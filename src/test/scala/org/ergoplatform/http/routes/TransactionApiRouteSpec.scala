@@ -11,16 +11,17 @@ import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, To
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.settings.{Constants, RESTApiSettings}
+import org.ergoplatform.settings.RESTApiSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
 import sigmastate.eval.Extensions._
-import sigma.Extensions._
-import sigma.eval.Extensions.EvalIterableOps
+import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, SType}
+import org.ergoplatform.settings.Constants.TrueTree
+import sigma.Extensions.CollBytesOps
 
 import java.net.InetSocketAddress
 import scala.concurrent.duration._
@@ -53,7 +54,7 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     )
 
   val output: ErgoBoxCandidate =
-     new ErgoBoxCandidate(inputBox.value, Constants.TrueLeaf, creationHeight = 0, tokens.toColl, registers)
+     new ErgoBoxCandidate(inputBox.value, TrueTree, creationHeight = 0, tokens.toArray.toColl, registers)
   val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(dataInput), IndexedSeq(output))
 
   val chainedInput = Input(tx.outputs.head.id, emptyProverResult)

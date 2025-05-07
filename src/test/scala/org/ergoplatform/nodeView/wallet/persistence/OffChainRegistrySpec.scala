@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanWalletInteraction}
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.WalletTestOps
 import org.ergoplatform.wallet.Constants
 import org.scalacheck.Gen
@@ -42,8 +43,7 @@ class OffChainRegistrySpec
 
       //check remove-offchain flag
       boxes.filter(_.scans.size > 1).flatMap(_.scans).find(_ != Constants.PaymentsScanId).map { scanId =>
-        val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
-        val p = EqualsScanningPredicate(ErgoBox.R1, ByteArrayConstant(trueProp.bytes))
+        val p = EqualsScanningPredicate(ErgoBox.R1, ByteArrayConstant(TrueTree.bytes))
         val scan = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = false)
         val filtered = boxes.filter(tb => tb.scans.contains(scanId))
 

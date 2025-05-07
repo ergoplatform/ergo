@@ -10,20 +10,20 @@ import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.{DataInput, ErgoBox, ErgoTreePredef}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
+import net.ceedubs.ficus.Ficus._
+import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext}
+import org.ergoplatform.sdk.SecretString
 import sigma.ast.ErgoTree
 import sigma.crypto.EcPointType
 import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
-import net.ceedubs.ficus.Ficus._
-import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext}
 
 import java.io.File
 
@@ -41,7 +41,7 @@ object ErgoCoreTestConstants extends ScorexLogging {
   implicit val validationSettingsNoIl: ErgoValidationSettings = validationSettings
     .updated(ErgoValidationSettingsUpdate(Seq(exIlUnableToValidate, exIlEncoding, exIlStructure, exEmpty), Seq()))
 
-  val parameters: Parameters = LaunchParameters
+  val parameters: Parameters = MainnetLaunchParameters
   val nipopowAlgos = new NipopowAlgos(chainSettings)
 
   val emission: EmissionRules = chainSettings.emissionRules

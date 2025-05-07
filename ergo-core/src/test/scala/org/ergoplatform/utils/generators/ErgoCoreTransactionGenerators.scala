@@ -15,8 +15,8 @@ import scorex.crypto.hash.Blake2b256
 import scorex.util.ScorexLogging
 import sigma.ast.ErgoTree
 import sigma.data.ProveDlog
-import sigma.eval.Extensions._
 import sigmastate.eval.Extensions._
+import sigma.Extensions.ArrayOps
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -39,7 +39,7 @@ object ErgoCoreTransactionGenerators extends ScorexLogging {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen
-  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
+  } yield new ErgoBoxCandidate(value, prop, h, tokens.toArray.toColl, ar)
 
   def ergoAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
 
@@ -48,7 +48,7 @@ object ErgoCoreTransactionGenerators extends ScorexLogging {
     ar <- additionalRegistersGen
     tokens <- additionalTokensGen
     value <- validValueGen
-  } yield new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(prop), h, tokens.toColl, ar)
+  } yield new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(prop), h, tokens.toArray.toColl, ar)
 
   lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
 

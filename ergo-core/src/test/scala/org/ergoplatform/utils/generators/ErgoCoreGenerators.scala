@@ -19,9 +19,10 @@ import scorex.crypto.hash.Digest32
 import sigma.ast.ErgoTree
 import sigma.crypto.{CryptoConstants, EcPointType}
 import sigma.data.{ProveDHTuple, ProveDlog}
+import sigma.interpreter.ProverResult
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.crypto.DiffieHellmanTupleProverInput
-import sigma.interpreter.ProverResult
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 import scala.util.Random
 
@@ -29,13 +30,12 @@ object ErgoCoreGenerators {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
-  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
-  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
+  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(TrueTree)
+  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(FalseTree)
 
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
-  lazy val noProofGen: Gen[ProverResult] =
-    Gen.const(emptyProverResult)
+  lazy val noProofGen: Gen[ProverResult] = Gen.const(emptyProverResult)
 
   lazy val dlogSecretWithPublicImageGen: Gen[(DLogProverInput, ProveDlog)] = for {
     secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
@@ -55,7 +55,7 @@ object ErgoCoreGenerators {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(dl => ErgoTree.fromSigmaBoolean(dl))
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(ErgoTree.fromSigmaBoolean)
 
   lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 

@@ -1,10 +1,10 @@
 package org.ergoplatform.tools
 
-import java.io.{File, PrintWriter}
+import org.ergoplatform.sdk.SecretString
 
+import java.io.{File, PrintWriter}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.interface4j.SecretString
 
 object ConfigGenerator extends App with ErgoTestHelpers {
   import org.ergoplatform.utils.ErgoNodeTestConstants._

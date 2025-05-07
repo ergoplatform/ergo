@@ -5,8 +5,8 @@ import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.ADKey
 import scorex.util.ModifierId
 import sigma.data.Digest32Coll
-import sigma.Extensions.ArrayOps
 import supertagged.TaggedType
+import sigma.Extensions.ArrayOps
 
 object IdUtils {
 

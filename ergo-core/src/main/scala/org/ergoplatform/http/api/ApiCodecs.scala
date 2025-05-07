@@ -1,6 +1,8 @@
 package org.ergoplatform.http.api
 
 import cats.syntax.either._
+import sigmastate.utils.Helpers._
+
 import io.circe._
 import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
@@ -14,7 +16,6 @@ import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.validation.ValidationResult
 import scorex.crypto.authds.merkle.MerkleProof
@@ -26,11 +27,11 @@ import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage}
 import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
 import sigmastate.interpreter._
-import sigma.serialization.{OpCodes, SigSerializer}
-import org.ergoplatform.sdk.JsonCodecs
-import sigma.Extensions.ArrayOps
-import sigma.crypto._
+import org.ergoplatform.sdk.{JsonCodecs, SecretString}
+import sigma.crypto.EcPointType
 import sigma.data._
+import sigma.serialization.{OpCodes, SigSerializer}
+import sigma.Extensions.ArrayOps
 
 import java.math.BigInteger
 import scala.annotation.nowarn

@@ -17,8 +17,8 @@ import org.ergoplatform._
 import org.scalatest.matchers.should.Matchers
 import scorex.util.ModifierId
 import sigma.ast.ErgoTree
-import sigma.{Coll, Colls}
 import sigma.data.ProveDlog
+import sigma.{Coll, Colls}
 import sigmastate.eval.Extensions._
 
 import java.io.File
@@ -92,7 +92,8 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
 
       assert(outToPassNext.isDefined)
 
-      System.out.println(s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
+      log.info(
+        s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
       loop(state.applyModifier(block, None)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)(history)
     } else {

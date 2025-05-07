@@ -83,8 +83,8 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           log.trace(s"Cache miss for existing modifier $id")
           cacheModifier(pm)
           Some(pm)
-        case Failure(_) =>
-          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+        case Failure(e) =>
+          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
           None
       }
     }

@@ -7,14 +7,14 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction._
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoBox}
-import sigma.ast.{SType, EvaluatedValue}
+import sigma.ast.{EvaluatedValue, SType}
 
 /**
   * A payment request contains an address (probably containing script), value, assets, additional registers.
   */
 case class PaymentRequest(address: ErgoAddress,
                           value: Long,
-                          assets: Seq[(ErgoBox.TokenId, Long)],
+                          assets: Array[(ErgoBox.TokenId, Long)],
                           registers: Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]])
   extends TransactionGenerationRequest
 
@@ -45,7 +45,7 @@ class PaymentRequestDecoder(ergoSettings: ErgoSettings) extends Decoder[PaymentR
       value <- cursor.downField("value").as[Long]
       assets <- cursor.downField("assets").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
-    } yield PaymentRequest(address, value, assets.toSeq.flatten, registers.getOrElse(Map.empty))
+    } yield PaymentRequest(address, value, assets.toArray.flatten, registers.getOrElse(Map.empty))
   }
 
 }

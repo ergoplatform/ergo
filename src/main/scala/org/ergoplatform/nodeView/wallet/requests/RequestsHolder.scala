@@ -19,7 +19,7 @@ case class RequestsHolder(requests: Seq[TransactionGenerationRequest],
   def withFee(): Seq[TransactionGenerationRequest] = {
     val address = Pay2SAddress(ErgoTreePredef.feeProposition(minerRewardDelay))
     val feeRequests = feeOpt
-        .map(PaymentRequest(address, _, assets = Seq.empty, registers = Map.empty))
+        .map(PaymentRequest(address, _, assets = Array.empty, registers = Map.empty))
         .toSeq
     requests ++ feeRequests
   }

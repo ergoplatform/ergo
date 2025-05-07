@@ -2,12 +2,14 @@ package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
+import org.ergoplatform.validation.ValidationRules
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoConstants
 import sigma.data.CGroupElement
-import sigmastate.eval.CPreHeader
+import sigma.validation.SigmaValidationSettings
 import sigma.{Coll, Colls, Header, PreHeader}
+import sigmastate.eval.CPreHeader
 
 trait InterpreterSpecCommon {
 
@@ -36,7 +38,9 @@ trait InterpreterSpecCommon {
     override def blockVersion: Byte = 1
   }
 
-  protected val stateContext = new BlockchainStateContext {
+  protected val stateContext = new VersionedBlockchainStateContext {
+
+    override val sigmaValidationSettings: SigmaValidationSettings = ValidationRules.currentSettings
 
     override def sigmaLastHeaders: Coll[Header] = Colls.emptyColl
 

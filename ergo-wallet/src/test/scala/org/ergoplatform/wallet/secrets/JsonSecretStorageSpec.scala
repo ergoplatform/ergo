@@ -1,7 +1,7 @@
 package org.ergoplatform.wallet.secrets
 
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Arbitrary

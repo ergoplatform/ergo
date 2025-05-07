@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import cats.syntax.either._  // needed for Scala 2.11
+import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
@@ -17,10 +17,10 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigma.Extensions.ArrayOps
+import sigma.{Colls, VersionContext}
+import sigma.Extensions._
 import sigma.crypto.EcPointType
-import sigma.data.{CAvlTree, CBigInt, CGroupElement}
-import sigmastate.eval.CHeader
+import sigma.data.{CBigInt, CGroupElement, CHeader}
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration
@@ -147,13 +147,20 @@ object Header extends ApiCodecs {
     */
   val Interpreter60Version: Byte = 4
 
+  def scriptFromBlockVersion(blockVersion: Byte): Byte = {
+    (blockVersion - 1).toByte
+  }
+
+  def scriptAndTreeFromBlockVersions(blockVersion: Byte): VersionContext = {
+    VersionContext((blockVersion - 1).toByte, (blockVersion - 1).toByte)
+  }
+
   def toSigma(header: Header): sigma.Header =
     CHeader(
-      id = header.id.toBytes.toColl,
       version = header.version,
       parentId = header.parentId.toBytes.toColl,
       ADProofsRoot = header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
-      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot.toColl)),
+      stateRootDigest = header.stateRoot.toColl,
       transactionsRoot = header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
       timestamp = header.timestamp,
       nBits = header.nBits,
@@ -163,7 +170,8 @@ object Header extends ApiCodecs {
       powOnetimePk = CGroupElement(header.powSolution.w),
       powNonce = header.powSolution.n.toColl,
       powDistance = CBigInt(header.powSolution.d.bigInteger),
-      votes = header.votes.toColl
+      votes = header.votes.toColl,
+      unparsedBytes = Colls.emptyColl[Byte]
     )
 
   val modifierTypeId: NetworkObjectTypeId.Value = HeaderTypeId.value

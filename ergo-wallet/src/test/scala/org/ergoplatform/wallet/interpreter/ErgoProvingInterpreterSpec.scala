@@ -64,7 +64,7 @@ class ErgoProvingInterpreterSpec
 
     val creationHeight = 10000
 
-    val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(prop), creationHeight)
+    val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromProposition(prop), creationHeight)
     val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
     val inputBox = boxCandidate.toBox(fakeTxId, 0.toShort)
 

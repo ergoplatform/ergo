@@ -25,7 +25,7 @@ object ErgoValidationSettingsUpdateSerializer extends ErgoSerializer[ErgoValidat
   private val FirstRule = sigma.validation.ValidationRules.FirstRuleId
 
   override def serialize(obj: ErgoValidationSettingsUpdate, w: Writer): Unit = {
-    val sigmaWriter = new SigmaByteWriter(w, None)
+    val sigmaWriter = new SigmaByteWriter(w, None, None, None)
     w.putUInt(obj.rulesToDisable.length.toLong)
     obj.rulesToDisable.foreach { r =>
       w.putUShort(r.toInt)

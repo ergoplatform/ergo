@@ -14,7 +14,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
 import sigma.Extensions._
-import sigma.ast.ErgoTree
+import sigma.ast.{ErgoTree, TrueLeaf}
 import sigma.ast.syntax.SigmaPropValue
 import sigma.data.SigmaConstants.MaxBoxSize
 
@@ -27,8 +27,7 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   private val onChainFilter = {box: TrackedBox => box.chainStatus.onChain}
   private val parentTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
 
-  private val TrueLeaf: SigmaPropValue = sigma.ast.TrueLeaf.toSigmaProp
-  private val TrueTree = ErgoTree.fromProposition(TrueLeaf)
+  private val TrueTree = ErgoTree.fromProposition(TrueLeaf.toSigmaProp)
   private val StartHeight: Int = 0
 
   private def genTokens(count: Int) = {

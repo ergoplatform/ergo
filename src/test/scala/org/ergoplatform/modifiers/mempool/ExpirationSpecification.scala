@@ -10,8 +10,9 @@ import scorex.util.encode.Base16
 import sigma.Colls
 import sigma.ast.{ErgoTree, ShortConstant}
 import sigma.interpreter.{ContextExtension, ProverResult}
-import sigmastate.helpers.TestingHelpers._
 import sigma.serialization.ErgoTreeSerializer
+import sigmastate.helpers.TestingHelpers._
+import org.ergoplatform.settings.Constants.TrueTree
 
 class ExpirationSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
@@ -87,7 +88,7 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, 0, h => {
         val fee = Math.min(parameters.storageFeeFactor * from.bytes.length, from.value)
-        val feeBoxCandidate = new ErgoBoxCandidate(fee, Constants.TrueLeaf, creationHeight = h)
+        val feeBoxCandidate = new ErgoBoxCandidate(fee, TrueTree, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = true)
     }
@@ -97,7 +98,7 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
     forAll(unspendableErgoBoxGen(parameters.storageFeeFactor * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 0, h => {
         val fee = Math.min(parameters.storageFeeFactor * from.bytes.length + 1, from.value)
-        val feeBoxCandidate = new ErgoBoxCandidate(fee, Constants.TrueLeaf, creationHeight = h)
+        val feeBoxCandidate = new ErgoBoxCandidate(fee, TrueTree, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
     }
@@ -107,7 +108,7 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
     forAll(unspendableErgoBoxGen(parameters.storageFeeFactor * 100 + 1, Long.MaxValue)) { from =>
       constructTest(from, 1, h => {
         val fee = Math.min(parameters.storageFeeFactor * from.bytes.length + 1, from.value)
-        val feeBoxCandidate = new ErgoBoxCandidate(fee, Constants.TrueLeaf, creationHeight = h)
+        val feeBoxCandidate = new ErgoBoxCandidate(fee, TrueTree, creationHeight = h)
 
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
@@ -118,7 +119,7 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
     forAll(unspendableErgoBoxGen()) { from =>
       constructTest(from, -1, h => {
         val fee = Math.min(parameters.storageFeeFactor * from.bytes.length, from.value)
-        val feeBoxCandidate = new ErgoBoxCandidate(fee, Constants.TrueLeaf, creationHeight = h)
+        val feeBoxCandidate = new ErgoBoxCandidate(fee, TrueTree, creationHeight = h)
         IndexedSeq(changeValue(from, -fee), Some(feeBoxCandidate)).flatten
       }, expectedValidity = false)
     }
@@ -126,7 +127,7 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
 
   property("script changed spending w. same value") {
     forAll(unspendableErgoBoxGen()) { from =>
-      val out = new ErgoBoxCandidate(from.value, Constants.TrueLeaf, from.creationHeight + 1, from.additionalTokens)
+      val out = new ErgoBoxCandidate(from.value, TrueTree, from.creationHeight + 1, from.additionalTokens)
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = false)
     }
   }
@@ -155,14 +156,14 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
 
     forAll(unspendableErgoBoxGen(minValue, Long.MaxValue)) { from =>
       val outcome = from.value <= from.bytes.length * parameters.storageFeeFactor
-      val out1 = new ErgoBoxCandidate(from.value - minValue, Constants.TrueLeaf, creationHeight = from.creationHeight + 1)
+      val out1 = new ErgoBoxCandidate(from.value - minValue, TrueTree, creationHeight = from.creationHeight + 1)
       constructTest(from, 0, _ => IndexedSeq(out1, out2), expectedValidity = outcome)
     }
   }
 
   property("destructing the whole box when its value no more than storage fee") {
     forAll(unspendableErgoBoxGen(maxValue = parameters.storageFeeFactor)) { from =>
-      val out = new ErgoBoxCandidate(from.value, Constants.TrueLeaf, creationHeight = from.creationHeight + 1)
+      val out = new ErgoBoxCandidate(from.value, TrueTree, creationHeight = from.creationHeight + 1)
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = true)
     }
   }

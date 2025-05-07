@@ -5,10 +5,10 @@ import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.wallet.protocol.Constants
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoLikeContext, ErgoLikeInterpreter}
 import scorex.util.ScorexLogging
-import sigma.ast.ErgoTree
 import sigmastate.interpreter.Interpreter.{ScriptEnv, VerificationResult}
-import sigma.data.{AvlTreeData, AvlTreeFlags}
 import sigma.Coll
+import sigma.ast.ErgoTree
+import sigma.data.{AvlTreeData, AvlTreeFlags}
 
 import scala.util.Try
 

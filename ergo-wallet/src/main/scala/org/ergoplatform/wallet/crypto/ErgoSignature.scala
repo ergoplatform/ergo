@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.crypto
 import org.bouncycastle.util.BigIntegers
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import sigma.crypto.{CryptoConstants, EcPointType}
+import sigma.crypto.EcPointType
 import sigma.serialization.GroupElementSerializer
 
 import scala.annotation.tailrec
@@ -13,7 +13,7 @@ import scala.annotation.tailrec
   */
 object ErgoSignature {
 
-  import CryptoConstants._
+  import sigma.crypto.CryptoConstants._
 
   /**
     * Signs given `msg` using given `sk`.

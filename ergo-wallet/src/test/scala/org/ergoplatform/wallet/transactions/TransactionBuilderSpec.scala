@@ -2,10 +2,10 @@ package org.ergoplatform.wallet.transactions
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.sdk.wallet.secrets.ExtendedSecretKey
 import org.ergoplatform.wallet.boxes.BoxSelector
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.WalletTestHelpers
 import org.scalatest.matchers.should.Matchers
@@ -15,6 +15,7 @@ import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
 import sigmastate.utils.Helpers._
+import sigma.Extensions.ArrayOps
 import sigma.eval.Extensions.EvalIterableOps
 
 import scala.util.{Success, Try}

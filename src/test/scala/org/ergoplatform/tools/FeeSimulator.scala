@@ -2,12 +2,13 @@ package org.ergoplatform.tools
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.Constants._
-import org.ergoplatform.settings.LaunchParameters._
+import org.ergoplatform.settings.MainnetLaunchParameters._
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
 import sigma.Colls
 import sigma.ast.ErgoTree
+import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigma.interpreter.{ContextExtension, ProverResult}
@@ -25,7 +26,7 @@ object FeeSimulator extends App {
   val creationHeight: Int = 100000
 
   val box1 = new ErgoBoxCandidate(
-    scala.util.Random.nextLong(),  ErgoTree.fromSigmaBoolean(k1), creationHeight,
+    scala.util.Random.nextLong(), ErgoTree.fromSigmaBoolean(k1), creationHeight,
     Colls.fromItems(Random.randomBytes(32).toTokenId -> scala.util.Random.nextLong()))
   val box2 = new ErgoBoxCandidate(scala.util.Random.nextLong(), ErgoTree.fromSigmaBoolean(k2), creationHeight)
 

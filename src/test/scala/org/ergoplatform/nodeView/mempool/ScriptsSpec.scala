@@ -53,15 +53,23 @@ class ScriptsSpec extends ErgoCorePropertyTest with FileUtils {
 
   property("simple crypto") {
     applyBlockSpendingScript(ErgoTree.fromSigmaBoolean(defaultMinerPk)) shouldBe 'success
-    applyBlockSpendingScript(ErgoTree.fromProposition(SigmaAnd(defaultProver.hdKeys.map(s => SigmaPropConstant(s.publicImage))))) shouldBe 'success
-    applyBlockSpendingScript(ErgoTree.fromProposition(SigmaAnd(defaultMinerPk, ProveDlog(dlogGroup.generator)))) shouldBe 'failure
-    applyBlockSpendingScript(ErgoTree.fromProposition(SigmaOr(defaultMinerPk, ProveDlog(dlogGroup.generator)))) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        SigmaAnd(defaultProver.hdKeys.map(s => SigmaPropConstant(s.publicImage))))) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        SigmaAnd(defaultMinerPk, ProveDlog(dlogGroup.generator)))) shouldBe 'failure
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        SigmaOr(defaultMinerPk, ProveDlog(dlogGroup.generator)))) shouldBe 'success
   }
 
   property("predef scripts") {
     delta shouldBe -1000
 
-    applyBlockSpendingScript(ErgoTree.fromProposition(GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp)) shouldBe 'success
+    applyBlockSpendingScript(
+      ErgoTree.fromProposition(
+        GE(Height, Plus(boxCreationHeight(Self), IntConstant(delta))).toSigmaProp)) shouldBe 'success
     applyBlockSpendingScript(ErgoTreePredef.rewardOutputScript(delta, defaultMinerPk)) shouldBe 'success
 //        applyBlockSpendingScript(ErgoScriptPredef.feeProposition(delta)) shouldBe 'success
   }

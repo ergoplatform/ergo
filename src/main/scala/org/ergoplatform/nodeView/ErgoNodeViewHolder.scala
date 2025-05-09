@@ -694,7 +694,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       log.info(s"Got locally generated modifier ${lm.blockSection.encodedId} of type ${lm.blockSection.modifierTypeId}")
       pmodModify(lm.blockSection, local = true)
 
-    case LocallyGeneratedOrderingBlock(efb) =>
+    case LocallyGeneratedOrderingBlock(efb, orderingBlockTransactions) =>
       log.info(s"Got locally generated ordering block ${efb.id}")
       pmodModify(efb.header, local = true)
       val sectionsToApply = if (settings.nodeSettings.stateType == StateType.Digest) {
@@ -705,6 +705,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sectionsToApply.foreach { section =>
         pmodModify(section, local = true)
       }
+      history().saveOrderingBlockTransactions(efb.id, orderingBlockTransactions)
 
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")

@@ -66,7 +66,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     * block header (ordering block) -> transaction ids
     * so transaction ids do belong to transactions in input blocks since the block (header)
     */
-  private val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+  private val orderingInputBlocksTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+
+  private val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 
   /**
     * waiting list for input blocks for which we got children for but the parent not delivered yet
@@ -107,7 +109,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     orderingBlockIdsToRemove.foreach { id =>
       bestHeights.remove(id)
       bestTips.remove(id)
-      orderingBlockTransactions.remove(id).map { ids =>
+      orderingInputBlocksTransactions.remove(id).map { ids =>
         ids.foreach { txId =>
           transactionsCache.remove(txId)
         }
@@ -272,8 +274,8 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     if (res) {
       val orderingBlockId = _bestInputBlock.get.header.parentId
-      val curr = orderingBlockTransactions.getOrElse(orderingBlockId, Seq.empty)
-      orderingBlockTransactions.put(orderingBlockId, curr ++ transactionIds)
+      val curr = orderingInputBlocksTransactions.getOrElse(orderingBlockId, Seq.empty)
+      orderingInputBlocksTransactions.put(orderingBlockId, curr ++ transactionIds)
     }
     res
   }
@@ -321,7 +323,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               val txs = inputBlockTransactions.get(ibId).get
               val orderingId = ib.header.parentId
               // removing input-block transactions
-              orderingBlockTransactions.put(orderingId, orderingBlockTransactions.apply(orderingId).filter(id => !txs.contains(id)))
+              orderingInputBlocksTransactions.put(orderingId, orderingInputBlocksTransactions.apply(orderingId).filter(id => !txs.contains(id)))
             }
 
             if (commonIndex > -1) {
@@ -474,16 +476,24 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @param id ordering block (header) id
     * @return transactions included in best input blocks chain since ordering block with identifier `id`
     */
-  def getOrderingBlockTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
+  def getCollectedInputBlocksTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every input block regeneration?
     // todo: optimize the code below
-    orderingBlockTransactions.get(id).map { ids =>
+    orderingInputBlocksTransactions.get(id).map { ids =>
       ids.flatMap(transactionsCache.get)
     }
   }
 
-  def getBestOrderingBlockTransactions(): Seq[ErgoTransaction] = {
-    bestOrderingBlock().map(h => h.id).flatMap(getOrderingBlockTransactions).getOrElse(Seq.empty)
+  def getBestOrderingCollectedInputBlocksTransactions(): Seq[ErgoTransaction] = {
+    bestOrderingBlock().map(h => h.id).flatMap(getCollectedInputBlocksTransactions).getOrElse(Seq.empty)
+  }
+
+  def saveOrderingBlockTransactions(orderingBlockId: ModifierId, transactions: Seq[ErgoTransaction]) = {
+    orderingBlockTransactions.put(orderingBlockId, transactions)
+  }
+
+  def getOrderingBlockTransactions(orderingBlockId: ModifierId): Option[Seq[ErgoTransaction]] = {
+    orderingBlockTransactions.get(orderingBlockId)
   }
 
 }

@@ -61,11 +61,12 @@ class CandidateGenerator(
   }
 
   /** Send solved ordering block to processing */
-  private def sendOrderingToNodeView(newBlock: ErgoFullBlock): Unit = {
+  private def sendOrderingToNodeView(newBlock: ErgoFullBlock,
+                                     orderingBlockTtransactions: Seq[ErgoTransaction]): Unit = {
     log.info(
       s"New ordering block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
-    viewHolderRef ! LocallyGeneratedOrderingBlock(newBlock)
+    viewHolderRef ! LocallyGeneratedOrderingBlock(newBlock, orderingBlockTtransactions)
   }
 
   /** Send solved input block to processing */
@@ -191,13 +192,14 @@ class CandidateGenerator(
         sf match {
           case _: OrderingSolutionFound =>
             // todo: account for input blocks
-            val newBlock = completeOrderingBlock(state.cache.get.candidateBlock, solution)
+            val cachedCandidate = state.cache.get.candidateBlock
+            val newBlock = completeOrderingBlock(cachedCandidate, solution)
             log.info(s"New block mined, header: ${newBlock.header}")
             ergoSettings.chainSettings.powScheme
               .validate(newBlock.header)  // check header PoW only
               .map(_ => newBlock) match {
               case Success(newBlock) =>
-                sendOrderingToNodeView(newBlock)
+                sendOrderingToNodeView(newBlock, cachedCandidate.orderingBlockTransactions)
                 context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
                 StatusReply.success(())
               case Failure(exception) =>
@@ -523,7 +525,7 @@ object CandidateGenerator extends ScorexLogging {
 
       // form input block related data
       val parentInputBlockIdOpt = bestInputBlock.map(bestInput => idToBytes(bestInput.id))
-      val previousOrderingBlockTransactions = history.getBestOrderingBlockTransactions()
+      val previousOrderingBlockTransactions = history.getBestOrderingCollectedInputBlocksTransactions()
       val previousOrderingBlockTransactionIds = previousOrderingBlockTransactions.map(_.id)
 
       /*

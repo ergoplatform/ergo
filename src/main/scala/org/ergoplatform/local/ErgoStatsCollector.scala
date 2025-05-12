@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
-import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
@@ -66,7 +66,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     lastIncomingMessageTime = System.currentTimeMillis(),
     lastMemPoolUpdateTime = System.currentTimeMillis(),
     None,
-    LaunchParameters,
+    settings.launchParameters,
     eip27Supported = true,
     settings.scorexSettings.restApi.publicUrl,
     settings.nodeSettings.extraIndex)

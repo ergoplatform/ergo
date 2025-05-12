@@ -3,9 +3,9 @@ package org.ergoplatform.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{OrderingBlockFound, P2PKAddress}
+import org.ergoplatform.{AutolykosSolution, OrderingBlockFound, P2PKAddress}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -31,12 +31,13 @@ import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{augWalletTransactionForScanGen, augWalletTransactionGen, boxesHolderGen}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
+import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
+import org.ergoplatform.sdk.SecretString
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.ByteArrayWrapper

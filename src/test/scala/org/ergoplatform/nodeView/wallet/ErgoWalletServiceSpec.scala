@@ -9,7 +9,9 @@ import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen
@@ -18,14 +20,13 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
-import sigma.ast.{ByteArrayConstant, ErgoTree, EvaluatedValue, FalseLeaf, SType, TrueLeaf}
 import sigma.Extensions.ArrayOps
+import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
 import sigmastate.helpers.TestingHelpers.testBox
 
 import scala.collection.compat.immutable.ArraySeq
@@ -96,7 +97,7 @@ class ErgoWalletServiceSpec
           ErgoLikeTransaction(IndexedSeq(), IndexedSeq()),
           creationOutIndex = 0,
           None,
-          testBox(1L, ErgoTree.fromProposition(TrueLeaf.toSigmaProp), 0),
+          testBox(1L, TrueTree, 0),
           Set(PaymentsScanId)
         )
       )
@@ -120,7 +121,7 @@ class ErgoWalletServiceSpec
   property("it should generate valid box candidates from payment request") {
     forAll(validErgoTransactionGen) {
       case (ergoBoxes, _) =>
-        val paymentRequest = PaymentRequest(pks.head, 1, Seq.empty, Map.empty)
+        val paymentRequest = PaymentRequest(pks.head, 1, Array.empty, Map.empty)
         val paymentCandidates = requestsToBoxCandidates(Seq(paymentRequest), ergoBoxes.head.id, startHeight, parameters, pks).get
         paymentCandidates shouldBe List(new ErgoBoxCandidate(value = 1, ergoTree = pks.head.script, startHeight))
     }
@@ -172,7 +173,7 @@ class ErgoWalletServiceSpec
             Base16.encode(ErgoBoxSerializer.toBytes(box.box))
           }
 
-          val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
+          val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
           val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
           val walletService = new ErgoWalletServiceImpl(ergoSettings)
@@ -251,7 +252,7 @@ class ErgoWalletServiceSpec
             .map { box =>
               Base16.encode(ErgoBoxSerializer.toBytes(box))
             }
-        val paymentRequest = PaymentRequest(pks.head, 50000, Seq.empty, Map.empty)
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
         val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
         val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get

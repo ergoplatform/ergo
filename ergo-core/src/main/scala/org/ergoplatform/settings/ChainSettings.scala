@@ -1,7 +1,8 @@
 package org.ergoplatform.settings
 
-import cats.syntax.either._
+import cats.syntax.either._  // needed for Scala 2.11
 import sigmastate.utils.Helpers._
+
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultySerializer

@@ -5,35 +5,19 @@ import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.AutolykosSolution
+import org.ergoplatform.AutolykosSolution.pkForV2
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.mining.AutolykosSolution.pkForV2
 import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigma.crypto.{CryptoConstants, EcPointType}
+import org.ergoplatform.AutolykosSolution.pkForV2
 
-/**
-  * Solution for an Autolykos PoW puzzle.
-  *
-  * In Autolykos v.1 all the four fields are used, in Autolykos v.2 only pk and n fields are used.
-  *
-  * @param pk - miner public key. Should be used to collect block rewards
-  * @param w  - one-time public key. Prevents revealing of miners secret
-  * @param n  - nonce (8 bytes)
-  * @param d  - distance between pseudo-random number, corresponding to nonce `n` and a secret,
-  *           corresponding to `pk`. The lower `d` is, the harder it was to find this solution.
-  */
-case class AutolykosSolution(pk: EcPointType,
-                             w: EcPointType,
-                             n: Array[Byte],
-                             d: BigInt) {
-  val encodedPk: Array[Byte] = groupElemToBytes(pk)
-}
 
-object AutolykosSolution extends ApiCodecs {
-  // "pk", "w" and "d" values for Autolykos v2 solution, where they not passed from outside
-  val pkForV2: EcPointType = CryptoConstants.dlogGroup.identity
+object AutolykosSolutionJsonCodecs extends ApiCodecs {
+  // "w" and "d" values for Autolykos v2 solution, where they not passed from outside
   val wForV2: EcPointType = CryptoConstants.dlogGroup.generator
   val dForV2: BigInt = 0
 
@@ -53,7 +37,7 @@ object AutolykosSolution extends ApiCodecs {
       n <- c.downField("n").as[Array[Byte]]
       dOpt <- c.downField("d").as[Option[BigInt]]
     } yield {
-      AutolykosSolution(pkOpt.getOrElse(pkForV2), wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
+      new AutolykosSolution(pkOpt.getOrElse(pkForV2), wOpt.getOrElse(wForV2), n, dOpt.getOrElse(dForV2))
     }
   }
 
@@ -107,7 +91,7 @@ class AutolykosV1SolutionSerializer extends ErgoSerializer[AutolykosSolution] {
     val nonce = r.getBytes(8)
     val dBytesLength = r.getUByte()
     val d = BigInt(BigIntegers.fromUnsignedByteArray(r.getBytes(dBytesLength)))
-    AutolykosSolution(pk, w, nonce, d)
+    new AutolykosSolution(pk, w, nonce, d)
   }
 
 }
@@ -128,7 +112,7 @@ class AutolykosV2SolutionSerializer extends ErgoSerializer[AutolykosSolution] {
   override def parse(r: Reader): AutolykosSolution = {
     val pk = groupElemFromBytes(r.getBytes(PublicKeyLength))
     val nonce = r.getBytes(8)
-    AutolykosSolution(pk, wForV2, nonce, dForV2)
+    new AutolykosSolution(pk, wForV2, nonce, dForV2)
   }
 
 }

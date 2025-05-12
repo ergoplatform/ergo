@@ -1,7 +1,6 @@
 package org.ergoplatform
 
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.AutolykosSolution
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import scorex.crypto.hash.Blake2b256

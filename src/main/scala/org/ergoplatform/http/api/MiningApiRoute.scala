@@ -6,13 +6,14 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WeakAutolykosSolution}
+import org.ergoplatform.mining.{AutolykosSolutionJsonCodecs, CandidateGenerator, ErgoMiner, WeakAutolykosSolution}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
-import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
+import org.ergoplatform.{AutolykosSolution, ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import sigma.data.ProveDlog
+import AutolykosSolutionJsonCodecs.jsonDecoder
 
 import scala.concurrent.Future
 

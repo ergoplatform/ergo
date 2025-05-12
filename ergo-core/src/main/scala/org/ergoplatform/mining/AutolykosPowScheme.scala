@@ -3,8 +3,8 @@ package org.ergoplatform.mining
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Height
-import org.ergoplatform.SubBlockAlgos.{subsPerBlock}
-import org.ergoplatform.{BlockSolutionSearchResult, InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NoSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound, OrderingSolutionFound, ProveBlockResult}
+import org.ergoplatform.SubBlockAlgos.subsPerBlock
+import org.ergoplatform.{AutolykosSolution, BlockSolutionSearchResult, InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NoSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound, OrderingSolutionFound, ProveBlockResult}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -423,10 +423,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       }
       if (d <= b) {
         log.debug(s"Ordering block solution found at $i")
-        OrderingSolutionFound(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+        OrderingSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else if (d <= b * subblocksPerBlock) {
         log.debug(s"Input block solution found at $i")
-        InputSolutionFound(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+        InputSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
         loop(i + 1)
       }

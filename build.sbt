@@ -33,11 +33,13 @@ lazy val commonSettings = Seq(
   ),
 )
 
+publishArtifact in (Compile, packageDoc) := false
+
 val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "5.0.15-49-ff5423cc-SNAPSHOT"
+val sigmaStateVersion = "5.0.15-538-9a8cc1b1-SNAPSHOT"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -96,6 +98,7 @@ val opts = Seq(
 )
 
 run / javaOptions ++= opts
+scalacOptions ++= Seq("-Xasync")
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 val scalacOpts = Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 

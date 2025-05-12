@@ -3,6 +3,8 @@ package org.ergoplatform.http.api
 import cats.syntax.either._ // needed for Scala 2.11
 import io.circe._           // needed for Scala 2.11
 import io.circe.syntax._
+import sigmastate.utils.Helpers._
+
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform._
@@ -14,7 +16,6 @@ import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.settings.{Algos, ErgoAlgos}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.validation.ValidationResult
 import scorex.crypto.authds.merkle.MerkleProof
@@ -26,11 +27,11 @@ import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage}
 import sigmastate.crypto.VerifierMessage.Challenge
 import sigmastate.crypto._
 import sigmastate.interpreter._
-import sigma.serialization.{OpCodes, SigSerializer}
-import org.ergoplatform.sdk.JsonCodecs
-import sigma.Extensions.ArrayOps
-import sigma.crypto._
+import org.ergoplatform.sdk.{JsonCodecs, SecretString}
+import sigma.crypto.EcPointType
 import sigma.data._
+import sigma.serialization.{OpCodes, SigSerializer}
+import sigma.Extensions.ArrayOps
 
 import java.math.BigInteger
 import scala.annotation.nowarn
@@ -185,6 +186,7 @@ trait ApiCodecs extends JsonCodecs {
     } yield ErgoTransaction(ergoLikeTx)
   })
 
+  @nowarn
   implicit val sigmaLeafEncoder: Encoder[SigmaLeaf] = Encoder.instance({
     leaf =>
       val op = leaf.opCode.toByte.asJson
@@ -194,6 +196,7 @@ trait ApiCodecs extends JsonCodecs {
       }
   })
 
+  @nowarn
   implicit val sigmaBooleanEncoder: Encoder[SigmaBoolean] = Encoder.instance({
     sigma =>
       val op = sigma.opCode.toByte.asJson
@@ -311,6 +314,7 @@ trait ApiCodecs extends JsonCodecs {
     }
   }
 
+  @nowarn
   implicit val proofEncoder: Encoder[SecretProven] = Encoder.instance { sp =>
     val proofType = sp match {
       case _: RealSecretProof => "proofReal"
@@ -385,6 +389,7 @@ trait ApiCodecs extends JsonCodecs {
     )
   }
 
+  @nowarn
   implicit val txHintsDecoder: Decoder[TransactionHintsBag] = Decoder.instance { cursor =>
     for {
       secretHints <- Decoder.decodeMap[Int, Seq[Hint]].tryDecode(cursor.downField("secretHints"))

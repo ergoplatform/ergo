@@ -12,20 +12,21 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
+import org.ergoplatform.settings.Constants.FalseTree
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigma.Colls
-import sigma.ast._
+import sigma.ast.{AtLeast, ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigma.data.ProveDlog
 import sigma.serialization.ValueSerializer
+import sigma.Colls
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -253,7 +254,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    createGenesisBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, Seq.empty, proofs)
+    createGenesisBox(EmissionRules.CoinsInOneErgo, FalseTree, Seq.empty, proofs)
   }
 
   /**
@@ -275,7 +276,7 @@ object ErgoState extends ScorexLogging {
     val boxes = genesisBoxes(settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, LaunchParameters).ensuring(us => {
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, settings.launchParameters).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
       java.util.Arrays.equals(us.rootDigest, settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh

@@ -1,8 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
-import sigmastate.utils.Helpers._ // for Scala 2.11
+// needed for Scala 2.11
 import cats.syntax.either._
-
+import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.settings._
@@ -12,10 +12,13 @@ import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.ModifierId
 import sigma.Colls
+import sigmastate.eval._
+import sigma.util.Extensions.SigmaBooleanOps
 import sigma.ast.{ByteArrayConstant, ByteConstant, ErgoTree, IntConstant, LongArrayConstant, SigmaPropConstant}
 import sigma.crypto.CryptoConstants
 import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
+import org.ergoplatform.settings.Constants.TrueTree
 
 
 class ErgoTransactionSpec extends ErgoCorePropertyTest {
@@ -88,7 +91,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
   property("context extension with neg id") {
     val negId: Byte = -10
 
-    val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
+    val b = new ErgoBox(1000000000L, TrueTree, Colls.emptyColl,
                          Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
                   0, 0)
     val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension(Map(negId -> IntConstant(0)))))
@@ -108,7 +111,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
   property("context extension with neg and pos ids") {
     val negId: Byte = -20
 
-    val b = new ErgoBox(1000000000L, Constants.TrueLeaf, Colls.emptyColl,
+    val b = new ErgoBox(1000000000L, TrueTree, Colls.emptyColl,
       Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
       0, 0)
     val ce = ContextExtension(Map(negId -> IntConstant(0), (-negId).toByte -> IntConstant(1)))

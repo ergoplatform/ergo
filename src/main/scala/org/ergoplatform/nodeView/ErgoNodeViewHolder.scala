@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, NetworkType, ScorexSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
 import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest, DownloadSubblock, DownloadSubblockTransactions}
@@ -441,8 +441,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val history = ErgoHistory.readOrGenerate(settings)
 
-    val wallet = ErgoWallet.readOrGenerate(
-      history.getReader, settings, LaunchParameters)
+    val wallet = ErgoWallet.readOrGenerate(history.getReader, settings, settings.launchParameters)
 
     val memPool = ErgoMemPool.empty(settings)
 

@@ -2,8 +2,9 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
+import org.ergoplatform.mining.{genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -19,9 +20,10 @@ import scorex.crypto.hash.Digest32
 import sigma.ast.ErgoTree
 import sigma.crypto.{CryptoConstants, EcPointType}
 import sigma.data.{ProveDHTuple, ProveDlog}
+import sigma.interpreter.ProverResult
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.crypto.DiffieHellmanTupleProverInput
-import sigma.interpreter.ProverResult
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 import scala.util.Random
 
@@ -29,13 +31,12 @@ object ErgoCoreGenerators {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
-  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
-  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
+  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(TrueTree)
+  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(FalseTree)
 
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
-  lazy val noProofGen: Gen[ProverResult] =
-    Gen.const(emptyProverResult)
+  lazy val noProofGen: Gen[ProverResult] = Gen.const(emptyProverResult)
 
   lazy val dlogSecretWithPublicImageGen: Gen[(DLogProverInput, ProveDlog)] = for {
     secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
@@ -55,7 +56,7 @@ object ErgoCoreGenerators {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(dl => ErgoTree.fromSigmaBoolean(dl))
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(ErgoTree.fromSigmaBoolean)
 
   lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 
@@ -137,7 +138,7 @@ object ErgoCoreGenerators {
     w <- genECPoint
     n <- genBytes(8)
     d <- Arbitrary.arbitrary[BigInt].map(_.mod(q - 1) + 1)
-  } yield AutolykosSolution(pk, w, n, d)
+  } yield new AutolykosSolution(pk, w, n, d)
 
   /**
     * Generates required difficulty in interval [1, 2^^255]
@@ -181,7 +182,7 @@ object ErgoCoreGenerators {
     * Header generator with default miner pk in pow solution
     */
   lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
-    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
+    h.copy(powSolution = new AutolykosSolution(defaultMinerPkPoint, h.powSolution.w, h.powSolution.n, h.powSolution.d))
   }
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {

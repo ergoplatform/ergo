@@ -22,6 +22,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
 import sigma.data.ProveDlog
 import org.scalatest.matchers.should.Matchers
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._

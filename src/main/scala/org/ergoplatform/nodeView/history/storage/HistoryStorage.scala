@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
+import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
@@ -27,7 +28,8 @@ import scala.jdk.CollectionConverters.asScalaIteratorConverter
   */
 class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStore: LDBKVStore, config: CacheSettings)
   extends ScorexLogging
-    with AutoCloseable {
+    with AutoCloseable
+    with ScorexEncoding {
 
   private lazy val headersCache =
     Caffeine.newBuilder()
@@ -81,8 +83,8 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           log.trace(s"Cache miss for existing modifier $id")
           cacheModifier(pm)
           Some(pm)
-        case Failure(_) =>
-          log.warn(s"Failed to parse modifier ${Algos.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+        case Failure(e) =>
+          log.warn(s"Failed to parse modifier $id from db (bytes are: ${Algos.encode(bytes)})", e)
           None
       }
     }
@@ -97,7 +99,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           }
           Some(pm)
         case Failure(_) =>
-          log.warn(s"Failed to parse index ${Algos.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+          log.warn(s"Failed to parse index $id from db (bytes are: ${Algos.encode(bytes)})")
           None
       }
     }

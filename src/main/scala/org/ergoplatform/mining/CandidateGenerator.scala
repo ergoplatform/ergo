@@ -26,7 +26,7 @@ import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
+import org.ergoplatform.{AutolykosSolution, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound, SubBlockAlgos}
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
@@ -34,8 +34,10 @@ import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.crypto.CryptoFacade
-import sigma.eval.Extensions.EvalIterableOps
+import sigma.ast.syntax.ErgoBoxRType
+import sigma.Extensions.ArrayOps
 import sigma.interpreter.ProverResult
+import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.concurrent.duration._
@@ -184,7 +186,7 @@ class CandidateGenerator(
       val preSolution = sf.as
       val solution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          new AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
         } else {
           preSolution
         }
@@ -361,7 +363,15 @@ object CandidateGenerator extends ScorexLogging {
       )
       None
     } else {
-      val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
+      val desiredUpdate = if (stateContext.blockVersion == 3) {
+        ergoSettings.votingTargets.desiredUpdate.copy(statusUpdates =
+          // 1007 is needed to switch off primitive type validation to add Unsigned Big Int support
+          // 1008 is needed to switch off non-primitive type validation to add Option & Header types support
+          // 1011 is needed to add new methods
+          Seq(1011.toShort -> ReplacedRule(1016), 1007.toShort -> ReplacedRule(1017), 1008.toShort -> ReplacedRule(1018)))
+      } else {
+        ergoSettings.votingTargets.desiredUpdate
+      }
       Some(
         createCandidate(
           pk,
@@ -403,9 +413,11 @@ object CandidateGenerator extends ScorexLogging {
     val forkVotingAllowed = votingFinishHeight.forall(fh => nextHeight < fh)
 
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
-      nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
+      nextHeight >= 823297 // todo: set mainnet voting start height, first block of epoch #804
+    } else if(ergoSettings.networkType.isTestNet) {
+      nextHeight >= 1548800 // testnet voting start height
     } else {
-      nextHeight >= 4096
+      nextHeight >= 8 // devnet voting start height
     }
 
     // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings
@@ -804,9 +816,8 @@ object CandidateGenerator extends ScorexLogging {
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets = feeBoxes
-        .flatMap(_.additionalTokens.toArray)
-        .toColl.take(MaxAssetsPerBox)
+      val feeAssets =
+        feeBoxes.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())

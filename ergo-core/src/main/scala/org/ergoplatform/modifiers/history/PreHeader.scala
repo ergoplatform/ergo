@@ -6,9 +6,9 @@ import org.ergoplatform.modifiers.history.header.Header._
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Constants
 import scorex.util._
-import sigma.Extensions.ArrayOps
 import sigma.crypto.EcPointType
 import sigma.data.CGroupElement
+import sigma.Extensions.ArrayOps
 
 /**
   * Only header fields that can be predicted by a miner

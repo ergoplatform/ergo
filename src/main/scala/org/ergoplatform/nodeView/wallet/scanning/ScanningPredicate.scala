@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.ErgoBox
-import sigma.ast.EvaluatedValue
 import sigma.ast._
 import sigma.Extensions._
 

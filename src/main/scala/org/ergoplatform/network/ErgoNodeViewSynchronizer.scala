@@ -37,6 +37,7 @@ import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, Inpu
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import sigma.VersionContext
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -181,6 +182,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
+  // current protocol version
+  private var protocolVersion = 0.toByte
+
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
@@ -193,7 +197,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
       txProcessingCache -= txId
     }
   }
@@ -791,7 +795,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
-      ErgoTransactionSerializer.parseBytesTry(bytes) match {
+      // actual tree version is properly set in ErgoTreeSerializer inside
+      val parseResult = VersionContext.withVersions(protocolVersion, protocolVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
           viewHolderRef ! TransactionFromRemote(utx)
@@ -1522,6 +1528,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedState(reader: ErgoStateReader) =>
+      protocolVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>
           context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))

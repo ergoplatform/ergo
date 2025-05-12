@@ -20,7 +20,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
   override val messageName: String = "OrderingBlockAnnouncement"
 
   override def serialize(ann: OrderingBlockAnnouncement, w: Writer): Unit = {
-    w.put(ann.version)
+    w.put(1.toByte) // todo: named constant
     HeaderSerializer.serialize(ann.header, w)
     w.putUInt(ann.nonBroadcastedTransactions.length)
     ann.nonBroadcastedTransactions.foreach{ tx =>  // todo: replace with cfor
@@ -44,7 +44,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
     val txIds = (1 to txIdsCount).map { _ => // todo: replace with cfor
       bytesToId(r.getBytes(32))
     }.toArray
-    OrderingBlockAnnouncement(version, header, txs, txIds)
+    OrderingBlockAnnouncement(header, txs, txIds)
     // todo: consider versioning by skipping unparsed bytes if version > 1
   }
 

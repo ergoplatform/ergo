@@ -33,7 +33,7 @@ import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younge
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockRequestMessageSpec, InputBlockTransactionsData, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec}
+import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockRequestMessageSpec, InputBlockTransactionsData, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec, OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
@@ -284,9 +284,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(healthCheckDelay, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
-  protected def broadcastModifierInv(modTypeId: NetworkObjectTypeId.Value, modId: ModifierId): Unit = {
+  protected def broadcastModifierInv(modTypeId: NetworkObjectTypeId.Value,
+                                     modId: ModifierId,
+                                     peersOpt: Option[Seq[ConnectedPeer]] = None): Unit = {
+    val sendingStrategy = if(peersOpt.isDefined) {
+      SendToPeers(peersOpt.get)
+    } else {
+      Broadcast
+    }
     val msg = Message(InvSpec, Right(InvData(modTypeId, Seq(modId))), None)
-    networkControllerRef ! SendToNetwork(msg, Broadcast)
+    networkControllerRef ! SendToNetwork(msg, sendingStrategy)
   }
 
   protected def broadcastModifierInv(m: ErgoNodeViewModifier): Unit = {
@@ -1442,8 +1449,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case FullBlockApplied(header) =>
       if (historyReader.bestHeaderOpt.exists(_.height <= header.height)) {
         // todo: broadcast BlockTransactions instance only to older clients
-        broadcastModifierInv(Header.modifierTypeId, header.id)
-        header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
+        val knownPeers = syncTracker.knownPeers()
+        val (sbSupported, sbNotSupported) = SubBlocksFilter.partition(knownPeers)
+
+        if (sbNotSupported.nonEmpty) {
+          val peersOpt = Some(sbNotSupported.toSeq)
+          broadcastModifierInv(Header.modifierTypeId, header.id, peersOpt)
+          header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id, peersOpt) }
+        }
+
+        if (sbSupported.nonEmpty) {
+          // broadcast subblock announcement
+          val ot = historyReader.getOrderingBlockTransactions(header.id).get // todo: .get
+          val obAnn = OrderingBlockAnnouncement(header, ot, Seq.empty) // todo: send ids for previously broadcasted txs, not .empty
+          val msg = Message(OrderingBlockAnnouncementMessageSpec, Right(obAnn), None)
+          networkControllerRef ! SendToNetwork(msg, SendToPeers(sbSupported.toSeq))
+        }
       }
       clearDeclined()
       clearInterblockCost()

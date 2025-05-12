@@ -6,12 +6,10 @@ import scorex.util.ModifierId
 
 /**
   * Ordering block announcement data
-  * @param version - message version
   * @param header - ordering block header
   * @param nonBroadcastedTransactions - transactions which were not broadcasted by miner (like emission and fee but could be arb)
   * @param broadcastedTransactionIds - ids of ordering block transactions which were broadcasted previously
   */
-case class OrderingBlockAnnouncement(version: Byte,
-                                     header: Header,
-                                     nonBroadcastedTransactions: Array[ErgoTransaction],
-                                     broadcastedTransactionIds: Array[ModifierId])
+case class OrderingBlockAnnouncement(header: Header,
+                                     nonBroadcastedTransactions: Seq[ErgoTransaction],
+                                     broadcastedTransactionIds: Seq[ModifierId])

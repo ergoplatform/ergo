@@ -21,6 +21,11 @@ sealed trait PeerFilteringRule {
   def filter(peers: Iterable[ConnectedPeer]): Iterable[ConnectedPeer] = {
     peers.filter(cp => condition(cp))
   }
+
+  def partition(peers: Iterable[ConnectedPeer]): (Iterable[ConnectedPeer], Iterable[ConnectedPeer]) = {
+    peers.partition(condition)
+  }
+
 }
 
 
@@ -111,3 +116,13 @@ object HeadersDownloadFilter extends PeerFilteringRule {
     peer.mode.exists(_.allHeadersAvailable)
   }
 }
+
+object SubBlocksFilter extends VersionBasedPeerFilteringRule {
+
+  def condition(version: Version): Boolean = {
+    // If neighbour version is >= `SubblocksVersion`, the neighbour supports sub-blocks protocol
+    version.compare(Version.SubblocksVersion) >= 0
+  }
+
+}
+

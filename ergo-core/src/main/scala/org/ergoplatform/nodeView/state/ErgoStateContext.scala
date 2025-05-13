@@ -39,7 +39,7 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
                                 override val validationSettings: ErgoValidationSettings,
                                 override val votingData: VotingData)(implicit chainSettings: ChainSettings)
   extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
-    validationSettings, votingData)(chainSettings) {
+                            validationSettings, votingData)(chainSettings) {
 
   override def sigmaPreHeader: sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
@@ -130,7 +130,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
       currentParameters.update(height, forkVote, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
-      calculatedValidationSettings, votingData)
+                          calculatedValidationSettings, votingData)
   }
 
   /**
@@ -298,7 +298,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * This function verifies whether a full block is valid against the ErgoStateContext instance, and modifies
     * the latter according to the former.
     *
-    * @param fb - block to apply
+    * @param fb             - block to apply
     * @return updated state context or error
     */
   def appendFullBlock(fb: ErgoFullBlock): Try[ErgoStateContext] = Try {

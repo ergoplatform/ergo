@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history
 
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
-
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
 import org.ergoplatform.http.api.ApiCodecs

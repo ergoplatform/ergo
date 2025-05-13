@@ -181,8 +181,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
-  // current protocol version
-  private var protocolVersion = 0.toByte
+  // current script version (block version minus 1)
+  private var activatedScriptVersion = Header.scriptFromBlockVersion(Header.InitialVersion)
 
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
@@ -775,7 +775,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
       // actual tree version is properly set in ErgoTreeSerializer inside
-      val parseResult = VersionContext.withVersions(protocolVersion, protocolVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
       parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
@@ -1442,7 +1442,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedState(reader: ErgoStateReader) =>
-      protocolVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
+      activatedScriptVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>
           context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))

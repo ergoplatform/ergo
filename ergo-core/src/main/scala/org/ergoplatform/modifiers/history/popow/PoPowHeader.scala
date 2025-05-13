@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history.popow
 
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
-
 import cats.Traverse
 import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}

@@ -395,15 +395,12 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       (outAssetsNum + inAssetsNum) * parameters.tokenAccessCost +
         (inAssets.size + outAssets.size) * parameters.tokenAccessCost
     val scriptsValidationCosts = tx.inputs.size + 1 // +1 for the block to JIT cost scaling
-    println(s"tx.inputs.size: ${tx.inputs.size}")
-    println(s"initialCost + totalAssetsAccessCost: ${initialCost + totalAssetsAccessCost}")
     val approxCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
 
 
     // check that validation pass if cost limit equals to approximated cost
     val sc = stateContextWith(paramsWith(approxCost))
     sc.currentParameters.maxBlockCost shouldBe approxCost
-    println("bv: " + sc.currentParameters.blockVersion)
     val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
     approxCost - calculatedCost <= 1 shouldBe true
 

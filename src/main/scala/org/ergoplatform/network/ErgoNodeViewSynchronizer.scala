@@ -1153,6 +1153,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
   }
 
+  def processOrderingBlockAnnouncement(oba: OrderingBlockAnnouncement,
+                                       hr: ErgoHistoryReader,
+                                       remote: ConnectedPeer): Unit = {
+    // todo: for now, we just check if referenced input block is stored
+    // todo: if so,
+    val inputBlockStored = oba.prevInputBlockId.map { t =>
+      hr.getInputBlockTransactions(bytesToId(t._1)).isDefined
+    }.getOrElse(true)
+
+    if (inputBlockStored) {
+
+    } else {
+
+    }
+  }
+
   /**
     * Object ids coming from other node.
     * Filter out modifier ids that are already in process (requested, received or applied),
@@ -1467,7 +1483,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (sbSupported.nonEmpty) {
           // broadcast subblock announcement
           val ot = historyReader.getOrderingBlockTransactions(header.id).get // todo: .get
-          val obAnn = OrderingBlockAnnouncement(header, ot, Seq.empty) // todo: send ids for previously broadcasted txs, not .empty
+          val prevInputId = None // todo: pass real value
+          val obAnn = OrderingBlockAnnouncement(header, ot, Seq.empty, prevInputId) // todo: send ids for previously broadcasted txs, not .empty
           val msg = Message(OrderingBlockAnnouncementMessageSpec, Right(obAnn), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeers(sbSupported.toSeq))
         }
@@ -1635,6 +1652,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       processInputBlockTransactionsRequest(ModifierId @@ subBlockId, hr, remote)
     case (_: InputBlockTransactionsMessageSpec.type, transactions: InputBlockTransactionsData, remote) =>
       processInputBlockTransactions(transactions, hr, remote)
+    case (_: OrderingBlockAnnouncementMessageSpec.type, oba: OrderingBlockAnnouncement, remote) =>
+      processOrderingBlockAnnouncement(oba, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

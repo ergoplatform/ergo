@@ -4,6 +4,9 @@ import org.ergoplatform.modifiers.history.header.HeaderSerializer
 import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecInputBlocks
+import scorex.crypto.authds.LeafData
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Blake2b256
 import scorex.util.{bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
@@ -30,6 +33,13 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
     ann.broadcastedTransactionIds.foreach { txId => // todo: replace with cfor
       w.putBytes(idToBytes(txId))
     }
+    if(ann.prevInputBlockId.isDefined) {
+      w.put(1.toByte)
+      w.putBytes(ann.prevInputBlockId.get._1)
+      // todo: implement MerkleProof serializer, and put proof bytes here
+    } else {
+      w.put(0.toByte)
+    }
   }
 
   override def parse(r: Reader): OrderingBlockAnnouncement = {
@@ -44,7 +54,16 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
     val txIds = (1 to txIdsCount).map { _ => // todo: replace with cfor
       bytesToId(r.getBytes(32))
     }.toArray
-    OrderingBlockAnnouncement(header, txs, txIds)
+    val defined = r.getByte()
+    val prevInputOpt = if(defined == 1) {
+      val prevInputId = r.getBytes(32)
+      // todo: read Merkle proof
+      val p = MerkleProof(LeafData @@ Array.emptyByteArray, Seq.empty)(Blake2b256)
+      Some(prevInputId -> p)
+    } else {
+      None
+    }
+    OrderingBlockAnnouncement(header, txs, txIds, prevInputOpt)
     // todo: consider versioning by skipping unparsed bytes if version > 1
   }
 

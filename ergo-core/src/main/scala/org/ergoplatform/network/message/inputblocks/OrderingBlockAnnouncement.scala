@@ -2,6 +2,8 @@ package org.ergoplatform.network.message.inputblocks
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 
 /**
@@ -12,4 +14,5 @@ import scorex.util.ModifierId
   */
 case class OrderingBlockAnnouncement(header: Header,
                                      nonBroadcastedTransactions: Seq[ErgoTransaction],
-                                     broadcastedTransactionIds: Seq[ModifierId])
+                                     broadcastedTransactionIds: Seq[ModifierId],
+                                     prevInputBlockId: Option[(Array[Byte], MerkleProof[Digest32])])

@@ -22,9 +22,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def historyReader: ErgoHistoryReader
 
+  private val bestInputBlocks = mutable.Map[ModifierId, Option[InputBlockInfo]]()
   /**
     * Pointer to a best input-block with transactions known
     */
+  // todo: just read _bestInputBlock from bestInputBlocks ?
   private var _bestInputBlock: Option[InputBlockInfo] = None
 
   /**
@@ -109,6 +111,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     orderingBlockIdsToRemove.foreach { id =>
       bestHeights.remove(id)
       bestTips.remove(id)
+      bestInputBlocks.remove(id)
       orderingInputBlocksTransactions.remove(id).map { ids =>
         ids.foreach { txId =>
           transactionsCache.remove(txId)
@@ -235,6 +238,8 @@ trait InputBlocksProcessor extends ScorexLogging {
           val txsValid = state.applyInputBlock(txs, ib.header)
           if (txsValid.isSuccess) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
+            val orderingId = ib.header.parentId
+            bestInputBlocks += orderingId -> Some(ib)
             _bestInputBlock = Some(ib)
             true
           } else {
@@ -250,6 +255,8 @@ trait InputBlocksProcessor extends ScorexLogging {
         val txsValid = state.applyInputBlock(txs, ib.header)
         if (txsValid.isSuccess) {
           log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
+          val orderingId = ib.header.parentId
+          bestInputBlocks += orderingId -> Some(ib)
           _bestInputBlock = Some(ib)
           true
         } else {
@@ -306,6 +313,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         val depth = inputBlockParents.get(sbId).map(_._2).getOrElse(1)
         val bestInputDepth = _bestInputBlock.map(_.id).flatMap(inputBlockParents.get).map(_._2).getOrElse(1)
         if (depth > bestInputDepth) {
+          val orderingId = ib.header.parentId
 
           // find common input block and do rollback
           val thisChain = inputBlocksChain(sbId).reverse
@@ -321,16 +329,19 @@ trait InputBlocksProcessor extends ScorexLogging {
             ((currentBestChain.length - 1).to(commonIndex + 1, -1)).foreach { idx =>
               val ibId = currentBestChain(idx)
               val txs = inputBlockTransactions.get(ibId).get
-              val orderingId = ib.header.parentId
               // removing input-block transactions
               orderingInputBlocksTransactions.put(orderingId, orderingInputBlocksTransactions.apply(orderingId).filter(id => !txs.contains(id)))
             }
 
             if (commonIndex > -1) {
-              _bestInputBlock = Some(inputBlockRecords(currentBestChain(commonIndex)))
+              val bestInputId = Some(inputBlockRecords(currentBestChain(commonIndex)))
+              bestInputBlocks += orderingId -> bestInputId
+              _bestInputBlock = bestInputId
               forkingInputBlock = Some(thisChain(commonIndex + 1))
             } else {
-              _bestInputBlock = None
+              val bestInputId = None
+              bestInputBlocks += orderingId -> bestInputId
+              _bestInputBlock = bestInputId
               forkingInputBlock = Some(thisChain.head)
             }
           }
@@ -494,6 +505,10 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   def getOrderingBlockTransactions(orderingBlockId: ModifierId): Option[Seq[ErgoTransaction]] = {
     orderingBlockTransactions.get(orderingBlockId)
+  }
+
+  def getBestInputBlock(orderingBlockId: ModifierId): Option[ModifierId] = {
+    bestInputBlocks.get(orderingBlockId).flatten.map(_.id)
   }
 
 }

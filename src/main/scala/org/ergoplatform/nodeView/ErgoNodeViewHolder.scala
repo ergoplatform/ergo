@@ -336,11 +336,23 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   private def processOrderingBlock(oba: OrderingBlockAnnouncement) = {
-    val chainTipOpt = history.estimatedTip()
-    val header = oba.header
-    val txs = Seq.empty[ErgoTransaction] // todo: sub-blocks : fill
-    val bs = new BlockTransactions(header.id, header.version, txs)
-    minimalState().applyModifier(bs, chainTipOpt)(_)
+    val chainTipOpt = history().estimatedTip()
+    val headerId = oba.header.parentId
+    history().typedModifierById[Header](headerId) match {
+      case Some(header) =>
+        val txs = history().getOrderingBlockTransactions(headerId).getOrElse(Seq.empty) ++
+          history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+
+        // just to be sure, checking Merkle root of collected transactions
+        require(header.transactionsRoot.sameElements(BlockTransactions.transactionsRoot(txs, header.version)))
+        val bs = new BlockTransactions(headerId, header.version, txs)
+        minimalState().applyModifier(bs, chainTipOpt)(_: LocallyGeneratedBlockSection => Unit) match {
+          case Failure(exception) => log.error(s"Error during application of input block transactions for $headerId: ", exception)
+          case Success(_) => log.debug(s"Transactions for ordering block ${headerId} applied successfully")
+        }
+      case None =>
+        log.error(s"parent header not found in processOrderingBlock : $headerId")
+    }
   }
 
   /**

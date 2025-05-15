@@ -18,13 +18,14 @@ import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest, DownloadSubblock, DownloadSubblockTransactions}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HistoryModifierSerializer}
 import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.core.network.ConnectedPeer
 
@@ -321,6 +322,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     case ProcessInputBlockTransactions(std) =>
       processInputBlockTransactions(std.inputBlockId, std.transactions)
+
+    case ProcessOrderingBlock(oba) =>
+      processOrderingBlock(oba)
   }
 
   private def processInputBlockTransactions(inputBlockId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
@@ -329,6 +333,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     newBestInputBlocks.foreach { id =>
       context.system.eventStream.publish(NewBestInputBlock(id))
     }
+  }
+
+  private def processOrderingBlock(oba: OrderingBlockAnnouncement) = {
+    val chainTipOpt = history.estimatedTip()
+    val header = oba.header
+    val txs = Seq.empty[ErgoTransaction] // todo: sub-blocks : fill
+    val bs = new BlockTransactions(header.id, header.version, txs)
+    minimalState().applyModifier(bs, chainTipOpt)(_)
   }
 
   /**

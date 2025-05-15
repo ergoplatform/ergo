@@ -1166,9 +1166,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }.getOrElse(true)
 
     if (inputBlockStored) {
-
+      viewHolderRef ! ProcessOrderingBlock(oba)
     } else {
-
+      // todo: sub-blocks: request full block for now
     }
   }
 

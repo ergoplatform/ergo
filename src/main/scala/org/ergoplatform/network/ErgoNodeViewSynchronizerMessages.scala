@@ -11,7 +11,7 @@ import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
-import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
+import org.ergoplatform.network.message.inputblocks.{InputBlockTransactionsData, OrderingBlockAnnouncement}
 import org.ergoplatform.subblocks.InputBlockInfo
 
 /**
@@ -150,4 +150,6 @@ object ErgoNodeViewSynchronizerMessages {
   case class ProcessInputBlock(subblock: InputBlockInfo, remote: ConnectedPeer)
 
   case class ProcessInputBlockTransactions(std: InputBlockTransactionsData)
+
+  case class ProcessOrderingBlock(oba: OrderingBlockAnnouncement)
 }

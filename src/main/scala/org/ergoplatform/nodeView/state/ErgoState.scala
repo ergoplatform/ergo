@@ -49,7 +49,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   /**
     *
-    * @param mod modifire to apply to the state
+    * @param mod modifier to apply to the state
     * @param estimatedTip - estimated height of blockchain tip
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State

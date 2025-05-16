@@ -23,22 +23,21 @@ import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPe
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
 import org.ergoplatform.utils.ScorexEncoder
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
-import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
+import org.ergoplatform.modifiers.history.extension.Extension.PrevInputBlockIdKey
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.network.message.inputblocks._
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.InputBlockInfo
-import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
-import scorex.crypto.authds.merkle.MerkleProof
 import sigma.VersionContext
 
 import scala.annotation.tailrec
@@ -1161,14 +1160,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // todo: for now, we just check if referenced input block is stored
     // todo: if so, input blocks are used, otherwise, full block is downloaded
     // todo: instead, missing input blocks should be downloaded
-    val inputBlockStored = oba.prevInputBlockId.map { t =>
+
+    val prevInputBlockIdOpt = oba.extensionFields.find(_._1.sameElements(PrevInputBlockIdKey))
+
+    val inputBlockStored = prevInputBlockIdOpt.map { t =>
       hr.getInputBlockTransactions(bytesToId(t._1)).isDefined
     }.getOrElse(true)
 
     if (inputBlockStored) {
+      // todo: process extension
       viewHolderRef ! ProcessOrderingBlock(oba)
     } else {
       // todo: sub-blocks: request full block for now
+      log.info(s"Requesting all the block transaction for ${oba.header.id} as prev input block not found")
+      val ext = Extension(oba.header.id, oba.extensionFields)
+      viewHolderRef ! ModifiersFromRemote(Seq(ext))
+      requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
     }
   }
 
@@ -1486,10 +1493,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (sbSupported.nonEmpty) {
           // broadcast subblock announcement
           val ot = historyReader.getOrderingBlockTransactions(header.id).get // todo: .get
-          val prevInputId = historyReader.getBestInputBlock(header.parentId)
-          val prevInputIdProof = new MerkleProof(LeafData @@ Array.emptyByteArray, Seq.empty)(Blake2b256) // todo: form and check Merkle proof
-          val prevInputData = prevInputId.map(id => (idToBytes(id), prevInputIdProof))
-          val obAnn = OrderingBlockAnnouncement(header, ot, Seq.empty, prevInputData) // todo: send ids for previously broadcasted txs, not .empty
+          val ext = historyReader.typedModifierById[Extension](header.extensionId).get // todo: .get
+          val obAnn = OrderingBlockAnnouncement(header, ot, Seq.empty, ext.fields) // todo: send ids for previously broadcasted txs, not .empty
           val msg = Message(OrderingBlockAnnouncementMessageSpec, Right(obAnn), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeers(sbSupported.toSeq))
         }

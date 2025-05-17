@@ -60,8 +60,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 
-  type EncodedManifestId = ModifierId
-
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 10,
     withinTimeRange = 1.minute) {
@@ -1169,6 +1167,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (inputBlockStored) {
       // todo: process extension
+      log.info(s"Processing ordering block  ${oba.header.id}") // todo: make it .debug
       viewHolderRef ! ProcessOrderingBlock(oba)
     } else {
       // todo: sub-blocks: request full block for now

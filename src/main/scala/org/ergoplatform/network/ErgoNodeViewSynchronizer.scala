@@ -1171,7 +1171,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       viewHolderRef ! ProcessOrderingBlock(oba)
     } else {
       // todo: sub-blocks: request full block for now
-      log.info(s"Requesting all the block transaction for ${oba.header.id} as prev input block not found")
+      log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
       val ext = Extension(oba.header.id, oba.extensionFields)
       viewHolderRef ! ModifiersFromRemote(Seq(ext))
       requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
@@ -1479,9 +1479,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case FullBlockApplied(header) =>
       if (historyReader.bestHeaderOpt.exists(_.height <= header.height)) {
-        // todo: broadcast BlockTransactions instance only to older clients
         val knownPeers = syncTracker.knownPeers()
         val (sbSupported, sbNotSupported) = SubBlocksFilter.partition(knownPeers)
+
+        // todo: make .debug
+        log.info(s"Sending ordering block ann to $sbSupported , sending old format block sections to ${sbNotSupported}")
 
         if (sbNotSupported.nonEmpty) {
           val peersOpt = Some(sbNotSupported.toSeq)

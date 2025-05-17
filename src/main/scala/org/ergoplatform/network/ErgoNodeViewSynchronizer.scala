@@ -1162,11 +1162,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val prevInputBlockIdOpt = oba.extensionFields.find(_._1.sameElements(PrevInputBlockIdKey))
 
     val inputBlockStored = prevInputBlockIdOpt.map { t =>
-      hr.getInputBlockTransactions(bytesToId(t._1)).isDefined
+      hr.getInputBlockTransactions(bytesToId(t._2)).isDefined
     }.getOrElse(true)
 
     if (inputBlockStored) {
-      // todo: process extension
       log.info(s"Processing ordering block  ${oba.header.id}") // todo: make it .debug
       viewHolderRef ! ProcessOrderingBlock(oba)
     } else {

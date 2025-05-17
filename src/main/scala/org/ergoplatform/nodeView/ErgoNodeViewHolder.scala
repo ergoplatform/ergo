@@ -335,7 +335,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
-  private def processOrderingBlock(oba: OrderingBlockAnnouncement) = {
+  private def processOrderingBlock(oba: OrderingBlockAnnouncement): Unit = {
     val headerId = oba.header.parentId
     history().typedModifierById[Header](headerId) match {
       case Some(header) =>
@@ -351,6 +351,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         require(header.transactionsRoot.sameElements(BlockTransactions.transactionsRoot(txs, header.version)))
         val bs = new BlockTransactions(headerId, header.version, txs)
         pmodModify(bs, false)
+
+        // todo: check ADProofs section generation
       case None =>
         log.error(s"parent header not found in processOrderingBlock : $headerId")
     }

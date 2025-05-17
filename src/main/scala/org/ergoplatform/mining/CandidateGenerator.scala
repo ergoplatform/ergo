@@ -22,7 +22,6 @@ import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -34,8 +33,6 @@ import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.crypto.CryptoFacade
-import sigma.ast.syntax.ErgoBoxRType
-import sigma.Extensions.ArrayOps
 import sigma.interpreter.ProverResult
 import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
@@ -815,13 +812,21 @@ object CandidateGenerator extends ScorexLogging {
       .newBoxes(txs)
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
-      val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets =
+      // todo: sub-blocks: fix tx fee collection , old code is commented out below for now
+      /*
+       import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+       import sigma.ast.syntax.ErgoBoxRType
+       import sigma.Extensions.ArrayOps
+
+       val feeAmount = feeBoxes.map(_.value).sum
+       val feeAssets =
         feeBoxes.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
-      val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
-      val minerBox =
+       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
+       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
-      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
+       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
+      */
+      None
     } else {
       None
     }

@@ -407,8 +407,6 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
        (outAssetsNum + inAssetsNum) * parameters.tokenAccessCost +
        (inAssets.size + outAssets.size) * parameters.tokenAccessCost
      val scriptsValidationCosts = tx.inputs.size + 1 // +1 for the block to JIT cost scaling
-     println(s"tx.inputs.size: ${tx.inputs.size}")
-     println(s"initialCost + totalAssetsAccessCost: ${initialCost + totalAssetsAccessCost}")
      val approxCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
 
 
@@ -498,7 +496,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
       "1b130206022edf0580fcf622d193db060873007301", // contains SBigInt.nbits
       "19110204040400d191b1dc6a03dd0173007301", // sigmaProp(Global.serialize(2).size > 0)
       "1916030601ff090105090100d192dc061473000173017302", // { val b = bigInt("-1"); val m = unsignedBigInt("5"); val ub = b.toUnsignedMod(m); ub >= 0 }
-    "190d00d193db0207e4e30102850880" // { val b = getVar[Byte](1).get; b.toBits == Coll(false, false, false, false, false, false, false, true) }
+      "190d00d193db0207e4e30102850880" // { val b = getVar[Byte](1).get; b.toBits == Coll(false, false, false, false, false, false, false, true) }
       // todo: scripts with optional / Header values
     )
 
@@ -532,10 +530,15 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest {
     }
   }
 
+  /**
+    * Checks that for all the versions activated, including 6.0, unsigned big int deserialization fails
+    */
   property("Unsigned big int in register - deserialization") {
-    VersionContext.withVersions(3, 3) {
-      val bs = "8094ebdc030b0208d3000001090102c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f774200"
-      an[sigma.validation.ValidationException] should be thrownBy ErgoBoxSerializer.parseBytes(Base16.decode(bs).get)
+    (1 to 3).foreach { version =>
+      VersionContext.withVersions(version.toByte, version.toByte) {
+        val bs = "8094ebdc030b0208d3000001090102c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f774200"
+        an[sigma.validation.ValidationException] should be thrownBy ErgoBoxSerializer.parseBytes(Base16.decode(bs).get)
+      }
     }
   }
   

@@ -468,6 +468,10 @@ object CandidateGenerator extends ScorexLogging {
       ergoSettings.votingTargets.softForkOption.getOrElse(0) == 1
     }
 
+    //todo: remove after 6.0 soft-fork activation
+    log.debug(s"betterVersion: $betterVersion, forkVotingAllowed: $forkVotingAllowed, " +
+              s"forkOrdered: $forkOrdered, nextHeightCondition: $nextHeightCondition")
+
     betterVersion &&
       forkVotingAllowed &&
       forkOrdered &&

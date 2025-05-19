@@ -17,6 +17,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
+import sigma.VersionContext
 import sigma.ast.{EvaluatedValue, SType}
 import sigmastate.eval.Extensions.ArrayByteOps
 
@@ -124,11 +125,15 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     * Check transaction given as hex-encoded bytes
     */
   def checkTransactionAsBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
-    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
-      case Success(tx) =>
-        validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
-      case Failure(e) =>
-        BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+    // actual tree version is properly set in ErgoTreeSerializer inside
+    val version = ergoSettings.chainSettings.protocolVersion
+    VersionContext.withVersions(version, version) {
+      Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+        case Success(tx) =>
+          validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
+        case Failure(e) =>
+          BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+      }
     }
   }
 

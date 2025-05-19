@@ -4,6 +4,7 @@ import java.io.Serializable
 import java.util
 
 import scorex.ByteUtils
+import spire.syntax.all.cfor
 
 /**
   * Wraps byte array and provides hashCode, equals and compare methods.
@@ -35,7 +36,11 @@ case class ByteArrayWrapper(data: Array[Byte])
       //if size is 8, display as a number
       ByteUtils.getLong(data, 0).toString + "L"
     } else {
-      javax.xml.bind.DatatypeConverter.printHexBinary(data)
+      val sb = new StringBuilder(data.length * 2)
+      cfor(0)(_ < data.length, _ + 1) { i =>
+        sb.append(f"${data(i)}%02X")
+      }
+      sb.toString()
     }
     getClass.getSimpleName + "[" + v + "]"
   }

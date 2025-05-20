@@ -99,7 +99,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   val localStateGen: Gen[WrappedUtxoState] =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings))
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings))
 
   def semanticallyValidModifier(state: UTXO_ST): PM = {
     statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])

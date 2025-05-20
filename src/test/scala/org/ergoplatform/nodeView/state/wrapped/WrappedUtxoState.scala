@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.state.wrapped
 
 import java.io.File
-import akka.actor.ActorRef
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.{BlockSection, TransactionsCarryingBlockSection}
@@ -61,7 +60,6 @@ object WrappedUtxoState {
 
   def apply(boxHolder: BoxHolder,
             dir: File,
-            nodeViewHolderRef: Option[ActorRef],
             parameters: Parameters,
             settings: ErgoSettings): WrappedUtxoState = {
     val emissionBox = ErgoState.genesisBoxes(settings.chainSettings).headOption

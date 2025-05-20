@@ -66,7 +66,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
   val history: HT = applyChain(generateHistory(), chain)
 
   val digestState: DigestState = {
-    ErgoNodeTransactionGenerators.boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, settings)).map { wus =>
+    ErgoNodeTransactionGenerators.boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).map { wus =>
       DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
     }
   }.sample.value
@@ -74,7 +74,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
   val utxoSettings: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Utxo))
 
   val utxoState: WrappedUtxoState =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, None, parameters, utxoSettings)).sample.value
+    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, utxoSettings)).sample.value
 
   lazy val wallet = new WalletStub
 

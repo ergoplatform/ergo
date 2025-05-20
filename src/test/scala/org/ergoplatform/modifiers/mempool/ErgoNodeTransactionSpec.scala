@@ -593,6 +593,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     bs shouldBe "1f06010101d17300"
     println(bs)
     println(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get))
+
   }
 
 }

@@ -1,16 +1,19 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants.TrueTree
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.{ErgoTestHelpers, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.util.encode.Base16
 import sigma.ast.ByteArrayConstant
 import sigma.interpreter.{ContextExtension, ProverResult}
+import sigma.serialization.ErgoTreeSerializer
 
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
@@ -425,6 +428,40 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val updPool = pool.put(utx1, 100).remove(utx1).put(utx2, 500).put(utx3, 5000)
     updPool.size shouldBe 1
     updPool.get(utx3.id).get.lastCheckedTime shouldBe (now + 1)
+  }
+
+  it should "reject v7 tree spending" in {
+    val (us, bh) = createUtxoState(initSettings)
+    val genesis = validFullBlock(None, us, bh)
+    val parameters = new Parameters(height = 0,
+                        Parameters.DefaultParameters.updated(Parameters.BlockVersion, Header.Interpreter60Version),
+                        proposedUpdate = ErgoValidationSettingsUpdate.empty)
+    val wus = WrappedUtxoState(us, bh, settings, parameters).applyModifier(genesis)(_ => ()).get
+    val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
+    var pool = ErgoMemPool.empty(settings)
+    val tx = txs.head
+    pool = pool.put(tx)
+
+    // v7 tree w. sigmaProp(true)
+    val bs = "1f06010101d17300"
+    val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get)
+
+    val spendingBox = tx.transaction.outputs.head
+    val o2 = new ErgoBoxCandidate(spendingBox.value, tree, spendingBox.creationHeight, spendingBox.additionalTokens, spendingBox.additionalRegisters)
+    val tx2 = UnconfirmedTransaction(tx.transaction.copy(
+      inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+      outputCandidates = IndexedSeq(o2)), None)
+    val (newPool, outcome) = pool.process(tx2, us)
+    outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool = newPool
+
+    val spendingBox2 = tx2.transaction.outputs.head
+    val o3 = new ErgoBoxCandidate(spendingBox2.value, tree, spendingBox2.creationHeight, spendingBox2.additionalTokens, spendingBox2.additionalRegisters)
+    val tx3 = UnconfirmedTransaction(tx2.transaction.copy(
+      inputs = IndexedSeq(new Input(spendingBox2.id, emptyProverResult)),
+      outputCandidates = IndexedSeq(o3)), None)
+    val (_, outcome2) = pool.process(tx3, us)
+    outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
   }
 
 }

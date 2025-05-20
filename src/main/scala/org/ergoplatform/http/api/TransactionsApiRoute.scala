@@ -109,11 +109,16 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     * Validate and broadcast transaction given as hex-encoded bytes
     */
   def sendTransactionAsBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
-    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
-      case Success(tx) =>
-        validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
-      case Failure(e) =>
-        BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+    // actual tree version for parsing is properly set in ErgoTreeSerializer inside
+    // we check parsed with max version available
+    val version = ergoSettings.chainSettings.protocolVersion
+    VersionContext.withVersions(version, version) {
+      Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+        case Success(tx) =>
+          validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
+        case Failure(e) =>
+          BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+      }
     }
   }
 

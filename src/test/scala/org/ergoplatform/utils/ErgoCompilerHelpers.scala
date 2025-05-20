@@ -9,7 +9,7 @@ import scala.util.{Failure, Success, Try}
 
 trait ErgoCompilerHelpers {
 
-  private def compileSource(source: String, scriptVersion: Byte, treeVersion: Byte) = {
+  def compileSource(source: String, scriptVersion: Byte, treeVersion: Byte): ErgoTree = {
     VersionContext.withVersions(scriptVersion, treeVersion) {
       val compiler = new SigmaCompiler(16.toByte)
       val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion)

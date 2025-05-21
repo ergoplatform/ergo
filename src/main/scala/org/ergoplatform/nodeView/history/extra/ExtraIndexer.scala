@@ -313,7 +313,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
-          if (!inputTokens.contains(iEb.box.additionalTokens(j)._1.toArray.toSeq)) {
+          val idMatch = java.util.Arrays.equals(iEb.box.additionalTokens(j)._1.toArray, tx.inputs.head.boxId)
+          if (idMatch && !inputTokens.contains(iEb.box.additionalTokens(j)._1.toArray.toSeq)) {
             val token = IndexedToken.fromBox(iEb, j)
             tokens.get(token.tokenId) match {
               case Some(t) => // same new token created in multiple boxes -> add amounts

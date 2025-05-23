@@ -2,13 +2,16 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
+import org.ergoplatform.ErgoHeader
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
+import sigma.VersionContext
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -248,6 +251,19 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
+
+                // added in 6.0 to check now versioned serializers
+                // as having unparseable outputs is okay per protocol rules, but in some cases in 6.0
+                // tree deserialization fails with versioning issues (eg when tree version > activated version),
+                // not parsing ones
+                val scriptVersion = Header.scriptFromBlockVersion(state.stateContext.blockVersion)
+                VersionContext.withVersions(scriptVersion, scriptVersion) {
+                  ErgoTransactionSerializer.parseBytesTry(unconfirmedTx.transaction.bytes) match {
+                    case Success(_) =>
+                    case Failure(e) => return (this, new ProcessingOutcome.Invalidated(e, validationStartTime))
+                  }
+                }
+
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>

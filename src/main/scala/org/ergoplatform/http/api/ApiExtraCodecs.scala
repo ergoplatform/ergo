@@ -23,7 +23,8 @@ trait ApiExtraCodecs extends JsonCodecs {
       "globalIndex" -> iEb.globalIndex.asJson,
       "inclusionHeight" -> iEb.inclusionHeight.asJson,
       "address" -> ergoAddressEncoder.toString(getAddress(iEb.box.ergoTree)(ergoAddressEncoder)).asJson,
-      "spentTransactionId" -> iEb.spendingTxIdOpt.asJson
+      "spentTransactionId" -> iEb.spendingTxIdOpt.asJson,
+      "spendingProof" -> iEb.spendingProofOpt.asJson
     ))
   }
 

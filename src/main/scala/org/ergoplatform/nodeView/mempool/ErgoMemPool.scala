@@ -8,7 +8,6 @@ import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
-import org.ergoplatform.ErgoHeader
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import sigma.VersionContext

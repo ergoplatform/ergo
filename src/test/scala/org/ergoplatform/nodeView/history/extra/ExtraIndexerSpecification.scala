@@ -3,7 +3,8 @@ package org.ergoplatform.nodeView.history.extra
 import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.http.api.SortDirection
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.Rollback
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
@@ -25,6 +26,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   val initSettings: ErgoSettings = settings
   case class CreateDB(blockCount: Int)
   case class Reset()
+  case class GenerateBetterChainTip()
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
@@ -40,6 +42,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   val lock: ReentrantLock = new ReentrantLock()
   val done: Condition = lock.newCondition()
+  val created: Condition = lock.newCondition()
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
                                 ID_LL, // tokenId -> (boxesCount,_)
@@ -50,7 +53,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val addresses: ID_LL = mutable.HashMap[ModifierId, (Long, Long)]()
     val indexedTokens: ID_LL = mutable.HashMap[ModifierId, (Long, Long)]()
     cfor(1)(_ <= limit, _ + 1) { i =>
-      _history.getReader.bestBlockTransactionsAt(i).get.txs.foreach { tx =>
+      val header = history.headerIdsAtHeight(i).last
+      val block = history.getFullBlock(history.typedModifierById[Header](header).get)
+      block.get.transactions.foreach { tx =>
         txsIndexed += 1
         if (i != 1) {
           tx.inputs.foreach { input =>
@@ -286,5 +291,29 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   property("random gens and rollbacks") {
     rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
+  }
+
+  property("tokens dont disappear when rolling back with orphan block") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    indexer ! GenerateBetterChainTip()
+    lock.lock()
+    created.await()
+    val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
+    indexer ! FullBlockApplied(newBestHeaderOpt.get) // will be ignored
+    indexer ! CreateDB(HEIGHT + 1)
+    lock.lock()
+    created.await()
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT).get)
+    lock.lock()
+    done.await()
+    val (_, indexedTokens, _, _) = manualIndex(HEIGHT)
+    checkTokens(indexedTokens, HEIGHT) shouldBe 0
+    indexer ! Reset()
   }
 }

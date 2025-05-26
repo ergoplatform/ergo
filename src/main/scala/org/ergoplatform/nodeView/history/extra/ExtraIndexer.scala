@@ -66,6 +66,13 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
    */
   protected def caughtUpHook(height: Int = 0): Unit = {}
 
+  /**
+   * Used in tests to get block for rollback, maybe orphan
+   */
+  protected def getLastTxForHeight(height: Int): ErgoTransaction = {
+    history.bestBlockTransactionsAt(height).get.txs.last
+  }
+
   // fast access buffers
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   protected val boxes: mutable.HashMap[ModifierId, IndexedErgoBox] = mutable.HashMap.empty[ModifierId, IndexedErgoBox]
@@ -306,7 +313,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
-          if (!inputTokens.contains(iEb.box.additionalTokens(j)._1.toArray.toSeq)) {
+          val idMatch = java.util.Arrays.equals(iEb.box.additionalTokens(j)._1.toArray, tx.inputs.head.boxId)
+          if (idMatch && !inputTokens.contains(iEb.box.additionalTokens(j)._1.toArray.toSeq)) {
             val token = IndexedToken.fromBox(iEb, j)
             tokens.get(token.tokenId) match {
               case Some(t) => // same new token created in multiple boxes -> add amounts
@@ -350,7 +358,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     log.info(s"Rolling back indexes from ${state.indexedHeight} to $height")
 
     try {
-      val lastTxToKeep: ErgoTransaction = history.bestBlockTransactionsAt(height).get.txs.last
+      val lastTxToKeep: ErgoTransaction = getLastTxForHeight(height)
       val txTarget: Long = history.typedExtraIndexById[IndexedErgoTransaction](lastTxToKeep.id).get.globalIndex
       val boxTarget: Long = history.typedExtraIndexById[IndexedErgoBox](bytesToId(lastTxToKeep.outputs.last.id)).get.globalIndex
       val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]

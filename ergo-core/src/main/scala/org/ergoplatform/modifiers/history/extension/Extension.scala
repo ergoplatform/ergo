@@ -2,7 +2,6 @@ package org.ergoplatform.modifiers.history.extension
 
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
-
 import com.google.common.primitives.Bytes
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}

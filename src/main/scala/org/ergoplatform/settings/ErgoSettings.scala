@@ -29,6 +29,9 @@ case class ErgoSettings(directory: String,
         .toOption
     }
 
+  /**
+    * @return blockchain parameters at the genesis block
+    */
   def launchParameters: Parameters = {
     if (networkType == NetworkType.DevNet) {
       DevnetLaunchParameters

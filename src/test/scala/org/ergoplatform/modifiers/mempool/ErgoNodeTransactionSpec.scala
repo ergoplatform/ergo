@@ -23,6 +23,7 @@ import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.DefaultHeader
 import sigma.ast.{AND, ErgoTree, TrueLeaf, UnsignedBigIntConstant}
 import sigma.interpreter.{ContextExtension, ProverResult}
+import sigma.serialization.ErgoTreeSerializer
 import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
 import sigmastate.helpers.TestingHelpers._
 
@@ -395,15 +396,12 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       (outAssetsNum + inAssetsNum) * parameters.tokenAccessCost +
         (inAssets.size + outAssets.size) * parameters.tokenAccessCost
     val scriptsValidationCosts = tx.inputs.size + 1 // +1 for the block to JIT cost scaling
-    println(s"tx.inputs.size: ${tx.inputs.size}")
-    println(s"initialCost + totalAssetsAccessCost: ${initialCost + totalAssetsAccessCost}")
     val approxCost: Int = (initialCost + totalAssetsAccessCost + scriptsValidationCosts).toInt
 
 
     // check that validation pass if cost limit equals to approximated cost
     val sc = stateContextWith(paramsWith(approxCost))
     sc.currentParameters.maxBlockCost shouldBe approxCost
-    println("bv: " + sc.currentParameters.blockVersion)
     val calculatedCost = tx.statefulValidity(from, IndexedSeq(), sc)(ErgoInterpreter(sc.currentParameters)).get
     approxCost - calculatedCost <= 1 shouldBe true
 
@@ -589,6 +587,15 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       val bytes = ErgoBoxSerializer.toBytes(b)
       ErgoBoxSerializer.parseBytesTry(bytes).isSuccess shouldBe false
     }
+  }
+
+  property("Execution of v7 tree") {
+    val tree2 = compileSource("sigmaProp(true)", 7, 7)
+    val bs = Base16.encode(ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree2))
+    bs shouldBe "1f06010101d17300"
+    println(bs)
+    println(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get))
+
   }
 
 }

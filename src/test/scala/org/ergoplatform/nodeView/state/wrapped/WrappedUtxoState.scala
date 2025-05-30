@@ -64,10 +64,10 @@ object WrappedUtxoState {
             settings: ErgoSettings): WrappedUtxoState = {
     val emissionBox = ErgoState.genesisBoxes(settings.chainSettings).headOption
     val us = UtxoState.fromBoxHolder(boxHolder, emissionBox, dir, settings, parameters)
-    WrappedUtxoState(us, boxHolder, settings, parameters)
+    WrappedUtxoState(us, boxHolder, settings)
   }
 
-  def apply(us: UtxoState, boxHolder: BoxHolder, settings: ErgoSettings, parameters: Parameters): WrappedUtxoState = {
+  def apply(us: UtxoState, boxHolder: BoxHolder, settings: ErgoSettings): WrappedUtxoState = {
     val boxes = boxHolder.boxes
 
     val version = us.version

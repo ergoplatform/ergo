@@ -126,7 +126,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val (us, bh) = createUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, fixture.settings, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       }.get
     applyBlock(genesis) shouldBe 'success
@@ -165,7 +165,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val (us, bh) = createUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, fixture.settings, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       }.get
     // TODO looks like another bug is still present here, see https://github.com/ergoplatform/ergo/issues/309
@@ -220,7 +220,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val (us, bh) = createUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, fixture.settings, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       }.get
 
@@ -271,7 +271,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val (us, bh) = createUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, fixture.settings, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       }.get
     applyBlock(genesis) shouldBe 'success
@@ -294,7 +294,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val (us, bh) = createUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, fixture.settings, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       }.get
 
@@ -447,7 +447,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     import fixture._
 
     val (us, bh) = createUtxoState(fixture.settings)
-    val wusGenesis = WrappedUtxoState(us, bh, fixture.settings, parameters)
+    val wusGenesis = WrappedUtxoState(us, bh, fixture.settings)
 
 
     val chain1block1 = validFullBlock(parentOpt = None, us, bh)
@@ -509,7 +509,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     import fixture._
 
     val (us, bh) = createUtxoState(fixture.settings)
-    val wusGenesis = WrappedUtxoState(us, bh, fixture.settings, parameters)
+    val wusGenesis = WrappedUtxoState(us, bh, fixture.settings)
 
     val invalidBlock = generateInvalidFullBlock(None, wusGenesis)
 

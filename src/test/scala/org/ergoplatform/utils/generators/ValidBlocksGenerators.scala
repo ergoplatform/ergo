@@ -30,8 +30,8 @@ object ValidBlocksGenerators
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 
-  def createUtxoState(settings: ErgoSettings): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, settings)
+  def createUtxoState(settings: ErgoSettings, parametersOpt: Option[Parameters] = None): (UtxoState, BoxHolder) = {
+    ErgoState.generateGenesisUtxoState(createTempDir, settings, parametersOpt)
   }
 
   def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =

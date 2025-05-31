@@ -498,4 +498,39 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome2.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
   }
 
+
+  it should "reject v6 tree reducing to false" in {
+    val parameters = new Parameters(height = 0,
+      Parameters.DefaultParameters.updated(Parameters.BlockVersion, Header.Interpreter60Version),
+      proposedUpdate = ErgoValidationSettingsUpdate.empty)
+    val (us, bh) = createUtxoState(initSettings, Some(parameters))
+
+    val wus = WrappedUtxoState(us, bh, settings)
+    val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
+    var pool = ErgoMemPool.empty(settings)
+    val tx = txs.head
+    pool = pool.put(tx)
+
+    // sigmaProp(Global.serialize(2).size <= 0)
+    val bs = "1b110204040400d190b1dc6a03dd0173007301"
+    val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get)
+
+    val spendingBox = tx.transaction.outputs.head
+    val o2 = new ErgoBoxCandidate(spendingBox.value, tree, spendingBox.creationHeight, spendingBox.additionalTokens, spendingBox.additionalRegisters)
+    val tx2 = UnconfirmedTransaction(tx.transaction.copy(
+      inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+      outputCandidates = IndexedSeq(o2)), None)
+    val (newPool, outcome) = pool.process(tx2, wus)
+    outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool = newPool
+
+    val spendingBox2 = tx2.transaction.outputs.head
+    val o3 = new ErgoBoxCandidate(spendingBox2.value, tree, spendingBox2.creationHeight, spendingBox2.additionalTokens, spendingBox2.additionalRegisters)
+    val tx3 = UnconfirmedTransaction(tx2.transaction.copy(
+      inputs = IndexedSeq(new Input(spendingBox2.id, emptyProverResult)),
+      outputCandidates = IndexedSeq(o3)), None)
+    val (_, outcome2) = pool.process(tx3, wus)
+    outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
+  }
+
 }

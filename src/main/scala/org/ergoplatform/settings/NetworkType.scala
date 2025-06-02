@@ -36,4 +36,11 @@ object NetworkType {
     override val addressPrefix: Byte = 32
   }
 
+  case object DevNet60 extends NetworkType {
+    override val verboseName: String = "devnet60"
+    override val isMainNet: Boolean = false
+    override val isTestNet: Boolean = false
+    override val addressPrefix: Byte = 32
+  }
+
 }

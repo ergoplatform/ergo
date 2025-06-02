@@ -139,7 +139,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     */
   def simplifiedUpcoming(): UpcomingStateContext = {
     val minerPk = org.ergoplatform.mining.group.generator
-    val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
+    val version = lastHeaderOpt.map(_.version).getOrElse(currentParameters.blockVersion)
     val nBits = lastHeaderOpt.map(_.nBits).getOrElse(chainSettings.initialNBits)
     val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
     val votes = Array.emptyByteArray
@@ -348,12 +348,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 }
 
 object ErgoStateContext {
-
-  /**
-    * Parameter to vote for to support EIP-27 soft-fork.
-    * Also used for output cost.
-    */
-  val eip27Vote: Byte = 8
 
   def empty(chainSettings: ChainSettings, parameters: Parameters): ErgoStateContext = {
     empty(chainSettings.genesisStateDigest, chainSettings, parameters)

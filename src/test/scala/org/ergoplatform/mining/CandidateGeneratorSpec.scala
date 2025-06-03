@@ -15,7 +15,6 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.NetworkType.DevNet60
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
@@ -420,8 +419,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .bytes
     val input = Input(rewardBox.id, emptyProverResult)
 
+
+    // sigmaProp(Global.serialize(2).size > 0)
+    val bs = "1b110204040400d191b1dc6a03dd0173007301"
+    val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get)
+
     val outputs = IndexedSeq(
-      new ErgoBoxCandidate(rewardBox.value, TrueTree, readers.s.stateContext.currentHeight)
+      new ErgoBoxCandidate(rewardBox.value, tree, readers.s.stateContext.currentHeight)
     )
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
 
@@ -430,10 +434,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         .sign(unsignedTx, IndexedSeq(rewardBox), IndexedSeq(), readers.s.stateContext)
         .get
     )
-
-    // sigmaProp(Global.serialize(2).size > 0)
-    val bs = "1b110204040400d191b1dc6a03dd0173007301"
-    val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get)
 
     val spendingBox = tx.outputs.head
     val o2 = new ErgoBoxCandidate(spendingBox.value, tree, spendingBox.creationHeight, spendingBox.additionalTokens, spendingBox.additionalRegisters)
@@ -475,7 +475,11 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .headers
       .flatMap(readers.h.getFullBlock)
       .filter(_.blockTransactions.transactions.map(_.id).contains(tx.id))
+
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)
+    val txIds = txs.map(_.id)
+    txIds.contains(tx.id) shouldBe true
+    txIds.contains(tx2.id) shouldBe false
     txs should have length 2 // 1 rewards and one regular tx, no fee collection
     system.terminate()
   }
@@ -534,8 +538,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .bytes
     val input = Input(rewardBox.id, emptyProverResult)
 
+
+    // sigmaProp(Global.serialize(2).size > 0)
+    val bs = "1b110204040400d191b1dc6a03dd0173007301"
+    val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get)
+
     val outputs = IndexedSeq(
-      new ErgoBoxCandidate(rewardBox.value, TrueTree, readers.s.stateContext.currentHeight)
+      new ErgoBoxCandidate(rewardBox.value, tree, readers.s.stateContext.currentHeight)
     )
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
 
@@ -544,10 +553,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         .sign(unsignedTx, IndexedSeq(rewardBox), IndexedSeq(), readers.s.stateContext)
         .get
     )
-
-    // sigmaProp(Global.serialize(2).size > 0)
-    val bs = "1b110204040400d191b1dc6a03dd0173007301"
-    val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get)
 
     val spendingBox = tx.outputs.head
     val o2 = new ErgoBoxCandidate(spendingBox.value, tree, spendingBox.creationHeight, spendingBox.additionalTokens, spendingBox.additionalRegisters)

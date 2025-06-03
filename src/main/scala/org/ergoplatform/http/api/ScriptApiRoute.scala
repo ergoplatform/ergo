@@ -70,7 +70,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].map(r => op(r)))(toRoute)
   }
 
-  // todo: unite p2sAddress and p2shAddress
+  // todo: unite p2sAddress and p2shAddress, https://github.com/ergoplatform/ergo/issues/2213
   private def p2sAddressR: Route = (path("p2sAddress") & post & entity(as[CompileRequest])) { compileRequest =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>

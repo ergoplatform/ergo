@@ -595,9 +595,6 @@ object CandidateGenerator extends ScorexLogging {
         emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
       )
 
-      println("ts: " + txs.size)
-      println("es: "  + toEliminate.size)
-
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
       if (txs.isEmpty) {

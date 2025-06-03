@@ -7,6 +7,9 @@ import sigma.compiler.ir.CompiletimeIRContext
 
 import scala.util.{Failure, Success, Try}
 
+/**
+  * Common compilation related utils
+  */
 trait ErgoCompilerHelpers {
 
   def compileSource(source: String, scriptVersion: Byte, treeVersion: Byte): ErgoTree = {

@@ -6,6 +6,9 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettings, MainnetL
 import org.ergoplatform.utils.ErgoCoreTestConstants.genesisStateDigest
 import org.ergoplatform.utils.generators.ErgoCoreGenerators.defaultHeaderGen
 
+/**
+  * Used in tests, state context generation utils
+  */
 trait ErgoStateContextHelpers {
 
   def stateContext(height: Int, blockVersion: Byte, settings: ErgoSettings): ErgoStateContext = {

@@ -13,7 +13,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base16
 import sigma.ast.ByteArrayConstant
 import sigma.interpreter.{ContextExtension, ProverResult}
-import sigma.serialization.ErgoTreeSerializer
+import sigma.serialization.{ErgoTreeSerializer, SerializerException}
 
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
@@ -435,8 +435,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       Parameters.DefaultParameters.updated(Parameters.BlockVersion, Header.Interpreter60Version),
       proposedUpdate = ErgoValidationSettingsUpdate.empty)
     val (us, bh) = createUtxoState(initSettings, Some(parameters))
-    val genesis = validFullBlock(None, us, bh)
-    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val wus = WrappedUtxoState(us, bh, settings)
     val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
     var pool = ErgoMemPool.empty(settings)
     val tx = txs.head
@@ -451,17 +450,11 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val tx2 = UnconfirmedTransaction(tx.transaction.copy(
       inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
       outputCandidates = IndexedSeq(o2)), None)
-    val (newPool, outcome) = pool.process(tx2, us)
-    outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
-    pool = newPool
+    val (_, outcome) = pool.process(tx2, us)
+    outcome.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
 
-    val spendingBox2 = tx2.transaction.outputs.head
-    val o3 = new ErgoBoxCandidate(spendingBox2.value, tree, spendingBox2.creationHeight, spendingBox2.additionalTokens, spendingBox2.additionalRegisters)
-    val tx3 = UnconfirmedTransaction(tx2.transaction.copy(
-      inputs = IndexedSeq(new Input(spendingBox2.id, emptyProverResult)),
-      outputCandidates = IndexedSeq(o3)), None)
-    val (_, outcome2) = pool.process(tx3, us)
-    outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
+    // sigma.serialization.SerializerException: Tree version (7) is above activated script version (3)
+    outcome.asInstanceOf[ProcessingOutcome.Invalidated].e.isInstanceOf[SerializerException] shouldBe true
   }
 
   it should "accept v6 tree" in {

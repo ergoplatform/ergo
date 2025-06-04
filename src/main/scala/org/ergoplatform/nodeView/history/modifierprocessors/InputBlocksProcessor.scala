@@ -495,6 +495,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * @return all the transaction in best input-blocks chain collected after current best ordering block
+    */
   def getBestOrderingCollectedInputBlocksTransactions(): Seq[ErgoTransaction] = {
     bestOrderingBlock().map(h => h.id).flatMap(getCollectedInputBlocksTransactions).getOrElse(Seq.empty)
   }
@@ -505,10 +508,6 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   def getOrderingBlockTransactions(orderingBlockId: ModifierId): Option[Seq[ErgoTransaction]] = {
     orderingBlockTransactions.get(orderingBlockId)
-  }
-
-  def getBestInputBlock(orderingBlockId: ModifierId): Option[ModifierId] = {
-    bestInputBlocks.get(orderingBlockId).flatten.map(_.id)
   }
 
 }

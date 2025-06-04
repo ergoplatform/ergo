@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
 import com.google.common.io.Files.createTempDir
-import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockInfo
-import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
@@ -17,28 +17,13 @@ import scorex.crypto.hash.Digest32
 import scorex.util.{bytesToId, idToBytes}
 import sigma.Colls
 import sigma.ast.ErgoTree
-import sigma.compiler.ir.CompiletimeIRContext
-import sigma.compiler.{CompilerResult, SigmaCompiler}
 import sigma.data.TrivialProp.TrueProp
 import sigma.interpreter.ProverResult
 
 
-class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
+class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpers {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
-
-  private def compileSource(source: String): ErgoTree = {
-    import sigma.ast._
-    val compiler = new SigmaCompiler(ErgoAddressEncoder.TestnetNetworkPrefix)
-    compiler.compile(Map.empty, source)(new CompiletimeIRContext) match {
-      case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
-        ErgoTree.fromProposition(script)
-      case CompilerResult(_, _, _, script: Value[SBoolean.type@unchecked]) if script.tpe == SBoolean =>
-        ErgoTree.fromProposition(script.toSigmaProp)
-      case _ =>
-        ???
-    }
-  }
 
   val eb1 = new ErgoBox(
     value = 1000000000L,
@@ -53,7 +38,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest {
 
   val eb2 = new ErgoBox(
     value = 1000000000L,
-    ergoTree = compileSource("CONTEXT.minerPubKey.size >= 0"),
+    ergoTree = compileSourceV5("CONTEXT.minerPubKey.size >= 0", 1),
     creationHeight = 0,
     additionalTokens = Colls.emptyColl,
     additionalRegisters = Map.empty,

@@ -488,13 +488,13 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
   property("2 forks switching") {
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
-    val wusAfterGenesis = WrappedUtxoState(us, bh, settings, parameters).applyModifier(genesis)(_ => ()).get
+    val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
     val chain1block1 = validFullBlock(Some(genesis), wusAfterGenesis)
     val wusChain1Block1 = wusAfterGenesis.applyModifier(chain1block1)(_ => ()).get
     val chain1block2 = validFullBlock(Some(chain1block1), wusChain1Block1)
 
     val (us2, bh2) = createUtxoState(settings)
-    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, settings, parameters).applyModifier(genesis)(_ => ()).get
+    val wus2AfterGenesis = WrappedUtxoState(us2, bh2, settings).applyModifier(genesis)(_ => ()).get
     val chain2block1 = validFullBlock(Some(genesis), wus2AfterGenesis)
     val wusChain2Block1 = wus2AfterGenesis.applyModifier(chain2block1)(_ => ()).get
     val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
@@ -520,7 +520,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
         val us = createUtxoState(bh, parameters)
         bh.sortedBoxes.foreach(box => us.boxById(box.id) should not be None)
         val genesis = validFullBlock(parentOpt = None, us, bh)
-        val wusAfterGenesis = WrappedUtxoState(us, bh, settings, parameters).applyModifier(genesis)(_ => ()).get
+        val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
         wusAfterGenesis.rootDigest shouldEqual genesis.header.stateRoot
 
         val (finalState: WrappedUtxoState, chain: Seq[ErgoFullBlock]) = (0 until depth)

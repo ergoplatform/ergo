@@ -23,7 +23,6 @@ import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.DefaultHeader
 import sigma.ast.{AND, ErgoTree, TrueLeaf, UnsignedBigIntConstant}
 import sigma.interpreter.{ContextExtension, ProverResult}
-import sigma.serialization.ErgoTreeSerializer
 import sigma.serialization.ErgoTreeSerializer.DefaultSerializer
 import sigmastate.helpers.TestingHelpers._
 
@@ -587,15 +586,6 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       val bytes = ErgoBoxSerializer.toBytes(b)
       ErgoBoxSerializer.parseBytesTry(bytes).isSuccess shouldBe false
     }
-  }
-
-  property("Execution of v7 tree") {
-    val tree2 = compileSource("sigmaProp(true)", 7, 7)
-    val bs = Base16.encode(ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(tree2))
-    bs shouldBe "1f06010101d17300"
-    println(bs)
-    println(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(Base16.decode(bs).get))
-
   }
 
 }

@@ -416,6 +416,11 @@ object Parameters {
     }
   }
 
+  // in 6.0 previous matchParameters rule is switched off,
+  // and this similar one is introduced
+  // the difference is,
+  // the new rule is not checking that locally calculated parameters has the same size as received in a block
+  // with this relaxation new parameters may be introduced without breaking consensus with older clients
   def matchParameters60(p1: Parameters, p2: Parameters, blockVersion: Header.Version): Try[Unit] = {
     if (blockVersion < Header.Interpreter60Version) {
       Success(())

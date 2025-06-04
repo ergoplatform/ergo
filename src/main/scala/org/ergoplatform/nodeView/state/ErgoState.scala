@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
@@ -270,13 +270,15 @@ object ErgoState extends ScorexLogging {
     * Generate genesis full (UTXO-set) state by inserting genesis boxes into empty UTXO set.
     * Assign `genesisStateDigest` from config as its version.
     */
-  def generateGenesisUtxoState(stateDir: File, settings: ErgoSettings): (UtxoState, BoxHolder) = {
+  def generateGenesisUtxoState(stateDir: File, settings: ErgoSettings, parametersOpt: Option[Parameters] = None): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val boxes = genesisBoxes(settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, settings.launchParameters).ensuring(us => {
+    val parameters = parametersOpt.getOrElse(settings.launchParameters)
+
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, parameters).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
       java.util.Arrays.equals(us.rootDigest, settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh

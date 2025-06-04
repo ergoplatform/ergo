@@ -35,6 +35,8 @@ case class ErgoSettings(directory: String,
   def launchParameters: Parameters = {
     if (networkType == NetworkType.DevNet) {
       DevnetLaunchParameters
+    } else if (networkType == NetworkType.DevNet60) {
+      Devnet60LaunchParameters
     } else if (networkType == NetworkType.TestNet) {
       TestnetLaunchParameters
     } else {

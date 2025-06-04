@@ -29,8 +29,18 @@ object NetworkType {
     override val addressPrefix: Byte = ErgoAddressEncoder.TestnetNetworkPrefix
   }
 
+
+  // devnet which is starting from 5.0 activated since genesis block
   case object DevNet extends NetworkType {
     override val verboseName: String = "devnet"
+    override val isMainNet: Boolean = false
+    override val isTestNet: Boolean = false
+    override val addressPrefix: Byte = 32
+  }
+
+  // used in tests only curently, devnet which is starting from 6.0 activated since genesis block
+  case object DevNet60 extends NetworkType {
+    override val verboseName: String = "devnet60"
     override val isMainNet: Boolean = false
     override val isTestNet: Boolean = false
     override val addressPrefix: Byte = 32

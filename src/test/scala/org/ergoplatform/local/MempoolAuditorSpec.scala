@@ -49,7 +49,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val (us, bh) = createUtxoState(settingsToTest)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
-      WrappedUtxoState(us, bh, settingsToTest, parameters).applyModifier(genesis) { mod =>
+      WrappedUtxoState(us, bh, settingsToTest).applyModifier(genesis) { mod =>
         nodeViewHolderRef ! mod
       } .get
 

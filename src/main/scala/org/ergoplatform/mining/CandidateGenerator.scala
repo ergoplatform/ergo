@@ -331,10 +331,10 @@ object CandidateGenerator extends ScorexLogging {
     txsToInclude: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings): Option[Try[(Candidate, EliminateTransactions)]] = {
 
-    // prioritized transactions to include
-    // filter out transactions which inputs spent already
+    // mandatory transactions to include into next block taken from the previous candidate
+    val stateWithMandatoryTxs = s.withTransactions(txsToInclude)
     lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
-      inputsNotSpent(tx, s)
+      inputsNotSpent(tx, stateWithMandatoryTxs)
     }
 
     val stateContext = s.stateContext

@@ -9,6 +9,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockAppli
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages._
+import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -77,6 +78,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   protected val general: ArrayBuffer[ExtraIndex] = ArrayBuffer.empty[ExtraIndex]
   protected val boxes: mutable.HashMap[ModifierId, IndexedErgoBox] = mutable.HashMap.empty[ModifierId, IndexedErgoBox]
   protected val trees: mutable.HashMap[ModifierId, IndexedErgoAddress] = mutable.HashMap.empty[ModifierId, IndexedErgoAddress]
+  protected val templates: mutable.HashMap[ModifierId, IndexedContractTemplate] = mutable.HashMap.empty[ModifierId, IndexedContractTemplate]
   protected val tokens: mutable.HashMap[ModifierId, IndexedToken] = mutable.HashMap.empty[ModifierId, IndexedToken]
   protected val segments: mutable.HashMap[ModifierId, Segment[_]] = mutable.HashMap.empty[ModifierId, Segment[_]]
 
@@ -207,10 +209,33 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     }
   }
 
+  private def findAndUpdateTemplate(id: ModifierId, spendOrReceive: Either[IndexedErgoBox, IndexedErgoBox]): Unit = {
+    templates.get(id).map { template =>
+      spendOrReceive match {
+        case Left(iEb) => template.spendBox(iEb, Some(history)) // spend box
+        case Right(iEb) => template.addBox(iEb) // receive box
+      }
+      return
+    }
+    history.typedExtraIndexById[IndexedContractTemplate](id) match {
+      case Some(x) =>
+        spendOrReceive match {
+          case Left(iEb) => templates.put(id, x.spendBox(iEb, Some(history))) // spend box
+          case Right(iEb) => templates.put(id, x.addBox(iEb)) // receive box
+        }
+      case None => // template not found at all
+        spendOrReceive match {
+          case Left(iEb) => log.error(s"Unknown template spent box ${bytesToId(iEb.box.id)}") // spend box should never happen by an unknown template
+          case Right(iEb) => templates.put(id, IndexedContractTemplate(id).addBox(iEb)) // receive box, new template
+        }
+
+    }
+  }
+
   /**
     * @return number of indexes in all buffers
     */
-  private def modCount: Int = general.length + boxes.size + trees.size + tokens.size
+  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size
 
   /**
     * Write buffered indexes to database and clear buffers.
@@ -223,6 +248,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
+    }
+
+    templates.values.foreach { template =>
+      template.buffer.values.foreach(seg => segments.put(seg.id, seg))
+      template.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
     // perform segmentation on big tokens and save their internal segment buffer
@@ -239,7 +269,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         (GlobalBoxIndexKey, ByteBuffer.allocate(8).putLong(state.globalBoxIndex).array),
         (RollbackToKey, ByteBuffer.allocate(4).putInt(state.rollbackTo).array)
       ),
-      ((((general ++= boxes.values) ++= trees.values) ++= tokens.values) ++= segments.values).toArray
+      (((((general ++= boxes.values) ++= trees.values) ++= templates.values) ++= tokens.values) ++= segments.values).toArray
     )
 
     log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
@@ -248,6 +278,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     general.clear()
     boxes.clear()
     trees.clear()
+    templates.clear()
     tokens.clear()
     segments.clear()
   }
@@ -291,7 +322,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           if (findAndSpendBox(boxId, tx.id, height, spendingProof)) { // spend box and add tx
             val iEb = boxes(boxId)
             findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
-            cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
+            findAndUpdateTemplate(hashTreeTemplate(iEb.box.ergoTree), Left(iEb))
+              cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
               findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Left(iEb))
             }
             inputs(i) = iEb.globalIndex
@@ -310,6 +342,9 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
         // box by address
         findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
+
+        // box by template
+        findAndUpdateTemplate(hashTreeTemplate(iEb.box.ergoTree), Right(boxes(iEb.id)))
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -371,10 +406,15 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
           iEb.spendingHeightOpt = None
           iEb.spendingTxIdOpt = None
+          iEb.spendingProofOpt = None
 
           val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
           address.findAndModBox(iEb.globalIndex, history)
-          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address) ++ address.buffer.values)
+
+          val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
+          template.findAndModBox(iEb.globalIndex, history)
+
+          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address, template) ++ address.buffer.values ++ template.buffer.values)
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
             history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
@@ -405,6 +445,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).map { address =>
           address.spendBox(iEb)
           toRemove ++= address.rollback(txTarget, boxTarget, _history)
+        }
+        history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).map { template =>
+          template.spendBox(iEb)
+          toRemove ++= template.rollback(txTarget, boxTarget, _history)
         }
         toRemove += iEb.id // box by id
         toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number

@@ -81,7 +81,7 @@ object CandidateBlock {
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
       "votes" -> Algos.encode(c.votes).asJson,
-      "extensionHash" -> Algos.encode(c.extension.digest).asJson,
+      "extensionHash" -> Algos.encode(c.extension.digest).asJson
       // todo: add input block related fields
     ).asJson)
 

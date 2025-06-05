@@ -66,10 +66,16 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * transactions generated AFTER an ordering block, till best known input block with transactions
     * block header (ordering block) -> transaction ids
+    * so best inputs-block chain transactions AFTER an ordering block
     * so transaction ids do belong to transactions in input blocks since the block (header)
     */
   private val orderingInputBlocksTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
+
+  /**
+    * Transactions commited in an ordering block
+    * Ordering (full) block -> transactions committed by it
+    */
   private val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
 
   /**

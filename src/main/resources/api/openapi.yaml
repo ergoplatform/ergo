@@ -273,6 +273,9 @@ components:
               format: int32
               minimum: 0
               example: 147
+            spendingProof:
+              nullable: true
+              $ref: '#/components/schemas/SpendingProof'
             globalIndex:
               description: Global index of the output in the blockchain
               type: integer

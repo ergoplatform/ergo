@@ -273,8 +273,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
 
     // sub-blocks related messages
-    context.system.eventStream.subscribe(self, classOf[DownloadSubblock])
-    context.system.eventStream.subscribe(self, classOf[DownloadSubblockTransactions])
+    context.system.eventStream.subscribe(self, classOf[DownloadInputBlock])
+    context.system.eventStream.subscribe(self, classOf[DownloadInputBlockTransactions])
     context.system.eventStream.subscribe(self, classOf[NewBestInputBlock])
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
@@ -645,11 +645,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
       }
-    case DownloadSubblock(sbId, remote) =>
+    case DownloadInputBlock(sbId, remote) =>
       // processing internal request to download an input block
       val msg = Message(InputBlockRequestMessageSpec, Right(sbId), None)
       networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-    case DownloadSubblockTransactions(sbId, remote) =>
+    case DownloadInputBlockTransactions(sbId, remote) =>
       // processing internal request to download input block transactions
       val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(sbId), None)
       networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))

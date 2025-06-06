@@ -22,6 +22,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def historyReader: ErgoHistoryReader
 
+  private val PruningThreshold = 2 // we remove input-blocks data after 2 ordering blocks
+
+
   private val bestInputBlocks = mutable.Map[ModifierId, Option[InputBlockInfo]]()
   /**
     * Pointer to a best input-block with transactions known
@@ -106,8 +109,6 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   private def prune(): Unit = {
-    val BlocksThreshold = 2 // we remove input-blocks data after 2 ordering blocks
-
     val bestHeight = _bestInputBlock.map(_.header.height).getOrElse(0)
 
     val orderingBlockIdsToRemove = bestHeights.keys.filter { orderingId =>
@@ -126,7 +127,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     val inputBlockIdsToRemove = inputBlockRecords.flatMap { case (id, ibi) =>
-      val res = (bestHeight - ibi.header.height) > BlocksThreshold
+      val res = (bestHeight - ibi.header.height) > PruningThreshold
       if (res) {
         Some(id)
       } else {

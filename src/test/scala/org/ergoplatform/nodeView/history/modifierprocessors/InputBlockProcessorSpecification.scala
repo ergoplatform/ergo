@@ -371,6 +371,26 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
   property("apply input block with parent ordering block in the past") {
 
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+
+    val c3 = genChain(1, h, stateOpt = Some(us)).tail
+    applyChain(h, c3)
+
+    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty)
+    val r = h.applyInputBlock(ib)
+    r shouldBe None
+
+    h.bestInputBlocksChain() shouldBe Seq()
+    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
   }
 
   property("apply input block with non-best parent input block") {

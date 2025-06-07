@@ -419,15 +419,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
-  property("apply new best input block (input blocks chain switch) - same ordering block") {
-
-  }
-
-  property("apply new best input block on another ordering block") {
-
-  }
-
-  property("apply input block with invalid transaction") {
+  property("apply new best input block on another ordering block on the same height") {
 
   }
 

@@ -7,10 +7,11 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockInfo
-import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest}
+import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.validTransactionsFromBoxHolder
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
@@ -38,7 +39,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
   val eb2 = new ErgoBox(
     value = 1000000000L,
-    ergoTree = compileSourceV5("CONTEXT.minerPubKey.size >= 0", 1),
+    ergoTree = compileSourceV5("CONTEXT.minerPubKey.size >= 0", 0),
     creationHeight = 0,
     additionalTokens = Colls.emptyColl,
     additionalRegisters = Map.empty,
@@ -419,15 +420,43 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
+  property("apply input block with class II transaction") {
+    val bh = BoxHolder(Seq(eb2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty)
+    val r1 = h.applyInputBlock(ib1)
+    r1 shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
+    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+
+    val c3 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
+    c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    // apply transactions
+    // input block should be rejected
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
   property("apply new best input block on another ordering block on the same height") {
 
   }
 
   property("apply input block with double spending") {
-
-  }
-
-  property("apply input block with class II transaction") {
 
   }
 

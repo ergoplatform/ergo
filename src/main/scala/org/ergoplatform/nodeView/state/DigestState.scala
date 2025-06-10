@@ -148,7 +148,7 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
-  override def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit] = ???
+  override def applyInputBlock(txs: Seq[ErgoTransaction], previousTxs: Seq[ErgoTransaction], header: Header): Try[Unit] = ???
 
 }
 

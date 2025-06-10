@@ -60,7 +60,7 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   def rollbackVersions: Iterable[VersionTag]
 
-  def applyInputBlock(txs: Seq[ErgoTransaction], header: Header): Try[Unit]
+  def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Unit]
 
   /**
     * @return read-only view of this state
@@ -260,7 +260,7 @@ object ErgoState extends ScorexLogging {
   /**
     * Genesis state boxes generator.
     * Genesis state is corresponding to the state before the very first block processed.
-    * For Ergo mainnet, contains emission contract box, proof-of-no--premine box, and treasury contract box
+    * For Ergo mainnet, contains emission contract box, proof-of-no-premine box, and treasury contract box
     */
   def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
     Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))

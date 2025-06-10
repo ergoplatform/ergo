@@ -237,15 +237,15 @@ trait InputBlocksProcessor extends ScorexLogging {
                                              state: ErgoState[_]): Boolean = {
     val ib = inputBlockRecords.apply(blockId)
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
+    val orderingId = ib.header.parentId
 
     val res: Boolean = _bestInputBlock match {
       case None =>
         if (ibParentOpt.isEmpty && ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           val txs = transactionIds.map(id => transactionsCache.apply(id))
-          val txsValid = state.applyInputBlock(txs, ib.header)
+          val txsValid = state.applyInputBlock(txs, Seq.empty, ib.header)
           if (txsValid.isSuccess) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
-            val orderingId = ib.header.parentId
             bestInputBlocks += orderingId -> Some(ib)
             _bestInputBlock = Some(ib)
             true
@@ -259,7 +259,11 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
         val txs = transactionIds.map(id => transactionsCache.apply(id))
-        val txsValid = state.applyInputBlock(txs, ib.header)
+
+        // todo: checks
+        val previousTxs = orderingInputBlocksTransactions.get(orderingId).map(_.map(transactionsCache.apply)).getOrElse(Seq.empty)
+
+        val txsValid = state.applyInputBlock(txs, previousTxs, ib.header)
         if (txsValid.isSuccess) {
           log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
           val orderingId = ib.header.parentId

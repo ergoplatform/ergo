@@ -572,7 +572,67 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
   }
 
   property("apply input block with double spending - spending from output created in an input block") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
 
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty)
+    val r1 = h.applyInputBlock(ib1)
+    r1 shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
+    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+
+    val input = tx1.head.outputs.head
+    val tx2 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
+
+    val c3 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
+    c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)))
+    var r = h.applyInputBlock(ib2)
+    r shouldBe None
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
+    h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
+    h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
+    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+
+    val c4 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
+    c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)))
+    r = h.applyInputBlock(ib3)
+    r shouldBe None
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
+    h.isAncestor(ib3.id, ib1.id).contains(ib3.id) shouldBe true
+    h.isAncestor(ib3.id, ib3.id).isEmpty shouldBe true
+    h.isAncestor(ib1.id, ib3.id).isEmpty shouldBe true
+
+    val tx3 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
+    
+    // apply transactions
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe Seq(ib2.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
+
+    h.applyInputBlockTransactions(ib3.id, Seq(tx3), us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
   }
 
   property("apply new best input block on another ordering block on the same height") {

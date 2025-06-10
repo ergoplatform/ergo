@@ -564,7 +564,6 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
 
     // apply transactions
-    // input block should be rejected
     h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 

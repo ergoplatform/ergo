@@ -66,6 +66,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     * @param headerId of the block these transactions belong to
     * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
     * @param currentStateContext Additional data required for transactions validation
+    * @param softFieldsAllowed
+    * @param checkUtxoSetTransformations
     * @return
     */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
@@ -232,13 +234,17 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
   override def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Unit] = {
     // check transactions with class II transactions disabled and no UTXO set transformations checked and written
-    // todo: double-spending is checked currently via operations over UTXO set, do a test and fix
     val res = this.withTransactions(previousTransactions).applyTransactions(txs, header.id, header.stateRoot, stateContext,
                                 softFieldsAllowed = false, checkUtxoSetTransformations = false)
     if (res.isFailure) {
       log.warn(s"Input block validation failed for ${header.id} : " + res)
     }
-    res
+    val inputs = (txs ++ previousTransactions).flatMap(_.inputs).map(_.boxId) // todo: optimize
+    if(inputs.size != inputs.distinct.size) {                                 // todo: optimize
+     Failure[Unit](new Exception("Double spending"))
+    } else {
+      res
+    }
   }
 
 }

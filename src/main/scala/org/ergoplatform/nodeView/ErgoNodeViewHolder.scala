@@ -310,16 +310,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case ProcessInputBlock(sbi, remote) =>
       val toDownloadOpt = history().applyInputBlock(sbi)
 
+      // ask for parent input block
+      // we do it before asking for transactions of this input-block to get parent and its transactions ASAP
+      toDownloadOpt.foreach { inputId =>
+        log.debug(s"Don't have parent of input-block ${sbi.id}, asking it")
+        context.system.eventStream.publish(DownloadInputBlock(inputId, remote))
+      }
+
       history().getInputBlockTransactions(sbi.id) match {
         case Some(txs) =>
           // we already have transactions somehow
           log.debug(s"Got input block ${sbi.id} transactions before the input block itself")
           processInputBlockTransactions(sbi.id, txs)
         case None =>
+          log.debug(s"Downloading transactions of input-block ${sbi.id}")
           context.system.eventStream.publish(DownloadInputBlockTransactions(sbi.id, remote))
-          toDownloadOpt.foreach { inputId =>
-            context.system.eventStream.publish(DownloadInputBlock(inputId, remote))
-          }
       }
 
     case ProcessInputBlockTransactions(std) =>

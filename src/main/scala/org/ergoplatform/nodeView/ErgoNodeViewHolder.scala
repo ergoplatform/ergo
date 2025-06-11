@@ -356,7 +356,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val ext = Extension(oba.header.id, oba.extensionFields)
         pmodModify(ext, local = false)
 
-        val orderingBlockTransactions = history().getOrderingBlockTransactions(headerId).getOrElse(Seq.empty)
+        // todo: check and handle broadcasted txs which are not in the mempool
+        val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ memoryPool().getAll(oba.broadcastedTransactionIds).map(_.transaction)
+        history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
         val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
 
         // todo: .debug before final release

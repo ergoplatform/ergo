@@ -345,9 +345,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   private def processOrderingBlock(oba: OrderingBlockAnnouncement): Unit = {
+    val parentId = oba.header.parentId
     val headerId = oba.header.id
     log.info(s"Processing ordering block announcement for $headerId")
-    history().typedModifierById[Header](headerId) match {
+    history().typedModifierById[Header](parentId) match {
       case Some(header) =>
 
         // we apply header and extension from ordering block announcement
@@ -355,8 +356,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val ext = Extension(oba.header.id, oba.extensionFields)
         pmodModify(ext, local = false)
 
-        val txs = history().getOrderingBlockTransactions(headerId).getOrElse(Seq.empty) ++
-          history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+        val orderingBlockTransactions = history().getOrderingBlockTransactions(headerId).getOrElse(Seq.empty)
+        val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+
+        // todo: .debug before final release
+        log.info(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block transactions and ${inputBlocksTransactions.length} input-blocks transactions")
+
+        // todo: check if ordering block transactions should come first
+        val txs = orderingBlockTransactions ++ inputBlocksTransactions
 
         // just to be sure, checking Merkle root of collected transactions
         require(header.transactionsRoot.sameElements(BlockTransactions.transactionsRoot(txs, header.version)))
@@ -365,7 +372,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
         // todo: check ADProofs section generation
       case None =>
-        log.error(s"parent header not found in processOrderingBlock : $headerId")
+        log.error(s"parent header not found in processOrderingBlock : $parentId")
     }
   }
 

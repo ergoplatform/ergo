@@ -513,6 +513,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     bestOrderingBlock().map(h => h.id).flatMap(getCollectedInputBlocksTransactions).getOrElse(Seq.empty)
   }
 
+  // todo: called only for local generation atm
   def saveOrderingBlockTransactions(orderingBlockId: ModifierId, transactions: Seq[ErgoTransaction]) = {
     orderingBlockTransactions.put(orderingBlockId, transactions)
   }

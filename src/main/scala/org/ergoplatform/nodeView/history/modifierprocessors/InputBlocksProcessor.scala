@@ -358,7 +358,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           }
         }
       case None =>
-        log.warn(s"Input block transactions delivered for not known input block $sbId")
+        log.warn(s"Input block transactions delivered for unknown input block $sbId")
         // todo: should transactions be saved in this case ?
         return Seq.empty
     }

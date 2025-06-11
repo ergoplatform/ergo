@@ -320,6 +320,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       history().getInputBlockTransactions(sbi.id) match {
         case Some(txs) =>
           // we already have transactions somehow
+          // shouldn't be the case now, but the path is left for possible optimizations in future
           log.debug(s"Got input block ${sbi.id} transactions before the input block itself")
           processInputBlockTransactions(sbi.id, txs)
         case None =>
@@ -338,18 +339,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
     // todo: send NewBestInputBlock(None) on new full block
     newBestInputBlocks.foreach { id =>
+      log.debug(s"New input-block with transactions found: $id")
       context.system.eventStream.publish(NewBestInputBlock(id))
     }
   }
 
   private def processOrderingBlock(oba: OrderingBlockAnnouncement): Unit = {
-    val headerId = oba.header.parentId
+    val headerId = oba.header.id
+    log.info(s"Processing ordering block announcement for $headerId")
     history().typedModifierById[Header](headerId) match {
       case Some(header) =>
-        pmodModify(header, false)
 
+        // we apply header and extension from ordering block announcement
+        pmodModify(header, local = false)
         val ext = Extension(oba.header.id, oba.extensionFields)
-        pmodModify(ext, false)
+        pmodModify(ext, local = false)
 
         val txs = history().getOrderingBlockTransactions(headerId).getOrElse(Seq.empty) ++
           history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)

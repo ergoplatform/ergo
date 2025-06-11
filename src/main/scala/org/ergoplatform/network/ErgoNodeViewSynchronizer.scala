@@ -1103,7 +1103,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   def processInputBlock(inputBlockInfo: InputBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     val subBlockHeader = inputBlockInfo.header
-    // apply sub-block if it is on current height
+    // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       if (inputBlockInfo.valid()) { // check PoW / Merkle proofs before processing
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block

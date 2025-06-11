@@ -235,13 +235,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   override def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Unit] = {
     // check transactions with class II transactions disabled and no UTXO set transformations checked and written
     val res = this.withTransactions(previousTransactions).applyTransactions(txs, header.id, header.stateRoot, stateContext,
-                                softFieldsAllowed = false, checkUtxoSetTransformations = false)
-    println("res: " + res)
+      softFieldsAllowed = false, checkUtxoSetTransformations = false)
     if (res.isFailure) {
       log.warn(s"Input block validation failed for ${header.id} : " + res)
     }
     val inputs = (txs ++ previousTransactions).flatMap(_.inputs).map(_.boxId) // todo: optimize
-    if(inputs.size != inputs.distinct.size) {    // todo: optimize
+    if (inputs.size != inputs.distinct.size) { // todo: optimize
       log.warn("Double spending")
       Failure[Unit](new Exception("Double spending"))
     } else {

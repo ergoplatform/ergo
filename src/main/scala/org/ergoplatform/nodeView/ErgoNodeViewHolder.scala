@@ -312,6 +312,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
       history().getInputBlockTransactions(sbi.id) match {
         case Some(txs) =>
+          // we already have transactions somehow
+          log.debug(s"Got input block ${sbi.id} transactions before the input block itself")
           processInputBlockTransactions(sbi.id, txs)
         case None =>
           context.system.eventStream.publish(DownloadInputBlockTransactions(sbi.id, remote))

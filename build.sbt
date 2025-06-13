@@ -120,9 +120,9 @@ assembly / test := {}
 assembly / assemblyJarName := s"ergo-${version.value}.jar"
 
 assembly / assemblyMergeStrategy := {
-  case "logback.xml" => MergeStrategy.first
+  case "logback.xml" => MergeStrategy.last
   case x if x.endsWith("module-info.class") => MergeStrategy.discard
-  case "reference.conf" => MergeStrategy.concat
+  case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("org", "iq80", "leveldb", xs @ _*) => MergeStrategy.first
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first

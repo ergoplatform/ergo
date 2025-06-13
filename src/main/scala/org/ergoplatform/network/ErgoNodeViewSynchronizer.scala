@@ -1606,12 +1606,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
 
-    case NewBestInputBlock(id) => // todo: broadcast only locally generated new best input block
+    // todo: broadcast only locally generated new best input block
+    case NewBestInputBlock(id) =>
       historyReader.getInputBlock(id) match {
         case Some(ibi) =>
           log.debug(s"Sending input block $id out")
+          val peers = syncTracker.statuses.filter(_._2.status == Equal).keys.toSeq // todo: include FORK
           val msg = Message(InputBlockMessageSpec, Right(ibi), None)
-          networkControllerRef ! SendToNetwork(msg, Broadcast)
+          networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
         case None =>
       }
   }

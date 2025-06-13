@@ -351,7 +351,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     history().typedModifierById[Header](parentId) match {
       case Some(header) =>
 
-        // we apply header and extension from ordering block announcement
         pmodModify(header, local = false)
         val ext = Extension(oba.header.id, oba.extensionFields)
         pmodModify(ext, local = false)
@@ -368,9 +367,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val txs = orderingBlockTransactions ++ inputBlocksTransactions
 
         // just to be sure, checking Merkle root of collected transactions
-        require(header.transactionsRoot.sameElements(BlockTransactions.transactionsRoot(txs, header.version)))
-        val bs = new BlockTransactions(headerId, header.version, txs)
-        pmodModify(bs, false)
+        if(header.transactionsRoot.sameElements(BlockTransactions.transactionsRoot(txs, header.version))) {
+          // we apply header and extension from ordering block announcement
+          log.info(s"Applying block transactions from input-blocks for $headerId")
+          val bs = new BlockTransactions(headerId, header.version, txs)
+          pmodModify(bs, false)
+        } else {
+          log.warn(s"Downloading block transactions fully for $headerId")
+          context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
+        }
 
         // todo: check ADProofs section generation
       case None =>

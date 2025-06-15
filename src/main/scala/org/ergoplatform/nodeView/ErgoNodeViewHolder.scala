@@ -345,14 +345,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   private def processOrderingBlock(oba: OrderingBlockAnnouncement): Unit = {
-    val parentId = oba.header.parentId
-    val headerId = oba.header.id
+    val header   = oba.header
+    val parentId = header.parentId
+    val headerId = header.id
     log.info(s"Processing ordering block announcement for $headerId")
     history().typedModifierById[Header](parentId) match {
-      case Some(header) =>
-
+      case Some(_) =>
         pmodModify(header, local = false)
-        val ext = Extension(oba.header.id, oba.extensionFields)
+        val ext = Extension(header.id, oba.extensionFields)
         pmodModify(ext, local = false)
 
         // todo: check and handle broadcasted txs which are not in the mempool
@@ -366,8 +366,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         // todo: check if ordering block transactions should come first
         val txs = orderingBlockTransactions ++ inputBlocksTransactions
 
-        // just to be sure, checking Merkle root of collected transactions
-        if(header.transactionsRoot.sameElements(BlockTransactions.transactionsRoot(txs, header.version))) {
+        val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
+        val blockDigest = header.transactionsRoot
+        // checking Merkle root of collected transactions
+        if(blockDigest.sameElements(calculatedDigest)) {
           // we apply header and extension from ordering block announcement
           log.info(s"Applying block transactions from input-blocks for $headerId")
           val bs = new BlockTransactions(headerId, header.version, txs)

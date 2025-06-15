@@ -61,11 +61,11 @@ class CandidateGenerator(
 
   /** Send solved ordering block to processing */
   private def sendOrderingToNodeView(newBlock: ErgoFullBlock,
-                                     orderingBlockTtransactions: Seq[ErgoTransaction]): Unit = {
+                                     orderingBlockTransactions: Seq[ErgoTransaction]): Unit = {
     log.info(
       s"New ordering block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
-    viewHolderRef ! LocallyGeneratedOrderingBlock(newBlock, orderingBlockTtransactions)
+    viewHolderRef ! LocallyGeneratedOrderingBlock(newBlock, orderingBlockTransactions)
   }
 
   /** Send solved input block to processing */

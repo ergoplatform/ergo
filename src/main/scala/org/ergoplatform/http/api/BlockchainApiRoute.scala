@@ -81,6 +81,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getBoxesByAddressGetRoute ~
       getBoxesByAddressUnspentR ~
       getBoxesByAddressUnspentGetRoute ~
+      getBoxesByTemplateHashR ~
+      getBoxesByTemplateHashUnspentR ~
       getBoxRangeR ~
       getBoxesByErgoTreeR ~
       getBoxesByErgoTreeUnspentR ~
@@ -105,6 +107,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getAddress(addr: ErgoAddress)(history: ErgoHistoryReader): Option[IndexedErgoAddress] =
     getAddress(addr.script)(history)
+
+  private def getTemplate(hash: ModifierId)(history: ErgoHistoryReader): Option[IndexedContractTemplate] =
+    history.typedExtraIndexById[IndexedContractTemplate](hash)
 
   private def getTxById(id: ModifierId)(history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
     history.typedExtraIndexById[IndexedErgoTransaction](id) match {
@@ -288,6 +293,41 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       (address, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
         val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent)
+    }
+
+  private def getBoxesByTemplateHash(templateHash: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
+    getHistory.map { history =>
+      getTemplate(templateHash)(history) match {
+        case Some(iCt) => (iCt.retrieveBoxes(history, offset, limit)(segmentTreshold), iCt.boxCount(segmentTreshold))
+        case None      => (Seq.empty[IndexedErgoBox], 0L)
+      }
+    }
+
+  private def getBoxesByTemplateHashR: Route =
+    (get & pathPrefix("box" / "byTemplateHash") & modifierId & paging) {
+      (template, offset, limit) =>
+        if(limit > MaxItems) {
+          BadRequest(s"No more than $MaxItems boxes can be requested")
+        } else {
+          ApiResponse(getBoxesByTemplateHash(template, offset, limit))
+        }
+    }
+
+  private def getBoxesByTemplateHashUnspent(templateHash: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
+    getHistoryWithMempool.map { case (history, mempool) =>
+      getTemplate(templateHash)(history)
+        .getOrElse(IndexedContractTemplate(templateHash))
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, Set.empty)
+    }
+
+  private def getBoxesByTemplateHashUnspentR: Route =
+    (get & pathPrefix("box" / "unspent" / "byTemplateHash") & modifierId & paging & sortDir & unconfirmed) {
+      (template, offset, limit, dir, unconfirmed) =>
+        if(limit > MaxItems) {
+          BadRequest(s"No more than $MaxItems boxes can be requested")
+        } else {
+          ApiResponse(getBoxesByTemplateHashUnspent(template, offset, limit, dir, unconfirmed))
+        }
     }
 
 

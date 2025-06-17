@@ -360,18 +360,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
         val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
 
-        // todo: .debug before final release
-        log.info(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block transactions and ${inputBlocksTransactions.length} input-blocks transactions")
-
         // todo: check if ordering block transactions should come first
         val txs = orderingBlockTransactions ++ inputBlocksTransactions
+
+        // todo: .debug before final release
+        log.info(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block transactions and ${inputBlocksTransactions.length} input-blocks transactions, total with transactions: ${txs.length} ")
 
         val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
         val blockDigest = header.transactionsRoot
         // checking Merkle root of collected transactions
         if(blockDigest.sameElements(calculatedDigest)) {
           // we apply header and extension from ordering block announcement
-          log.info(s"Applying block transactions from input-blocks for $headerId")
+          log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
           val bs = new BlockTransactions(headerId, header.version, txs)
           pmodModify(bs, false)
         } else {

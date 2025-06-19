@@ -54,7 +54,7 @@ object IndexedErgoBoxSerializer extends ErgoSerializer[IndexedErgoBox] {
     w.putInt(iEb.inclusionHeight)
     w.putOption[ModifierId](iEb.spendingTxIdOpt)((ww, id) => ww.putBytes(fastIdToBytes(id)))
     w.putOption[Int](iEb.spendingHeightOpt)(_.putInt(_))
-    w.putOption[ProverResult](iEb.spendingProofOpt)((ww, pr) => ProverResult.serializer.serialize(pr, new SigmaByteWriter(ww, None)))
+    w.putOption[ProverResult](iEb.spendingProofOpt)((ww, pr) => ProverResult.serializer.serialize(pr, new SigmaByteWriter(ww, None, None, None)))
     ErgoBoxSerializer.serialize(iEb.box, w)
     w.putLong(iEb.globalIndex)
   }

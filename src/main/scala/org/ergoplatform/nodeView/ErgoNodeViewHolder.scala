@@ -364,7 +364,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val txs = orderingBlockTransactions ++ inputBlocksTransactions
 
         // todo: .debug before final release
-        log.info(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block transactions and ${inputBlocksTransactions.length} input-blocks transactions, total with transactions: ${txs.length} ")
+        if(txs.length > 1) {
+          log.info(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block transactions and ${inputBlocksTransactions.length} input-blocks transactions, total with transactions: ${txs.length} ")
+        }
 
         val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
         val blockDigest = header.transactionsRoot

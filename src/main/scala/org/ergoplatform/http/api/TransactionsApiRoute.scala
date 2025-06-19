@@ -17,8 +17,8 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-import sigma.ast.SType
-import sigma.ast.EvaluatedValue
+import sigma.VersionContext
+import sigma.ast.{EvaluatedValue, SType}
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.concurrent.Future
@@ -109,11 +109,16 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     * Validate and broadcast transaction given as hex-encoded bytes
     */
   def sendTransactionAsBytesR: Route = (path("bytes") & pathEnd & post & entity(as[String])) { txBytesStr =>
-    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
-      case Success(tx) =>
-        validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
-      case Failure(e) =>
-        BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+    // actual tree version for parsing is properly set in ErgoTreeSerializer inside
+    // we check parsed with max version available
+    val version = ergoSettings.chainSettings.protocolVersion
+    VersionContext.withVersions(version, version) {
+      Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+        case Success(tx) =>
+          validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
+        case Failure(e) =>
+          BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+      }
     }
   }
 
@@ -125,11 +130,15 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     * Check transaction given as hex-encoded bytes
     */
   def checkTransactionAsBytesR: Route = (path("checkBytes") & post & entity(as[String])) { txBytesStr =>
-    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
-      case Success(tx) =>
-        validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
-      case Failure(e) =>
-        BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+    // actual tree version is properly set in ErgoTreeSerializer inside
+    val version = ergoSettings.chainSettings.protocolVersion
+    VersionContext.withVersions(version, version) {
+      Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+        case Success(tx) =>
+          validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
+        case Failure(e) =>
+          BadRequest(s"Can not parse transaction bytes: ${e.getMessage}")
+      }
     }
   }
 
@@ -170,13 +179,13 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     }
 
   /** Get list of unconfirmed transaction ids */
-  def getUnconfirmedTxIdsR: Route = 
+  def getUnconfirmedTxIdsR: Route =
     (pathPrefix("unconfirmed" / "transactionIds") & get) {
       ApiResponse(getMemPool.map(_.getAll.map(_.id)))
     }
 
   /** Post list of unconfirmed transaction ids and check if they are in the mempool */
-  def getUnconfirmedTxsByIdsR: Route = 
+  def getUnconfirmedTxsByIdsR: Route =
     (pathPrefix("unconfirmed" / "byTransactionIds") & post & entity(as[Json])) { txIds =>
       txIds.as[List[String]] match {
         case Left(ex) =>

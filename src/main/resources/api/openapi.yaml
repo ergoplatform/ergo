@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.27"
+  version: "6.0.0"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -881,6 +881,7 @@ components:
       required:
         - script
         - namedConstants
+        - treeVersion
         - context
       properties:
         script:
@@ -890,11 +891,28 @@ components:
           description: Environment for compiler
           type: object
           nullable: true
+        treeVersion:
+          description: ErgoScript version to be used in compiler
+          nullable: true
         context:
           description: Interpreter context
           type: object
           nullable: true
           $ref: '#/components/schemas/ErgoLikeContext'
+
+    CompileRequest:
+      type: object
+      required:
+        - source
+        - treeVersion
+      properties:
+        source:
+          description: Source code of the ErgoScript to be compiled
+          type: string
+        treeVersion:
+          description: Version of ErgoTree to compile to
+          type: integer
+          format: int8
 
     SigmaBoolean:
       description: Algebraic data type of sigma proposition expressions
@@ -5364,7 +5382,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SourceHolder'
+              $ref: '#/components/schemas/CompileRequest'
       responses:
         '200':
           description: Ergo address derived from source
@@ -5398,7 +5416,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SourceHolder'
+              $ref: '#/components/schemas/CompileRequest'
       responses:
         '200':
           description: P2SH address derived from source

@@ -10,7 +10,8 @@ import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
-import sigma.ast.{ByteArrayConstant, ErgoTree, FalseLeaf, TrueLeaf}
+import sigma.ast.{ByteArrayConstant, ErgoTree}
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 import scala.util.Random
 
@@ -35,21 +36,20 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
   private val monetarySettings = initSettings.chainSettings.monetary.copy(minerRewardDelay = 720)
   private val s = initSettings.copy(chainSettings = initSettings.chainSettings.copy(monetary = monetarySettings))
 
-  private val trueProp = org.ergoplatform.settings.Constants.TrueLeaf
-  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
+  private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(TrueTree.bytes))
   private val appReq = ScanRequest("True detector", scanningPredicate, Some(ScanWalletInteraction.Off), None)
   private val scanId: ScanId = ScanId @@ 50.toShort
 
   private val pubkeys = prover.hdPubKeys
   private val miningScripts = WalletCache.miningScripts(pubkeys, s)
 
-  private def paymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(pubkeys.map(epk => ErgoTree.fromSigmaBoolean(epk.key))))
+  private def paymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(pubkeys.map(ek => ErgoTree.fromSigmaBoolean(ek.key))))
 
   private def miningRewardsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.oneOf(miningScripts))
 
-  private def nonTrackablePaymentsGen: Gen[List[ErgoTree]] = Gen.nonEmptyListOf(Gen.const(ErgoTree.fromProposition(FalseLeaf.toSigmaProp)))
+  private def nonTrackablePaymentsGen: Gen[List[ErgoTree]] = Gen.nonEmptyListOf(Gen.const(FalseTree))
 
-  private def appPaymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.const(trueProp))
+  private def appPaymentsGen: Gen[List[ErgoTree]] = Gen.listOf(Gen.const(TrueTree))
 
   private def walletVarsGen: Gen[WalletVars] = {
     for {
@@ -195,13 +195,7 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
 
         //applying a transaction spending outputs of the previous transaction
         val inputs2 = spendingTx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
-        val outputs2 = IndexedSeq(
-          new ErgoBoxCandidate(
-            spendingTx.outputs.map(_.value).sum,
-            ErgoTree.fromProposition(FalseLeaf.toSigmaProp),
-            height1
-          )
-        )
+        val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseTree, height1))
         val spendingTx2 = new ErgoTransaction(inputs2, IndexedSeq.empty, outputs2)
 
         val (r3, o3, f3) =
@@ -272,12 +266,11 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
   }
 
   property("scan with forced flag is sharing boxes with the p2k-wallet") {
-    val trueProp = ErgoTree.fromProposition(TrueLeaf.toSigmaProp)
-    val outs = IndexedSeq(new ErgoBoxCandidate(1000, trueProp, creationHeight = 1))
+    val outs = IndexedSeq(new ErgoBoxCandidate(1000, TrueTree, creationHeight = 1))
     val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
 
     val cache = WalletCache(pubkeys, s)
-    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(trueProp.bytes))
+    val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(TrueTree.bytes))
     val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(ScanWalletInteraction.Forced), Some(false))
     val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
 

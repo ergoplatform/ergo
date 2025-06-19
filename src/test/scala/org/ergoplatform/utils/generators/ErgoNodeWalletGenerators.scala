@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
@@ -86,13 +86,13 @@ object ErgoNodeWalletGenerators {
       value <- Gen.choose(1L, 100000L)
       assets <- additionalTokensGen
       registers <- additionalRegistersGen
-    } yield PaymentRequest(Pay2SAddress(Constants.FalseLeaf), value, assets, registers)
+    } yield PaymentRequest(Pay2SAddress(FalseTree), value, assets.toArray, registers)
   }
 
   def burnTokensRequestGen: Gen[BurnTokensRequest] = {
     for {
       assets <- additionalTokensGen
-    } yield BurnTokensRequest(assets)
+    } yield BurnTokensRequest(assets.toArray)
   }
 
   def assetIssueRequestGen: Gen[AssetIssueRequest] = {
@@ -101,7 +101,7 @@ object ErgoNodeWalletGenerators {
       name <- Gen.alphaUpperStr
       description <- Gen.alphaLowerStr
       decimals <- Gen.choose(4, 16)
-    } yield AssetIssueRequest(Pay2SAddress(Constants.FalseLeaf), None, amount, name, description, decimals)
+    } yield AssetIssueRequest(Pay2SAddress(FalseTree), None, amount, name, description, decimals)
   }
 
   def registrySummaryGen: Gen[WalletDigest] = {

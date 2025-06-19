@@ -11,18 +11,17 @@ import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sdk.wallet.TokensMap
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.fixtures.WalletFixture
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import sigma.Colls
+import sigmastate.eval.Extensions._
+import sigma.Extensions._
 import sigma.ast.ErgoTree
 import sigma.data.ProveDlog
-import sigmastate.eval.Extensions._
 import sigma.interpreter.ProverResult
-import sigma.Extensions._
-import sigma.eval.Extensions.EvalIterableOps
+import org.ergoplatform.settings.Constants.TrueTree
 
 trait WalletTestOps extends NodeViewBaseOps {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -124,21 +123,21 @@ trait WalletTestOps extends NodeViewBaseOps {
 
     def creatingCandidate = new ErgoBoxCandidate(balanceToReturn, scriptToReturn, startHeight, replaceNewAssetStub(assets, inputs).toColl)
 
-    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, Constants.TrueLeaf, creationHeight = startHeight)) else None
+    val spendingOutput = if (balanceToSpend > 0) Some(new ErgoBoxCandidate(balanceToSpend, TrueTree, creationHeight = startHeight)) else None
     val creatingOutput = if (balanceToReturn > 0) Some(creatingCandidate) else None
     ErgoTransaction(inputs.toIndexedSeq, spendingOutput.toIndexedSeq ++ creatingOutput.toIndexedSeq)
   }
 
-  private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Seq[(TokenId, Long)] = {
+  private def replaceNewAssetStub(assets: Seq[(TokenId, Long)], inputs: Seq[Input]): Array[(TokenId, Long)] = {
     def isNewAsset(tokenId: TokenId, value: Long): Boolean = tokenId == newAssetIdStub
 
     val (newAsset, spentAssets) = assets.partition((isNewAsset _).tupled)
-    newAsset.map(inputs.head.boxId.toTokenId -> _._2) ++ spentAssets
+    (newAsset.map(inputs.head.boxId.toTokenId -> _._2) ++ spentAssets).toArray
   }
 
-  def randomNewAsset: Seq[(TokenId, Long)] = Seq(newAssetIdStub -> randomLong())
+  def randomNewAsset: Array[(TokenId, Long)] = Array(newAssetIdStub -> randomLong())
 
-  def assetsWithRandom(boxes: Seq[ErgoBox]): Seq[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
+  def assetsWithRandom(boxes: Seq[ErgoBox]): Array[(TokenId, Long)] = randomNewAsset ++ assetsByTokenId(boxes)
 
   val fakeInputs: IndexedSeq[Input] = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
 

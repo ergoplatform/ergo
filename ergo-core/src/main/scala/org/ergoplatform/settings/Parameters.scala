@@ -8,10 +8,11 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 
-import scala.util.Try
+import scala.util.{Success, Try}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import Extension.SystemParametersPrefix
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.sdk.BlockchainParameters
 
 import scala.annotation.nowarn
@@ -66,6 +67,13 @@ class Parameters(val height: Height,
     */
   lazy val maxBlockCost: Int = parametersTable(MaxBlockCostIncrease)
 
+  /**
+    * Number of sub-blocks per block, on average
+    */
+  lazy val subBlocksPerBlock: Int = parametersTable(SubblocksPerBlockIncrease)
+
+  lazy val subBlocksPerBlockOpt: Option[Int] = parametersTable.get(SubblocksPerBlockIncrease)
+
   lazy val softForkStartingHeight: Option[Height] = parametersTable.get(SoftForkStartingHeight)
   lazy val softForkVotesCollected: Option[Int] = parametersTable.get(SoftForkVotesCollected)
 
@@ -78,7 +86,13 @@ class Parameters(val height: Height,
              votingSettings: VotingSettings): (Parameters, ErgoValidationSettingsUpdate) = {
     val (table1, activatedUpdate) = updateFork(height, parametersTable, forkVote, epochVotes, proposedUpdate, votingSettings)
     val table2 = updateParams(table1, epochVotes, votingSettings)
-    (Parameters(height, table2, proposedUpdate), activatedUpdate)
+    // insert sub-blocks per block parameter on next epoch after block version v4 (protocol v6) activation
+    val table3 = if(table2.getOrElse(BlockVersion, -1) == 4 && !table2.contains(SubblocksPerBlockIncrease) && !activatedUpdate.rulesToDisable.contains(409)) {
+      table2.updated(SubblocksPerBlockIncrease, SubblocksPerBlockDefault)
+    } else {
+      table2
+    }
+    (Parameters(height, table3, proposedUpdate), activatedUpdate)
   }
 
   def updateFork(height: Height,
@@ -126,16 +140,16 @@ class Parameters(val height: Height,
     if (softForkStartingHeight.nonEmpty
       && height == softForkStartingHeight.get + votingEpochLength * (votingEpochs + activationEpochs)
       && softForkApproved(votes)) {
-      table = table.updated(BlockVersion, table(BlockVersion) + 1)
+      val newVersion = table(BlockVersion) + 1
+
+      table = table.updated(BlockVersion, newVersion)
       activatedUpdate = proposedUpdate
     }
 
-    // Forced version update to version 2 at height provided in settings
-    if (height == votingSettings.version2ActivationHeight) {
-      // Forced update should happen, but some soft-fork update happened before.
-      // Node should fail at this point, as the situation is unclear
-      require(table(BlockVersion) == 1, "Protocol version is not 1 on the hard-fork")
-      table = table.updated(BlockVersion, table(BlockVersion) + 1)
+    // Forced version update to version 2 at height provided in settings.
+    // Needed as it was non-voted hard-fork in the mainnet.
+    if (height == votingSettings.version2ActivationHeight && table(BlockVersion) == 1) {
+      table = table.updated(BlockVersion, 2)
     }
     (table, activatedUpdate)
   }
@@ -217,6 +231,10 @@ class Parameters(val height: Height,
     Parameters(height, parametersTable.updated(MaxBlockCostIncrease, cost), proposedUpdate)
   }
 
+  def withNumOfSubblocksPerBlock(subblocksPerBlock: Int): Parameters = {
+    Parameters(height, parametersTable.updated(SubblocksPerBlockIncrease, subblocksPerBlock), proposedUpdate)
+  }
+
   override def toString: String = s"Parameters(height: $height; ${parametersTable.mkString("; ")}; $proposedUpdate)"
 
   def canEqual(o: Any): Boolean = o.isInstanceOf[Parameters]
@@ -266,6 +284,14 @@ object Parameters {
   val OutputCostIncrease: Byte = 8
   val OutputCostDecrease: Byte = (-OutputCostIncrease).toByte
 
+  // added in protocol v6.0 (block version 4.0)
+  val SubblocksPerBlockIncrease: Byte = 9
+  val SubblocksPerBlockDecrease: Byte = (-SubblocksPerBlockIncrease).toByte
+
+  val SubblocksPerBlockDefault: Int = 30
+  val SubblocksPerBlockStep: Int = 1
+  val SubblocksPerBlockMin: Int = 2
+  val SubblocksPerBlockMax: Int = 2048 //0.00001 Erg
 
   val StorageFeeFactorDefault: Int = 1250000
   val StorageFeeFactorMax: Int = 2500000
@@ -317,19 +343,22 @@ object Parameters {
 
   val stepsTable: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorStep,
-    MinValuePerByteIncrease -> MinValueStep
+    MinValuePerByteIncrease -> MinValueStep,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockStep
   )
 
   val minValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMin,
     MinValuePerByteIncrease -> MinValueMin,
     MaxBlockSizeIncrease -> MaxBlockSizeMin,
-    MaxBlockCostIncrease -> 16 * 1024
+    MaxBlockCostIncrease -> 16 * 1024,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockMin
   )
 
   val maxValues: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorMax,
-    MinValuePerByteIncrease -> MinValueMax
+    MinValuePerByteIncrease -> MinValueMax,
+    SubblocksPerBlockIncrease -> SubblocksPerBlockMax
   )
 
   val ParamVotesCount = 2
@@ -383,6 +412,33 @@ object Parameters {
     }
   }
 
+  // in 6.0 previous matchParameters rule is switched off,
+  // and this similar one is introduced
+  // the difference is,
+  // the new rule is not checking that locally calculated parameters has the same size as received in a block
+  // with this relaxation new parameters may be introduced without breaking consensus with older clients
+  def matchParameters60(p1: Parameters, p2: Parameters, blockVersion: Header.Version): Try[Unit] = {
+    if (blockVersion < Header.Interpreter60Version) {
+      Success(())
+    } else {
+      Try {
+        if (p1.height != p2.height) {
+          throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
+        }
+        if (!(p1.parametersTable.size <= p2.parametersTable.size)) { // the only difference from matchParameters
+          throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
+        }
+        if (p1.proposedUpdate != p2.proposedUpdate) {
+          throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
+        }
+        p1.parametersTable.foreach { case (k, v) =>
+          val v2 = p2.parametersTable(k)
+          if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+        }
+      }
+    }
+  }
+
 }
 
 object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
@@ -420,7 +476,8 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
       "tokenAccessCost" -> p.tokenAccessCost.asJson,
       "inputCost" -> p.inputCost.asJson,
       "dataInputCost" -> p.dataInputCost.asJson,
-      "outputCost" -> p.outputCost.asJson
+      "outputCost" -> p.outputCost.asJson,
+      "subblocksPerBlock" -> p.subBlocksPerBlockOpt.asJson
     ).asJson
   }
 

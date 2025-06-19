@@ -4,8 +4,8 @@ import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
 import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.util.ModifierId
-import sigma.{Coll, Colls}
 import sigma.ast.ErgoTree
+import sigma.{Coll, Colls}
 
 object BoxUtils {
 

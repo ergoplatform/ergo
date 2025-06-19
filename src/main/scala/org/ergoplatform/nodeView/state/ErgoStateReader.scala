@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.{ErgoBox, NodeViewComponent}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
@@ -69,14 +69,15 @@ object ErgoStateReader extends ScorexLogging {
       .flatMap(b => ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(b).toOption)
       .getOrElse {
         log.warn("Can't read blockchain parameters from database")
-        ErgoStateContext.empty(settings.chainSettings, LaunchParameters)
+        ErgoStateContext.empty(settings.chainSettings, settings.launchParameters)
       }
   }
 
   /**
     * Method to reconstruct state context (used in scripts execution) corresponding to last block of a voting epoch,
-    * except of voting-defined blockchain parameters. Basically, this method is setting proper last headers.
-    * Then the first block of a new epoch will set the parameters.
+    * except of voting-defined blockchain parameters and protocol version. Basically, this method is setting
+    * proper last headers. Then the first block of a new epoch will set the parameters.
+    *
     * @param historyReader - history reader to get heights from
     * @param height - height for which state context will be reconstructed
     * @param settings - chain and node settings
@@ -94,7 +95,7 @@ object ErgoStateReader extends ScorexLogging {
       if (lastHeaders.size != Constants.LastHeadersInContext) {
         Failure(new Exception(s"Only ${lastHeaders.size} headers found in reconstructStateContextBeforeEpoch"))
       } else {
-        val empty = ErgoStateContext.empty(settings.chainSettings, LaunchParameters)
+        val empty = ErgoStateContext.empty(settings.chainSettings, settings.launchParameters)
         val esc = new ErgoStateContext( lastHeaders,
                                         None,
                                         empty.genesisStateDigest,

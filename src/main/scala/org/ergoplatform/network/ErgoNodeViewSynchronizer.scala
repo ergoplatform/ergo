@@ -36,6 +36,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import sigma.VersionContext
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -180,6 +181,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
 
+  // current script version (block version minus 1)
+  private var activatedScriptVersion = Header.scriptFromBlockVersion(Header.InitialVersion)
+
   /**
     * To be called when the node is synced and new block arrives, to reset transactions cost counter
     */
@@ -192,7 +196,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, processingCacheRecord.source)
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
       txProcessingCache -= txId
     }
   }
@@ -770,7 +774,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
-      ErgoTransactionSerializer.parseBytesTry(bytes) match {
+      // actual tree version is properly set in ErgoTreeSerializer inside
+      val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
           viewHolderRef ! TransactionFromRemote(utx)
@@ -1436,6 +1442,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedState(reader: ErgoStateReader) =>
+      activatedScriptVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>
           context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))

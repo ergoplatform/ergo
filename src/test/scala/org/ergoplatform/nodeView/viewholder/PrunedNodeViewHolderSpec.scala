@@ -49,7 +49,7 @@ class PrunedNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps
     import fixture._
 
     val (us, bh) = createUtxoState(fixture.settings)
-    val wus = WrappedUtxoState(us, bh, fixture.settings, parameters)
+    val wus = WrappedUtxoState(us, bh, fixture.settings)
 
     val fullChain = genFullChain(wus, totalBlocks, nodeViewHolderRef)
 

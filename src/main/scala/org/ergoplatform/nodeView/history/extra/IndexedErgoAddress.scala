@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 case class IndexedErgoAddress(treeHash: ModifierId,
                               override val txs: ArrayBuffer[Long] = new ArrayBuffer[Long],
                               override val boxes: ArrayBuffer[Long] = new ArrayBuffer[Long])
-  extends Segment[IndexedErgoAddress](treeHash, id => IndexedErgoAddress(id), txs, boxes) with ExtraIndex {
+  extends Segment[IndexedErgoAddress](id => IndexedErgoAddress(id), txs, boxes) with ExtraIndex {
 
   override lazy val id: ModifierId = treeHash
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)

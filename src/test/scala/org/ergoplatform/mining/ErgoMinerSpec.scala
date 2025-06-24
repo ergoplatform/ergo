@@ -65,13 +65,9 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with FileUtils with
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
-    val complexScript: ErgoTree = {
-      val start = SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))
-      val tree = ErgoTree.fromProposition((0 until 100).foldLeft(start) { (l, _) =>
-        SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
-      })
-      tree
-    }
+    val complexScript: ErgoTree = ErgoTree.fromProposition((0 until 100).foldLeft(SigmaAnd(SigmaPropConstant(defaultMinerPk), SigmaPropConstant(defaultMinerPk))) { (l, _) =>
+      SigmaAnd(SigmaPropConstant(defaultMinerPk), l)
+    })
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)

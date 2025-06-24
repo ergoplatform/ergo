@@ -1,6 +1,8 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform._
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state._
@@ -17,6 +19,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
   override def receive: Receive = {
     case test.CreateDB(blockCount: Int) => createDB(blockCount)
     case test.Reset() => reset()
+    case test.GenerateBetterChainTip() => GenerateBetterChainTip()
   }
 
   override def caughtUpHook(height: Int = 0): Unit = {
@@ -24,6 +27,12 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     test.lock.lock()
     test.done.signal()
     test.lock.unlock()
+  }
+
+  override def getLastTxForHeight(height: Int): ErgoTransaction = {
+    val header = history.headerIdsAtHeight(height).last
+    val block = history.getFullBlock(history.typedModifierById[Header](header).get)
+    block.get.transactions.last
   }
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
@@ -55,6 +64,9 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     stateOpt = Some(ChainGenerator.generate(blockCount, dir, _history, stateOpt))
     test._history = _history
     context.become(receive.orElse(loaded(IndexerState.fromHistory(_history))))
+    test.lock.lock()
+    test.created.signal()
+    test.lock.unlock()
   }
 
   def reset(): Unit = {
@@ -66,6 +78,15 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     tokens.clear()
     segments.clear()
     context.become(receive.orElse(loaded(IndexerState(0, 0, 0, 0, caughtUp = false))))
+  }
+
+  def GenerateBetterChainTip(): Unit = {
+    stateOpt = Some(ChainGenerator.generateBetter(_history, stateOpt.get))
+    test._history = _history
+    context.become(receive.orElse(loaded(IndexerState.fromHistory(_history))))
+    test.lock.lock()
+    test.created.signal()
+    test.lock.unlock()
   }
 
 }

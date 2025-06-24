@@ -4,10 +4,10 @@ import org.ergoplatform.ErgoBox.{R2, STokensRegType}
 import org.ergoplatform.ErgoTreePredef.{boxCreationHeight, expectedMinerOutScriptBytesVal}
 import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
 import org.ergoplatform.settings.MonetarySettings
-import sigmastate._
-import sigma.Coll
 import sigma.ast._
 import sigma.ast.syntax._
+import sigmastate._
+import sigma.Coll
 
 /**
   * Container for re-emission related contracts. Contains re-emission contract and pay-to-reemission contract.

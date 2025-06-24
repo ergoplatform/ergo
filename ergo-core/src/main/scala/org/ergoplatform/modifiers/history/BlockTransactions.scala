@@ -18,6 +18,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
+import sigma.VersionContext
 
 import scala.annotation.nowarn
 import scala.collection.mutable
@@ -140,12 +141,22 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
 
   override def serialize(bt: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(bt.headerId))
-    if (bt.blockVersion > 1) {
+    val blockVersion = bt.blockVersion
+    if (blockVersion > 1) {
+      // see comments in parse()
       w.putUInt(MaxTransactionsInBlock.toLong + bt.blockVersion)
     }
     w.putUInt(bt.txs.size.toLong)
     bt.txs.foreach { tx =>
-      ErgoTransactionSerializer.serialize(tx, w)
+      if (blockVersion >= VersionContext.V6SoftForkVersion) {
+        // since 6.0 we use versioned serializers
+        VersionContext.withVersions(blockVersion, blockVersion) {
+          ErgoTransactionSerializer.serialize(tx, w)
+        }
+      } else {
+        // before 6.0 activation, VersionContext is not used
+        ErgoTransactionSerializer.serialize(tx, w)
+      }
     }
   }
 
@@ -170,8 +181,25 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
       txCount = r.getUInt().toIntExact
     }
 
-    val txs = (1 to txCount).map { _ =>
-      ErgoTransactionSerializer.parse(r)
+    val txs: IndexedSeq[ErgoTransaction] = {
+      lazy val version = Header.scriptAndTreeFromBlockVersions(blockVersion)
+
+      (1 to txCount).map { _ =>
+        if (blockVersion >= VersionContext.V6SoftForkVersion) {
+          if (headerId == "3f5a4acbdfd76a97f2fdf387559c2a67b4ea5f9e9bcf66ef079cde766c6e9398") {
+            // todo: public testnet bug with v7 tree included in v4 block, remove after testnet relaunch
+            VersionContext.withVersions(1, 1) {
+              ErgoTransactionSerializer.parse(r)
+            }
+          } else {
+            VersionContext.withVersions(version.activatedVersion, version.ergoTreeVersion) {
+              ErgoTransactionSerializer.parse(r)
+            }
+          }
+        } else {
+          ErgoTransactionSerializer.parse(r)
+        }
+      }
     }
     BlockTransactions(headerId, blockVersion, txs, Some(r.position - startPos))
   }

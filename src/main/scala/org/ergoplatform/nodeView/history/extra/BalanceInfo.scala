@@ -30,8 +30,8 @@ case class BalanceInfo() extends ScorexLogging {
   def retrieveAdditionalTokenInfo(history: ErgoHistoryReader): BalanceInfo = {
     additionalTokenInfo ++= tokens.map(token => {
       history.typedExtraIndexById[IndexedToken](uniqueId(token._1)) match {
-        case Some(iT) => (token._1,(iT.name,iT.decimals))
-        case None => (token._1,("", 0))
+        case Some(iT) => (token._1, (iT.name.getOrElse(""), iT.decimals.getOrElse(0)))
+        case None => (token._1, ("", 0))
       }
     })
     this

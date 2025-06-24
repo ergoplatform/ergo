@@ -1,10 +1,11 @@
 package org.ergoplatform.wallet.mnemonic
 
+import org.ergoplatform.sdk.SecretString
+
 import java.text.Normalizer.Form.NFKD
 import java.text.Normalizer.normalize
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
-import org.ergoplatform.wallet.interface4j.SecretString
 import scodec.bits.BitVector
 import sigma.crypto.CryptoFacade
 

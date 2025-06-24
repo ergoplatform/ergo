@@ -9,13 +9,13 @@ import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.BoxUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import sigma.Colls
-import sigmastate.helpers.TestingHelpers._
 import sigma.interpreter.{ContextExtension, ProverResult}
+import sigmastate.helpers.TestingHelpers._
 
 import scala.util.Random
 
@@ -136,8 +136,8 @@ object ChainGenerator {
                             extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
-    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(Constants.TrueLeaf, Colls.emptyColl, Map(), parameters)
-    val outputs = IndexedSeq(testBox(minimalAmount, Constants.TrueLeaf, creationHeight = startHeight))
+    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(TrueTree, Colls.emptyColl, Map(), parameters)
+    val outputs = IndexedSeq(testBox(minimalAmount, TrueTree, creationHeight = startHeight))
 
     def txs = Seq(ErgoTransaction(inputs, outputs))
 

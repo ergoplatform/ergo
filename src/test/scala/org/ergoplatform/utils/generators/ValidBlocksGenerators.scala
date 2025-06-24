@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalatest.matchers.should.Matchers
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.avltree.batch.Remove
@@ -25,7 +25,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Random, Success}
 
 object ValidBlocksGenerators
-  extends TestkitHelpers with TestFileUtils with Matchers with ScorexLogging {
+  extends TestkitHelpers with FileUtils with Matchers with ScorexLogging {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._

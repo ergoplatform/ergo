@@ -7,7 +7,7 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -29,7 +29,7 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
     */
   def version: VersionTag
 
-  val store: LDBVersionedStore
+  val store: RocksDBVersionedStore
 
   protected def ergoSettings: ErgoSettings
 
@@ -64,7 +64,7 @@ object ErgoStateReader extends ScorexLogging {
   /**
     * Read blockchain-related state context from `store` database
     */
-  def storageStateContext(store: LDBVersionedStore, settings: ErgoSettings): ErgoStateContext = {
+  def storageStateContext(store: RocksDBVersionedStore, settings: ErgoSettings): ErgoStateContext = {
     store.get(ErgoStateReader.ContextKey)
       .flatMap(b => ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(b).toOption)
       .getOrElse {

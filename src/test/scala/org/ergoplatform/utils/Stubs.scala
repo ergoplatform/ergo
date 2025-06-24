@@ -33,7 +33,7 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
@@ -49,7 +49,7 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-trait Stubs extends ErgoTestHelpers with TestFileUtils {
+trait Stubs extends ErgoTestHelpers with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ChainGenerator._

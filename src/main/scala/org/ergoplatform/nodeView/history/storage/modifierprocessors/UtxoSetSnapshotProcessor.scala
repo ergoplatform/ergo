@@ -13,12 +13,12 @@ import scorex.core.network.ConnectedPeer
 import org.ergoplatform.serialization.SubtreeSerializer
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import scala.util.{Failure, Random, Success, Try}
-import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedRocksDBAVLStorage}
 
 /**
   * Parts of history processing and storage corresponding to UTXO set snapshot processing and storage
@@ -204,7 +204,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     * @param blockId - id of a block corresponding to the tree (tree is on top of a state after the block)
     * @return prover with initialized tree database
     */
-  def createPersistentProver(stateStore: LDBVersionedStore,
+  def createPersistentProver(stateStore: RocksDBVersionedStore,
                              historyReader: ErgoHistoryReader,
                              height: Height,
                              blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
@@ -213,15 +213,15 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
         log.info("Starting UTXO set snapshot transfer into state database")
         ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
           case Success(esc) =>
-            val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-            VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
+            val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedRocksDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
+            VersionedRocksDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
               ldbStorage =>
                 log.info("Finished UTXO set snapshot transfer into state database")
                 ldbStorage.restorePrunedProver().map {
                   prunedAvlProver =>
                     new PersistentBatchAVLProver[Digest32, HF] {
                       override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-                      override val storage: VersionedLDBAVLStorage = ldbStorage
+                      override val storage: VersionedRocksDBAVLStorage = ldbStorage
                     }
                 }
             }

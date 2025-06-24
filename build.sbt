@@ -218,7 +218,7 @@ lazy val avldb = (project in file("avldb"))
     Compile / compile / javacOptions ++= javacReleaseOption,
     libraryDependencies ++= Seq(
       // database dependencies
-      "org.rocksdb" % "rocksdbjni" % "9.7.3"
+      "org.rocksdb" % "rocksdbjni" % "10.2.1"
     )
   )
 

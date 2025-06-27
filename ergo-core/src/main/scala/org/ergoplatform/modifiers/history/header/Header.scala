@@ -59,7 +59,7 @@ case class Header(override val version: Header.Version,
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
   nBits, height, extensionRoot, votes, unparsedBytes) with PreHeader with BlockSection {
 
-  override def serializedId: Array[Header.Version] = Algos.hash(bytes)
+  override def serializedId: Array[Byte] = Algos.hash(bytes)
 
   override type M = Header
 

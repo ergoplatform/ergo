@@ -570,7 +570,7 @@ object CandidateGenerator extends ScorexLogging {
       // within collectTxs(), transactions from previous input blocks will be accounted in addition to the new txs
       val newTransactionCandidates = emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
 
-      val (inputBlockTransactions, orderingTxs, toEliminate) = collectTxs(
+      val (preInputBlockTransactions, orderingTxs, toEliminate) = collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
@@ -578,6 +578,10 @@ object CandidateGenerator extends ScorexLogging {
         upcomingContext,
         newTransactionCandidates
       )
+
+      // filter out transactions included in previous input-blocks
+      // todo: clear them from mempool on new best input block / add to mempool on input blocks chain forking
+      val inputBlockTransactions = preInputBlockTransactions.filterNot(tx => previousOrderingBlockTransactionIds.contains(tx.id))
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
@@ -599,7 +603,7 @@ object CandidateGenerator extends ScorexLogging {
       val inputBlockTransactionsDigestValue = Algos.merkleTreeRoot(inputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
 
       // digest (Merkle tree root) first class transactions since ordering block till last input-block
-      val previousInputBlocksTransactionsValue = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
+      val previousInputBlocksTransactionsDigest = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
 
       val inputBlockExtCandidate = InputBlockFields.toExtensionFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, inputBlockTransactionsDigestValue)
 
@@ -607,7 +611,7 @@ object CandidateGenerator extends ScorexLogging {
 
       val inputBlockFieldsProof = extensionCandidate.proofForInputBlockData.get // todo: .get
 
-      val inputBlockFields = new InputBlockFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsValue, inputBlockFieldsProof)
+      val inputBlockFields = new InputBlockFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsDigest, inputBlockFieldsProof)
 
       def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(

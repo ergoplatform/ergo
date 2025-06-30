@@ -514,7 +514,8 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   // todo: called only for local generation atm
-  def saveOrderingBlockTransactions(orderingBlockId: ModifierId, transactions: Seq[ErgoTransaction]) = {
+  def saveOrderingBlockTransactions(orderingBlockId: ModifierId,
+                                    transactions: Seq[ErgoTransaction]): Option[Seq[ErgoTransaction]] = {
     orderingBlockTransactions.put(orderingBlockId, transactions)
   }
 

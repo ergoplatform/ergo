@@ -340,7 +340,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     // todo: send NewBestInputBlock(None) on new full block
     newBestInputBlocks.foreach { id =>
       log.debug(s"New input-block with transactions found: $id")
-      context.system.eventStream.publish(NewBestInputBlock(id))
+      context.system.eventStream.publish(NewBestInputBlock(Some(id)))
     }
   }
 
@@ -363,15 +363,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         // todo: check if ordering block transactions should come first
         val txs = orderingBlockTransactions ++ inputBlocksTransactions
 
-        // todo: .debug before final release
-        if(txs.length > 1) {
-          log.info(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block transactions and ${inputBlocksTransactions.length} input-blocks transactions, total with transactions: ${txs.length} ")
-        }
+        log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
+          s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +
+          s"total transactions: ${txs.length} ")
 
         val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
         val blockDigest = header.transactionsRoot
         // checking Merkle root of collected transactions
-        if(blockDigest.sameElements(calculatedDigest)) {
+        if (blockDigest.sameElements(calculatedDigest)) {
           // we apply header and extension from ordering block announcement
           log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
           val bs = new BlockTransactions(headerId, header.version, txs)

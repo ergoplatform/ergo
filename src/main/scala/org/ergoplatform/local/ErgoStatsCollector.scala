@@ -132,8 +132,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         fullBlocksScore = h.bestFullBlockOpt.flatMap(m => h.scoreOf(m.id))
       )
 
-    case NewBestInputBlock(v) =>
-      nodeInfo = nodeInfo.copy(bestInputBlockId = Some(v))
+    case NewBestInputBlock(vOpt) =>
+      nodeInfo = nodeInfo.copy(bestInputBlockId = vOpt)
   }
 
   private def onConnectedPeers: Receive = {

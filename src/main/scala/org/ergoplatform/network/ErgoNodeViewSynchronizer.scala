@@ -1607,7 +1607,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     // todo: broadcast only locally generated new best input block
-    case NewBestInputBlock(id) =>
+    case NewBestInputBlock(Some(id)) =>
       historyReader.getInputBlock(id) match {
         case Some(ibi) =>
           log.debug(s"Sending input block $id out")
@@ -1616,6 +1616,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
         case None =>
       }
+
+    case NewBestInputBlock(None) =>  // todo: anything needed ?
   }
 
   /** handlers of messages coming from peers */

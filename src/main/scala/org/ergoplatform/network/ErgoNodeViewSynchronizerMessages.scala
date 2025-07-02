@@ -51,7 +51,7 @@ object ErgoNodeViewSynchronizerMessages {
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
-    case class NewBestInputBlock(id: ModifierId) extends NodeViewChange
+    case class NewBestInputBlock(idOpt: Option[ModifierId]) extends NodeViewChange
 
     /**
      * Event which is published when rollback happened (on finding a better chain)

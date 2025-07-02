@@ -337,7 +337,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   private def processInputBlockTransactions(inputBlockId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
     val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
-    // todo: send NewBestInputBlock(None) on new full block
     newBestInputBlocks.foreach { id =>
       log.debug(s"New input-block with transactions found: $id")
       context.system.eventStream.publish(NewBestInputBlock(Some(id)))
@@ -374,7 +373,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           // we apply header and extension from ordering block announcement
           log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
           val bs = new BlockTransactions(headerId, header.version, txs)
-          pmodModify(bs, false)
+          pmodModify(bs, local = false)
+          // todo: send NewBestInputBlock(None) in cases where block transactions are downloaded from remote
+          context.system.eventStream.publish(NewBestInputBlock(None))
         } else {
           log.warn(s"Downloading block transactions fully for $headerId")
           context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))

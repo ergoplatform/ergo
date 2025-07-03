@@ -236,7 +236,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
-                  context.system.eventStream.publish(FullBlockApplied(modToApply.asInstanceOf[ErgoFullBlock].header))
+                  val header = modToApply.asInstanceOf[ErgoFullBlock].header
+                  context.system.eventStream.publish(FullBlockApplied(header))
+
+                  // if this is new best block, reset best input block ref around the node
+                  if (header.height == chainTipOpt.getOrElse(-1) + 1) {
+                    context.system.eventStream.publish(NewBestInputBlock(None))
+                  }
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
@@ -374,7 +380,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
           val bs = new BlockTransactions(headerId, header.version, txs)
           pmodModify(bs, local = false)
-          // todo: send NewBestInputBlock(None) in cases where block transactions are downloaded from remote
+
+          // for other cases, NewBestInputBlock(None) is sent in applyState() of this class
           context.system.eventStream.publish(NewBestInputBlock(None))
         } else {
           log.warn(s"Downloading block transactions fully for $headerId")

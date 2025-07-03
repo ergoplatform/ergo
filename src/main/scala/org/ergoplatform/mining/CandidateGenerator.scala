@@ -27,12 +27,12 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
-import sigmastate.ErgoBoxRType
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.crypto.CryptoFacade
-import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.interpreter.ProverResult
+import sigma.ast.syntax.ErgoBoxRType
+import sigma.Extensions.ArrayOps
+import sigma.crypto.CryptoFacade
+import sigma.data.{Digest32Coll, ProveDlog}
+import sigma.interpreter.ProverResult
+import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
@@ -51,6 +51,9 @@ class CandidateGenerator(
   with ScorexLogging {
 
   import org.ergoplatform.mining.CandidateGenerator._
+
+  private val candidateGenInterval =
+    ergoSettings.nodeSettings.blockCandidateGenerationInterval
 
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
@@ -74,7 +77,7 @@ class CandidateGenerator(
 
   override def receive: Receive = {
 
-    /** first we need to get Readers to have some initial state to work with */
+    // first we need to get Readers to have some initial state to work with
     case Readers(h, s: UtxoStateReader, m, _) =>
       val lastHeaders   = h.lastHeaders(500).headers
       val avgMiningTime = getBlockMiningTimeAvg(lastHeaders.map(_.timestamp))
@@ -87,7 +90,8 @@ class CandidateGenerator(
       context.become(
         initialized(
           CandidateGeneratorState(
-            cache       = None,
+            cachedCandidate = None,
+            cachedPreviousCandidate = None,
             solvedBlock = None,
             h,
             s,
@@ -114,23 +118,33 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      context.become(initialized(state.copy(mpr = mp)))
+      if (hasCandidateExpired(
+        state.cachedCandidate,
+        state.solvedBlock,
+        candidateGenInterval
+      )) {
+        log.debug(s"Regenerating candidate block")
+        context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, mpr = mp)))
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      } else {
+        context.become(initialized(state.copy(mpr = mp)))
+      }
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
 
-    /**
-      * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
-      * we need to generate new candidate and possibly also discard existing solution if it is also behind
-      */
+    /*
+     * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
+     * we need to generate new candidate and possibly also discard existing solution if it is also behind
+     */
     case FullBlockApplied(header) =>
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
-      if (needNewCandidate(state.cache, header)) {
+      if (needNewCandidate(state.cachedCandidate, header)) {
         if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
         else
-          context.become(initialized(state.copy(cache = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
       } else {
         context.become(initialized(state))
@@ -138,8 +152,8 @@ class CandidateGenerator(
 
     case gen @ GenerateCandidate(txsToInclude, reply) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (cachedFor(state.cache, txsToInclude)) {
-        senderOpt.foreach(_ ! StatusReply.success(state.cache.get))
+      if (cachedFor(state.cachedCandidate, txsToInclude)) {
+        senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
         CandidateGenerator.generateCandidate(
@@ -163,7 +177,7 @@ class CandidateGenerator(
             log.info(s"Generated new candidate in $generationTook ms")
             context.become(
               initialized(
-                state.copy(cache = Some(candidate), avgGenTime = generationTook.millis)
+                state.copy(cachedCandidate = Some(candidate), cachedPreviousCandidate = state.cachedCandidate, avgGenTime = generationTook.millis)
               )
             )
             senderOpt.foreach(_ ! StatusReply.success(candidate))
@@ -181,7 +195,7 @@ class CandidateGenerator(
       }
 
     case preSolution: AutolykosSolution
-        if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
+        if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val solution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
@@ -190,7 +204,13 @@ class CandidateGenerator(
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = completeBlock(state.cache.get.candidateBlock, solution)
+        val newBlock = state.cachedCandidate
+          .map(candidate => completeBlock(candidate.candidateBlock, solution))
+          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
+          .getOrElse {
+            log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
+            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
+          }
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme
           .validate(newBlock.header)
@@ -200,8 +220,8 @@ class CandidateGenerator(
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
             StatusReply.success(())
           case Failure(exception) =>
-            log.warn(s"Removing candidate due to invalid block", exception)
-            context.become(initialized(state.copy(cache = None)))
+            log.warn(s"Removing candidates due to invalid block", exception)
+            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
             StatusReply.error(
               new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
             )
@@ -242,7 +262,8 @@ object CandidateGenerator extends ScorexLogging {
 
   /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(
-    cache: Option[Candidate],
+    cachedCandidate: Option[Candidate],
+    cachedPreviousCandidate: Option[Candidate],
     solvedBlock: Option[ErgoFullBlock],
     hr: ErgoHistoryReader,
     sr: UtxoStateReader,
@@ -297,6 +318,33 @@ object CandidateGenerator extends ScorexLogging {
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
   }
 
+  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
+    * interval so they switch to it.
+    * If blockCandidateGenerationInterval elapsed since last block generation,
+    * then new tx in mempool is a reasonable trigger of candidate regeneration
+    */
+  def hasCandidateExpired(
+    cachedCandidate: Option[Candidate],
+    solvedBlock: Option[ErgoFullBlock],
+    candidateGenInterval: FiniteDuration
+   ): Boolean = {
+    def candidateAge(c: Candidate): FiniteDuration =
+      (System.currentTimeMillis() - c.candidateBlock.timestamp).millis
+    // non-empty solved block means we wait for newly mined block to be applied
+    if (solvedBlock.isDefined) {
+      false
+    } else {
+      cachedCandidate match {
+        // if current candidate is older than candidateGenInterval
+        case Some(c) if candidateGenInterval.compare(candidateAge(c)) <= 0 =>
+          log.info(s"Regenerating block candidate")
+          true
+        case _ =>
+          false
+      }
+    }
+  }
+
   /** Calculate average mining time from latest block header timestamps */
   def getBlockMiningTimeAvg(
     timestamps: IndexedSeq[Header.Timestamp]
@@ -328,9 +376,10 @@ object CandidateGenerator extends ScorexLogging {
     txsToInclude: Seq[ErgoTransaction],
     ergoSettings: ErgoSettings
   ): Option[Try[(Candidate, EliminateTransactions)]] = {
-    //mandatory transactions to include into next block taken from the previous candidate
+    // mandatory transactions to include into next block taken from the previous candidate
+    val stateWithMandatoryTxs = s.withTransactions(txsToInclude)
     lazy val unspentTxsToInclude = txsToInclude.filter { tx =>
-      inputsNotSpent(tx, s)
+      inputsNotSpent(tx, stateWithMandatoryTxs)
     }
 
     val stateContext = s.stateContext
@@ -356,7 +405,15 @@ object CandidateGenerator extends ScorexLogging {
       )
       None
     } else {
-      val desiredUpdate = ergoSettings.votingTargets.desiredUpdate
+      val desiredUpdate = if (stateContext.blockVersion == 3) {
+        ergoSettings.votingTargets.desiredUpdate.copy(statusUpdates =
+          // 1007 is needed to switch off primitive type validation to add Unsigned Big Int support
+          // 1008 is needed to switch off non-primitive type validation to add Option & Header types support
+          // 1011 is needed to add new methods
+          Seq(1011.toShort -> ReplacedRule(1016), 1007.toShort -> ReplacedRule(1017), 1008.toShort -> ReplacedRule(1018)))
+      } else {
+        ergoSettings.votingTargets.desiredUpdate
+      }
       Some(
         createCandidate(
           pk,
@@ -398,9 +455,11 @@ object CandidateGenerator extends ScorexLogging {
     val forkVotingAllowed = votingFinishHeight.forall(fh => nextHeight < fh)
 
     val nextHeightCondition = if (ergoSettings.networkType.isMainNet) {
-      nextHeight >= 823297 // mainnet voting start height, first block of epoch #804
+      nextHeight >= 1561601 // 6.0 voting starting height, first block of epoch #1525
+    } else if(ergoSettings.networkType.isTestNet) {
+      nextHeight >= 1548800 // testnet voting start height
     } else {
-      nextHeight >= 4096
+      nextHeight >= 8 // devnet voting start height
     }
 
     // we automatically vote for 5.0 soft-fork in the mainnet if 120 = 0 vote not provided in settings
@@ -410,7 +469,7 @@ object CandidateGenerator extends ScorexLogging {
       ergoSettings.votingTargets.softForkOption.getOrElse(0) == 1
     }
 
-    //todo: remove after 5.0 soft-fork activation
+    //todo: remove after 6.0 soft-fork activation
     log.debug(s"betterVersion: $betterVersion, forkVotingAllowed: $forkVotingAllowed, " +
               s"forkOrdered: $forkOrdered, nextHeightCondition: $nextHeightCondition")
 
@@ -427,7 +486,6 @@ object CandidateGenerator extends ScorexLogging {
     * @param history                 - blockchain reader (to extract parent)
     * @param proposedUpdate          - votes for parameters update or/and soft-fork
     * @param state                   - UTXO set reader
-    * @param timeProvider            - network time provider
     * @param poolTxs                 - memory pool transactions
     * @param emissionTxOpt           - optional emission transaction
     * @param prioritizedTransactions - transactions which are going into the block in the first place
@@ -746,7 +804,7 @@ object CandidateGenerator extends ScorexLogging {
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
       val feeAmount = feeBoxes.map(_.value).sum
       val feeAssets =
-        feeBoxes.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
+        feeBoxes.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
@@ -884,7 +942,7 @@ object CandidateGenerator extends ScorexLogging {
   }
 
   /**
-    * Derives header without pow from [[CandidateBlock]].
+    * Derives header without pow from a block candidate provided
     */
   def deriveUnprovenHeader(candidate: CandidateBlock): HeaderWithoutPow = {
     val (parentId, height) = derivedHeaderFields(candidate.parentOpt)
@@ -903,7 +961,8 @@ object CandidateGenerator extends ScorexLogging {
       candidate.nBits,
       height,
       extensionRoot,
-      candidate.votes
+      candidate.votes,
+      Array.emptyByteArray
     )
   }
 

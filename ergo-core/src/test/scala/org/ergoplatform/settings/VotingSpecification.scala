@@ -1,13 +1,15 @@
 package org.ergoplatform.settings
 
+import sigmastate.utils.Helpers._ // needed for Scala 2.11
+
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.ValidationRules.rulesSpec
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.validation.{DisabledRule, ReplacedRule, ValidationRules => VR}
+import sigma.validation.{DisabledRule, ReplacedRule, ValidationException}
+import org.ergoplatform.validation.{ValidationRules => VR}
 import scorex.crypto.authds.ADDigest
-import sigmastate.utils.Helpers._
 
 import scala.util.Try
 
@@ -38,7 +40,8 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
   private val proposedUpdate = ErgoValidationSettingsUpdate(
     Seq(ValidationRules.exDuplicateKeys, ValidationRules.exValueLength),
-    Seq(VR.CheckDeserializedScriptType.id -> DisabledRule, VR.CheckValidOpCode.id -> ReplacedRule((VR.FirstRuleId + 11).toShort)))
+    Seq(VR.CheckDeserializedScriptType.id -> DisabledRule,
+        VR.CheckValidOpCode.id -> ReplacedRule((sigma.validation.ValidationRules.FirstRuleId + 11).toShort)))
   private val proposedUpdate2 = ErgoValidationSettingsUpdate(Seq(ValidationRules.fbOperationFailed), Seq())
   val ctx: ErgoStateContext = {
     new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(updSettings)
@@ -53,8 +56,18 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
   property("correct rule ids") {
     rulesSpec foreach { r =>
-      r._1 < org.ergoplatform.validation.ValidationRules.FirstRuleId shouldBe true
+      r._1 < sigma.validation.ValidationRules.FirstRuleId shouldBe true
     }
+  }
+
+  property(".toExtensionCandidate && .parseExtension") {
+    val update = ErgoValidationSettingsUpdate(
+      Seq.empty,
+      Seq(1011.toShort -> ReplacedRule(1016), 1007.toShort -> ReplacedRule(1017), 1008.toShort -> ReplacedRule(1018))
+    )
+    val vs = ErgoValidationSettings.initial.updated(update)
+    val vs2 = ErgoValidationSettings.parseExtension(vs.toExtensionCandidate).get
+    vs2.updateFromInitial == vs.updateFromInitial
   }
 
   property("ErgoValidationSettings toExtension/fromExtension roundtrip") {
@@ -70,8 +83,8 @@ class VotingSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("voting for non-existing parameter") {
-    val p: Parameters = Parameters(2, Map(BlockVersion -> 0), proposedUpdate)
+  property("voting for non-existing parameter - before block version V4") {
+    val p: Parameters = Parameters(2, Map(BlockVersion -> 3), proposedUpdate)
     val vr: VotingData = VotingData.empty
     val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
     val invalidVote = 100: Byte
@@ -84,6 +97,35 @@ class VotingSpecification extends ErgoCorePropertyTest {
     // proposing a vote for non-existing param is not allowed
     val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
     esc2.appendHeader(h2).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
+
+    // proposing a vote for non-existing param is not allowed
+
+    val votes2 = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
+    val h22 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes2, version = 0: Byte)
+    esc2.appendHeader(h22).toEither.left.get.getMessage.contains("Incorrect vote") shouldBe true
+  }
+
+  property("voting for non-existing parameter - on and after block version V4") {
+    val p: Parameters = Parameters(2, Map(BlockVersion -> 4), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val validationSettingsNoIl: ErgoValidationSettings = validationSettings
+      .updated(ErgoValidationSettingsUpdate(Seq(ValidationRules.hdrVotesUnknown), Seq()))
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val invalidVote = 100: Byte
+    val votes = Array(invalidVote , NoParameter, NoParameter)
+
+    // voting for non-existing param is okay if not start of an epoch
+    val h = defaultHeaderGen.sample.get.copy(height = 1, votes = votes, version = 0: Byte)
+    val esc2 = esc.appendHeader(h).get
+
+    // proposing a vote for non-existing param is not allowed
+    val h2 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    esc2.appendHeader(h2).toEither.toOption.isDefined shouldBe true
+
+    // proposing a vote for decreasing param is not allowed
+    val votes2 = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
+    val h22 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes2, version = 0: Byte)
+    esc2.appendHeader(h2).toEither.toOption.isDefined shouldBe true
   }
 
   //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
@@ -110,6 +152,32 @@ class VotingSpecification extends ErgoCorePropertyTest {
     val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0), proposedUpdate)
     val esc41 = process(esc31, p4, he.copy(height = 4)).get
     esc41.currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
+  }
+
+  //Simple checks for votes in header could be found also in NonVerifyADHistorySpecification("Header votes")
+  property("simple voting - decrease - start - conditions") {
+    val kInit = 1000000
+
+    val p: Parameters = Parameters(2, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(updSettings)
+    val votes = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
+    val h = defaultHeaderGen.sample.get.copy(height = 2, votes = votes, version = 0: Byte)
+    val esc2 = process(esc, p, h).get
+
+    //no quorum gathered - no parameter change
+    val he = defaultHeaderGen.sample.get.copy(votes = Array.fill(3)(NoParameter), version = 0: Byte)
+    val esc30 = process(esc2, p, he).get
+    val esc40 = process(esc30, p, he).get
+    esc40.currentParameters.storageFeeFactor shouldBe kInit
+
+    //quorum gathered - parameter change
+    val esc31 = process(esc2, p, h.copy(height = 3)).get
+    esc31.votingData.epochVotes.find(_._1 == StorageFeeFactorDecrease).get._2 shouldBe 2
+
+    val p4 = Parameters(4, Map(StorageFeeFactorIncrease -> (kInit - Parameters.StorageFeeFactorStep), BlockVersion -> 0), proposedUpdate)
+    val esc41 = process(esc31, p4, he.copy(height = 4)).get
+    esc41.currentParameters.storageFeeFactor shouldBe (kInit - Parameters.StorageFeeFactorStep)
   }
 
   /**
@@ -193,6 +261,8 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     val esc12 = process(esc11, expectedParameters12, h12).get
     checkValidationSettings(esc12.validationSettings, proposedUpdate)
+
+    esc12.validationSettings.sigmaSettings.isSoftFork(ValidationException("", VR.CheckValidOpCode, Seq.empty)) shouldBe true
 
     // vote for soft-fork @ activation height
     val h12w = h12.copy(votes = forkVote)

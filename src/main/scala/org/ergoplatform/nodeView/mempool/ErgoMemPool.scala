@@ -2,13 +2,15 @@ package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
+import sigma.VersionContext
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -106,15 +108,37 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   /**
-    * Remove transaction from the pool
+    * Remove transaction from the pool along with its double-spends
     */
-  def remove(tx: ErgoTransaction): ErgoMemPool = {
-    log.debug(s"Removing transaction ${tx.id} from the mempool")
-    new ErgoMemPool(pool.remove(tx), updateStatsOnRemoval(tx), sortingOption)
+  def removeTxAndDoubleSpends(tx: ErgoTransaction): ErgoMemPool = {
+    def removeTx(mp: ErgoMemPool, tx: ErgoTransaction): ErgoMemPool = {
+      log.debug(s"Removing transaction ${tx.id} from the mempool")
+      new ErgoMemPool(mp.pool.remove(tx), mp.updateStatsOnRemoval(tx), sortingOption)
+    }
+
+    val poolWithoutTx = removeTx(this, tx)
+    val doubleSpentTransactionIds = tx.inputs.flatMap(i =>
+      poolWithoutTx.pool.inputs.get(i.boxId)
+    ).toSet
+    val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { txId =>
+      poolWithoutTx.pool.orderedTransactions.get(txId)
+    }
+    doubleSpentTransactions.foldLeft(poolWithoutTx) { case (pool, tx) =>
+      removeTx(pool, tx.transaction)
+    }
   }
 
-  def remove(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
-    txs.foldLeft(this) { case (acc, tx) => acc.remove(tx) }
+  /**
+    * Remove provided transactions and their doublespends from the pool
+    */
+  def removeWithDoubleSpends(txs: TraversableOnce[ErgoTransaction]): ErgoMemPool = {
+    txs.foldLeft(this) { case (memPool, tx) =>
+      if (memPool.contains(tx.id)) { // tx could be removed earlier in this loop as double-spend of another tx
+        memPool.removeTxAndDoubleSpends(tx)
+      } else {
+        memPool
+      }
+    }
   }
 
   /**
@@ -226,6 +250,19 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
+
+                // added in 6.0 to check now versioned serializers
+                // as having unparseable outputs is okay per protocol rules, but in some cases in 6.0
+                // tree deserialization fails with versioning issues (eg when tree version > activated version),
+                // not parsing ones
+                val scriptVersion = Header.scriptFromBlockVersion(state.stateContext.blockVersion)
+                VersionContext.withVersions(scriptVersion, scriptVersion) {
+                  ErgoTransactionSerializer.parseBytesTry(unconfirmedTx.transaction.bytes) match {
+                    case Success(_) =>
+                    case Failure(e) => return (this, new ProcessingOutcome.Invalidated(e, validationStartTime))
+                  }
+                }
+
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>

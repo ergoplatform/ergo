@@ -10,13 +10,13 @@ import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
 import io.circe.syntax._
 import org.ergoplatform.http.api.ScriptApiRoute
+import org.ergoplatform.settings.Constants.TrueTree
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
-import sigmastate.SByte
-import sigmastate.Values.{CollectionConstant, ErgoTree, TrueLeaf}
-import sigmastate.serialization.{ErgoTreeSerializer, ValueSerializer}
-
+import sigma.ast.SByte
+import sigma.ast.syntax.CollectionConstant
+import sigma.serialization.{ErgoTreeSerializer, ValueSerializer}
 
 class ScriptApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -72,8 +72,8 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val addressStr = json.hcursor.downField("address").as[String].right.get
       addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
     }
-    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 0.asJson)) ~> route ~>
       check(assertion(responseAs[Json]))
   }
 
@@ -84,8 +84,8 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val addressStr = json.hcursor.downField("address").as[String].right.get
       addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
     }
-    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson)) ~> route ~> check(assertion(responseAs[Json]))
-    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson)) ~> route ~>
+    Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> route ~> check(assertion(responseAs[Json]))
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 0.asJson)) ~> route ~>
       check(assertion(responseAs[Json]))
   }
 
@@ -106,8 +106,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
     Get(s"$prefix/$suffix/$p2pk") ~> route ~> check(assertion(responseAs[Json], p2pk))
 
-    val script = TrueLeaf
-    val tree = ErgoTree.fromProposition(script)
+    val tree = TrueTree
 
     val p2sh = Pay2SHAddress.apply(tree).toString()
     p2sh shouldBe "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
@@ -128,7 +127,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
 
       val bac = ValueSerializer.deserialize(vbs).asInstanceOf[CollectionConstant[SByte.type]]
 
-      val bs = bac.value.toArray.map(_.byteValue())
+      val bs = bac.value.toArray.map(b => b.byteValue())
 
       val tree = ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bs)
 
@@ -143,8 +142,7 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val p2sh = "rbcrmKEYduUvADj9Ts3dSVSG27h54pgrq5fPuwB"
     Get(s"$prefix/$suffix/$p2sh") ~> route ~> check(assertion(responseAs[Json], p2sh))
 
-    val script = TrueLeaf
-    val tree = ErgoTree.fromProposition(script)
+    val tree = TrueTree
     val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))

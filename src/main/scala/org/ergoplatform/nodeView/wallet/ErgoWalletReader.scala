@@ -10,15 +10,15 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResu
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.{ErgoBox, NodeViewComponent, P2PKAddress}
 import scorex.util.ModifierId
-import sigmastate.Values.SigmaBoolean
+import sigma.data.SigmaBoolean
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import java.util.concurrent.TimeUnit

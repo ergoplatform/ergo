@@ -12,20 +12,21 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, LaunchParameters, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.settings.Constants.FalseTree
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigmastate.AtLeast
-import sigmastate.Values.{ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
-import sigmastate.crypto.DLogProtocol.ProveDlog
-import sigmastate.serialization.ValueSerializer
+import sigma.ast.{AtLeast, ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
+import sigma.data.ProveDlog
+import sigma.serialization.ValueSerializer
+import sigma.Colls
 import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
@@ -205,15 +206,13 @@ object ErgoState extends ScorexLogging {
                         ergoTree: ErgoTree,
                         additionalTokens: Seq[(TokenId, Long)] = Seq.empty,
                         additionalRegisters: AdditionalRegisters = Map.empty): ErgoBox = {
-    import sigmastate.eval._
-
     val creationHeight: Int = EmptyHistoryHeight
 
     val transactionId: ModifierId = ErgoBox.allZerosModifierId
     val boxIndex: Short = 0: Short
 
     new ErgoBox(value, ergoTree,
-      CostingSigmaDslBuilder.Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
+      Colls.fromArray(additionalTokens.toArray[(TokenId, Long)]),
       additionalRegisters,
       transactionId, boxIndex, creationHeight)
   }
@@ -252,7 +251,7 @@ object ErgoState extends ScorexLogging {
   private def noPremineBox(chainSettings: ChainSettings): ErgoBox = {
     val proofsBytes = chainSettings.noPremineProof.map(b => ByteArrayConstant(b.getBytes("UTF-8")))
     val proofs = ErgoBox.nonMandatoryRegisters.zip(proofsBytes).toMap
-    createGenesisBox(EmissionRules.CoinsInOneErgo, Constants.FalseLeaf, Seq.empty, proofs)
+    createGenesisBox(EmissionRules.CoinsInOneErgo, FalseTree, Seq.empty, proofs)
   }
 
   /**
@@ -268,13 +267,15 @@ object ErgoState extends ScorexLogging {
     * Generate genesis full (UTXO-set) state by inserting genesis boxes into empty UTXO set.
     * Assign `genesisStateDigest` from config as its version.
     */
-  def generateGenesisUtxoState(stateDir: File, settings: ErgoSettings): (UtxoState, BoxHolder) = {
+  def generateGenesisUtxoState(stateDir: File, settings: ErgoSettings, parametersOpt: Option[Parameters] = None): (UtxoState, BoxHolder) = {
 
     log.info("Generating genesis UTXO state")
     val boxes = genesisBoxes(settings.chainSettings)
     val bh = BoxHolder(boxes)
 
-    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, LaunchParameters).ensuring(us => {
+    val parameters = parametersOpt.getOrElse(settings.launchParameters)
+
+    UtxoState.fromBoxHolder(bh, boxes.headOption, stateDir, settings, parameters).ensuring(us => {
       log.info(s"Genesis UTXO state generated with hex digest ${Base16.encode(us.rootDigest)}")
       java.util.Arrays.equals(us.rootDigest, settings.chainSettings.genesisStateDigest) && us.version == genesisStateVersion
     }) -> bh

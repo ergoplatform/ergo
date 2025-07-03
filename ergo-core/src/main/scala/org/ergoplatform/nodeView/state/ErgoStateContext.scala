@@ -9,19 +9,20 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.ExtensionValidator
-import org.ergoplatform.sdk.wallet.protocol.context.BlockchainStateContext
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationState}
+import org.ergoplatform.wallet.interpreter.VersionedBlockchainStateContext
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions.ArrayOps
-import sigmastate.eval.SigmaDsl
 import sigma.Coll
+import sigma.eval.SigmaDsl
+import sigma.Extensions.ArrayOps
+import sigma.crypto.EcPointType
+import sigma.validation.SigmaValidationSettings
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
@@ -68,7 +69,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                        val validationSettings: ErgoValidationSettings,
                        val votingData: VotingData)
                       (implicit val chainSettings: ChainSettings)
-  extends BlockchainStateContext
+  extends VersionedBlockchainStateContext
     with BytesSerializable
     with ScorexEncoding
     with ScorexLogging {
@@ -77,6 +78,8 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
   private val votingSettings = chainSettings.voting
   private val popowAlgos = new NipopowAlgos(chainSettings)
+
+  override val sigmaValidationSettings: SigmaValidationSettings = validationSettings.sigmaSettings
 
   override def sigmaPreHeader: sigma.PreHeader =
     PreHeader.toSigma(lastHeaders.headOption.getOrElse(PreHeader.fake))
@@ -136,7 +139,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     */
   def simplifiedUpcoming(): UpcomingStateContext = {
     val minerPk = org.ergoplatform.mining.group.generator
-    val version = lastHeaderOpt.map(_.version).getOrElse(Header.InitialVersion)
+    val version = lastHeaderOpt.map(_.version).getOrElse(currentParameters.blockVersion)
     val nBits = lastHeaderOpt.map(_.nBits).getOrElse(chainSettings.initialNBits)
     val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
     val votes = Array.emptyByteArray
@@ -192,7 +195,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                For the latter case, the light fullnode is just relied on PoW majority about parameters and validation
                settings.
                */
-              val (calculatedParams, calculatedSettings) = if (currentParameters.height == 0) {
+              val (calculatedParamsPre60, calculatedSettings) = if (currentParameters.height == 0) {
                 parsedParams -> parsedSettings
               } else {
                 val (params, settingsUpdates) = currentParameters
@@ -201,9 +204,24 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
                 params -> settings
               }
 
+              // 6.0: insert number of sub-blocks per block if it is not there
+              val calculatedParams = if (
+                header.version >= Header.Interpreter60Version &&
+                !calculatedParamsPre60.parametersTable.contains(Parameters.SubblocksPerBlockIncrease) &&
+                !validationState.settings.isActive(exMatchParameters)
+              ) {
+                parsedParams.parametersTable.get(Parameters.SubblocksPerBlockIncrease) match {
+                  case Some(value) => calculatedParamsPre60.withNumOfSubblocksPerBlock(value)
+                  case None => calculatedParamsPre60.withNumOfSubblocksPerBlock(Parameters.SubblocksPerBlockDefault)
+                }
+              } else {
+                calculatedParamsPre60
+              }
+
               currentValidationState
                 .validate(exBlockVersion, calculatedParams.blockVersion == header.version, InvalidModifier(s"${calculatedParams.blockVersion} == ${header.version}", extension.id, extension.modifierTypeId))
                 .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams), extension.id, extension.modifierTypeId)
+                .validateNoFailure(exMatchParameters60, Parameters.matchParameters60(parsedParams, calculatedParams, header.version), extension.id, extension.modifierTypeId)
                 .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, InvalidModifier(s"$parsedSettings vs $calculatedSettings", extension.id, extension.modifierTypeId))
           }.result
       }.result
@@ -330,12 +348,6 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 }
 
 object ErgoStateContext {
-
-  /**
-    * Parameter to vote for to support EIP-27 soft-fork.
-    * Also used for output cost.
-    */
-  val eip27Vote: Byte = 8
 
   def empty(chainSettings: ChainSettings, parameters: Parameters): ErgoStateContext = {
     empty(chainSettings.genesisStateDigest, chainSettings, parameters)

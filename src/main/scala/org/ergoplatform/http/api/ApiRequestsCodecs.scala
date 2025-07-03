@@ -3,13 +3,13 @@ package org.ergoplatform.http.api
 import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.ErgoLikeContext
-import org.ergoplatform.http.api.requests.{CryptoResult, ExecuteRequest, HintExtractionRequest}
+import org.ergoplatform.http.api.requests.{CompileRequest, CryptoResult, ExecuteRequest, HintExtractionRequest}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommitmentsRequest, TransactionSigningRequest}
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import sigma.AnyValue
-import sigmastate.Values.SigmaBoolean
+import sigma.data.SigmaBoolean
 
 /**
   * JSON codecs for HTTP API requests related entities
@@ -26,6 +26,8 @@ trait ApiRequestsCodecs extends ApiCodecs {
     ).asJson
   }
 
+  implicit val compileRequestDecoder: Decoder[CompileRequest] = Decoder.forProduct2("source", "treeVersion")(CompileRequest.apply)
+
   implicit val hintExtractionRequestDecoder: Decoder[HintExtractionRequest] = { cursor =>
     for {
       tx <- cursor.downField("tx").as[ErgoTransaction]
@@ -40,9 +42,10 @@ trait ApiRequestsCodecs extends ApiCodecs {
     def apply(cursor: HCursor): Decoder.Result[ExecuteRequest] = {
       for {
         script <- cursor.downField("script").as[String]
+        treeVersion <- cursor.downField("treeVersion").as[Option[Byte]]
         env <- cursor.downField("namedConstants").as[Map[String, AnyValue]]
         ctx <- cursor.downField("context").as[ErgoLikeContext]
-      } yield ExecuteRequest(script, env.map({ case (k, v) => k -> v.value }), ctx)
+      } yield ExecuteRequest(script, treeVersion, env.map({ case (k, v) => k -> v.value }), ctx)
     }
   }
 

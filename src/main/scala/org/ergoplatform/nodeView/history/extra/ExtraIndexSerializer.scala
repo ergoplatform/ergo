@@ -10,6 +10,9 @@ object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
         case m: IndexedErgoAddress =>
           w.put(IndexedErgoAddress.extraIndexTypeId)
           IndexedErgoAddressSerializer.serialize(m, w)
+        case m: IndexedContractTemplate =>
+          w.put(IndexedContractTemplate.extraIndexTypeId)
+          IndexedContractTemplateSerializer.serialize(m, w)
         case m: IndexedErgoTransaction =>
           w.put(IndexedErgoTransaction.extraIndexTypeId)
           IndexedErgoTransactionSerializer.serialize(m, w)
@@ -34,6 +37,8 @@ object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
       r.getByte() match {
         case IndexedErgoAddress.`extraIndexTypeId` =>
           IndexedErgoAddressSerializer.parse(r)
+        case IndexedContractTemplate.`extraIndexTypeId` =>
+          IndexedContractTemplateSerializer.parse(r)
         case IndexedErgoTransaction.`extraIndexTypeId` =>
           IndexedErgoTransactionSerializer.parse(r)
         case IndexedErgoBox.`extraIndexTypeId` =>

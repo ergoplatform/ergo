@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
+
 import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof

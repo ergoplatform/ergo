@@ -5,8 +5,8 @@ logLevel := Level.Debug
 
 // this values should be in sync with ergo-wallet/build.sbt
 val scala211 = "2.11.12"
-val scala212 = "2.12.18"
-val scala213 = "2.13.12"
+val scala212 = "2.12.20"
+val scala213 = "2.13.16"
 
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
@@ -18,8 +18,8 @@ lazy val commonSettings = Seq(
   // without the tag version resolves to [branch name]-[git commit hash]-SNAPSHOT
   // don't set the version manually
   resolvers ++= Seq("Sonatype Releases" at "https://oss.sonatype.org/content/repositories/releases/",
-    "Bintray" at "https://jcenter.bintray.com/", //for org.ethereum % leveldbjni-all 
     "SonaType" at "https://oss.sonatype.org/content/groups/public",
+    "Repo for leveldbjni-all" at "https://gitlab.com/api/v4/projects/61211221/packages/maven",
     "Typesafe maven releases" at "https://dl.bintray.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
@@ -33,11 +33,13 @@ lazy val commonSettings = Seq(
   ),
 )
 
+publishArtifact in (Compile, packageDoc) := false
+
 val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "5.0.13"
+val sigmaStateVersion = "6.0.1"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -95,13 +97,14 @@ val opts = Seq(
   "-XX:+UseStringDeduplication"
 )
 
-javaOptions in run ++= opts
+run / javaOptions ++= opts
+scalacOptions ++= Seq("-Xasync")
 scalacOptions --= Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 val scalacOpts = Seq("-Ywarn-numeric-widen", "-Ywarn-value-discard", "-Ywarn-unused:params", "-Xcheckinit")
 
 
-sourceGenerators in Compile += Def.task {
-  val versionFile = (sourceManaged in Compile).value / "org" / "ergoplatform" / "Version.scala"
+Compile / sourceGenerators += Def.task {
+  val versionFile = (Compile / sourceManaged).value / "org" / "ergoplatform" / "Version.scala"
   
   IO.write(versionFile,
     s"""package org.ergoplatform
@@ -113,14 +116,14 @@ sourceGenerators in Compile += Def.task {
   Seq(versionFile)
 }
 
-mainClass in assembly := Some("org.ergoplatform.ErgoApp")
+assembly / mainClass := Some("org.ergoplatform.ErgoApp")
 
-test in assembly := {}
+assembly / test := {}
 
-assemblyJarName in assembly := s"ergo-${version.value}.jar"
+assembly / assemblyJarName := s"ergo-${version.value}.jar"
 
-assemblyMergeStrategy in assembly := {
-  case "logback.xml" => MergeStrategy.first
+assembly / assemblyMergeStrategy := {
+  case "logback.xml" => MergeStrategy.last
   case x if x.endsWith("module-info.class") => MergeStrategy.discard
   case "reference.conf" => CustomMergeStrategy.concatReversed
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
@@ -128,23 +131,23 @@ assemblyMergeStrategy in assembly := {
   case PathList("org", "bouncycastle", xs @ _*) => MergeStrategy.first
   case PathList("javax", "activation", xs @ _*) => MergeStrategy.last
   case PathList("javax", "annotation", xs @ _*) => MergeStrategy.last
-  case other => (assemblyMergeStrategy in assembly).value(other)
+  case other => (assembly / assemblyMergeStrategy).value(other)
 }
 
 enablePlugins(sbtdocker.DockerPlugin)
 enablePlugins(JavaAppPackaging)
 enablePlugins(ReproducibleBuildsPlugin)
 
-mappings in Universal += {
-  val sampleFile = (resourceDirectory in Compile).value / "samples" / "local.conf.sample"
+Universal / mappings += {
+  val sampleFile = (Compile / resourceDirectory).value / "samples" / "local.conf.sample"
   sampleFile -> "conf/local.conf"
 }
 
 // removes all jar mappings in universal and appends the fat jar
-mappings in Universal ++= {
+Universal / mappings ++= {
   // universalMappings: Seq[(File,String)]
-  val universalMappings = (mappings in Universal).value
-  val fatJar = (assembly in Compile).value
+  val universalMappings = (Universal / mappings).value
+  val fatJar = (Compile / assembly).value
   // removing means filtering
   val filtered = universalMappings filter {
     case (_, name) => !name.endsWith(".jar")
@@ -172,10 +175,10 @@ inConfig(IntegrationTest)(Seq(
   scalacOptions ++= Seq("-Xasync")
 ))
 
-dockerfile in docker := {
-  val configDevNet = (resourceDirectory in IntegrationTest).value / "devnetTemplate.conf"
-  val configTestNet = (resourceDirectory in IntegrationTest).value / "testnetTemplate.conf"
-  val configMainNet = (resourceDirectory in IntegrationTest).value / "mainnetTemplate.conf"
+docker / dockerfile := {
+  val configDevNet = (IntegrationTest / resourceDirectory).value / "devnetTemplate.conf"
+  val configTestNet = (IntegrationTest / resourceDirectory).value / "testnetTemplate.conf"
+  val configMainNet = (IntegrationTest / resourceDirectory).value / "mainnetTemplate.conf"
 
   new Dockerfile {
     from("openjdk:11-jre-slim")
@@ -187,18 +190,13 @@ dockerfile in docker := {
   }
 }
 
-buildOptions in docker := BuildOptions(
+docker / buildOptions := BuildOptions(
   removeIntermediateContainers = BuildOptions.Remove.OnSuccess
 )
 
-//FindBugs settings
-
-findbugsReportType := Some(FindbugsReport.Xml)
-findbugsExcludeFilters := Some(scala.xml.XML.loadFile(baseDirectory.value / "findbugs-exclude.xml"))
-
 //Scapegoat settings
 
-scapegoatVersion in ThisBuild := "1.3.3"
+ThisBuild / scapegoatVersion := "1.3.11"
 
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
@@ -214,9 +212,9 @@ lazy val avldb = (project in file("avldb"))
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-    scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
-    scalacOptions in(Compile, compile) --= scalacOpts,
-    javacOptions in(Compile, compile) ++= javacReleaseOption,
+    Compile / compile / scalacOptions ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
+    Compile / compile / scalacOptions --= scalacOpts,
+    Compile / compile / javacOptions ++= javacReleaseOption,
     libraryDependencies ++= Seq(
       // database dependencies
       "org.ethereum" % "leveldbjni-all" % "1.18.3",
@@ -237,7 +235,7 @@ lazy val avldb_benchmarks = (project in file("avldb/benchmarks"))
     publishArtifact := false,
     resolvers ++= Seq("Sonatype OSS Releases" at "https://oss.sonatype.org/content/repositories/releases"),
     testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework"),
-    parallelExecution in Test := false,
+    Test / parallelExecution := false,
     logBuffered := false
   )
   .dependsOn(avldb)
@@ -256,9 +254,9 @@ lazy val ergoCore = (project in file("ergo-core"))
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),
-    scalacOptions in(Compile, compile) ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
-    scalacOptions in(Compile, compile) --= scalacOpts,
-    parallelExecution in Test := false,
+    Compile / compile / scalacOptions ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
+    Compile / compile / scalacOptions --= scalacOpts,
+    Test / parallelExecution := false,
   )
 
 lazy val ergoWallet = (project in file("ergo-wallet"))
@@ -271,7 +269,7 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),
-    scalacOptions in(Compile, compile) ++= (if(scalaBinaryVersion.value == "2.11")
+    Compile / compile / scalacOptions ++= (if(scalaBinaryVersion.value == "2.11")
         Seq.empty
       else
         Seq("-release", "8")
@@ -294,8 +292,8 @@ lazy val ergo = (project in file("."))
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-    scalacOptions in(Compile, compile) ++= Seq("-release", "8"),
-    javacOptions in(Compile, compile) ++= javacReleaseOption,
+    Compile / compile / scalacOptions ++= Seq("-release", "8"),
+    Compile / compile / javacOptions ++= javacReleaseOption,
     libraryDependencies ++= Seq(
       // api dependencies
       "io.circe" %% "circe-core" % circeVersion,
@@ -311,7 +309,7 @@ lazy val ergo = (project in file("."))
 
       "org.bitlet" % "weupnp" % "0.1.4",
       // command line args parsing
-      "com.github.scopt" %% "scopt" % "4.0.1",
+      "com.github.scopt" %% "scopt" % "4.1.0",
 
       // API dependencies
       "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
@@ -320,8 +318,7 @@ lazy val ergo = (project in file("."))
       // jaxb-api is included only to avoid a runtime exception
       "javax.xml.bind" % "jaxb-api" % "2.4.0-b180830.0359",
 
-      // caching, bloom filters, Longs/Ints
-      "com.google.guava" % "guava" % "21.0",
+      // caching
       "com.github.ben-manes.caffeine" % "caffeine" % "2.9.3" // use 3.x only for java 11+
     )
   )
@@ -354,6 +351,6 @@ def javacReleaseOption = {
 }
 
 // prefix version with "-SNAPSHOT" for builds without a git tag
-dynverSonatypeSnapshots in ThisBuild := true
+ThisBuild / dynverSonatypeSnapshots := true
 // use "-" instead of default "+"
-dynverSeparator in ThisBuild := "-"
+ThisBuild / dynverSeparator := "-"

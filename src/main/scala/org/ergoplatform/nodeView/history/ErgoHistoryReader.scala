@@ -359,9 +359,9 @@ trait ErgoHistoryReader
     * @return
     */
   def syncInfoV1: ErgoSyncInfoV1 = {
-    /**
-      * Return last count headers from best headers chain if exist or chain up to genesis otherwise
-      */
+    /*
+     * Return last count headers from best headers chain if exist or chain up to genesis otherwise
+     */
     def lastHeaderIds(count: Int): IndexedSeq[ModifierId] = {
       val currentHeight = headersHeight
       val from = Math.max(currentHeight - count + 1, 1)

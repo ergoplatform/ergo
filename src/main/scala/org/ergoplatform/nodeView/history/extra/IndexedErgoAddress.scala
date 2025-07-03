@@ -8,7 +8,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
-import sigmastate.Values.ErgoTree
+import sigma.ast.ErgoTree
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 case class IndexedErgoAddress(treeHash: ModifierId,
                               override val txs: ArrayBuffer[Long] = new ArrayBuffer[Long],
                               override val boxes: ArrayBuffer[Long] = new ArrayBuffer[Long])
-  extends Segment[IndexedErgoAddress](treeHash, id => IndexedErgoAddress(id), txs, boxes) with ExtraIndex {
+  extends Segment[IndexedErgoAddress](id => IndexedErgoAddress(id), txs, boxes) with ExtraIndex {
 
   override lazy val id: ModifierId = treeHash
   override def serializedId: Array[Byte] = fastIdToBytes(treeHash)
@@ -55,8 +55,9 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     * @return this address
     */
   override private[extra] def spendBox(iEb: IndexedErgoBox, historyOpt: Option[ErgoHistoryReader] = None)(implicit ae: ErgoAddressEncoder): IndexedErgoAddress = {
-    if(historyOpt.isDefined)
+    if(historyOpt.isDefined) {
       findAndModBox(iEb.globalIndex, historyOpt.get)
+    }
     balanceInfo.foreach(_.subtract(iEb.box))
     this
   }

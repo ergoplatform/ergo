@@ -13,12 +13,13 @@ import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.BoxSelector
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
+
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -116,7 +117,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case _: RestoreWallet | _: InitWallet =>
       sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
 
-    /** READERS */
+    /* READERS */
     case ReadBalances(chainStatus) =>
       val walletDigest = if (chainStatus.onChain) {
         state.registry.fetchDigest()
@@ -194,7 +195,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ReadScans =>
       sender() ! ReadScansResponse(state.walletVars.externalScans)
 
-    /** STATE CHANGE */
+    /* STATE CHANGE */
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
       val newState = ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)))
       context.become(loadedWallet(newState))
@@ -219,7 +220,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           context.become(loadedWallet(state.copy(error = Some(errorMsg))))
       }
 
-    /** SCAN COMMANDS */
+    /* SCAN COMMANDS */
     //scan mempool transaction
     case ScanOffChain(tx) =>
       val dustLimit = settings.walletSettings.dustLimit
@@ -300,7 +301,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.warn("Avoiding rollback as wallet is not initialized yet")
       }
 
-      /** WALLET COMMANDS */
+    /* WALLET COMMANDS */
     case CheckSeed(mnemonic, passOpt) =>
       state.secretStorageOpt match {
         case Some(secretStorage) =>

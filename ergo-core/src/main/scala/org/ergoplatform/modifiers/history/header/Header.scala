@@ -17,9 +17,10 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util._
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.eval.Extensions._
-import sigmastate.eval.{CAvlTree, CBigInt, CGroupElement, CHeader}
+import sigma.{Colls, VersionContext}
+import sigma.Extensions._
+import sigma.crypto.EcPointType
+import sigma.data.{CBigInt, CGroupElement, CHeader}
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration
@@ -40,6 +41,7 @@ import scala.concurrent.duration.FiniteDuration
   * @param extensionRoot - Merkle tree digest of the extension section of the block
   * @param powSolution - solution for the proof-of-work puzzle
   * @param votes - votes for changing system parameters
+  * @param unparsedBytes - bytes of fields added in future versions of the protocol and not parseable
   * @param sizeOpt - optionally, size of the header (to avoid serialization on calling .length)
   */
 case class Header(override val version: Header.Version,
@@ -53,8 +55,9 @@ case class Header(override val version: Header.Version,
                   override val extensionRoot: Digest32,
                   powSolution: AutolykosSolution,
                   override val votes: Array[Byte], //3 bytes
+                  override val unparsedBytes: Array[Byte],
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
-  nBits, height, extensionRoot, votes) with PreHeader with BlockSection {
+  nBits, height, extensionRoot, votes, unparsedBytes) with PreHeader with BlockSection {
 
   override def serializedId: Array[Header.Version] = Algos.hash(bytes)
 
@@ -138,14 +141,26 @@ object Header extends ApiCodecs {
     */
   val Interpreter50Version: Byte = 3
 
+  /**
+    * Block version after the 6.0 soft-fork
+    * 6.0 interpreter (EIP-50)
+    */
+  val Interpreter60Version: Byte = 4
+
+  def scriptFromBlockVersion(blockVersion: Byte): Byte = {
+    (blockVersion - 1).toByte
+  }
+
+  def scriptAndTreeFromBlockVersions(blockVersion: Byte): VersionContext = {
+    VersionContext((blockVersion - 1).toByte, (blockVersion - 1).toByte)
+  }
 
   def toSigma(header: Header): sigma.Header =
     CHeader(
-      id = header.id.toBytes.toColl,
       version = header.version,
       parentId = header.parentId.toBytes.toColl,
       ADProofsRoot = header.ADProofsRoot.asInstanceOf[Array[Byte]].toColl,
-      stateRoot = CAvlTree(ErgoInterpreter.avlTreeFromDigest(header.stateRoot.toColl)),
+      stateRootDigest = header.stateRoot.toColl,
       transactionsRoot = header.transactionsRoot.asInstanceOf[Array[Byte]].toColl,
       timestamp = header.timestamp,
       nBits = header.nBits,
@@ -155,7 +170,8 @@ object Header extends ApiCodecs {
       powOnetimePk = CGroupElement(header.powSolution.w),
       powNonce = header.powSolution.n.toColl,
       powDistance = CBigInt(header.powSolution.d.bigInteger),
-      votes = header.votes.toColl
+      votes = header.votes.toColl,
+      unparsedBytes = Colls.emptyColl[Byte]
     )
 
   val modifierTypeId: NetworkObjectTypeId.Value = HeaderTypeId.value
@@ -180,7 +196,8 @@ object Header extends ApiCodecs {
       "size" -> h.size.asJson,
       "extensionId" -> Algos.encode(h.extensionId).asJson,
       "transactionsId" -> Algos.encode(h.transactionsId).asJson,
-      "adProofsId" -> Algos.encode(h.ADProofsId).asJson
+      "adProofsId" -> Algos.encode(h.ADProofsId).asJson,
+      "unparsedBytes" -> Algos.encode(h.unparsedBytes).asJson
     ).asJson
   }
 
@@ -197,8 +214,10 @@ object Header extends ApiCodecs {
       version <- c.downField("version").as[Byte]
       votes <- c.downField("votes").as[String]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
+      unparsedBytes <- c.downField("unparsedBytes").as[Option[Array[Byte]]]
     } yield Header(version, parentId, adProofsRoot, stateRoot,
-      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get)
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get,
+      unparsedBytes.getOrElse(Array.emptyByteArray))
   }
 
 }

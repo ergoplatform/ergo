@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
-import org.ergoplatform.settings.{Algos, ErgoSettings, LaunchParameters, Parameters}
+import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
@@ -62,8 +62,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     None,
     launchTime = System.currentTimeMillis(),
     lastIncomingMessageTime = System.currentTimeMillis(),
+    lastMemPoolUpdateTime = System.currentTimeMillis(),
     None,
-    LaunchParameters,
+    settings.launchParameters,
     eip27Supported = true,
     settings.scorexSettings.restApi.publicUrl,
     settings.nodeSettings.extraIndex)
@@ -100,6 +101,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private def onMempoolChanged: Receive = {
     case ChangedMempool(p) =>
+      nodeInfo = nodeInfo.copy(lastMemPoolUpdateTime = System.currentTimeMillis())
       nodeInfo = nodeInfo.copy(unconfirmedCount = p.size)
   }
 
@@ -171,6 +173,7 @@ object ErgoStatsCollector {
     * @param maxPeerHeight - maximum block height of connected peers
     * @param launchTime - when the node was launched (in Java time format, basically, UNIX time * 1000)
     * @param lastIncomingMessageTime - when the node received last p2p message (in Java time)
+    * @param lastMemPoolUpdateTime - when the mempool was last updated (in Java time)
     * @param genesisBlockIdOpt - header id of genesis block
     * @param parameters - array with network parameters at the moment
     * @param eip27Supported - whether EIP-27 locked in
@@ -193,6 +196,7 @@ object ErgoStatsCollector {
                       maxPeerHeight : Option[Int],
                       launchTime: Long,
                       lastIncomingMessageTime: Long,
+                      lastMemPoolUpdateTime: Long,
                       genesisBlockIdOpt: Option[String],
                       parameters: Parameters,
                       eip27Supported: Boolean,
@@ -227,6 +231,7 @@ object ErgoStatsCollector {
         "peersCount" -> ni.peersCount.asJson,
         "launchTime" -> ni.launchTime.asJson,
         "lastSeenMessageTime" -> ni.lastIncomingMessageTime.asJson,
+        "lastMemPoolUpdateTime" -> ni.lastMemPoolUpdateTime.asJson,
         "genesisBlockId" -> ni.genesisBlockIdOpt.asJson,
         "parameters" -> ni.parameters.asJson,
         "eip27Supported" -> ni.eip27Supported.asJson,

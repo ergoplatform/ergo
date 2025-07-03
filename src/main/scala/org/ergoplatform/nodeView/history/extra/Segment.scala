@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.fastIdToBytes
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -20,27 +19,20 @@ import scala.reflect.ClassTag
  * Class to manage the tracking of transactions/boxes in relation to some other object (ErgoTree/token).
  * When [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes are accumulated, new instances of the parent object are created to contain them.
  * This mechanism is used to prevent excessive serialization/deserialization delays caused by objects with a lot of transaction/box indexes.
- * @param parentId - identifier of parent object
  * @param factory  - parent object factory
  * @param txs      - list of numeric transaction indexes
  * @param boxes    - list of numeric box indexes, negative values indicate the box is spent
- * @param idMod    - function to apply to ids during segmentation and db lookup
  * @tparam T       - type of parent object
  */
-abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
-                                                   val factory: ModifierId => T,
+abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
                                                    val txs: ArrayBuffer[Long],
-                                                   val boxes: ArrayBuffer[Long],
-                                                   val idMod: ModifierId => ModifierId = id => id)
+                                                   val boxes: ArrayBuffer[Long])
   extends ExtraIndex with ScorexLogging {
-
-  override lazy val id: ModifierId = parentId
-  override def serializedId: Array[Byte] = fastIdToBytes(parentId)
 
   /**
    * Internal segment buffer
    */
-  private[extra] val buffer: mutable.HashMap[ModifierId,T] = new mutable.HashMap[ModifierId,T]
+  private[extra] val buffer: mutable.HashMap[ModifierId, T] = new mutable.HashMap[ModifierId, T]
 
   /**
    * Number of segments in database containing box numbers
@@ -79,15 +71,13 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       var high = boxSegmentCount - 1
       while(low <= high) {
         val mid = (low + high) >>> 1
-        segmentId = boxSegmentId(parentId, mid)
-        buffer.get(segmentId).orElse(history.typedExtraIndexById[T](idMod(segmentId))).foreach { segment =>
-          if(abs(segment.boxes.head) < boxNumAbs &&
-            abs(segment.boxes.last) < boxNumAbs)
+        segmentId = factory(boxSegmentId(id, mid)).id
+        buffer.get(segmentId).orElse(history.typedExtraIndexById[T](segmentId)).foreach { segment =>
+          if (abs(segment.boxes.head) < boxNumAbs && abs(segment.boxes.last) < boxNumAbs) {
             low = mid + 1
-          else if(abs(segment.boxes.head) > boxNumAbs &&
-            abs(segment.boxes.last) > boxNumAbs)
+          } else if (abs(segment.boxes.head) > boxNumAbs && abs(segment.boxes.last) > boxNumAbs) {
             high = mid - 1
-          else {
+          } else {
             low = high + 1 // break
             buffer.put(segmentId, segment)
           }
@@ -118,7 +108,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
 
     // Split txs until under segmentTreshold
     while(txs.length > segmentTreshold) {
-      data += factory(txSegmentId(parentId, txSegmentCount))
+      data += factory(txSegmentId(id, txSegmentCount))
       data.last.txs ++= txs.take(segmentTreshold)
       txSegmentCount += 1
       txs.remove(0, segmentTreshold)
@@ -126,25 +116,12 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
 
     // Split boxes until under segmentTreshold
     while(boxes.length > segmentTreshold) {
-      data += factory(boxSegmentId(parentId, boxSegmentCount))
+      data += factory(boxSegmentId(id, boxSegmentCount))
       data.last.boxes ++= boxes.take(segmentTreshold)
       boxSegmentCount += 1
       boxes.remove(0, segmentTreshold)
     }
     data.toArray
-  }
-
-  /**
-   * Calculate the segment offsets for the given range.
-   *
-   * @param offset - items to skip from the start
-   * @param limit  - items to retrieve
-   * @return array of offsets
-   */
-  private[extra] def getSegmentsForRange(offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[Int] = {
-    val floor = math.max(math.floor(offset * 1F / segmentTreshold).toInt, 0)
-    val ceil = math.ceil((offset + limit) * 1F / segmentTreshold).toInt
-    (floor to ceil).toArray
   }
 
   /**
@@ -175,7 +152,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @param offset        - number of items to skip from the start
    * @param limit         - max number of item to be returned
    * @param segmentCount  - number of segments of the parent address
-   * @param array         - the indexes already in memory
+   * @param arr         - the indexes already in memory
    * @param idOf          - function to calculate segment ids, either [[txSegmentId]] or [[boxSegmentId]]
    * @param arraySelector - function to select index array from retreived segments
    * @param retrieve      - function to retrieve indexes from database
@@ -189,55 +166,36 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
                                                   arr: ArrayBuffer[Long],
                                                   idOf: (ModifierId, Int) => ModifierId,
                                                   arraySelector: T => ArrayBuffer[Long],
-                                                  retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B],
-                                                  txsFlag: Boolean)
+                                                  retrieve: (ArrayBuffer[Long], ErgoHistoryReader) => Array[B])
                                                  (implicit segmentTreshold: Int): Array[B] = {
-    val array = if(txsFlag) {
-      arr.reverse
-    } else {
-      arr
-    }
 
-    val total: Int = segmentTreshold * segmentCount + array.length
+    val total: Int = segmentTreshold * segmentCount + arr.length
     if (offset >= total)
       return Array.empty[B] // return empty array if all elements are skipped
-    if (offset + limit > array.length && segmentCount > 0) {
-
-      val target = offset + limit
-
-      val collected: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
-      collected ++= (if (offset < array.length) array.slice(offset, Math.min(offset + limit, array.length)) else Nil)
-      val segments = getSegmentsForRange(offset - array.length, limit).map(n => math.min(segmentCount - 1, n)).distinct
-      segments.foreach { num =>
-        val lowerBound = array.length + num * segmentTreshold
-        val upperBound = lowerBound + segmentTreshold
-
-        if (collected.length < limit && target > lowerBound) {
-          val arr = if(txsFlag) {
-            arraySelector(
-              history.typedExtraIndexById[T](idMod(idOf(parentId, (segmentCount - 1) - num))).get
-            ).reverse
-          } else {
-            arraySelector(
-              history.typedExtraIndexById[T](idMod(idOf(parentId, num))).get
-            ).reverse
-          }
-          if (target > upperBound) {
-            collected ++= arr.slice(offset - lowerBound, arr.size)
-          } else {
-            if (offset > lowerBound) {
-              collected ++= arr.slice(offset - lowerBound, offset - lowerBound + limit)
-            } else {
-              collected ++= arr.slice(0, target - lowerBound)
-            }
-          }
-        }
-      }
-
-      retrieve(collected, history)
-    } else {
-      retrieve(array.slice(offset, offset + limit), history)
+    val collected: ArrayBuffer[Long] = ArrayBuffer.empty[Long]
+    var off = offset
+    var lim = limit
+    var segment = segmentCount - 1
+    if(off < arr.size) { // all elements are in memory
+      val x = arr.dropRight(off).takeRight(lim)
+      collected ++= x.reverse
+      off = 0
+      lim -= x.size
+    }else { // skip all elements in memory
+      off -= arr.size
     }
+    while(off > segmentTreshold && segment >= 0) { // skip segments until offset gets smaller than one segment
+      off -= segmentTreshold
+      segment -= 1
+    }
+    while(lim > 0 && segment >= 0) { // take limit elements from remaining segments (also skip remaining offset)
+      val x = arraySelector(history.typedExtraIndexById[T](factory(idOf(id, segment)).id).get).dropRight(off).takeRight(lim)
+      collected ++= x.reverse
+      lim -= x.size
+      off = 0
+      segment -= 1
+    }
+    retrieve(collected, history)
   }
 
   /**
@@ -249,7 +207,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return array of transactions with full bodies
    */
   def retrieveTxs(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoTransaction] =
-    getFromSegments(history, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs, txsFlag = true)
+    getFromSegments(history, offset, limit, txSegmentCount, txs, txSegmentId, _.txs, getTxs)
 
   /**
    * Get a range of the boxes associated with the parent object
@@ -260,7 +218,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
    * @return array of boxes
    */
   def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoBox] =
-    getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes, txsFlag = false)
+    getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
 
 
   /**
@@ -271,7 +229,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     * @param mempool                - mempool to use, if unconfirmed is true
     * @param offset                 - items to skip from the start
     * @param limit                  - items to retrieve
-    * @param sortDir                - whether to start retrieval from newest box ([[DESC]]) or oldest box ([[ASC]])
+    * @param sortDir                - whether to start retrieval from the newest box (DESC) or oldest box (ASC)
     * @param unconfirmed            - whether to include unconfirmed boxes
     * @param spentBoxesIdsInMempool - Set of box IDs that are spent in the mempool (to be excluded if necessary)
     * @return array of unspent boxes
@@ -290,14 +248,14 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
         var segment: Int = boxSegmentCount
         while (data.length < (limit + offset) && segment > 0) {
           segment -= 1
-          history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
+          history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id)) ++=: data
         }
         data.reverse.slice(offset, offset + limit)
       case ASC =>
         var segment: Int = 0
         while (data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](idMod(boxSegmentId(parentId, segment))).get.boxes
+          data ++= history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes
             .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
           segment += 1
         }
@@ -307,7 +265,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
     }
     if (unconfirmed) {
       val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
-      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, _, 0)).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, None, _, 0)).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
       sortDir match {
         case DESC => unconfirmedBoxes ++ confirmedBoxes
         case ASC => confirmedBoxes ++ unconfirmedBoxes
@@ -317,7 +275,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
   }
 
   /**
-   * Logic for [[Segment.rollback]]
+   * Logic for `Segment.rollback`
    *
    * @param txTarget  - remove transaction numbers above this number
    * @param boxTarget - remove box numbers above this number
@@ -340,7 +298,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       txs.clear()
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
-        val segmentId = idMod(txSegmentId(parentId, txSegmentCount - 1))
+        val segmentId = factory(txSegmentId(id, txSegmentCount - 1)).id
         txs ++= history.typedExtraIndexById[T](segmentId).get.txs
         toRemove += segmentId
         txSegmentCount -= 1
@@ -353,7 +311,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val parentId: ModifierId,
       boxes.clear()
       boxes ++= tmp
       if (boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
-        val segmentId = idMod(boxSegmentId(parentId, boxSegmentCount - 1))
+        val segmentId = factory(boxSegmentId(id, boxSegmentCount - 1)).id
         boxes ++= history.typedExtraIndexById[T](segmentId).get.boxes
         toRemove += segmentId
         boxSegmentCount -= 1

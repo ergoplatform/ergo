@@ -10,22 +10,18 @@ import org.ergoplatform.it.api.NodeApi.UnexpectedStatusCodeException
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.it.util.RichEither
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
-import org.ergoplatform.nodeView.wallet.requests.{
-  PaymentRequest,
-  RequestsHolder,
-  RequestsHolderEncoder
-}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWalletServiceImpl}
+import org.ergoplatform.nodeView.wallet.requests.{PaymentRequest, RequestsHolder, RequestsHolderEncoder}
+import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
-import org.ergoplatform.wallet.interface4j.SecretString
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.scalatest.wordspec.AsyncWordSpec
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigma.Colls
-import sigmastate.Values.{ErgoTree, TrueLeaf}
 
 import scala.concurrent.ExecutionContext
 
@@ -104,13 +100,12 @@ class WalletSpec
   }
 
   "it should generate unsigned transaction" in {
-    import sigmastate.eval._
     val mnemonic =
       SecretString.create(walletAutoInitConfig.getString("ergo.wallet.testMnemonic"))
     val prover = new ErgoWalletServiceImpl(settings)
       .buildProverFromMnemonic(mnemonic, None, parameters)
     val pk            = prover.hdPubKeys.head.key
-    val ergoTree      = ErgoTree.fromProposition(TrueLeaf)
+    val ergoTree      = TrueTree
     val transactionId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
     val input = new ErgoBox(
       60000000,
@@ -127,7 +122,7 @@ class WalletSpec
     val paymentRequest = PaymentRequest(
       P2PKAddress(pk)(settings.addressEncoder),
       50000000,
-      Seq.empty,
+      Array.empty,
       Map.empty
     )
     val requestsHolder = RequestsHolder(

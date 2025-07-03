@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "5.0.22"
+  version: "6.0.0"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -273,6 +273,9 @@ components:
               format: int32
               minimum: 0
               example: 147
+            spendingProof:
+              nullable: true
+              $ref: '#/components/schemas/SpendingProof'
             globalIndex:
               description: Global index of the output in the blockchain
               type: integer
@@ -878,6 +881,7 @@ components:
       required:
         - script
         - namedConstants
+        - treeVersion
         - context
       properties:
         script:
@@ -887,11 +891,28 @@ components:
           description: Environment for compiler
           type: object
           nullable: true
+        treeVersion:
+          description: ErgoScript version to be used in compiler
+          nullable: true
         context:
           description: Interpreter context
           type: object
           nullable: true
           $ref: '#/components/schemas/ErgoLikeContext'
+
+    CompileRequest:
+      type: object
+      required:
+        - source
+        - treeVersion
+      properties:
+        source:
+          description: Source code of the ErgoScript to be compiled
+          type: string
+        treeVersion:
+          description: Version of ErgoTree to compile to
+          type: integer
+          format: int8
 
     SigmaBoolean:
       description: Algebraic data type of sigma proposition expressions
@@ -1301,6 +1322,15 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+
+    PrivateKeyRequest:
+          description: Request for getting a secret corresponding to wallet address
+          type: object
+          required:
+            - address
+          properties:
+            address:
+              $ref: '#/components/schemas/ErgoAddress'
 
     PaymentRequest:
       description: Request for generation of payment transaction to a given address
@@ -3252,6 +3282,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /transactions/unconfirmed/transactionIds:
+    get:
+      summary: Get list of unconfirmed transactions ids
+      operationId: getUnconfirmedTxIds
+      tags:
+        - transactions
+      responses:
+        '200':
+          description: List of unconfirmed transaction ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schema/ApiError'
+
+  /transactions/unconfirmed/byTransactionIds:
+    post:
+      summary: Get list of unconfirmed transactions by their ids
+      operationId: getUnconfirmedTxsByIds
+      tags:
+        - transactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: List of unconfirmed transaction ids
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /transactions/unconfirmed/byErgoTree:
     parameters:
       - in: query
@@ -4188,7 +4270,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              type: object
+              required:
+                - address
+              properties:
+                address:
+                  $ref: "#/components/schemas/ErgoAddress"
       responses:
         '200':
           description: Change address updated successfully
@@ -4881,7 +4968,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ErgoAddress"
+              $ref: "#/components/schemas/PrivateKeyRequest"
       responses:
         '200':
           description: Successfully retrieved secret key
@@ -5295,7 +5382,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SourceHolder'
+              $ref: '#/components/schemas/CompileRequest'
       responses:
         '200':
           description: Ergo address derived from source
@@ -5329,7 +5416,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SourceHolder'
+              $ref: '#/components/schemas/CompileRequest'
       responses:
         '200':
           description: P2SH address derived from source
@@ -6443,6 +6530,124 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blockchain/box/byTemplateHash:
+    get:
+      summary: Retrieve boxes by their contract template hash
+      operationId: getBoxesByTemplateHash
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: hash
+          required: true
+          description: blake2b256 hash of an ErgoTree template encoded in base 16
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+      responses:
+        '200':
+          description: boxes with wanted template hash
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No boxes found for wanted template hash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/box/unspent/byTemplateHash:
+    get:
+      summary: Retrieve unspent boxes by their contract template hash
+      operationId: getBoxesByTemplateHashUnspent
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: hash
+          required: true
+          description: blake2b256 hash of an ErgoTree template encoded in base 16
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+        - in: query
+          name: offset
+          required: false
+          description: amount of elements to skip from the start
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - in: query
+          name: limit
+          required: false
+          description: amount of elements to retrieve
+          schema:
+            type: integer
+            format: int32
+            default: 5
+        - in: query
+          name: sortDirection
+          required: false
+          description: desc = new boxes first ; asc = old boxes first
+          schema:
+            type: string
+            default: desc
+        - in: query
+          name: includeUnconfirmed
+          required: false
+          description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: unspent boxes with wanted template hash
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of boxes
+                items:
+                  $ref: '#/components/schemas/IndexedErgoBox'
+        '404':
+          description: No unspent boxes found for wanted template hash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /blockchain/box/range:
     get:
       summary: Get a range of box ids
@@ -6643,7 +6848,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-
+  /blockchain/tokens:
+    post:
+      summary: Retrieve minting information about a list of tokens
+      operationId: getTokensByIds
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+                description: Token ID
+      responses:
+        '200':
+          description: Array of tokens with the provided IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexedToken'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /blockchain/balance:
     post:
       summary: Retrieve confirmed and unconfirmed balance of an address

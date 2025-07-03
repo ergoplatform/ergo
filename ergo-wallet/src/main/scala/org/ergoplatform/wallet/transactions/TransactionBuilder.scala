@@ -7,11 +7,10 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
-import sigmastate.eval.Extensions._
-import sigmastate.eval._
+import sigma.eval.Extensions.EvalIterableOps
 import sigmastate.utils.Extensions._
 import sigma.Coll
-import sigma.Extensions._
+import sigma.Extensions.{ArrayOps, CollBytesOps}
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -48,7 +47,7 @@ object TransactionBuilder {
       feeAmt,
       ErgoTreePredef.feeProposition(),
       currentHeight,
-      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Array.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
     val paymentBoxes =
@@ -57,7 +56,7 @@ object TransactionBuilder {
           transferAmt,
           recipientAddress.script,
           currentHeight,
-          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Array.empty[(ErgoBox.TokenId, Long)].toColl,
           Map.empty
         )
       }.toVector
@@ -70,7 +69,7 @@ object TransactionBuilder {
           changeAmt,
           changeAddress.script,
           currentHeight,
-          Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+          Array.empty[(ErgoBox.TokenId, Long)].toColl,
           Map.empty
         )
         paymentBoxes ++ Vector(feeBox, changeBox)
@@ -112,21 +111,21 @@ object TransactionBuilder {
       transferAmt,
       recipientAddress.script,
       currentHeight,
-      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Array.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
     val fee = new ErgoBoxCandidate(
       feeAmt,
       ErgoTreePredef.feeProposition(),
       currentHeight,
-      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Array.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
     val change = new ErgoBoxCandidate(
       changeAmt,
       changeAddress.script,
       currentHeight,
-      Seq.empty[(ErgoBox.TokenId, Long)].toColl,
+      Array.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
     val unsignedInputs = inputIds

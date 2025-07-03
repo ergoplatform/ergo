@@ -1,24 +1,30 @@
 package org.ergoplatform.utils.generators
 
+import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionSigningRequest}
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, WalletTransaction}
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.{BoxUtils, RandomLike, RandomWrapper}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.EmptyHistoryHeight
 import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.utils.WalletGenerators.{additionalRegistersGen, additionalTokensGen, boxIdGen, ergoBoxGen, validValueGen}
 import org.scalacheck.Gen
 import scorex.db.ByteArrayWrapper
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
-import sigmastate.Values.ErgoTree
+import sigma.ast.ErgoTree
+import sigma.data.ProveDlog
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
+import org.ergoplatform.settings.Constants.TrueTree
+import sigma.eval.Extensions.EvalIterableOps
+
 import scala.collection.mutable
 import scala.util.Random
 
@@ -27,6 +33,60 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+
+  val creationHeightGen: Gen[Int] = Gen.choose(0, Int.MaxValue / 2)
+
+  lazy val ergoBoxCandidateGen: Gen[ErgoBoxCandidate] = for {
+    h <- creationHeightGen
+    prop <- trueLeafGen
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+    value <- validValueGen
+  } yield new ErgoBoxCandidate(value, prop, h, tokens.toColl, ar)
+
+  def ergoAddressGen: Gen[ErgoAddress] = proveDlogGen.map(P2PKAddress.apply)
+
+  def ergoBoxCandidateGen(prop: ProveDlog): Gen[ErgoBoxCandidate] = for {
+    h <- creationHeightGen
+    ar <- additionalRegistersGen
+    tokens <- additionalTokensGen
+    value <- validValueGen
+  } yield new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(prop), h, tokens.toColl, ar)
+
+  lazy val ergoBoxGenNoProp: Gen[ErgoBox] = ergoBoxGen(propGen = trueLeafGen)
+
+  def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
+                          propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
+    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = EmptyHistoryHeight)
+  }
+
+  def unspendableErgoBoxGen(minValue: Long = parameters.minValuePerByte * 200,
+                            maxValue: Long = coinsTotal): Gen[ErgoBox] = {
+    ergoBoxGen(propGen = falseLeafGen, valueGenOpt = Some(Gen.choose(minValue, maxValue)))
+  }
+
+  lazy val inputGen: Gen[Input] = for {
+    boxId <- boxIdGen
+    spendingProof <- noProofGen
+  } yield Input(boxId, spendingProof)
+
+  lazy val dataInputGen: Gen[DataInput] = for {
+    boxId <- boxIdGen
+  } yield DataInput(boxId)
+
+  lazy val reallySmallInt: Gen[Int] = Gen.choose(0, 3)
+
+  lazy val invalidErgoTransactionGen: Gen[ErgoTransaction] = for {
+    from: IndexedSeq[Input] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen).map(_.toIndexedSeq))
+  } yield ErgoTransaction(from, dataInputs, to)
+
+  def invalidErgoTransactionGen(prop: ProveDlog): Gen[ErgoTransaction] = for {
+    from: IndexedSeq[Input] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, inputGen).map(_.toIndexedSeq))
+    dataInputs: IndexedSeq[DataInput] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, dataInputGen).map(_.toIndexedSeq))
+    to: IndexedSeq[ErgoBoxCandidate] <- reallySmallInt.flatMap(i => Gen.listOfN(i + 1, ergoBoxCandidateGen(prop)).map(_.toIndexedSeq))
+  } yield ErgoTransaction(from, dataInputs, to)
 
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
     tx <- invalidErgoTransactionGen
@@ -58,7 +118,7 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   def validUnsignedTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                         rnd: RandomLike = new RandomWrapper,
                                         issueNew: Boolean = true,
-                                        outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                        outputsProposition: ErgoTree = TrueTree,
                                         dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): UnsignedErgoTransaction = {
     require(boxesToSpend.nonEmpty, "At least one box is needed to generate a transaction")
 
@@ -144,7 +204,7 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   def validTransactionFromBoxes(boxesToSpend: IndexedSeq[ErgoBox],
                                 rnd: RandomLike = new RandomWrapper,
                                 issueNew: Boolean = true,
-                                outputsProposition: ErgoTree = Constants.TrueLeaf,
+                                outputsProposition: ErgoTree = TrueTree,
                                 stateCtxOpt: Option[ErgoStateContext] = None,
                                 dataBoxes: IndexedSeq[ErgoBox] = IndexedSeq()): ErgoTransaction = {
     val unsignedTx = validUnsignedTransactionFromBoxes(boxesToSpend, rnd, issueNew, outputsProposition, dataBoxes)
@@ -196,7 +256,7 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   def transactionSigningRequestGen(includeInputs: Boolean): Gen[TransactionSigningRequest] = for {
     (secret, pubKey) <- dlogSecretWithPublicImageGen
     (secretDh, _) <- dhtSecretWithPublicImageGen
-    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(pubKey)
+    (inputBoxes, utx) <- validUnsignedErgoTransactionGen(ErgoTree.fromSigmaBoolean(pubKey))
     inputBoxesEncoded = inputBoxes.map(b => Base16.encode(b.bytes))
     secretSeq = Seq(ExternalSecret(DlogSecretKey(secret)), ExternalSecret(DhtSecretKey(secretDh)))
   } yield TransactionSigningRequest(utx, TransactionHintsBag.empty, secretSeq,

@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
-import org.ergoplatform.settings.{Algos, Constants}
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils._
 import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
@@ -17,10 +17,12 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
+import sigma.Extensions.ArrayOps
+import sigma.ast.ErgoTree
+import sigma.data.{CAND, CTHRESHOLD}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
-import sigmastate.eval._
-import sigmastate.{CAND, CTHRESHOLD}
+import org.ergoplatform.settings.Constants.TrueTree
 
 import scala.concurrent.duration._
 
@@ -57,7 +59,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           // prepare a lot of inputs
           val inputsToCreate = 50
           val sumToSpend = (snap.walletBalance - MinBoxValue) / (inputsToCreate + 1)
-          val req = (0 until inputsToCreate).map(_ => PaymentRequest(addresses.head, sumToSpend, Seq.empty, Map.empty))
+          val req = (0 until inputsToCreate).map(_ => PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
           log.info(s"Confirmed balance $snap")
           log.info(s"Payment request $req")
           val tx = await(wallet.generateTransaction(req)).get
@@ -73,7 +75,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         eventually {
           // generate transaction spending part of inputs
           val newSumToSpend = tx.outputs.head.value
-          val req2 = Seq(PaymentRequest(addresses.head, newSumToSpend, Seq.empty, Map.empty))
+          val req2 = Seq(PaymentRequest(addresses.head, newSumToSpend, Array.empty, Map.empty))
           log.info(s"Payment requests 2 $req2")
           val tx2 = await(wallet.generateTransaction(req2)).get
           (req2, tx2)
@@ -107,7 +109,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val tokenDescription: String = s"ERG description"
         val tokenDecimals: Int = 9
         val feeAmount = availableAmount / 4
-        val feeReq = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), feeAmount, Seq.empty, Map.empty)
+        val feeReq = PaymentRequest(Pay2SAddress(TrueTree), feeAmount, Array.empty, Map.empty)
         val req = AssetIssueRequest(address, None, emissionAmount, tokenName, tokenDescription, tokenDecimals)
         val tx = await(wallet.generateTransaction(Seq(feeReq, req))).get
         log.info(s"Generated transaction $tx")
@@ -140,9 +142,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
 
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance, assetToSpend, Map.empty)
 
         val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
         tx1.outputs.size shouldBe 1
@@ -152,7 +154,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         //change == 1:
         val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
         val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
-        val req2 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - MinBoxValue, assetToSpend2, Map.empty)
+        val req2 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance - MinBoxValue, assetToSpend2, Map.empty)
 
         val tx2 = await(wallet.generateTransaction(Seq(req2))).get
         tx2.outputs.size shouldBe 2
@@ -180,9 +182,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
 
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance, assetToSpend, Map.empty)
 
         val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
         tx1.outputs.size shouldBe 1
@@ -218,9 +220,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
         log.error(s"Confirmed balance $confirmedBalance")
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance, assetToSpend, Map.empty)
 
         val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
         tx1.outputs.size shouldBe 1
@@ -228,9 +230,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         toAssetMap(tx1.outputs.head.additionalTokens.toArray) shouldBe toAssetMap(assetToSpend)
 
         //change == 1:
-        val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
+        val assetToSpend2 = assetToSpend.map{ case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
         val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
-        val req2 = Seq(BurnTokensRequest(assetToSpend2), PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - MinBoxValue, Seq.empty, Map.empty))
+        val req2 = Seq(BurnTokensRequest(assetToSpend2), PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance - MinBoxValue, Array.empty, Map.empty))
 
         val tx2 = await(wallet.generateTransaction(req2)).get
         tx2.outputs.size shouldBe 2
@@ -272,7 +274,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       Some(assetToSpend.map(x => encodedTokenId(x._1))) shouldBe ww.settings.walletSettings.tokensWhitelist
       assetToSpend should not be empty
 
-      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance / 2, Seq.empty, Map.empty)
+      val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance / 2, Array.empty, Map.empty)
 
       val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
       tx1.outputs.size shouldBe 2
@@ -304,7 +306,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
       assetToSpend should not be empty
 
-      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance / 2, Seq.empty, Map.empty)
+      val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance / 2, Array.empty, Map.empty)
 
       val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
       tx1.outputs.size shouldBe 2
@@ -336,7 +338,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
       assetToSpend should not be empty
 
-      val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance / 2, Seq.empty, Map.empty)
+      val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance / 2, Array.empty, Map.empty)
 
       val tx1 = await(wallet.generateTransaction(Seq(req1), boxesToUseEncoded)).get
       tx1.outputs.size shouldBe 2
@@ -359,13 +361,13 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val (tx, block, assetsToSpend) =
         eventually {
           val snap = getConfirmedBalances
-          val assetsToSpend = assetsByTokenId(initialBoxes).toSeq
+          val assetsToSpend = assetsByTokenId(initialBoxes).toArray
           assetsToSpend should not be empty
 
           val sumToSpend = snap.walletBalance / (addresses.length + 1)
           val req =
             PaymentRequest(addresses.head, sumToSpend, assetsToSpend, Map.empty) +:
-              addresses.tail.map(a => PaymentRequest(a, sumToSpend, Seq.empty, Map.empty))
+              addresses.tail.map(a => PaymentRequest(a, sumToSpend, Array.empty, Map.empty))
           log.info(s"Confirmed balance $snap")
           log.info(s"Payment request $req")
           val tx = await(wallet.generateTransaction(req)).get
@@ -388,7 +390,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val newSnap = getConfirmedBalances
         val newSumToSpend = newSnap.walletBalance / addresses.length
         val req2 = PaymentRequest(addresses.head, newSumToSpend, assetsToSpend, Map.empty) +:
-          addresses.tail.map(a => PaymentRequest(a, newSumToSpend, Seq.empty, Map.empty))
+          addresses.tail.map(a => PaymentRequest(a, newSumToSpend, Array.empty, Map.empty))
         log.info(s"New balance $newSnap")
         log.info(s"Payment requests 2 $req2")
         val tx2 = await(wallet.generateTransaction(req2)).get
@@ -704,7 +706,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       // We need this second block to have something to rollback. Just spent some balance to anyone
       val balanceToSpend = randomLong(initialBalance)
-      val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, address.pubkey)
+      val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(address.pubkey))
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.pubkey)
       val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
       applyBlock(block) shouldBe 'success
@@ -764,7 +766,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         eventually {
           val initialBalance = getConfirmedBalances.walletBalance
           val balanceToSpend = randomLong(balanceAmount(boxesToSpend))
-          val creationTx = makeTx(boxesToSpend, emptyProverResult, balanceToSpend, pubKey, randomNewAsset)
+          val creationTx = makeTx(boxesToSpend, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(pubKey), randomNewAsset)
           val initialAssets = assetAmount(boxesAvailable(creationTx, pubKey))
           initialAssets should not be empty
           log.info(s"Initial balance: $initialBalance")
@@ -931,7 +933,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val initialBalance = balanceAmount(initialBoxes)
 
       val balancePicked = randomLong(initialBalance)
-      val creationTx = makeTx(initialBoxes, emptyProverResult, balancePicked, address.pubkey, randomNewAsset)
+      val creationTx = makeTx(initialBoxes, emptyProverResult, balancePicked, ErgoTree.fromSigmaBoolean(address.pubkey), randomNewAsset)
       val boxesToSpend = boxesAvailable(creationTx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
 
@@ -993,9 +995,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
 
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance, assetToSpend, Map.empty)
 
         val tx1 = await(wallet.generateTransaction(Seq(req1))).get
         tx1.outputs.size shouldBe 1
@@ -1005,7 +1007,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         //change == 1:
         val assetToSpend2 = assetToSpend.map { case (tokenId, tokenValue) => (tokenId, tokenValue - 1) }
         val assetToReturn = assetToSpend.map { case (tokenId, _) => (tokenId, 1L) }
-        val req2 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance - MinBoxValue, assetToSpend2, Map.empty)
+        val req2 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance - MinBoxValue, assetToSpend2, Map.empty)
 
         val tx2 = await(wallet.generateTransaction(Seq(req2))).get
         tx2.outputs.size shouldBe 2
@@ -1027,9 +1029,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
 
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(Constants.TrueLeaf), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(TrueTree), confirmedBalance, assetToSpend, Map.empty)
 
         val utx = await(wallet.generateUnsignedTransaction(Seq(req1))).get
         utx.outputs.size shouldBe 1
@@ -1059,9 +1061,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
 
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val req1 = PaymentRequest(Pay2SAddress(CAND(Seq(secret1.publicImage, secret2.publicImage))), confirmedBalance, assetToSpend, Map.empty)
+        val req1 = PaymentRequest(Pay2SAddress(ErgoTree.fromSigmaBoolean(CAND(Seq(secret1.publicImage, secret2.publicImage)))), confirmedBalance, assetToSpend, Map.empty)
 
         val tx = await(wallet.generateTransaction(Seq(req1))).get
 
@@ -1096,9 +1098,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val confirmedBalance = getConfirmedBalances.walletBalance
 
         //pay out all the wallet balance:
-        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toSeq
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
         assetToSpend should not be empty
-        val addr = Pay2SAddress(CTHRESHOLD(2, Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage)))
+        val addr = Pay2SAddress(ErgoTree.fromSigmaBoolean(CTHRESHOLD(2, Seq(secret1.publicImage, secret2.publicImage, secret3.publicImage))))
         val req1 = PaymentRequest(addr, confirmedBalance, assetToSpend, Map.empty)
 
         val tx = await(wallet.generateTransaction(Seq(req1))).get

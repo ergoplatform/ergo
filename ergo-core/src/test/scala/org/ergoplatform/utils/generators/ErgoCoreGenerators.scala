@@ -11,16 +11,18 @@ import org.ergoplatform.network.ModePeerFeature
 import org.ergoplatform.nodeView.history.{ErgoSyncInfo, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Constants, ErgoValidationSettings, ErgoValidationSettingsUpdate, ValidationRules}
-import org.ergoplatform.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
+import sigma.validation.{ChangedRule, DisabledRule, EnabledRule, ReplacedRule}
 import org.scalacheck.Arbitrary.arbByte
 import org.scalacheck.{Arbitrary, Gen}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
-import sigmastate.Values.ErgoTree
-import sigmastate.crypto.CryptoConstants.EcPointType
-import sigmastate.crypto.DLogProtocol.{DLogProverInput, ProveDlog}
-import sigmastate.crypto.{CryptoConstants, DiffieHellmanTupleProverInput, ProveDHTuple}
-import sigmastate.interpreter.ProverResult
+import sigma.ast.ErgoTree
+import sigma.crypto.{CryptoConstants, EcPointType}
+import sigma.data.{ProveDHTuple, ProveDlog}
+import sigma.interpreter.ProverResult
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigmastate.crypto.DiffieHellmanTupleProverInput
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 import scala.util.Random
 
@@ -28,13 +30,12 @@ object ErgoCoreGenerators {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
-  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(Constants.TrueLeaf)
-  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(Constants.FalseLeaf)
+  lazy val trueLeafGen: Gen[ErgoTree] = Gen.const(TrueTree)
+  lazy val falseLeafGen: Gen[ErgoTree] = Gen.const(FalseTree)
 
   lazy val smallPositiveInt: Gen[Int] = Gen.choose(1, 5)
 
-  lazy val noProofGen: Gen[ProverResult] =
-    Gen.const(emptyProverResult)
+  lazy val noProofGen: Gen[ProverResult] = Gen.const(emptyProverResult)
 
   lazy val dlogSecretWithPublicImageGen: Gen[(DLogProverInput, ProveDlog)] = for {
     secret <- genBytes(32).map(seed => BigIntegers.fromUnsignedByteArray(seed))
@@ -54,7 +55,7 @@ object ErgoCoreGenerators {
     seed <- genBytes(32)
   } yield DLogProverInput(BigIntegers.fromUnsignedByteArray(seed)).publicImage
 
-  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(_.toSigmaProp)
+  lazy val proveDlogTreeGen: Gen[ErgoTree] = proveDlogGen.map(ErgoTree.fromSigmaBoolean)
 
   lazy val ergoPropositionGen: Gen[ErgoTree] = Gen.oneOf(trueLeafGen, falseLeafGen, proveDlogTreeGen)
 
@@ -172,6 +173,7 @@ object ErgoCoreGenerators {
     extensionHash,
     powSolution,
     Array.fill(3)(0: Byte),
+    Array.emptyByteArray,
     None
   )
 
@@ -200,7 +202,7 @@ object ErgoCoreGenerators {
   lazy val ergoValidationSettingsUpdateGen: Gen[ErgoValidationSettingsUpdate] = for {
     n <- Gen.choose(1, 200)
     disabledRules = ValidationRules.rulesSpec.filter(_._2.mayBeDisabled).keys.take(n).toSeq
-    replacedRuleCode <- Gen.choose(org.ergoplatform.validation.ValidationRules.FirstRuleId, Short.MaxValue)
+    replacedRuleCode <- Gen.choose(sigma.validation.ValidationRules.FirstRuleId, Short.MaxValue)
     changedRuleValue <- genBoundedBytes(0, 127)
     statuses <- Gen.listOf(Gen.oneOf(DisabledRule, EnabledRule, ReplacedRule(replacedRuleCode), ChangedRule(changedRuleValue)))
     statusUpdates = org.ergoplatform.validation.ValidationRules.ruleSpecs.take(statuses.size).map(_.id).zip(statuses)

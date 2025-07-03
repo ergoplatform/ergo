@@ -9,10 +9,11 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.{ModifierId, Random}
 import scorex.util.encode.Base16
 import sigma.Colls
-import sigmastate.CTHRESHOLD
-import sigmastate.Values.{GroupElementConstant, SigmaBoolean}
-import sigmastate.interpreter.{ContextExtension, HintsBag}
-import sigmastate.serialization.ErgoTreeSerializer
+import sigma.ast.{ErgoTree, GroupElementConstant}
+import sigma.data.{CGroupElement, CTHRESHOLD, SigmaBoolean}
+import sigma.interpreter.ContextExtension
+import sigma.serialization.ErgoTreeSerializer
+import sigmastate.interpreter.HintsBag
 
 
 class ErgoProvingInterpreterSpec
@@ -63,7 +64,7 @@ class ErgoProvingInterpreterSpec
 
     val creationHeight = 10000
 
-    val boxCandidate = new ErgoBoxCandidate(value, prop, creationHeight)
+    val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromProposition(prop), creationHeight)
     val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
     val inputBox = boxCandidate.toBox(fakeTxId, 0.toShort)
 
@@ -94,7 +95,7 @@ class ErgoProvingInterpreterSpec
 
     val value = 100000000L
     val creationHeight = 10000
-    val boxCandidate = new ErgoBoxCandidate(value, pk, creationHeight)
+    val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(pk), creationHeight)
 
     val numOfInputs = 50
     val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))

@@ -30,8 +30,8 @@ object ValidBlocksGenerators
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 
-  def createUtxoState(settings: ErgoSettings): (UtxoState, BoxHolder) = {
-    ErgoState.generateGenesisUtxoState(createTempDir, settings)
+  def createUtxoState(settings: ErgoSettings, parametersOpt: Option[Parameters] = None): (UtxoState, BoxHolder) = {
+    ErgoState.generateGenesisUtxoState(createTempDir, settings, parametersOpt)
   }
 
   def createUtxoState(bh: BoxHolder, parameters: Parameters): UtxoState =
@@ -49,11 +49,13 @@ object ValidBlocksGenerators
     validTransactionsFromBoxes(sizeLimit, stateBoxesIn, Seq(), rnd)
   }
 
-  /** @param sizeLimit maximum transactions size in bytes */
+  /** @param sizeLimit maximum transactions size in bytes
+    * @return generated transactions and unspent outputs
+    * */
   def validTransactionsFromBoxes(sizeLimit: Int,
-                                           stateBoxesIn: Seq[ErgoBox],
-                                           dataBoxesIn: Seq[ErgoBox],
-                                           rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
+                                 stateBoxesIn: Seq[ErgoBox],
+                                 dataBoxesIn: Seq[ErgoBox],
+                                 rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
     var createdEmissionBox: Seq[ErgoBox] = Seq()
 
     @tailrec
@@ -156,7 +158,7 @@ object ValidBlocksGenerators
     val num = 1 + rnd.nextInt(3)
 
     val allBoxes = wus.takeBoxes(num + rnd.nextInt(100))
-    val anyoneCanSpendBoxes = allBoxes.filter(_.ergoTree == Constants.TrueLeaf)
+    val anyoneCanSpendBoxes = allBoxes.filter(_.ergoTree == Constants.TrueTree)
     val boxes = if (anyoneCanSpendBoxes.nonEmpty) anyoneCanSpendBoxes else allBoxes
 
     validTransactionsFromBoxes(num, boxes, rnd)._1

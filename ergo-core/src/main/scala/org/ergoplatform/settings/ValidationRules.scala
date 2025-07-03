@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import org.ergoplatform.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
+import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -11,6 +11,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator}
 import org.ergoplatform.validation.ValidationResult.Invalid
 import scorex.util.ModifierId
+import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 
 object ValidationRules {
 
@@ -299,6 +300,7 @@ object ValidationRules {
   val exParseValidationSettings: Short = 411
   val exMatchValidationSettings: Short = 412
   val exIlUnableToValidate: Short = 413
+  val exMatchParameters60: Short = 414
 
   // full block application
   val fbOperationFailed: Short = 500

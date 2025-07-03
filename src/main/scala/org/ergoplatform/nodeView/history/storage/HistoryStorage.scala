@@ -81,8 +81,8 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           log.trace(s"Cache miss for existing modifier $id")
           cacheModifier(pm)
           Some(pm)
-        case Failure(_) =>
-          log.warn(s"Failed to parse modifier ${Algos.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+        case Failure(e) =>
+          log.warn(s"Failed to parse modifier ${Algos.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
           None
       }
     }
@@ -92,8 +92,8 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       ExtraIndexSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
           log.trace(s"Cache miss for existing index $id")
-          if(pm.isInstanceOf[Segment[_]]){
-            extraCache.put(pm.id, pm) // cache all segment type objects
+          if(!pm.isInstanceOf[Segment[_]]){
+            extraCache.put(pm.id, pm) // cache non-segment objects
           }
           Some(pm)
         case Failure(_) =>

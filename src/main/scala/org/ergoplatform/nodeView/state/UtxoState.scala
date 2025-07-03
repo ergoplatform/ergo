@@ -155,7 +155,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             log.error("Calculated proofHash is not equal to the declared one, doing another attempt")
 
-            /**
+            /*
               * Proof generated was different from one announced.
               *
               * In most cases, announced proof is okay, and as proof is already checked, problem in some

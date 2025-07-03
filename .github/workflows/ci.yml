@@ -21,12 +21,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.12, 2.12.18, 2.11.12]
+        scala: [2.13.16, 2.12.20, 2.11.12]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -36,7 +36,7 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Cache sbt
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
               ~/.sbt
@@ -45,7 +45,7 @@ jobs:
               ~/.cache/coursier/v1
               ~/AppData/Local/Coursier/Cache/v1
               ~/Library/Caches/Coursier/v1
-          key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+          key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
       - name: Runs wallet tests
         run: sbt ++${{ matrix.scala }} ergoWallet/test
@@ -64,12 +64,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.12, 2.12.18, 2.11.12]
+        scala: [2.13.16, 2.12.20, 2.11.12]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -79,7 +79,7 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Cache sbt
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
             ~/.sbt
@@ -88,7 +88,7 @@ jobs:
             ~/.cache/coursier/v1
             ~/AppData/Local/Coursier/Cache/v1
             ~/Library/Caches/Coursier/v1
-          key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+          key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
       - name: Runs ergo-core tests
         run: sbt ++${{ matrix.scala }} ergoCore/test
@@ -105,12 +105,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.12.18]
+        scala: [2.12.20]
         java: [adopt@1.8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -120,7 +120,7 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Cache sbt
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: |
               ~/.sbt
@@ -129,7 +129,7 @@ jobs:
               ~/.cache/coursier/v1
               ~/AppData/Local/Coursier/Cache/v1
               ~/Library/Caches/Coursier/v1
-          key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+          key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
       - name: Runs node tests
         run: sbt -Denv=test clean ++${{ matrix.scala }} test
@@ -139,12 +139,12 @@ jobs:
      strategy:
        matrix:
          os: [ ubuntu-latest ]
-         scala: [ 2.12.18 ]
+         scala: [ 2.12.20 ]
          java: [ adopt@1.8 ]
      runs-on: ${{ matrix.os }}
      steps:
        - name: Checkout current branch (full)
-         uses: actions/checkout@v2
+         uses: actions/checkout@v4
          with:
            path: it
            fetch-depth: 0
@@ -155,7 +155,7 @@ jobs:
            java-version: ${{ matrix.java }}
 
        - name: Cache sbt
-         uses: actions/cache@v2
+         uses: actions/cache@v4
          with:
            path: |
              ~/.sbt
@@ -164,7 +164,7 @@ jobs:
              ~/.cache/coursier/v1
              ~/AppData/Local/Coursier/Cache/v1
              ~/Library/Caches/Coursier/v1
-           key: ${{ runner.os }}-sbt-cache-v2-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
        - name: Runs it node tests
          run: |

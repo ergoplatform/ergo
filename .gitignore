@@ -63,6 +63,7 @@ local.conf
 .vscode/
 project/metals.sbt
 null/
+out/
 
 # scala worksheets
 *.worksheet.sc

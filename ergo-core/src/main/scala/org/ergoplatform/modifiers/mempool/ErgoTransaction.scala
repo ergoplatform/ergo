@@ -3,7 +3,6 @@ package org.ergoplatform.modifiers.mempool
 import io.circe.syntax._
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
 import org.ergoplatform.ErgoBox.BoxId
-import org.ergoplatform._
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.emission.EmissionRules
@@ -28,7 +27,6 @@ import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, Validati
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
 import java.util
@@ -80,7 +78,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
-  lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+  private lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`

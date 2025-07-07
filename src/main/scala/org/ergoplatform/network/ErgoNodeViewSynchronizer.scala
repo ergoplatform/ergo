@@ -1618,18 +1618,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
 
-    // todo: broadcast only locally generated new best input block
+    // todo: broadcast only locally generated new best input block?
     case NewBestInputBlock(Some(id)) =>
       historyReader.getInputBlock(id) match {
         case Some(ibi) =>
           log.debug(s"Sending input block $id out")
-          val peers = syncTracker.statuses.filter(_._2.status == Equal).keys.toSeq // todo: include FORK
+          val peers = syncTracker.statuses.filter { s =>
+            val status = s._2.status
+            status == Equal || status == Fork
+          }.keys.toSeq
           val msg = Message(InputBlockMessageSpec, Right(ibi), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
         case None =>
       }
 
-    case NewBestInputBlock(None) =>  // todo: anything needed ?
+    case NewBestInputBlock(None) =>
+      // this signal is sent on ordering block application, nothing p2p layer should do
   }
 
   /** handlers of messages coming from peers */

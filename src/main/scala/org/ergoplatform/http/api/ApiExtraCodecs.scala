@@ -129,4 +129,13 @@ trait ApiExtraCodecs extends JsonCodecs {
     } yield new SnapshotsInfo(availableManifests)
   }
 
+  implicit val indexedBlockEncoder: Encoder[IndexedBlock] = { iBlock =>
+    Json.obj(
+      "header"       -> iBlock.header.asJson,
+      "transactions" -> iBlock.transactions.asJson,
+      "height"       -> iBlock.height.asJson,
+      "size"         -> iBlock.size.asJson
+    )
+  }
+
 }

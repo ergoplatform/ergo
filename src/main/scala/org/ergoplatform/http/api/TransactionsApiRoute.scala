@@ -26,6 +26,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
+import org.ergoplatform.{ErgoBox, Input}
 
 import sigma.ast.SType
 import sigma.ast.EvaluatedValue
@@ -119,10 +120,87 @@ case class TransactionsApiRoute(
         }
     }
 
-  private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] =
-    getMemPool.map { p =>
-      p.getAll.slice(offset, offset + limit).map(_.transaction.asJson).asJson
+  /**
+    * Resolves transaction inputs to full boxes using the UTXO state.
+    * Returns a map from box ID to resolved ErgoBox for successful resolutions.
+    */
+  private def resolveTransactionInputs(
+    inputs: IndexedSeq[Input],
+    state: ErgoStateReader
+  ): Map[BoxId, ErgoBox] = {
+    state match {
+      case utxoState: UtxoStateReader =>
+        inputs.flatMap { input =>
+          utxoState.boxById(input.boxId).map(box => input.boxId -> box)
+        }.toMap
+      case _ =>
+        Map.empty
     }
+  }
+
+  /**
+    * Creates a transaction JSON representation with resolved input boxes.
+    */
+  private def createTransactionWithResolvedInputs(
+    tx: ErgoTransaction,
+    resolvedInputs: Map[BoxId, ErgoBox]
+  ): Json = {
+    // Create custom input representations that include the resolved box
+    val enrichedInputs = tx.inputs.map { input =>
+      val baseInput = Json.obj(
+        "boxId"         -> input.boxId.asJson,
+        "spendingProof" -> input.spendingProof.asJson
+      )
+
+      resolvedInputs.get(input.boxId) match {
+        case Some(box) =>
+          baseInput.deepMerge(box.asJson)
+        case None =>
+          baseInput
+      }
+    }
+
+    Json.obj(
+      "id"         -> tx.id.asJson,
+      "inputs"     -> enrichedInputs.asJson,
+      "dataInputs" -> tx.dataInputs.asJson,
+      "outputs"    -> tx.outputs.asJson,
+      "size"       -> tx.size.asJson
+    )
+  }
+
+  /**
+    * Resolves inputs for multiple transactions and returns them with resolved inputs.
+    */
+  private def getUnconfirmedTransactionsWithResolvedInputs(
+    offset: Int,
+    limit: Int
+  ): Future[Json] =
+    getMemPool.flatMap { pool =>
+      getState.map { state =>
+        val transactions = pool.getAll.slice(offset, offset + limit)
+        val enrichedTxs = transactions.map { unconfirmedTx =>
+          val tx             = unconfirmedTx.transaction
+          val resolvedInputs = resolveTransactionInputs(tx.inputs, state)
+          createTransactionWithResolvedInputs(tx, resolvedInputs)
+        }
+        enrichedTxs.asJson
+      }
+    }
+
+  /**
+    * Resolves inputs for a single transaction and returns it with resolved inputs.
+    */
+  private def getUnconfirmedTransactionWithResolvedInputs(
+    transaction: ErgoTransaction
+  ): Future[Json] =
+    getState.map { state =>
+      val resolvedInputs = resolveTransactionInputs(transaction.inputs, state)
+      createTransactionWithResolvedInputs(transaction, resolvedInputs)
+    }
+
+  private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] =
+    getUnconfirmedTransactionsWithResolvedInputs(offset, limit)
 
   private def validateTransactionAndProcess(
     tx: ErgoTransaction
@@ -235,7 +313,16 @@ case class TransactionsApiRoute(
   /** Get unconfirmed transaction by its id */
   def getUnconfirmedTxByIdR: Route =
     (pathPrefix("unconfirmed" / "byTransactionId") & get & modifierId) { modifierId =>
-      ApiResponse(getMemPool.map(_.modifierById(modifierId)))
+      ApiResponse(
+        getMemPool.flatMap { pool =>
+          pool.modifierById(modifierId) match {
+            case Some(unconfirmedTx) =>
+              getUnconfirmedTransactionWithResolvedInputs(unconfirmedTx)
+            case None =>
+              Future.successful(Json.Null)
+          }
+        }
+      )
     }
 
   /** Collect all transactions which inputs or outputs contain given ErgoTree hex */
@@ -258,7 +345,7 @@ case class TransactionsApiRoute(
                   }.toSet
 
                 getState
-                  .map {
+                  .flatMap {
                     case state: UtxoStateReader =>
                       val txWithInputMatch =
                         allTxs
@@ -271,11 +358,22 @@ case class TransactionsApiRoute(
                                 ) =>
                               tx.transaction
                           }
-                      txsWithOutputMatch ++ txWithInputMatch
+                      val allMatchingTxs = (txsWithOutputMatch ++ txWithInputMatch).toSeq
+                        .slice(offset, offset + limit)
+
+                      Future
+                        .sequence(
+                          allMatchingTxs.map(getUnconfirmedTransactionWithResolvedInputs)
+                        )
+                        .map(_.asJson)
                     case _ =>
-                      txsWithOutputMatch
+                      Future.successful(
+                        txsWithOutputMatch
+                          .slice(offset, offset + limit)
+                          .map(_.asJson)
+                          .asJson
+                      )
                   }
-                  .map(_.slice(offset, offset + limit))
               }
             )
         }
@@ -292,9 +390,17 @@ case class TransactionsApiRoute(
                 .flatMap(
                   _.transaction.inputs
                     .filter(_.boxId.sameElements(boxId))
-                    .flatMap(i => state.boxById(i.boxId).toList)
                 )
                 .headOption
+                .flatMap { input =>
+                  state.boxById(input.boxId).map { box =>
+                    val baseInput = Json.obj(
+                      "boxId"         -> input.boxId.asJson,
+                      "spendingProof" -> input.spendingProof.asJson
+                    )
+                    baseInput.deepMerge(box.asJson)
+                  }
+                }
             case _ =>
               Option.empty
           }

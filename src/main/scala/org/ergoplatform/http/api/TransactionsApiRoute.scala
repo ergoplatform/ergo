@@ -373,7 +373,7 @@ case class TransactionsApiRoute(
     }
 
   def getSpendingProofByBoxIdR: Route =
-    (path("spendingProof") & get & boxId & parameter("height".as[Int]) & pathEnd) {
+    (pathPrefix("spendingProof") & get & boxId & parameter("height".as[Int])) {
       (boxId, height) =>
         ApiResponse(getSpendingProofByBoxId(boxId, height))
     }

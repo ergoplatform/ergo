@@ -3607,6 +3607,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /transactions/spendingProof/{boxId}:
+    get:
+      summary: Get the spending proof for a box by its identifier.
+      description: This endpoint allows to retrieve the spending proof of a box, which is part of the transaction that spent it. The proof is not available for unspent boxes. You must also provide the height of the block in which the spending transaction was included.
+      operationId: getSpendingProofByBoxId
+      tags:
+        - transactions
+      parameters:
+        - in: path
+          name: boxId
+          required: true
+          description: ID of the box to retrieve the spending proof for.
+          schema:
+            $ref: '#/components/schemas/TransactionBoxId'
+        - in: query
+          name: height
+          required: true
+          description: The height of the block in which the spending transaction was included.
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The spending proof object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpendingProof'
+        '404':
+          description: The spending proof for the given box ID at the specified height was not found. This could be because the box is unspent, the box ID is wrong, or the height is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /peers/all:
     get:
       summary: Get all known peers

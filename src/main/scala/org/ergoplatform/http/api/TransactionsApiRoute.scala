@@ -13,7 +13,12 @@ import org.ergoplatform.modifiers.mempool.{
   ErgoTransactionSerializer,
   UnconfirmedTransaction
 }
-import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.ErgoReadersHolder.{
+  GetDataFromHistory,
+  GetReaders,
+  Readers
+}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
@@ -21,8 +26,10 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
+
 import sigma.ast.SType
 import sigma.ast.EvaluatedValue
+import sigma.interpreter.ProverResult
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.concurrent.Future
@@ -83,7 +90,8 @@ case class TransactionsApiRoute(
     sendTransactionAsBytesR ~
     getFeeHistogramR ~
     getRecommendedFeeR ~
-    getExpectedWaitTimeR
+    getExpectedWaitTimeR ~
+    getSpendingProofByBoxIdR
   }
 
   private def getMemPool: Future[ErgoMemPoolReader] =
@@ -91,6 +99,25 @@ case class TransactionsApiRoute(
 
   private def getState: Future[ErgoStateReader] =
     (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
+
+  private def getHistory: Future[ErgoHistoryReader] =
+    (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r))
+      .mapTo[ErgoHistoryReader]
+
+  private def getSpendingProofByBoxId(
+    boxId: BoxId,
+    height: Int
+  ): Future[Option[ProverResult]] =
+    getHistory.map { history =>
+      history
+        .bestFullBlockAt(height)
+        .flatMap { fullBlock =>
+          fullBlock.blockTransactions.txs
+            .flatMap(_.inputs)
+            .find(_.boxId.sameElements(boxId))
+            .map(_.spendingProof)
+        }
+    }
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] =
     getMemPool.map { p =>
@@ -343,6 +370,12 @@ case class TransactionsApiRoute(
               }
             )
         }
+    }
+
+  def getSpendingProofByBoxIdR: Route =
+    (path("spendingProof") & get & boxId & parameter("height".as[Int]) & pathEnd) {
+      (boxId, height) =>
+        ApiResponse(getSpendingProofByBoxId(boxId, height))
     }
 
 }

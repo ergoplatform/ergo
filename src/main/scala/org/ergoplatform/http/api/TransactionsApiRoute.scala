@@ -101,6 +101,9 @@ case class TransactionsApiRoute(
   private def getState: Future[ErgoStateReader] =
     (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
 
+  private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] =
+    (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
+
   private def getHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r))
       .mapTo[ErgoHistoryReader]
@@ -121,17 +124,18 @@ case class TransactionsApiRoute(
     }
 
   /**
-    * Resolves transaction inputs to full boxes using the UTXO state.
+    * Resolves transaction inputs to full boxes using both UTXO state and mempool.
     * Returns a map from box ID to resolved ErgoBox for successful resolutions.
     */
   private def resolveTransactionInputs(
     inputs: IndexedSeq[Input],
-    state: ErgoStateReader
+    state: ErgoStateReader,
+    pool: ErgoMemPoolReader
   ): Map[BoxId, ErgoBox] = {
     state match {
       case utxoState: UtxoStateReader =>
         inputs.flatMap { input =>
-          utxoState.boxById(input.boxId).map(box => input.boxId -> box)
+          utxoState.withMempool(pool).boxById(input.boxId).map(box => input.boxId -> box)
         }.toMap
       case _ =>
         Map.empty
@@ -176,16 +180,15 @@ case class TransactionsApiRoute(
     offset: Int,
     limit: Int
   ): Future[Json] =
-    getMemPool.flatMap { pool =>
-      getState.map { state =>
+    getStateAndPool.map {
+      case (state, pool) =>
         val transactions = pool.getAll.slice(offset, offset + limit)
         val enrichedTxs = transactions.map { unconfirmedTx =>
           val tx             = unconfirmedTx.transaction
-          val resolvedInputs = resolveTransactionInputs(tx.inputs, state)
+          val resolvedInputs = resolveTransactionInputs(tx.inputs, state, pool)
           createTransactionWithResolvedInputs(tx, resolvedInputs)
         }
         enrichedTxs.asJson
-      }
     }
 
   /**
@@ -194,9 +197,10 @@ case class TransactionsApiRoute(
   private def getUnconfirmedTransactionWithResolvedInputs(
     transaction: ErgoTransaction
   ): Future[Json] =
-    getState.map { state =>
-      val resolvedInputs = resolveTransactionInputs(transaction.inputs, state)
-      createTransactionWithResolvedInputs(transaction, resolvedInputs)
+    getStateAndPool.map {
+      case (state, pool) =>
+        val resolvedInputs = resolveTransactionInputs(transaction.inputs, state, pool)
+        createTransactionWithResolvedInputs(transaction, resolvedInputs)
     }
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] =

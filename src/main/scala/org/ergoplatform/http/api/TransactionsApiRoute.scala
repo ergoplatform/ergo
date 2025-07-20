@@ -92,6 +92,7 @@ case class TransactionsApiRoute(
     getFeeHistogramR ~
     getRecommendedFeeR ~
     getExpectedWaitTimeR ~
+    getSpendingProofByUnconfirmedBoxIdR ~
     getSpendingProofByBoxIdR
   }
 
@@ -480,6 +481,18 @@ case class TransactionsApiRoute(
               }
             )
         }
+    }
+
+  def getSpendingProofByUnconfirmedBoxIdR: Route =
+    (pathPrefix("unconfirmed" / "spendingProof") & get & boxId) { boxId =>
+      ApiResponse(
+        getMemPool.map { pool =>
+          pool.getAll.view
+            .flatMap(_.transaction.inputs)
+            .find(_.boxId.sameElements(boxId))
+            .map(_.spendingProof)
+        }
+      )
     }
 
   def getSpendingProofByBoxIdR: Route =

@@ -100,7 +100,7 @@ class CandidateGenerator(
           )
         )
       )
-      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       context.system.eventStream
         .subscribe(self, classOf[FullBlockApplied])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
@@ -124,8 +124,10 @@ class CandidateGenerator(
         candidateGenInterval
       )) {
         log.debug(s"Regenerating candidate block")
-        context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, mpr = mp)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+        // with forced = true, state.cachedCandidate will be ignored in GenerateCandidate processing,
+        // but state.previousCachedCandidate will be set to cachedCandidate
+        context.become(initialized(state.copy(mpr = mp)))
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = true)
       } else {
         context.become(initialized(state.copy(mpr = mp)))
       }
@@ -145,14 +147,14 @@ class CandidateGenerator(
           context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
         else
           context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
         context.become(initialized(state))
       }
 
-    case gen @ GenerateCandidate(txsToInclude, reply) =>
+    case gen @ GenerateCandidate(txsToInclude, reply, forced) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (cachedFor(state.cachedCandidate, txsToInclude)) {
+      if (!forced && cachedFor(state.cachedCandidate, txsToInclude)) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -257,7 +259,8 @@ object CandidateGenerator extends ScorexLogging {
 
   case class GenerateCandidate(
     txsToInclude: Seq[ErgoTransaction],
-    reply: Boolean
+    reply: Boolean,
+    forced: Boolean
   )
 
   /** Local state of candidate generator to avoid mutable vars */

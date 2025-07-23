@@ -18,6 +18,8 @@ import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.BlockTransactions
 import scorex.core.api.http.ApiResponse
 import scorex.util.{ModifierId, bytesToId}
 import sigma.ast.ErgoTree
@@ -89,7 +91,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       getTokenInfoByIdR ~
       getTokenInfoByIdsR ~
       getAddressBalanceTotalR ~
-      getAddressBalanceTotalGetRoute
+      getAddressBalanceTotalGetRoute ~
+      getBlockByHeaderIdR ~
+      getBlocksByHeaderIdsR
     }
   else
     pathPrefix("blockchain") {
@@ -462,6 +466,93 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getAddressBalanceTotalGetRoute: Route =
     (pathPrefix("balanceForAddress") & get & addressPass) { address =>
       ApiResponse(getAddressBalanceTotal(address))
+    }
+
+  private def getIndexedBlockByHeaderId(
+    headerId: ModifierId
+  ): Future[Option[IndexedBlock]] =
+    getHistory.map { history =>
+      for {
+
+        header <- history.typedModifierById[Header](headerId)
+
+        blockTransactions <- history.typedModifierById[BlockTransactions](
+                              header.transactionsId
+                            )
+
+      } yield {
+
+        val resolvedTransactions = blockTransactions.txs.flatMap { tx =>
+          history
+            .typedExtraIndexById[IndexedErgoTransaction](tx.id)
+            .map(_.retrieveBody(history))
+
+        }
+
+        IndexedBlock(
+          header,
+          resolvedTransactions,
+          header.height,
+          blockTransactions.size
+        )
+
+      }
+
+    }
+
+  private def getIndexedBlocksByHeaderIds(
+    headerIds: Seq[ModifierId]
+  ): Future[Seq[IndexedBlock]] =
+    getHistory.map { history =>
+      headerIds.flatMap { headerId =>
+        for {
+
+          header <- history.typedModifierById[Header](headerId)
+
+          blockTransactions <- history.typedModifierById[BlockTransactions](
+                                header.transactionsId
+                              )
+
+        } yield {
+
+          val resolvedTransactions = blockTransactions.txs.flatMap { tx =>
+            history
+              .typedExtraIndexById[IndexedErgoTransaction](tx.id)
+              .map(_.retrieveBody(history))
+
+          }
+
+          IndexedBlock(
+            header,
+            resolvedTransactions,
+            header.height,
+            blockTransactions.size
+          )
+
+        }
+
+      }
+
+    }
+
+  private def getBlockByHeaderIdR: Route =
+    (get & pathPrefix("block" / "byHeaderId") & modifierId) { id =>
+      ApiResponse(getIndexedBlockByHeaderId(id))
+
+    }
+
+  private def getBlocksByHeaderIdsR: Route =
+    (post & path("blocks" / "byHeaderIds") & entity(as[Seq[ModifierId]])) { headerIds =>
+      if (headerIds.length > MaxItems) {
+
+        BadRequest(s"No more than $MaxItems blocks can be requested")
+
+      } else {
+
+        ApiResponse(getIndexedBlocksByHeaderIds(headerIds))
+
+      }
+
     }
 
 }

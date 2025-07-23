@@ -24,8 +24,10 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   private val PruningThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
-
+  // dictionary which is storing ordering block -> best input block correspondence
+  // todo: pruning
   private val bestInputBlocks = mutable.Map[ModifierId, Option[InputBlockInfo]]()
+
   /**
     * Pointer to a best input-block with transactions known
     */
@@ -514,7 +516,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     bestOrderingBlock().map(h => h.id).flatMap(getCollectedInputBlocksTransactions).getOrElse(Seq.empty)
   }
 
-  // todo: called only for local generation atm
   def saveOrderingBlockTransactions(orderingBlockId: ModifierId,
                                     transactions: Seq[ErgoTransaction]): Option[Seq[ErgoTransaction]] = {
     orderingBlockTransactions.put(orderingBlockId, transactions)

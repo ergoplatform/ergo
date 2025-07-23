@@ -314,6 +314,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     // input blocks related logic
     // process input block got from p2p network
     case ProcessInputBlock(sbi, remote) =>
+      // apply input block with no transaction, and check if downloading parent input block is needed
       val toDownloadOpt = history().applyInputBlock(sbi)
 
       // ask for parent input block

@@ -1427,6 +1427,29 @@ components:
           type: integer
           format: int32
 
+    IndexedFullBlock:
+      description: Block with header and transactions
+      type: object
+      required:
+        - header
+        - blockTransactions
+        - adProofs
+        - extension
+        - size
+      properties:
+        header:
+          $ref: '#/components/schemas/BlockHeader'
+        blockTransactions:
+          $ref: '#/components/schemas/IndexedBlockTransactions'
+        adProofs:
+          $ref: '#/components/schemas/BlockADProofs'
+        extension:
+          $ref: '#/components/schemas/Extension'
+        size:
+          description: Size in bytes
+          type: integer
+          format: int32
+
     PowSolutions:
       description: An object containing all components of pow solution
       type: object
@@ -1645,6 +1668,25 @@ components:
         transactions:
           description: Transactions of the block
           $ref: '#/components/schemas/Transactions'
+        size:
+          description: Size in bytes of all block transactions
+          type: integer
+          format: int32
+
+    IndexedBlockTransactions:
+      description: Section of a block which contains indexed transactions.
+      type: object
+      required:
+        - headerId
+        - transactions
+        - size
+      properties:
+        headerId:
+          description: Identifier of a header of a corresponding block
+          $ref: '#/components/schemas/ModifierId'
+        transactions:
+          description: IndexedTransactions of the block
+          $ref: '#/components/schemas/IndexedTransactions'
         size:
           description: Size in bytes of all block transactions
           type: integer
@@ -2371,6 +2413,12 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/ErgoTransaction'
+
+    IndexedTransactions:
+      description: List of IndexedErgoTransaction objects
+      type: array
+      items:
+        $ref: '#/components/schemas/IndexedErgoTransaction'
 
     FeeHistogramBin:
       description: Fee histogram bin
@@ -6038,6 +6086,79 @@ paths:
                   fullHeight:
                     type: integer
                     description: number of all known blocks
+
+  /blockchain/block/byHeaderId/{headerId}:
+    get:
+      summary: Get an indexed block by its header ID.
+      operationId: getBlockByHeaderId
+      tags:
+        - blockchain
+      parameters:
+        - in: path
+          name: headerId
+          required: true
+          description: The header ID of the block to retrieve.
+          schema:
+            $ref: '#/components/schemas/ModifierId'
+      responses:
+        '200':
+          description: The requested indexed block.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexedFullBlock'
+        '404':
+          description: A block with the specified header ID was not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blockchain/blocks/byHeaderIds:
+    post:
+      summary: Get an array of indexed blocks by their header IDs.
+      operationId: getBlocksByHeaderIds
+      tags:
+        - blockchain
+      requestBody:
+        required: true
+        description: An array of header IDs to retrieve. The number of IDs is limited.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ModifierId'
+              example:
+                - "d16c21a48194480b57754980072d6507425f1647e6216a2a0a2569a9b0a701d1"
+                - "e569557a2f153a1e2898a3b2b415a9bf32b13b19b22a083f23a07747e93f7c4f"
+      responses:
+        '200':
+          description: An array of the requested indexed blocks. The response will contain only the blocks that were found.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexedFullBlock'
+        '400':
+          description: The request is invalid, e.g., it contains too many header IDs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 
   /blockchain/transaction/byId/{txId}:
     get:

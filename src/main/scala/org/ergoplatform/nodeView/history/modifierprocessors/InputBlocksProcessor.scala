@@ -95,12 +95,14 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
 
+  // extracts ordering block id from input block data provided
+  private def extractOrderingId(ib: InputBlockInfo) = ib.header.parentId
   /**
     * @return best ordering and input blocks
     */
   def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
     val bestOrdering = bestOrderingBlock()
-    val bestInputForOrdering = if (_bestInputBlock.exists(sbi => bestOrdering.map(_.id).contains(sbi.header.parentId))) {
+    val bestInputForOrdering = if (_bestInputBlock.exists(sbi => bestOrdering.map(_.id).contains(extractOrderingId(sbi)))) {
       _bestInputBlock
     } else {
       None
@@ -164,7 +166,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
-    lazy val orderingId = ib.header.parentId
+    lazy val orderingId = extractOrderingId(ib)
 
     // updates best known input block chain tips and best tip's height
     def updateBestTipsAndHeight(childId: ModifierId, parentIdOpt: Option[ModifierId], depth: Int): Unit = {
@@ -237,11 +239,11 @@ trait InputBlocksProcessor extends ScorexLogging {
                                              state: ErgoState[_]): Boolean = {
     val ib = inputBlockRecords.apply(blockId)
     val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
-    val orderingId = ib.header.parentId
+    val orderingId = extractOrderingId(ib)
 
     val res: Boolean = _bestInputBlock match {
       case None =>
-        if (ibParentOpt.isEmpty && ib.header.parentId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
+        if (ibParentOpt.isEmpty && orderingId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
           val txs = transactionIds.map(id => transactionsCache.apply(id))
           val txsValid = state.applyInputBlock(txs, Seq.empty, ib.header)
           if (txsValid.isSuccess) {
@@ -266,7 +268,6 @@ trait InputBlocksProcessor extends ScorexLogging {
         val txsValid = state.applyInputBlock(txs, previousTxs, ib.header)
         if (txsValid.isSuccess) {
           log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
-          val orderingId = ib.header.parentId
           bestInputBlocks += orderingId -> Some(ib)
           _bestInputBlock = Some(ib)
           true
@@ -291,7 +292,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     if (res) {
-      val orderingBlockId = _bestInputBlock.get.header.parentId
+      val orderingBlockId = extractOrderingId(_bestInputBlock.get) // todo: .get
       val curr = orderingInputBlocksTransactions.getOrElse(orderingBlockId, Seq.empty)
       orderingInputBlocksTransactions.put(orderingBlockId, curr ++ transactionIds)
     }
@@ -324,7 +325,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         val depth = inputBlockParents.get(sbId).map(_._2).getOrElse(1)
         val bestInputDepth = _bestInputBlock.map(_.id).flatMap(inputBlockParents.get).map(_._2).getOrElse(1)
         if (depth > bestInputDepth) {
-          val orderingId = ib.header.parentId
+          val orderingId = extractOrderingId(ib)
 
           // find common input block and do rollback
           val thisChain = inputBlocksChain(sbId).reverse
@@ -369,7 +370,7 @@ trait InputBlocksProcessor extends ScorexLogging {
                            state: ErgoState[_],
                            acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
       if (processBestInputBlockCandidate(sbId, transactionIds, state)) {
-        val orderingId = inputBlockRecords.get(sbId).map(_.header.parentId).get // todo: .get
+        val orderingId = inputBlockRecords.get(sbId).map(extractOrderingId).get // todo: .get
 
         val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
           isAncestor(tipId, sbId).map(_ -> tipId)

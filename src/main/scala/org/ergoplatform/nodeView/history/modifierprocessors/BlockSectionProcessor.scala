@@ -1,8 +1,7 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
-import org.ergoplatform.utils.ScorexEncoding
 
 import scala.util.Try
 
@@ -10,7 +9,7 @@ import scala.util.Try
   * Trait that declares interfaces for validation and processing of various
   * block sections: BlockTransactions, ADProofs, etc.
   */
-trait BlockSectionProcessor extends ScorexEncoding {
+trait BlockSectionProcessor {
 
   /**
     * Whether state requires to download adProofs before full block application

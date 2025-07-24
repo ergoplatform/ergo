@@ -2,7 +2,7 @@ package org.ergoplatform.tools
 
 import org.ergoplatform._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator, InputBlockFields}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.Header
@@ -199,7 +199,7 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, InputBlockFields.empty, Seq.empty, Seq.empty)
     }
   }.flatten
 
@@ -208,7 +208,7 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
 
     pow.proveCandidate(candidate, prover.hdKeys.head.privateInput.w) match {
-      case Some(fb) => fb
+      case OrderingBlockFound(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
           .map(nipopowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))

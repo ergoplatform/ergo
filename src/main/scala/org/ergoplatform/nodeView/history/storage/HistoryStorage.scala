@@ -84,7 +84,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           cacheModifier(pm)
           Some(pm)
         case Failure(e) =>
-          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
+          log.warn(s"Failed to parse modifier $id from db (bytes are: ${Algos.encode(bytes)})", e)
           None
       }
     }
@@ -99,7 +99,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           }
           Some(pm)
         case Failure(_) =>
-          log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+          log.warn(s"Failed to parse index $id from db (bytes are: ${Algos.encode(bytes)})")
           None
       }
     }

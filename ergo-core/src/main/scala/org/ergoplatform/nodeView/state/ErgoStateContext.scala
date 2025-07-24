@@ -57,7 +57,7 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
   * for transaction validation if lastHeaders not empty or in `upcoming` version.
   *
   * @param lastHeaders        - fixed number (10) of last headers
-  * @param lastExtensionOpt   - last block extension
+  * @param lastExtensionOpt   - last block extension, used to compare new block's extension against it
   * @param genesisStateDigest - genesis state digest (before the very first block)
   * @param currentParameters  - parameters at the beginning of the current voting epoch
   * @param votingData         - votes for parameters change within the current voting epoch

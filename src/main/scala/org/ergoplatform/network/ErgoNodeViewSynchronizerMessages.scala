@@ -11,6 +11,8 @@ import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
+import org.ergoplatform.network.message.inputblocks.{InputBlockTransactionsData, OrderingBlockAnnouncement}
+import org.ergoplatform.subblocks.InputBlockInfo
 
 /**
   * Repository of messages processed ErgoNodeViewSynchronizer actor
@@ -39,7 +41,7 @@ object ErgoNodeViewSynchronizerMessages {
 
     trait NodeViewHolderEvent
 
-    trait NodeViewChange extends NodeViewHolderEvent
+    sealed trait NodeViewChange extends NodeViewHolderEvent
 
     case class ChangedHistory(reader: ErgoHistoryReader) extends NodeViewChange
 
@@ -48,6 +50,8 @@ object ErgoNodeViewSynchronizerMessages {
     case class ChangedVault(reader: ErgoWalletReader) extends NodeViewChange
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
+
+    case class NewBestInputBlock(idOpt: Option[ModifierId]) extends NodeViewChange
 
     /**
      * Event which is published when rollback happened (on finding a better chain)
@@ -142,4 +146,10 @@ object ErgoNodeViewSynchronizerMessages {
     * @param nipopowProof - proof to initialize history from
     */
   case class ProcessNipopow(nipopowProof: NipopowProof)
+
+  case class ProcessInputBlock(subblock: InputBlockInfo, remote: ConnectedPeer)
+
+  case class ProcessInputBlockTransactions(std: InputBlockTransactionsData)
+
+  case class ProcessOrderingBlock(oba: OrderingBlockAnnouncement)
 }

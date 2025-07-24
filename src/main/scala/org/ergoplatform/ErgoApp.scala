@@ -20,6 +20,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
 import scorex.core.network._
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message._
+import org.ergoplatform.network.message.inputblocks.{InputBlockMessageSpec, InputBlockRequestMessageSpec, InputBlockTransactionsMessageSpec, InputBlockTransactionsRequestMessageSpec, OrderingBlockAnnouncementMessageSpec}
 import org.ergoplatform.network.peer.PeerManagerRef
 import scorex.util.ScorexLogging
 
@@ -75,14 +76,22 @@ class ErgoApp(args: Args) extends ScorexLogging {
       InvSpec,
       RequestModifierSpec,
       ModifiersSpec,
+      // utxo set snapshot exchange related messages
       GetSnapshotsInfoSpec,
       SnapshotsInfoSpec,
       GetManifestSpec,
       ManifestSpec,
       GetUtxoSnapshotChunkSpec,
       UtxoSnapshotChunkSpec,
+      // nipopows exchange related messages
       GetNipopowProofSpec,
-      NipopowProofSpec
+      NipopowProofSpec,
+      // input block related messages
+      InputBlockMessageSpec,
+      InputBlockRequestMessageSpec,
+      InputBlockTransactionsMessageSpec,
+      InputBlockTransactionsRequestMessageSpec,
+      OrderingBlockAnnouncementMessageSpec
     )
   }
 
@@ -125,20 +134,26 @@ class ErgoApp(args: Args) extends ScorexLogging {
         networkControllerRef
       )
       var map: Map[MessageCode, ActorRef] = Map(
-        InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
-        RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
-        ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
-        ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        InvSpec.messageCode                                  -> ergoNodeViewSynchronizerRef,
+        RequestModifierSpec.messageCode                      -> ergoNodeViewSynchronizerRef,
+        ModifiersSpec.messageCode                            -> ergoNodeViewSynchronizerRef,
+        ErgoSyncInfoMessageSpec.messageCode                  -> ergoNodeViewSynchronizerRef,
         // utxo set snapshot exchange related messages
-        GetSnapshotsInfoSpec.messageCode    -> ergoNodeViewSynchronizerRef,
-        SnapshotsInfoSpec.messageCode       -> ergoNodeViewSynchronizerRef,
-        GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
-        ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
-        GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
-        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef,
+        GetSnapshotsInfoSpec.messageCode                     -> ergoNodeViewSynchronizerRef,
+        SnapshotsInfoSpec.messageCode                        -> ergoNodeViewSynchronizerRef,
+        GetManifestSpec.messageCode                          -> ergoNodeViewSynchronizerRef,
+        ManifestSpec.messageCode                             -> ergoNodeViewSynchronizerRef,
+        GetUtxoSnapshotChunkSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
+        UtxoSnapshotChunkSpec.messageCode                    -> ergoNodeViewSynchronizerRef,
         // nipopows exchange related messages
-        GetNipopowProofSpec.messageCode     -> ergoNodeViewSynchronizerRef,
-        NipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
+        GetNipopowProofSpec.messageCode                      -> ergoNodeViewSynchronizerRef,
+        NipopowProofSpec.messageCode                         -> ergoNodeViewSynchronizerRef,
+        // input block related messages
+        InputBlockMessageSpec.messageCode                    -> ergoNodeViewSynchronizerRef,
+        InputBlockRequestMessageSpec.messageCode             -> ergoNodeViewSynchronizerRef,
+        InputBlockTransactionsMessageSpec.messageCode        -> ergoNodeViewSynchronizerRef,
+        InputBlockTransactionsRequestMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        OrderingBlockAnnouncementMessageSpec.messageCode -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {

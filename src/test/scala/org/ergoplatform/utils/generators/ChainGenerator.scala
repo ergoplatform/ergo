@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.Input
+import org.ergoplatform.{Input, OrderingBlockFound, OrderingBlockHeaderFound}
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, PoPowHeader}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.BoxUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
@@ -100,7 +101,7 @@ object ChainGenerator {
                  extensionHash: Digest32 = EmptyDigest32,
                  tsOpt: Option[Long] = None,
                  diffBitsOpt: Option[Long] = None,
-                 useRealTs: Boolean): Header =
+                 useRealTs: Boolean): Header = {
     powScheme.prove(
       prev,
       Header.InitialVersion,
@@ -113,7 +114,9 @@ object ChainGenerator {
       extensionHash,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockHeaderFound]  // todo: fix
+    .h
+  }
 
   def genChain(height: Int): Seq[ErgoFullBlock] =
     blockStream(None).take(height)
@@ -125,15 +128,17 @@ object ChainGenerator {
                history: ErgoHistory,
                blockVersion: Header.Version = Header.InitialVersion,
                nBits: Long = chainSettings.initialNBits,
-               extension: ExtensionCandidate = defaultExtension): Seq[ErgoFullBlock] = {
+               extension: ExtensionCandidate = defaultExtension,
+               stateOpt: Option[ErgoStateReader] = None): Seq[ErgoFullBlock] = {
     val prefix = history.bestFullBlockOpt
-    blockStream(prefix, blockVersion, nBits, extension).take(height + prefix.size)
+    blockStream(prefix, blockVersion, nBits, extension, stateOpt).take(height + prefix.size)
   }
 
   def blockStream(prefix: Option[ErgoFullBlock],
                             blockVersion: Header.Version = Header.InitialVersion,
                             nBits: Long = chainSettings.initialNBits,
-                            extension: ExtensionCandidate = defaultExtension): Stream[ErgoFullBlock] = {
+                            extension: ExtensionCandidate = defaultExtension,
+                            stateOpt: Option[ErgoStateReader] = None): Stream[ErgoFullBlock] = {
     val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
     val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), proof))
     val minimalAmount = BoxUtils.minimalErgoAmountSimulated(TrueTree, Colls.emptyColl, Map(), parameters)
@@ -142,9 +147,9 @@ object ChainGenerator {
     def txs = Seq(ErgoTransaction(inputs, outputs))
 
     lazy val blocks: Stream[ErgoFullBlock] =
-      nextBlock(prefix, txs, extension, blockVersion, nBits) #::
+      nextBlock(prefix, txs, extension, blockVersion, nBits, stateOpt) #::
         blocks.zip(Stream.from(2)).map { case (prev, _) =>
-          nextBlock(Option(prev), txs, extension, blockVersion, nBits)
+          nextBlock(Option(prev), txs, extension, blockVersion, nBits, stateOpt)
         }
     prefix ++: blocks
   }
@@ -153,7 +158,8 @@ object ChainGenerator {
                 txs: Seq[ErgoTransaction],
                 extension: ExtensionCandidate,
                 blockVersion: Header.Version = Header.InitialVersion,
-                nBits: Long = chainSettings.initialNBits): ErgoFullBlock = {
+                nBits: Long = chainSettings.initialNBits,
+                stateOpt: Option[ErgoStateReader] = None): ErgoFullBlock = {
     val interlinks = prev.toSeq.flatMap(x =>
       nipopowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension ++ nipopowAlgos.interlinksToExtension(interlinks)
@@ -161,14 +167,15 @@ object ChainGenerator {
       prev.map(_.header),
       blockVersion,
       nBits,
-      EmptyStateRoot,
+      stateOpt.map(_.rootDigest).getOrElse(EmptyStateRoot),
       emptyProofs,
       txs,
       Math.max(System.currentTimeMillis(), prev.map(_.header.timestamp + 1).getOrElse(System.currentTimeMillis())),
       validExtension,
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   def applyHeaderChain(historyIn: ErgoHistory, chain: HeaderChain): ErgoHistory = {

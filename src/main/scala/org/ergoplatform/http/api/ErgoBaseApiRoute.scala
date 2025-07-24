@@ -127,7 +127,7 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           val validationContext = utxo.stateContext.simplifiedUpcoming()
           utxo.withMempool(mp)
-            .validateWithCost(tx, validationContext, maxTxCost, None)
+            .validateWithCost(tx, validationContext, maxTxCost, None, softFieldsAllowed = true) // todo: pass sFA from API
             .map(cost => new UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
         case _ =>
           tx.statelessValidity()

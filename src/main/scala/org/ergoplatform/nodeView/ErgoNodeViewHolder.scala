@@ -363,41 +363,56 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     history().typedModifierById[Header](parentId) match {
       case Some(_) =>
+        // apply header and extension section got from ordering block announcement
         pmodModify(header, local = false)
         val ext = Extension(header.id, oba.extensionFields)
         pmodModify(ext, local = false)
 
-        // todo: check and handle broadcasted txs which are not in the mempool
-        val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ memoryPool().getAll(oba.broadcastedTransactionIds).map(_.transaction)
-        history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
-        val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+        val broadcastedTransactionIds = oba.broadcastedTransactionIds
+        val mempoolTransactions = memoryPool().getAll(broadcastedTransactionIds).map(_.transaction) // todo: more efficint iteration
 
-        // todo: check if ordering block transactions should come first
-        val txs = orderingBlockTransactions ++ inputBlocksTransactions
+        val allTransactionsDownloaded = mempoolTransactions.size == broadcastedTransactionIds.size
 
-        log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
-          s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +
-          s"total transactions: ${txs.length} ")
+        // todo: download only txs which are not in the mempool if allTransactionsDownloaded == false,
+        // todo: currently the whole block is downloaded
 
-        val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
-        val blockDigest = header.transactionsRoot
-        // checking Merkle root of collected transactions
-        if (blockDigest.sameElements(calculatedDigest)) {
-          // we apply header and extension from ordering block announcement
-          log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
-          val bs = new BlockTransactions(headerId, header.version, txs)
-          pmodModify(bs, local = false)
+        if (allTransactionsDownloaded) {
+          val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ mempoolTransactions
+          history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
+          val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
 
-          // for other cases, NewBestInputBlock(None) is sent in applyState() of this class
-          context.system.eventStream.publish(NewBestInputBlock(None))
+          // todo: check if ordering block transactions should come first
+          val txs = orderingBlockTransactions ++ inputBlocksTransactions
+
+          log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
+            s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +
+            s"total transactions: ${txs.length} ")
+
+          val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
+          val blockDigest = header.transactionsRoot
+
+          // checking Merkle root of collected transactions
+          val merkleRootCorrect = blockDigest.sameElements(calculatedDigest)
+          if (merkleRootCorrect) {
+            // we apply header and extension from ordering block announcement
+            log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
+            val bs = new BlockTransactions(headerId, header.version, txs)
+            pmodModify(bs, local = false)
+
+            // for other cases, NewBestInputBlock(None) is sent in applyState() of this class
+            context.system.eventStream.publish(NewBestInputBlock(None))
+          } else {
+            log.warn(s"Downloading block transactions fully for $headerId as Merkle root does not match")
+            context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
+          }
         } else {
-          log.warn(s"Downloading block transactions fully for $headerId")
+          log.warn(s"Downloading block transactions fully for $headerId as not all the transactions available")
           context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
         }
 
         // todo: check ADProofs section generation
       case None =>
-        log.error(s"parent header not found in processOrderingBlock : $parentId")
+        log.error(s"parent header not found in processOrderingBlock, its id is $parentId")
     }
   }
 

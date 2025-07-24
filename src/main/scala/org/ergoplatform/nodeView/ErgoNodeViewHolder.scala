@@ -311,38 +311,42 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
       }
 
-    // input blocks related logic
-    // process input block got from p2p network
-    case ProcessInputBlock(sbi, remote) =>
+    /*
+     *  Input and ordering blocks related logic
+     */
+
+    // process input block got from p2p network (with no transactions)
+    case ProcessInputBlock(inputBlockInfo, remote) =>
       // apply input block with no transaction, and check if downloading parent input block is needed
-      val toDownloadOpt = history().applyInputBlock(sbi)
+      val toDownloadOpt = history().applyInputBlock(inputBlockInfo)
 
       // ask for parent input block
       // we do it before asking for transactions of this input-block to get parent and its transactions ASAP
       toDownloadOpt.foreach { inputId =>
-        log.debug(s"Don't have parent of input-block ${sbi.id}, asking it")
+        log.debug(s"Don't have parent of input-block ${inputBlockInfo.id}, asking it")
         context.system.eventStream.publish(DownloadInputBlock(inputId, remote))
       }
 
-      history().getInputBlockTransactions(sbi.id) match {
+      history().getInputBlockTransactions(inputBlockInfo.id) match {
         case Some(txs) =>
           // we already have transactions somehow
           // shouldn't be the case now, but the path is left for possible optimizations in future
-          log.debug(s"Got input block ${sbi.id} transactions before the input block itself")
-          processInputBlockTransactions(sbi.id, txs)
+          log.debug(s"Got input block ${inputBlockInfo.id} transactions before the input block itself")
+          processInputBlockTransactions(inputBlockInfo.id, txs)
         case None =>
-          log.debug(s"Downloading transactions of input-block ${sbi.id}")
-          context.system.eventStream.publish(DownloadInputBlockTransactions(sbi.id, remote))
+          log.debug(s"Downloading transactions of input-block ${inputBlockInfo.id}")
+          context.system.eventStream.publish(DownloadInputBlockTransactions(inputBlockInfo.id, remote))
       }
 
     case ProcessInputBlockTransactions(std) =>
       processInputBlockTransactions(std.inputBlockId, std.transactions)
 
-    case ProcessOrderingBlock(oba) =>
-      processOrderingBlock(oba)
+    case ProcessOrderingBlock(orderingBlockAnnouncement) =>
+      processOrderingBlock(orderingBlockAnnouncement)
   }
 
   private def processInputBlockTransactions(inputBlockId: ModifierId, transactions: Seq[ErgoTransaction]): Unit = {
+    // apply input block transactions
     val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
     newBestInputBlocks.foreach { id =>
       log.debug(s"New input-block with transactions found: $id")
@@ -354,7 +358,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val header   = oba.header
     val parentId = header.parentId
     val headerId = header.id
+
     log.info(s"Processing ordering block announcement for $headerId")
+
     history().typedModifierById[Header](parentId) match {
       case Some(_) =>
         pmodModify(header, local = false)

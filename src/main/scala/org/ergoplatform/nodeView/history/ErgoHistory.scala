@@ -119,9 +119,7 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  def reportModifierIsInvalid(modifier: BlockSection,
-                              progressInfo: ProgressInfo[BlockSection]
-                             ): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
+  def reportModifierIsInvalid(modifier: BlockSection): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
@@ -136,7 +134,7 @@ trait ErgoHistory
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
             historyStorage.insert(validityRow, BlockSection.emptyArray).map { _ =>
-              this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+              this -> ProgressInfo.empty
             }
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
@@ -148,7 +146,7 @@ trait ErgoHistory
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
                 BlockSection.emptyArray
               ).map { _ =>
-                this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+                this -> ProgressInfo.empty
               }
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
@@ -184,7 +182,7 @@ trait ErgoHistory
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
         historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), BlockSection.emptyArray).map { _ =>
-          this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+          this -> ProgressInfo.empty
         }
     }
   }

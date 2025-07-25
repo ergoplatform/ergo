@@ -185,7 +185,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
       lazy val version = Header.scriptAndTreeFromBlockVersions(blockVersion)
 
       (1 to txCount).map { _ =>
-        if (blockVersion >= VersionContext.V6SoftForkVersion) {
+        if (blockVersion >= Header.Interpreter60Version) {
           if (headerId == "3f5a4acbdfd76a97f2fdf387559c2a67b4ea5f9e9bcf66ef079cde766c6e9398") {
             // todo: public testnet bug with v7 tree included in v4 block, remove after testnet relaunch
             VersionContext.withVersions(1, 1) {

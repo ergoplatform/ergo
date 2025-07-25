@@ -79,8 +79,8 @@ case class Header(override val version: Header.Version,
     * Expected identifiers of the block sections corresponding to this header
     */
   @nowarn
-  lazy val sectionIds: Seq[(NetworkObjectTypeId.Value, ModifierId)] =
-    Array(
+  lazy val sectionIds: Map[NetworkObjectTypeId.Value, ModifierId] =
+    Map(
       (ADProofs.modifierTypeId, ADProofsId),
       (BlockTransactions.modifierTypeId, transactionsId),
       (Extension.modifierTypeId, extensionId)
@@ -90,7 +90,11 @@ case class Header(override val version: Header.Version,
     * Expected identifiers of the block sections corresponding to this header,
     * except of state transformations proof section id
     */
-  lazy val sectionIdsWithNoProof: Seq[(NetworkObjectTypeId.Value, ModifierId)] = sectionIds.tail
+  lazy val sectionIdsWithNoProof: Map[NetworkObjectTypeId.Value, ModifierId] =
+    Map(
+      (BlockTransactions.modifierTypeId, transactionsId),
+      (Extension.modifierTypeId, extensionId)
+    )
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 

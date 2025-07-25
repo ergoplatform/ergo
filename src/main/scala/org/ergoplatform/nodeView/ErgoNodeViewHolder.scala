@@ -27,7 +27,6 @@ import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -130,14 +129,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
   private def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
-    //TODO: actually, pi.toDownload contains only 1 modifierid per type,
-    //TODO: see the only case where toDownload is not empty during ProgressInfo construction
-    //TODO: so the code below can be optimized
-    val toDownload = mutable.Map[NetworkObjectTypeId.Value, Seq[ModifierId]]()
-    pi.toDownload.foreach { case (tid, mid) =>
-      toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
-    }
-    context.system.eventStream.publish(DownloadRequest(toDownload.toMap))
+    val toDownload = pi.toDownload.toMap.mapValues(mid => Seq(mid))
+    context.system.eventStream.publish(DownloadRequest(toDownload))
   }
 
 

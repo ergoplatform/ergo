@@ -32,7 +32,7 @@ class ErgoMiningThread(
       1.second,
       ergoSettings.nodeSettings.internalMinerPollingInterval,
       candidateGenerator,
-      GenerateCandidate(Seq.empty, reply = true)
+      GenerateCandidate(Seq.empty, reply = true, forced = false)
     )(context.dispatcher, self)
   }
 

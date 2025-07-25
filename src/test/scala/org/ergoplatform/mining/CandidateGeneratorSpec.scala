@@ -139,7 +139,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       )
 
     expectNoMessage(1.second)
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
 
     val block = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
@@ -150,7 +150,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     // now block should be cached
     (0 to 20).foreach { _ =>
-      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
       testProbe.expectMsgClass(5.millis, classOf[StatusReply[_]])
     }
 
@@ -200,7 +200,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = settingsWithShortRegeneration.chainSettings.powScheme
@@ -242,13 +242,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     )
 
     // candidate should be regenerated immediately after a mempool change
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         // this triggers mempool change that triggers candidate regeneration
         viewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None))
         expectNoMessage(candidateGenDelay)
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
         testProbe.expectMsgPF(candidateGenDelay) {
           case StatusReply.Success(regeneratedCandidate: Candidate) =>
             // regeneratedCandidate now contains new transaction
@@ -282,7 +282,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val startBlock: Option[Header] = history.bestHeaderOpt
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -328,7 +328,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     testProbe.expectNoMessage(200.millis)
     // mine a block with that transaction
-    candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -387,7 +387,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val startBlock: Option[Header] = history.bestHeaderOpt
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -443,7 +443,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     testProbe.expectNoMessage(200.millis)
     // mine a block with that transaction
-    candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -506,7 +506,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val startBlock: Option[Header] = history.bestHeaderOpt
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
@@ -562,7 +562,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     testProbe.expectNoMessage(200.millis)
     // mine a block with that transaction
-    candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme

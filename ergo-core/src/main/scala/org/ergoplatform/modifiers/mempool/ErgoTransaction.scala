@@ -1,7 +1,7 @@
 package org.ergoplatform.modifiers.mempool
 
 import io.circe.syntax._
-import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input, SubBlockAlgos}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, ErgoLikeTransactionSerializer, Input}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}

@@ -44,7 +44,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getModifierByIdR ~
       // input block related API
       getBestInputBlockR ~
-      getBestInputBlocksChainR
+      getBestInputBlocksChainR ~
+      getInputBlockR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -65,6 +66,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       history.headerIdsAt(offset, limit).asJson
     }
 
+  /**
+    * @return ids of best ordering and input blocks
+    */
   private def getBestInputBlockR = {
     (pathPrefix("bestInputBlock") & get) {
       ApiResponse(getHistory.map{ h =>
@@ -76,6 +80,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
 
+  /**
+    * @return ids of best input-blocks chain, along with ordering block id
+    */
   private def getBestInputBlocksChainR = {
     (pathPrefix("bestInputChain") & get) {
       ApiResponse(getHistory.map{ h =>
@@ -83,6 +90,19 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
         val bi = h.bestInputBlocksChain()
         Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlocks" -> bi.asJson)
       })
+    }
+  }
+
+  /**
+    * @return transactions of input block with given id
+    */
+  private def getInputBlockR = {
+    (modifierId & pathPrefix("inputBlock") & get) { id =>
+      ApiResponse {
+        getHistory.map { history =>
+          history.getInputBlockTransactions(id)
+        }
+      }
     }
   }
 

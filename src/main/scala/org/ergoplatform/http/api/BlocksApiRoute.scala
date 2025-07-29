@@ -45,7 +45,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       // input block related API
       getBestInputBlockR ~
       getBestInputBlocksChainR ~
-      getInputBlockR
+      getInputBlockTransactionsR ~
+      getInputBlockTransactionIdsR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -96,8 +97,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   /**
     * @return transactions of input block with given id
     */
-  private def getInputBlockR = {
-    (modifierId & pathPrefix("inputBlock") & get) { id =>
+  private def getInputBlockTransactionsR = {
+    (modifierId & pathPrefix("inputBlockTransactions") & get) { id =>
       ApiResponse {
         getHistory.map { history =>
           history.getInputBlockTransactions(id)
@@ -105,6 +106,20 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       }
     }
   }
+
+  /**
+    * @return transaction ids of input block with given id
+    */
+  private def getInputBlockTransactionIdsR = {
+    (modifierId & pathPrefix("inputBlockTransactionIds") & get) { id =>
+      ApiResponse {
+        getHistory.map { history =>
+          history.getInputBlockTransactionIds(id)
+        }
+      }
+    }
+  }
+
 
   private def getFullBlockByHeaderId(headerId: ModifierId): Future[Option[ErgoFullBlock]] =
     getHistory.map { history =>

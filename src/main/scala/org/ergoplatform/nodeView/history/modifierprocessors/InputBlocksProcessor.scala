@@ -473,6 +473,10 @@ trait InputBlocksProcessor extends ScorexLogging {
     inputBlockRecords.get(sbId)
   }
 
+  def getInputBlockTransactionIds(sbId: ModifierId): Option[Seq[ModifierId]] = {
+    inputBlockTransactions.get(sbId)
+  }
+
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below

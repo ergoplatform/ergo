@@ -6120,7 +6120,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/blocks/byHeaderIds:
+  /blockchain/block/byHeaderIds:
     post:
       summary: Get an array of indexed blocks by their header IDs.
       operationId: getBlocksByHeaderIds

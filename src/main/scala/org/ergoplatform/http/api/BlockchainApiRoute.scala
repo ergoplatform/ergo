@@ -437,7 +437,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     } else if (dir == SortDirection.INVALID) {
       BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
     } else {
-      ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir, unconfirmed))
+      ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir, unconfirmed, excludeMempoolSpent))
     }
   }
 

@@ -317,20 +317,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         }
     }
 
-  private def getBoxesByTemplateHashUnspent(templateHash: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByTemplateHashUnspent(templateHash: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
     getHistoryWithMempool.map { case (history, mempool) =>
+      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
       getTemplate(templateHash)(history)
         .getOrElse(IndexedContractTemplate(templateHash))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, Set.empty)
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
     }
 
   private def getBoxesByTemplateHashUnspentR: Route =
-    (get & pathPrefix("box" / "unspent" / "byTemplateHash") & modifierId & paging & sortDir & unconfirmed) {
-      (template, offset, limit, dir, unconfirmed) =>
+    (get & pathPrefix("box" / "unspent" / "byTemplateHash") & modifierId & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
+      (template, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
         if(limit > MaxItems) {
           BadRequest(s"No more than $MaxItems boxes can be requested")
         } else {
-          ApiResponse(getBoxesByTemplateHashUnspent(template, offset, limit, dir, unconfirmed))
+          val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
+          ApiResponse(getBoxesByTemplateHashUnspent(template, offset, limit, dir, unconfirmed, excludeMempoolSpent))
         }
     }
 
@@ -369,20 +371,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
     getHistoryWithMempool.map { case (history, mempool) =>
+      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
       getAddress(tree)(history)
         .getOrElse(IndexedErgoAddress(hashErgoTree(tree)))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, Set.empty)
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
     }
 
-  private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir & unconfirmed) { (tree, offset, limit, dir, unconfirmed) =>
+  private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) { (tree, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
     if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else if (dir == SortDirection.INVALID) {
       BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
     }else {
-      ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit, dir, unconfirmed))
+      val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
+      ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit, dir, unconfirmed, excludeMempoolSpent))
     }
   }
 
@@ -418,20 +422,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getBoxesByTokenId(id, offset, limit))
   }
 
-  private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean): Future[Seq[IndexedErgoBox]] =
+  private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
     getHistoryWithMempool.map { case (history, mempool) =>
+      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
       history.typedExtraIndexById[IndexedToken](uniqueId(id))
         .getOrElse(IndexedToken(id))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, Set.empty)
+        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
     }
 
-  private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir & unconfirmed) { (id, offset, limit, dir, unconfirmed) =>
+  private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) { (id, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
+    val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
     if (limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     } else if (dir == SortDirection.INVALID) {
       BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
     } else {
-      ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir, unconfirmed))
+      ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir, unconfirmed, excludeMempoolSpent))
     }
   }
 

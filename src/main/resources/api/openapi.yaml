@@ -6493,6 +6493,13 @@ paths:
           schema:
             type: boolean
             default: false
+        - in: query
+          name: excludeMempoolSpent
+          required: false
+          description: if true exclude spent inputs from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes associated with wanted token
@@ -6746,6 +6753,13 @@ paths:
           schema:
             type: boolean
             default: false
+        - in: query
+          name: excludeMempoolSpent
+          required: false
+          description: if true exclude spent inputs from mempool
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: unspent boxes with wanted template hash
@@ -6905,6 +6919,13 @@ paths:
           name: includeUnconfirmed
           required: false
           description: if true include unconfirmed transactions from mempool
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: excludeMempoolSpent
+          required: false
+          description: if true exclude spent inputs from mempool
           schema:
             type: boolean
             default: false

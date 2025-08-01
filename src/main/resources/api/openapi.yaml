@@ -3276,7 +3276,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Transactions'
+                $ref: '#/components/schemas/IndexedTransactions'
         default:
           description: Error
           content:
@@ -3322,7 +3322,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErgoTransaction'
+                $ref: '#/components/schemas/IndexedErgoTransaction'
         default:
           description: Error
           content:
@@ -3420,7 +3420,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Transactions'
+                $ref: '#/components/schemas/IndexedTransactions'
         default:
           description: Error
           content:
@@ -3447,7 +3447,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErgoTransactionOutput'
+                $ref: '#/components/schemas/IndexedErgoBox'
         default:
           description: Error
           content:

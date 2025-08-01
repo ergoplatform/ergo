@@ -241,6 +241,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
                   // if this is new best block, reset best input block ref around the node
                   if (header.height == chainTipOpt.getOrElse(-1) + 1) {
+                    history.updateStateWithOrderingBlock(header)
                     context.system.eventStream.publish(NewBestInputBlock(None))
                   }
                 }

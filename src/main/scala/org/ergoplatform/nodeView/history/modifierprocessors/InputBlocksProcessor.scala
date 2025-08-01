@@ -407,7 +407,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
-  // todo: call on best header change
   def updateStateWithOrderingBlock(h: Header): Unit = {
     if (h.height >= _bestInputBlock.map(_.header.height).getOrElse(0)) {
       resetState(true)

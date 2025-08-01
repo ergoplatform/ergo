@@ -25,7 +25,6 @@ trait InputBlocksProcessor extends ScorexLogging {
   private val PruningThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
   // dictionary which is storing ordering block -> best input block correspondence
-  // todo: pruning
   private val bestInputBlocks = mutable.Map[ModifierId, Option[InputBlockInfo]]()
 
   /**
@@ -140,7 +139,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     inputBlockIdsToRemove.foreach { id =>
-      log.info(s"Pruning input block # $id") // todo: switch to .debug
+      log.debug(s"Pruning input block # $id")
       inputBlockRecords.remove(id).foreach { ibi =>
         ibi.prevInputBlockId.foreach { parentId =>
           deliveryWaitlist.remove(bytesToId(parentId))

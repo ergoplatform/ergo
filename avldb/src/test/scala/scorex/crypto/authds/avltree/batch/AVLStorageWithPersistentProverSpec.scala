@@ -2,11 +2,11 @@ package scorex.crypto.authds.avltree.batch
 
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
+import scorex.crypto.authds.avltree.batch.benchmark.RocksDBVersionedStoreBenchmark.getRandomTempDir
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof, ADValue}
 import scorex.crypto.hash.{Digest32, Blake2b256}
 import scorex.utils.Random
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 
 import scala.util.{Success, Failure, Try}
 
@@ -15,9 +15,9 @@ class AVLStorageWithPersistentProverSpec extends AnyPropSpec with Matchers {
   type HF = Blake2b256.type
   implicit val hf: HF = Blake2b256
 
-  val stateStore = new LDBVersionedStore(getRandomTempDir, 10)
+  val stateStore = new RocksDBVersionedStore(getRandomTempDir, 10)
 
-  protected lazy val storage = new VersionedLDBAVLStorage(stateStore)
+  protected lazy val storage = new VersionedRocksDBAVLStorage(stateStore)
 
   protected lazy val persistentProver: PersistentBatchAVLProver[Digest32, HF] =
     PersistentBatchAVLProver.create(

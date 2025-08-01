@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util
 
+import scala.reflect.ClassTag
 import scala.util.Try
 
 class SegmentSpec extends ErgoCorePropertyTest {
@@ -30,27 +31,26 @@ class SegmentSpec extends ErgoCorePropertyTest {
   val segment2: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 2, segmentTreshold * 3))
   val ia: IndexedErgoAddress = IndexedErgoAddress(hash, new ArrayBuffer[Long](), boxes.slice(segmentTreshold * 3, boxes.size))
 
-  val hr: ErgoHistoryReader = new ErgoHistoryReader {
-    override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null ,null) {
-      override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
+    val hr = new ErgoHistoryReader {
+      override def typedExtraIndexById[T <: ExtraIndex : ClassTag](id: ModifierId): Option[T] = {
         val b = Base16.decode(id).get.head
         if(b == 0) {
-          Some(segment0)
+          Some(segment0.asInstanceOf[T])
         } else if(b == 1) {
-          Some(segment1)
+          Some(segment1.asInstanceOf[T])
         } else if(b == 2) {
-          Some(segment2)
+          Some(segment2.asInstanceOf[T])
         } else {
           None
         }
       }
+      override protected[history] val historyStorage: HistoryStorage = null
+      override protected val settings: ErgoSettings = null
+      override protected def requireProofs: Boolean = ???
+      override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = ???
+      override protected def validate(m: NonHeaderBlockSection): Try[Unit] = ???
+      override val powScheme: AutolykosPowScheme = null
     }
-    override protected val settings: ErgoSettings = null
-    override protected def requireProofs: Boolean = ???
-    override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = ???
-    override protected def validate(m: NonHeaderBlockSection): Try[Unit] = ???
-    override val powScheme: AutolykosPowScheme = null
-  }
 
   def getFromSegments(offset: Int, limit: Int): Array[Long] = {
     ia.getFromSegments(

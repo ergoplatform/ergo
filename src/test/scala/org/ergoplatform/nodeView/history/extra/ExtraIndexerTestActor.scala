@@ -54,7 +54,6 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
   def createDB(blockCount: Int): Unit = {
     if(stateOpt.isEmpty) {
       dir = createTempDir
-      dir.mkdirs()
 
       val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, test.initSettings.chainSettings,
         nodeSettings, test.initSettings.scorexSettings, test.initSettings.walletSettings, test.initSettings.cacheSettings)

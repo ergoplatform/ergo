@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationReject
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
+import org.ergoplatform.{ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
@@ -248,7 +249,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         getMemPool.flatMap { pool =>
           pool.modifierById(modifierId) match {
             case Some(unconfirmedTx) =>
-              getUnconfirmedTransactionWithResolvedInputs(unconfirmedTx.transaction)
+              getUnconfirmedTransactionWithResolvedInputs(unconfirmedTx)
             case None =>
               Future.successful(Json.Null)
           }

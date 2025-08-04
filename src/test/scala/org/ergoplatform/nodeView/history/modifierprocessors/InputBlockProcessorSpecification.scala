@@ -661,6 +661,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
   // todo: test pruning
 
+  // test: test follow-up ordering blocks application, check that reference to bestInputBlock etc reset
+
   // todo : tests for digest state
 
 }

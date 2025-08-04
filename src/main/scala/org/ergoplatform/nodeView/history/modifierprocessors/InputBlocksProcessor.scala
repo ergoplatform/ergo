@@ -53,7 +53,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * txid -> transaction index
-    * 
+    *
     * We use Google Guava's cache with expiration, remove from cache after few ordering blocks of confirmation,
     * but in case of a transaction got into an input-blocks fork not confirmed by ordering blocks it can be stuck in
     * the cachec till expiration (8 hours now)
@@ -175,12 +175,15 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Update input block related structures with a new input block got from a local miner or p2p network
+    * We dont have input block transactions yet (usually) when this method is called.
     *
-    * @return id of another input block to download
+    * @return id of parent input block to download, if it is not known to us
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
     lazy val orderingId = extractOrderingId(ib)
+
+    // =============== helper functions ===========================
 
     // updates best known input block chain tips and best tip's height
     def updateBestTipsAndHeight(childId: ModifierId, parentIdOpt: Option[ModifierId], depth: Int): Unit = {
@@ -212,6 +215,10 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
+    // =============== main function ===========================
+
+    // if input-block corresponds to an ordering block @ better height, reset best input block reference
+    // todo: make sure PoW and difficulty checked, to avoid low-diff block being sent in order to break input blocks chain
     if (ib.header.height > _bestInputBlock.map(_.header.height).getOrElse(-1)) {
       log.debug("Resetting state")
       resetState(false)

@@ -97,6 +97,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * waiting list for input blocks for which we got children for but the parent not delivered yet
+    * we store parents here
     */
   private[modifierprocessors] val deliveryWaitlist = mutable.Set[ModifierId]()
 
@@ -179,7 +180,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     *
     * @return id of parent input block to download, if it is not known to us
     */
-  // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
     lazy val orderingId = extractOrderingId(ib)
 
@@ -239,11 +239,13 @@ trait InputBlocksProcessor extends ScorexLogging {
         None
 
       case None if ibParentOpt.isDefined =>
+        // parent input-block exists, but not known to us, remember it and request downloading it
         deliveryWaitlist.add(ibParentOpt.get)
         disconnectedWaitlist.add(ib)
         ibParentOpt
 
       case None =>
+        // there is no parent input-block, thus this input block is the first generated after its ordering block
         val selfDepth = 1
         inputBlockParents.put(ib.id, None -> selfDepth)
         updateBestTipsAndHeight(ib.id, None, selfDepth)
@@ -323,7 +325,8 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * @return - sequence of new best input blocks
     */
-  //  todo: return input block ids rolled back?
+  // todo: use PoEM to store only 2-3 best chains and select best one quickly
+  // todo: return input block ids rolled back?
   def applyInputBlockTransactions(sbId: ModifierId,
                                   transactions: Seq[ErgoTransaction],
                                   state: ErgoState[_]): Seq[ModifierId] = {

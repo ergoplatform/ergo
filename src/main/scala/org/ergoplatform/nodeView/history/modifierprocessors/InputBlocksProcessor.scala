@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
+import com.google.common.cache.CacheBuilder
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
@@ -7,6 +8,7 @@ import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
+import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
 import scala.collection.mutable
 
@@ -51,9 +53,20 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * txid -> transaction index
+    * 
+    * We use Google Guava's cache with expiration, remove from cache after few ordering blocks of confirmation,
+    * but in case of a transaction got into an input-blocks fork not confirmed by ordering blocks it can be stuck in
+    * the cachec till expiration (8 hours now)
     */
-  // todo: improve removing, some txs included in forked input blocks may stuck in the cache
-  private val transactionsCache = mutable.Map[ModifierId, ErgoTransaction]()
+  // todo: elements of the cache are accessed via getIfPresent without being checked for null result
+  // todo: as they should be in the cache always, but in some extreme cases could be possible exceptions
+  private val transactionsCache = CacheBuilder.newBuilder()
+    .maximumSize(1000000)
+    .expireAfterWrite(480, TimeUnit.MINUTES) // 8 hours
+    .build[ModifierId, ErgoTransaction]()
+
+
+   // mutable.Map[ModifierId, ErgoTransaction]()
 
   /**
     * Best known chain tips (in terms of pow), input blocks in those chain do not necessarily have transactions (yet)
@@ -124,7 +137,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       bestInputBlocks.remove(id)
       orderingInputBlocksTransactions.remove(id).map { ids =>
         ids.foreach { txId =>
-          transactionsCache.remove(txId)
+          transactionsCache.invalidate(txId)
         }
       }
     }
@@ -245,7 +258,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     val res: Boolean = _bestInputBlock match {
       case None =>
         if (ibParentOpt.isEmpty && orderingId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
-          val txs = transactionIds.map(id => transactionsCache.apply(id))
+          val txs = transactionIds.map(id => transactionsCache.getIfPresent(id))
           val txsValid = state.applyInputBlock(txs, Seq.empty, ib.header)
           if (txsValid.isSuccess) {
             log.info(s"Applying best input block #: ${ib.header.id}, no parent")
@@ -261,10 +274,10 @@ trait InputBlocksProcessor extends ScorexLogging {
           false
         }
       case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
-        val txs = transactionIds.map(id => transactionsCache.apply(id))
+        val txs = transactionIds.map(id => transactionsCache.getIfPresent(id))
 
         // todo: checks
-        val previousTxs = orderingInputBlocksTransactions.get(orderingId).map(_.map(transactionsCache.apply)).getOrElse(Seq.empty)
+        val previousTxs = orderingInputBlocksTransactions.get(orderingId).map(_.map(transactionsCache.getIfPresent)).getOrElse(Seq.empty)
 
         val txsValid = state.applyInputBlock(txs, previousTxs, ib.header)
         if (txsValid.isSuccess) {
@@ -479,7 +492,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
-      ids.flatMap(transactionsCache.get)
+      ids.map(transactionsCache.getIfPresent)
     }
   }
 
@@ -507,7 +520,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: cache input block transactions to avoid recalculating it on every input block regeneration?
     // todo: optimize the code below
     orderingInputBlocksTransactions.get(id).map { ids =>
-      ids.flatMap(transactionsCache.get)
+      ids.map(transactionsCache.getIfPresent)
     }
   }
 

@@ -557,4 +557,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+
+  // todo: tests for sub-blocks
+
 }

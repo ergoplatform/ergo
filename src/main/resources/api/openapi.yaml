@@ -242,6 +242,21 @@ components:
                 type: string
                 description: Name of the token, if any
 
+    ErgoBoxWithSpendingProof:
+      allOf:
+        - $ref: '#/components/schemas/ErgoTransactionOutput'
+        - type: object
+          description: Box indexed with extra information
+          required:
+            - spendingProof
+            - boxId
+          properties:
+            spendingProof:
+                $ref: '#/components/schemas/SpendingProof'
+            boxId:
+                $ref: '#/components/schemas/TransactionBoxId'
+
+
     IndexedErgoBox:
       allOf:
         - $ref: '#/components/schemas/ErgoTransactionOutput'
@@ -425,6 +440,38 @@ components:
           description: Size in bytes
           type: integer
           format: int32
+
+    ErgoTransactionWithInputBoxes:
+        type: object
+        description: Transaction indexed with extra information
+        required:
+            - id
+            - inputs
+            - dataInputs
+            - outputs
+            - size
+        properties:
+            id:
+              $ref: '#/components/schemas/TransactionId'
+            inputs:
+                description: Transaction inputs
+                type: array
+                items:
+                    $ref: '#/components/schemas/ErgoBoxWithSpendingProof'
+            dataInputs:
+                description: Transaction data inputs
+                type: array
+                items:
+                    $ref: '#/components/schemas/ErgoTransactionDataInput'
+            outputs:
+                description: Transaction outputs
+                type: array
+                items:
+                    $ref: '#/components/schemas/ErgoTransactionOutput'
+            size:
+                description: Size in bytes
+                type: integer
+                format: int32
 
     IndexedErgoTransaction:
       type: object
@@ -2414,11 +2461,18 @@ components:
       items:
         $ref: '#/components/schemas/ErgoTransaction'
 
+    TransactionsWithInputBoxes:
+      description: List of ErgoTransaction augmented with input boxes
+      type: array
+      items:
+        $ref: '#/components/schemas/ErgoTransactionWithInputBoxes'
+
     IndexedTransactions:
       description: List of IndexedErgoTransaction objects
       type: array
       items:
         $ref: '#/components/schemas/IndexedErgoTransaction'
+
 
     FeeHistogramBin:
       description: Fee histogram bin
@@ -3276,7 +3330,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexedTransactions'
+                $ref: '#/components/schemas/TransactionsWithInputBoxes'
         default:
           description: Error
           content:
@@ -3322,7 +3376,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexedErgoTransaction'
+                $ref: '#/components/schemas/ErgoTransactionWithInputBoxes'
         default:
           description: Error
           content:
@@ -3350,7 +3404,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schema/ApiError'
+                $ref: '#/components/schemas/ApiError'
 
   /transactions/unconfirmed/byTransactionIds:
     post:
@@ -3420,7 +3474,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IndexedTransactions'
+                $ref: '#/components/schemas/ErgoTransactionWithInputBoxes'
         default:
           description: Error
           content:
@@ -5375,16 +5429,16 @@ paths:
       responses:
         '200':
           description: A list of saved snapshots
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/SnapshotsInfo'
-    default:
-      description: Error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiError'
+          content:
+            application/json:
+                schema:
+                    $ref: '#/components/schemas/SnapshotsInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+                schema:
+                    $ref: '#/components/schemas/ApiError'
 
 
 
@@ -6234,9 +6288,9 @@ paths:
         - blockchain
       requestBody:
         required: true
+        description: address associated with transactions
         content:
           application/json:
-            description: address associated with transactions
             schema:
               type: string
               example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
@@ -6329,7 +6383,7 @@ paths:
   /blockchain/box/byId/{boxId}:
     get:
       summary: Retrieve a box by its id
-      operationId: getBoxById
+      operationId: getIndexedBoxById
       tags:
         - blockchain
       parameters:
@@ -6530,10 +6584,10 @@ paths:
       tags:
         - blockchain
       requestBody:
+        description: address associated with boxes
         required: true
         content:
           application/json:
-            description: adderess associated with boxes
             schema:
               type: string
               example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
@@ -6590,10 +6644,10 @@ paths:
       tags:
         - blockchain
       requestBody:
+        description: address associated with unspent boxes
         required: true
         content:
           application/json:
-            description: adderess associated with unspent boxes
             schema:
               type: string
               example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
@@ -6658,7 +6712,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/byTemplateHash:
+  /blockchain/box/byTemplateHash/{hash}:
     get:
       summary: Retrieve boxes by their contract template hash
       operationId: getBoxesByTemplateHash
@@ -6710,7 +6764,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
-  /blockchain/box/unspent/byTemplateHash:
+  /blockchain/box/unspent/byTemplateHash/{hash}:
     get:
       summary: Retrieve unspent boxes by their contract template hash
       operationId: getBoxesByTemplateHashUnspent
@@ -6831,9 +6885,9 @@ paths:
         - blockchain
       requestBody:
         required: true
+        description: hex encoded ergotree
         content:
           application/json:
-            description: hex encoded ergotree
             schema:
               type: string
               example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
@@ -6884,10 +6938,10 @@ paths:
       tags:
         - blockchain
       requestBody:
+        description: hex encoded ergotree
         required: true
         content:
           application/json:
-            description: hex encoded ergotree
             schema:
               type: string
               example: '100204a00b08cd021cf943317b0fdb50f60892a46b9132b9ced337c7de79248b104b293d9f1f078eea02d192a39a8cc7a70173007301'
@@ -7027,10 +7081,10 @@ paths:
       tags:
         - blockchain
       requestBody:
+        description: address with balance
         required: true
         content:
           application/json:
-            description: adderess with balance
             schema:
               type: string
               example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'

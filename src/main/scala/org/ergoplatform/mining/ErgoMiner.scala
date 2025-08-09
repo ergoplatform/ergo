@@ -156,7 +156,7 @@ class ErgoMiner(
       log.info("Starting mining triggered by incoming block")
       self ! StartMining
 
-    case GenerateCandidate(_, _) =>
+    case GenerateCandidate(_, _, _) =>
       sender() ! StatusReply.error("Miner has not started yet")
   }
 
@@ -164,7 +164,7 @@ class ErgoMiner(
     * The reason is that replying is optional and it is not possible to obtain a sender reference from MiningApiRoute 'ask'.
     */
   def started(minerState: MinerState): Receive = {
-    case genCandidate @ GenerateCandidate(_, _) =>
+    case genCandidate @ GenerateCandidate(_, _, _) =>
       minerState.candidateGeneratorRef forward genCandidate
 
     case solution: AutolykosSolution =>

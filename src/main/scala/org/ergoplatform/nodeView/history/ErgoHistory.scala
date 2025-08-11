@@ -95,7 +95,7 @@ trait ErgoHistory
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
-        val nonMarkedIds = (fb.header.id +: fb.header.sectionIds.map(_._2))
+        val nonMarkedIds = (fb.header.sectionIds.values ++ Iterable(fb.header.id))
           .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty).toArray
 
         if (nonMarkedIds.nonEmpty) {
@@ -174,7 +174,7 @@ trait ErgoHistory
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
                 val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
-                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Map.empty)
               }
             }
         }

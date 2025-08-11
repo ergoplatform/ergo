@@ -2,9 +2,9 @@ package org.ergoplatform.http.api
 
 import cats.syntax.either._ // needed for Scala 2.11
 import io.circe._           // needed for Scala 2.11
-import io.circe.syntax._
 import sigmastate.utils.Helpers._
 
+import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform._

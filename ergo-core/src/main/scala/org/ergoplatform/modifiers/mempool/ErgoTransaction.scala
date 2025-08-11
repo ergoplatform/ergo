@@ -81,7 +81,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
-  lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+  private lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`

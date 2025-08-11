@@ -129,7 +129,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
   private def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
-    val toDownload = pi.toDownload.toMap.mapValues(mid => Seq(mid))
+    val toDownload = pi.toDownload.mapValues(mid => Seq(mid))
     context.system.eventStream.publish(DownloadRequest(toDownload))
   }
 

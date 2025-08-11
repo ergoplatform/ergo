@@ -18,8 +18,9 @@ case class ProgressInfo[PM <: BlockSection](branchPoint: Option[ModifierId],
                                             toApply: Seq[PM],
                                             toDownload: Map[NetworkObjectTypeId.Value, ModifierId]) {
 
-  if (toRemove.nonEmpty)
+  if (toRemove.nonEmpty) {
     require(branchPoint.isDefined, s"Branch point should be defined for non-empty `toRemove`")
+  }
 
   lazy val chainSwitchingNeeded: Boolean = toRemove.nonEmpty
 
@@ -30,5 +31,5 @@ case class ProgressInfo[PM <: BlockSection](branchPoint: Option[ModifierId],
 }
 
 object ProgressInfo {
-  val empty = ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Map.empty)
+  val empty: ProgressInfo[BlockSection] = ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Map.empty)
 }

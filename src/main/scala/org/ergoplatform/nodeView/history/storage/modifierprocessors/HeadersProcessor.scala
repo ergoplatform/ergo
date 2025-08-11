@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings._
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayWrapper
 import scorex.util._
@@ -27,7 +26,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * Contains all functions required by History to process Headers.
   */
-trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with ScorexLogging with ScorexEncoding {
+trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with ScorexLogging {
 
   /**
     * Key for database record storing ID of best block header

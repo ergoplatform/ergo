@@ -25,8 +25,8 @@ import scala.util.{Failure, Success, Try}
   */
 object ModifierValidator {
 
-  def apply(settings: ValidationSettings)(implicit e: ScorexEncoder): ValidationState[Unit] = {
-    ValidationState(ModifierValidator.success, settings)(e)
+  def apply(settings: ValidationSettings): ValidationState[Unit] = {
+    ValidationState(ModifierValidator.success, settings)
   }
 
   /** report recoverable modifier error that could be fixed by later retries */
@@ -65,7 +65,7 @@ object ModifierValidator {
 }
 
 /** This is the place where all the validation DSL lives */
-case class ValidationState[T](result: ValidationResult[T], settings: ValidationSettings)(implicit e: ScorexEncoder) {
+case class ValidationState[T](result: ValidationResult[T], settings: ValidationSettings) {
 
   /** Create the next validation state as the result of given `operation` */
   def pass[R](operation: => ValidationResult[R]): ValidationState[R] = {
@@ -115,6 +115,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
   /** Validate the `id`s are equal. The `error` callback will be provided with detail on argument values
     */
   def validateEqualIds(id: Short, `given`: => ModifierId, expected: => ModifierId, modifierTypeId: NetworkObjectTypeId.Value): ValidationState[T] = {
+    val e = ScorexEncoder
     pass {
       if (!settings.isActive(id) || given == expected) result
       else settings.getError(id, InvalidModifier(s"Given: ${e.encodeId(given)}, expected ${e.encodeId(expected)}", given, modifierTypeId))

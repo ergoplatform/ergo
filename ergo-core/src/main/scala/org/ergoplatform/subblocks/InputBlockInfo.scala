@@ -1,6 +1,6 @@
 package org.ergoplatform.subblocks
 
-import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.mining.{AutolykosPowScheme, InputBlockFields}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Constants
@@ -24,9 +24,11 @@ case class InputBlockInfo(version: Byte,
 
   lazy val id: ModifierId = header.id
 
-  // todo: only Merkle proof validated for now, check if it is enough
-  def valid(): Boolean = {
-    inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
+  // todo: only pow && Merkle proof validated for now, check if it is enough
+  def valid(powScheme: AutolykosPowScheme): Boolean = {
+    // todo: check difficulty
+    powScheme.validate(header).isSuccess &&
+      inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
   }
 
   def prevInputBlockId: Option[Array[Byte]] = inputBlockFields.prevInputBlockId

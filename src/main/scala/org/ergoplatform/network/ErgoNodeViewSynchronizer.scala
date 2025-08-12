@@ -1101,82 +1101,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  def processInputBlock(inputBlockInfo: InputBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
-    val subBlockHeader = inputBlockInfo.header
-    // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
-    if (subBlockHeader.height == hr.fullBlockHeight + 1) {
-      if (inputBlockInfo.valid()) { // check PoW / Merkle proofs before processing
-        val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block
-        log.info(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
-        // write sub-block to db, ask for transactions in it
-        viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
-        // todo: ask for txs only if subblock's parent is a best subblock ?
-        val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(inputBlockInfo.header.id), None)
-        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-      } else {
-        log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
-        penalizeMisbehavingPeer(remote)
-      }
-    } else {
-      log.info(s"Got sub-block for height ${subBlockHeader.height}, while height of our best full-block is ${hr.fullBlockHeight}")
-      // just ignore the subblock
-    }
-  }
-
-  def processInputBlockRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
-    hr.getInputBlock(subBlockId) match {
-      case Some(sbi) =>
-        val msg = Message(InputBlockMessageSpec, Right(sbi), None)
-        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-      case None =>
-        log.warn(s"Requested sub block not found: $subBlockId")
-    }
-  }
-
-  // todo: send transactions? or transaction ids? or switch from one option to another depending on message size ?
-  def processInputBlockTransactionsRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
-    hr.getInputBlockTransactions(subBlockId) match {
-      case Some(transactions) =>
-        val std = InputBlockTransactionsData(subBlockId, transactions)
-        val msg = Message(InputBlockTransactionsMessageSpec, Right(std), None)
-        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-      case None =>
-        log.warn(s"Transactions not found for requested sub block ${subBlockId}")
-    }
-  }
-
-  def processInputBlockTransactions(transactionsData: InputBlockTransactionsData,
-                                    hr: ErgoHistoryReader,
-                                    remote: ConnectedPeer): Unit = {
-    // todo: check if not spam, ie transaction were requested
-    viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
-  }
-
-  def processOrderingBlockAnnouncement(oba: OrderingBlockAnnouncement,
-                                       hr: ErgoHistoryReader,
-                                       remote: ConnectedPeer): Unit = {
-    // todo: for now, we just check if referenced input block is stored
-    // todo: if so, input blocks are used, otherwise, full block is downloaded
-    // todo: instead, missing input blocks should be downloaded
-
-    val prevInputBlockIdOpt = oba.extensionFields.find(_._1.sameElements(PrevInputBlockIdKey))
-
-    val inputBlockStored = prevInputBlockIdOpt.map { t =>
-      hr.getInputBlockTransactions(bytesToId(t._2)).isDefined
-    }.getOrElse(true)
-
-    if (inputBlockStored) {
-      log.info(s"Processing ordering block  ${oba.header.id}") // todo: make it .debug
-      viewHolderRef ! ProcessOrderingBlock(oba)
-    } else {
-      // todo: sub-blocks: request full block for now
-      log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
-      val ext = Extension(oba.header.id, oba.extensionFields)
-      viewHolderRef ! ModifiersFromRemote(Seq(ext))
-      requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
-    }
-  }
-
   /**
     * Object ids coming from other node.
     * Filter out modifier ids that are already in process (requested, received or applied),
@@ -1295,6 +1219,85 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (objs.nonEmpty) {
       sendByParts(objs)
+    }
+  }
+
+  // PROCESS LOGIC FOR INPUT- AND ORDERING BLOCKS RELATED DATA
+
+  def processInputBlock(inputBlockInfo: InputBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    val subBlockHeader = inputBlockInfo.header
+    // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
+    if (subBlockHeader.height == hr.fullBlockHeight + 1) {
+      val powScheme = settings.chainSettings.powScheme
+      if (inputBlockInfo.valid(powScheme)) { // check PoW / Merkle proofs before processing todo: check diff
+        val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block
+        log.info(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
+        // write sub-block to db, ask for transactions in it
+        viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+        // todo: ask for txs only if subblock's parent is a best subblock ?
+        val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(inputBlockInfo.header.id), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      } else {
+        log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        penalizeMisbehavingPeer(remote)
+      }
+    } else {
+      log.info(s"Got sub-block for height ${subBlockHeader.height}, while height of our best full-block is ${hr.fullBlockHeight}")
+      // just ignore the subblock
+    }
+  }
+
+  def processInputBlockRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    hr.getInputBlock(subBlockId) match {
+      case Some(sbi) =>
+        val msg = Message(InputBlockMessageSpec, Right(sbi), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      case None =>
+        log.warn(s"Requested sub block not found: $subBlockId")
+    }
+  }
+
+  // todo: send transactions? or transaction ids? or switch from one option to another depending on message size ?
+  def processInputBlockTransactionsRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    hr.getInputBlockTransactions(subBlockId) match {
+      case Some(transactions) =>
+        val std = InputBlockTransactionsData(subBlockId, transactions)
+        val msg = Message(InputBlockTransactionsMessageSpec, Right(std), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      case None =>
+        log.warn(s"Transactions not found for requested sub block ${subBlockId}")
+    }
+  }
+
+  def processInputBlockTransactions(transactionsData: InputBlockTransactionsData,
+                                    hr: ErgoHistoryReader,
+                                    remote: ConnectedPeer): Unit = {
+    // todo: check if not spam, ie transaction were requested
+    viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
+  }
+
+  def processOrderingBlockAnnouncement(oba: OrderingBlockAnnouncement,
+                                       hr: ErgoHistoryReader,
+                                       remote: ConnectedPeer): Unit = {
+    // todo: for now, we just check if referenced input block is stored
+    // todo: if so, input blocks are used, otherwise, full block is downloaded
+    // todo: instead, missing input blocks should be downloaded
+
+    val prevInputBlockIdOpt = oba.extensionFields.find(_._1.sameElements(PrevInputBlockIdKey))
+
+    val inputBlockStored = prevInputBlockIdOpt.map { t =>
+      hr.getInputBlockTransactions(bytesToId(t._2)).isDefined
+    }.getOrElse(true)
+
+    if (inputBlockStored) {
+      log.info(s"Processing ordering block  ${oba.header.id}") // todo: make it .debug
+      viewHolderRef ! ProcessOrderingBlock(oba)
+    } else {
+      // todo: sub-blocks: request full block for now
+      log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
+      val ext = Extension(oba.header.id, oba.extensionFields)
+      viewHolderRef ! ModifiersFromRemote(Seq(ext))
+      requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
     }
   }
 

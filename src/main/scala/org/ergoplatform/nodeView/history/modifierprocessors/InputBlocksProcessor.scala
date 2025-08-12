@@ -49,6 +49,9 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * input block id -> input block transaction ids index
     */
+  // todo: transactions can be put here without input block received, ie PoW and difficulty checked
+  // todo: thus they wont be cleared on pruning and the data structure can be DoSed. Fix by putting such transactions
+  // todo: into a special queue
   private val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
   /**

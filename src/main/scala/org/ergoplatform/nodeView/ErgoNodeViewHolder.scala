@@ -323,8 +323,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
       history().getInputBlockTransactions(inputBlockInfo.id) match {
         case Some(txs) =>
-          // we already have transactions somehow
-          // shouldn't be the case now, but the path is left for possible optimizations in future
+          // we already have transactions, that is possible sometimes if they arrive before the input block
+          // over p2p network
           log.debug(s"Got input block ${inputBlockInfo.id} transactions before the input block itself")
           processInputBlockTransactions(inputBlockInfo.id, txs)
         case None =>

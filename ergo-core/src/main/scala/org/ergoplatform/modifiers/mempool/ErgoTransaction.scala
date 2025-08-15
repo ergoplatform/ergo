@@ -28,6 +28,7 @@ import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, SoftFiel
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.utils.Ints
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import sigma.exceptions.SoftFieldAccessException
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
@@ -35,6 +36,7 @@ import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 import java.util
 import scala.annotation.nowarn
 import scala.collection.mutable
+import scala.util.hashing.MurmurHash3
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -70,13 +72,33 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
+  private lazy val witnessBytes = ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))
   /**
     * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
     * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,
     * where both kinds of ids are written into leafs of the tree.
     */
-  lazy val witnessSerializedId: Array[Byte] =
-    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
+  lazy val witnessSerializedId: Array[Byte] = Algos.hash(witnessBytes).tail
+
+  /**
+    * Weak (non-cryptographic) 6 bytes ID. To be used for block transactions propagation only.
+    * The idea of using 6-bytes hash is taken from BIP-152 (Bitcoin's compact blocks proposal).
+    */
+  lazy val weakId: Array[Byte] = {
+    val h1 = MurmurHash3.bytesHash(messageToSign)
+    val h2 = MurmurHash3.bytesHash(witnessBytes, h1)
+    val result = new Array[Byte](6)
+    val hb1 = Ints.toByteArray(h1)
+    val hb2 = Ints.toByteArray(h2)
+    result(0) = hb1(0)
+    result(1) = hb1(1)
+    result(2) = (hb1(2) ^ hb2(0)).toByte
+    result(3) = (hb1(3) ^ hb2(1)).toByte
+    result(4) = hb2(2)
+    result(5) = hb2(3)
+    result
+  }
+
 
 
   lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)

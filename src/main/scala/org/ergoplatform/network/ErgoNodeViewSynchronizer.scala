@@ -1234,7 +1234,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
         // write sub-block to db, ask for transactions in it
         viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
-        // todo: ask for txs only if subblock's parent is a best subblock ?
         val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(inputBlockInfo.header.id), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
       } else {
@@ -1253,7 +1252,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val msg = Message(InputBlockMessageSpec, Right(sbi), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
       case None =>
-        log.warn(s"Requested sub block not found: $subBlockId")
+        log.warn(s"Requested by $remote sub block not found: $subBlockId")
     }
   }
 

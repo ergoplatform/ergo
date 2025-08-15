@@ -218,7 +218,7 @@ object NipopowAlgos {
     if (keys.isEmpty) {
       Some(BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash))
     } else {
-      ext.batchProofFor(keys: _*)
+      ext.batchProofForInterlinks(keys: _*)
     }
   }
 

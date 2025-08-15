@@ -23,17 +23,20 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.validation.ValidationResult.fromValidationState
-import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
+import org.ergoplatform.validation.ValidationResult.{Invalid, fromValidationState}
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, SoftFieldsAccessError, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.utils.Ints
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
+import sigma.exceptions.SoftFieldAccessException
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
 import java.util
 import scala.annotation.nowarn
 import scala.collection.mutable
+import scala.util.hashing.MurmurHash3
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -69,18 +72,38 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
+  private lazy val witnessBytes = ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))
   /**
     * Id of transaction "witness" (taken from Bitcoin jargon, means commitment to signatures of a transaction).
     * Id is 248-bit long, to distinguish transaction ids from witness ids in Merkle tree of transactions,
     * where both kinds of ids are written into leafs of the tree.
     */
-  lazy val witnessSerializedId: Array[Byte] =
-    Algos.hash(ByteArrayUtils.mergeByteArrays(inputs.map(_.spendingProof.proof))).tail
+  lazy val witnessSerializedId: Array[Byte] = Algos.hash(witnessBytes).tail
+
+  /**
+    * Weak (non-cryptographic) 6 bytes ID. To be used for block transactions propagation only.
+    * The idea of using 6-bytes hash is taken from BIP-152 (Bitcoin's compact blocks proposal).
+    */
+  lazy val weakId: Array[Byte] = {
+    val h1 = MurmurHash3.bytesHash(messageToSign)
+    val h2 = MurmurHash3.bytesHash(witnessBytes, h1)
+    val result = new Array[Byte](6)
+    val hb1 = Ints.toByteArray(h1)
+    val hb2 = Ints.toByteArray(h2)
+    result(0) = hb1(0)
+    result(1) = hb1(1)
+    result(2) = (hb1(2) ^ hb2(0)).toByte
+    result(3) = (hb1(3) ^ hb2(1)).toByte
+    result(4) = hb2(2)
+    result(5) = hb2(3)
+    result
+  }
+
 
 
   lazy val outAssetsTry: Try[(Map[Seq[Byte], Long], Int)] = ErgoBoxAssetExtractor.extractAssets(outputCandidates)
 
-  lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
+  private lazy val outputsSumTry: Try[Long] = Try(outputCandidates.map(_.value).reduce(Math.addExact(_, _)))
 
   /**
     * Stateless transaction validation with result returned as `ValidationResult`
@@ -113,7 +136,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                           box: ErgoBox,
                           inputIndex: Short,
                           stateContext: ErgoStateContext,
-                          currentTxCost: Long)
+                          currentTxCost: Long,
+                          softFieldsAllowed: Boolean)
                          (implicit verifier: ErgoInterpreter): ValidationResult[Long] = {
 
     // Cost limit per block
@@ -133,11 +157,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val ctx = new ErgoContext(
       stateContext, transactionContext, inputContext,
       costLimit = maxCost - currentTxCost, // remaining cost so far
-      initCost = 0)
+      initCost = 0,
+      softFieldsAllowed
+    )
 
     val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
     val (isCostValid, scriptCost: Long) =
       costTry match {
+        case Failure(t) if t.isInstanceOf[SoftFieldAccessException] =>
+          return Invalid(Seq(new SoftFieldsAccessError(t.asInstanceOf[SoftFieldAccessException], id)))
         case Failure(t) =>
           log.warn(s"Tx verification failed: ${t.getMessage}", t)
           log.warn(s"Tx $id verification context: " +
@@ -360,7 +388,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def validateStateful(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
-                       accumulatedCost: Long)
+                       accumulatedCost: Long,
+                       softFieldsAllowed: Boolean)
                       (implicit verifier: ErgoInterpreter): ValidationState[Long] = {
 
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
@@ -434,7 +463,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       // Check inputs, the most expensive check usually, so done last.
       .validateSeq(boxesToSpend.zipWithIndex) { case (validation, (box, idx)) =>
         val currentTxCost = validation.result.payload.get
-        verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
+        verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost, softFieldsAllowed)
       }
       .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
@@ -446,9 +475,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
   def statefulValidity(boxesToSpend: IndexedSeq[ErgoBox],
                        dataBoxes: IndexedSeq[ErgoBox],
                        stateContext: ErgoStateContext,
-                       accumulatedCost: Long = 0L)
+                       accumulatedCost: Long = 0L,
+                       softFieldsAllowed: Boolean = true)
                       (implicit verifier: ErgoInterpreter): Try[Int] = {
-    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost).result.toTry.map(_.toInt)
+    validateStateful(boxesToSpend, dataBoxes, stateContext, accumulatedCost, softFieldsAllowed).result.toTry.map(_.toInt)
   }
 
   override type M = ErgoTransaction

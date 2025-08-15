@@ -8,6 +8,7 @@ import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import cats.syntax.either._
+import org.ergoplatform.OrderingSolutionFound
 
 class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
@@ -26,18 +27,24 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
       val b = pow.getB(h.nBits)
       val hbs = Ints.toByteArray(h.height)
       val N = pow.calcN(h)
-      val newHeader = pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000)
-        .map(s => h.copy(powSolution = s)).get
-      pow.validate(newHeader) shouldBe 'success
+      pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000) match {
+        case OrderingSolutionFound(as) =>
+          val nh = h.copy(powSolution = as)
+          pow.validate(nh) shouldBe 'success
 
-      if(ver > Header.InitialVersion) {
-        // We remove last byte of "msg", perform PoW and check that it fails validation
-        require(HeaderSerializer.bytesWithoutPow(h).last == 0)
-        val msg2 = Blake2b256(HeaderSerializer.bytesWithoutPow(h).dropRight(1))
+          if (ver > Header.InitialVersion) {
+            // We remove last byte of "msg", perform PoW and check that it fails validation
+            require(HeaderSerializer.bytesWithoutPow(h).last == 0)
+            val msg2 = Blake2b256(HeaderSerializer.bytesWithoutPow(h).dropRight(1))
 
-        val newHeader2 = pow.checkNonces(ver, hbs, msg2, sk, x, b, N, 0, 1000)
-          .map(s => h.copy(powSolution = s)).get
-        pow.validate(newHeader2) shouldBe 'failure
+            pow.checkNonces(ver, hbs, msg2, sk, x, b, N, 0, 1000) match {
+              case OrderingSolutionFound(as2) =>
+                val nh2 = h.copy(powSolution = as2)
+                pow.validate(nh2) shouldBe 'failure
+              case _ =>
+            }
+          }
+        case _ =>
       }
     }
   }

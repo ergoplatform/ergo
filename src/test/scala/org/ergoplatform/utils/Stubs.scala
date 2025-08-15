@@ -3,9 +3,9 @@ package org.ergoplatform.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.P2PKAddress
+import org.ergoplatform.{AutolykosSolution, OrderingBlockFound, P2PKAddress}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -112,7 +112,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case CandidateGenerator.GenerateCandidate(_, reply, _) =>
+      case CandidateGenerator.GenerateCandidate(_, reply) =>
         if (reply) {
           val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
@@ -408,7 +408,9 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).value
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+     .fb
+      .header
   }
 
 }

@@ -1,7 +1,8 @@
 package org.ergoplatform.network
 
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosSolution, groupElemFromBytes}
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -39,7 +40,7 @@ class HeaderSerializationSpecification extends ErgoCorePropertyTest {
     val w = base16ToEcPoint("026d7b267c33120d15c267664081a6b77a6dcae6b35147db2c3e1195573119cb14")
     val n = Base16.decode("0008a1d103880117").get
     val d = BigInt("35863003992655055679291741607273543535646500642591973829915050")
-    val powSolution = AutolykosSolution(pk, w, n, d)
+    val powSolution = new AutolykosSolution(pk, w, n, d)
     val votes = Array[Byte](4, 3, 0)
 
     val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits,
@@ -137,7 +138,7 @@ class HeaderSerializationSpecification extends ErgoCorePropertyTest {
     val w = AutolykosSolution.wForV2
     val n = Base16.decode("1b95db2168f95fda").get
     val d = AutolykosSolution.dForV2
-    val powSolution = AutolykosSolution(pk, w, n, d)
+    val powSolution = new AutolykosSolution(pk, w, n, d)
     val votes = Array[Byte](0, 0, 0)
 
     val h = Header(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp, nBits,

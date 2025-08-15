@@ -6,7 +6,7 @@ import scorex.util.serialization.{Reader, Writer}
 /**
  * The `NipopowProof` message is a reply to a `GetNipopowProof` message.
  */
-object NipopowProofSpec extends MessageSpecV1[Array[Byte]] {
+object NipopowProofSpec extends MessageSpecInitial[Array[Byte]] {
 
   val SizeLimit = 2000000
   override val messageCode: Byte = 91

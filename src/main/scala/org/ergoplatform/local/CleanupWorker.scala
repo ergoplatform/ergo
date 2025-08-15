@@ -87,7 +87,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       txs match {
         case head :: tail if costAcc < CostLimit =>
           val validationContext = state.stateContext.simplifiedUpcoming()
-          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
+          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost,
+                                  None, softFieldsAllowed = true) match { // todo: save soft fields status in UnconfTx
             case Success(txCost) =>
               val updTx = head.withCost(txCost)
               validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)

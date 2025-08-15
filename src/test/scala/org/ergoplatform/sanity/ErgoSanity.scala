@@ -1,7 +1,7 @@
 package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, OrderingBlockFound}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -61,7 +61,9 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
       defaultMinerSecretNumber
-    ).get
+    ).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
+      .header
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =

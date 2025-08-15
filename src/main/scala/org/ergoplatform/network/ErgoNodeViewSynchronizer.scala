@@ -5,9 +5,8 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Algos, ErgoSettings, NetworkSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
@@ -22,19 +21,22 @@ import org.ergoplatform.network.message.{InvSpec, MessageSpec, ModifiersSpec, Re
 import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
-import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.utils.ScorexEncoder
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
+import org.ergoplatform.modifiers.history.extension.Extension.PrevInputBlockIdKey
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.network.message.inputblocks._
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
 
@@ -54,11 +56,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                settings: ErgoSettings,
                                syncTracker: ErgoSyncTracker,
                                deliveryTracker: DeliveryTracker)(implicit ex: ExecutionContext)
-  extends Actor with Synchronizer with ScorexLogging with ScorexEncoding {
+  extends Actor with Synchronizer with ScorexLogging {
 
   import org.ergoplatform.network.ErgoNodeViewSynchronizer._
-
-  type EncodedManifestId = ModifierId
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
     maxNrOfRetries = 10,
@@ -272,6 +272,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
 
+    // sub-blocks related messages
+    context.system.eventStream.subscribe(self, classOf[DownloadInputBlock])
+    context.system.eventStream.subscribe(self, classOf[DownloadInputBlockTransactions])
+    context.system.eventStream.subscribe(self, classOf[NewBestInputBlock])
+
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
     val interval = networkSettings.syncInterval
@@ -282,9 +287,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(healthCheckDelay, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
   }
 
-  protected def broadcastModifierInv(modTypeId: NetworkObjectTypeId.Value, modId: ModifierId): Unit = {
+  protected def broadcastModifierInv(modTypeId: NetworkObjectTypeId.Value,
+                                     modId: ModifierId,
+                                     peersOpt: Option[Seq[ConnectedPeer]] = None): Unit = {
+    val sendingStrategy = if(peersOpt.isDefined) {
+      SendToPeers(peersOpt.get)
+    } else {
+      Broadcast
+    }
     val msg = Message(InvSpec, Right(InvData(modTypeId, Seq(modId))), None)
-    networkControllerRef ! SendToNetwork(msg, Broadcast)
+    networkControllerRef ! SendToNetwork(msg, sendingStrategy)
   }
 
   protected def broadcastModifierInv(m: ErgoNodeViewModifier): Unit = {
@@ -633,6 +645,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
       }
+    case DownloadInputBlock(sbId, remote) =>
+      // processing internal request to download an input block
+      val msg = Message(InputBlockRequestMessageSpec, Right(sbId), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+    case DownloadInputBlockTransactions(sbId, remote) =>
+      // processing internal request to download input block transactions
+      val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(sbId), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
   }
 
   /**
@@ -783,7 +803,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
           penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          log.warn(s"Failed to parse transaction with declared id ${ScorexEncoder.encodeId(id)} from ${remote.toString}")
       }
     }
   }
@@ -807,7 +827,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // Forget about block section, so it will be redownloaded if announced again only
           deliveryTracker.setUnknown(id, modifierTypeId)
           penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse modifier with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          log.warn(s"Failed to parse modifier with declared id ${ScorexEncoder.encodeId(id)} from ${remote.toString}")
           None
       }
     }
@@ -1081,7 +1101,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-
   /**
     * Object ids coming from other node.
     * Filter out modifier ids that are already in process (requested, received or applied),
@@ -1203,6 +1222,84 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  // PROCESS LOGIC FOR INPUT- AND ORDERING BLOCKS RELATED DATA
+
+  def processInputBlock(inputBlockInfo: InputBlockInfo, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    val subBlockHeader = inputBlockInfo.header
+    // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
+    if (subBlockHeader.height == hr.fullBlockHeight + 1) {
+      val powScheme = settings.chainSettings.powScheme
+      if (inputBlockInfo.valid(powScheme)) { // check PoW / Merkle proofs before processing todo: check diff
+        val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block
+        log.info(s"Processing valid sub-block ${subBlockHeader.id} with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}")
+        // write sub-block to db, ask for transactions in it
+        viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+        val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(inputBlockInfo.header.id), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      } else {
+        log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        penalizeMisbehavingPeer(remote)
+      }
+    } else {
+      log.info(s"Got sub-block for height ${subBlockHeader.height}, while height of our best full-block is ${hr.fullBlockHeight}")
+      // just ignore the subblock
+    }
+  }
+
+  def processInputBlockRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    hr.getInputBlock(subBlockId) match {
+      case Some(sbi) =>
+        val msg = Message(InputBlockMessageSpec, Right(sbi), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      case None =>
+        log.warn(s"Requested by $remote sub block not found: $subBlockId")
+    }
+  }
+
+  // todo: send transactions? or transaction ids? or switch from one option to another depending on message size ?
+  def processInputBlockTransactionsRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
+    hr.getInputBlockTransactions(subBlockId) match {
+      case Some(transactions) =>
+        val std = InputBlockTransactionsData(subBlockId, transactions)
+        val msg = Message(InputBlockTransactionsMessageSpec, Right(std), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      case None =>
+        log.warn(s"Transactions not found for requested sub block ${subBlockId}")
+    }
+  }
+
+  def processInputBlockTransactions(transactionsData: InputBlockTransactionsData,
+                                    hr: ErgoHistoryReader,
+                                    remote: ConnectedPeer): Unit = {
+    // todo: check if not spam, ie transaction were requested
+    viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
+  }
+
+  def processOrderingBlockAnnouncement(oba: OrderingBlockAnnouncement,
+                                       hr: ErgoHistoryReader,
+                                       remote: ConnectedPeer): Unit = {
+    // todo: for now, we just check if referenced input block is stored
+    // todo: if so, input blocks are used, otherwise, full block is downloaded
+    // todo: instead, missing input blocks should be downloaded
+
+    val prevInputBlockIdOpt = oba.extensionFields.find(_._1.sameElements(PrevInputBlockIdKey))
+
+    val inputBlockStored = prevInputBlockIdOpt.map { t =>
+      hr.getInputBlockTransactions(bytesToId(t._2)).isDefined
+    }.getOrElse(true)
+
+    if (inputBlockStored) {
+      log.info(s"Processing ordering block  ${oba.header.id}") // todo: make it .debug
+      viewHolderRef ! ProcessOrderingBlock(oba)
+    } else {
+      // todo: sub-blocks: request full block for now
+      log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
+      val ext = Extension(oba.header.id, oba.extensionFields)
+      viewHolderRef ! ModifiersFromRemote(Seq(ext))
+      requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
+    }
+  }
+
   /**
     * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
     */
@@ -1236,7 +1333,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         } else {
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered network object " +
-                   s"$modifierTypeId : ${encoder.encodeId(modifierId)} on time")
+                   s"$modifierTypeId : ${ScorexEncoder.encodeId(modifierId)} on time")
 
           // Number of delivery checks for a block section, utxo set snapshot chunk or manifest
           // increased or initialized, except the case where we can have issues with connectivity,
@@ -1382,9 +1479,46 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
     case FullBlockApplied(header) =>
-      if (header.isNew(2.hours)) {
-        broadcastModifierInv(Header.modifierTypeId, header.id)
-        header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
+      if (historyReader.bestHeaderOpt.exists(_.height <= header.height)) {
+        val knownPeers = syncTracker.fullInfo()
+
+        // Split known peers into ones supporting input/ordering blocks and ones not
+        val (sendOrderingToStatuses, sendFullToStatuses) = knownPeers.partition { peerStatus =>
+          if (peerStatus.status == Equal || peerStatus.status == Fork) {
+            peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion)
+          } else {
+            false
+          }
+        }
+
+        val sendOrderingTo = sendOrderingToStatuses.map(_.peer)
+
+        val sendFullTo = sendFullToStatuses.map(_.peer)
+
+        log.debug(s"Sending ordering block ann to $sendOrderingTo , sending old format block sections to $sendFullTo")
+
+
+        // send block sections in full for older peers not supporting sub-blocks
+        if (sendFullTo.nonEmpty) {
+          val peersOpt = Some(sendFullTo.toSeq)
+          broadcastModifierInv(Header.modifierTypeId, header.id, peersOpt)
+          header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id, peersOpt) }
+        }
+
+        if (sendOrderingTo.nonEmpty) {
+          // broadcast subblock announcement
+          val otOpt = historyReader.getOrderingBlockTransactions(header.id)
+          val extOpt = historyReader.typedModifierById[Extension](header.extensionId)
+          if(otOpt.isDefined && extOpt.isDefined) {
+            val ot = otOpt.get
+            val ext = extOpt.get
+            val obAnn = OrderingBlockAnnouncement(header, ot, Seq.empty, ext.fields) // todo: send ids for previously broadcasted txs, not .empty
+            val msg = Message(OrderingBlockAnnouncementMessageSpec, Right(obAnn), None)
+            networkControllerRef ! SendToNetwork(msg, SendToPeers(sendOrderingTo.toSeq))
+          } else {
+            log.warn(s"Not found ordering block transactions and/or extension for ${header.id} during broadcasting")
+          }
+        }
       }
       clearDeclined()
       clearInterblockCost()
@@ -1485,6 +1619,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
+
+    // todo: broadcast only locally generated new best input block?
+    case NewBestInputBlock(Some(id)) =>
+      historyReader.getInputBlock(id) match {
+        case Some(ibi) =>
+          log.debug(s"Sending input block $id out")
+          val peers = syncTracker.statuses.filter { s =>
+            val status = s._2.status
+            status == Equal || status == Fork
+          }.keys.toSeq
+          val msg = Message(InputBlockMessageSpec, Right(ibi), None)
+          networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+        case None =>
+      }
+
+    case NewBestInputBlock(None) =>
+      // this signal is sent on ordering block application, nothing p2p layer should do
   }
 
   /** handlers of messages coming from peers */
@@ -1501,6 +1652,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       modifiersReq(hr, mp, data, remote)
     case (_: ModifiersSpec.type, data: ModifiersData, remote) =>
       modifiersFromRemote(hr, mp, data, remote, blockAppliedTxsCache)
+    // UTXO snapshot related messages
     case (spec: MessageSpec[_], _, remote) if spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
       usrOpt match {
         case Some(usr) => sendSnapshotsInfo(usr, remote)
@@ -1525,10 +1677,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
+    // Nipopows related messages
     case (_: GetNipopowProofSpec.type, data: NipopowProofData, remote) =>
       sendNipopowProof(data, hr, remote)
     case (_: NipopowProofSpec.type , proofBytes: Array[Byte], remote) =>
       processNipopowProof(proofBytes, hr, remote)
+    // Sub-blocks related messages
+    case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockInfo, remote) =>
+      processInputBlock(subBlockInfo, hr, remote)
+    case (_: InputBlockRequestMessageSpec.type, subBlockId: String, remote) =>
+      processInputBlockRequest(ModifierId @@ subBlockId, hr, remote)
+    case (_: InputBlockTransactionsRequestMessageSpec.type, subBlockId: String, remote) =>
+      processInputBlockTransactionsRequest(ModifierId @@ subBlockId, hr, remote)
+    case (_: InputBlockTransactionsMessageSpec.type, transactions: InputBlockTransactionsData, remote) =>
+      processInputBlockTransactions(transactions, hr, remote)
+    case (_: OrderingBlockAnnouncementMessageSpec.type, oba: OrderingBlockAnnouncement, remote) =>
+      processOrderingBlockAnnouncement(oba, hr, remote)
   }
 
   def initialized(hr: ErgoHistory,

@@ -3,6 +3,8 @@ package org.ergoplatform.mining
 import com.google.common.primitives.{Bytes, Ints, Longs}
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.SubBlockAlgos.subsPerBlock
+import org.ergoplatform.{AutolykosSolution, BlockSolutionSearchResult, InputBlockFound, InputBlockHeaderFound, InputSolutionFound, NoSolutionFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound, OrderingSolutionFound, ProveBlockResult}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
@@ -12,6 +14,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer, Head
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
+import org.ergoplatform.settings.Parameters
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{ModifierId, ScorexLogging}
@@ -106,7 +109,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
       // for version 1, we check equality of left and right sides of the equation
       require(checkPoWForVersion1(header), "Incorrect points")
     } else {
-      require(checkPoWForVersion2(header), "h(f) < b condition not met")
+      require(checkOrderingBlockPoW(header), "h(f) < b condition not met")
     }
   }
 
@@ -116,13 +119,21 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     * @param header - header to check PoW for
     * @return whether PoW is valid or not
     */
-  def checkPoWForVersion2(header: Header): Boolean = {
-    val b = getB(header.nBits)
+  def checkOrderingBlockPoW(header: Header): Boolean = {
     // for version 2, we're calculating hit and compare it with target
     val hit = hitForVersion2(header)
+
+    val b = getB(header.nBits)
     hit < b
   }
 
+  def checkInputBlockPoW(header: Header): Boolean = {
+    val hit = hitForVersion2(header) // todo: cache hit in header
+
+    val orderingTarget = getB(header.nBits)
+    val inputTarget = orderingTarget * subsPerBlock // todo: use adjustable subsPerBlock
+    hit < inputTarget
+  }
   /**
     * Check PoW for Autolykos v1 header
     *
@@ -241,7 +252,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   /**
     * Get target `b` from encoded difficulty `nBits`
     */
-  private[mining] def getB(nBits: Long): BigInt = {
+  def getB(nBits: Long): BigInt = {
     q / DifficultySerializer.decodeCompactBits(nBits)
   }
 
@@ -278,6 +289,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   //Proving-related code which is not critical for consensus below
 
+
   /**
     * Autolykos solver suitable for CPU-mining in testnet and devnets.
     *
@@ -295,7 +307,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
             votes: Array[Byte],
             sk: PrivateKey,
             minNonce: Long = Long.MinValue,
-            maxNonce: Long = Long.MaxValue): Option[Header] = {
+            maxNonce: Long = Long.MaxValue): ProveBlockResult = {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
 
     val h = HeaderWithoutPow(version, parentId, adProofsRoot, stateRoot, transactionsRoot, timestamp,
@@ -305,7 +317,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val x = randomSecret()
     val hbs = Ints.toByteArray(h.height)
     val N = calcN(h)
-    checkNonces(version, hbs, msg, sk, x, b, N, minNonce, maxNonce).map(solution => h.toHeader(solution))
+    checkNonces(version, hbs, msg, sk, x, b, N, minNonce, maxNonce) match {
+      case NoSolutionFound => NothingFound
+      case InputSolutionFound(as) => InputBlockHeaderFound(h.toHeader(as))
+      case OrderingSolutionFound(as) => OrderingBlockHeaderFound(h.toHeader(as))
+    }
   }
 
   /**
@@ -323,17 +339,23 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                  votes: Array[Byte],
                  sk: PrivateKey,
                  minNonce: Long = Long.MinValue,
-                 maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
+                 maxNonce: Long = Long.MaxValue): ProveBlockResult = {
 
     val transactionsRoot = BlockTransactions.transactionsRoot(transactions, version)
     val adProofsRoot = ADProofs.proofDigest(adProofBytes)
 
-    prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
-      timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce).map { h =>
+    def constructBlockFromHeader(h: Header) = {
       val adProofs = ADProofs(h.id, adProofBytes)
       val blockTransactions = BlockTransactions(h.id, version, transactions)
       val extension = extensionCandidate.toExtension(h.id)
       new ErgoFullBlock(h, blockTransactions, extension, Some(adProofs))
+    }
+
+    prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot,
+      timestamp, extensionCandidate.digest, votes, sk, minNonce, maxNonce) match {
+      case NothingFound => NothingFound
+      case InputBlockHeaderFound(h) => InputBlockFound(constructBlockFromHeader(h))
+      case OrderingBlockHeaderFound(h) => OrderingBlockFound(constructBlockFromHeader(h))
     }
   }
 
@@ -344,7 +366,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   def proveCandidate(candidateBlock: CandidateBlock,
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
-                     maxNonce: Long = Long.MaxValue): Option[ErgoFullBlock] = {
+                     maxNonce: Long = Long.MaxValue): ProveBlockResult = {
     proveBlock(candidateBlock.parentOpt,
       candidateBlock.version,
       candidateBlock.nBits,
@@ -362,7 +384,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
-    * Return AutolykosSolution if there is any valid nonce in this interval.
+    * Return BlockSolutionSearchResult if there is any valid nonce in this interval, for ordering or input block.
     */
   private[mining] def checkNonces(version: Header.Version,
                                   h: Array[Byte],
@@ -372,14 +394,17 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
                                   b: BigInt,
                                   N: Int,
                                   startNonce: Long,
-                                  endNonce: Long): Option[AutolykosSolution] = {
+                                  endNonce: Long): BlockSolutionSearchResult = {
+
+    val subblocksPerBlock = Parameters.SubsPerBlockDefault // todo : make adjustable
+
     log.debug(s"Going to check nonces from $startNonce to $endNonce")
     val p1 = groupElemToBytes(genPk(sk))
     val p2 = groupElemToBytes(genPk(x))
 
     @tailrec
-    def loop(i: Long): Option[AutolykosSolution] = if (i == endNonce) {
-      None
+    def loop(i: Long): BlockSolutionSearchResult = if (i == endNonce) {
+      NoSolutionFound
     } else {
       if (i % 1000000 == 0 && i > 0) println(s"$i nonce tested")
       val nonce = Longs.toByteArray(i)
@@ -397,8 +422,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
         toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
       }
       if (d <= b) {
-        log.debug(s"Solution found at $i")
-        Some(AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+        log.debug(s"Ordering block solution found at $i")
+        OrderingSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+      } else if (d <= b * subblocksPerBlock) {
+        log.debug(s"Input block solution found at $i")
+        InputSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {
         loop(i + 1)
       }

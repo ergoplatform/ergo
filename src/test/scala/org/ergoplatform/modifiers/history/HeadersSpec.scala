@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers.history
 
 import com.google.common.primitives.Longs
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
@@ -12,8 +13,12 @@ class HeadersSpec extends ErgoCorePropertyTest {
   val chain: HeaderChain = genHeaderChain(50, diffBitsOpt = None, useRealTs = false)
   val genesisId: ModifierId = chain.head.id
 
-  private def mutateNonce(nonce: Array[Byte]): Array[Byte] = {
-    Longs.toByteArray(Longs.fromByteArray(nonce) + 1)
+  private def mutateNonce(s: AutolykosSolution) = {
+    new AutolykosSolution(s.pk, s.w, Longs.toByteArray(Longs.fromByteArray(s.n) + 1), s.d)
+  }
+
+  private def mutateD(s: AutolykosSolution) = {
+    new AutolykosSolution(s.pk, s.w, s.n, s.d + 1)
   }
 
   property("Any field change should lead to different id") {
@@ -27,9 +32,9 @@ class HeadersSpec extends ErgoCorePropertyTest {
       header.copy(nBits = header.nBits + 1).id should not equal initialId
       header.copy(height = header.height + 1).id should not equal initialId
       header.copy(extensionRoot = Blake2b256(header.extensionRoot)).id should not equal initialId
-      header.copy(powSolution = header.powSolution.copy(n = mutateNonce(header.powSolution.n))).id should not equal initialId
+      header.copy(powSolution = mutateNonce(header.powSolution)).id should not equal initialId
       if(header.version == 1) {
-        header.copy(powSolution = header.powSolution.copy(d = header.powSolution.d + 1)).id should not equal initialId
+        header.copy(powSolution = mutateD(header.powSolution)).id should not equal initialId
       }
     }
   }

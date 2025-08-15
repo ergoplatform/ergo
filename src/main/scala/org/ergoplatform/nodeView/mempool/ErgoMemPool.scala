@@ -264,7 +264,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 }
 
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
-                utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
+                // todo : save softFields tolerance status
+                utxoWithPool.validateWithCost(tx, validationContext, costLimit, None, softFieldsAllowed = true) match {
                   case Success(cost) =>
                     acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
                   case Failure(ex) =>

@@ -16,7 +16,7 @@ import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
   * its database of available nodes rather than waiting for unsolicited `Peers`
   * messages to arrive over time.
   */
-object GetPeersSpec extends MessageSpecV1[Unit] {
+object GetPeersSpec extends MessageSpecInitial[Unit] {
   override val messageCode: MessageCode = 1: Byte
 
   override val messageName: String = "GetPeers message"
@@ -41,7 +41,7 @@ object PeersSpec {
   * The `Peers` message is a reply to a `GetPeer` message and relays connection information about peers
   * on the network.
   */
-class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
+class PeersSpec(peersLimit: Int) extends MessageSpecInitial[Seq[PeerSpec]] {
 
   override val messageCode: MessageCode = PeersSpec.messageCode
 
@@ -64,7 +64,7 @@ class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
 /**
   * The `GetSnapshotsInfo` message requests an `SnapshotsInfo` message from the receiving node
   */
-object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
+object GetSnapshotsInfoSpec extends MessageSpecInitial[Unit] {
   private val SizeLimit = 100
 
   override val messageCode: MessageCode = 76: Byte
@@ -83,7 +83,7 @@ object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
   * The `SnapshotsInfo` message is a reply to a `GetSnapshotsInfo` message.
   * It contains information about UTXO set snapshots stored locally.
   */
-object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
+object SnapshotsInfoSpec extends MessageSpecInitial[SnapshotsInfo] {
   private val SizeLimit = 20000
 
   override val messageCode: MessageCode = 77: Byte
@@ -115,7 +115,7 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
 /**
   * The `GetManifest` sends manifest (BatchAVLProverManifest) identifier
   */
-object GetManifestSpec extends MessageSpecV1[ManifestId] {
+object GetManifestSpec extends MessageSpecInitial[ManifestId] {
   private val SizeLimit = 100
 
   override val messageCode: MessageCode = 78: Byte
@@ -136,7 +136,7 @@ object GetManifestSpec extends MessageSpecV1[ManifestId] {
   * The `Manifest` message is a reply to a `GetManifest` message.
   * It contains serialized manifest, top subtree of a tree authenticating UTXO set snapshot
   */
-object ManifestSpec extends MessageSpecV1[Array[Byte]] {
+object ManifestSpec extends MessageSpecInitial[Array[Byte]] {
   private val SizeLimit = 4000000
 
   override val messageCode: MessageCode = 79: Byte
@@ -160,7 +160,7 @@ object ManifestSpec extends MessageSpecV1[Array[Byte]] {
 /**
   * The `GetUtxoSnapshotChunk` sends send utxo subtree (BatchAVLProverSubtree) identifier
   */
-object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
+object GetUtxoSnapshotChunkSpec extends MessageSpecInitial[SubtreeId] {
   private val SizeLimit = 100
 
   override val messageCode: MessageCode = 80: Byte
@@ -181,7 +181,7 @@ object GetUtxoSnapshotChunkSpec extends MessageSpecV1[SubtreeId] {
 /**
   * The `UtxoSnapshotChunk` message is a reply to a `GetUtxoSnapshotChunk` message.
   */
-object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
+object UtxoSnapshotChunkSpec extends MessageSpecInitial[Array[Byte]] {
   private val SizeLimit = 4000000
 
   override val messageCode: MessageCode = 81: Byte

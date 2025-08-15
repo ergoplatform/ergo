@@ -13,7 +13,7 @@ import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import org.ergoplatform.core._
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
 import scorex.util.ScorexLogging
@@ -29,8 +29,7 @@ class DigestState protected(override val version: VersionTag,
                             override val store: LDBVersionedStore,
                             override val ergoSettings: ErgoSettings)
   extends ErgoState[DigestState]
-    with ScorexLogging
-    with ScorexEncoding {
+    with ScorexLogging {
 
   store.lastVersionID
     .foreach(id => require(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
@@ -82,17 +81,17 @@ class DigestState protected(override val version: VersionTag,
       Failure(new Exception(s"Modifier not validated: $a"))
   }
 
-  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[DigestState] =
+  override def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedBlockSection => Unit): Try[DigestState] =
     (processFullBlock orElse processHeader orElse processOther) (mod)
 
   @SuppressWarnings(Array("OptionGet"))
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
-    log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
+    log.info(s"Rollback Digest State to version ${Algos.encode(version)}")
     val versionBytes = org.ergoplatform.core.versionToBytes(version)
     Try(store.rollbackTo(versionBytes)).map { _ =>
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
-      log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
+      log.info(s"Rollback to version ${Algos.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
       new DigestState(version, rootHash, store, ergoSettings)
     }
   }
@@ -149,6 +148,8 @@ class DigestState protected(override val version: VersionTag,
     }
   }
 
+  override def applyInputBlock(txs: Seq[ErgoTransaction], previousTxs: Seq[ErgoTransaction], header: Header): Try[Unit] = ???
+
 }
 
 object DigestState extends ScorexLogging with ScorexEncoding {
@@ -200,7 +201,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
       case Success(state) => state
       case Failure(e) =>
         store.close()
-        log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
+        log.warn(s"Failed to create state with ${versionOpt.map(Algos.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
         ErgoState.generateGenesisDigestState(dir, settings)
     }
   }

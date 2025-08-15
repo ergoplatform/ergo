@@ -4,8 +4,9 @@ import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor}
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.mining.AutolykosSolutionJsonCodecs
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, PreHeader}
@@ -21,6 +22,7 @@ import sigma.{Colls, VersionContext}
 import sigma.Extensions._
 import sigma.crypto.EcPointType
 import sigma.data.{CBigInt, CGroupElement, CHeader}
+import org.ergoplatform.mining.AutolykosSolutionJsonCodecs._
 
 import scala.annotation.nowarn
 import scala.concurrent.duration.FiniteDuration
@@ -59,7 +61,7 @@ case class Header(override val version: Header.Version,
                   override val sizeOpt: Option[Int] = None) extends HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
   nBits, height, extensionRoot, votes, unparsedBytes) with PreHeader with BlockSection {
 
-  override def serializedId: Array[Header.Version] = Algos.hash(bytes)
+  override def serializedId: Array[Byte] = Algos.hash(bytes)
 
   override type M = Header
 
@@ -79,8 +81,8 @@ case class Header(override val version: Header.Version,
     * Expected identifiers of the block sections corresponding to this header
     */
   @nowarn
-  lazy val sectionIds: Seq[(NetworkObjectTypeId.Value, ModifierId)] =
-    Array(
+  lazy val sectionIds: Map[NetworkObjectTypeId.Value, ModifierId] =
+    Map(
       (ADProofs.modifierTypeId, ADProofsId),
       (BlockTransactions.modifierTypeId, transactionsId),
       (Extension.modifierTypeId, extensionId)
@@ -90,7 +92,11 @@ case class Header(override val version: Header.Version,
     * Expected identifiers of the block sections corresponding to this header,
     * except of state transformations proof section id
     */
-  lazy val sectionIdsWithNoProof: Seq[(NetworkObjectTypeId.Value, ModifierId)] = sectionIds.tail
+  lazy val sectionIdsWithNoProof: Map[NetworkObjectTypeId.Value, ModifierId] =
+    Map(
+      (BlockTransactions.modifierTypeId, transactionsId),
+      (Extension.modifierTypeId, extensionId)
+    )
 
   override lazy val toString: String = s"Header(${this.asJson.noSpaces})"
 
@@ -187,7 +193,7 @@ object Header extends ApiCodecs {
       "parentId" -> Algos.encode(h.parentId).asJson,
       "timestamp" -> h.timestamp.asJson,
       "extensionHash" -> Algos.encode(h.extensionRoot).asJson,
-      "powSolutions" -> h.powSolution.asJson,
+      "powSolutions" -> h.powSolution.asJson(AutolykosSolutionJsonCodecs.jsonEncoder),
       "nBits" -> h.nBits.asJson,
       "height" -> h.height.asJson,
       "difficulty" -> h.requiredDifficulty.toString.asJson,
@@ -213,7 +219,7 @@ object Header extends ApiCodecs {
       height <- c.downField("height").as[Int]
       version <- c.downField("version").as[Byte]
       votes <- c.downField("votes").as[String]
-      solutions <- c.downField("powSolutions").as[AutolykosSolution]
+      solutions <- c.downField("powSolutions").as[AutolykosSolution]((AutolykosSolutionJsonCodecs.jsonDecoder))
       unparsedBytes <- c.downField("unparsedBytes").as[Option[Array[Byte]]]
     } yield Header(version, parentId, adProofsRoot, stateRoot,
       transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get,

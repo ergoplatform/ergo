@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
+import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util.ScorexLogging
@@ -32,7 +33,7 @@ class ErgoMiningThread(
       1.second,
       ergoSettings.nodeSettings.internalMinerPollingInterval,
       candidateGenerator,
-      GenerateCandidate(Seq.empty, reply = true, forced = false)
+      GenerateCandidate(Seq.empty, reply = true)
     )(context.dispatcher, self)
   }
 
@@ -61,19 +62,26 @@ class ErgoMiningThread(
       }
     case StatusReply.Error(ex) =>
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
+      context.become(mining(nonce + 1, candidateBlock, solvedBlocksCount))
+      self ! MineCmd
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
       context.become(mining(nonce, candidateBlock, solvedBlocksCount + 1))
     case MineCmd =>
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck) match {
-        case Some(newBlock) =>
-          log.info(s"Found solution, sending it for validation")
-          candidateGenerator ! newBlock.header.powSolution
-        case None =>
+        case OrderingBlockFound(newBlock) =>
+          log.info(s"Found solution for ordering block, sending it for validation")
+          candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
+        case InputBlockFound(newBlock) =>
+          log.info(s"Found solution for input block, sending it for validation")
+          candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
+        case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
           context.become(mining(lastNonceToCheck, candidateBlock, solvedBlocksCount))
           self ! MineCmd
+        case _ =>
+          //todo : rework ProveBlockResult hierarchy to avoid this branch
       }
     case GetSolvedBlocksCount =>
       sender() ! SolvedBlocksCount(solvedBlocksCount)

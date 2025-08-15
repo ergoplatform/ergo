@@ -43,7 +43,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "6.0.2"
+val sigmaStateVersion = "5.0.15-538-9a8cc1b1-SNAPSHOT"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)

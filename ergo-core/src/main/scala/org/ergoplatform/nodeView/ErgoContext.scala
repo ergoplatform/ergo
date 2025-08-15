@@ -13,7 +13,8 @@ class ErgoContext(val stateContext: ErgoStateContext,
                   transactionContext: TransactionContext,
                   inputContext: InputContext,
                   override val costLimit: Long,
-                  override val initCost: Long)
+                  override val initCost: Long,
+                  override val softFieldsAllowed: Boolean)
   extends ErgoLikeContext(ErgoInterpreter.avlTreeFromDigest(stateContext.previousStateDigest),
     stateContext.sigmaLastHeaders,
     stateContext.sigmaPreHeader,
@@ -25,5 +26,6 @@ class ErgoContext(val stateContext: ErgoStateContext,
     stateContext.validationSettings.sigmaSettings,
     costLimit,
     initCost,
-    activatedScriptVersion = (stateContext.blockVersion - 1).toByte // block version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
+    activatedScriptVersion = (stateContext.blockVersion - 1).toByte, // block version N of ErgoProtocol corresponds to version N-1 of ErgoTree (aka script version)
+    softFieldsAllowed
   )

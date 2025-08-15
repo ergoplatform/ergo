@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingBlockFound}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
@@ -45,7 +45,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
-    await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true, forced = false)).mapTo[Candidate].map(_.externalVersion))
+    await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true)).mapTo[Candidate].map(_.externalVersion))
 
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettingsReader.read()
@@ -116,7 +116,8 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
         ErgoTransaction(costlyTx.inputs, costlyTx.dataInputs, costlyTx.outputCandidates),
         r.s.stateContext,
         costLimit = 440000,
-        None
+        None,
+        softFieldsAllowed = true
       ).get
     txCost shouldBe 439080
 
@@ -258,12 +259,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
 
     testProbe.expectNoMessage(200.millis)
-    minerRef.tell(GenerateCandidate(Seq(tx2), reply = true, forced = false), testProbe.ref)
+    minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val block = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+          .asInstanceOf[OrderingBlockFound]  // todo: fix
+          .fb
         testProbe.expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
 
@@ -307,7 +309,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     passiveMiner ! StartMining
 
     implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 200.millis) // it takes a while before PK is set
-    eventually(await(passiveMiner.askWithStatus(GenerateCandidate(Seq.empty, reply = true, forced = false)).mapTo[Candidate]))
+    eventually(await(passiveMiner.askWithStatus(GenerateCandidate(Seq.empty, reply = true)).mapTo[Candidate]))
     system.terminate()
   }
 

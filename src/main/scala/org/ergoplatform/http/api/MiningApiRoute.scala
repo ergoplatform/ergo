@@ -6,13 +6,14 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
+import org.ergoplatform.mining.{AutolykosSolutionJsonCodecs, CandidateGenerator, ErgoMiner, WeakAutolykosSolution}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
-import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
+import org.ergoplatform.{AutolykosSolution, ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import sigma.data.ProveDlog
+import AutolykosSolutionJsonCodecs.jsonDecoder
 
 import scala.concurrent.Future
 
@@ -36,7 +37,7 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate. Useful for external miners.
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true, forced = false)
+    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }
@@ -48,12 +49,21 @@ case class MiningApiRoute(miner: ActorRef,
   def candidateWithTxsR: Route = (path("candidateWithTxs")
     & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
 
-    val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true, forced = false)
+    val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
+    val result = if (ergoSettings.nodeSettings.useExternalMiner) {
+      miner.askWithStatus(solution).mapTo[Unit]
+    } else {
+      Future.failed(new Exception("External miner support is inactive"))
+    }
+    ApiResponse(result)
+  }
+
+  def weakSolutionR: Route = (path("weakSolution") & post & entity(as[WeakAutolykosSolution])) { solution =>
     val result = if (ergoSettings.nodeSettings.useExternalMiner) {
       miner.askWithStatus(solution).mapTo[Unit]
     } else {

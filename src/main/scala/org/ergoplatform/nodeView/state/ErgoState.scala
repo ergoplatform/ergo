@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.settings.Constants.FalseTree
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -49,16 +49,18 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   /**
     *
-    * @param mod modifire to apply to the state
+    * @param mod modifier to apply to the state
     * @param estimatedTip - estimated height of blockchain tip
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State
     */
-  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
+  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedBlockSection => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
+
+  def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Unit]
 
   /**
     * @return read-only view of this state
@@ -105,7 +107,8 @@ object ErgoState extends ScorexLogging {
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext,
-                       nodeSettings: NodeConfigurationSettings)
+                       nodeSettings: NodeConfigurationSettings,
+                       softFieldsAllowed: Boolean = true)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
@@ -132,7 +135,7 @@ object ErgoState extends ScorexLogging {
       }
     }
 
-    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(-1)
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
@@ -151,7 +154,7 @@ object ErgoState extends ScorexLogging {
           .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
           .payload[Long](validCostResult.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
+            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value, softFieldsAllowed)(verifier).result
           }
       }
       costResult
@@ -257,7 +260,7 @@ object ErgoState extends ScorexLogging {
   /**
     * Genesis state boxes generator.
     * Genesis state is corresponding to the state before the very first block processed.
-    * For Ergo mainnet, contains emission contract box, proof-of-no--premine box, and treasury contract box
+    * For Ergo mainnet, contains emission contract box, proof-of-no-premine box, and treasury contract box
     */
   def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
     Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))

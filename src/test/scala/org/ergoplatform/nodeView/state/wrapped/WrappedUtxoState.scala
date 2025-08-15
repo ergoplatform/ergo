@@ -9,7 +9,7 @@ import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.core.{VersionTag, idToVersion}
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
@@ -35,7 +35,7 @@ class WrappedUtxoState(prover: PersistentBatchAVLProver[Digest32, HF],
   }
 
   override def applyModifier(mod: BlockSection, estimatedTip: Option[Height] = None)
-                            (generate: LocallyGeneratedModifier => Unit): Try[WrappedUtxoState] =
+                            (generate: LocallyGeneratedBlockSection => Unit): Try[WrappedUtxoState] =
     super.applyModifier(mod, estimatedTip)(generate) match {
       case Success(us) =>
         mod match {

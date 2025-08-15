@@ -21,6 +21,11 @@ sealed trait PeerFilteringRule {
   def filter(peers: Iterable[ConnectedPeer]): Iterable[ConnectedPeer] = {
     peers.filter(cp => condition(cp))
   }
+
+  def partition(peers: Iterable[ConnectedPeer]): (Iterable[ConnectedPeer], Iterable[ConnectedPeer]) = {
+    peers.partition(condition)
+  }
+
 }
 
 
@@ -40,7 +45,7 @@ trait VersionBasedPeerFilteringRule extends PeerFilteringRule {
     * @return - whether the peer should be selected
     */
   override def condition(peer: ConnectedPeer): Boolean = {
-    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.Eip37ForkVersion)
     condition(version)
   }
 
@@ -83,7 +88,7 @@ object NipopowSupportFilter extends PeerFilteringRule {
     * @return - whether the peer should be selected
     */
   override def condition(peer: ConnectedPeer): Boolean = {
-    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.initial)
+    val version = peer.peerInfo.map(_.peerSpec.protocolVersion).getOrElse(Version.Eip37ForkVersion)
 
     peer.mode.flatMap(_.nipopowBootstrapped).isEmpty &&
       version.compare(Version.NipopowActivationVersion) >= 0
@@ -111,3 +116,13 @@ object HeadersDownloadFilter extends PeerFilteringRule {
     peer.mode.exists(_.allHeadersAvailable)
   }
 }
+
+object SubBlocksFilter extends VersionBasedPeerFilteringRule {
+
+  def condition(version: Version): Boolean = {
+    // If neighbour version is >= `SubblocksVersion`, the neighbour supports sub-blocks protocol
+    version.compare(Version.SubblocksVersion) >= 0
+  }
+
+}
+

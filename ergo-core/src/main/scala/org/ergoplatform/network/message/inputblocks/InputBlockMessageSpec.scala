@@ -7,7 +7,8 @@ import scorex.util.serialization.{Reader, Writer}
 
 /**
   * Message that is informing about sub block produced.
-  * Contains header and link to previous sub block ().
+  * Contains header and extension section fields related to sub-blocks (such as link to previous sub block),
+  * along with Merkle proof for them.
   */
 object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockInfo] {
 

@@ -59,13 +59,13 @@ trait InputBlocksProcessor extends ScorexLogging {
     *
     * We use Google Guava's cache with expiration, remove from cache after few ordering blocks of confirmation,
     * but in case of a transaction got into an input-blocks fork not confirmed by ordering blocks it can be stuck in
-    * the cachec till expiration (8 hours now)
+    * the cache till expiration (8 hours now)
     */
   // todo: elements of the cache are accessed via getIfPresent without being checked for null result
   // todo: as they should be in the cache always, but in some extreme cases could be possible exceptions
   private val transactionsCache = CacheBuilder.newBuilder()
     .maximumSize(1000000)
-    .expireAfterWrite(480, TimeUnit.MINUTES) // 8 hours
+    .expireAfterWrite(120, TimeUnit.MINUTES) // 2 hours
     .build[ModifierId, ErgoTransaction]()
 
 

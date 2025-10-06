@@ -233,9 +233,15 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case ScanInputBlock(txs) =>
       // todo: more efficient processing
-      txs.foreach{tx =>
+      txs.foreach { tx =>
         self ! ScanOffChain(tx)
       }
+
+      // todo: utxoStateReaderOpt will be reset on first mempool update or another input block, fix
+      val sOpt = state.utxoStateReaderOpt.map(_.withTransactions(txs))
+      val newState = state.copy(utxoStateReaderOpt = sOpt)
+      context.become(loadedWallet(newState))
+
 
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>

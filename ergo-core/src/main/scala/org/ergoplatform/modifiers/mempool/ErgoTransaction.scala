@@ -60,6 +60,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
                            override val sizeOpt: Option[Int] = None)
   extends ErgoLikeTransaction(inputs, dataInputs, outputCandidates)
     with Signable
+    with OutputsHolder
     with ErgoNodeViewModifier
     with ScorexLogging {
 

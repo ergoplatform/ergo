@@ -69,6 +69,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
       }
 
+      boxes.size shouldBe 2
       
       // Generate second transaction that spends outputs from first transaction
       eventually {

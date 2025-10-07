@@ -38,6 +38,8 @@
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\todo}[1]{{\color{red}TODO: #1}}
 
+\newcommand{\knote}[1]{{\authnote{\textcolor{green}{Alex notes}}{#1}}}
+
 \begin{document}
 
 \title{Matrix: Splitting Ergo Blocks Into Input and Ordering Blocks For Fast Transaction Propagation and Confirmation}
@@ -75,27 +77,10 @@ faster transaction propagation and confirmation in flat commodity-hardware power
 has the same security as original proof-of-work blockhain, while nearly fully utilizing network bandwidth~(and so achieving
 maximum performance possible).
 
-\subsection{Motivation}
+The rest of the paper is organized as follows. In Section ? we outline architectural overview of the proposal. In
+Section ? we provide security arguments, namely, prove that security-wise Ergo protocol will be the same after update.
+In Section ? we provide implementation details.
 
-The primary limitations of the current Ergo architecture include:
-
-\begin{itemize}
-\item \textbf{Confirmation Latency}: 2-minute average block time creates user-facing delays
-\item \textbf{Network Bottlenecks}: Full block propagation consumes significant bandwidth
-\item \textbf{Time Variance}: Block time distribution leads to unpredictable confirmations
-\item \textbf{Inefficient Propagation}: Transactions and blocks share the same propagation channel
-\end{itemize}
-
-\subsection{Solution Overview}
-
-The Input Blocks architecture addresses these limitations through:
-
-\begin{itemize}
-\item \textbf{Dual Blockchain Structure}: Separation of transaction processing (Input Blocks) from consensus finalization (Ordering Blocks)
-\item \textbf{Soft-fork Compatibility}: Gradual deployment without chain splits
-\item \textbf{Backward Compatibility}: Existing nodes continue to function normally
-\item \textbf{Performance Optimization}: 64x more frequent "confirmations" via Input Blocks
-\end{itemize}
 
 \section{Architectural Overview}
 

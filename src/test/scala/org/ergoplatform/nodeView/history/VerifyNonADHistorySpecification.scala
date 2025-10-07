@@ -218,4 +218,204 @@ class VerifyNonADHistorySpecification extends ErgoCorePropertyTest {
     }
   }
 
+  property("chain reorganization scenarios - testing isLinkable indirectly") {
+    var history = genHistory()
+    
+    // Create initial chain
+    val chain = genChain(6, history)
+    history = applyChain(history, chain)
+    
+    // Create a fork that extends from block 3
+    val forkPoint = chain.take(3).last
+    val forkChain = genChain(4, forkPoint).tail
+    
+    // Apply the fork chain - this should trigger chain reorganization
+    // The isLinkable method is used internally to check if blocks can be linked
+    history = applyChain(history, forkChain)
+    
+    // Verify that the best chain has been updated to the fork
+    history.bestFullBlockIdOpt.get shouldEqual forkChain.last.id
+    
+    // Verify that blocks from the original chain that are not in the best chain anymore
+    // are still accessible but not marked as best chain
+    chain.drop(3).forall { block =>
+      !history.asInstanceOf[FullBlockProcessor].isInBestFullChain(block.id)
+    } shouldBe true
+    
+    // Verify that blocks from the fork are marked as best chain
+    forkChain.forall { block =>
+      history.asInstanceOf[FullBlockProcessor].isInBestFullChain(block.id)
+    } shouldBe true
+  }
+
+  property("multiple fork scenarios - testing isLinkable comprehensively") {
+    var history = genHistory()
+    
+    // Test 1: Block extending best chain directly
+    val chain = genChain(8, history)
+    // Apply headers first
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    // Then apply full blocks
+    history = applyChain(history, chain)
+    
+    // Update best full block to allow applying new blocks
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(chain.last.header)
+    }
+    
+    // Create a block that directly extends the best chain
+    val directExtension = genChain(1, chain.last).head
+    
+    // This should be applicable as it directly extends the best chain
+    // The isLinkable method would return true for this case
+    history.applicable(directExtension.header) shouldBe true
+    
+    // Test 2: Multiple forks from different points
+    val forkPoint1 = chain.take(4).last
+    val forkChain1 = genChain(3, forkPoint1).tail
+    
+    val forkPoint2 = chain.take(6).last  
+    val forkChain2 = genChain(2, forkPoint2).tail
+    
+    // Apply first fork - apply headers first
+    history = applyHeaderChain(history, HeaderChain(forkChain1.map(_.header)))
+    history = applyChain(history, forkChain1)
+    
+    // Apply second fork - apply headers first
+    history = applyHeaderChain(history, HeaderChain(forkChain2.map(_.header)))
+    history = applyChain(history, forkChain2)
+    
+    // Verify best chain is updated to the longest fork
+    history.bestFullBlockIdOpt.get shouldEqual forkChain2.last.id
+    
+    // Test 3: Orphan blocks with no connection to existing chain
+    // Create an independent chain that doesn't connect to the existing history
+    val independentChain = genChain(3)
+    val orphanBlock = independentChain.last
+    
+    // Orphan blocks should not be applicable as they don't connect to existing chain
+    // The isLinkable method would return false for this case
+    // Note: The orphan block's parent doesn't exist in our history
+    history.applicable(orphanBlock.header) shouldBe false
+    
+    // Test 4: Blocks extending non-best chains (forks)
+    val forkExtension = genChain(1, forkChain1.last).head
+    
+    // Blocks extending existing forks should be applicable
+    // The isLinkable method would return true for this case
+    history.applicable(forkExtension.header) shouldBe true
+  }
+
+  property("complex chain structure - testing isLinkable with deep forks") {
+    var history = genHistory()
+    
+    // Create a main chain
+    val mainChain = genChain(10, history)
+    // Apply headers first
+    history = applyHeaderChain(history, HeaderChain(mainChain.map(_.header)))
+    // Then apply full blocks
+    history = applyChain(history, mainChain)
+    
+    // Update best full block to allow applying new blocks
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(mainChain.last.header)
+    }
+    
+    // Create multiple forks at different heights
+    val forkAtHeight3 = genChain(5, mainChain.take(3).last).tail
+    val forkAtHeight6 = genChain(4, mainChain.take(6).last).tail
+    val forkAtHeight8 = genChain(3, mainChain.take(8).last).tail
+    
+    // Apply forks in order - each should trigger chain reorganization
+    history = applyChain(history, forkAtHeight3)
+    history.bestFullBlockIdOpt.get shouldEqual forkAtHeight3.last.id
+    
+    history = applyChain(history, forkAtHeight6)
+    history.bestFullBlockIdOpt.get shouldEqual forkAtHeight6.last.id
+    
+    history = applyChain(history, forkAtHeight8)
+    history.bestFullBlockIdOpt.get shouldEqual forkAtHeight8.last.id
+    
+    // Verify that all blocks from forks are properly linked
+    forkAtHeight3.forall { block =>
+      history.contains(block.id)
+    } shouldBe true
+    
+    forkAtHeight6.forall { block =>
+      history.contains(block.id)
+    } shouldBe true
+    
+    forkAtHeight8.forall { block =>
+      history.contains(block.id)
+    } shouldBe true
+    
+    // Create a new fork that extends from an old fork
+    val forkFromOldFork = genChain(2, forkAtHeight3.last).tail
+    
+    // This should be applicable as it extends an existing fork
+    history.applicable(forkFromOldFork.head.header) shouldBe true
+    
+    // Apply the fork from old fork
+    history = applyChain(history, forkFromOldFork)
+    
+    // The new fork should become best chain if it has higher cumulative difficulty
+    // (in this test setup, longer chains typically have higher difficulty)
+    history.bestFullBlockIdOpt.get shouldEqual forkFromOldFork.last.id
+  }
+
+  property("edge cases for chain linking - testing isLinkable robustness") {
+    var history = genHistory()
+    
+    // Test 1: Single block chain (genesis extension)
+    val singleBlock = genChain(1, history).head
+    // Apply headers first
+    history = applyHeaderChain(history, HeaderChain(Seq(singleBlock.header)))
+    // Then apply full blocks
+    history = applyChain(history, Seq(singleBlock))
+    
+    // Update best full block to allow applying new blocks
+    if (!history.isHeadersChainSynced) {
+      history.updateBestFullBlock(singleBlock.header)
+    }
+    
+    // Verify genesis block is properly linked
+    history.bestFullBlockIdOpt.get shouldEqual singleBlock.id
+    
+    // Test 2: Very short fork
+    val shortChain = genChain(3, history)
+    history = applyChain(history, shortChain)
+    
+    val veryShortFork = genChain(1, shortChain.take(1).last).tail
+    history = applyChain(history, veryShortFork)
+    
+    // Main chain should remain best (short fork has lower cumulative difficulty)
+    history.bestFullBlockIdOpt.get shouldEqual shortChain.last.id
+    
+    // Test 3: Blocks with same parent (competing blocks)
+    val parentBlock = shortChain.last
+    val competingBlock1 = genChain(1, parentBlock).head
+    val competingBlock2 = genChain(1, parentBlock).head
+    
+    // Both competing blocks should be applicable
+    history.applicable(competingBlock1.header) shouldBe true
+    history.applicable(competingBlock2.header) shouldBe true
+    
+    // Apply first competing block
+    history = applyChain(history, Seq(competingBlock1))
+    
+    // Second competing block should still be applicable (but will create a fork)
+    history.applicable(competingBlock2.header) shouldBe true
+    
+    // Test 4: Chain with gaps (simulating partial synchronization)
+    val gapChain = genChain(5)
+    
+    // Only apply some blocks from the chain
+    history = applyChain(history, Seq(gapChain.head, gapChain.last))
+    
+    // Middle blocks should still be applicable (they can be linked through headers)
+    gapChain.drop(1).dropRight(1).forall { block =>
+      history.applicable(block.header)
+    } shouldBe true
+  }
+
 }

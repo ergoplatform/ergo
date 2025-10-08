@@ -925,6 +925,310 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlockTransactions(ib1.id, tx1.map(_.weakId)) shouldBe Some(tx1)
   }
 
+  property("input block with transactions exceeding block cost limit should be rejected") {
+    val bh = BoxHolder(Seq(eb1, eb2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    // Create multiple transactions that together exceed the block cost limit
+    // We'll create transactions with many inputs/outputs to increase cost
+    val expensiveTransactions = (1 to 50).map { i =>
+      // Create a transaction with multiple inputs and outputs to increase cost
+      val input = if (i % 2 == 0) eb1 else eb2
+      val outputCandidate = new ErgoBoxCandidate(
+        input.value / 3, // Split value to create multiple outputs
+        input.ergoTree,
+        0,
+        input.additionalTokens,
+        input.additionalRegisters
+      )
+      
+      // Create transaction with multiple inputs and outputs to increase cost
+      // Use proper value distribution to avoid validation errors
+      new ErgoTransaction(
+        IndexedSeq(new Input(input.id, ProverResult.empty)),
+        IndexedSeq.empty,
+        IndexedSeq(
+          outputCandidate,
+          outputCandidate,
+          new ErgoBoxCandidate(
+            input.value - (input.value / 3) * 2, // Remaining value
+            input.ergoTree,
+            0,
+            input.additionalTokens,
+            input.additionalRegisters
+          )
+        )
+      )
+    }
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val r = h.applyInputBlock(ib)
+    r shouldBe None
+
+    h.bestInputBlocksChain() shouldBe Seq()
+    
+    // This should fail as the cumulative cost of transactions exceeds block limit
+    h.applyInputBlockTransactions(ib.id, expensiveTransactions, us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
+  property("input block with transactions within block cost limit should be accepted") {
+    val bh = BoxHolder(Seq(eb1, eb2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    // Use empty transactions which should be valid and have minimal cost
+    // This ensures the cumulative cost is within block limit
+    val validTransactions = Seq.empty[ErgoTransaction]
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val r = h.applyInputBlock(ib)
+    r shouldBe None
+
+    h.bestInputBlocksChain() shouldBe Seq()
+    
+    // This should succeed as the cumulative cost of transactions is within block limit
+    h.applyInputBlockTransactions(ib.id, validTransactions, us) shouldBe Seq(ib.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib.id)
+  }
+
+  property("transactions with cumulative cost over block limit spread across 2 input blocks should be accepted") {
+    // Create multiple boxes to avoid double spending
+    val boxes = (1 to 50).map { i =>
+      new ErgoBox(
+        value = 1000000000L,
+        ergoTree = ErgoTree.fromProposition(TrueProp),
+        creationHeight = 0,
+        additionalTokens = Colls.emptyColl,
+        additionalRegisters = Map.empty,
+        transactionId = bytesToId(Algos.hash(s"dummyTx$i")),
+        index = i.toShort
+      )
+    }
+    
+    val bh = BoxHolder(boxes)
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    // Create transactions that individually are within block limit but together exceed it
+    // We'll split them across 2 input blocks, each transaction spends a different box
+    val expensiveTransactions1 = (0 to 24).map { i =>
+      val input: ErgoBox = boxes(i)
+      val outputCandidate = new ErgoBoxCandidate(
+        input.value / 3,
+        input.ergoTree,
+        0,
+        input.additionalTokens,
+        input.additionalRegisters
+      )
+      
+      new ErgoTransaction(
+        IndexedSeq(new Input(input.id, ProverResult.empty)),
+        IndexedSeq.empty,
+        IndexedSeq(
+          outputCandidate,
+          outputCandidate,
+          new ErgoBoxCandidate(
+            input.value - (input.value / 3) * 2,
+            input.ergoTree,
+            0,
+            input.additionalTokens,
+            input.additionalRegisters
+          )
+        )
+      )
+    }
+
+    val expensiveTransactions2 = (25 to 49).map { i =>
+      val input: ErgoBox = boxes(i)
+      val outputCandidate = new ErgoBoxCandidate(
+        input.value / 3,
+        input.ergoTree,
+        0,
+        input.additionalTokens,
+        input.additionalRegisters
+      )
+      
+      new ErgoTransaction(
+        IndexedSeq(new Input(input.id, ProverResult.empty)),
+        IndexedSeq.empty,
+        IndexedSeq(
+          outputCandidate,
+          outputCandidate,
+          new ErgoBoxCandidate(
+            input.value - (input.value / 3) * 2,
+            input.ergoTree,
+            0,
+            input.additionalTokens,
+            input.additionalRegisters
+          )
+        )
+      )
+    }
+
+    // Create first input block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val r1 = h.applyInputBlock(ib1)
+    r1 shouldBe None
+
+    // Create second input block (child of first)
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val r2 = h.applyInputBlock(ib2)
+    r2 shouldBe None
+
+    h.bestInputBlocksChain() shouldBe Seq()
+    
+    // Apply transactions to first input block - should succeed
+    h.applyInputBlockTransactions(ib1.id, expensiveTransactions1, us) shouldBe Seq(ib1.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // Apply transactions to second input block - should succeed
+    // Even though cumulative cost across both blocks exceeds limit, each individual block is within limit
+    h.applyInputBlockTransactions(ib2.id, expensiveTransactions2, us) shouldBe Seq(ib2.id)
+    h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
+
+    // Apply ordering block after the two input blocks - should succeed
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+    applyChain(h, c4)
+    
+    // Verify that the ordering block was applied successfully
+    h.bestFullBlockOpt.get.id shouldBe c4.last.id
+    
+    // After applying ordering block, input block chain should be reset
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
+  property("apply input block with malformed header should be rejected") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    // Create input block with invalid parent (non-existent ordering block)
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val invalidParentHeader = c2(0).header.copy(parentId = bytesToId(Array.fill(32)(0.toByte)))
+    val invalidIb = InputBlockInfo(1, invalidParentHeader, InputBlockFields.empty, None)
+    
+    // The input block should be stored but won't be part of valid chain
+    h.applyInputBlock(invalidIb) shouldBe None
+    h.getInputBlock(invalidIb.id) shouldBe Some(invalidIb)
+    
+    // But it shouldn't be part of the best chain
+    h.bestInputBlocksChain() shouldBe Seq()
+    h.applyInputBlockTransactions(invalidIb.id, Seq.empty, us) shouldBe Seq()
+  }
+
+  property("apply input block with duplicate transactions should be rejected") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1.head
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+
+    // Try to apply duplicate transactions in same input block
+    val duplicateTxs = Seq(tx1, tx1) // Same transaction twice
+    
+    // This should be rejected due to duplicate transactions
+    h.applyInputBlockTransactions(ib1.id, duplicateTxs, us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
+  property("apply input block with transactions referencing non-existent UTXOs should be rejected") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+
+    // Create transaction spending a non-existent box (use a different box ID)
+    val nonExistentBox = new ErgoBox(
+      value = 1000000000L,
+      ergoTree = ErgoTree.fromProposition(TrueProp),
+      creationHeight = 0,
+      additionalTokens = Colls.emptyColl,
+      additionalRegisters = Map.empty,
+      transactionId = bytesToId(Algos.hash("nonExistentTx")),
+      index = 0
+    )
+    val invalidTx = new ErgoTransaction(
+      IndexedSeq(new Input(nonExistentBox.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb1.toCandidate)
+    )
+
+    // This should be rejected due to non-existent input
+    h.applyInputBlockTransactions(ib1.id, Seq(invalidTx), us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
+  property("apply input block with invalid script execution should be rejected") {
+    // Create a box with a script that will always fail
+    val alwaysFailBox = new ErgoBox(
+      value = 1000000000L,
+      ergoTree = compileSourceV5("false", 0), // Script that always returns false
+      creationHeight = 0,
+      additionalTokens = Colls.emptyColl,
+      additionalRegisters = Map.empty,
+      transactionId = bytesToId(Algos.hash("failTx")),
+      index = 0
+    )
+
+    val bh = BoxHolder(Seq(alwaysFailBox))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+
+    // Create transaction spending the always-fail box
+    val invalidTx = new ErgoTransaction(
+      IndexedSeq(new Input(alwaysFailBox.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(alwaysFailBox.toCandidate)
+    )
+
+    // This should be rejected due to script validation failure
+    h.applyInputBlockTransactions(ib1.id, Seq(invalidTx), us) shouldBe Seq()
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
   // test: test follow-up ordering blocks application, check that reference to bestInputBlock etc reset
 
   // todo : tests for digest state

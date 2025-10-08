@@ -375,7 +375,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.getAllPrioritized.map(_.transaction.id) shouldBe ids
 
     val conformingTxs = pool.take(3).toSeq
-    val stateWithTxs = wus.withUnconfirmedTransactions(conformingTxs)
+    val stateWithTxs = wus.withTransactions(conformingTxs)
 
     conformingTxs.map(_.transaction).flatMap(_.inputs).map(_.boxId).forall(bIb => stateWithTxs.boxById(bIb)
       .isDefined) shouldBe true

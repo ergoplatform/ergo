@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, OutputsHolder}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -161,24 +161,10 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
   }
 
   /**
-    * Producing a copy of the state which takes into account outputs of given transactions.
-    * Useful when checking mempool transactions.
-    */
-  def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, ergoSettings) {
-      lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
-
-      override def boxById(id: ADKey): Option[ErgoBox] = {
-        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
-      }
-    }
-  }
-
-  /**
    * Producing a copy of the state which takes into account outputs of given transactions.
    * Useful when checking mempool transactions.
    */
-  def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
+  def withTransactions(transactions: Seq[OutputsHolder]): UtxoState = {
     new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
@@ -192,6 +178,6 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * Producing a copy of the state which takes into account pool of unconfirmed transactions.
     * Useful when checking mempool transactions.
     */
-  def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
 
 }

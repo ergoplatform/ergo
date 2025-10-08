@@ -98,7 +98,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
-          val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
+          val stateToCheck = utxoState.withTransactions(toBroadcast)
           toBroadcast.foreach { unconfirmedTx =>
             if (unconfirmedTx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
               log.info(s"Rebroadcasting $unconfirmedTx")

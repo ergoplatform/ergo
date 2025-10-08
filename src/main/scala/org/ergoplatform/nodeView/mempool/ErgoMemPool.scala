@@ -265,7 +265,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
-              val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
+              val utxoWithPool = utxo.withTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
 
                 // added in 6.0 to check now versioned serializers

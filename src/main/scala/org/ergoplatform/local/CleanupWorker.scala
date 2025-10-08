@@ -75,7 +75,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     // Take into account other transactions from the pool.
     // This provides possibility to validate transactions which are spending off-chain outputs.
-    val state = validator.withUnconfirmedTransactions(allPoolTxs)
+    val state = validator.withTransactions(allPoolTxs)
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec

@@ -86,10 +86,18 @@ In Section ? we provide implementation details.
 
 \subsection{Dual Blockchain Structure}
 
-The Input Blocks architecture introduces a two-tier blockchain structure:
+The input/ordering blocks architecture introduces a two-tier blockchain structure like:
 
 \begin{align*}
 \text{Ordering Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Ordering Block}
+\end{align*}
+
+So instead of having just full-blocks, we have blocks of two roles here. In our design, though, this new structure is only used
+for limited number of last ordering blocks, then input blocks are pruned, and ordering blocks along with input blocks they are witnessing
+are compressed into full-blocks we have in the Ergo protocol right now:
+
+\begin{align*}
+    \text{Full Block}  \rightarrow \text{Full Block}  \rightarrow \text{Ordering Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Ordering Block}
 \end{align*}
 
 \subsection{Block Types and Properties}

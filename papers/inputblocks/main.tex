@@ -82,14 +82,14 @@ Section ? we provide security arguments, namely, prove that security-wise Ergo p
 In Section ? we provide implementation details.
 
 
-\section{Architectural Overview}
+\section{Architectural Overview}rightarrow
 
 \subsection{Dual Blockchain Structure}
 
 The input/ordering blocks architecture introduces a two-tier blockchain structure like:
 
 \begin{align*}
-\text{Ordering Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Ordering Block}
+\text{Ordering Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Ordering Block}
 \end{align*}
 
 So instead of having just full-blocks, we have blocks of two roles here. In our design, though, this new structure is only used
@@ -97,8 +97,10 @@ for limited number of last ordering blocks, then input blocks are pruned, and or
 are compressed into full-blocks we have in the Ergo protocol right now:
 
 \begin{align*}
-    \text{Full Block}  \rightarrow \text{Full Block}  \rightarrow \text{Ordering Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Input Block} \rightarrow \text{Ordering Block}
+    \text{Full Block}  \leftarrow \text{Full Block}  \leftarrow \text{Ordering Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Ordering Block}
 \end{align*}
+
+An input block is a by-product of mining process, i.e. they are block candidates with lower difficulty.
 
 \subsection{Block Types and Properties}
 

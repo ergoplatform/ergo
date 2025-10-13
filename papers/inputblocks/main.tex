@@ -77,6 +77,21 @@ faster transaction propagation and confirmation in flat commodity-hardware power
 has the same security as original proof-of-work blockhain, while nearly fully utilizing network bandwidth~(and so achieving
 maximum performance possible).
 
+While the proposed solution is generic and may be applied to different Proof-of-Work networks~(probably, including
+Bitcoin), in this work we focus on improving network bandwidth utilization and transaction confirmation time in Ergo network.
+
+Talking about the Ergo network, a block is generated every two minutes on average, and confirmed transactions are propagated along with
+other block sections. This is not efficient at all. Most of new block's transactions are already available in a node's mempool, and
+bottlenecking network bandwidth after two minutes of (more or less) idle state is downgrading network performance (for
+more, see motivation in [1]).
+
+Also, while average block delay in Ergo is 2 minutes, variance is high, and often a user may wait 10 minutes for
+first confirmation. Proposals to lower variance are introducing experimental and controversial changes in consensus protocol.
+Changing block delay via hardfork would have a lot of harsh consequences (e.g. many contracts relying on current block
+delay would be broken), and security of consensus after reducing block delay under bounded processing capacity could be
+compromised [2]. Thus it makes sense to consider weaker notions of confirmation which still could be useful for
+a variety of applications.
+
 The rest of the paper is organized as follows. In Section ? we outline architectural overview of the proposal. In
 Section ? we provide security arguments, namely, prove that security-wise Ergo protocol will be the same after update.
 In Section ? we provide implementation details.

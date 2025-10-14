@@ -97,11 +97,12 @@ Section ? we provide security arguments, namely, prove that security-wise Ergo p
 In Section ? we provide implementation details.
 
 
-\section{Architectural Overview}rightarrow
+\section{Architectural Overview}
 
 \subsection{Dual Blockchain Structure}
 
-The input/ordering blocks architecture introduces a two-tier blockchain structure like:
+Following ideas in PRISM~\cite{bagaria2019prism}, parallel Proof-of-Work~\cite{garay2024proof}, and Tailstorm~\cite{keller2023tailstorm}, we introduce two kinds of blocks in the Ergo
+via non-breaking consensus protocol update. The input/ordering blocks architecture introduces a two-tier blockchain structure like:
 
 \begin{align*}
 \text{Ordering Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Ordering Block}
@@ -115,7 +116,25 @@ are compressed into full-blocks we have in the Ergo protocol right now:
     \text{Full Block}  \leftarrow \text{Full Block}  \leftarrow \text{Ordering Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Ordering Block}
 \end{align*}
 
-An input block is a by-product of mining process, i.e. they are block candidates with lower difficulty.
+An input block is a by-product of mining process, i.e. they are block candidates with lower difficulty. For starters,
+lets revisit blocks in current Ergo protocol, which is classic Proof-of-Work protocol formalized in~\cite{garay2024bitcoin}. A valid block
+is a set of (semantically valid) header fields (and corresponding valid block sections, such as block transactions),
+including special field to iterate over, called nonce, such as $H(b) < T$, where $H()$ is Autolykos Proof-of-Work
+function, *b* are block header bytes (including nonce), and $T$ is a Proof-of-Work *target* value. A value which is reverse
+to target is called difficulty $D$: $D = 2^256 / T$~\footnote{in fact, slightly less value than $2^256$ is being used, namely, order of
+secp256k1 curve group, this is inherited from initial Autolykos 1 Proof-of-Work algorithm}. $D$ (and so $T$) is being readjusted
+regularly via a deterministic procedure (called difficulty readjustment algorithm) to have blocks coming every two minutes on average.
+
+Aside of blocks, *superblocks" are also used in the Ergo protocol, for building NiPoPoWs on top of them. A superblock is
+a block which is more difficult to find than an ordinary, for example, for a (level-1) superblock *S* we may require
+$H(S) < T/2$, and in general, we can call n-level superblock a block $S$ for which $H(S) < T/2^n$. Please note that a
+superblock is also a valid block (every superblock is passing block PoW test).
+
+We propose to name full blocks in Ergo as *ordering blocks* from now, and use input-blocks (or sub-blocks) to carry most
+of transactions. For starters, we set $t = T/64$ (the divisor will be revisited later) and define input-block *ib* generation
+condition as $H(ib) < t$, then a miner can generate on average 63 input blocks plus an ordering block
+per ordering block generation period. Please note that, unlike superblocks, input blocks are not passing ordering-block PoW check,
+but an ordering block is passing input block check.
 
 \subsection{Block Types and Properties}
 

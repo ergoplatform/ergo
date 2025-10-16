@@ -76,7 +76,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe Seq(ib.id)
+    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe (Seq(ib.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib.id)
   }
 
@@ -116,9 +116,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // apply transactions
     // out-of-order application
-    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe Seq(ib1.id, ib2.id)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id, ib2.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
   }
 
@@ -149,7 +149,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.disconnectedWaitlist shouldBe Set(childIb)
     h.deliveryWaitlist shouldBe Set(bytesToId(childIb.prevInputBlockId.get))
 
-    h.applyInputBlockTransactions(childIb.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(childIb.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlock() shouldBe None
 
     // Now apply parent
@@ -161,7 +161,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
     h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
 
-    h.applyInputBlockTransactions(parentIb.id, Seq.empty, us) shouldBe Seq(parentIb.id, childIb.id)
+    h.applyInputBlockTransactions(parentIb.id, Seq.empty, us) shouldBe (Seq(parentIb.id, childIb.id) -> Seq.empty)
     h.bestInputBlock().get shouldBe childIb
 
     h.bestInputBlocksChain() shouldBe Seq(childIb.id, parentIb.id)
@@ -189,7 +189,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
     h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
 
-    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
 
     val c3 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -212,8 +212,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // apply transactions
     // todo: test out-of-order application, currently failing but maybe it is ok?
-    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq()
-    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe Seq(ib2.id, ib3.id)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe (Seq(ib2.id, ib3.id) -> Seq.empty)
 
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }
@@ -243,13 +243,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
     h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
 
-    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
 
 
     val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r2 = h.applyInputBlock(ib2)
     r2 shouldBe None
-    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq(ib2.id)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
 
@@ -270,12 +270,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // apply transactions
     // todo: test out-of-order application, currently failing but maybe it is ok?
-    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
 
     val ib4 = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
     val r4 = h.applyInputBlock(ib4)
     r4 shouldBe None
-    h.applyInputBlockTransactions(ib4.id, Seq.empty, us) shouldBe Seq(ib3.id, ib4.id)
+    h.applyInputBlockTransactions(ib4.id, Seq.empty, us) shouldBe (Seq(ib3.id, ib4.id) -> Seq.empty)
 
     h.bestInputBlocksChain() shouldBe Seq(ib4.id, ib3.id, ib1.id)
   }
@@ -313,7 +313,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq(tx), us) shouldBe Seq(ib.id)
+    h.applyInputBlockTransactions(ib.id, Seq(tx), us) shouldBe (Seq(ib.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib.id)
   }
 
@@ -350,7 +350,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq(tx), us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib.id, Seq(tx), us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -367,7 +367,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -391,7 +391,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -417,7 +417,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
 
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -445,7 +445,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // apply transactions
     // input block should be rejected
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -474,7 +474,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // apply transactions
     // input block should be rejected
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
   }
 
@@ -518,10 +518,10 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
 
     // apply transactions
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
-    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe Seq(ib2.id)
+    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe (Seq(ib2.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
 
     val c4 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
@@ -540,7 +540,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val input2 = tx2.outputs.head
     val tx3 = new ErgoTransaction(IndexedSeq(Input(input2.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input2.toCandidate))
 
-    h.applyInputBlockTransactions(ib3.id, Seq(tx3), us) shouldBe Seq(ib3.id)
+    h.applyInputBlockTransactions(ib3.id, Seq(tx3), us) shouldBe (Seq(ib3.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id, ib1.id)
   }
 
@@ -583,11 +583,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
 
     // apply transactions
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // input block with double spending rejected
-    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
   }
 
@@ -645,14 +645,14 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val tx3 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
 
     // apply transactions
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
-    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe Seq(ib2.id)
+    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe (Seq(ib2.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
 
     // input block with double spending rejected
-    h.applyInputBlockTransactions(ib3.id, Seq(tx3), us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib3.id, Seq(tx3), us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
   }
 
@@ -782,9 +782,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlock(ib4b)
 
     // Apply transactions to fork A
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
-    h.applyInputBlockTransactions(ib2a.id, Seq.empty, us) shouldBe Seq(ib2a.id)
-    h.applyInputBlockTransactions(ib3a.id, Seq.empty, us) shouldBe Seq(ib3a.id)
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.applyInputBlockTransactions(ib2a.id, Seq.empty, us) shouldBe (Seq(ib2a.id) -> Seq.empty)
+    h.applyInputBlockTransactions(ib3a.id, Seq.empty, us) shouldBe (Seq(ib3a.id) -> Seq.empty)
 
     // Fork B should become best chain when transactions are applied
     // Note: Fork switching may require specific conditions to trigger
@@ -818,7 +818,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlock(invalidIb.id) shouldBe Some(invalidIb)
 
     // Try to apply transactions to non-existent input block
-    h.applyInputBlockTransactions(bytesToId(Array.fill(32)(0.toByte)), Seq.empty, us) shouldBe Seq.empty
+    h.applyInputBlockTransactions(bytesToId(Array.fill(32)(0.toByte)), Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
   }
 
   property("state reset when new ordering blocks arrive") {
@@ -866,8 +866,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlock(ib2)
 
     // Apply transactions to initial chain
-    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe Seq(ib1.id)
-    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe Seq(ib2.id)
+    h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
 
     // Create reorganization chain
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
@@ -974,7 +974,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
     
     // This should fail as the cumulative cost of transactions exceeds block limit
-    h.applyInputBlockTransactions(ib.id, expensiveTransactions, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib.id, expensiveTransactions, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -999,7 +999,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
     
     // This should succeed as the cumulative cost of transactions is within block limit
-    h.applyInputBlockTransactions(ib.id, validTransactions, us) shouldBe Seq(ib.id)
+    h.applyInputBlockTransactions(ib.id, validTransactions, us) shouldBe (Seq(ib.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib.id)
   }
 
@@ -1096,12 +1096,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
     
     // Apply transactions to first input block - should succeed
-    h.applyInputBlockTransactions(ib1.id, expensiveTransactions1, us) shouldBe Seq(ib1.id)
+    h.applyInputBlockTransactions(ib1.id, expensiveTransactions1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Apply transactions to second input block - should succeed
     // Even though cumulative cost across both blocks exceeds limit, each individual block is within limit
-    h.applyInputBlockTransactions(ib2.id, expensiveTransactions2, us) shouldBe Seq(ib2.id)
+    h.applyInputBlockTransactions(ib2.id, expensiveTransactions2, us) shouldBe (Seq(ib2.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
 
     // Apply ordering block after the two input blocks - should succeed
@@ -1134,7 +1134,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     
     // But it shouldn't be part of the best chain
     h.bestInputBlocksChain() shouldBe Seq()
-    h.applyInputBlockTransactions(invalidIb.id, Seq.empty, us) shouldBe Seq()
+    h.applyInputBlockTransactions(invalidIb.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
   }
 
   property("apply input block with duplicate transactions should be rejected") {
@@ -1155,7 +1155,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val duplicateTxs = Seq(tx1, tx1) // Same transaction twice
     
     // This should be rejected due to duplicate transactions
-    h.applyInputBlockTransactions(ib1.id, duplicateTxs, us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib1.id, duplicateTxs, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -1189,7 +1189,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     )
 
     // This should be rejected due to non-existent input
-    h.applyInputBlockTransactions(ib1.id, Seq(invalidTx), us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib1.id, Seq(invalidTx), us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
@@ -1225,7 +1225,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     )
 
     // This should be rejected due to script validation failure
-    h.applyInputBlockTransactions(ib1.id, Seq(invalidTx), us) shouldBe Seq()
+    h.applyInputBlockTransactions(ib1.id, Seq(invalidTx), us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
   }
 

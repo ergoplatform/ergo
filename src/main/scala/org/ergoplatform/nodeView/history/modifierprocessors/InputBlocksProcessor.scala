@@ -327,13 +327,45 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
-    * @return - sequence of new best input blocks
+    * @return - sequence of new best input blocks applied, and sequence of input blocks rolled back
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
-  // todo: return input block ids rolled back
   def applyInputBlockTransactions(sbId: ModifierId,
                                   transactions: Seq[ErgoTransaction],
-                                  state: ErgoState[_]): Seq[ModifierId] = {
+                                  state: ErgoState[_]): (Seq[ModifierId], Seq[ModifierId]) = {
+
+    @tailrec
+    def bestInputBlockStep(sbId: ModifierId,
+                           transactionIds: Seq[ModifierId],
+                           state: ErgoState[_],
+                           acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
+      if (processBestInputBlockCandidate(sbId, transactionIds, state)) {
+        val orderingId = inputBlockRecords.get(sbId).map(extractOrderingId).get // todo: .get
+
+        val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
+          isAncestor(tipId, sbId).map(_ -> tipId)
+        }.filter { case (childId, _) =>
+          inputBlockTransactions.contains(childId)
+        }) match {
+          case s if s.isEmpty => None
+          case s => Some(s.maxBy { case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0) }._1)
+        }
+
+        val updAcc = acc :+ sbId
+
+        maybeChildToApply match {
+          case Some(nsbId) =>
+            inputBlockTransactions.get(sbId) match {
+              case Some(ntransactionIds) => bestInputBlockStep(nsbId, ntransactionIds, state, updAcc)
+              case None => updAcc
+            }
+          case None => updAcc
+        }
+      } else {
+        acc
+      }
+    }
+
     log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
@@ -390,47 +422,15 @@ trait InputBlocksProcessor extends ScorexLogging {
       case None =>
         log.warn(s"Input block transactions delivered for unknown input block $sbId")
         // todo: should transactions be saved in this case ?
-        return Seq.empty
-    }
-
-    @tailrec
-    def bestInputBlockStep(sbId: ModifierId,
-                           transactionIds: Seq[ModifierId],
-                           state: ErgoState[_],
-                           acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
-      if (processBestInputBlockCandidate(sbId, transactionIds, state)) {
-        val orderingId = inputBlockRecords.get(sbId).map(extractOrderingId).get // todo: .get
-
-        val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
-          isAncestor(tipId, sbId).map(_ -> tipId)
-        }.filter { case (childId, _) =>
-          inputBlockTransactions.contains(childId)
-        }) match {
-          case s if s.isEmpty => None
-          case s => Some(s.maxBy { case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0) }._1)
-        }
-
-        val updAcc = acc :+ sbId
-
-        maybeChildToApply match {
-          case Some(nsbId) =>
-            inputBlockTransactions.get(sbId) match {
-              case Some(ntransactionIds) => bestInputBlockStep(nsbId, ntransactionIds, state, updAcc)
-              case None => updAcc
-            }
-          case None => updAcc
-        }
-      } else {
-        acc
-      }
+        return Seq.empty -> Seq.empty
     }
 
     if (forkingInputBlock.isEmpty) {
-      bestInputBlockStep(sbId, transactionIds, state)
+      bestInputBlockStep(sbId, transactionIds, state) -> Seq.empty
     } else {
       val sbId = forkingInputBlock.get
       val transactionIds = inputBlockTransactions.get(sbId).get
-      bestInputBlockStep(sbId, transactionIds, state)
+      bestInputBlockStep(sbId, transactionIds, state) -> Seq.empty
     }
   }
 

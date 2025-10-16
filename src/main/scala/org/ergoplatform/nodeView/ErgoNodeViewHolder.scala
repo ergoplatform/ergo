@@ -350,7 +350,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                             local: Boolean): Unit = {
     try {
       // apply input block transactions
-      val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
+      val (newBestInputBlocks, _) = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
 
       // todo: process rollbacks
 

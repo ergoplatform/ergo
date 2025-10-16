@@ -351,6 +351,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     // apply input block transactions
     val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
 
+    // todo: process rollbacks
+
     // clear mempool from input block transactions
     val updMp = memoryPool().removeWithDoubleSpends(transactions)
     updateNodeView(updatedMempool = Some(updMp))
@@ -816,11 +818,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
       val inputBlockTxs = subBlockTransactionsData.transactions
       processInputBlockTransactions(subblockInfo.id, inputBlockTxs, local = true)
-
-      // todo: handle inputs chain rollback
-      // clear mempool from input block transactions
-      val updMp = memoryPool().removeWithDoubleSpends(inputBlockTxs)
-      updateNodeView(updatedMempool = Some(updMp))
   }
 
   protected def getCurrentInfo: Receive = {

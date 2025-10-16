@@ -330,7 +330,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return - sequence of new best input blocks
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
-  // todo: return input block ids rolled back?
+  // todo: return input block ids rolled back
   // todo: wrap in Try or make sure no exception possible
   def applyInputBlockTransactions(sbId: ModifierId,
                                   transactions: Seq[ErgoTransaction],

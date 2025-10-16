@@ -348,22 +348,26 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def processInputBlockTransactions(inputBlockId: ModifierId,
                                             transactions: Seq[ErgoTransaction],
                                             local: Boolean): Unit = {
-    // apply input block transactions
-    val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
+    try {
+      // apply input block transactions
+      val newBestInputBlocks = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
 
-    // todo: process rollbacks
+      // todo: process rollbacks
 
-    // clear mempool from input block transactions
-    val updMp = memoryPool().removeWithDoubleSpends(transactions)
-    updateNodeView(updatedMempool = Some(updMp))
+      // clear mempool from input block transactions
+      val updMp = memoryPool().removeWithDoubleSpends(transactions)
+      updateNodeView(updatedMempool = Some(updMp))
 
-    // todo: process all the newBestInputBlocks, not just one
-    val newVault = vault().scanInputBlock(transactions)
-    updateNodeView(updatedVault = Some(newVault))
+      // todo: process all the newBestInputBlocks, not just one
+      val newVault = vault().scanInputBlock(transactions)
+      updateNodeView(updatedVault = Some(newVault))
 
-    newBestInputBlocks.foreach { id =>
-      log.debug(s"New input-block with transactions found: $id")
-      context.system.eventStream.publish(NewBestInputBlock(Some(id), local))
+      newBestInputBlocks.foreach { id =>
+        log.debug(s"New input-block with transactions found: $id")
+        context.system.eventStream.publish(NewBestInputBlock(Some(id), local))
+      }
+    } catch {
+      case t: Throwable => log.error(s"Exception during input block $inputBlockId processing ", t)
     }
   }
 

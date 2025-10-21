@@ -44,13 +44,13 @@
 
 \title{Matrix: Splitting Ergo Blocks Into Input and Ordering Blocks For Fast Transaction Propagation and Confirmation}
 
-\author{Alexander Chepurnoy (kushti) \and Ergo Core Developers}
-\institute{Ergo Platform, https://ergoplatform.org}
+\author{Alexander Chepurnoy (kushti)}
+\institute{https://kushti.github.io/}
 
 \maketitle
 
 \begin{abstract}
-This paper presents the design and implementation of Matrix, a new design where, instead of chain of full-blocks (which is still
+This paper presents the design and implementation of Matrix, a new design, where, instead of chain of full-blocks (which is still
 being used for storing blocks beyond last few ones), we have more complex structure with input and ordering blocks in Ergo.
 This novel blockchain architecture separates transaction processing from block ordering to achieve faster transaction confirmations and improved
 network throughput. The system introduces two types of blocks: \emph{Input Blocks} for fast transaction processing
@@ -154,7 +154,28 @@ Miner Rewards & Fees + Storage rent & Emission + Fees \\
 \caption{Comparison of Input Blocks and Ordering Blocks}
 \end{table}
 
+\subsection{Linking Structure}
+
+Every input block is referencing previous input block and also parent ordering block. An ordering block is referencing
+previous ordering block as well as last seen input block. In both cases, a reference to an ordering block is written into
+a block header. In case of Ergo, reference to last seen input block is written into an extension section of a block, see
+implementation section for details~(in an implementation for Bitcoin or a fork of Bitcoin, a coinbase transaction can be used).
+
+Linear relationship with linking is coming along linear relationship in regards with transactions (ie no conflicts
+possible between input block transactions). See the next subsection for details.
+
+\subsection{Transactions Validation and Confirmation}
+
 \section{Technical Implementation}
+
+\subsection{Extension}
+
+There are three new fields in extension field of a block:
+- a digest (Merkle tree root) of new first-class transactions since last input-block
+- a digest (Merkle tree root) first class transactions since ordering block till last input-block
+- reference to a last seen input block
+
+
 
 \subsection{Proof-of-Work Modifications}
 

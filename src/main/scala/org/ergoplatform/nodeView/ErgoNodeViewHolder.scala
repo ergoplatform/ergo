@@ -350,18 +350,35 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                             local: Boolean): Unit = {
     try {
       // apply input block transactions
-      val (newBestInputBlocks, _) = history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
+      val (newBestInputBlocks, rollbackInputBlocks) = {
+        history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
+      }
 
-      // todo: process rollbacks
+      rollbackInputBlocks.foreach { id =>
+        history().getInputBlockTransactions(id) match {
+          case Some(txs) =>
+            val updMp = memoryPool().put(txs.map(tx => UnconfirmedTransaction(tx, None)))
+            updateNodeView(updatedMempool = Some(updMp))
+
+            // todo: process rollbacks for the wallet
+          case None =>
+        }
+      }
 
       // clear mempool from input block transactions
-      val updMp = memoryPool().removeWithDoubleSpends(transactions)
-      updateNodeView(updatedMempool = Some(updMp))
+      newBestInputBlocks.foreach { id =>
+        history().getInputBlockTransactions(id) match {
+          case Some(txs) =>
+            val updMp = memoryPool().removeWithDoubleSpends(txs)
+            updateNodeView(updatedMempool = Some(updMp))
 
-      // todo: process all the newBestInputBlocks, not just one
-      val newVault = vault().scanInputBlock(transactions)
-      updateNodeView(updatedVault = Some(newVault))
+            val newVault = vault().scanInputBlock(txs)
+            updateNodeView(updatedVault = Some(newVault))
+          case None =>
+        }
+      }
 
+      // send rollback signal
       newBestInputBlocks.foreach { id =>
         log.debug(s"New input-block with transactions found: $id")
         context.system.eventStream.publish(NewBestInputBlock(Some(id), local))

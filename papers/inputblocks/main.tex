@@ -171,9 +171,13 @@ possible between input block transactions). See the next subsection for details.
 \subsection{Extension}
 
 There are three new fields in extension field of a block:
-- a digest (Merkle tree root) of new first-class transactions since last input-block
-- a digest (Merkle tree root) first class transactions since ordering block till last input-block
-- reference to a last seen input block
+\begin{itemize}
+  \item a digest (Merkle tree root) of new first-class transactions since last input-block. Key is 0x0300,
+        value is Merkle tree root bytes (32 byts).
+  \item a digest (Merkle tree root) first class transactions since ordering block till last input-block. Key is 0x0301,
+  value is Merkle tree root bytes (32 byts).
+  \item reference to a last seen input block. Key is 0x0302, value is input block id (32 byts).
+\end{itemize}
 
 
 

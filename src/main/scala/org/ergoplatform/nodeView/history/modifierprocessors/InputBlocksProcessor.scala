@@ -7,7 +7,7 @@ import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.subblocks.InputBlockInfo
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{bytesToId, ModifierId, ScorexLogging}
 
 import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
@@ -70,8 +70,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     .build[ModifierId, ErgoTransaction]()
 
 
-   // mutable.Map[ModifierId, ErgoTransaction]()
-
   /**
     * Best known chain tips (in terms of pow), input blocks in those chain do not necessarily have transactions (yet)
     * ordering block id -> best known input block chain tip ids
@@ -91,7 +89,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     * so transaction ids do belong to transactions in input blocks since the block (header)
     */
   private val orderingInputBlocksTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
-
 
   /**
     * Transactions commited in an ordering block
@@ -116,6 +113,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // extracts ordering block id from input block data provided
   private def extractOrderingId(ib: InputBlockInfo) = ib.header.parentId
+
   /**
     * @return best ordering and input blocks
     */
@@ -334,6 +332,19 @@ trait InputBlocksProcessor extends ScorexLogging {
                                   transactions: Seq[ErgoTransaction],
                                   state: ErgoState[_]): (Seq[ModifierId], Seq[ModifierId]) = {
 
+    /**
+      * Recursively processes the best input block chain by applying transactions and moving to the next child block.
+      * This tail-recursive function traverses the input block chain, applying transactions at each step and
+      * accumulating the sequence of successfully processed input block IDs.
+      *
+      * The algorithm:
+      * 1. Attempts to process the current input block candidate with its transactions
+      * 2. If successful, finds the best child block to process next
+      * 3. Recursively continues with the child block
+      * 4. Returns the accumulated sequence of processed block IDs
+      *
+      * @return Sequence of input block IDs that were successfully processed in this chain
+      */
     @tailrec
     def bestInputBlockStep(sbId: ModifierId,
                            transactionIds: Seq[ModifierId],
@@ -366,7 +377,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    log.info(s"Applying input block transactions for $sbId , transactions: ${transactions.size}")
+    log.info(s"Applying ${transactions.size} input block transactions for $sbId")
     val transactionIds = transactions.map(_.id)
     inputBlockTransactions.put(sbId, transactionIds)
 

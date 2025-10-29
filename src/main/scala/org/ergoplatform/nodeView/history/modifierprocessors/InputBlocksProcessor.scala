@@ -325,7 +325,18 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
-    * @return - sequence of new best input blocks applied, and sequence of input blocks rolled back
+    * Applies input block transactions and updates the best input block chain.
+    * 
+    * This method is the core of input block processing, handling both linear chain extension
+    * and fork switching scenarios. It manages the state transitions when new input blocks
+    * with transactions are received.
+    *
+    * @param sbId The input block ID to process
+    * @param transactions The transactions contained in the input block
+    * @param state The current Ergo state for transaction validation
+    * @return A tuple containing:
+    *         - Sequence of new best input blocks applied (forward progress)
+    *         - Sequence of input blocks rolled back (when switching forks)
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlockTransactions(sbId: ModifierId,
@@ -334,36 +345,54 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     /**
       * Recursively processes the best input block chain by applying transactions and moving to the next child block.
-      * This tail-recursive function traverses the input block chain, applying transactions at each step and
-      * accumulating the sequence of successfully processed input block IDs.
-      *
-      * The algorithm:
+      * 
+      * This is the core algorithm for input block chain progression. It implements a tail-recursive
+      * traversal that:
       * 1. Attempts to process the current input block candidate with its transactions
       * 2. If successful, finds the best child block to process next
       * 3. Recursively continues with the child block
       * 4. Returns the accumulated sequence of processed block IDs
       *
-      * @return Sequence of input block IDs that were successfully processed in this chain
+      * The function ensures that only valid chains are extended and maintains the invariant that
+      * the best chain contains only blocks with valid transactions that pass state validation.
+      *
+      * Key characteristics:
+      * - Tail-recursive for stack safety with long chains
+      * - Processes blocks in depth-first order along the best chain
+      * - Stops when no valid child blocks are available
+      * - Accumulates successfully processed block IDs
+      *
+      * @param sbId Current input block ID being processed
+      * @param transactionIds Transaction IDs for the current block
+      * @param state Current Ergo state for validation
+      * @param acc Accumulator for successfully processed block IDs
+      * @return Sequence of input block IDs that were successfully processed in order
       */
     @tailrec
     def bestInputBlockStep(sbId: ModifierId,
                            transactionIds: Seq[ModifierId],
                            state: ErgoState[_],
                            acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
+      // Attempt to process the current block candidate
       if (processBestInputBlockCandidate(sbId, transactionIds, state)) {
         val orderingId = inputBlockRecords.get(sbId).map(extractOrderingId).get // todo: .get
 
+        // Find the best child block to process next
+        // This selects from the best tips that are descendants of the current block
+        // and have their transactions available
         val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
           isAncestor(tipId, sbId).map(_ -> tipId)
         }.filter { case (childId, _) =>
           inputBlockTransactions.contains(childId)
         }) match {
           case s if s.isEmpty => None
+          // Select the child with the highest depth (longest chain)
           case s => Some(s.maxBy { case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0) }._1)
         }
 
         val updAcc = acc :+ sbId
 
+        // Recursively process the next child block if available
         maybeChildToApply match {
           case Some(nsbId) =>
             inputBlockTransactions.get(sbId) match {
@@ -373,6 +402,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           case None => updAcc
         }
       } else {
+        // Current block processing failed, return accumulated results
         acc
       }
     }

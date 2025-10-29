@@ -166,6 +166,28 @@ possible between input block transactions). See the next subsection for details.
 
 \subsection{Transactions Validation and Confirmation}
 
+Ideally, all the transactions should be in input blocks only. In a simplest blockchain with payment transactions only that would 
+be doable by introducing a requirement to have transactions in input blocks only. However, with rich blockchain context that would be 
+improssible in Ergo. 
+
+\subsection{Transaction Classification}
+
+Transactions are classified into two categories based on their validation requirements:
+
+\subsubsection{First-class Transactions (99\%)}
+\begin{itemize}
+\item Validation outcome independent of block context
+\item Can only be included in input blocks
+\item Examples: Simple transfers, most smart contracts
+\end{itemize}
+
+\subsubsection{Second-class Transactions}
+\begin{itemize}
+\item Validation depends on block context (timestamp, miner pubkey)
+\item Can be included in both input and ordering blocks
+\item Examples: Emission contracts, time-dependent contracts
+\end{itemize}
+
 \section{Technical Implementation}
 
 \subsection{Extension}
@@ -230,23 +252,7 @@ class InputBlockFields(
 
 \section{Transaction Processing}
 
-\subsection{Transaction Classification}
 
-Transactions are classified into two categories based on their validation requirements:
-
-\subsubsection{First-class Transactions (99\%)}
-\begin{itemize}
-\item Validation outcome independent of block context
-\item Can only be included in input blocks
-\item Examples: Simple transfers, most smart contracts
-\end{itemize}
-
-\subsubsection{Second-class Transactions}
-\begin{itemize}
-\item Validation depends on block context (timestamp, miner pubkey)
-\item Can be included in both input and ordering blocks
-\item Examples: Emission contracts, time-dependent contracts
-\end{itemize}
 
 \subsection{Merkle Tree Structure}
 

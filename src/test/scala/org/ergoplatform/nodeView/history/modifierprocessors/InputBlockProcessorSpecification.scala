@@ -846,7 +846,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlock() shouldBe None
   }
 
-  property("chain reorganization with input blocks") {
+  property("chain reorganization with input blocks - no common input block") {
     val bh = BoxHolder(Seq(eb1))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
     val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
@@ -869,6 +869,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
 
+    h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
+
     // Create reorganization chain
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
     val ib1alt = InputBlockInfo(1, c4(0).header, InputBlockFields.empty, None)
@@ -883,18 +885,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlock(ib3alt)
 
     // Apply transactions to reorganization chain (longer chain)
-    // Note: Chain reorganization may not automatically switch to longer chain
-    // The exact behavior may vary based on implementation
     h.applyInputBlockTransactions(ib1alt.id, tx1, us)
     h.applyInputBlockTransactions(ib2alt.id, Seq.empty, us)
     h.applyInputBlockTransactions(ib3alt.id, Seq.empty, us)
 
-    // The best chain should be determined by the implementation
-    // Let's verify that at least one chain is established and has the expected length
-    // todo : improve conditions
-    val bestChain = h.bestInputBlocksChain()
-    bestChain should not be empty
-    bestChain.length should be >= 1
+    h.bestInputBlocksChain() shouldBe Seq(ib3alt.id, ib2alt.id, ib1alt.id)
   }
 
   property("input block transaction retrieval methods") {

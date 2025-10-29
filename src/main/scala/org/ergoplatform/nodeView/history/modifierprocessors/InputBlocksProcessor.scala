@@ -362,10 +362,6 @@ trait InputBlocksProcessor extends ScorexLogging {
       * - Stops when no valid child blocks are available
       * - Accumulates successfully processed block IDs
       *
-      * @param sbId Current input block ID being processed
-      * @param transactionIds Transaction IDs for the current block
-      * @param state Current Ergo state for validation
-      * @param acc Accumulator for successfully processed block IDs
       * @return Sequence of input block IDs that were successfully processed in order
       */
     @tailrec

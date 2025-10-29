@@ -168,13 +168,14 @@ possible between input block transactions). See the next subsection for details.
 
 Ideally, all the transactions should be in input blocks only. In a simplest blockchain with payment transactions only that would 
 be doable by introducing a requirement to have transactions in input blocks only. However, with rich blockchain context that would be 
-improssible in Ergo. 
+impossible in Ergo, as a transaction in input block may use blockchain header fields which could be different in ordering block~(timestamp, miner pubkey, votes). Then old clients which are validating ordering blocks only would fail. Thus we break transactions into two classes. Normally, we expect that about 99\% of transactions would be of class one, and they would be included into input blocks only.
+
 
 \subsection{Transaction Classification}
 
 Transactions are classified into two categories based on their validation requirements:
 
-\subsubsection{First-class Transactions (99\%)}
+\subsubsection{First-class Transactions}
 \begin{itemize}
 \item Validation outcome independent of block context
 \item Can only be included in input blocks

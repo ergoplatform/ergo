@@ -137,4 +137,49 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "reset blockchain to specified height" in {
+    val currentHeight = history.headersHeight
+    // Target height should be less than current height
+    val targetHeight = if (currentHeight > 1) currentHeight - 1 else 0
+    
+    val resetRequestJson = Map("height" -> targetHeight).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      
+      val response = responseAs[Json]
+      val responseObj = response.asObject.get
+      
+      responseObj("success").get.asBoolean.get shouldBe true
+      responseObj("resetHeight").get.asNumber.get.toInt.get shouldBe targetHeight
+      responseObj("message").get.asString.get should include("reset")
+    }
+  }
+
+  it should "reject reset with negative height" in {
+    val resetRequestJson = Map("height" -> -1).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[String]
+      response should include("non-negative")
+    }
+  }
+
+  it should "reject reset with height higher than current" in {
+    val currentHeight = history.headersHeight
+    val targetHeight = currentHeight + 100
+    
+    val resetRequestJson = Map("height" -> targetHeight).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[String]
+      response should include("higher than current height")
+    }
+  }
+
 }

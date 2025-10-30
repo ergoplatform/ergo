@@ -30,6 +30,8 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import akka.util.Timeout
+import scala.concurrent.duration._
 
 /**
   * Composite local view of the node
@@ -680,6 +682,104 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (mempool) sender() ! ChangedMempool(nodeView._4.getReader)
   }
 
+  /**
+    * Reset blockchain to specified height by removing all blocks after that height
+    */
+  private def resetBlockchainToHeight(targetHeight: Int): Try[String] = {
+    Try {
+      val currentHeight = history().headersHeight
+      val currentFullHeight = history().fullBlockHeight
+
+      // Comprehensive validation
+      if (targetHeight < 0) {
+        throw new IllegalArgumentException(s"Target height must be non-negative, got $targetHeight")
+      }
+      if (targetHeight > currentHeight) {
+        throw new IllegalArgumentException(s"Target height $targetHeight is higher than current height $currentHeight")
+      }
+      if (targetHeight == currentHeight) {
+        return Success(s"Blockchain is already at height $targetHeight, no reset needed")
+      }
+      
+      // Check if the target height actually exists
+      val targetHeaderExists = history().bestHeaderIdAtHeight(targetHeight).isDefined
+      if (!targetHeaderExists) {
+        throw new IllegalArgumentException(s"No block found at height $targetHeight")
+      }
+
+      log.info(s"Starting blockchain reset: current height $currentHeight, target height $targetHeight, blocks to remove: ${currentHeight - targetHeight}")
+
+      // Get headers to remove (all headers after target height)
+      val headersToRemove = ((targetHeight + 1) to currentHeight).flatMap { height =>
+        history().headerIdsAtHeight(height)
+      }
+
+      if (headersToRemove.isEmpty) {
+        return Success(s"No headers found to remove after height $targetHeight")
+      }
+
+      log.info(s"Found ${headersToRemove.length} headers to remove from heights ${targetHeight + 1} to $currentHeight")
+
+      // Remove headers in reverse order (from highest to lowest height) for safety
+      val sortedHeaders = headersToRemove.reverse
+      var removedCount = 0
+      
+      sortedHeaders.foreach { headerId =>
+        history().forgetHeader(headerId) match {
+          case Success(_) =>
+            removedCount += 1
+            if (removedCount % 100 == 0) {
+              log.info(s"Removed $removedCount/${sortedHeaders.length} headers...")
+            }
+          case Failure(ex) =>
+            log.error(s"Failed to remove header $headerId after removing $removedCount headers", ex)
+            throw new RuntimeException(s"Reset partially completed but failed at header $headerId: ${ex.getMessage}", ex)
+        }
+      }
+
+      log.info(s"Successfully removed all $removedCount headers")
+
+      // If extra indexing is enabled, rollback the indexes
+      if (settings.nodeSettings.extraIndex) {
+        // Note: Extra indexer rollback will be handled automatically when blocks are removed
+        // The indexer listens for Rollback events and handles them appropriately
+        log.info(s"Extra indexing enabled - indexes will be rolled back automatically")
+      }
+
+      // Rollback state to the target height
+      val targetHeaderIdOpt = history().bestHeaderIdAtHeight(targetHeight)
+      targetHeaderIdOpt match {
+        case Some(targetHeaderId) =>
+          val targetVersion = idToVersion(targetHeaderId)
+          minimalState().rollbackTo(targetVersion) match {
+            case Success(newState) =>
+              log.info(s"Successfully rolled back state to height $targetHeight")
+              updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+            case Failure(ex) =>
+              log.error(s"Failed to rollback state to height $targetHeight", ex)
+              throw ex
+          }
+        case None =>
+          log.warn(s"No header found at target height $targetHeight, state rollback skipped")
+      }
+
+      val newHeight = history().headersHeight
+      val message = s"Blockchain successfully reset from height $currentHeight to height $newHeight"
+      log.info(message)
+      message
+
+    } recover {
+      case ex: IllegalArgumentException =>
+        val errorMsg = ex.getMessage
+        log.error(s"Blockchain reset validation failed: $errorMsg")
+        throw ex
+      case ex =>
+        val errorMsg = s"Blockchain reset failed: ${ex.getMessage}"
+        log.error(errorMsg, ex)
+        throw new RuntimeException(errorMsg, ex)
+    }
+  }
+
   private def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       log.info(s"Check that chain is healthy, progress is $chainProgress")
@@ -689,6 +789,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sender() ! healthCheckReply
   }
 
+  private def handleBlockchainReset: Receive = {
+    case ResetBlockchainTo(height) =>
+      log.info(s"Received request to reset blockchain to height $height")
+      val result = resetBlockchainToHeight(height)
+      sender() ! result
+  }
+
   override def receive: Receive =
     processRemoteModifiers orElse
       processLocallyGeneratedModifiers orElse
@@ -696,7 +803,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       getCurrentInfo orElse
       getNodeViewChanges orElse
       processStateSnapshot orElse
-      handleHealthCheck orElse {
+      handleHealthCheck orElse
+      handleBlockchainReset orElse {
         case a: Any => log.error("Strange input: " + a)
       }
 
@@ -740,6 +848,11 @@ object ErgoNodeViewHolder {
     sealed trait HealthCheckResult
     case object ChainIsHealthy extends HealthCheckResult
     case class ChainIsStuck(reason: String) extends HealthCheckResult
+
+    /**
+      * Reset blockchain to a specific block height, removing all blocks after that height
+      */
+    case class ResetBlockchainTo(height: Int)
   }
 
   case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent

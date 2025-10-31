@@ -6,7 +6,6 @@ import akka.pattern.ask
 import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
-import io.circe.generic.auto._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
@@ -193,23 +192,24 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   /**
     * Reset blockchain to specified height by removing all blocks after that height.
     * This is useful when blockchain database is in invalid state and full resync needs to be avoided.
+    * Requires API key authentication for security.
     */
-  def resetBlockchainR: Route = (post & path("reset") & entity(as[ResetRequest])) { request =>
+  def resetBlockchainR: Route = (post & path("reset") & withAuth & entity(as[ResetRequest])) { request =>
     // Additional API-level validation
     if (request.height < 0) {
       BadRequest("Height must be non-negative")
     } else {
-      implicit val timeout: Timeout = Timeout(60.seconds) // Increased timeout for potentially long operation
+      implicit val timeoutDuration: Timeout = Timeout(60.seconds) // Increased timeout for potentially long operation
       
-      val resetFuture = (viewHolderRef ? ResetBlockchainTo(request.height)).mapTo[scala.util.Try[String]]
+      val resetFuture = (viewHolderRef ? ResetBlockchainTo(request.height))(timeoutDuration).mapTo[scala.util.Try[String]]
       
       onComplete(resetFuture) {
         case Success(Success(message)) =>
-          ApiResponse(Map(
-            "success" -> true, 
-            "message" -> message,
-            "resetHeight" -> request.height
-          ).asJson)
+          ApiResponse(Json.obj(
+            "success" -> Json.fromBoolean(true), 
+            "message" -> Json.fromString(message),
+            "resetHeight" -> Json.fromInt(request.height)
+          ))
         case Success(Failure(ex: IllegalArgumentException)) =>
           BadRequest(s"Invalid request: ${ex.getMessage}")
         case Success(Failure(ex)) =>
@@ -226,3 +226,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   * Request case class for blockchain reset
   */
 case class ResetRequest(height: Int)
+
+object ResetRequest {
+  import io.circe.{Decoder, Encoder}
+  import io.circe.generic.semiauto._
+  
+  implicit val decoder: Decoder[ResetRequest] = deriveDecoder
+  implicit val encoder: Encoder[ResetRequest] = deriveEncoder
+}

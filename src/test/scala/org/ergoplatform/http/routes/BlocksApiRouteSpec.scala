@@ -163,8 +163,9 @@ class BlocksApiRouteSpec
 
     Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
-      val response = responseAs[String]
-      response should include("non-negative")
+      val response = responseAs[Json]
+      val detail = response.hcursor.get[String]("detail").getOrElse("")
+      detail should include("Height must be non-negative")
     }
   }
 
@@ -177,8 +178,9 @@ class BlocksApiRouteSpec
 
     Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
-      val response = responseAs[String]
-      response should include("higher than current height")
+      val response = responseAs[Json]
+      val detail = response.hcursor.get[String]("detail").getOrElse("")
+      detail should include("higher than current height")
     }
   }
 

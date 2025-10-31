@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import org.ergoplatform.network.{Handshake, PeerSpec, Version}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, ResetBlockchainTo}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -130,6 +130,16 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     def receive: Receive = {
       case LocallyGeneratedTransaction(utx) =>
         sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
+      case ResetBlockchainTo(height) =>
+        // Simulate proper validation like the real implementation
+        import scala.util.{Success, Failure}
+        if (height < 0) {
+          sender() ! Failure(new IllegalArgumentException("Height must be non-negative"))
+        } else if (height > history.headersHeight) {
+          sender() ! Failure(new IllegalArgumentException(s"Cannot reset to height $height, higher than current height ${history.headersHeight}"))
+        } else {
+          sender() ! Success(s"Blockchain reset to height $height successfully")
+        }
       case _ =>
     }
   }

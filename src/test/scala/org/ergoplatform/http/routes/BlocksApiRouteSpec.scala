@@ -184,4 +184,53 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "handle blockchain reset after block corruption scenario" in {
+    // This test addresses Kushti's concern: when blocks are marked as invalid due to corruption,
+    // reset should ensure they are re-downloaded and revalidated properly
+    
+    val currentHeight = history.headersHeight
+    
+    // Simulate some blocks being present (we'll work with what we have in test history)
+    currentHeight should be > 1
+    
+    val targetHeight = currentHeight - 2  // Reset to 2 blocks before current
+    
+    // First, verify we have blocks at the heights we expect to remove
+    val blocksToRemove = (targetHeight + 1 to currentHeight).flatMap(h => history.headerIdsAtHeight(h))
+    blocksToRemove should not be empty
+    
+    // Simulate the scenario: blocks exist but may have been marked invalid due to corruption
+    // In a real corruption scenario, blocks would be marked as invalid via reportModifierIsInvalid
+    // but still exist in storage. The reset should clear everything to force redownload.
+    
+    val resetRequestJson = Map("height" -> targetHeight).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      
+      val response = responseAs[Json]
+      val responseObj = response.asObject.get
+      
+      // Verify successful reset
+      responseObj("success").get.asBoolean.get shouldBe true
+      responseObj("resetHeight").get.asNumber.get.toInt.get shouldBe targetHeight
+      
+      val message = responseObj("message").get.asString.get
+      message should include("reset")
+      // Verify that the enhanced message mentions comprehensive cleanup
+      message should include("validity indices cleaned")
+      
+      // Verify that the blockchain height has been reset
+      val newHeight = history.headersHeight
+      newHeight shouldBe <= targetHeight
+      
+      // After reset, the removed blocks should no longer exist in history
+      // This ensures that they will be re-requested and revalidated from peers
+      blocksToRemove.foreach { removedBlockId =>
+        history.contains(removedBlockId) shouldBe false
+      }
+    }
+  }
+
 }

@@ -223,7 +223,7 @@ class BlocksApiRouteSpec
       
       // Verify that the blockchain height has been reset
       val newHeight = history.headersHeight
-      newHeight shouldBe <= targetHeight
+      newHeight should be <= targetHeight
       
       // After reset, the removed blocks should no longer exist in history
       // This ensures that they will be re-requested and revalidated from peers
@@ -278,7 +278,7 @@ class BlocksApiRouteSpec
       
       // Step 3: Verify blocks are removed and ready for revalidation
       val newHeight = history.headersHeight
-      newHeight shouldBe <= targetHeight
+      newHeight should be <= targetHeight
       
       // The key assertion: After reset, previously invalidated blocks are completely removed
       // This ensures they will be re-downloaded and revalidated from peers, becoming valid again

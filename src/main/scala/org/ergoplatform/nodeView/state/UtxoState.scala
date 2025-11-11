@@ -75,7 +75,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                                        expectedDigest: ADDigest,
                                        currentStateContext: ErgoStateContext,
                                        softFieldsAllowed: Boolean = true,
-                                       checkUtxoSetTransformations: Boolean = true): Try[Unit] = {
+                                       checkUtxoSetTransformations: Boolean = true): Try[Long] = {
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -85,7 +85,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
     val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings, softFieldsAllowed)(checkBoxExistence)
     if (txProcessing.isValid && checkUtxoSetTransformations) {
-      log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
+      val blockCost = txProcessing.payload.getOrElse(0L)
+      log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): $blockCost")
       val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
         val operations = stateChanges.operations
         var opsResult: Try[Unit] = Success(())
@@ -106,8 +107,9 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         .validateEquals(fbDigestIncorrect, expectedDigest, persistentProver.digest, headerId, Header.modifierTypeId)
         .result
         .toTry
+        .map(_ => blockCost)
     } else {
-      txProcessing.toTry.map(_ => ())
+      txProcessing.toTry
     }
   }
 
@@ -138,7 +140,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
         val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
 
-        txsTry.map { _: Unit =>
+        txsTry.map { _ =>
           val emissionBox = extractEmissionBox(fb)
           val meta = metadata(idToVersion(fb.id), fb.header.stateRoot, emissionBox, newStateContext)
 
@@ -232,7 +234,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
-  override def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Unit] = {
+  override def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Long] = {
     // check transactions with class II transactions disabled and no UTXO set transformations checked and written
     val res = this.withTransactions(previousTransactions).applyTransactions(txs, header.id, header.stateRoot, stateContext,
       softFieldsAllowed = false, checkUtxoSetTransformations = false)
@@ -242,7 +244,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     val inputs = (txs ++ previousTransactions).flatMap(_.inputs).map(_.boxId) // todo: optimize
     if (inputs.size != inputs.distinct.size) { // todo: optimize
       log.warn("Double spending")
-      Failure[Unit](new Exception("Double spending"))
+      Failure[Long](new Exception("Double spending"))
     } else {
       res
     }

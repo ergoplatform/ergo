@@ -97,9 +97,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    println("tips: " + h.getOrderingBlockTips(h.bestHeaderOpt.get.id))
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true // result should be Some(Set())
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
 
     val c3 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -108,11 +108,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib2)
     r shouldBe None
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
-    h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
-    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
 
     // apply transactions
     // out-of-order application
@@ -120,6 +117,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id, ib2.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set(ib2.id)
   }
 
   property("apply input block with parent input block not available (out of order application)") {
@@ -145,9 +144,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe Some(parentIb.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id) shouldBe None
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe None
-    h.isAncestor(childIb.id, parentIb.id).isEmpty shouldBe true
     h.disconnectedWaitlist shouldBe Set(childIb)
-    h.deliveryWaitlist shouldBe Set(bytesToId(childIb.prevInputBlockId.get))
 
     h.applyInputBlockTransactions(childIb.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlock() shouldBe None
@@ -156,16 +153,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val r2 = h.applyInputBlock(parentIb)
     r2 shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set(childIb.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(childIb.id, parentIb.id).contains(childIb.id) shouldBe true
-    h.isAncestor(childIb.id, childIb.id).isEmpty shouldBe true
-    h.isAncestor(parentIb.id, childIb.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     h.applyInputBlockTransactions(parentIb.id, Seq.empty, us) shouldBe (Seq(parentIb.id, childIb.id) -> Seq.empty)
     h.bestInputBlock().get shouldBe childIb
 
     h.bestInputBlocksChain() shouldBe Seq(childIb.id, parentIb.id)
-    h.inputBlocksChain(childIb.id) shouldBe Seq(childIb.id, parentIb.id)
   }
 
   property("input block - fork switching - disjoint forks") {
@@ -186,8 +179,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
 
@@ -197,7 +189,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val c4 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     val ib2 = InputBlockInfo(1, c3(0).header, InputBlockFields.empty, None)
     val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
@@ -205,10 +197,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val r = h.applyInputBlock(ib3)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(ib2.id, ib1.id).isEmpty shouldBe true
-    h.isAncestor(ib3.id, ib2.id).contains(ib3.id) shouldBe true
-    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     // apply transactions
     // todo: test out-of-order application, currently failing but maybe it is ok?
@@ -240,8 +229,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
 
@@ -251,7 +239,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r2 shouldBe None
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     val c4 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -266,7 +254,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // both tips of depth == 2 are recognized now
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     // apply transactions
     // todo: test out-of-order application, currently failing but maybe it is ok?
@@ -440,8 +428,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     // apply transactions
     // input block should be rejected
@@ -468,8 +455,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
 
     // apply transactions
@@ -498,8 +484,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     val input = tx1.head.outputs.head
     val tx2 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
@@ -512,10 +497,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     var r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
-    h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
-    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     // apply transactions
     h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
@@ -532,10 +514,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r = h.applyInputBlock(ib3)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 3
-    h.isAncestor(ib3.id, ib1.id).contains(ib3.id) shouldBe true
-    h.isAncestor(ib3.id, ib3.id).isEmpty shouldBe true
-    h.isAncestor(ib1.id, ib3.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 3
 
     val input2 = tx2.outputs.head
     val tx3 = new ErgoTransaction(IndexedSeq(Input(input2.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input2.toCandidate))
@@ -563,8 +542,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     val input = eb1
     val tx2 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
@@ -577,10 +555,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
-    h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
-    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     // apply transactions
     h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
@@ -610,8 +585,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 1
-    h.isAncestor(ib1.id, ib1.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     val input = tx1.head.outputs.head
     val tx2 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
@@ -624,10 +598,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     var r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 2
-    h.isAncestor(ib2.id, ib1.id).contains(ib2.id) shouldBe true
-    h.isAncestor(ib2.id, ib2.id).isEmpty shouldBe true
-    h.isAncestor(ib1.id, ib2.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     val c4 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -637,10 +608,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r = h.applyInputBlock(ib3)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id).get shouldBe 3
-    h.isAncestor(ib3.id, ib1.id).contains(ib3.id) shouldBe true
-    h.isAncestor(ib3.id, ib3.id).isEmpty shouldBe true
-    h.isAncestor(ib1.id, ib3.id).isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 3
 
     val tx3 = new ErgoTransaction(IndexedSeq(Input(input.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input.toCandidate))
 

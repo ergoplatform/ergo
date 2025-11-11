@@ -60,7 +60,10 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   def rollbackVersions: Iterable[VersionTag]
 
-  def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Unit]
+  /**
+    * @return cost of validation
+    */
+  def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Long]
 
   /**
     * @return read-only view of this state

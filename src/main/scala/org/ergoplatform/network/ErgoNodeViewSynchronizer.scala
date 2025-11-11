@@ -1292,7 +1292,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       val powScheme = settings.chainSettings.powScheme
       if (inputBlockInfo.valid(powScheme)) { // check PoW / Merkle proofs before processing todo: check diff
-        val prevSbIdOpt = inputBlockInfo.prevInputBlockId.map(bytesToId) // link to previous sub-block
+        val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block
         val weakTxIdsOpt = inputBlockInfo.weakTxIds
 
         log.info(s"Processing valid sub-block $subBlockId with parent sub-block $prevSbIdOpt and parent block ${subBlockHeader.parentId}, weak txs announced: ${weakTxIdsOpt.map(_.length)}")

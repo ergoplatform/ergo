@@ -97,7 +97,6 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
-    println("tips: " + h.getOrderingBlockTips(h.bestHeaderOpt.get.id))
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true // result should be Some(Set())
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
 

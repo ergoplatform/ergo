@@ -7,9 +7,10 @@ import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.subblocks.InputBlockInfo
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging}
 
 import java.util.concurrent.TimeUnit
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -41,7 +42,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     def complete: Boolean = processedIndex == depth
 
     def fork(newInputBlock: InputBlockInfo): Seq[InputBlocksChain] = {
-      newInputBlock.prevInputBlockId.map(bytesToId) match {
+      newInputBlock.prevInputBlockId match {
         case Some(prevId) =>
           if (prevId == chain.lastOption.getOrElse("")) {
             val updChain = InputBlocksChain(chain :+ newInputBlock.id, processedIndex, costCollected)
@@ -169,7 +170,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
       val sbId = ibi.id
-      val prevId = ibi.prevInputBlockId.map(bytesToId)
+      val prevId = ibi.prevInputBlockId
       if (prevId.isEmpty) {
         val firstChain = InputBlocksChain(ibi)
         Some(InputBlocksTree(Seq(firstChain)))
@@ -198,6 +199,25 @@ trait InputBlocksProcessor extends ScorexLogging {
     def processInputBlockTransactions(ib: InputBlockInfo,
                                       txs: Seq[ErgoTransaction],
                                       state: ErgoState[_]): (Seq[ModifierId], Seq[ModifierId]) = {
+      @tailrec
+      def applicationStep(ib: InputBlockInfo,
+                          txs: Seq[ErgoTransaction],
+                          acc: (InputBlocksChain, Seq[ModifierId])): (InputBlocksChain, Seq[ModifierId]) = {
+        acc._1.applyTransactions(ib, txs, state) match {
+          case Success(updChain) =>
+            val res = (updChain -> (acc._2 ++ Seq(ib.id)))
+            disconnectedWaitlist.find(_.prevInputBlockId.contains(ib.id)) match {
+              case Some(ib) if inputBlockTransactions.contains(ib.id) =>
+                val txs = inputBlockTransactions(ib.id).map(transactionsCache.getIfPresent)
+                applicationStep(ib, txs, res)
+              case _ => res
+            }
+          case Failure(e) =>
+            log.warn(s"Application of input-block transactions failed for ${ib.id} : ", e)
+            acc
+        }
+      }
+
       // todo: recursive application
       var res: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty
       (0 until forks.length).find{ i =>
@@ -205,17 +225,14 @@ trait InputBlocksProcessor extends ScorexLogging {
         f.firstToComplete() match {
           case Some(id) if id == ib.id =>
             if(i == bestIndex || bestIndex == -1) {
-              f.applyTransactions(ib, txs, state) match {
-                case Success(updChain) =>
-                  // todo: return modified tree also
-                  println("hh")
-                  val updTree = new InputBlocksTree(forks.updated(i, updChain))
-                  inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
-                  res = (Seq(ib.id) -> Seq.empty)
-                  true
-                case Failure(e) =>
-                  log.warn(s"Application of input-block transactions failed for ${ib.id} : ", e)
-                  false
+              val r = applicationStep(ib, txs, (f -> Seq.empty))
+              if (r._2.nonEmpty) {
+                val updTree = new InputBlocksTree(forks.updated(i, r._1))
+                inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
+                res = r._2 -> Seq.empty
+                true
+              } else {
+                false
               }
             } else {
               // process fork if needed
@@ -393,7 +410,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           None
         case None =>
           disconnectedWaitlist.add(ib)
-          ib.prevInputBlockId.map(bytesToId)
+          ib.prevInputBlockId
       }
     }
 

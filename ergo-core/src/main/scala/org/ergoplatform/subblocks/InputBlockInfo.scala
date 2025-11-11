@@ -9,7 +9,7 @@ import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.{Blake2b256, CryptographicHash, Digest32}
 import scorex.util.Extensions.IntOps
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import sigma.util.Extensions.LongOps
 
@@ -44,7 +44,7 @@ case class InputBlockInfo(version: Byte,
     powValid && extValid
   }
 
-  def prevInputBlockId: Option[Array[Byte]] = inputBlockFields.prevInputBlockId
+  lazy val prevInputBlockId: Option[ModifierId] = inputBlockFields.prevInputBlockId.map(bytesToId)
 
   def transactionsDigest: Digest32 = inputBlockFields.transactionsDigest
 
@@ -62,7 +62,7 @@ object InputBlockInfo {
     override def serialize(sbi: InputBlockInfo, w: Writer): Unit = {
       w.put(sbi.version)
       HeaderSerializer.serialize(sbi.header, w)
-      w.putOption(sbi.prevInputBlockId){case (w, id) => w.putBytes(id)}
+      w.putOption(sbi.prevInputBlockId){case (w, id) => w.putBytes(idToBytes(id))}
       w.putBytes(sbi.transactionsDigest)
       w.putBytes(sbi.inputBlockFields.prevTransactionsDigest)
       val proof = bmp.serialize(sbi.merkleProof)

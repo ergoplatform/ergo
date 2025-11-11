@@ -117,10 +117,10 @@ trait InputBlocksProcessor extends ScorexLogging {
     lazy val knownInputBlocks = forks.flatMap(_.chain).toSet
 
     lazy private val longestIndex = {
-      val bl = -2
+      val bl = -1
       var i = -1
       (0 until forks.length).foreach { c =>
-        if (forks(i).depth > bl) {
+        if (forks(c).chain.length > bl) {
           i = c
         }
       }
@@ -129,7 +129,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     def longestDepth: Option[Int] = {
       if (longestIndex != -1) {
-        Some(forks(longestIndex).processedIndex)
+        Some(forks(longestIndex).chain.length)
       } else None
     }
 
@@ -169,7 +169,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
-      val sbId = ibi.id
       val prevId = ibi.prevInputBlockId
       if (prevId.isEmpty) {
         val firstChain = InputBlocksChain(ibi)
@@ -177,7 +176,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       } else {
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
           val newForks = forks.flatMap { c =>
-            if (c.chain.contains(sbId)) {
+            if (c.chain.contains(prevId.get)) {
               c.fork(ibi)
             } else {
               Seq(c)
@@ -206,10 +205,11 @@ trait InputBlocksProcessor extends ScorexLogging {
         acc._1.applyTransactions(ib, txs, state) match {
           case Success(updChain) =>
             val res = (updChain -> (acc._2 ++ Seq(ib.id)))
-            disconnectedWaitlist.find(_.prevInputBlockId.contains(ib.id)) match {
-              case Some(ib) if inputBlockTransactions.contains(ib.id) =>
-                val txs = inputBlockTransactions(ib.id).map(transactionsCache.getIfPresent)
-                applicationStep(ib, txs, res)
+            updChain.firstToComplete().filter(inputBlockTransactions.contains) match {
+              case Some(nextId)  =>
+                val nextIb = inputBlockRecords(nextId)
+                val txs = inputBlockTransactions(nextId).map(transactionsCache.getIfPresent)
+                applicationStep(nextIb, txs, res)
               case _ => res
             }
           case Failure(e) =>
@@ -409,6 +409,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           inputBlockTrees.put(orderingId, updTree)
           None
         case None =>
+          println("adding to disconnected queue: " + ib.id)
           disconnectedWaitlist.add(ib)
           ib.prevInputBlockId
       }
@@ -556,7 +557,6 @@ trait InputBlocksProcessor extends ScorexLogging {
         val orderingId = extractOrderingId(ib)
         inputBlockTrees.get(orderingId) match {
           case Some(tree) =>
-            log.warn(s"Input block transactions delivered for when input block $sbId not processed")
             tree.processInputBlockTransactions(ib, transactions, state)
           case None =>
             Seq.empty -> Seq.empty
@@ -720,7 +720,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return best known inputs-block chain for the current best-known ordering block
     */
   def bestInputBlocksChain(): Seq[ModifierId] = {
-    bestOrderingBlock().map(_.id).flatMap(id => inputBlockTrees.get(id)).map(_.bestChain).getOrElse(Seq.empty)
+    bestOrderingBlock().map(_.id).flatMap(id => inputBlockTrees.get(id)).map(_.bestChain).getOrElse(Seq.empty).reverse
   }
 
 
@@ -798,6 +798,11 @@ trait InputBlocksProcessor extends ScorexLogging {
   def getOrderingBlockTipHeight(id: ModifierId): Int = {
     inputBlockTrees.get(id).map(_.bestDepth).getOrElse(-1)
   }
+
+  def getLongestChainLength(id: ModifierId): Int = {
+    inputBlockTrees.get(id).flatMap(_.longestDepth).getOrElse(-1)
+  }
+
 
   /**
     * @param id ordering block (header) id

@@ -99,6 +99,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true // result should be Some(Set())
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
+    h.getLongestChainLength(h.bestHeaderOpt.get.id) shouldBe 1
 
     val c3 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
@@ -109,6 +110,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
+    h.getLongestChainLength(h.bestHeaderOpt.get.id) shouldBe 2
 
     // apply transactions
     // out-of-order application
@@ -141,8 +143,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // Apply child first - should return parent id as needed
     val r1 = h.applyInputBlock(childIb)
     r1 shouldBe Some(parentIb.id)
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id) shouldBe None
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe None
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id) shouldBe Some(Set.empty)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
     h.disconnectedWaitlist shouldBe Set(childIb)
 
     h.applyInputBlockTransactions(childIb.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
@@ -151,11 +153,16 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // Now apply parent
     val r2 = h.applyInputBlock(parentIb)
     r2 shouldBe None
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set(childIb.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set()
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
+    h.getLongestChainLength(h.bestHeaderOpt.get.id) shouldBe 2
 
     h.applyInputBlockTransactions(parentIb.id, Seq.empty, us) shouldBe (Seq(parentIb.id, childIb.id) -> Seq.empty)
     h.bestInputBlock().get shouldBe childIb
+
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set(childIb.id)
+
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 2
 
     h.bestInputBlocksChain() shouldBe Seq(childIb.id, parentIb.id)
   }

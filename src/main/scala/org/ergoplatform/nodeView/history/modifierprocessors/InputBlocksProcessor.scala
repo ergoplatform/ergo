@@ -727,30 +727,50 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   // Getters to serve client requests below
 
+  /**
+    * Returns the best input block for the current best ordering block.
+    * 
+    * @return the best input block information if available, None otherwise
+    */
   def bestInputBlock(): Option[InputBlockInfo] = {
     bestBlocks._2
   }
 
+  /**
+    * Returns the input blocks tree structure for the current best ordering block.
+    * 
+    * @return the input blocks tree if available, None otherwise
+    */
   def inputBlocksTree(): Option[InputBlocksTree] = {
     bestBlocks._1.flatMap(h => inputBlockTrees.get(h.id))
   }
 
   /**
-    * @return best known inputs-block chain for the current best-known ordering block
+    * Returns the best known input blocks chain for the current best-known ordering block.
+    * The chain is returned in reverse order (from tip to genesis).
     */
   def bestInputBlocksChain(): Seq[ModifierId] = {
     bestOrderingBlock().map(_.id).flatMap(id => inputBlockTrees.get(id)).map(_.bestChain).getOrElse(Seq.empty).reverse
   }
 
 
+  /**
+    * Retrieves an input block by its modifier ID.
+    */
   def getInputBlock(sbId: ModifierId): Option[InputBlockInfo] = {
     inputBlockRecords.get(sbId)
   }
 
+  /**
+    * Retrieves the transaction IDs contained in a specified input block.
+    */
   def getInputBlockTransactionIds(sbId: ModifierId): Option[Seq[ModifierId]] = {
     inputBlockTransactions.get(sbId)
   }
 
+  /**
+    * Retrieves transactions for a specified input block.
+    */
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below

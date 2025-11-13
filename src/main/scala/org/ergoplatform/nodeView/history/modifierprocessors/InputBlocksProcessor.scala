@@ -169,15 +169,30 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
+      def applyDisconnected(acc: Seq[InputBlocksChain]): Seq[InputBlocksChain] = {
+        disconnectedWaitlist.foldLeft(acc) { case (a, ib) =>
+          val idx = acc.indexWhere(_.chain.lastOption == ib.prevInputBlockId)
+
+          if(idx > -1){
+            val c = a(idx)
+            val newChains = c.fork(ib)
+            a.updated(idx, newChains.head) ++ newChains.tail
+          } else {
+            a
+          }
+        }
+      }
+
       val prevId = ibi.prevInputBlockId
       if (prevId.isEmpty) {
         val firstChain = InputBlocksChain(ibi)
-        Some(InputBlocksTree(Seq(firstChain)))
+        val chains = applyDisconnected(Seq(firstChain))
+        Some(InputBlocksTree(chains))
       } else {
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
           val newForks = forks.flatMap { c =>
             if (c.chain.contains(prevId.get)) {
-              c.fork(ibi)
+              applyDisconnected(c.fork(ibi))
             } else {
               Seq(c)
             }
@@ -714,6 +729,10 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   def bestInputBlock(): Option[InputBlockInfo] = {
     bestBlocks._2
+  }
+
+  def inputBlocksTree(): Option[InputBlocksTree] = {
+    bestBlocks._1.flatMap(h => inputBlockTrees.get(h.id))
   }
 
   /**

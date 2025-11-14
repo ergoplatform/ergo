@@ -38,8 +38,11 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    def depth: Int = chain.length
-    def complete: Boolean = processedIndex == depth
+    def depthOf(id: ModifierId): Int = {
+      chain.indexOf(id)
+    }
+
+    def complete: Boolean = processedIndex == chain.length
 
     def fork(newInputBlock: InputBlockInfo): Seq[InputBlocksChain] = {
       newInputBlock.prevInputBlockId match {
@@ -146,8 +149,8 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     def bestDepth: Int = {
       if (bestIndex != -1) {
-        forks(bestIndex).depth
-      } else 0
+        forks(bestIndex).processedIndex
+      } else -1
     }
 
     def bestTip: Option[ModifierId] = {
@@ -185,9 +188,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
       val prevId = ibi.prevInputBlockId
       if (prevId.isEmpty) {
-        val firstChain = InputBlocksChain(ibi)
-        val chains = applyDisconnected(Seq(firstChain))
-        Some(InputBlocksTree(chains))
+        val newChain = InputBlocksChain(ibi)
+        val chains = applyDisconnected(Seq(newChain))
+        Some(InputBlocksTree(forks ++ chains))
       } else {
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
           val newForks = forks.flatMap { c =>
@@ -233,33 +236,56 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
-      // todo: recursive application
-      var res: (Seq[ModifierId], Seq[ModifierId]) = Seq.empty -> Seq.empty
-      (0 until forks.length).find{ i =>
-        val f = forks(i)
-        f.firstToComplete() match {
-          case Some(id) if id == ib.id =>
-            if(i == bestIndex || bestIndex == -1) {
-              val r = applicationStep(ib, txs, (f -> Seq.empty))
-              if (r._2.nonEmpty) {
-                val updTree = new InputBlocksTree(forks.updated(i, r._1))
-                inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
-                res = r._2 -> Seq.empty
-                true
-              } else {
-                false
-              }
-            } else {
-              // process fork if needed
-              // todo: finish
-              // if(f.processedIndex)
-              res = Seq.empty -> Seq.empty
-              true
-            }
-          case _ => false
+      val bestIndex = if(this.bestIndex == -1){
+        this.longestIndex
+      } else {
+        this.bestIndex
+      }
+      if (bestIndex == -1) {
+        return Seq.empty -> Seq.empty
+      }
+
+      def switchNeeded(id: ModifierId): Boolean = {
+        val lf = forks(longestIndex)
+        val d = lf.depthOf(id)
+        d > bestDepth && {
+          (lf.processedIndex + 1 to d).forall{i =>
+            val id = lf.chain(i)
+            inputBlockTransactions.contains(id)
+          }
         }
       }
-      res
+
+      if(longestIndex != bestIndex && switchNeeded(ib.id)) {
+        //todo: rollback
+        val f = forks(longestIndex)
+        val ibId = f.chain(f.processedIndex + 1)
+        val ib = inputBlockRecords(ibId)
+        val txs = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
+        val r = applicationStep(ib, txs, (f -> Seq.empty)) // todo: rollback instead of Seq.empty
+        if (r._2.nonEmpty) {
+          val updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
+          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
+          r._2 -> Seq.empty
+        } else {
+          log.warn("") // todo
+          Seq.empty -> Seq.empty
+        }
+      } else if(forks(bestIndex).firstToComplete().contains(ib.id)) {
+        val f = forks(bestIndex)
+        val r = applicationStep(ib, txs, (f -> Seq.empty))
+        if (r._2.nonEmpty) {
+          val updTree = new InputBlocksTree(forks.updated(bestIndex, r._1))
+          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
+          r._2 -> Seq.empty
+        } else {
+          log.warn("") // todo
+          Seq.empty -> Seq.empty
+        }
+      } else {
+        log.debug("") // todo
+        Seq.empty -> Seq.empty
+      }
     }
   }
 
@@ -570,6 +596,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     inputBlockRecords.get(sbId) match {
       case Some(ib) =>
         val orderingId = extractOrderingId(ib)
+        if(!bestBlocks._1.map(_.id).contains(orderingId)){
+          return Seq.empty -> Seq.empty
+        }
         inputBlockTrees.get(orderingId) match {
           case Some(tree) =>
             tree.processInputBlockTransactions(ib, transactions, state)

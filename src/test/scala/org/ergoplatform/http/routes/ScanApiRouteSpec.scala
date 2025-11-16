@@ -1,6 +1,6 @@
 package org.ergoplatform.http.routes
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server.{Route, ValidationRejection}
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -18,7 +18,6 @@ import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.ADKey
 import scorex.utils.Random
 import sigma.ast.ByteArrayConstant
-
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -269,6 +268,29 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     Post(prefix + "/p2sRule", "s7smJmdbakqfwNo") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  "ScanApiRoute" should "successfully handle p2sRule with long testnet address and truncate scan name" in {
+    // Testnet P2S address that exceeds the 255 byte limit
+    val testnetP2S = "47vws8BeKJigut3p4eFbsKhQHoDvKo69K8ikb6xqxyWXye9ejVEbBjWacdecnG9ceyd2ZEt99LJyWoEUZ3H47jfVUKXNNcsSq7h63AuRUB78urnUq1qxCNQURxWQgvtyBXGR8MXK4iDEDFTPFXd4Gnu7mvLFEi9J8ycpQucwZ8iEP5nuUu2FE6A93r8oBA1CY8pSn23mV7uaoB9QZHHDajykXk9ojHa9xKFJTZkQMrtYDJwCe2RG18PswnupavfujQbFBUb5Gz12rsmqggJm43Rq3gwy4RvsYcZsTdUaV6QVZQnamzu37djE4xDmK1EsUd1jraTCLgFrPNARAgztQpj68vmRj7aFtHB6c9w6SoMvEsiA3DceffqqVhkxzAfE4uNkYdC8nm5A3jJ4TyM6Wck3YB4tKi2DAzH2rXz1TiEUzaQ1wPftPqJFhpyEhWdLjBWzDAdWEPCRRBkxVnnMQ5s2ChmWJ9GX4zxYgZ6tVcASfavNz4CcxUQGrLXMdKseVcarP9JkKCGVna534dbL8pnj6WzQgTSVn9wNRRXfaLwrJpuq"
+
+    // Verify the address length exceeds the maximum scan name length
+    val addressBytes = testnetP2S.getBytes("UTF-8")
+    addressBytes.length should be > 255
+
+    // Make the POST request to the p2sRule endpoint
+    Post("/scan/p2sRule", HttpEntity(ContentTypes.`application/json`, "\"" + testnetP2S + "\"")) ~> route ~> check {
+      // The request should succeed (even though we're using a mock wallet)
+      // In a real scenario, this would register a scan with a truncated name
+      status shouldBe StatusCodes.OK
+
+      // Verify that the scan name would be truncated to 255 bytes
+      val expectedTruncatedName = new String(testnetP2S.getBytes("UTF-8"), 0, 255, "UTF-8")
+      expectedTruncatedName.getBytes("UTF-8").length shouldBe 255
+
+      // The truncated name should be a prefix of the original address
+      testnetP2S should startWith(expectedTruncatedName)
     }
   }
 

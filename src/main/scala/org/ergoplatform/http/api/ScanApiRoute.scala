@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 

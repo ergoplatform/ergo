@@ -53,7 +53,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           } else {
             val idx = chain.indexOf(prevId)
             // todo: fix processedIndex, costCollected in fork processing, they may decrease
-            val forkedChain = InputBlocksChain(chain.take(idx + 1), processedIndex, costCollected)
+            val forkedChain = InputBlocksChain(chain.take(idx + 1) :+ newInputBlock.id, processedIndex, costCollected)
             Seq(forkedChain, this)
           }
         case _ =>
@@ -120,10 +120,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     lazy val knownInputBlocks = forks.flatMap(_.chain).toSet
 
     lazy private val longestIndex = {
-      val bl = -1
+      var bl = -1
       var i = -1
       (0 until forks.length).foreach { c =>
         if (forks(c).chain.length > bl) {
+          bl = forks(c).chain.length
           i = c
         }
       }
@@ -137,10 +138,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     lazy private val bestIndex = {
-      val bl = -1
+      var bl = -1
       var i = -1
       (0 until forks.length).foreach { c =>
         if (forks(c).processedIndex > bl) {
+          bl = forks(c).processedIndex
           i = c
         }
       }
@@ -195,7 +197,8 @@ trait InputBlocksProcessor extends ScorexLogging {
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
           val newForks = forks.flatMap { c =>
             if (c.chain.contains(prevId.get)) {
-              applyDisconnected(c.fork(ibi))
+              val forked = c.fork(ibi)
+              applyDisconnected(forked)
             } else {
               Seq(c)
             }
@@ -265,7 +268,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         val r = applicationStep(ib, txs, (f -> Seq.empty)) // todo: rollback instead of Seq.empty
         if (r._2.nonEmpty) {
           val updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
-          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
+          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           r._2 -> Seq.empty
         } else {
           log.warn("") // todo
@@ -276,7 +279,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         val r = applicationStep(ib, txs, (f -> Seq.empty))
         if (r._2.nonEmpty) {
           val updTree = new InputBlocksTree(forks.updated(bestIndex, r._1))
-          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beatiful modification of mutable state
+          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           r._2 -> Seq.empty
         } else {
           log.warn("") // todo

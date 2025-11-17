@@ -260,6 +260,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c5.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
+    // apply forked input block which is another child of current best input block's parent
     val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib3)
     r shouldBe None
@@ -437,8 +438,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib1.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe -1
 
     // apply transactions
     // input block should be rejected
@@ -1294,29 +1295,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib4c.id, Seq.empty, us)
     h.applyInputBlockTransactions(ib5c.id, Seq.empty, us)
 
-    // The implementation doesn't automatically switch to longer chains
-    // It prefers the first valid chain it encounters (Fork A in this case)
-    // So the best chain should be Fork A with 3 blocks
     val finalBestChain = h.bestInputBlocksChain()
     finalBestChain should not be empty
-    finalBestChain.length shouldBe 3
-    // Fork A should remain the best chain (ib3a -> ib2a -> ib1)
-    // Check that the chain contains the expected blocks in the correct order
-    println("5 " + ib5b.id)
-    println("4 " + ib4b.id)
-    println("3 " + ib3b.id)
-    println("2 " + ib2b.id)
-    println("1 " + ib1.id)
+    finalBestChain.length shouldBe 5
 
-    println("5 " + ib5c.id)
-    println("4 " + ib4c.id)
-    println("3 " + ib3c.id)
-    println("2 " + ib2c.id)
-    println("1 " + ib1.id)
-
-    finalBestChain.head shouldBe ib5b.id
-    finalBestChain(1) shouldBe ib2a.id
-    finalBestChain(2) shouldBe ib1.id
+    finalBestChain.head shouldBe ib5c.id
+    finalBestChain(1) shouldBe ib4c.id
+    finalBestChain(2) shouldBe ib3c.id
 
     // Verify all input blocks are accessible
     h.getInputBlock(ib1.id) shouldBe Some(ib1)

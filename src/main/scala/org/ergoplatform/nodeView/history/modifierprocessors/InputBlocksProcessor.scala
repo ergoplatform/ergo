@@ -164,7 +164,8 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     def bestChain: Seq[ModifierId] = {
       if (bestIndex != -1) {
-        forks(bestIndex).chain
+        val f = forks(bestIndex)
+        f.chain.take(f.processedIndex + 1)
       } else Seq.empty
     }
 

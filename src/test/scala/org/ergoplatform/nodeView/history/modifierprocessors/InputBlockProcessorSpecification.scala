@@ -538,8 +538,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
     r = h.applyInputBlock(ib3)
     r shouldBe None
-    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib3.id)
-    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 3
+    h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should not contain(ib3.id)
+    h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     val input2 = tx2.outputs.head
     val tx3 = new ErgoTransaction(IndexedSeq(Input(input2.id, ProverResult.empty)), IndexedSeq(), IndexedSeq(input2.toCandidate))
@@ -565,6 +565,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
+    h.bestInputBlocksChain() shouldBe Seq()
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set.empty
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe -1
@@ -579,11 +580,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib2)
     r shouldBe None
+    h.bestInputBlocksChain() shouldBe Seq()
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set.empty
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe -1
 
     // apply transactions
     h.applyInputBlockTransactions(ib1.id, tx1, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    println(h.inputBlocksTree())
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // input block with double spending rejected
@@ -1313,9 +1316,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     finalBestChain should not be empty
     finalBestChain.length shouldBe 5
 
-    finalBestChain.head shouldBe ib5c.id
-    finalBestChain(1) shouldBe ib4c.id
-    finalBestChain(2) shouldBe ib3c.id
+    finalBestChain.head shouldBe ib5b.id
+    finalBestChain(1) shouldBe ib4b.id
+    finalBestChain(2) shouldBe ib3b.id
 
     // Verify all input blocks are accessible
     h.getInputBlock(ib1.id) shouldBe Some(ib1)

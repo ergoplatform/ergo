@@ -52,9 +52,10 @@ trait InputBlocksProcessor extends ScorexLogging {
             Seq(updChain)
           } else {
             val idx = chain.indexOf(prevId)
-            // todo: fix processedIndex, costCollected in fork processing, they may decrease
-            val forkedChain = InputBlocksChain(chain.take(idx + 1) :+ newInputBlock.id, processedIndex, costCollected)
-            Seq(forkedChain, this)
+            // todo: fix costCollected in fork processing, it may decrease
+            val newPi = Math.min(processedIndex, idx)
+            val forkedChain = InputBlocksChain(chain.take(idx + 1) :+ newInputBlock.id, newPi, costCollected)
+            Seq(this, forkedChain)
           }
         case _ =>
           log.error(s"Input block with no parent in fork(): ${newInputBlock.id}")
@@ -178,7 +179,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         disconnectedWaitlist.foldLeft(acc) { case (a, ib) =>
           val idx = acc.indexWhere(_.chain.lastOption == ib.prevInputBlockId)
 
-          if(idx > -1){
+          if (idx > -1) {
             val c = a(idx)
             val newChains = c.fork(ib)
             a.updated(idx, newChains.head) ++ newChains.tail
@@ -859,7 +860,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return tips (leaf input blocks) for the ordering block with identifier `id`
     */
   def getOrderingBlockTips(id: ModifierId): Option[Set[ModifierId]] = {
-    inputBlockTrees.get(id).map(_.forks.flatMap(_.tip).toSet)
+    val treeOpt = inputBlockTrees.get(id)
+    val bd = treeOpt.map(_.bestDepth).getOrElse(-1)
+    treeOpt.map(_.forks.filter(_.processedIndex == bd).flatMap(_.tip).toSet)
   }
 
   /**

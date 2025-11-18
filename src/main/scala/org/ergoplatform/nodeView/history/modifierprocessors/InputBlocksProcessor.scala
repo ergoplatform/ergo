@@ -86,7 +86,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    private def registerCompletion(id: ModifierId, costDelta: Long): Try[InputBlocksChain] = {
+    def registerCompletion(id: ModifierId, costDelta: Long): Try[InputBlocksChain] = {
       firstToComplete() match {
         case Some(expectedId) if expectedId == id => // todo: extra check which can be removed after release ?
           Success(InputBlocksChain(chain, processedIndex + 1, costCollected + costDelta))
@@ -269,7 +269,19 @@ trait InputBlocksProcessor extends ScorexLogging {
         val txs = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
         val r = applicationStep(ib, txs, (f -> Seq.empty)) // todo: rollback instead of Seq.empty
         if (r._2.nonEmpty) {
-          val updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
+          // todo: eliminate boilerplate, see the same code in another branch below
+          var updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
+          val updForks = updTree.forks
+          (0 until updForks.length).foreach{idx =>
+            val f = updForks(idx)
+            if(f.firstToComplete().contains(ib.id)){
+              f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
+                case Success(ibc) => updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                case Failure(_) =>
+                  log.warn("") // todo
+              }
+            }
+          }
           inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           r._2 -> Seq.empty
         } else {
@@ -280,7 +292,19 @@ trait InputBlocksProcessor extends ScorexLogging {
         val f = forks(bestIndex)
         val r = applicationStep(ib, txs, (f -> Seq.empty))
         if (r._2.nonEmpty) {
-          val updTree = new InputBlocksTree(forks.updated(bestIndex, r._1))
+          // todo: eliminate boilerplate, see the same code in another branch below
+          var updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
+          val updForks = updTree.forks
+          (0 until updForks.length).foreach{idx =>
+            val f = updForks(idx)
+            if(f.firstToComplete().contains(ib.id)){
+              f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
+                case Success(ibc) => updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                case Failure(_) =>
+                  log.warn("") // todo
+              }
+            }
+          }
           inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           r._2 -> Seq.empty
         } else {

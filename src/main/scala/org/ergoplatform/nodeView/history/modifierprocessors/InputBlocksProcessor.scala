@@ -31,7 +31,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   // input blocks chain since ordering
   case class InputBlocksChain(chain: Seq[ModifierId], processedIndex: Int, costCollected: Long) {
     def tip: Option[ModifierId] = {
-      if(processedIndex == -1) {
+      if (processedIndex == -1) {
         None
       } else {
         Some((chain(processedIndex)))
@@ -48,13 +48,18 @@ trait InputBlocksProcessor extends ScorexLogging {
       newInputBlock.prevInputBlockId match {
         case Some(prevId) =>
           if (prevId == chain.lastOption.getOrElse("")) {
-            val updChain = InputBlocksChain(chain :+ newInputBlock.id, processedIndex, costCollected)
+            val updChain =
+              InputBlocksChain(chain :+ newInputBlock.id, processedIndex, costCollected)
             Seq(updChain)
           } else {
             val idx = chain.indexOf(prevId)
             // todo: fix costCollected in fork processing, it may decrease
             val newPi = Math.min(processedIndex, idx)
-            val forkedChain = InputBlocksChain(chain.take(idx + 1) :+ newInputBlock.id, newPi, costCollected)
+            val forkedChain = InputBlocksChain(
+              chain.take(idx + 1) :+ newInputBlock.id,
+              newPi,
+              costCollected
+            )
             Seq(this, forkedChain)
           }
         case _ =>
@@ -64,7 +69,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     lazy val collectedTransactions: Seq[ErgoTransaction] = {
-      (0 to processedIndex).flatMap{i =>
+      (0 to processedIndex).flatMap { i =>
         val id = chain(i)
         inputBlockTransactions.get(id) match {
           case Some(txIds) =>
@@ -88,7 +93,8 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     def registerCompletion(id: ModifierId, costDelta: Long): Try[InputBlocksChain] = {
       firstToComplete() match {
-        case Some(expectedId) if expectedId == id => // todo: extra check which can be removed after release ?
+        case Some(expectedId)
+            if expectedId == id => // todo: extra check which can be removed after release ?
           Success(InputBlocksChain(chain, processedIndex + 1, costCollected + costDelta))
         case _ =>
           val msg = s"Improper input-block completion: $id"
@@ -97,12 +103,16 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    def applyTransactions(ib: InputBlockInfo, txs: Seq[ErgoTransaction], state: ErgoState[_]): Try[(InputBlocksChain)] = {
+    def applyTransactions(
+      ib: InputBlockInfo,
+      txs: Seq[ErgoTransaction],
+      state: ErgoState[_]
+    ): Try[(InputBlocksChain)] = {
       val prevTransactions = this.collectedTransactions
-      val txsValid = state.applyInputBlock(txs, prevTransactions, ib.header)
+      val txsValid         = state.applyInputBlock(txs, prevTransactions, ib.header)
       txsValid match {
         case Success(cost) => registerCompletion(ib.id, cost)
-        case Failure(e) => Failure(e)
+        case Failure(e)    => Failure(e)
 
       }
     }
@@ -110,6 +120,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   object InputBlocksChain {
+
     def apply(ib: InputBlockInfo): InputBlocksChain = {
       new InputBlocksChain(Seq(ib.id), -1, 0)
     }
@@ -117,16 +128,16 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   case class InputBlocksTree(forks: Seq[InputBlocksChain]) {
 
-    // todo: cache?
+    // todo: cache it?
     lazy val knownInputBlocks = forks.flatMap(_.chain).toSet
 
-    lazy private val longestIndex = {
+    private lazy val longestIndex = {
       var bl = -1
-      var i = -1
+      var i  = -1
       (0 until forks.length).foreach { c =>
         if (forks(c).chain.length > bl) {
           bl = forks(c).chain.length
-          i = c
+          i  = c
         }
       }
       i
@@ -138,13 +149,13 @@ trait InputBlocksProcessor extends ScorexLogging {
       } else None
     }
 
-    lazy private val bestIndex = {
+    private lazy val bestIndex = {
       var bl = -1
-      var i = -1
+      var i  = -1
       (0 until forks.length).foreach { c =>
         if (forks(c).processedIndex > bl) {
           bl = forks(c).processedIndex
-          i = c
+          i  = c
         }
       }
       i
@@ -177,23 +188,24 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
       def applyDisconnected(acc: Seq[InputBlocksChain]): Seq[InputBlocksChain] = {
-        disconnectedWaitlist.foldLeft(acc) { case (a, ib) =>
-          val idx = acc.indexWhere(_.chain.lastOption == ib.prevInputBlockId)
+        disconnectedWaitlist.foldLeft(acc) {
+          case (a, ib) =>
+            val idx = acc.indexWhere(_.chain.lastOption == ib.prevInputBlockId)
 
-          if (idx > -1) {
-            val c = a(idx)
-            val newChains = c.fork(ib)
-            a.updated(idx, newChains.head) ++ newChains.tail
-          } else {
-            a
-          }
+            if (idx > -1) {
+              val c         = a(idx)
+              val newChains = c.fork(ib)
+              a.updated(idx, newChains.head) ++ newChains.tail
+            } else {
+              a
+            }
         }
       }
 
       val prevId = ibi.prevInputBlockId
       if (prevId.isEmpty) {
         val newChain = InputBlocksChain(ibi)
-        val chains = applyDisconnected(Seq(newChain))
+        val chains   = applyDisconnected(Seq(newChain))
         Some(InputBlocksTree(forks ++ chains))
       } else {
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
@@ -212,26 +224,30 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
-    case class InputBlockTxsProcessingResult(processingLog: (Seq[ModifierId], Seq[ModifierId]))
     /**
       * @return A tuple containing:
       *         - Sequence of new best input blocks applied (forward progress)
       *         - Sequence of input blocks rolled back (when switching forks)
       */
-    def processInputBlockTransactions(ib: InputBlockInfo,
-                                      txs: Seq[ErgoTransaction],
-                                      state: ErgoState[_]): (Seq[ModifierId], Seq[ModifierId]) = {
+    def processInputBlockTransactions(
+      ib: InputBlockInfo,
+      txs: Seq[ErgoTransaction],
+      state: ErgoState[_]
+    ): (Seq[ModifierId], Seq[ModifierId]) = {
       @tailrec
-      def applicationStep(ib: InputBlockInfo,
-                          txs: Seq[ErgoTransaction],
-                          acc: (InputBlocksChain, Seq[ModifierId])): (InputBlocksChain, Seq[ModifierId]) = {
+      def applicationStep(
+        ib: InputBlockInfo,
+        txs: Seq[ErgoTransaction],
+        acc: (InputBlocksChain, Seq[ModifierId])
+      ): (InputBlocksChain, Seq[ModifierId]) = {
         acc._1.applyTransactions(ib, txs, state) match {
           case Success(updChain) =>
             val res = (updChain -> (acc._2 ++ Seq(ib.id)))
             updChain.firstToComplete().filter(inputBlockTransactions.contains) match {
-              case Some(nextId)  =>
+              case Some(nextId) =>
                 val nextIb = inputBlockRecords(nextId)
-                val txs = inputBlockTransactions(nextId).map(transactionsCache.getIfPresent)
+                val txs =
+                  inputBlockTransactions(nextId).map(transactionsCache.getIfPresent)
                 applicationStep(nextIb, txs, res)
               case _ => res
             }
@@ -241,7 +257,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
-      val bestIndex = if(this.bestIndex == -1){
+      val bestIndex = if (this.bestIndex == -1) {
         this.longestIndex
       } else {
         this.bestIndex
@@ -252,33 +268,34 @@ trait InputBlocksProcessor extends ScorexLogging {
 
       def switchNeeded(id: ModifierId): Boolean = {
         val lf = forks(longestIndex)
-        val d = lf.depthOf(id)
+        val d  = lf.depthOf(id)
         d > bestDepth && {
-          (lf.processedIndex + 1 to d).forall{i =>
+          (lf.processedIndex + 1 to d).forall { i =>
             val id = lf.chain(i)
             inputBlockTransactions.contains(id)
           }
         }
       }
 
-      if(longestIndex != bestIndex && switchNeeded(ib.id)) {
+      if (longestIndex != bestIndex && switchNeeded(ib.id)) {
         //todo: rollback
-        val f = forks(longestIndex)
+        val f    = forks(longestIndex)
         val ibId = f.chain(f.processedIndex + 1)
-        val ib = inputBlockRecords(ibId)
-        val txs = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
-        val r = applicationStep(ib, txs, (f -> Seq.empty)) // todo: rollback instead of Seq.empty
+        val ib   = inputBlockRecords(ibId)
+        val txs  = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
+        val r    = applicationStep(ib, txs, (f -> Seq.empty)) // todo: rollback instead of Seq.empty
         if (r._2.nonEmpty) {
           // todo: eliminate boilerplate, see the same code in another branch below
-          var updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
+          var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
           val updForks = updTree.forks
-          (0 until updForks.length).foreach{idx =>
+          (0 until updForks.length).foreach { idx =>
             val f = updForks(idx)
-            if(f.firstToComplete().contains(ib.id)){
+            if (f.firstToComplete().contains(ib.id)) {
               f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
-                case Success(ibc) => updTree = new InputBlocksTree(forks.updated(idx, ibc))
-                case Failure(_) =>
-                  log.warn("") // todo
+                case Success(ibc) =>
+                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                case Failure(e) =>
+                  log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
             }
           }
@@ -288,20 +305,21 @@ trait InputBlocksProcessor extends ScorexLogging {
           log.warn("") // todo
           Seq.empty -> Seq.empty
         }
-      } else if(forks(bestIndex).firstToComplete().contains(ib.id)) {
+      } else if (forks(bestIndex).firstToComplete().contains(ib.id)) {
         val f = forks(bestIndex)
         val r = applicationStep(ib, txs, (f -> Seq.empty))
         if (r._2.nonEmpty) {
           // todo: eliminate boilerplate, see the same code in another branch below
-          var updTree = new InputBlocksTree(forks.updated(longestIndex, r._1))
+          var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
           val updForks = updTree.forks
-          (0 until updForks.length).foreach{idx =>
+          (0 until updForks.length).foreach { idx =>
             val f = updForks(idx)
-            if(f.firstToComplete().contains(ib.id)){
+            if (f.firstToComplete().contains(ib.id)) {
               f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
-                case Success(ibc) => updTree = new InputBlocksTree(forks.updated(idx, ibc))
-                case Failure(_) =>
-                  log.warn("") // todo
+                case Success(ibc) =>
+                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                case Failure(e) =>
+                  log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
             }
           }
@@ -330,7 +348,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   private val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
 
-
   /**
     * input block id -> input block transaction ids index
     */
@@ -348,7 +365,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   // todo: elements of the cache are accessed via getIfPresent without being checked for null result
   // todo: as they should be in the cache always, but in some extreme cases could be possible exceptions
-  private val transactionsCache = CacheBuilder.newBuilder()
+  private val transactionsCache = CacheBuilder
+    .newBuilder()
     .maximumSize(1000000)
     .expireAfterWrite(120, TimeUnit.MINUTES) // 2 hours
     .build[ModifierId, ErgoTransaction]()
@@ -364,7 +382,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
 
-
   private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
 
   // extracts ordering block id from input block data provided
@@ -376,7 +393,8 @@ trait InputBlocksProcessor extends ScorexLogging {
   def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
     val bestOrdering = bestOrderingBlock()
     val bestInputForOrdering =
-      bestOrdering.map(_.id)
+      bestOrdering
+        .map(_.id)
         .flatMap(inputBlockTrees.get)
         .flatMap(_.bestTip)
         .flatMap(inputBlockRecords.get)
@@ -395,13 +413,14 @@ trait InputBlocksProcessor extends ScorexLogging {
       inputBlockTrees.remove(id)
     }
 
-    val inputBlockIdsToRemove = inputBlockRecords.flatMap { case (id, ibi) =>
-      val res = (bestHeight - ibi.header.height) > PruningThreshold
-      if (res) {
-        Some(id)
-      } else {
-        None
-      }
+    val inputBlockIdsToRemove = inputBlockRecords.flatMap {
+      case (id, ibi) =>
+        val res = (bestHeight - ibi.header.height) > PruningThreshold
+        if (res) {
+          Some(id)
+        } else {
+          None
+        }
     }
 
     inputBlockIdsToRemove.foreach { id =>
@@ -428,43 +447,11 @@ trait InputBlocksProcessor extends ScorexLogging {
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
     lazy val orderingId = extractOrderingId(ib)
 
-    // =============== helper functions ===========================
-
-    // updates best known input block chain tips and best tip's height
-    /* def updateBestTipsAndHeight(childId: ModifierId, parentIdOpt: Option[ModifierId], depth: Int): Unit = {
-      def currentBestTips = bestTips.getOrElse(orderingId, mutable.Set.empty)
-      def tipHeight = bestHeights.getOrElse(orderingId, 0)
-
-      parentIdOpt.foreach { parentId =>
-        bestTips.put(orderingId, currentBestTips -= parentId)
-      }
-      if (depth >= tipHeight) { //} || (currentBestTips.size < 3 && tipHeight >= 4 && depth >= tipHeight - 2)) {
-        if (depth > tipHeight) {
-          bestHeights.put(orderingId, depth)
-        }
-        bestTips.put(orderingId, currentBestTips += childId)
-      }
-    } */
-
-    // look through disconnected children to find ones which can be connected now
-   /* def addChildren(parentId: ModifierId, parentDepth: Int): Unit = {
-      val children = disconnectedWaitlist.filter(childIb =>
-        childIb.prevInputBlockId.exists(pid => bytesToId(pid) == parentId)
-      )
-      val childDepth = parentDepth + 1
-      children.foreach { childIb =>
-        updateBestTipsAndHeight(childIb.id, Some(parentId), childDepth)
-        inputBlockParents.put(childIb.id, Some(parentId) -> childDepth)
-        disconnectedWaitlist.remove(childIb)
-        addChildren(childIb.id, childDepth)
-      }
-    } */
-
-    // =============== main function ===========================
-
     // if input-block corresponds to an ordering block @ better height, reset best input block reference
     // todo: make sure PoW and difficulty checked, to avoid low-diff block being sent in order to break input blocks chain
-    if (ib.header.height > bestBlocks._1.map(_.height).getOrElse(0) + 2) { // todo: beautify
+    if (ib.header.height > bestBlocks._1
+          .map(_.height)
+          .getOrElse(0) + 2) { // todo: beautify
       log.debug("Resetting state")
       resetState()
     }
@@ -493,109 +480,11 @@ trait InputBlocksProcessor extends ScorexLogging {
         inputBlockTrees.put(orderingId, tree)
         updateTree(tree)
     }
-
-/*
-    ibParentOpt.flatMap(parentId => inputBlockParents.get(parentId)) match {
-      case Some((_, parentDepth)) =>
-        val selfDepth = parentDepth + 1
-        inputBlockParents.put(ib.id, ibParentOpt -> selfDepth)
-        updateBestTipsAndHeight(ib.id, ibParentOpt, selfDepth)
-        if (deliveryWaitlist.contains(ib.id)) {
-          addChildren(ib.id, selfDepth)
-        }
-        None
-
-      case None if ibParentOpt.isDefined =>
-        // parent input-block exists, but not known to us, remember it and request downloading it
-        deliveryWaitlist.add(ibParentOpt.get)
-        disconnectedWaitlist.add(ib)
-        ibParentOpt
-
-      case None =>
-        // there is no parent input-block, thus this input block is the first generated after its ordering block
-        val selfDepth = 1
-        inputBlockParents.put(ib.id, None -> selfDepth)
-        updateBestTipsAndHeight(ib.id, None, selfDepth)
-        if (deliveryWaitlist.contains(ib.id)) {
-          addChildren(ib.id, selfDepth)
-        }
-        None
-    } */
   }
-
-  // helper method to find best input block (tip of a best PoW chain containing transactions)
-  /*
-  private def processBestInputBlockCandidate(blockId: ModifierId,
-                                             transactionIds: Seq[ModifierId],
-                                             state: ErgoState[_]): Boolean = {
-    val ib = inputBlockRecords.apply(blockId)
-    val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
-    val orderingId = extractOrderingId(ib)
-
-
-    println("ib : " + ib.id + " parentid: " + ibParentOpt + " _bestInputBlock: " + _bestInputBlock.map(_.id))
-    val res: Boolean = _bestInputBlock match {
-      case None =>
-        if (ibParentOpt.isEmpty && orderingId == historyReader.bestHeaderOpt.map(_.id).getOrElse("")) {
-          val txs = transactionIds.map(id => transactionsCache.getIfPresent(id))
-          val txsValid = state.applyInputBlock(txs, Seq.empty, ib.header)
-          if (txsValid.isSuccess) {
-            log.info(s"Applying best input block #: ${ib.header.id}, no parent")
-            bestInputBlocks += orderingId -> Some(ib)
-            _bestInputBlock = Some(ib)
-            true
-          } else {
-            // todo: more processing ?
-            invalid.add(blockId)
-            false
-          }
-        } else {
-          false
-        }
-      case Some(maybeParent) if (ibParentOpt.contains(maybeParent.id)) =>
-        val txs = transactionIds.map(id => transactionsCache.getIfPresent(id))
-
-        // todo: checks
-        val previousTxs = orderingInputBlocksTransactions.get(orderingId).map(_.map(transactionsCache.getIfPresent)).getOrElse(Seq.empty)
-
-        val txsValid = state.applyInputBlock(txs, previousTxs, ib.header)
-        if (txsValid.isSuccess) {
-          log.info(s"Applying best input block #: ${ib.id} @ height ${ib.header.height}, header is ${ib.header.id}, parent is ${maybeParent.id}")
-          bestInputBlocks += orderingId -> Some(ib)
-          _bestInputBlock = Some(ib)
-          true
-        } else {
-          // todo: eliminate common code with the previous branch
-          // todo: more processing ?
-          invalid.add(blockId)
-          false
-        }
-      case _ =>
-        ibParentOpt match {
-          case Some(ibParent) =>
-            // child of forked input block
-            log.info(s"Applying forked input block #: ${ib.header.id}, with parent $ibParent")
-            // todo: forks switching etc
-            false
-          case None =>
-            // first input block since ordering block but another best block exists
-            log.info(s"Applying forked input block #: ${ib.header.id}, with no parent")
-            false
-        }
-    }
-
-    if (res) {
-      val orderingBlockId = extractOrderingId(_bestInputBlock.get) // todo: .get
-      val curr = orderingInputBlocksTransactions.getOrElse(orderingBlockId, Seq.empty)
-      orderingInputBlocksTransactions.put(orderingBlockId, curr ++ transactionIds)
-    }
-    res
-  }
-   */
 
   /**
     * Applies input block transactions and updates the best input block chain.
-    * 
+    *
     * This method is the core of input block processing, handling both linear chain extension
     * and fork switching scenarios. It manages the state transitions when new input blocks
     * with transactions are received.
@@ -608,9 +497,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     *         - Sequence of input blocks rolled back (when switching forks)
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
-  def applyInputBlockTransactions(sbId: ModifierId,
-                                  transactions: Seq[ErgoTransaction],
-                                  state: ErgoState[_]): (Seq[ModifierId], Seq[ModifierId]) = {
+  def applyInputBlockTransactions(
+    sbId: ModifierId,
+    transactions: Seq[ErgoTransaction],
+    state: ErgoState[_]
+  ): (Seq[ModifierId], Seq[ModifierId]) = {
 
     log.info(s"Applying ${transactions.size} input block transactions for $sbId")
     val transactionIds = transactions.map(_.id)
@@ -625,7 +516,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     inputBlockRecords.get(sbId) match {
       case Some(ib) =>
         val orderingId = extractOrderingId(ib)
-        if(!bestBlocks._1.map(_.id).contains(orderingId)){
+        if (!bestBlocks._1.map(_.id).contains(orderingId)) {
           return Seq.empty -> Seq.empty
         }
         inputBlockTrees.get(orderingId) match {
@@ -641,140 +532,6 @@ trait InputBlocksProcessor extends ScorexLogging {
         Seq.empty -> Seq.empty
     }
 
-    /*
-        /**
-          * Recursively processes the best input block chain by applying transactions and moving to the next child block.
-          *
-          * This is the core algorithm for input block chain progression. It implements a tail-recursive
-          * traversal that:
-          * 1. Attempts to process the current input block candidate with its transactions
-          * 2. If successful, finds the best child block to process next
-          * 3. Recursively continues with the child block
-          * 4. Returns the accumulated sequence of processed block IDs
-          *
-          * The function ensures that only valid chains are extended and maintains the invariant that
-          * the best chain contains only blocks with valid transactions that pass state validation.
-          *
-          * Key characteristics:
-          * - Tail-recursive for stack safety with long chains
-          * - Processes blocks in depth-first order along the best chain
-          * - Stops when no valid child blocks are available
-          * - Accumulates successfully processed block IDs
-          *
-          * @return Sequence of input block IDs that were successfully processed in order
-          */
-        @tailrec
-        def bestInputBlockStep(sbId: ModifierId,
-                               transactionIds: Seq[ModifierId],
-                               state: ErgoState[_],
-                               acc: Seq[ModifierId] = Seq.empty): Seq[ModifierId] = {
-
-          // Attempt to process the current block candidate
-          if (processBestInputBlockCandidate(sbId, transactionIds, state)) {
-            val orderingId = inputBlockRecords.get(sbId).map(extractOrderingId).get // todo: .get
-
-            // Find the best child block to process next
-            // This selects from the best tips that are descendants of the current block
-            // and have their transactions available
-            val maybeChildToApply = (bestTips.getOrElse(orderingId, Set.empty).flatMap { tipId =>
-              isAncestor(tipId, sbId).map(_ -> tipId)
-            }.filter { case (childId, _) =>
-              inputBlockTransactions.contains(childId)
-            }) match {
-              case s if s.isEmpty => None
-              // Select the child with the highest depth (longest chain)
-              case s => Some(s.maxBy { case (_, tipId) => inputBlockParents.get(tipId).map(_._2).getOrElse(0) }._1)
-            }
-
-            val updAcc = acc :+ sbId
-
-            // Recursively process the next child block if available
-            maybeChildToApply match {
-              case Some(nsbId) =>
-                inputBlockTransactions.get(sbId) match {
-                  case Some(ntransactionIds) => bestInputBlockStep(nsbId, ntransactionIds, state, updAcc)
-                  case None => updAcc
-                }
-              case None => updAcc
-            }
-          } else {
-            // Current block processing failed, return accumulated results
-            acc
-          }
-        }
-
-        log.info(s"Applying ${transactions.size} input block transactions for $sbId")
-        val transactionIds = transactions.map(_.id)
-        inputBlockTransactions.put(sbId, transactionIds)
-
-        // put transactions into cache shared among all the input blocks,
-        // to avoid data duplication in input block related functions
-        transactions.foreach { tx =>
-          transactionsCache.put(tx.id, tx)
-        }
-
-        var forkingInputBlock: Option[ModifierId] = None
-
-        inputBlockRecords.get(sbId) match {
-          case Some(ib) if ib.prevInputBlockId.map(bytesToId) == bestInputBlock().map(_.id) =>
-          // continuation of best input blocks chain, do nothing aside of linear tip update
-          case Some(ib) =>
-            val depth = inputBlockParents.get(sbId).map(_._2).getOrElse(1)
-            val bestInputDepth = _bestInputBlock.map(_.id).flatMap(inputBlockParents.get).map(_._2).getOrElse(1)
-            if (depth > bestInputDepth) {
-              log.info(s"Switching input-block forks as $depth > $bestInputDepth") // todo: make debug before release
-              val orderingId = extractOrderingId(ib)
-
-              // find common input block and do rollback
-              val thisChain = inputBlocksChain(sbId).reverse
-              if (thisChain.forall(id => inputBlockTransactions.contains(id))) {
-
-                val currentBestChain = bestInputBlocksChain().reverse
-                var commonIndex = -1
-                (0 until currentBestChain.length).foreach { idx =>
-                  if (thisChain(idx) == currentBestChain(idx)) {
-                    commonIndex = idx
-                  }
-                }
-                ((currentBestChain.length - 1).to(commonIndex + 1, -1)).foreach { idx =>
-                  val ibId = currentBestChain(idx)
-                  val txs = inputBlockTransactions.get(ibId).get
-                  // removing input-block transactions
-                  val updTxs = orderingInputBlocksTransactions.get(orderingId).getOrElse(Seq.empty).filter(id => !txs.contains(id))
-                  orderingInputBlocksTransactions.put(orderingId, updTxs)
-                }
-
-                if (commonIndex > -1) {
-                  val bestInputId = Some(inputBlockRecords(currentBestChain(commonIndex)))
-                  bestInputBlocks += orderingId -> bestInputId
-                  _bestInputBlock = bestInputId
-                  forkingInputBlock = Some(thisChain(commonIndex + 1))
-                } else {
-                  val bestInputId = None
-                  bestInputBlocks += orderingId -> bestInputId
-                  _bestInputBlock = bestInputId
-                  forkingInputBlock = Some(thisChain.head)
-                }
-              } else {
-                log.warn("Broken input-blocks chain during fork switching attempt")
-              }
-            }
-          case None =>
-            log.warn(s"Input block transactions delivered for unknown input block $sbId")
-            // todo: should transactions be saved in this case ?
-            return Seq.empty -> Seq.empty
-        }
-
-        if (forkingInputBlock.isEmpty) {
-          bestInputBlockStep(sbId, transactionIds, state) -> Seq.empty
-        } else {
-          val sbId = forkingInputBlock.get
-          val transactionIds = inputBlockTransactions.get(sbId).get // todo: .get
-          val applied = bestInputBlockStep(sbId, transactionIds, state)
-          val rolledBack = Seq.empty
-          applied -> rolledBack
-        }
-        */
   }
 
   def updateStateWithOrderingBlock(h: Header): Unit = {
@@ -787,7 +544,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Returns the best input block for the current best ordering block.
-    * 
+    *
     * @return the best input block information if available, None otherwise
     */
   def bestInputBlock(): Option[InputBlockInfo] = {
@@ -796,7 +553,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Returns the input blocks tree structure for the current best ordering block.
-    * 
+    *
     * @return the input blocks tree if available, None otherwise
     */
   def inputBlocksTree(): Option[InputBlocksTree] = {
@@ -808,9 +565,13 @@ trait InputBlocksProcessor extends ScorexLogging {
     * The chain is returned in reverse order (from tip to genesis).
     */
   def bestInputBlocksChain(): Seq[ModifierId] = {
-    bestOrderingBlock().map(_.id).flatMap(id => inputBlockTrees.get(id)).map(_.bestChain).getOrElse(Seq.empty).reverse
+    bestOrderingBlock()
+      .map(_.id)
+      .flatMap(id => inputBlockTrees.get(id))
+      .map(_.bestChain)
+      .getOrElse(Seq.empty)
+      .reverse
   }
-
 
   /**
     * Retrieves an input block by its modifier ID.
@@ -849,8 +610,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     orderingBlockAnnouncements.get(id)
   }
 
-
-
   /**
     * @param sbId
     * @param toFilter - weak ids of transactions which SHOULD BE in resul
@@ -886,7 +645,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def getOrderingBlockTips(id: ModifierId): Option[Set[ModifierId]] = {
     val treeOpt = inputBlockTrees.get(id)
-    val bd = treeOpt.map(_.bestDepth).getOrElse(-1)
+    val bd      = treeOpt.map(_.bestDepth).getOrElse(-1)
     treeOpt.map(_.forks.filter(_.processedIndex == bd).flatMap(_.tip).toSet)
   }
 
@@ -902,20 +661,25 @@ trait InputBlocksProcessor extends ScorexLogging {
     inputBlockTrees.get(id).flatMap(_.longestDepth).getOrElse(-1)
   }
 
-
   /**
     * @param id ordering block (header) id
     * @return transactions included in best input blocks chain since ordering block with identifier `id`
     */
   def getCollectedInputBlocksTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
-    bestOrderingBlock().map(_.id).flatMap(inputBlockTrees.get).map(_.bestChainTransactions)
+    bestOrderingBlock()
+      .map(_.id)
+      .flatMap(inputBlockTrees.get)
+      .map(_.bestChainTransactions)
   }
 
   /**
     * @return all the transaction in best input-blocks chain collected after current best ordering block
     */
   def getBestOrderingCollectedInputBlocksTransactions(): Seq[ErgoTransaction] = {
-    bestOrderingBlock().map(h => h.id).flatMap(getCollectedInputBlocksTransactions).getOrElse(Seq.empty)
+    bestOrderingBlock()
+      .map(h => h.id)
+      .flatMap(getCollectedInputBlocksTransactions)
+      .getOrElse(Seq.empty)
   }
 
   def saveOrderingBlockTransactions(orderingBlockId: ModifierId,
@@ -923,7 +687,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     orderingBlockTransactions.put(orderingBlockId, transactions)
   }
 
-  def getOrderingBlockTransactions(orderingBlockId: ModifierId): Option[Seq[ErgoTransaction]] = {
+  def getOrderingBlockTransactions(
+    orderingBlockId: ModifierId
+  ): Option[Seq[ErgoTransaction]] = {
     orderingBlockTransactions.get(orderingBlockId)
   }
 

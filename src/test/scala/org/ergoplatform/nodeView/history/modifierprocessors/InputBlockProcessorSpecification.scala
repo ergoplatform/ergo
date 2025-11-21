@@ -37,7 +37,6 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     index = 0
   )
 
-
   val eb2 = new ErgoBox(
     value = 1000000000L,
     ergoTree = compileSourceV5("CONTEXT.minerPubKey.size >= 0", 0),

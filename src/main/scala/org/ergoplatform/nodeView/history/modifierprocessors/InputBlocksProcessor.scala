@@ -445,40 +445,47 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return id of parent input block to download, if it is not known to us
     */
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
-    lazy val orderingId = extractOrderingId(ib)
+    try {
+      lazy val orderingId = extractOrderingId(ib)
 
-    // if input-block corresponds to an ordering block @ better height, reset best input block reference
-    // todo: make sure PoW and difficulty checked, to avoid low-diff block being sent in order to break input blocks chain
-    if (ib.header.height > bestBlocks._1
-          .map(_.height)
-          .getOrElse(0) + 2) { // todo: beautify
-      log.debug("Resetting state")
-      resetState()
-    }
-
-    inputBlockRecords.put(ib.id, ib)
-
-    // val ibParentOpt = ib.prevInputBlockId.map(bytesToId)
-
-    def updateTree(tree: InputBlocksTree): Option[ModifierId] = {
-      tree.insertInputBlock(ib) match {
-        case Some(updTree) =>
-          inputBlockTrees.put(orderingId, updTree)
-          None
-        case None =>
-          println("adding to disconnected queue: " + ib.id)
-          disconnectedWaitlist.add(ib)
-          ib.prevInputBlockId
+      // if input-block corresponds to an ordering block @ better height, reset best input block reference
+      // todo: make sure PoW and difficulty checked, to avoid low-diff block being sent in order to break input blocks chain
+      if (ib.header.height > bestBlocks._1
+        .map(_.height)
+        .getOrElse(0) + 2) { // todo: beautify
+        log.debug("Resetting state")
+        resetState()
       }
-    }
 
-    inputBlockTrees.get(orderingId) match {
-      case Some(tree) =>
-        updateTree(tree)
-      case None =>
-        val tree = InputBlocksTree.empty
-        inputBlockTrees.put(orderingId, tree)
-        updateTree(tree)
+      inputBlockRecords.put(ib.id, ib)
+
+      /**
+        * @return an optional if of input block to download
+        */
+      def updateTree(tree: InputBlocksTree): Option[ModifierId] = {
+        tree.insertInputBlock(ib) match {
+          case Some(updTree) =>
+            inputBlockTrees.put(orderingId, updTree)
+            None
+          case None =>
+            log.info("Put input block to disconnected queue: " + ib.id)
+            disconnectedWaitlist.add(ib)
+            ib.prevInputBlockId
+        }
+      }
+
+      inputBlockTrees.get(orderingId) match {
+        case Some(tree) =>
+          updateTree(tree)
+        case None =>
+          val tree = InputBlocksTree.empty
+          inputBlockTrees.put(orderingId, tree)
+          updateTree(tree)
+      }
+    } catch {
+      case t: Throwable =>
+        log.error(s"Can't apply input block ${ib.id}", t)
+        None
     }
   }
 
@@ -503,32 +510,38 @@ trait InputBlocksProcessor extends ScorexLogging {
     state: ErgoState[_]
   ): (Seq[ModifierId], Seq[ModifierId]) = {
 
-    log.info(s"Applying ${transactions.size} input block transactions for $sbId")
-    val transactionIds = transactions.map(_.id)
-    inputBlockTransactions.put(sbId, transactionIds)
+    try {
+      log.info(s"Applying ${transactions.size} input block transactions for $sbId")
+      val transactionIds = transactions.map(_.id)
+      inputBlockTransactions.put(sbId, transactionIds)
 
-    // put transactions into cache shared among all the input blocks,
-    // to avoid data duplication in input block related functions
-    transactions.foreach { tx =>
-      transactionsCache.put(tx.id, tx)
-    }
+      // put transactions into cache shared among all the input blocks,
+      // to avoid data duplication in input block related functions
+      transactions.foreach { tx =>
+        transactionsCache.put(tx.id, tx)
+      }
 
-    inputBlockRecords.get(sbId) match {
-      case Some(ib) =>
-        val orderingId = extractOrderingId(ib)
-        if (!bestBlocks._1.map(_.id).contains(orderingId)) {
-          return Seq.empty -> Seq.empty
-        }
-        inputBlockTrees.get(orderingId) match {
-          case Some(tree) =>
-            tree.processInputBlockTransactions(ib, transactions, state)
-          case None =>
-            Seq.empty -> Seq.empty
-        }
+      inputBlockRecords.get(sbId) match {
+        case Some(ib) =>
+          val orderingId = extractOrderingId(ib)
+          if (!bestBlocks._1.map(_.id).contains(orderingId)) {
+            return Seq.empty -> Seq.empty
+          }
+          inputBlockTrees.get(orderingId) match {
+            case Some(tree) =>
+              tree.processInputBlockTransactions(ib, transactions, state)
+            case None =>
+              Seq.empty -> Seq.empty
+          }
 
-      case None =>
-        log.warn(s"Input block transactions delivered for unknown input block $sbId")
-        // todo: should transactions be saved in this case ?
+        case None =>
+          log.warn(s"Input block transactions delivered for unknown input block $sbId")
+          // todo: should transactions be saved in this case ?
+          Seq.empty -> Seq.empty
+      }
+    } catch {
+      case t: Throwable =>
+        log.error(s"Error in $sbId transactions application ", t)
         Seq.empty -> Seq.empty
     }
 

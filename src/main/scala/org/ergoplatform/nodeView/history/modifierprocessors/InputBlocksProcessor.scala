@@ -277,13 +277,29 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
-      if (longestIndex != bestIndex && switchNeeded(ib.id)) {
-        //todo: rollback
-        val f    = forks(longestIndex)
-        val ibId = f.chain(f.processedIndex + 1)
+      if (longestIndex != bestIndex && switchNeeded(ib.id)) { // forking case
+
+        val currentFork = forks(bestIndex)
+        val newFork    = forks(longestIndex)
+
+        val rollbackInputBlocks = {
+          var commonIdx = -1
+          (0 until currentFork.chain.length).foreach { idx =>
+            if (currentFork.chain(idx).sameElements(newFork.chain(idx)) && idx <= newFork.processedIndex) { // todo: finish
+              commonIdx = idx
+            }
+          }
+          if(commonIdx == -1 || commonIdx == currentFork.processedIndex){
+            Seq.empty
+          } else {
+            currentFork.chain.slice(commonIdx + 1, currentFork.processedIndex)
+          }
+        }
+
+        val ibId = newFork.chain(newFork.processedIndex + 1)
         val ib   = inputBlockRecords(ibId)
         val txs  = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
-        val r    = applicationStep(ib, txs, (f -> Seq.empty)) // todo: rollback instead of Seq.empty
+        val r    = applicationStep(ib, txs, (newFork -> rollbackInputBlocks))
         if (r._2.nonEmpty) {
           // todo: eliminate boilerplate, see the same code in another branch below
           var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
@@ -305,7 +321,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           log.warn("") // todo
           Seq.empty -> Seq.empty
         }
-      } else if (forks(bestIndex).firstToComplete().contains(ib.id)) {
+      } else if (forks(bestIndex).firstToComplete().contains(ib.id)) { // no forking
         val f = forks(bestIndex)
         val r = applicationStep(ib, txs, (f -> Seq.empty))
         if (r._2.nonEmpty) {

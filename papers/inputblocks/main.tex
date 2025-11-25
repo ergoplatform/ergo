@@ -286,7 +286,7 @@ class InputBlockFields(
 \item Provides canonical ordering
 \end{enumerate}
 
-\section{Security Considerations}
+\section{Security}
 
 \subsection{Consensus Security}
 
@@ -312,7 +312,12 @@ class InputBlockFields(
 \item No inflation changes required
 \end{itemize}
 
-\section{Performance Evaluation}
+
+\section{Light Clients}
+
+\section{Deployment}
+
+\section{Conclusion}
 
 \subsection{Theoretical Improvements}
 
@@ -331,34 +336,6 @@ class InputBlockFields(
 \item Improved DeFi and trading applications
 \item Enhanced scalability without consensus changes
 \end{itemize}
-
-\section{Implementation Status}
-
-\subsection{Completed Components}
-
-\begin{itemize}
-\item Input block data structures (\code{InputBlockInfo}, \code{InputBlockFields})
-\item P2P message specifications
-\item PoW validation for input blocks
-\item Network message handlers
-\item Input block processor framework
-\end{itemize}
-
-\subsection{Pending Components}
-
-\begin{itemize}
-\item Transaction classification engine
-\item Merkle proof generation/validation
-\item Fee script modifications
-\item Comprehensive testing suite
-\item Soft-fork activation mechanism
-\end{itemize}
-
-\section{Light Clients}
-
-\section{Deployment}
-
-\section{Conclusion}
 
 The Input Blocks implementation represents a significant advancement in Ergo's scalability and user experience without compromising security or decentralization. By separating transaction processing from consensus finalization, this architecture enables faster confirmations, improved throughput, and better network efficiency while maintaining full backward compatibility.
 

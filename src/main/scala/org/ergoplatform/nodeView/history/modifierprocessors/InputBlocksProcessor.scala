@@ -285,7 +285,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         val rollbackInputBlocks = {
           var commonIdx = -1
           (0 until currentFork.chain.length).foreach { idx =>
-            if (currentFork.chain(idx).sameElements(newFork.chain(idx)) && idx <= newFork.processedIndex) { // todo: finish
+            if (currentFork.chain(idx).sameElements(newFork.chain(idx)) && idx <= newFork.processedIndex) {
               commonIdx = idx
             }
           }
@@ -318,7 +318,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           r._2 -> Seq.empty
         } else {
-          log.warn("") // todo
+          log.warn("Progress is empty in processInputBlockTransactions")
           Seq.empty -> Seq.empty
         }
       } else if (forks(bestIndex).firstToComplete().contains(ib.id)) { // no forking
@@ -342,11 +342,11 @@ trait InputBlocksProcessor extends ScorexLogging {
           inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           r._2 -> Seq.empty
         } else {
-          log.warn("") // todo
+          log.warn("Progress is empty in processInputBlockTransactions")
           Seq.empty -> Seq.empty
         }
       } else {
-        log.debug("") // todo
+        log.info("No forking and no non-forking ") // todo: make debug before release
         Seq.empty -> Seq.empty
       }
     }

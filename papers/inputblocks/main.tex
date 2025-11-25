@@ -50,8 +50,8 @@
 \maketitle
 
 \begin{abstract}
-This paper presents the design and implementation of Matrix, a new design, where, instead of chain of full-blocks (which is still
-being used for storing blocks beyond last few ones), we have more complex structure with input and ordering blocks in Ergo.
+This paper presents the design and implementation of \em{Matrix}, a new design, where, instead of chain of full-blocks (which is still
+being used for storing blocks beyond last few ones, bootstrapping new nodes, light clients), we have more complex structure with input and ordering blocks in Ergo.
 This novel blockchain architecture separates transaction processing from block ordering to achieve faster transaction confirmations and improved
 network throughput. The system introduces two types of blocks: \emph{Input Blocks} for fast transaction processing
 and \emph{Ordering Blocks} for final consensus, maintaining backward compatibility through a soft-fork approach.
@@ -179,17 +179,20 @@ Transactions are classified into two categories based on their validation requir
 \begin{itemize}
 \item Validation outcome independent of block context
 \item Can only be included in input blocks
-\item Examples: Simple transfers, most smart contracts
+\item Examples: Simple transfers, most smart contracts (which do not depend on block timestamp, miner pubkey)
 \end{itemize}
 
 \subsubsection{Second-class Transactions}
 \begin{itemize}
-\item Validation depends on block context (timestamp, miner pubkey)
+\item Validation depends on block context (block timestamp, miner pubkey, block votes)
 \item Can be included in both input and ordering blocks
-\item Examples: Emission contracts, time-dependent contracts
+\item Examples: emission contracts, time-dependent contracts
 \end{itemize}
 
-\section{Technical Implementation}
+\section{Implementation}
+
+In this section we describe how to implement input blocks without breaking current full and light Ergo client. Our
+proposal is generic enough and can be reused for other classic Proof-of-Work blockchains (such as Bitcoin).
 
 \subsection{Extension}
 
@@ -254,17 +257,6 @@ class InputBlockFields(
 \section{Transaction Processing}
 
 
-
-\subsection{Merkle Tree Structure}
-
-Ordering blocks include extension fields for input block validation:
-
-\begin{itemize}
-\item \code{E1}: Digest of new first-class transactions since last input block
-\item \code{E2}: Digest of first-class transactions since last ordering block
-\item \code{E3}: Reference to last input block
-\end{itemize}
-
 \section{Network Propagation Protocol}
 
 \subsection{Announcement Phase}
@@ -309,7 +301,6 @@ Ordering blocks include extension fields for input block validation:
 
 \begin{itemize}
 \item Spam protection through penalty system
-\item Double-spending prevention via Merkle proofs
 \item Eclipse attack resistance through peer validation
 \end{itemize}
 
@@ -362,6 +353,10 @@ Ordering blocks include extension fields for input block validation:
 \item Comprehensive testing suite
 \item Soft-fork activation mechanism
 \end{itemize}
+
+\section{Light Clients}
+
+\section{Deployment}
 
 \section{Conclusion}
 

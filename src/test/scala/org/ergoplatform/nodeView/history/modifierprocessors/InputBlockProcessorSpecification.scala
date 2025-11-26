@@ -266,12 +266,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val ibc0 = h.inputBlocksTree().get.forks.head
     ibc0.chain shouldBe Seq(ib1.id, ib2.id)
     ibc0.processedIndex shouldBe 1
-    ibc0.costCollected shouldBe 0
+    ibc0.processedBlocks.length shouldBe 2
 
     val ibc1 = h.inputBlocksTree().get.forks.last
     ibc1.chain shouldBe Seq(ib1.id, ib3.id)
     ibc1.processedIndex shouldBe 0
-    ibc1.costCollected shouldBe 0
+    ibc1.processedBlocks.length shouldBe 1
 
     r shouldBe None
     // both tips of depth == 2 are recognized now

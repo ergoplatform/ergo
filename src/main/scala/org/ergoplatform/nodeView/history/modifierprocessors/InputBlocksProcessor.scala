@@ -29,7 +29,10 @@ trait InputBlocksProcessor extends ScorexLogging {
   private val PruningThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
   // input blocks chain since ordering
-  case class InputBlocksChain(chain: Seq[ModifierId], processedIndex: Int, costCollected: Long) {
+  case class InputBlocksChain(chain: Seq[ModifierId], processedBlocks: Seq[Long]) {
+
+    val processedIndex: Int = processedBlocks.length - 1
+
     def tip: Option[ModifierId] = {
       if (processedIndex == -1) {
         None
@@ -49,16 +52,13 @@ trait InputBlocksProcessor extends ScorexLogging {
         case Some(prevId) =>
           if (prevId == chain.lastOption.getOrElse("")) {
             val updChain =
-              InputBlocksChain(chain :+ newInputBlock.id, processedIndex, costCollected)
+              InputBlocksChain(chain :+ newInputBlock.id, processedBlocks)
             Seq(updChain)
           } else {
             val idx = chain.indexOf(prevId)
-            // todo: fix costCollected in fork processing, it may decrease
-            val newPi = Math.min(processedIndex, idx)
             val forkedChain = InputBlocksChain(
               chain.take(idx + 1) :+ newInputBlock.id,
-              newPi,
-              costCollected
+              processedBlocks.take(idx + 1)
             )
             Seq(this, forkedChain)
           }
@@ -95,7 +95,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       firstToComplete() match {
         case Some(expectedId)
             if expectedId == id => // todo: extra check which can be removed after release ?
-          Success(InputBlocksChain(chain, processedIndex + 1, costCollected + costDelta))
+          Success(InputBlocksChain(chain, processedBlocks :+ costDelta))
         case _ =>
           val msg = s"Improper input-block completion: $id"
           log.error(msg)
@@ -122,7 +122,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   object InputBlocksChain {
 
     def apply(ib: InputBlockInfo): InputBlocksChain = {
-      new InputBlocksChain(Seq(ib.id), -1, 0)
+      new InputBlocksChain(Seq(ib.id), Seq.empty)
     }
   }
 
@@ -234,12 +234,12 @@ trait InputBlocksProcessor extends ScorexLogging {
       txs: Seq[ErgoTransaction],
       state: ErgoState[_]
     ): (Seq[ModifierId], Seq[ModifierId]) = {
+
+
       @tailrec
-      def applicationStep(
-        ib: InputBlockInfo,
-        txs: Seq[ErgoTransaction],
-        acc: (InputBlocksChain, Seq[ModifierId])
-      ): (InputBlocksChain, Seq[ModifierId]) = {
+      def applicationStep(ib: InputBlockInfo,
+                          txs: Seq[ErgoTransaction],
+                          acc: (InputBlocksChain, Seq[ModifierId])): (InputBlocksChain, Seq[ModifierId]) = {
         acc._1.applyTransactions(ib, txs, state) match {
           case Success(updChain) =>
             val res = (updChain -> (acc._2 ++ Seq(ib.id)))

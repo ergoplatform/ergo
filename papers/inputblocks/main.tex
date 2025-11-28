@@ -99,6 +99,8 @@ In Section ? we provide implementation details.
 
 \section{Architectural Overview}
 
+In this section, we provide overview of input blocks design. Details then provided in the follow-up Implementation section.
+
 \subsection{Dual Blockchain Structure}
 
 Following ideas in PRISM~\cite{bagaria2019prism}, parallel Proof-of-Work~\cite{garay2024proof}, and Tailstorm~\cite{keller2023tailstorm}, we introduce two kinds of blocks in the Ergo
@@ -202,7 +204,7 @@ There are three new fields in extension field of a block:
         value is Merkle tree root bytes (32 byts).
   \item a digest (Merkle tree root) first class transactions since ordering block till last input-block. Key is 0x0301,
   value is Merkle tree root bytes (32 byts).
-  \item reference to a last seen input block. Key is 0x0302, value is input block id (32 byts).
+  \item reference to a last seen input block. Key is 0x0302, value is input block id (32 bytes).
 \end{itemize}
 
 

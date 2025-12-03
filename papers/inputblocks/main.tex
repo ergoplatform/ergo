@@ -38,7 +38,7 @@
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\todo}[1]{{\color{red}TODO: #1}}
 
-\newcommand{\knote}[1]{{\authnote{\textcolor{green}{Alex notes}}{#1}}}
+\newcommand{\knote}[1]{{\authnote{\textcolor{green}{kushti notes}}{#1}}}
 
 \begin{document}
 
@@ -316,6 +316,21 @@ class InputBlockFields(
 
 
 \section{Light Clients}
+
+\subsection{Stateless clients}
+
+Ergo has a support for partially stateless clients, where only miners need to store UTXO sets, and stateless clients
+can ask stateful ones for authenticated AVL+ tree based proofs of UTXO set transformations~\cite{reyzin2017improving}.
+
+% TODO: do we need to leave stateless clients intact or can modify
+
+\subsection{SPV and NiPoPoW clients}
+
+An SPV client is not downloading full blocks, only block headers or short proof of headers-chain, such as NiPoPoW~(a
+non-interactive proof of proof-of-work)~\cite{kiayias2020non}, and then ask for transactions.
+
+Input blocks perfectly compatible with SPV clients. An SPV client can still ask for headers or NiPoPoW just, and so enjoy
+the same minimal bandwidth requirements, or it may ask for input-blocks additionally, to enjoy faster confirmations. 
 
 \section{Deployment}
 

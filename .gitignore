@@ -70,3 +70,4 @@ out/
 
 # scala worksheets
 *.worksheet.sc
+llm_generated/

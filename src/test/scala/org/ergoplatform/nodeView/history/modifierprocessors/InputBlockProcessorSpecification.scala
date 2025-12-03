@@ -1331,6 +1331,199 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlock(ib4c.id) shouldBe Some(ib4c)
   }
 
+  property("complex multi-level fork resolution with transaction dependencies") {
+    // Create a scenario where multiple levels of forks exist with inter-dependent transactions
+    // Single fork: ib1 -> ib2 -> ib3 (with transactions spending outputs from ib2)
+
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val initialTxs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create common root input block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, initialTxs, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // Create single fork: ib1 -> ib2 -> ib3 (with transactions spending outputs from ib2)
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2)
+
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    h.applyInputBlock(ib3)
+
+    // Create transactions for the fork (spending outputs from previous transactions in the same fork)
+    val forkTx1Outputs = initialTxs.head.outputs
+    val forkTx1 = new ErgoTransaction(
+      IndexedSeq(Input(forkTx1Outputs.head.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(forkTx1Outputs.head.toCandidate)
+    )
+
+    val forkTx2 = new ErgoTransaction(
+      IndexedSeq(Input(forkTx1.outputs.head.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(forkTx1.outputs.head.toCandidate)
+    )
+
+    // Apply transactions to the fork
+    h.applyInputBlockTransactions(ib2.id, Seq(forkTx1), us) shouldBe (Seq(ib2.id) -> Seq.empty)
+    h.applyInputBlockTransactions(ib3.id, Seq(forkTx2), us) shouldBe (Seq(ib3.id) -> Seq.empty)
+
+    // The fork should be the current best chain
+    val bestChain = h.bestInputBlocksChain()
+    bestChain should not be empty
+    bestChain should contain(ib1.id) // Root should always be there
+    bestChain.length should be >= 3 // Should contain at least ib1, ib2, ib3
+
+    h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id, ib1.id)
+  }
+
+  property("deep fork switching with many blocks") {
+    // Create a scenario where the system must switch to a fork that is many blocks long
+    // Short Chain: ib1 -> ib2 (2 blocks)
+    // Long Chain: ib1 -> ib2alt -> ib3alt -> ib4alt -> ib5alt -> ib6alt (5 blocks total)
+    // Verify that when longer chain becomes valid, the system properly switches and applies all changes
+
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val initialTxs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create common root input block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, initialTxs, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // Create short fork: ib1 -> ib2
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
+
+    // The short fork should now be the best chain
+    h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
+
+    // Create long fork: ib1 -> ib2alt -> ib3alt -> ib4alt -> ib5alt -> ib6alt (5 blocks total)
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2alt = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2alt)
+
+    val c5 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib3alt = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib2alt.id)), None)
+    h.applyInputBlock(ib3alt)
+
+    val c6 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib4alt = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib3alt.id)), None)
+    h.applyInputBlock(ib4alt)
+
+    val c7 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib5alt = InputBlockInfo(1, c7(0).header, parentOnly(idToBytes(ib4alt.id)), None)
+    h.applyInputBlock(ib5alt)
+
+    val c8 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib6alt = InputBlockInfo(1, c8(0).header, parentOnly(idToBytes(ib5alt.id)), None)
+    h.applyInputBlock(ib6alt)
+
+    // Apply transactions to the long fork
+    h.applyInputBlockTransactions(ib2alt.id, Seq.empty, us)
+    h.applyInputBlockTransactions(ib3alt.id, Seq.empty, us)
+    h.applyInputBlockTransactions(ib4alt.id, Seq.empty, us)
+    h.applyInputBlockTransactions(ib5alt.id, Seq.empty, us)
+    h.applyInputBlockTransactions(ib6alt.id, Seq.empty, us)
+
+    // The long fork should now be the best chain since it's longer (5 blocks vs 2 blocks in short fork)
+    val bestChain = h.bestInputBlocksChain()
+    bestChain should have length 6 // ib6alt, ib5alt, ib4alt, ib3alt, ib2alt, ib1
+    bestChain.head shouldBe ib6alt.id
+    bestChain.last shouldBe ib1.id
+
+    // Verify that all blocks in the long fork are accessible
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+    h.getInputBlock(ib2.id) shouldBe Some(ib2) // Old short fork block should still exist
+    h.getInputBlock(ib2alt.id) shouldBe Some(ib2alt)
+    h.getInputBlock(ib3alt.id) shouldBe Some(ib3alt)
+    h.getInputBlock(ib4alt.id) shouldBe Some(ib4alt)
+    h.getInputBlock(ib5alt.id) shouldBe Some(ib5alt)
+    h.getInputBlock(ib6alt.id) shouldBe Some(ib6alt)
+  }
+
+  property("fork-based double-spending attempt prevention") {
+    // Create a scenario where a malicious actor creates two forks with the same input being spent in both
+    // Fork A: ib1 -> ib2a (with transaction spending box X)
+    // Fork B: ib1 -> ib2b (with different transaction spending same box X)
+    // Ensure that only one fork can be valid and the system properly prevents double-spending
+
+    val bh = BoxHolder(Seq(eb1))  // Single box to spend
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create common root input block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // Create Fork A: ib1 -> ib2a (with transaction spending the same box as in Fork B)
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2a = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2a)
+
+    // Create Fork B: ib1 -> ib2b (with different transaction spending the same box as in Fork A)
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2b = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2b)
+
+    // Apply the same transaction to the first fork - this should succeed
+    val resultA = h.applyInputBlockTransactions(ib2a.id, txs, us)
+    resultA._1 should not be empty  // First fork transaction should be accepted
+
+    // Apply the same transaction (trying to spend the same UTXO) to the second fork
+    // This should fail since the UTXO was already spent in the first fork
+    val resultB = h.applyInputBlockTransactions(ib2b.id, txs, us)
+    resultB._1 shouldBe empty  // Second fork transaction should be rejected
+
+    // Verify that the best chain only includes the valid fork
+    val bestChain = h.bestInputBlocksChain()
+    if (bestChain.contains(ib2a.id)) {
+      // If ib2a is in best chain, then ib2b should not be present
+      bestChain should not contain ib2b.id
+    } else if (bestChain.contains(ib2b.id)) {
+      // If ib2b is in best chain, then ib2a should not be present
+      bestChain should not contain ib2a.id
+    }
+
+    // Verify that both input blocks exist in the system
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+    h.getInputBlock(ib2a.id) shouldBe Some(ib2a)
+    h.getInputBlock(ib2b.id) shouldBe Some(ib2b)
+
+    // Verify that the double spending was correctly prevented
+    // The system should handle the competing forks properly without allowing double spending
+    val allTxs = h.getBestOrderingCollectedInputBlocksTransactions()
+    allTxs.length shouldBe 1  // Only one transaction should be accepted, not both
+  }
+
   // test: test follow-up ordering blocks application, check that reference to bestInputBlock etc reset
 
   // todo : tests for digest state

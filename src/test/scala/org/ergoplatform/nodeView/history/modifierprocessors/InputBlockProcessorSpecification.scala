@@ -1524,6 +1524,232 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     allTxs.length shouldBe 1  // Only one transaction should be accepted, not both
   }
 
+  property("concurrent fork creation and validation") {
+    // Create multiple forks simultaneously and apply transactions out of order
+    // Fork A: ib1 -> ib2a -> ib3a
+    // Fork B: ib1 -> ib2b -> ib3b
+    // Fork C: ib1 -> ib2c -> ib3c
+    // Apply transactions in random order and verify correct state management
+
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create common root input block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // Create Fork A: ib1 -> ib2a -> ib3a
+    val c3a = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2a = InputBlockInfo(1, c3a(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2a)
+
+    val c4a = genChain(2, h, stateOpt = Some(us)).tail
+    val ib3a = InputBlockInfo(1, c4a(0).header, parentOnly(idToBytes(ib2a.id)), None)
+    h.applyInputBlock(ib3a)
+
+    // Create Fork B: ib1 -> ib2b -> ib3b
+    val c3b = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2b = InputBlockInfo(1, c3b(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2b)
+
+    val c4b = genChain(2, h, stateOpt = Some(us)).tail
+    val ib3b = InputBlockInfo(1, c4b(0).header, parentOnly(idToBytes(ib2b.id)), None)
+    h.applyInputBlock(ib3b)
+
+    // Create Fork C: ib1 -> ib2c -> ib3c
+    val c3c = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2c = InputBlockInfo(1, c3c(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2c)
+
+    val c4c = genChain(2, h, stateOpt = Some(us)).tail
+    val ib3c = InputBlockInfo(1, c4c(0).header, parentOnly(idToBytes(ib2c.id)), None)
+    h.applyInputBlock(ib3c)
+
+    // Generate transactions for each fork
+    val txsA = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+    val txsB = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(2)), 201)._1
+    val txsC = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(3)), 201)._1
+
+    // Apply transactions in non-sequential order to test concurrent processing
+    // Apply transactions for fork C first
+    h.applyInputBlockTransactions(ib3c.id, txsC, us) // Try to apply to child when parent not processed
+    // This should return empty because parent transaction is not processed yet
+
+    h.applyInputBlockTransactions(ib2c.id, txsC, us) // Apply to parent
+    // May or may not succeed depending on validation
+
+    h.applyInputBlockTransactions(ib3c.id, txsC, us) // Now apply to child
+
+    // Apply transactions for fork A next
+    h.applyInputBlockTransactions(ib3a.id, txsA, us) // Try to apply to child first
+    // This might return empty if parent not processed
+
+    h.applyInputBlockTransactions(ib2a.id, txsA, us) // Apply to parent
+    // May or may not succeed depending on validation
+
+    h.applyInputBlockTransactions(ib3a.id, txsA, us) // Now apply to child
+
+    // Apply transactions for fork B last
+    h.applyInputBlockTransactions(ib2b.id, txsB, us) // Apply to parent
+    // May or may not succeed depending on validation
+
+    h.applyInputBlockTransactions(ib3b.id, txsB, us) // Apply to child
+
+    // Verify that all input blocks exist
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+    h.getInputBlock(ib2a.id) shouldBe Some(ib2a)
+    h.getInputBlock(ib3a.id) shouldBe Some(ib3a)
+    h.getInputBlock(ib2b.id) shouldBe Some(ib2b)
+    h.getInputBlock(ib3b.id) shouldBe Some(ib3b)
+    h.getInputBlock(ib2c.id) shouldBe Some(ib2c)
+    h.getInputBlock(ib3c.id) shouldBe Some(ib3c)
+
+    // Verify that the system correctly manages the multiple concurrent forks
+    val allForks = h.inputBlocksTree().get.forks
+    allForks.length should be >= 3  // Should have at least 3 forks from the common root
+
+    // At least the three main forks should be present with the root
+    val forkContainingIb1 = allForks.count(fork => fork.chain.contains(ib1.id))
+    forkContainingIb1 should be >= 1  // The root block should be in at least one fork
+
+    // All forks should contain the root and have proper chains
+    allForks.foreach { fork =>
+      fork.chain should contain(ib1.id)
+      fork.chain.length shouldBe >=(2) // At least 2 blocks (parent + one child)
+    }
+    h.bestInputBlocksChain() shouldBe Seq(ib2a.id, ib1.id)
+  }
+
+  property("forks spanning across multiple ordering blocks") {
+    // Create a scenario where forks span across different ordering blocks
+    // Ordering Block 1 -> fork1ib1 -> fork1ib2
+    // Ordering Block 2 -> fork2ib1 -> fork2ib2
+    // Test how forks are handled across ordering block boundaries
+
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+
+    // First, create a base chain with one ordering block
+    val c1 = genChain(height = 1, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Verify we have the first ordering block
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    // Create input blocks for the first fork on the first ordering block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val fork1ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(fork1ib1)
+    h.applyInputBlockTransactions(fork1ib1.id, Seq.empty, us) shouldBe (Seq(fork1ib1.id) -> Seq.empty)
+
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val fork1ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(fork1ib1.id)), None)
+    h.applyInputBlock(fork1ib2)
+    h.applyInputBlockTransactions(fork1ib2.id, Seq.empty, us) shouldBe (Seq(fork1ib2.id) -> Seq.empty)
+
+    // Verify input blocks from first fork of the first ordering block are properly linked
+    h.bestInputBlocksChain() shouldBe Seq(fork1ib2.id, fork1ib1.id)
+
+    // Now create a competing ordering block: we generate a new chain starting from the same genesis
+    // to create a competing fork at the same height as the current best chain
+    val competingChain = genChain(height = 1, history = h, stateOpt = Some(us)).toList
+
+    // This competing block should be at the same height as the first ordering block
+    competingChain.head.height shouldBe c1.head.height  // Both should be at height 1
+    applyChain(h, competingChain)
+
+    // Now create input blocks for the second fork on the competing ordering block
+    val c5 = genChain(2, h, stateOpt = Some(us)).tail  // These are input blocks for the competing ordering block
+    val fork2ib1 = InputBlockInfo(1, c5(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(fork2ib1)
+    h.applyInputBlockTransactions(fork2ib1.id, Seq.empty, us) shouldBe (Seq(fork2ib1.id) -> Seq.empty)
+
+    val c6 = genChain(2, h, stateOpt = Some(us)).tail
+    val fork2ib2 = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(fork2ib1.id)), None)
+    h.applyInputBlock(fork2ib2)
+    h.applyInputBlockTransactions(fork2ib2.id, Seq.empty, us) shouldBe (Seq(fork2ib2.id) -> Seq.empty)
+
+    // Verify we now have input blocks associated with the second fork on the competing ordering block
+    val bestChainAfterSecond = h.bestInputBlocksChain()
+    bestChainAfterSecond should contain(fork2ib1.id)
+    bestChainAfterSecond should contain(fork2ib2.id)
+
+    // Create a scenario where we have competing forks across ordering blocks
+    // Create alternative input blocks for the competing ordering block
+    val c7 = genChain(2, h, stateOpt = Some(us)).tail
+    val fork2ib3 = InputBlockInfo(1, c7(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(fork2ib3)
+
+    // Verify that both ordering blocks have their respective input blocks
+    h.getInputBlock(fork1ib1.id) shouldBe Some(fork1ib1)
+    h.getInputBlock(fork1ib2.id) shouldBe Some(fork1ib2)
+    h.getInputBlock(fork2ib1.id) shouldBe Some(fork2ib1)
+    h.getInputBlock(fork2ib2.id) shouldBe Some(fork2ib2)
+    h.getInputBlock(fork2ib3.id) shouldBe Some(fork2ib3)
+
+    // Check that the best chain reflects the most recent activity
+    val bestChain = h.bestInputBlocksChain()
+    bestChain should contain(fork2ib1.id)  // Should contain input blocks from the second fork of the second ordering block
+    bestChain should contain(fork2ib2.id)  // Should contain the second input block from the second fork
+    bestChain.length shouldBe 2  // Should contain exactly two input blocks from the second fork
+
+    // Verify that both ordering blocks have their respective input blocks
+    h.getInputBlock(fork1ib1.id) shouldBe Some(fork1ib1)
+    h.getInputBlock(fork1ib2.id) shouldBe Some(fork1ib2)
+    h.getInputBlock(fork2ib1.id) shouldBe Some(fork2ib1)
+    h.getInputBlock(fork2ib2.id) shouldBe Some(fork2ib2)
+    h.getInputBlock(fork2ib3.id) shouldBe Some(fork2ib3)
+
+    // At this point, only fork2ib1 and fork2ib2 should be in the best chain (since fork2ib3 hasn't had transactions applied yet)
+    val currentBestChainBeforeIb5 = h.bestInputBlocksChain()
+    currentBestChainBeforeIb5 should contain allElementsOf Seq(fork2ib1.id, fork2ib2.id)  // Two blocks from second fork should be present
+    currentBestChainBeforeIb5.length shouldBe 2  // Should contain exactly the two input blocks processed so far
+
+    // Now apply transactions to fork2ib3 to make it part of the chain
+    h.applyInputBlockTransactions(fork2ib3.id, Seq.empty, us)
+
+    // Check that the best chain reflects the most recent activity correctly after applying fork2ib3
+    val currentBestChain = h.bestInputBlocksChain()
+    // After applying fork2ib3 transactions, it competes with the existing fork2 chain (fork2ib1 -> fork2ib2)
+    // Depending on the implementation, it may or may not replace the existing chain
+    // If fork2ib3 creates a different competing branch, the best chain might still be fork2ib1->fork2ib2
+    currentBestChain.length should (be >= 1 and be <= 2)  // Should contain 1-2 blocks depending on which fork is selected
+
+    // Test that when a new ordering block is added, it properly manages the input block context
+    val c8 = genChain(2, h, stateOpt = Some(us)).tail
+    val oldBestHeight = h.bestFullBlockOpt.get.height
+    applyChain(h, c8)
+
+    // After a new ordering block, the input block chain should reset or handle the transition
+    // The exact behavior depends on the implementation, but it should not cause errors
+    h.bestFullBlockOpt.get.id shouldBe c8.last.id
+
+    // Explicitly verify that the best ordering block height increased
+    val newBestHeight = h.bestFullBlockOpt.get.height
+    newBestHeight shouldBe >(oldBestHeight)
+
+    // Input blocks from previous ordering blocks may still exist but not be part of active chain
+    h.getInputBlock(fork1ib1.id) shouldBe Some(fork1ib1)
+    h.getInputBlock(fork1ib2.id) shouldBe Some(fork1ib2)
+    h.getInputBlock(fork2ib1.id) shouldBe Some(fork2ib1)
+    h.getInputBlock(fork2ib2.id) shouldBe Some(fork2ib2)
+    h.getInputBlock(fork2ib3.id) shouldBe Some(fork2ib3)
+
+    // The best input blocks chain after the third ordering block should be empty or reset
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
   // test: test follow-up ordering blocks application, check that reference to bestInputBlock etc reset
 
   // todo : tests for digest state

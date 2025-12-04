@@ -50,7 +50,7 @@
 \maketitle
 
 \begin{abstract}
-This paper presents the design and implementation of \em{Matrix}, a new design, where, instead of chain of full-blocks (which is still
+This paper presents the design and implementation of \emph{Matrix}, a new design, where, instead of chain of full-blocks (which is still
 being used for storing blocks beyond last few ones, bootstrapping new nodes, light clients), we have more complex structure with input and ordering blocks in Ergo.
 This novel blockchain architecture separates transaction processing from block ordering to achieve faster transaction confirmations and improved
 network throughput. The system introduces two types of blocks: \emph{Input Blocks} for fast transaction processing
@@ -191,6 +191,15 @@ Transactions are classified into two categories based on their validation requir
 \item Examples: emission contracts, time-dependent contracts
 \end{itemize}
 
+\subsubsection{Fees}
+
+A transaction fee is not a part of the core Ergo protocol. A reference client implementation is currently recognizing
+as a transaction fee contract one which is locking fee under miner's public key, and no alternative options
+automatically checked. As using miner public key makes a transactions belonging to second-class transactions, and such
+transactions can be included into ordering blocks only, to utilize input blocks we need to introduce additional
+fee contracts. The simplest option is to use just TRUE (anyone-can-spend) proposition. It is also the best option for
+compacting blockchain space.
+
 \section{Implementation}
 
 In this section we describe how to implement input blocks without breaking current full and light Ergo client. Our
@@ -330,7 +339,7 @@ An SPV client is not downloading full blocks, only block headers or short proof 
 non-interactive proof of proof-of-work)~\cite{kiayias2020non}, and then ask for transactions.
 
 Input blocks perfectly compatible with SPV clients. An SPV client can still ask for headers or NiPoPoW just, and so enjoy
-the same minimal bandwidth requirements, or it may ask for input-blocks additionally, to enjoy faster confirmations. 
+the same minimal bandwidth requirements, or it may ask for input-blocks additionally, to enjoy faster confirmations.
 
 \section{Deployment}
 

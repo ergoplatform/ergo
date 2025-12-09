@@ -1750,6 +1750,168 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
   }
 
+  property("fork pruning when multiple forks exist") {
+    // Create a scenario where multiple competing forks exist and then apply ordering blocks to trigger pruning
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+
+    // Create base ordering block
+    val c1 = genChain(height = 1, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create a common root input block
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val rootIb = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(rootIb)
+    h.applyInputBlockTransactions(rootIb.id, Seq.empty, us) shouldBe (Seq(rootIb.id) -> Seq.empty)
+
+    // Create multiple competing forks from the root
+    // Fork A: rootIb -> forkA1 -> forkA2
+    val forkA1Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkA1 = InputBlockInfo(1, forkA1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
+    h.applyInputBlock(forkA1)
+
+    val forkA2Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkA2 = InputBlockInfo(1, forkA2Block(0).header, parentOnly(idToBytes(forkA1.id)), None)
+    h.applyInputBlock(forkA2)
+
+    // Fork B: rootIb -> forkB1 -> forkB2
+    val forkB1Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkB1 = InputBlockInfo(1, forkB1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
+    h.applyInputBlock(forkB1)
+
+    val forkB2Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkB2 = InputBlockInfo(1, forkB2Block(0).header, parentOnly(idToBytes(forkB1.id)), None)
+    h.applyInputBlock(forkB2)
+
+    // Fork C: rootIb -> forkC1 -> forkC2 -> forkC3
+    val forkC1Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkC1 = InputBlockInfo(1, forkC1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
+    h.applyInputBlock(forkC1)
+
+    val forkC2Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkC2 = InputBlockInfo(1, forkC2Block(0).header, parentOnly(idToBytes(forkC1.id)), None)
+    h.applyInputBlock(forkC2)
+
+    val forkC3Block = genChain(2, h, stateOpt = Some(us)).tail
+    val forkC3 = InputBlockInfo(1, forkC3Block(0).header, parentOnly(idToBytes(forkC2.id)), None)
+    h.applyInputBlock(forkC3)
+
+    // Verify that all input blocks exist before processing transactions
+    h.getInputBlock(rootIb.id) shouldBe Some(rootIb)
+    h.getInputBlock(forkA1.id) shouldBe Some(forkA1)
+    h.getInputBlock(forkA2.id) shouldBe Some(forkA2)
+    h.getInputBlock(forkB1.id) shouldBe Some(forkB1)
+    h.getInputBlock(forkB2.id) shouldBe Some(forkB2)
+    h.getInputBlock(forkC1.id) shouldBe Some(forkC1)
+    h.getInputBlock(forkC2.id) shouldBe Some(forkC2)
+    h.getInputBlock(forkC3.id) shouldBe Some(forkC3)
+
+    // Apply transactions to create active forks
+    // When applying transactions with Seq.empty to input blocks, the forward progress may or may not include the block ID
+    // depending on whether there are new transactions to process. In this case, we're just applying empty transactions
+    // to process the basic block structure without additional transactions.
+    val progressA1 = h.applyInputBlockTransactions(forkA1.id, Seq.empty, us)
+    progressA1._2 shouldBe empty  // Rollback progress should be empty
+
+    val progressA2 = h.applyInputBlockTransactions(forkA2.id, Seq.empty, us)
+    progressA2._2 shouldBe empty  // Rollback progress should be empty
+
+    val progressB1 = h.applyInputBlockTransactions(forkB1.id, Seq.empty, us)
+    progressB1._2 shouldBe empty  // Rollback progress should be empty
+
+    val progressB2 = h.applyInputBlockTransactions(forkB2.id, Seq.empty, us)
+    progressB2._2 shouldBe empty  // Rollback progress should be empty
+
+    val progressC1 = h.applyInputBlockTransactions(forkC1.id, Seq.empty, us)
+    progressC1._2 shouldBe empty  // Rollback progress should be empty
+
+    val progressC2 = h.applyInputBlockTransactions(forkC2.id, Seq.empty, us)
+    progressC2._2 shouldBe empty  // Rollback progress should be empty
+
+    val progressC3 = h.applyInputBlockTransactions(forkC3.id, Seq.empty, us)
+    progressC3._2 shouldBe empty  // Rollback progress should be empty
+
+    // Verify all forks exist in the input blocks tree
+    val initialForks = h.inputBlocksTree().get.forks
+    initialForks.length should be >= 3  // Should have at least the 3 competing forks
+
+
+    // Apply two new ordering blocks to trigger pruning
+    val orderingBlock2 = genChain(2, h, stateOpt = Some(us)).tail
+    applyChain(h, orderingBlock2)
+    h.updateStateWithOrderingBlock(orderingBlock2.head.header)
+
+    val orderingBlock3 = genChain(2, h, stateOpt = Some(us)).tail
+    applyChain(h, orderingBlock3)
+    h.updateStateWithOrderingBlock(orderingBlock3.head.header)
+
+    // Apply one more ordering block to ensure pruning is complete
+    val orderingBlock4 = genChain(2, h, stateOpt = Some(us)).tail
+    applyChain(h, orderingBlock4)
+    h.updateStateWithOrderingBlock(orderingBlock4.head.header)
+
+    // After 2 ordering blocks are applied, verify that the system state is updated
+    val bestFullBlockOpt = h.bestFullBlockOpt
+    bestFullBlockOpt shouldBe defined
+    bestFullBlockOpt.get.height shouldBe >(c1.head.height)  // Should be at a higher height now
+
+    // After new ordering blocks are applied, the old input blocks associated with the previous
+    // ordering block context may be subject to pruning depending on the implementation
+    // Let's apply additional ordering blocks to see the effect on input blocks
+
+    // Capture the height after orderingBlock4 to compare later
+    val heightAfterOrderingBlock4 = h.bestFullBlockOpt.map(_.height).getOrElse(0)
+
+    // Apply one more ordering block to further test pruning behavior
+    val orderingBlock5 = genChain(2, h, stateOpt = Some(us)).tail
+    applyChain(h, orderingBlock5)
+
+    // Verify that best block height has increased after orderingBlock5
+    val heightAfterOrderingBlock5 = h.bestFullBlockOpt.map(_.height).getOrElse(0)
+    heightAfterOrderingBlock5 should be > heightAfterOrderingBlock4
+
+    // Explicitly update state with the new ordering block to trigger pruning
+    h.updateStateWithOrderingBlock(orderingBlock5.head.header)
+
+    // Apply another ordering block to trigger the pruning mechanism more definitively
+    val orderingBlock6 = genChain(2, h, stateOpt = Some(us)).tail
+    applyChain(h, orderingBlock6)
+
+    // Verify that best block height has increased after orderingBlock6
+    val heightAfterOrderingBlock6 = h.bestFullBlockOpt.map(_.height).getOrElse(0)
+    heightAfterOrderingBlock6 should be > heightAfterOrderingBlock5
+
+    // Explicitly update state with the new ordering block to trigger pruning
+    h.updateStateWithOrderingBlock(orderingBlock6.head.header)
+
+    // Make sure we trigger one more update to potentially finish pruning operations
+    val latestBlock = genChain(2, h, stateOpt = Some(us)).head
+    applyChain(h, List(latestBlock))
+    h.updateStateWithOrderingBlock(latestBlock.header)
+
+    // After several new ordering blocks are applied, check if the original input blocks have been pruned
+    // According to the pruning mechanism, old input blocks should no longer be defined after enough
+    // new ordering blocks have arrived
+    h.getInputBlock(forkA1.id) shouldBe None  // forkA1.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(forkA2.id) shouldBe None  // forkA2.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(forkB1.id) shouldBe None  // forkB1.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(forkB2.id) shouldBe None  // forkB2.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(forkC1.id) shouldBe None  // forkC1.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(forkC2.id) shouldBe None  // forkC2.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(forkC3.id) shouldBe None  // forkC3.id should not be defined after multiple new ordering blocks
+    h.getInputBlock(rootIb.id) shouldBe None  // rootIb.id should not be defined after multiple new ordering blocks
+
+    // After new ordering blocks arrive, verify the system continues to operate properly
+    // The best input blocks chain might contain elements from the old context or be empty
+    // depending on the specific pruning implementation
+    val finalBestChain = h.bestInputBlocksChain()
+    finalBestChain shouldBe a[Seq[_]]
+  }
+
   // test: test follow-up ordering blocks application, check that reference to bestInputBlock etc reset
 
   // todo : tests for digest state

@@ -191,12 +191,15 @@ Transactions are classified into two categories based on their validation requir
 \item Examples: emission contracts, time-dependent contracts
 \end{itemize}
 
+In the UTXO model, a transaction is second-class if a script of any input of it reads block context data
+(block timestamp, miner pubkey, block votes), otherwise, the transaction belongs to first class.
+
 \subsubsection{Fees}
 
 A transaction fee is not a part of the core Ergo protocol. A reference client implementation is currently recognizing
 as a transaction fee contract one which is locking fee under miner's public key, and no alternative options
-automatically checked. As using miner public key makes a transactions belonging to second-class transactions, and such
-transactions can be included into ordering blocks only, to utilize input blocks we need to introduce additional
+automatically checked. Using miner public key makes a transactions belonging to second-class transactions, and such
+transactions can be included into ordering blocks only. So to bring miners transaction fees to input blocks we need to introduce additional
 fee contracts. The simplest option is to use just TRUE (anyone-can-spend) proposition. It is also the best option for
 compacting blockchain space.
 

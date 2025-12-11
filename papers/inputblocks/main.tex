@@ -34,6 +34,7 @@
 
 \lstset{style=mystyle}
 
+\newcommand{\protname}{\textsf{Matrix}}
 \newcommand{\Ergo}{\textsf{Ergo}}
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\todo}[1]{{\color{red}TODO: #1}}
@@ -42,7 +43,7 @@
 
 \begin{document}
 
-\title{Matrix: Splitting Ergo Blocks Into Input and Ordering Blocks For Fast Transaction Propagation and Confirmation}
+\title{\protname{}: Splitting Ergo Blocks Into Input and Ordering Blocks For Fast Transaction Propagation and Confirmation}
 
 \author{Alexander Chepurnoy (kushti)}
 \institute{https://kushti.github.io/}
@@ -345,6 +346,21 @@ Input blocks perfectly compatible with SPV clients. An SPV client can still ask 
 the same minimal bandwidth requirements, or it may ask for input-blocks additionally, to enjoy faster confirmations.
 
 \section{Deployment}
+
+We plan to deploy \protname{} gradually:
+
+\begin{itemize}
+  \item{} First of all, only some mining pools and solo miners will implement \protname{}. They will form peer-to-peer
+           sub-network which peers send input/ordering blocks related messages to other sub-network peers, but avoid
+           to send them to other peers (not supporting input blocks yet). At this point extension fields do not necessarily
+           present in extension section.
+  \item{} More and more miners support \protname{}, and when 90+\% hashrate is on it, lock-in voting takes place.
+            One-epoch indicative voting would be enough. In case of 90+\% hashrate support voting for lock-in,
+            extension fields become necessary, and so \protname{} becomes part of the protocol. However, old block structure
+            and p2p messages still supported, for bootstrapping nodes with historical data, and to support older as well
+            as light clients.
+\end{itemize}
+
 
 \section{Conclusion}
 

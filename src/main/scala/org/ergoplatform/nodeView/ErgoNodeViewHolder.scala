@@ -218,6 +218,57 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     }
   }
 
+  protected def handleRollback: Receive = {
+    case RollbackToHeight(height) =>
+      val history = nodeView._1
+      val state = nodeView._2
+      val bestHeight = history.headersHeight
+      if (height < bestHeight && height > 0) {
+        val idToRollback = history.bestHeaderIdAtHeight(height).get
+        val version = idToVersion(idToRollback)
+
+        state.rollbackTo(version) match {
+          case Success(newState) =>
+            log.info(s"State rolled back to $height")
+            history.pruneTo(height) match {
+               case Success(newHistory) =>
+                 log.info(s"History pruned to $height")
+                 val newVault = vault().rollback(version) match {
+                     case Success(nv) => nv
+                     case Failure(e) => 
+                       log.warn("Wallet rollback failed: ", e)
+                       vault()
+                 }
+                 updateNodeView(Some(newHistory), Some(newState), Some(newVault))
+                 
+                 context.system.eventStream.publish(Rollback(idToRollback))
+                 sender() ! Success(idToRollback)
+               case Failure(e) =>
+                 log.error("History pruning failed", e)
+                 sender() ! Failure(e)
+            }
+          case Failure(e) =>
+            log.error("State rollback failed", e)
+            sender() ! Failure(e)
+        }
+      } else {
+         sender() ! Failure(new Exception(s"Invalid height $height, current best $bestHeight"))
+      }
+  }
+
+  override def receive: Receive =
+    processRemoteModifiers orElse
+      processLocallyGeneratedModifiers orElse
+      transactionsProcessing orElse
+      getCurrentInfo orElse
+      getNodeViewChanges orElse
+      processStateSnapshot orElse
+      handleHealthCheck orElse 
+      handleRollback orElse { // Added handleRollback
+        case a: Any => log.error("Strange input: " + a)
+      }
+
+
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
                          suffixTrimmed: IndexedSeq[BlockSection],
@@ -740,6 +791,7 @@ object ErgoNodeViewHolder {
     sealed trait HealthCheckResult
     case object ChainIsHealthy extends HealthCheckResult
     case class ChainIsStuck(reason: String) extends HealthCheckResult
+    case class RollbackToHeight(height: Int)
   }
 
   case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent

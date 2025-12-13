@@ -2742,12 +2742,16 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                description: Array of header ids
-                example: ['8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337']
-                items:
-                  type: string
-                  example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+                type: object
+                properties:
+                  best:
+                    type: string
+                    example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+                  forks:
+                    type: array
+                    items:
+                      type: string
+                      example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
         '404':
           description: Blocks at this height doesn't exist
           content:

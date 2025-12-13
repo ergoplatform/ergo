@@ -49,7 +49,17 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   private def getHeaderIdsAtHeight(h: Int): Future[Json] =
     getHistory.map { history =>
-      history.headerIdsAtHeight(h).map(Algos.encode).asJson
+      val headers = history.headerIdsAtHeight(h)
+      val bestHeaderIdOpt = history.bestHeaderIdAtHeight(h)
+      val forks = bestHeaderIdOpt match {
+        case Some(best) => headers.filter(_ != best)
+        case None => headers
+      }
+      val best = bestHeaderIdOpt.getOrElse(ModifierId @@ "")
+      Map(
+        "best" -> Algos.encode(best).asJson,
+        "forks" -> forks.map(Algos.encode).asJson
+      ).asJson
     }
 
   private def getLastHeaders(n: Int): Future[Json] =

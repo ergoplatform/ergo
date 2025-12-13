@@ -207,7 +207,17 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           case Right(iEb) => tokens.put(id, x.addBox(iEb)) // receive box
         }
       case None => // token not found at all
-        log.error(s"Unknown token $id") // spend box should never happen by an unknown token
+        spendOrReceive match {
+          case Left(iEb) => 
+            // Spending a box from an unknown token should not happen, but log it
+            log.error(s"Unknown token $id being spent from box ${iEb.id}")
+          case Right(iEb) => 
+            // Receiving a box with a token that doesn't exist - create a minimal token entry
+            // This can happen after rollbacks where tokens were deleted but boxes with those tokens still exist
+            val newToken = IndexedToken(id).addBox(iEb)
+            tokens.put(id, newToken)
+            log.debug(s"Created new token entry for $id when adding box ${iEb.id} (likely after rollback)")
+        }
     }
   }
 

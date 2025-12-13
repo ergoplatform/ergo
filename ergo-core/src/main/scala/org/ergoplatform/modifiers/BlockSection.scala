@@ -12,7 +12,7 @@ trait BlockSection extends ErgoNodeViewModifier {
   /**
     * Id of another block section of the same type, which should be applied to the node view before this modifier
     */
-  def parentId: scorex.util.ModifierId
+  def parentId: ModifierId
 
 }
 

@@ -15,7 +15,9 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import org.ergoplatform.core.idToBytes
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 

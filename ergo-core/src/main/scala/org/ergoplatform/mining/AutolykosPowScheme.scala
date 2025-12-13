@@ -14,7 +14,8 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import sigma.crypto.CryptoFacade
 import sigma.data.ProveDlog
 
@@ -435,7 +436,7 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
     val proofs = if (mandatoryTxIds.nonEmpty) {
       // constructs fake block transactions section (BlockTransactions instance) to get proofs from it
-      val fakeHeaderId = scorex.util.bytesToId(Array.fill(org.ergoplatform.sdk.wallet.Constants.ModifierIdLength)(0: Byte))
+      val fakeHeaderId = org.ergoplatform.core.bytesToId(Array.fill(org.ergoplatform.sdk.wallet.Constants.ModifierIdLength)(0: Byte))
       val bt = BlockTransactions(fakeHeaderId, blockCandidate.version, blockCandidate.transactions)
       val ps = mandatoryTxIds.flatMap { txId => bt.proofFor(txId).map(mp => TransactionMembershipProof(txId, mp)) }
       Some(ProofOfUpcomingTransactions(headerCandidate, ps))

@@ -65,7 +65,7 @@ class ErgoProvingInterpreterSpec
     val creationHeight = 10000
 
     val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromProposition(prop), creationHeight)
-    val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+    val fakeTxId = ModifierId.fromHex(Base16.encode(Array.fill(32)(5: Byte)))
     val inputBox = boxCandidate.toBox(fakeTxId, 0.toShort)
 
     val unsignedInput = new UnsignedInput(inputBox.id, ContextExtension.empty)
@@ -98,7 +98,7 @@ class ErgoProvingInterpreterSpec
     val boxCandidate = new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(pk), creationHeight)
 
     val numOfInputs = 50
-    val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+    val fakeTxId = ModifierId.fromHex(Base16.encode(Array.fill(32)(5: Byte)))
     val inputBoxes = (1 to numOfInputs).map(i => boxCandidate.toBox(fakeTxId, i.toShort))
     val unsignedInputs = inputBoxes.map(ib => new UnsignedInput(ib.id, ContextExtension.empty))
 
@@ -126,7 +126,7 @@ class ErgoProvingInterpreterSpec
       R6 -> GroupElementConstant(CGroupElement(pk3.value))
     )
 
-    val transactionId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+    val transactionId = ModifierId.fromHex(Base16.encode(Array.fill(32)(5: Byte)))
 
     val value = 1000000
     val input = new ErgoBox(value, ergoTree, Colls.emptyColl[(TokenId, Long)], registers, transactionId, 0, 1)

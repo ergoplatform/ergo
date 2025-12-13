@@ -10,7 +10,7 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.Colls
 import sigmastate.eval._
 import sigma.util.Extensions.SigmaBooleanOps
@@ -92,7 +92,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
     val negId: Byte = -10
 
     val b = new ErgoBox(1000000000L, TrueTree, Colls.emptyColl,
-                         Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+                         Map.empty, ModifierId.fromHex("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742"),
                   0, 0)
     val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension(Map(negId -> IntConstant(0)))))
 
@@ -112,7 +112,7 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
     val negId: Byte = -20
 
     val b = new ErgoBox(1000000000L, TrueTree, Colls.emptyColl,
-      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      Map.empty, ModifierId.fromHex("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742"),
       0, 0)
     val ce = ContextExtension(Map(negId -> IntConstant(0), (-negId).toByte -> IntConstant(1)))
     val input = Input(b.id, ProverResult(Array.emptyByteArray, ce))

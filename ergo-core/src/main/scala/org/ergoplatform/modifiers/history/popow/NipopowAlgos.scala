@@ -8,7 +8,8 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{Algos, ChainSettings, Constants}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.util.{Failure, Success, Try}
 

@@ -24,7 +24,8 @@ import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPe
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
@@ -594,7 +595,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
-    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
+    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId.fromHex(Algos.encode(manifestId)), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetManifestSpec, Right(manifestId), None)
@@ -604,7 +605,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
     // as we download multiple chunks in parallel and they can be quite large, timeout increased
     val chunkDeliveryTimeout = 4 * deliveryTimeout
-    deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
+    deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId.fromHex(Algos.encode(subtreeId)), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(chunkDeliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
@@ -913,7 +914,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                    snapshotsInfo: SnapshotsInfo,
                                    remote: ConnectedPeer): Unit = {
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
-      val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
+      val encodedManifestId = ModifierId.fromHex(Algos.encode(manifestId))
       val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
       if (ownId.getOrElse(Array.emptyByteArray).sameElements(manifestId)) {
         log.debug(s"Discovered manifest $encodedManifestId for height $height from $remote")
@@ -937,7 +938,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
     ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
       case Success(manifest) =>
-        val manifestId = ModifierId @@ Algos.encode(manifest.id)
+        val manifestId = ModifierId.fromHex(Algos.encode(manifest.id))
         log.info(s"Got manifest $manifestId from $remote")
         deliveryTracker.getRequestedInfo(ManifestTypeId.value, manifestId) match {
           case Some(ri) if ri.peer == remote =>
@@ -981,7 +982,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def processUtxoSnapshotChunk(serializedChunk: Array[Byte], hr: ErgoHistory, remote: ConnectedPeer): Unit = {
     SubtreeSerializer.parseBytesTry(serializedChunk) match {
       case Success(subtree) =>
-        val chunkId = ModifierId @@ Algos.encode(subtree.id)
+        val chunkId = ModifierId.fromHex(Algos.encode(subtree.id))
         deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
           case Some(_) =>
             log.debug(s"Got utxo snapshot chunk, id: $chunkId, size: ${serializedChunk.length}")

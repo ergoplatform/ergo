@@ -14,7 +14,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.data.{ProveDlog, SigmaBoolean}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 

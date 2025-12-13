@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import scorex.util.Extensions.LongOps
-import scorex.util.{bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 
 /**

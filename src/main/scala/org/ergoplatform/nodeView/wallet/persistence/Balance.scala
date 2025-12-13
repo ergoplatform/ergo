@@ -2,7 +2,8 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedBoxId, encodedBoxId}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 
 case class Balance(id: EncodedBoxId,
                    value: Long,

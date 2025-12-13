@@ -7,7 +7,8 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
-import scorex.util.{ByteArrayBuilder, bytesToId}
+import org.ergoplatform.core.bytesToId
+import scorex.util.ByteArrayBuilder
 import scorex.util.Extensions._
 
 object HeaderSerializer extends ErgoSerializer[Header] {

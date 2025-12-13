@@ -1,7 +1,8 @@
 package org.ergoplatform.modifiers.mempool
 
 import scorex.core.network.ConnectedPeer
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 /**
   * Wrapper for unconfirmed transaction and corresponding data

@@ -1,9 +1,7 @@
 package org.ergoplatform.modifiers
 
-import org.ergoplatform.core.BytesSerializable
+import org.ergoplatform.core.{BytesSerializable, bytesToId}
 import org.ergoplatform.utils.ScorexEncoding
-import scorex.util.{ModifierId, bytesToId}
-import scorex.utils.Ints
 
 /**
   * Basic trait for entities which are modifying internal blockchain view of the node, such as
@@ -39,7 +37,7 @@ trait ErgoNodeViewModifier extends BytesSerializable with ScorexEncoding {
   /**
     * @return readable representation of `id`, as `id` is a hex-encoded string now, just identity functions is used
     */
-  def encodedId: String = id
+  def encodedId: String = id.toHexString
 
   override def equals(obj: scala.Any): Boolean = obj match {
     case that: ErgoNodeViewModifier => (that.id == id) && (that.modifierTypeId == modifierTypeId)
@@ -47,7 +45,7 @@ trait ErgoNodeViewModifier extends BytesSerializable with ScorexEncoding {
   }
 
   override def hashCode(): Int = {
-    Ints.fromByteArray(serializedId)
+    id.hashCode()
   }
 
 }

@@ -14,7 +14,9 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import sigma.ast.ErgoTree
 import sigma.Extensions._
 import sigma.interpreter.ProverResult
@@ -634,9 +636,7 @@ object ExtraIndexer {
     * @return an array of bytes
     */
   private[extra] def fastIdToBytes(id: ModifierId): Array[Byte] = {
-    val x: Array[Byte] = new Array[Byte](id.length / 2)
-    cfor(0)(_ < id.length, _ + 2) { i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte }
-    x
+    id.toBytes
   }
 
   /**

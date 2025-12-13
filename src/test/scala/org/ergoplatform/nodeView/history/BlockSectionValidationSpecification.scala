@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 
 class BlockSectionValidationSpecification extends ErgoCorePropertyTest {

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.reflect.ClassTag
 

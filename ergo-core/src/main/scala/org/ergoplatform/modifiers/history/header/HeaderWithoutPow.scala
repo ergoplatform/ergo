@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history.header
 import org.ergoplatform.mining.AutolykosSolution
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * Header without proof-of-work puzzle solution, see Header class description for details.

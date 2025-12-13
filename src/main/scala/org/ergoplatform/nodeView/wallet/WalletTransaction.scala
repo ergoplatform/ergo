@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSeria
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 import sigma.VersionContext

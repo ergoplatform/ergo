@@ -7,7 +7,9 @@ import org.ergoplatform.nodeView.history.extra.SegmentSerializer._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.sdk.JavaHelpers.Algos
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import spire.implicits.cfor
 
 import scala.collection.mutable.ArrayBuffer
@@ -66,7 +68,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
     if(inCurrent >= 0) { // box found in current box array
       boxes.update(inCurrent, -boxes(inCurrent))
     } else { // box is in another segment, use binary search to locate
-      var segmentId: ModifierId = ModifierId @@ ""
+      var segmentId: ModifierId = ModifierId(Array.fill(32)(0: Byte))
       var low = 0
       var high = boxSegmentCount - 1
       while(low <= high) {

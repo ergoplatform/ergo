@@ -1,7 +1,6 @@
 package org.ergoplatform.validation
 
-import org.ergoplatform.modifiers.NetworkObjectTypeId
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.{ModifierId, NetworkObjectTypeId}
 
 import scala.util.control.NoStackTrace
 

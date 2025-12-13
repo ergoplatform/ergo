@@ -5,7 +5,7 @@ import org.ergoplatform.sdk.JsonCodecs
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import io.circe.syntax._
 
 /**

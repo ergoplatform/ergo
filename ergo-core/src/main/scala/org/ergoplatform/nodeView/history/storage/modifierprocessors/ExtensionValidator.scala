@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{InvalidModifier, ValidationState}
-import scorex.util.bytesToId
+import org.ergoplatform.core.bytesToId
 
 /**
   * Class that implements extension validation based on current to ErgoValidationSettings

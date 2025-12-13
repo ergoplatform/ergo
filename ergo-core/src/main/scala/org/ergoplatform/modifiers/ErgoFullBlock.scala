@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 case class ErgoFullBlock(header: Header,
                          blockTransactions: BlockTransactions,

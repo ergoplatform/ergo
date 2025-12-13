@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet.models
 import io.circe.generic.encoding.DerivedAsObjectEncoder.deriveEncoder
 import io.circe.syntax._
 import io.circe.{Encoder, Json, KeyEncoder}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * Box model for Wallet API

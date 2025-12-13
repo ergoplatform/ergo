@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.{ErgoSyncInfoMessageSpec, ErgoSyncInfoV
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.network.message.{Message, MessageSerializer}
 import scorex.crypto.hash
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 
 
@@ -25,7 +25,7 @@ class ErgoSyncInfoSpecification extends ErgoCorePropertyTest {
 
     val lastHeaderId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)
 
-    val syncInfo = ErgoSyncInfoV1(Seq(ModifierId @@ Base16.encode(lastHeaderId)))
+    val syncInfo = ErgoSyncInfoV1(Seq(ModifierId.fromHex(Base16.encode(lastHeaderId))))
 
     val syncMessage = Message(syncSpec, Right(syncInfo), None)
 

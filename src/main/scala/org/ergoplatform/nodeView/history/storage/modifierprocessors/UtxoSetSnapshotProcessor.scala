@@ -14,7 +14,8 @@ import org.ergoplatform.serialization.SubtreeSerializer
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 
 import scala.util.{Failure, Random, Success, Try}
@@ -63,7 +64,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     val ts0 = System.currentTimeMillis()
     _cachedDownloadPlan.foreach { plan =>
       val chunkIdsToRemove = downloadedChunkIdsIterator(plan.totalChunks)
-        .map(chunkId => ModifierId @@ Algos.encode(chunkId))
+        .map(chunkId => ModifierId.fromHex(Algos.encode(chunkId)))
         .toArray
       historyStorage.remove(Array.empty, chunkIdsToRemove)
     }

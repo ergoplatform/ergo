@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ScorexSettings, _}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 
 import scala.concurrent.duration._

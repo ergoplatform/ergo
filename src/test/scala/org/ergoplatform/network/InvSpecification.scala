@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.network.message.{InvData, InvSpec, Message, MessageSerializer}
 import scorex.crypto.hash
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 
 /**
@@ -22,7 +22,7 @@ class InvSpecification extends ErgoCorePropertyTest {
 
     val headerId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)
 
-    val headerIdEncoded = ModifierId @@ Base16.encode(headerId)
+    val headerIdEncoded = ModifierId.fromHex(Base16.encode(headerId))
 
     val invData = InvData(Header.modifierTypeId, Seq(headerIdEncoded))
 

@@ -18,7 +18,8 @@ import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.util.Try
 
@@ -132,7 +133,7 @@ object PoPowHeader {
       header <- c.downField("header").as[Header]
       interlinks <- c.downField("interlinks").as[Seq[String]]
       proof <- c.downField("interlinksProof").as[BatchMerkleProof[Digest32]]
-    } yield PoPowHeader(header, interlinks.map(s => ModifierId @@ s), proof)
+    } yield PoPowHeader(header, interlinks.map(s => ModifierId.fromHex(s)), proof)
   }
 }
 

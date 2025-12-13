@@ -2,7 +2,7 @@ package org.ergoplatform.local
 
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowProof
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * A verifier for PoPoW proofs. During its lifetime, it processes many proofs with the aim of deducing at any given

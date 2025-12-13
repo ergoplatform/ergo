@@ -2,7 +2,9 @@ package org.ergoplatform.network.message
 
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 import scala.collection.immutable

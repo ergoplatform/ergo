@@ -5,7 +5,7 @@ import org.ergoplatform.NodeViewComponent
 import org.ergoplatform.consensus.ContainsModifiers
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTransaction] {
 

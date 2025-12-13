@@ -11,7 +11,8 @@ import org.ergoplatform.settings.{ErgoSettings, NetworkCacheSettings}
 import scorex.core.network.DeliveryTracker._
 import scorex.core.network.ModifiersStatus._
 import org.ergoplatform.utils._
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}

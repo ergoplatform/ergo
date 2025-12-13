@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.utils.FileUtils
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import java.io.File
 import scala.collection.mutable

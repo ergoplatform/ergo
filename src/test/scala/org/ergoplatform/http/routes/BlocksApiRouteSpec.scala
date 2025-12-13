@@ -13,7 +13,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 class BlocksApiRouteSpec
   extends AnyFlatSpec

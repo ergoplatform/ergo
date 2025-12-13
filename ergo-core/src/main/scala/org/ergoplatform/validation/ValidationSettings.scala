@@ -2,7 +2,7 @@ package org.ergoplatform.validation
 
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.validation.ValidationResult.Invalid
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * Specifies the strategy to by used (fail-fast or error-accumulative), a set of

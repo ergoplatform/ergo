@@ -10,7 +10,7 @@ import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{ModifierValidator, _}
 import scorex.db.ByteArrayWrapper
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.reflect.ClassTag
 import scala.util.Try

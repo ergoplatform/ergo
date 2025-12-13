@@ -14,7 +14,7 @@ import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.utils.fixtures.WalletFixture
 import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.Colls
 import sigmastate.eval.Extensions._
 import sigma.Extensions._

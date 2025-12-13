@@ -8,7 +8,8 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, f
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.ADKey
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 import spire.implicits.cfor
 
 /**
@@ -33,7 +34,7 @@ case class IndexedErgoTransaction(txid: ModifierId,
   override lazy val id: ModifierId = txid
   override def serializedId: Array[Byte] = fastIdToBytes(id)
 
-  private var _blockId: ModifierId = ModifierId @@ ""
+  private var _blockId: ModifierId = ModifierId(Array.fill(32)(0: Byte))
   private var _inclusionHeight: Int = 0
   private var _timestamp: Header.Timestamp = 0L
   private var _numConfirmations: Int = 0

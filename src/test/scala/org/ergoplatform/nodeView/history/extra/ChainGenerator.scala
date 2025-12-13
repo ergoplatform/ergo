@@ -16,7 +16,7 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
 import org.ergoplatform.core.idToVersion
 import org.scalatest.matchers.should.Matchers
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.ast.ErgoTree
 import sigma.data.ProveDlog
 import sigma.{Coll, Colls}

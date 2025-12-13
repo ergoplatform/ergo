@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator}
 import org.ergoplatform.validation.ValidationResult.Invalid
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 
 object ValidationRules {

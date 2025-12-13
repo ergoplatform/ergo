@@ -16,7 +16,8 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.Extensions._
 import sigma.VersionContext
 
@@ -76,7 +77,7 @@ case class BlockTransactions(headerId: ModifierId,
   def proofFor(txId: Array[Byte]): Option[MerkleProof[Digest32]] =
     merkleTree.proofByElement(Leaf[Digest32](LeafData @@ txId)(Algos.hash))
 
-  def proofFor(txId: ModifierId): Option[MerkleProof[Digest32]] = proofFor(scorex.util.idToBytes(txId))
+  def proofFor(txId: ModifierId): Option[MerkleProof[Digest32]] = proofFor(idToBytes(txId))
 
   override type M = BlockTransactions
 
@@ -186,7 +187,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
 
       (1 to txCount).map { _ =>
         if (blockVersion >= Header.Interpreter60Version) {
-          if (headerId == "3f5a4acbdfd76a97f2fdf387559c2a67b4ea5f9e9bcf66ef079cde766c6e9398") {
+          if (headerId.toHexString == "3f5a4acbdfd76a97f2fdf387559c2a67b4ea5f9e9bcf66ef079cde766c6e9398") {
             // todo: public testnet bug with v7 tree included in v4 block, remove after testnet relaunch
             VersionContext.withVersions(1, 1) {
               ErgoTransactionSerializer.parse(r)

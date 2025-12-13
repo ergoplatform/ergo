@@ -5,7 +5,7 @@ import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionError
 import org.ergoplatform.wallet.transactions.TransactionBuilder._
 import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.annotation.tailrec
 import scala.collection.mutable

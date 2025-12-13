@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.utils.ErgoNodeTestConstants.defaultTimeout
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.validFullBlock
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -146,7 +146,7 @@ trait NodeViewTestOps extends NodeViewBaseOps {
 
   def getHistoryHeight(implicit ctx: Ctx): Int = getHistory.headersHeight
 
-  def getHeightOf(id: scorex.util.ModifierId)(implicit ctx: Ctx): Option[Int] = getHistory.heightOf(id)
+  def getHeightOf(id: org.ergoplatform.modifiers.ModifierId)(implicit ctx: Ctx): Option[Int] = getHistory.heightOf(id)
 
   def getLastHeadersLength(count: Int)(implicit ctx: Ctx): Int = getHistory.lastHeaders(count).size
 

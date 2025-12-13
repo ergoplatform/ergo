@@ -22,7 +22,9 @@ import org.ergoplatform.settings.Constants.FalseTree
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import sigma.ast.{AtLeast, ByteArrayConstant, ErgoTree, IntConstant, SigmaPropConstant}
 import sigma.data.ProveDlog
 import sigma.serialization.ValueSerializer

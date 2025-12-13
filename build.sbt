@@ -212,6 +212,10 @@ lazy val avldb = (project in file("avldb"))
     crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "avldb",
+    // Add Automatic-Module-Name for JPMS compatibility
+    Compile / packageBin / packageOptions += Package.ManifestAttributes(
+      "Automatic-Module-Name" -> "org.ergoplatform.avldb"
+    ),
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
@@ -253,6 +257,10 @@ lazy val ergoCore = (project in file("ergo-core"))
     crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-core",
+    // Add Automatic-Module-Name for JPMS compatibility
+    Compile / packageBin / packageOptions += Package.ManifestAttributes(
+      "Automatic-Module-Name" -> "org.ergoplatform.core"
+    ),
     libraryDependencies ++= Seq(
       "com.iheart" %% "ficus" % ficusVersion,
       effectiveSigma,
@@ -269,6 +277,10 @@ lazy val ergoWallet = (project in file("ergo-wallet"))
     crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
     commonSettings,
     name := "ergo-wallet",
+    // Add Automatic-Module-Name for JPMS compatibility
+    Compile / packageBin / packageOptions += Package.ManifestAttributes(
+      "Automatic-Module-Name" -> "org.ergoplatform.wallet"
+    ),
     libraryDependencies ++= Seq(
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
@@ -292,6 +304,9 @@ lazy val ergo = (project in file("."))
   .settings(
     commonSettings,
     name := "ergo",
+    Compile / packageBin / packageOptions += Package.ManifestAttributes(
+      "Automatic-Module-Name" -> "org.ergoplatform.node"
+    ),
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
@@ -331,30 +346,3 @@ lazy val ergo = (project in file("."))
   .dependsOn(avldb % "test->test;compile->compile")
   .configs(It2Test)
 
-
-// PGP key for signing a release build published to sonatype
-// signing is done by sbt-pgp plugin
-// how to generate a key - https://central.sonatype.org/pages/working-with-pgp-signatures.html
-// how to export a key and use it with Travis - https://docs.scala-lang.org/overviews/contributors/index.html#export-your-pgp-key-pair
-pgpPublicRing := file("ci/pubring.asc")
-pgpSecretRing := file("ci/secring.asc")
-pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toArray)
-usePgpKeyHex("D78982639AD538EF361DEC6BF264D529385A0333")
-
-credentials ++= (for {
-  username <- Option(System.getenv().get("SONATYPE_USERNAME"))
-  password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
-} yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
-
-def javacReleaseOption = {
-  if (System.getProperty("java.version").startsWith("1.")) 
-    // java <9 "--release" is not supported
-    Seq()
-  else
-    Seq("--release", "8")
-}
-
-// prefix version with "-SNAPSHOT" for builds without a git tag
-ThisBuild / dynverSonatypeSnapshots := true
-// use "-" instead of default "+"
-ThisBuild / dynverSeparator := "-"

@@ -29,6 +29,8 @@ import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
+import akka.pattern.pipe
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -43,6 +45,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
+  private implicit val ec: ExecutionContext = context.dispatcher
 
   type NodeView = (ErgoHistory, State, ErgoWallet, ErgoMemPool)
 
@@ -389,13 +392,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   /**
-    * Performs mempool update after a block application, transactions
+    * Performs mempool update after a block application asynchronously, transactions
     * from rolled back block are to be returned to the pool, and transactions
     * included in applied block are to be removed.
     */
-  protected def updateMemPool(blocksRemoved: Seq[BlockSection],
-                              blocksApplied: Seq[BlockSection],
-                              memPool: ErgoMemPool): ErgoMemPool = {
+  protected def updateMemPoolAsync(blocksRemoved: Seq[BlockSection],
+                                  blocksApplied: Seq[BlockSection],
+                                  memPool: ErgoMemPool): Future[ErgoMemPool] = Future {
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
     val rolledBackTxs = blocksRemoved
@@ -490,7 +493,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
                   val newMemPool = if (almostSynced) {
-                    updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
+                    // Trigger async mempool update and continue with current mempool
+                    val mempoolFuture = updateMemPoolAsync(progressInfo.toRemove, blocksApplied, memoryPool())
+                    mempoolFuture.map { updatedMemPool =>
+                      MempoolUpdateComplete(updatedMemPool, newHistory, newMinState, newVault)
+                    }.pipeTo(self)
+
+                    // Return current mempool immediately, will be updated when async operation completes
+                    memoryPool()
                   } else {
                     memoryPool()
                   }
@@ -652,6 +662,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     case RecheckedTransactions(unconfirmedTxs) =>
       val updatedPool = memoryPool().put(unconfirmedTxs)
       updateNodeView(updatedMempool = Some(updatedPool))
+    case MempoolUpdateComplete(updatedMemPool, expectedHistory, expectedState, expectedVault) =>
+      // Only update if the node view hasn't changed since the async operation started
+      if (history().headerId == expectedHistory.headerId && 
+          minimalState().version == expectedState.version) {
+        log.debug("Applying asynchronously computed mempool update")
+        updateNodeView(updatedMempool = Some(updatedMemPool))
+      } else {
+        log.debug("Skipping stale mempool update - node view has progressed")
+      }
     case EliminateTransactions(ids) =>
       val updatedPool = ids.foldLeft(memoryPool()) { case (pool, txId) => pool.invalidate(txId) }
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -811,3 +830,11 @@ object ErgoNodeViewRef {
     system.actorOf(props(settings))
   
 }
+
+/**
+  * Internal message sent when asynchronous mempool update completes
+  */
+case class MempoolUpdateComplete(newMemPool: ErgoMemPool, 
+                                  expectedHistory: ErgoHistory,
+                                  expectedState: State, 
+                                  expectedVault: ErgoWallet)

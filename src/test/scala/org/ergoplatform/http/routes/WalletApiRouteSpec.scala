@@ -158,6 +158,18 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "return meaningful error when unlock wallet with missing pass field" in {
+    Post(prefix + "/unlock", Json.obj()) ~> route ~> check {
+      rejection shouldBe a[MissingQueryParamRejection]
+    }
+  }
+
+  it should "return meaningful error when unlock wallet with invalid JSON" in {
+    Post(prefix + "/unlock", Json.obj("wrongField" -> "value".asJson)) ~> route ~> check {
+      rejection shouldBe a[MissingQueryParamRejection]
+    }
+  }
+
   it should "check wallet" in {
     Post(prefix + "/check", Json.obj("mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
       route ~> check {

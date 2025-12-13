@@ -73,12 +73,12 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private val password: Directive1[String] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("pass").as[String]
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection("pass field is required: " + e.getMessage)), s => provide(s))
   }
 
   private val derivationPath: Directive1[String] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("derivationPath").as[String]
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection("derivationPath field is required: " + e.getMessage)), s => provide(s))
   }
 
   private val restoreRequest: Directive1[(Boolean, String, String, Option[String])] = entity(as[Json]).flatMap { p =>
@@ -97,7 +97,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     p.hcursor.downField("mnemonic").as[String]
       .flatMap(mnemo => p.hcursor.downField("mnemonicPass").as[Option[String]]
         .map(mnemoPassOpt => (mnemo, mnemoPassOpt)))
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection("mnemonic field is required: " + e.getMessage)), s => provide(s))
   }
 
   private val initRequest: Directive1[(String, Option[String])] = entity(as[Json]).flatMap { p =>
@@ -105,7 +105,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       .flatMap(pass => p.hcursor.downField("mnemonicPass").as[Option[String]]
         .map(mnemoPassOpt => (pass, mnemoPassOpt))
       )
-      .fold(_ => reject, s => provide(s))
+      .fold(e => reject(MissingQueryParamRejection("pass field is required: " + e.getMessage)), s => provide(s))
   }
 
   private val txParams: Directive[(Int, Int, Int, Int)] = parameters(

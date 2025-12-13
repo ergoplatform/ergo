@@ -5,7 +5,7 @@ import io.circe._
 import io.circe.syntax._
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.core.network.DeliveryTracker
 import scorex.core.network.ModifiersStatus._
 
@@ -17,7 +17,7 @@ class DeliveryTrackerSpec extends ErgoCorePropertyTest {
   property("tracker should accept requested modifiers, turn them into received and clear them") {
     forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
       val tracker = DeliveryTracker.empty(settings)
-      val mid: ModifierId = ModifierId @@ "foo"
+      val mid: ModifierId = ModifierId.fromHex("0000000000000000000000000000000000000000000000000000000000000666") // "foo" padded to 64 hex chars
       val mTypeId: NetworkObjectTypeId.Value = NetworkObjectTypeId.fromByte(104)
       tracker.setRequested(mTypeId, mid, peer) { _ => Cancellable.alreadyCancelled}
       val infoFields =

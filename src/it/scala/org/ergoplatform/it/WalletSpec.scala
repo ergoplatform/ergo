@@ -19,7 +19,7 @@ import org.ergoplatform.utils.{ErgoTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.{ErgoBox, P2PKAddress}
 import org.scalatest.wordspec.AsyncWordSpec
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 import sigma.Colls
 
@@ -106,7 +106,7 @@ class WalletSpec
       .buildProverFromMnemonic(mnemonic, None, parameters)
     val pk            = prover.hdPubKeys.head.key
     val ergoTree      = TrueTree
-    val transactionId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+    val transactionId = ModifierId.fromHex(Base16.encode(Array.fill(32)(5: Byte)))
     val input = new ErgoBox(
       60000000,
       ergoTree,

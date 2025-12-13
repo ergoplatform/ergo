@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 
 import scala.collection.mutable.ArrayBuffer
@@ -11,7 +11,6 @@ import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.ErgoSettings
-import scorex.util
 
 import scala.util.Try
 
@@ -19,7 +18,7 @@ class SegmentSpec extends ErgoCorePropertyTest {
 
   implicit val segmentTreshold: Int = 512
 
-  val hash: util.ModifierId.Type = ModifierId @@ Base16.encode(Array.fill(32)(0.toByte))
+  val hash: ModifierId = ModifierId.fromHex(Base16.encode(Array.fill(32)(0.toByte)))
   val boxes = new ArrayBuffer[Long]()
   (1 to 1706).foreach{i =>
     boxes.append(i)
@@ -33,7 +32,7 @@ class SegmentSpec extends ErgoCorePropertyTest {
   val hr: ErgoHistoryReader = new ErgoHistoryReader {
     override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null ,null) {
       override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
-        val b = Base16.decode(id).get.head
+        val b = id.toBytes.head
         if(b == 0) {
           Some(segment0)
         } else if(b == 1) {
@@ -60,7 +59,7 @@ class SegmentSpec extends ErgoCorePropertyTest {
       segmentCount = 3,
       ia.boxes,
       idOf = {
-        case (_, i) => ModifierId @@ Base16.encode(Array.fill(32)(i.toByte))
+        case (_, i) => ModifierId.fromHex(Base16.encode(Array.fill(32)(i.toByte)))
       },
       arraySelector = { ai => ai.boxes },
       retrieve = {

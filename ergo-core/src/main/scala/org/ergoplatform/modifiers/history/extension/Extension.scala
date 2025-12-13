@@ -12,7 +12,7 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * Extension section of Ergo block. Contains key-value storage

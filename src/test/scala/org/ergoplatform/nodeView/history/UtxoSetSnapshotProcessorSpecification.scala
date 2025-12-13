@@ -9,7 +9,7 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.db.LDBVersionedStore
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.util.Random
 
@@ -60,7 +60,7 @@ class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
     val manifestBytes = us.snapshotsDb.readManifestBytes(manifestId).get
     val manifest = serializer.parseBytes(manifestBytes)
     val subtreeIds = manifest.subtreesIds
-    val subtreeIdsEncoded = subtreeIds.map(id => ModifierId @@ Algos.encode(id))
+    val subtreeIdsEncoded = subtreeIds.map(id => ModifierId.fromHex(Algos.encode(id)))
 
     subtreeIds.foreach {sid =>
       val subtreeBytes = us.snapshotsDb.readSubtreeBytes(sid).get
@@ -68,20 +68,20 @@ class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
       subtree.verify(sid) shouldBe true
     }
 
-    val blockId = ModifierId @@ Algos.encode(Array.fill(32)(Random.nextInt(100).toByte))
+    val blockId = ModifierId.fromHex(Algos.encode(Array.fill(32)(Random.nextInt(100).toByte)))
     utxoSetSnapshotProcessor.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)
     val dp = utxoSetSnapshotProcessor.utxoSetSnapshotDownloadPlan().get
     dp.snapshotHeight shouldBe snapshotHeight
-    val expected = dp.expectedChunkIds.map(id => ModifierId @@ Algos.encode(id))
+    val expected = dp.expectedChunkIds.map(id => ModifierId.fromHex(Algos.encode(id)))
     expected shouldBe subtreeIdsEncoded
-    val toDownload = utxoSetSnapshotProcessor.getChunkIdsToDownload(expected.size).map(id => ModifierId @@ Algos.encode(id))
+    val toDownload = utxoSetSnapshotProcessor.getChunkIdsToDownload(expected.size).map(id => ModifierId.fromHex(Algos.encode(id)))
     toDownload shouldBe expected
 
     subtreeIds.foreach { subtreeId =>
       val subtreeBytes = us.snapshotsDb.readSubtreeBytes(subtreeId).get
       utxoSetSnapshotProcessor.registerDownloadedChunk(subtreeId, subtreeBytes)
     }
-    val s = utxoSetSnapshotProcessor.downloadedChunksIterator().map(s => ModifierId @@ Algos.encode(s.id)).toSeq
+    val s = utxoSetSnapshotProcessor.downloadedChunksIterator().map(s => ModifierId.fromHex(Algos.encode(s.id))).toSeq
     s shouldBe subtreeIdsEncoded
 
     val dir = createTempDir

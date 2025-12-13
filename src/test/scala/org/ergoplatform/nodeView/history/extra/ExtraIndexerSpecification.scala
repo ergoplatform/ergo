@@ -13,7 +13,8 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.modifiers.ModifierId
+import org.ergoplatform.core.bytesToId
 import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
@@ -340,6 +341,64 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     done.await()
     val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
     checkTokens(indexedTokens) shouldBe 0
+    indexer ! Reset()
+  }
+
+  property("tokens are properly re-indexed after rollback when token was deleted") {
+    // This test reproduces issue #2210: tokens missing after rollback
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+
+    // Find a token that exists
+    val (_, _, indexedTokensBefore, _, _) = manualIndex(HEIGHT)
+    val tokenIdOpt = indexedTokensBefore.keys.headOption
+
+    tokenIdOpt shouldNot be(None)
+    val tokenId = tokenIdOpt.get
+
+    // Verify token exists and has boxes
+    val tokenBefore = history.typedExtraIndexById[IndexedToken](tokenId)
+    tokenBefore shouldNot be(None)
+    tokenBefore.get.boxCount should be > 0
+
+    // Rollback to a point where the token might be deleted (if it had no boxes at that height)
+    val rollbackHeight = BRANCHPOINT
+    indexer ! Rollback(history.bestHeaderIdAtHeight(rollbackHeight).get)
+    lock.lock()
+    done.await()
+
+    // Re-index from rollback point
+    indexer ! Index()
+    lock.lock()
+    done.await()
+
+    // After re-indexing, the token should exist again if it has boxes
+    val (_, _, indexedTokensAfter, _, _) = manualIndex(HEIGHT)
+    
+    // Check that the token exists and can be queried
+    val tokenAfter = history.typedExtraIndexById[IndexedToken](tokenId)
+    
+    // If the token had boxes at the final height, it should exist
+    if (indexedTokensAfter.contains(tokenId) && indexedTokensAfter(tokenId)._1 > 0) {
+      tokenAfter shouldNot be(None)
+      tokenAfter.get.boxCount should be > 0
+      
+      // Verify we can retrieve unspent boxes by token ID (the API endpoint behavior)
+      val unspentBoxes = tokenAfter.get.retrieveUtxos(
+        history, 
+        ErgoMemPool.empty(settings), 
+        0, 
+        100, 
+        SortDirection.ASC, 
+        unconfirmed = false, 
+        Set.empty
+      )
+      unspentBoxes shouldNot be(empty)
+      unspentBoxes.exists(_.isSpent) shouldBe false
+    }
+
     indexer ! Reset()
   }
 }

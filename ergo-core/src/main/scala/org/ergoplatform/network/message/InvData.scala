@@ -1,7 +1,6 @@
 package org.ergoplatform.network.message
 
-import org.ergoplatform.modifiers.NetworkObjectTypeId
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.{ModifierId, NetworkObjectTypeId}
 
 /**
   * P2P network message which is encoding "inventory", transactions or block sections the node has

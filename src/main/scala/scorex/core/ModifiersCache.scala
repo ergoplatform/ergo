@@ -1,7 +1,7 @@
 package scorex.core
 
 import org.ergoplatform.consensus.ContainsModifiers
-import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier}
+import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ModifierId}
 import org.ergoplatform.nodeView.history.ErgoHistory
 
 import scala.annotation.tailrec
@@ -17,12 +17,12 @@ import scala.collection.mutable
 trait ModifiersCache extends ContainsModifiers[ErgoNodeViewModifier] {
   require(maxSize >= 1)
 
-  type K = scorex.util.ModifierId
+  type K = ModifierId
   type V = BlockSection
 
   protected val cache: mutable.Map[K, V] = mutable.LinkedHashMap[K, V]()
 
-  override def modifierById(modifierId: scorex.util.ModifierId): Option[ErgoNodeViewModifier] = {
+  override def modifierById(modifierId: ModifierId): Option[ErgoNodeViewModifier] = {
     cache.get(modifierId)
   }
 

@@ -1,11 +1,11 @@
 package org.ergoplatform.settings
 
+import org.ergoplatform.modifiers.ModifierId
 import org.ergoplatform.utils
 import org.ergoplatform.utils.ScorexEncoder
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
-import scorex.util._
 
 
 object Algos extends ErgoAlgos with utils.ScorexEncoding {
@@ -18,7 +18,7 @@ object Algos extends ErgoAlgos with utils.ScorexEncoding {
 
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 
-  @inline def encode(id: ModifierId): String = encoder.encode(id)
+  @inline def encode(id: ModifierId): String = encoder.encodeId(id)
 
   /**
     * A method to build a Merkle tree over binary objects (leafs of the tree)

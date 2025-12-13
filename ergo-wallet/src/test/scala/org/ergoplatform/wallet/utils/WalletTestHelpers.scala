@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.utils
 
 import org.ergoplatform.settings.ErgoAlgos
 import org.scalatest.propspec.AnyPropSpec
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.annotation.tailrec
 
@@ -34,7 +34,7 @@ trait WalletTestHelpers extends AnyPropSpec {
 
   /** Hashes the string and returns the hash as [[ModifierId]]. */
   def stringToId(s: String): ModifierId = {
-    scorex.util.bytesToId(ErgoAlgos.hash(s))
+    org.ergoplatform.core.bytesToId(ErgoAlgos.hash(s))
   }
 
 }

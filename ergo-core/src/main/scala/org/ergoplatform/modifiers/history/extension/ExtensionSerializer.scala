@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history.extension
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
 
 import scala.annotation.nowarn
 

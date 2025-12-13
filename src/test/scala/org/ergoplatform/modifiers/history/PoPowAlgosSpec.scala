@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   import org.ergoplatform.utils.generators.ChainGenerator._

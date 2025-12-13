@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoBoxAssets
 import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
 import org.ergoplatform.wallet.transactions.TransactionBuilder._
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.annotation.tailrec
 import scala.collection.mutable

@@ -9,7 +9,7 @@ import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.hash.Blake2b256
-import scorex.util.bytesToId
+import org.ergoplatform.core.bytesToId
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._

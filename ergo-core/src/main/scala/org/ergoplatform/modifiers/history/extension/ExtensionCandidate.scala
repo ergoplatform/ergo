@@ -5,7 +5,7 @@ import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{BatchMerkleProof, Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scala.annotation.nowarn
 import scala.collection.mutable
 /**

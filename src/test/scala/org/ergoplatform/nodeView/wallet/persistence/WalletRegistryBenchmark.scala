@@ -9,7 +9,7 @@ import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, Input}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 import sigma.ast.ErgoTree
 import sigma.interpreter.{ContextExtension, ProverResult}
@@ -58,7 +58,7 @@ object WalletRegistryBenchmark extends App {
   }
 
   val scanResults0 = ScanResults(boxes, ArraySeq.empty, ArraySeq.empty)
-  registry.updateOnBlock(scanResults0, ModifierId @@ Base16.encode(Array.fill(32)(0: Byte)), 1).get
+  registry.updateOnBlock(scanResults0, ModifierId.fromHex(Base16.encode(Array.fill(32)(0: Byte))), 1).get
   println("keys: " + walletVars.proverOpt.get.secretKeys.size)
 
   val bts0 = System.currentTimeMillis()
@@ -77,7 +77,7 @@ object WalletRegistryBenchmark extends App {
   }
 
   val scanResults1 = ScanResults(ArraySeq.empty, ArraySeq.empty, txs)
-  registry.updateOnBlock(scanResults1, ModifierId @@ Base16.encode(Array.fill(32)(1: Byte)), 2).get
+  registry.updateOnBlock(scanResults1, ModifierId.fromHex(Base16.encode(Array.fill(32)(1: Byte))), 2).get
 
   val tts0 = System.currentTimeMillis()
   val txsRead = registry.allWalletTxs()

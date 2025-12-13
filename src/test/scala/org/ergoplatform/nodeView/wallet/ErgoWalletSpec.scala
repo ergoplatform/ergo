@@ -15,7 +15,7 @@ import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.{ErgoInterpreter, TransactionHintsBag}
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.ErgoTree
@@ -37,7 +37,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>
-      val assets = preAssets.map { case (id, amt) => ModifierId @@ Algos.encode(id) -> amt }
+      val assets = preAssets.map { case (id, amt) => ModifierId.fromHex(Algos.encode(id)) -> amt }
       val wd0 = WalletDigest(1, 0, assets)
       val bs = WalletDigestSerializer.toBytes(wd0)
       WalletDigestSerializer.parseBytes(bs).walletAssetBalances shouldBe wd0.walletAssetBalances

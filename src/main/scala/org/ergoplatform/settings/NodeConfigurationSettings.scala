@@ -5,7 +5,7 @@ import net.ceedubs.ficus.readers.ValueReader
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -15,7 +15,7 @@ trait CheckpointingSettingsReader extends ModifierIdReader {
   implicit val checkpointSettingsReader: ValueReader[CheckpointSettings] = { (cfg, path) =>
     CheckpointSettings(
       cfg.as[Int](s"$path.height"),
-      ModifierId @@ cfg.as[String](s"$path.blockId")
+      ModifierId.fromHex(cfg.as[String](s"$path.blockId"))
     )
   }
 }

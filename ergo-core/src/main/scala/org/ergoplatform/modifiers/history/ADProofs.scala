@@ -14,7 +14,8 @@ import scorex.crypto.authds.avltree.batch.{Lookup => _, _}
 import scorex.crypto.authds.{ADDigest, ADValue, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.Extensions._
 
 import scala.util.{Failure, Success, Try}

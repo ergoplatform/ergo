@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history
 import com.google.common.primitives.Longs
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 class HeadersSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.ChainGenerator._

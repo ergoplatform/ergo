@@ -1,7 +1,7 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.core.VersionTag
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.{Base16, BytesEncoder}
 
 import scala.util.Try
@@ -38,7 +38,7 @@ class ScorexEncoder extends BytesEncoder {
     * with encode() and decode methods
     */
   @inline
-  def encodeId(input: ModifierId): String = input
+  def encodeId(input: ModifierId): String = input.toHexString
 
 }
 

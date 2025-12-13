@@ -3,7 +3,7 @@ package org.ergoplatform.network.message
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 import org.ergoplatform.settings.Algos
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -37,7 +37,7 @@ object GetNipopowProofSpec extends MessageSpecV1[NipopowProofData] {
 
     val headerIdPresents = r.getByte() == 1
     val headerIdOpt = if (headerIdPresents) {
-      Some(ModifierId @@ Algos.encode(r.getBytes(ModifierIdLength)))
+      Some(ModifierId.fromHex(Algos.encode(r.getBytes(ModifierIdLength))))
     } else {
       None
     }

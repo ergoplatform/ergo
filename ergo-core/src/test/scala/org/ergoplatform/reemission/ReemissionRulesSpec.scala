@@ -4,7 +4,7 @@ import org.ergoplatform._
 import org.ergoplatform.settings.{MonetarySettings, ReemissionSettings}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.hash.Blake2b256
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.Colls
 import sigma.ast.ErgoTree
 import sigma.data.TrivialProp.TrueProp
@@ -21,12 +21,13 @@ class ReemissionRulesSpec extends ErgoCorePropertyTest {
 
   private val ms = MonetarySettings()
   private val checkReemissionRules: Boolean = true
-  private val emissionNftId: ModifierId = ModifierId @@ "06f29034fb69b23d519f84c4811a19694b8cdc2ce076147aaa050276f0b840f4"
-  private val reemissionTokenId: ModifierId = ModifierId @@ "01345f0ed87b74008d1c46aefd3e7ad6ee5909a2324f2899031cdfee3cc1e022"
-  private val reemissionNftId: ModifierId = ModifierId @@ "06f2c3adfe52304543f7b623cc3fccddc0174a7db52452fef8e589adacdfdfee"
+  private val emissionNftId: ModifierId = ModifierId.fromHex("06f29034fb69b23d519f84c4811a19694b8cdc2ce076147aaa050276f0b840f4")
+  private val reemissionTokenId: ModifierId = ModifierId.fromHex("01345f0ed87b74008d1c46aefd3e7ad6ee5909a2324f2899031cdfee3cc1e022")
+  private val reemissionNftId: ModifierId = ModifierId.fromHex("06f2c3adfe52304543f7b623cc3fccddc0174a7db52452fef8e589adacdfdfee")
   private val activationHeight: Int = 0
   private val reemissionStartHeight: Int = 100
-  private val injectionBoxBytesEncoded: ModifierId = ModifierId @@ "a0f9e1b5fb011003040005808098f4e9b5ca6a0402d1ed91c1b2a4730000730193c5a7c5b2a4730200f6ac0b0201345f0ed87b74008d1c46aefd3e7ad6ee5909a2324f2899031cdfee3cc1e02280808cfaf49aa53506f29034fb69b23d519f84c4811a19694b8cdc2ce076147aaa050276f0b840f40100325c3679e7e0e2f683e4a382aa74c2c1cb989bb6ad6a1d4b1c5a021d7b410d0f00"
+  // Note: injectionBoxBytesEncoded is actually a String, not a ModifierId (it's longer than 64 hex chars)
+  private val injectionBoxBytesEncoded: String = "a0f9e1b5fb011003040005808098f4e9b5ca6a0402d1ed91c1b2a4730000730193c5a7c5b2a4730200f6ac0b0201345f0ed87b74008d1c46aefd3e7ad6ee5909a2324f2899031cdfee3cc1e02280808cfaf49aa53506f29034fb69b23d519f84c4811a19694b8cdc2ce076147aaa050276f0b840f40100325c3679e7e0e2f683e4a382aa74c2c1cb989bb6ad6a1d4b1c5a021d7b410d0f00"
   private val rs = ReemissionSettings(checkReemissionRules, emissionNftId, reemissionTokenId,
                                       reemissionNftId, activationHeight, reemissionStartHeight, injectionBoxBytesEncoded)
 

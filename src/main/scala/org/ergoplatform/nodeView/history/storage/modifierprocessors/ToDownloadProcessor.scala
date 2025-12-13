@@ -5,7 +5,8 @@ import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, Snapshots
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 

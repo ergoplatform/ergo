@@ -11,7 +11,8 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{ChainSettings, NipopowSettings}
 import org.ergoplatform.settings.Constants.HashLength
 import scorex.db.ByteArrayWrapper
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import scala.util.Try
 

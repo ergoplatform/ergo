@@ -8,7 +8,9 @@ import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import org.ergoplatform.core.idToBytes
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 import spire.syntax.all.cfor
@@ -34,17 +36,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   private lazy val headersCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.headersCacheSize)
-      .build[String, BlockSection]()
+      .build[ModifierId, BlockSection]()
 
   private lazy val blockSectionsCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.blockSectionsCacheSize)
-      .build[String, BlockSection]()
+      .build[ModifierId, BlockSection]()
 
   private lazy val extraCache =
     Caffeine.newBuilder()
       .maximumSize(config.history.extraCacheSize)
-      .build[String, ExtraIndex]()
+      .build[ModifierId, ExtraIndex]()
 
   private lazy val indexCache =
     Caffeine.newBuilder()
@@ -84,7 +86,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           cacheModifier(pm)
           Some(pm)
         case Failure(e) =>
-          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
+          log.warn(s"Failed to parse modifier ${encoder.encodeId(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
           None
       }
     }
@@ -99,7 +101,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           }
           Some(pm)
         case Failure(_) =>
-          log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
+          log.warn(s"Failed to parse index ${encoder.encodeId(id)} from db (bytes are: ${Algos.encode(bytes)})")
           None
       }
     }

@@ -9,7 +9,8 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import scorex.core.api.http.ApiRoute
-import scorex.util.{bytesToId, ModifierId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 import akka.pattern.ask
 import io.circe.syntax.EncoderOps
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction

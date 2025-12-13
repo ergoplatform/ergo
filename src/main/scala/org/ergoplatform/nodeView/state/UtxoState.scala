@@ -21,7 +21,7 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.util.{Failure, Success, Try}
 

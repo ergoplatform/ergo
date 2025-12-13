@@ -7,7 +7,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.emission.EmissionRules
 import scorex.crypto.authds.ADDigest
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 
 import scala.concurrent.duration.FiniteDuration

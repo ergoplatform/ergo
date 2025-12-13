@@ -8,8 +8,9 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants.{MiningScanId, PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import scorex.util.{ModifierId, ScorexLogging}
-import scorex.util.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
+import org.ergoplatform.core.bytesToId
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.collection.immutable.TreeSet

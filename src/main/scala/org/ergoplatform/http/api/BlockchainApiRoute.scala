@@ -21,7 +21,8 @@ import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import scorex.core.api.http.ApiResponse
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.ast.ErgoTree
 import spire.implicits.cfor
 

@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.PoPowHeader
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 class PopowProcessorSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.HistoryTestHelpers._

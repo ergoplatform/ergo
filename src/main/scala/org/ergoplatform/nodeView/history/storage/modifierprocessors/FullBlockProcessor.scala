@@ -8,7 +8,8 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
 import scorex.db.ByteArrayWrapper
-import scorex.util.{ModifierId, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap

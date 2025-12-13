@@ -6,7 +6,8 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, f
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 import sigma.ast.ErgoTree
 

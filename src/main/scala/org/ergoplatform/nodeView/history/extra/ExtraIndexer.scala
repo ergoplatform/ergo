@@ -14,7 +14,9 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import sigma.ast.ErgoTree
 import sigma.Extensions._
 import sigma.interpreter.ProverResult
@@ -205,7 +207,17 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           case Right(iEb) => tokens.put(id, x.addBox(iEb)) // receive box
         }
       case None => // token not found at all
-        log.error(s"Unknown token $id") // spend box should never happen by an unknown token
+        spendOrReceive match {
+          case Left(iEb) => 
+            // Spending a box from an unknown token should not happen, but log it
+            log.error(s"Unknown token $id being spent from box ${iEb.id}")
+          case Right(iEb) => 
+            // Receiving a box with a token that doesn't exist - create a minimal token entry
+            // This can happen after rollbacks where tokens were deleted but boxes with those tokens still exist
+            val newToken = IndexedToken(id).addBox(iEb)
+            tokens.put(id, newToken)
+            log.debug(s"Created new token entry for $id when adding box ${iEb.id} (likely after rollback)")
+        }
     }
   }
 
@@ -634,9 +646,7 @@ object ExtraIndexer {
     * @return an array of bytes
     */
   private[extra] def fastIdToBytes(id: ModifierId): Array[Byte] = {
-    val x: Array[Byte] = new Array[Byte](id.length / 2)
-    cfor(0)(_ < id.length, _ + 2) { i => x(i / 2) = ((hexIndex(id(i)) << 4) | hexIndex(id(i + 1))).toByte }
-    x
+    id.toBytes
   }
 
   /**

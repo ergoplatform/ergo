@@ -3,7 +3,7 @@ package org.ergoplatform.modifiers.history.popow
 import org.ergoplatform.mining.difficulty.DifficultyAdjustment
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.ChainSettings
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.collection.mutable
 import scala.util.Try

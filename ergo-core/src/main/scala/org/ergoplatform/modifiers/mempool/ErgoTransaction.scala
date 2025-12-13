@@ -27,7 +27,9 @@ import org.ergoplatform.validation.ValidationResult.fromValidationState
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult, ValidationState}
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
@@ -230,10 +232,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       lazy val reemissionSettings = stateContext.chainSettings.reemission
       lazy val reemissionRules = reemissionSettings.reemissionRules
 
-      lazy val reemissionTokenId = ModifierId @@@ reemissionSettings.reemissionTokenId
+      lazy val reemissionTokenId = reemissionSettings.reemissionTokenId
       lazy val reemissionTokenIdBytes = reemissionSettings.reemissionTokenIdBytes
 
-      lazy val emissionNftId = ModifierId @@@ reemissionSettings.emissionNftId
+      lazy val emissionNftId = reemissionSettings.emissionNftId
       lazy val emissionNftIdBytes = reemissionSettings.emissionNftIdBytes
 
       lazy val chainSettings = stateContext.chainSettings

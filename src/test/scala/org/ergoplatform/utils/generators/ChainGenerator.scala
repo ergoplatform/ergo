@@ -70,7 +70,7 @@ object ChainGenerator {
     chain.headers.foldLeft((Seq.empty[PoPowHeader], None: Option[PoPowHeader])) {
       case ((acc, bestHeaderOpt), h) =>
         val links = if (bestHeaderOpt.isEmpty) {
-          Seq(scorex.util.bytesToId(Array.fill(32)(0: Byte)))
+          Seq(org.ergoplatform.core.bytesToId(Array.fill(32)(0: Byte)))
         } else {
           nipopowAlgos.updateInterlinks(
             bestHeaderOpt.map(_.header),

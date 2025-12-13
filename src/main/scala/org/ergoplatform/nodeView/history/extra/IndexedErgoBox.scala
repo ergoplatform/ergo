@@ -4,7 +4,8 @@ import org.ergoplatform.ErgoBox
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 import sigma.interpreter.ProverResult
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}

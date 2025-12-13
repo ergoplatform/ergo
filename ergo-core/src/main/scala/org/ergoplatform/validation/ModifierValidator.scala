@@ -6,7 +6,8 @@ import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.utils.ScorexEncoder
 import org.ergoplatform.validation.ValidationResult._
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.util.{Failure, Success, Try}
 
@@ -153,7 +154,7 @@ case class ValidationState[T](result: ValidationResult[T], settings: ValidationS
           case Success(_) =>
             result
           case Failure(unexpectedEx) =>
-            settings.getError(id, unexpectedEx, ModifierId @@@ bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
+            settings.getError(id, unexpectedEx, bytesToId(Array.fill(32)(0.toByte)), modifierTypeId)
         }
       }
     }

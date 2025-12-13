@@ -1,7 +1,6 @@
 package org.ergoplatform.consensus
 
-import org.ergoplatform.modifiers.ErgoNodeViewModifier
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.{ErgoNodeViewModifier, ModifierId}
 
 /**
   * Object that contains modifiers of type `MOD`

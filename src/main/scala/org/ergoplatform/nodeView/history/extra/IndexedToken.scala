@@ -8,7 +8,9 @@ import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ByteArrayOps, ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ByteArrayOps
 import sigma.Extensions._
 import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant

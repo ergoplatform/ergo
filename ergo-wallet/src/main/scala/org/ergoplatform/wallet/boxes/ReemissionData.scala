@@ -1,6 +1,6 @@
 package org.ergoplatform.wallet.boxes
 
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * Re-emission settings which are needed in order to construct transactions

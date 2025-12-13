@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 trait MempoolTestHelpers {
 

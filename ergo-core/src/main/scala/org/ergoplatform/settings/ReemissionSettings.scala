@@ -3,9 +3,8 @@ package org.ergoplatform.settings
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.reemission.ReemissionRules
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
-import sigmastate.utils.Extensions.ModifierIdOps
 import sigma.Coll
 /**
   * Configuration section for re-emission (EIP27) parameters

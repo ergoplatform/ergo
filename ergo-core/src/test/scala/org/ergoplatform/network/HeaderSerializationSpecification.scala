@@ -7,7 +7,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import scorex.util.encode.Base16
 import sigma.crypto.EcPointType
 
@@ -27,7 +27,7 @@ class HeaderSerializationSpecification extends ErgoCorePropertyTest {
     // real header from mainnet, at 414,474, https://explorer.ergoplatform.com/en/blocks/8cf6dca6b9505243e36192fa107735024c0000cf4594b1daa2dc4e13ee86f26f
     val version = 1 : Byte
     val height = 414474
-    val parentId = ModifierId @@ "8bdd043dab20aa690afc9a18fc4797de4f02f049f5c16f9657646c753d69582e"
+    val parentId = ModifierId.fromHex("8bdd043dab20aa690afc9a18fc4797de4f02f049f5c16f9657646c753d69582e")
     val adProofsRoot = Digest32 @@ Base16.decode("4527a2a7bcee7f77b5697f505e5effc5342750f58a52dddfe407a3ce3bd3abd0").get
     val stateRoot = ADDigest @@ Base16.decode("6c06d6277d40aeb958c5631515dc3ec3d11d8504e62de77df024d0ca67242fb512").get
     val transactionsRoot = Digest32 @@ Base16.decode("722f9306300d0d96fe8c10de830216d700131614f9e6ce2496e8dba1cbb45951").get
@@ -125,7 +125,7 @@ class HeaderSerializationSpecification extends ErgoCorePropertyTest {
     // real header from mainnet, at 418,838, https://explorer.ergoplatform.com/en/blocks/f46c89e44f13a92d8409341490f97f05c85785fa8d2d2164332cc066eda95c39
     val version = 2 : Byte
     val height = 418138
-    val parentId = ModifierId @@ "7fbc70ec5913706ddef67bbcdb7700ea5f15dc709012491269c9c7eb545d720c"
+    val parentId = ModifierId.fromHex("7fbc70ec5913706ddef67bbcdb7700ea5f15dc709012491269c9c7eb545d720c")
     val adProofsRoot = Digest32 @@ Base16.decode("a80bbd4d69b4f017da6dd9250448ef1cde492121fc350727e755c7b7ae2988ad").get
     val stateRoot = ADDigest @@ Base16.decode("995c0efe63744c5227e6ae213a2061c60f8db845d47707a6bff53f9ff1936a9e13").get
     val transactionsRoot = Digest32 @@ Base16.decode("141bf3de015c44995858a435e4d6c50c51622d077760de32977ba5412aaaae03").get

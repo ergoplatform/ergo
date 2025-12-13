@@ -6,7 +6,9 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.network.message.SyncInfoMessageSpec
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 /**
   * Information on sync status to be sent to peer over the wire. It should provide an answer to the question how

@@ -2,7 +2,7 @@ package org.ergoplatform.consensus
 
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.utils.ScorexEncoder
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
   * Info returned by history to nodeViewHolder after modifier application

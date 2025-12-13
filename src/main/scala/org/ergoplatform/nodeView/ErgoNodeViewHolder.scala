@@ -21,7 +21,8 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.RecoverableModifierError
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 import spire.syntax.all.cfor
 
 import java.io.File

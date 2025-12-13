@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, TokenId}
 import org.ergoplatform.settings.{Algos, Parameters}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 import sigma.ast.ErgoTree
 import sigma.{Coll, Colls}
 
@@ -20,7 +20,7 @@ object BoxUtils {
                                  additionalRegisters: AdditionalRegisters = Map(),
                                  parameters: Parameters): Long = {
     val candidateMock = new ErgoBoxCandidate(value = Long.MaxValue, script, creationHeight = Int.MaxValue, tokens, additionalRegisters)
-    val mockId = ModifierId @@ Algos.encode(scorex.util.Random.randomBytes(32))
+    val mockId = ModifierId.fromHex(Algos.encode(scorex.util.Random.randomBytes(32)))
     minimalErgoAmount(candidateMock.toBox(mockId, 1), parameters)
   }
 

@@ -19,7 +19,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
   import Parameters._
 
-  private val headerId = scorex.util.bytesToId(Array.fill(32)(0: Byte))
+  private val headerId = org.ergoplatform.core.bytesToId(Array.fill(32)(0: Byte))
 
   private val votingEpochLength = 2
 

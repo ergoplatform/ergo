@@ -17,7 +17,9 @@ import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADKey
 import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import org.ergoplatform.core.{bytesToId, idToBytes}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import java.io.File
 import scala.collection.mutable

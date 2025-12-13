@@ -508,7 +508,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       ergoTree.version shouldBe treeVersion
 
       val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
-          Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+          Map.empty, ModifierId.fromHex("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742"),
           0, 0)
 
       val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
@@ -536,7 +536,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     ergoTree.root.isRight shouldBe true // parsed
 
     val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
-      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      Map.empty, ModifierId.fromHex("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742"),
       0, 0)
     val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
@@ -562,7 +562,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     ergoTree.root.isRight shouldBe false
 
     val b = new ErgoBox(1000000000L, ergoTree, Colls.emptyColl,
-      Map.empty, ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      Map.empty, ModifierId.fromHex("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742"),
       0, 0)
     val input = Input(b.id, ProverResult(Array.emptyByteArray, ContextExtension.empty))
 
@@ -577,7 +577,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
   property("Box can't contain 6.0 data types in registers") {
     val ubic = UnsignedBigIntConstant(new BigInteger("2"))
     val b = new ErgoBox(1000000000L, ErgoTreePredef.TrueProp(ErgoTree.defaultHeaderWithVersion(3.toByte)), Colls.emptyColl,
-      Map(R4 -> ubic), ModifierId @@ "c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742",
+      Map(R4 -> ubic), ModifierId.fromHex("c95c2ccf55e03cac6659f71ca4df832d28e2375569cec178dcb17f3e2e5f7742"),
       0, 0)
 
     VersionContext.withVersions(3, 3) {

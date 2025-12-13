@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ModifierId
 
 import scala.concurrent.Future
 

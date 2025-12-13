@@ -3,7 +3,9 @@ package org.ergoplatform.tools
 import org.ergoplatform.modifiers.NetworkObjectTypeId
 import org.ergoplatform.settings.ValidationRules
 import org.ergoplatform.validation.InvalidModifier
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 object ValidationRulesPrinter extends App with ScorexLogging {
 

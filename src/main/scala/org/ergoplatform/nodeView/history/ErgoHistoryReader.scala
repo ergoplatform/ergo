@@ -13,7 +13,8 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectio
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.util.{ModifierId, ScorexLogging}
+import org.ergoplatform.modifiers.ModifierId
+import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
 import scala.reflect.ClassTag

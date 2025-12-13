@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
-import scorex.util.{ModifierId, bytesToId}
+import org.ergoplatform.core.bytesToId
+import org.ergoplatform.modifiers.ModifierId
 
 /**
  * Base trait for all additional indexes made by ExtraIndexer

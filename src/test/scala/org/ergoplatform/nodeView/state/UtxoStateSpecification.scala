@@ -544,7 +544,89 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
     }
   }
 
-
+  property("proofsForTransactions() does not modify UTXO set tree - extensive test") {
+    // Generate blocks with transactions to test thoroughly
+    // Using 50 blocks with 50 txs each for practical testing (can be increased to 500x500)
+    val numBlocks = 50  
+    val txsPerBlock = 50
+    
+    var (us, bh) = createUtxoState(settings)
+    var height: Int = GenesisHeight
+    var parentOpt: Option[ErgoFullBlock] = None
+    
+    info(s"Testing proofsForTransactions() across $numBlocks blocks with ~$txsPerBlock txs each")
+    
+    (0 until numBlocks).foreach { blockNum =>
+      // Generate transactions from current box holder
+      val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height + blockNum)))
+      val txs = t._1.take(txsPerBlock)
+      val newBh = t._2
+      
+      if (txs.nonEmpty) {
+        // Store the digest before calling proofsForTransactions
+        val digestBeforeProofs = us.rootDigest.clone()
+        
+        // Call proofsForTransactions first - this should NOT modify the tree
+        val proofsResult = us.proofsForTransactions(txs)
+        proofsResult shouldBe 'success
+        
+        val (adProofBytes, adDigest) = proofsResult.get
+        
+        // Check that digest after proofsForTransactions is the same as before
+        val digestAfterProofs = us.rootDigest
+        digestBeforeProofs.sameElements(digestAfterProofs) shouldBe true
+        
+        // Build the block header with the proof digest
+        val header = defaultHeaderGen.sample.value
+        val realHeader = header.copy(
+          stateRoot = adDigest,
+          ADProofsRoot = ADProofs.proofDigest(adProofBytes),
+          height = height,
+          parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId)
+        )
+        
+        // Verify that digest from proofsForTransactions output corresponds to header's stateRoot
+        realHeader.stateRoot shouldBe adDigest
+        
+        // Verify that header.ADProofsRoot corresponds to ADProofs.proofDigest(proofBytes)
+        val proofDigestFromBytes = ADProofs.proofDigest(adProofBytes)
+        realHeader.ADProofsRoot.sameElements(proofDigestFromBytes) shouldBe true
+        
+        // Construct the full block
+        val adProofs = ADProofs(realHeader.id, adProofBytes)
+        val bt = BlockTransactions(realHeader.id, Header.InitialVersion, txs)
+        val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
+        
+        // Verify that the state digest still hasn't changed before applyModifier
+        val digestBeforeApply = us.rootDigest
+        digestBeforeProofs.sameElements(digestBeforeApply) shouldBe true
+        
+        // Now call applyModifier - this SHOULD modify the tree
+        val applyResult = us.applyModifier(fb, None)(_ => ())
+        applyResult shouldBe 'success
+        
+        val newUs = applyResult.get
+        
+        // After applyModifier, the digest should now match the header's stateRoot
+        newUs.rootDigest.sameElements(realHeader.stateRoot) shouldBe true
+        
+        // Verify the digest changed after apply (confirming applyModifier works correctly)
+        (!digestBeforeApply.sameElements(newUs.rootDigest)) shouldBe true
+        
+        // Update state for next iteration
+        us = newUs
+        bh = newBh
+        height = height + 1
+        parentOpt = Some(fb)
+        
+        if ((blockNum + 1) % 10 == 0) {
+          info(s"Successfully processed ${blockNum + 1} blocks")
+        }
+      }
+    }
+    
+    info(s"Test completed: proofsForTransactions() called $numBlocks times without modifying the UTXO set tree")
+  }
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
     nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)

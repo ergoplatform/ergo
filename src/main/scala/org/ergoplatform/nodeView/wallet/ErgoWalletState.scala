@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
@@ -19,7 +19,6 @@ case class ErgoWalletState(
     storage: WalletStorage,
     secretStorageOpt: Option[JsonSecretStorage],
     registry: WalletRegistry,
-    offChainRegistry: OffChainRegistry,
     outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
     walletVars: WalletVars,
     stateReaderOpt: Option[ErgoStateReader],
@@ -32,17 +31,25 @@ case class ErgoWalletState(
   ) extends ScorexLogging {
 
   /**
+    * Extract off-chain boxes from mempool transactions that are tracked by the wallet
+    */
+  def extractOffChainBoxes: Seq[TrackedBox] = {
+    mempoolReaderOpt match {
+      case Some(mempool) =>
+        val dustLimit = walletVars.settings.dustLimit
+        mempool.getAllPrioritized.flatMap { unconfirmedTx =>
+          WalletScanLogic.extractWalletOutputs(unconfirmedTx.transaction, None, walletVars, Some(dustLimit))
+        }
+      case None => Seq.empty
+    }
+  }
+
+  /**
     * This filter is selecting boxes which are onchain and not spent offchain yet or created offchain
-    * (and not spent offchain, but that is ensured by offChainRegistry).
+    * (and not spent offchain, but that is ensured by checking mempool).
     * This filter is used when the wallet is going through its boxes to assemble a transaction.
     */
   val walletFilter: FilterFn = (trackedBox: TrackedBox) => {
-    val preStatus = if (trackedBox.chainStatus.onChain) {
-      offChainRegistry.onChainBalances.exists(_.id == trackedBox.boxId)
-    } else {
-      true
-    }
-
     val bid = trackedBox.box.id
 
     // double-check that box is not spent yet by inputs of mempool transactions
@@ -53,14 +60,14 @@ case class ErgoWalletState(
       }
     }
 
-    // double-check that box is exists in UTXO set or outputs of offchain transaction
+    // double-check that box exists in UTXO set or outputs of offchain transaction
     def inOutputs: Boolean = {
       utxoStateReaderOpt.forall { utxo =>
         utxo.boxById(bid).isDefined
       }
     }
 
-    preStatus && notInInputs && inOutputs
+    notInInputs && inOutputs
   }
 
   // Secret is set in form of keystore file of testMnemonic in the config
@@ -121,7 +128,7 @@ case class ErgoWalletState(
     */
   def getBoxesToSpend: Seq[TrackedBox] = {
     require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-    (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ offChainRegistry.offChainBoxes).distinct
+    (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ extractOffChainBoxes).distinct
   }
 
 }
@@ -138,14 +145,12 @@ object ErgoWalletState {
   def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
     WalletRegistry.apply(ergoSettings).map { registry =>
       val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)
-      val offChainRegistry = OffChainRegistry.init(registry)
       val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
       val maxInputsToUse = ergoSettings.walletSettings.maxInputs
       ErgoWalletState(
         ergoStorage,
         secretStorageOpt = None,
         registry,
-        offChainRegistry,
         outputsFilter = None,
         walletVars,
         stateReaderOpt = None,

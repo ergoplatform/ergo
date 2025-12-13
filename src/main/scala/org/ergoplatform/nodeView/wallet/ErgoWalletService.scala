@@ -402,7 +402,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       val confirmed = state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
       if (considerUnconfirmed) {
         // We filter out spent boxes in the same way as wallet does when assembling a transaction
-        (confirmed ++ state.offChainRegistry.offChainBoxes).filter(state.walletFilter)
+        (confirmed ++ state.extractOffChainBoxes).filter(state.walletFilter)
       } else {
         confirmed
       }
@@ -410,7 +410,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       val confirmed = state.registry.walletConfirmedBoxes()
       if (considerUnconfirmed) {
         // Just adding boxes created off-chain
-        confirmed ++ state.offChainRegistry.offChainBoxes
+        confirmed ++ state.extractOffChainBoxes
       } else {
         confirmed
       }
@@ -421,7 +421,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
     val unconfirmed: Seq[TrackedBox] =
       if (considerUnconfirmed) {
-        state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
+        state.extractOffChainBoxes.filter(_.scans.contains(scanId))
       } else {
         ArraySeq.empty[TrackedBox]
       }
@@ -584,16 +584,15 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     }
 
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
-      WalletScanLogic.scanBlockTransactions(
-        state.registry,
-        state.offChainRegistry,
-        state.walletVars,
-        block,
-        state.outputsFilter,
-        dustLimit,
-        ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
-        state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
-      }
+    WalletScanLogic.scanBlockTransactions(
+      state.registry,
+      state.walletVars,
+      block,
+      state.outputsFilter,
+      dustLimit,
+      ergoSettings.walletSettings.walletProfile).map { case (reg, updatedOutputsFilter) =>
+      state.copy(registry = reg, outputsFilter = Some(updatedOutputsFilter))
+    }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

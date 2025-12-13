@@ -9,6 +9,7 @@ import org.ergoplatform.settings.ErgoSettings
   * blocks from the network and keep them in our history.
   */
 trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
+  self: BasicReaders =>
 
   protected def settings: ErgoSettings
 
@@ -37,7 +38,8 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
   /** Check if headers chain is synchronized with the network and modifier is not too old
     */
   def shouldDownloadBlockAtHeight(height: Int): Boolean = {
-    isHeadersChainSynced && height >= minimalFullBlockHeight
+    val bestFullBlockHeight = bestFullBlockOpt.map(_.height).getOrElse(-1)
+    isHeadersChainSynced && (height >= minimalFullBlockHeight || height > bestFullBlockHeight)
   }
 
   /** Update minimal full block height and header chain synced flag

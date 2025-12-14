@@ -67,7 +67,9 @@ case class WalletApiRoute(readersHolder: ActorRef,
         checkSeedR ~
         rescanWalletR ~
         extractHintsR ~
-        getPrivateKeyR
+        getPrivateKeyR ~
+        signMessageR ~
+        verifySignatureR
     }
   }
 
@@ -496,6 +498,43 @@ case class WalletApiRoute(readersHolder: ActorRef,
           }
         case None => NotExists("Address not found in wallet database.")
       }
+    }
+  }
+
+  def signMessageR: Route = (path("signMessage") & post & entity(as[SignMessageRequest])) { req =>
+    val addressOpt = req.address.flatMap(addrStr => ErgoAddressEncoder(ergoSettings.chainSettings.addressPrefix).fromString(addrStr).toOption)
+    withWalletOp(_.signMessage(req.message, addressOpt.flatMap {
+      case p2pk: P2PKAddress => Some(p2pk)
+      case _ => None
+    })) {
+      case Success((signature, publicKey)) => 
+        ApiResponse(Json.obj(
+          "signature" -> signature.asJson,
+          "publicKey" -> publicKey.asJson
+        ))
+      case Failure(e) => BadRequest(e.getMessage)
+    }
+  }
+
+  def verifySignatureR: Route = (path("verifySignature") & post & entity(as[VerifySignatureRequest])) { req =>
+    Try {
+      import org.ergoplatform.wallet.crypto.ErgoSignature
+      import sigma.serialization.{GroupElementSerializer, SigmaSerializer}
+      
+      val messageBytes = req.message.getBytes("UTF-8")
+      val signatureBytes = Base16.decode(req.signature).get
+      val publicKeyBytes = Base16.decode(req.publicKey).get
+      
+      // Parse the public key bytes into EcPointType
+      val publicKey = GroupElementSerializer.parse(SigmaSerializer.startReader(publicKeyBytes))
+      
+      // Verify signature using ErgoSignature
+      val verified = ErgoSignature.verify(messageBytes, signatureBytes, publicKey)
+      
+      verified
+    } match {
+      case Success(verified) => ApiResponse(Json.obj("verified" -> verified.asJson))
+      case Failure(e) => BadRequest(s"Verification failed: ${e.getMessage}")
     }
   }
 

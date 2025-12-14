@@ -412,4 +412,12 @@ object ErgoWalletActorMessages {
    */
   case class AddBoxResponse(status: Try[Unit])
 
+  /**
+   * Sign an arbitrary message with wallet's private key
+   *
+   * @param message - message to sign
+   * @param addressOpt - optional address to use for signing (if not provided, uses first available key)
+   */
+  case class SignMessage(message: String, addressOpt: Option[P2PKAddress])
+
 }

@@ -169,4 +169,7 @@ trait ErgoWalletReader extends NodeViewComponent {
                                includeUnconfirmed: Boolean): Future[Seq[AugWalletTransaction]] =
     (walletActor ? GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)).mapTo[Seq[AugWalletTransaction]]
 
+  def signMessage(message: String, addressOpt: Option[P2PKAddress]): Future[Try[(String, String)]] =
+    (walletActor ? SignMessage(message, addressOpt)).mapTo[Try[(String, String)]]
+
 }

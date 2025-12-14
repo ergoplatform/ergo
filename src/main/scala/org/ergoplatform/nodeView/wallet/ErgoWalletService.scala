@@ -111,7 +111,7 @@ trait ErgoWalletService {
     */
   def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
 
-  def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox]
+  def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox]
 
   /**
     * @param state               current wallet state
@@ -396,10 +396,16 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       state.copy(storage = WalletStorage.readOrCreate(settings))
     }
 
-  override def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {
+  override def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
     val currentHeight = state.fullHeight
     val boxes = if (unspentOnly) {
-      val confirmed = state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
+      val confirmed = if (minHeight > 0 || maxHeight < Int.MaxValue) {
+        // Use height-based query to extract only boxes in given range from DB, like done for /wallet/transactions
+        state.registry.walletUnspentBoxesByInclusionHeight(minHeight, maxHeight)
+      } else {
+        // Use the original query when no height filtering is needed
+        state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
+      }
       if (considerUnconfirmed) {
         // We filter out spent boxes in the same way as wallet does when assembling a transaction
         (confirmed ++ state.offChainRegistry.offChainBoxes).filter(state.walletFilter)

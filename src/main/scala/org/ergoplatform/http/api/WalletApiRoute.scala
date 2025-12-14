@@ -307,8 +307,16 @@ case class WalletApiRoute(readersHolder: ActorRef,
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) {
     (minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val considerUnconfirmed = minConfNum == -1
+      // Determine actual height range to query from DB
+      val (actualMinHeight, actualMaxHeight) = if (minHeight > 0 || maxHeight < Int.MaxValue) {
+        // Height-based filtering: use height range for DB query
+        (minHeight, if (maxHeight == -1) Int.MaxValue else maxHeight)
+      } else {
+        // No height filtering or only confirmation-based filtering
+        (0, Int.MaxValue)
+      }
       withWallet { wallet =>
-        wallet.walletBoxes(unspentOnly = true, considerUnconfirmed)
+        wallet.walletBoxes(unspentOnly = true, considerUnconfirmed, actualMinHeight, actualMaxHeight)
           .map { boxes =>
             boxes
               .filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
@@ -321,7 +329,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     (minConfNum, maxConfNum, minHeight, maxHeight, limit, offset)  =>
       val considerUnconfirmed = minConfNum == -1
       withWallet {
-        _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
+        _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed, 0, Int.MaxValue)
           .map {
             _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
             .slice(offset, offset + limit)

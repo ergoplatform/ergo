@@ -382,8 +382,16 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
     deleteRecursive(registryFolder)
 
-    WalletRegistry.apply(settings).map { reg =>
-      state.copy(registry = reg)
+    WalletRegistry.apply(settings).flatMap { reg =>
+      // Set the wallet height to current blockchain height to avoid rescanning from genesis
+      val currentHeight = state.fullHeight
+      if (currentHeight > 0) {
+        log.info(s"Setting wallet initial height to current blockchain height: $currentHeight")
+        reg.setInitialHeight(currentHeight).map(_ => state.copy(registry = reg))
+      } else {
+        // If blockchain height is 0 (no blocks yet), keep default height 0
+        Success(state.copy(registry = reg))
+      }
     }
   }
 

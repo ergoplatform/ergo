@@ -426,6 +426,18 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   }
 
   /**
+    * Set the initial wallet height without any balance changes.
+    * This is used when initializing or restoring a wallet to avoid rescanning from genesis.
+    *
+    * @param height - the height to set
+    */
+  def setInitialHeight(height: Int): Try[Unit] = {
+    val digest = WalletDigest(height, 0, Seq.empty)
+    val bag = putDigest(KeyValuePairsBag.empty, digest)
+    bag.transact(store, scorex.utils.Random.randomBytes(32))
+  }
+
+  /**
     * Remove association between an application and a box.
     * Please note that in case of rollback association remains removed!
     *

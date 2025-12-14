@@ -12,13 +12,17 @@ import scorex.util.{ModifierId, ScorexLogging}
   * @param lastCheckedTime - when last validity check was done
   * @param transactionBytes - transaction bytes, to avoid serializations when we send it over the wire
   * @param source - peer which delivered the transaction (None if transaction submitted via API)
+  * @param isUsingBlockchainContext - flag indicating if any input's ergoTree uses blockchain context
+  * @param validationResult - cached validation result (true/false) when isUsingBlockchainContext is true
   */
 class UnconfirmedTransaction(val transaction: ErgoTransaction,
                              val lastCost: Option[Int],
                              val createdTime: Long,
                              val lastCheckedTime: Long,
                              val transactionBytes: Option[Array[Byte]],
-                             val source: Option[ConnectedPeer])
+                             val source: Option[ConnectedPeer],
+                             val isUsingBlockchainContext: Option[Boolean],
+                             val validationResult: Option[Boolean])
   extends ScorexLogging {
 
   def id: ModifierId = transaction.id
@@ -33,7 +37,24 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
       createdTime,
       lastCheckedTime = System.currentTimeMillis(),
       transactionBytes,
-      source)
+      source,
+      isUsingBlockchainContext,
+      validationResult)
+  }
+
+  /**
+    * Updates blockchain context usage flag and validation result
+    */
+  def withBlockchainContext(usesContext: Boolean, isValid: Boolean, cost: Int): UnconfirmedTransaction = {
+    new UnconfirmedTransaction(
+      transaction,
+      lastCost = Some(cost),
+      createdTime,
+      lastCheckedTime = System.currentTimeMillis(),
+      transactionBytes,
+      source,
+      isUsingBlockchainContext = Some(usesContext),
+      validationResult = Some(isValid))
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -48,12 +69,12 @@ object UnconfirmedTransaction {
 
   def apply(tx: ErgoTransaction, source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    new UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source)
+    new UnconfirmedTransaction(tx, None, now, now, Some(tx.bytes), source, None, None)
   }
 
   def apply(tx: ErgoTransaction, txBytes: Array[Byte], source: Option[ConnectedPeer]): UnconfirmedTransaction = {
     val now = System.currentTimeMillis()
-    new UnconfirmedTransaction(tx, None, now, now, Some(txBytes), source)
+    new UnconfirmedTransaction(tx, None, now, now, Some(txBytes), source, None, None)
   }
 
 }

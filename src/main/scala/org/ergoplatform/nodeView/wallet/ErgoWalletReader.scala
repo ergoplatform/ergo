@@ -7,6 +7,7 @@ import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
@@ -36,14 +37,14 @@ trait ErgoWalletReader extends NodeViewComponent {
     * @param mnemonicPassOpt  mnemonic encription password
     * @return  menmonic phrase for the new wallet
     */
-  def initWallet(pass: SecretString, mnemonicPassOpt: Option[SecretString]): Future[Try[SecretString]] =
+  def initWallet(pass: WalletPassword, mnemonicPassOpt: Option[MnemonicPassword]): Future[Try[SecretString]] =
     (walletActor ? InitWallet(pass, mnemonicPassOpt)).mapTo[Try[SecretString]]
 
-  def restoreWallet(encryptionPass: SecretString, mnemonic: SecretString,
-                    mnemonicPassOpt: Option[SecretString] = None, usePre1627KeyDerivation: Boolean): Future[Try[Unit]] =
+  def restoreWallet(encryptionPass: WalletPassword, mnemonic: WalletMnemonic,
+                    mnemonicPassOpt: Option[MnemonicPassword] = None, usePre1627KeyDerivation: UsePre1627KeyDerivation): Future[Try[Unit]] =
     (walletActor ? RestoreWallet(mnemonic, mnemonicPassOpt, encryptionPass, usePre1627KeyDerivation)).mapTo[Try[Unit]]
 
-  def unlockWallet(pass: SecretString): Future[Try[Unit]] =
+  def unlockWallet(pass: WalletPassword): Future[Try[Unit]] =
     (walletActor ? UnlockWallet(pass)).mapTo[Try[Unit]]
 
   def lockWallet(): Unit = walletActor ! LockWallet
@@ -57,7 +58,7 @@ trait ErgoWalletReader extends NodeViewComponent {
     (walletActor ? CheckSeed(mnemonic, mnemonicPassOpt)).mapTo[Boolean]
   }
 
-  def deriveKey(path: String): Future[Try[P2PKAddress]] =
+  def deriveKey(path: DerivationPathString): Future[Try[P2PKAddress]] =
     (walletActor ? DeriveKey(path)).mapTo[Try[P2PKAddress]]
 
   def deriveNextKey: Future[DeriveNextKeyResult] =
@@ -70,7 +71,7 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def balancesWithUnconfirmed: Future[WalletDigest] = balances(OffChain)
 
-  def publicKeys(from: Int, to: Int): Future[Seq[P2PKAddress]] =
+  def publicKeys(from: BoxIndex, to: BoxIndex): Future[Seq[P2PKAddress]] =
     (walletActor ? ReadPublicKeys(from, to)).mapTo[Seq[P2PKAddress]]
 
   def allExtendedPublicKeys(): Future[Seq[ExtendedPublicKey]] =
@@ -80,10 +81,10 @@ trait ErgoWalletReader extends NodeViewComponent {
     (walletActor ? GetPrivateKeyFromPath(path)).mapTo[Try[DLogProverInput]]
 
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
-    (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
+    (walletActor ? GetWalletBoxes(UnspentOnly(unspentOnly), ConsiderUnconfirmed(considerUnconfirmed))).mapTo[Seq[WalletBox]]
 
   def scanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Future[Seq[WalletBox]] =
-    (walletActor ? GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight)).mapTo[Seq[WalletBox]]
+    (walletActor ? GetScanUnspentBoxes(scanId, ConsiderUnconfirmed(considerUnconfirmed), MinInclusionHeight(minHeight), MaxInclusionHeight(maxHeight))).mapTo[Seq[WalletBox]]
 
   def scanSpentBoxes(scanId: ScanId): Future[Seq[WalletBox]] =
     (walletActor ? GetScanSpentBoxes(scanId)).mapTo[Seq[WalletBox]]
@@ -100,7 +101,7 @@ trait ErgoWalletReader extends NodeViewComponent {
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true))
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = ShouldSignTransaction(true)))
       .mapTo[Try[ErgoTransaction]]
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
@@ -114,7 +115,7 @@ trait ErgoWalletReader extends NodeViewComponent {
   def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[UnsignedErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = false)).mapTo[Try[UnsignedErgoTransaction]]
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = ShouldSignTransaction(false))).mapTo[Try[UnsignedErgoTransaction]]
 
 
   def signTransaction(tx: UnsignedErgoTransaction,
@@ -147,10 +148,10 @@ trait ErgoWalletReader extends NodeViewComponent {
     (walletActor ? AddBox(box, scanIds)).mapTo[AddBoxResponse]
 
   def collectBoxes(request: BoxesRequest): Future[ReqBoxesResponse] =
-    (walletActor ? CollectWalletBoxes(request.targetBalance, request.targetAssets)).mapTo[ReqBoxesResponse]
+    (walletActor ? CollectWalletBoxes(TargetBalance(request.targetBalance), request.targetAssets)).mapTo[ReqBoxesResponse]
 
   def transactionsByScanId(scanId: ScanId, includeUnconfirmed: Boolean): Future[ScanRelatedTxsResponse] =
-    (walletActor ? GetScanTransactions(scanId, includeUnconfirmed)).mapTo[ScanRelatedTxsResponse]
+    (walletActor ? GetScanTransactions(scanId, IncludeUnconfirmed(includeUnconfirmed))).mapTo[ScanRelatedTxsResponse]
 
   /**
     * Get filtered scan-related txs

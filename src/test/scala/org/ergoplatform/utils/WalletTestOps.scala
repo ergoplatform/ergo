@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.IdUtils._
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.utils.fixtures.WalletFixture
@@ -36,7 +37,7 @@ trait WalletTestOps extends NodeViewBaseOps {
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
   def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
-    await(w.wallet.publicKeys(0, Int.MaxValue))
+    await(w.wallet.publicKeys(BoxIndex(0), BoxIndex(Int.MaxValue)))
 
   def getConfirmedBalances(implicit w: WalletFixture): WalletDigest =
     await(w.wallet.confirmedBalances)

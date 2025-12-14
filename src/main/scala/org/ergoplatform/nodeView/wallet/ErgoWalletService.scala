@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
@@ -60,8 +61,8 @@ trait ErgoWalletService {
     */
   def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
-                 walletPass: SecretString,
-                 mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)]
+                 walletPass: WalletPassword,
+                 mnemonicPassOpt: Option[MnemonicPassword]): Try[(SecretString, ErgoWalletState)]
 
   /**
     * @param state current wallet state
@@ -74,10 +75,10 @@ trait ErgoWalletService {
     */
   def restoreWallet(state: ErgoWalletState,
                     settings: ErgoSettings,
-                    mnemonic: SecretString,
-                    mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString, 
-                    usePre1627KeyDerivation: Boolean): Try[ErgoWalletState]
+                    mnemonic: WalletMnemonic,
+                    mnemonicPassOpt: Option[MnemonicPassword],
+                    walletPass: WalletPassword, 
+                    usePre1627KeyDerivation: UsePre1627KeyDerivation): Try[ErgoWalletState]
 
   /**
     * Decrypt underlying encrypted storage using `walletPass` and update public keys
@@ -86,7 +87,7 @@ trait ErgoWalletService {
     * @param usePreEip3Derivation if true, the first key is the master key
     * @return Try of new wallet state
     */
-  def unlockWallet(state: ErgoWalletState, walletPass: SecretString, usePreEip3Derivation: Boolean): Try[ErgoWalletState]
+  def unlockWallet(state: ErgoWalletState, walletPass: WalletPassword, usePreEip3Derivation: Boolean): Try[ErgoWalletState]
 
   /**
     * Clear secret from previously decrypted json storage and reset prover
@@ -299,15 +300,15 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
   override def initWallet(state: ErgoWalletState,
                  settings: ErgoSettings,
-                 walletPass: SecretString,
-                 mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)] = {
+                 walletPass: WalletPassword,
+                 mnemonicPassOpt: Option[MnemonicPassword]): Try[(SecretString, ErgoWalletState)] = {
     val walletSettings = settings.walletSettings
     //Read high-quality random bits from Java's SecureRandom
     val entropy = scorex.utils.Random.randomBytes(walletSettings.seedStrengthBits / 8)
     log.info("Initializing wallet")
 
     def initStorage(mnemonic: SecretString): Try[JsonSecretStorage] =
-      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt), walletPass, usePre1627KeyDerivation = false)(walletSettings.secretStorage))
+      Try(JsonSecretStorage.init(Mnemonic.toSeed(mnemonic, mnemonicPassOpt.map(_.value)), walletPass.value, usePre1627KeyDerivation = false)(walletSettings.secretStorage))
 
     val result =
       new Mnemonic(walletSettings.mnemonicPhraseLanguage, walletSettings.seedStrengthBits)
@@ -329,14 +330,14 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
   override def restoreWallet(state: ErgoWalletState,
                     settings: ErgoSettings,
-                    mnemonic: SecretString,
-                    mnemonicPassOpt: Option[SecretString],
-                    walletPass: SecretString,
-                    usePre1627KeyDerivation: Boolean): Try[ErgoWalletState] =
+                    mnemonic: WalletMnemonic,
+                    mnemonicPassOpt: Option[MnemonicPassword],
+                    walletPass: WalletPassword,
+                    usePre1627KeyDerivation: UsePre1627KeyDerivation): Try[ErgoWalletState] =
     if (settings.nodeSettings.isFullBlocksPruned)
       Failure(new IllegalArgumentException("Unable to restore wallet when pruning is enabled"))
     else
-      Try(JsonSecretStorage.restore(mnemonic, mnemonicPassOpt, walletPass, settings.walletSettings.secretStorage, usePre1627KeyDerivation))
+      Try(JsonSecretStorage.restore(mnemonic.value, mnemonicPassOpt.map(_.value), walletPass.value, settings.walletSettings.secretStorage, usePre1627KeyDerivation.value))
         .flatMap { secretStorage =>
           // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           recreateRegistry(state, settings).flatMap { stateV1 =>
@@ -348,12 +349,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
 
   override def unlockWallet(state: ErgoWalletState,
-                   walletPass: SecretString,
+                   walletPass: WalletPassword,
                    usePreEip3Derivation: Boolean): Try[ErgoWalletState] = {
     if (state.walletVars.proverOpt.isEmpty) {
       state.secretStorageOpt match {
         case Some(secretStorage) =>
-          secretStorage.unlock(walletPass).flatMap { _ =>
+          secretStorage.unlock(walletPass.value).flatMap { _ =>
             secretStorage.secret match {
               case None =>
                 Failure(new Exception("Master key is not available for wallet unlocking"))

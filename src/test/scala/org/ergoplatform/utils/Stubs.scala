@@ -196,7 +196,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       case _: CheckSeed => sender() ! true
 
       case GetWalletBoxes(unspentOnly, _) =>
-        val boxes = if (unspentOnly) {
+        val boxes = if (unspentOnly.value) {
           Seq(walletBox10_10, walletBox20_30)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
@@ -204,7 +204,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
 
       case GetScanTransactions(scanId, includeUnconfirmed) =>
-        if (includeUnconfirmed) {
+        if (includeUnconfirmed.value) {
           sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId, includeUnconfirmed = true))
         } else {
           sender() ! ScanRelatedTxsResponse(walletTxsForScan(scanId))
@@ -219,7 +219,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         DeriveNextKeyResult(Success((WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey)))
 
       case ReadPublicKeys(from, until) =>
-        sender() ! trackedAddresses.slice(from, until)
+        sender() ! trackedAddresses.slice(from.value, until.value)
 
       case ReadBalances(chainStatus) =>
         sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.WrappedArray.empty)
@@ -240,14 +240,14 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         sender() ! RemoveScanResponse(res)
 
       case GetScanUnspentBoxes(_, considerUnconfirmed,  minHeight, maxHeight) =>
-        val unfiltered = if(considerUnconfirmed) {
+        val unfiltered = if(considerUnconfirmed.value) {
           Seq(walletBoxN_N)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
         val res = unfiltered.filter { box =>
-          box.trackedBox.inclusionHeightOpt.getOrElse(0) >= minHeight &&
-            (maxHeight == -1 || box.trackedBox.inclusionHeightOpt.getOrElse(Int.MaxValue) <= maxHeight)
+          box.trackedBox.inclusionHeightOpt.getOrElse(0) >= minHeight.value &&
+            (maxHeight.value == -1 || box.trackedBox.inclusionHeightOpt.getOrElse(Int.MaxValue) <= maxHeight.value)
         }
         sender() ! res
 

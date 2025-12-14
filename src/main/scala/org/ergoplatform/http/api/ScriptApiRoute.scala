@@ -11,6 +11,7 @@ import org.ergoplatform.http.api.requests.{CompileRequest, CryptoResult, Execute
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequestDecoder
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
@@ -72,7 +73,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   // todo: unite p2sAddress and p2shAddress, https://github.com/ergoplatform/ergo/issues/2213
   private def p2sAddressR: Route = (path("p2sAddress") & post & entity(as[CompileRequest])) { compileRequest =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+    withWalletAndStateOp(r => (r.w.publicKeys(BoxIndex(0), BoxIndex(loadMaxKeys)), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
         val scriptVersion = Header.scriptFromBlockVersion(bv)
         val treeVersion = compileRequest.treeVersion
@@ -88,7 +89,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 
   private def p2shAddressR: Route = (path("p2shAddress") & post & entity(as[CompileRequest])) { compileRequest =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+    withWalletAndStateOp(r => (r.w.publicKeys(BoxIndex(0), BoxIndex(loadMaxKeys)), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
         val scriptVersion = Header.scriptFromBlockVersion(bv)
         val treeVersion = compileRequest.treeVersion

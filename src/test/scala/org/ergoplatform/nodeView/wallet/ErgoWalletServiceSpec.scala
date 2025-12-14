@@ -6,6 +6,7 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
@@ -81,10 +82,10 @@ class ErgoWalletServiceSpec
         walletService.restoreWallet(
           walletState,
           settingsWithPruning,
-          mnemonic = SecretString.create("x"),
+          mnemonic = WalletMnemonic(SecretString.create("x")),
           mnemonicPassOpt = None,
-          walletPass = SecretString.create("y"),
-          usePre1627KeyDerivation = false
+          walletPass = WalletPassword(SecretString.create("y")),
+          usePre1627KeyDerivation = UsePre1627KeyDerivation(false)
         ).failed.get.getMessage shouldBe "Unable to restore wallet when pruning is enabled"
       }
     }
@@ -303,14 +304,14 @@ class ErgoWalletServiceSpec
         val walletState = initialState(store, versionedStore)
         val walletService = new ErgoWalletServiceImpl(settings)
         val pass = Random.nextString(10)
-        val initializedState = walletService.initWallet(walletState, settings, SecretString.create(pass), Option.empty).get._2
+        val initializedState = walletService.initWallet(walletState, settings, WalletPassword(SecretString.create(pass)), Option.empty).get._2
 
         // Wallet unlocked after init, so we're locking it
         val initLockedWalletState = walletService.lockWallet(initializedState)
         initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
         initLockedWalletState.walletVars.proverOpt shouldBe empty
 
-        val unlockedWalletState = walletService.unlockWallet(initLockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get
+        val unlockedWalletState = walletService.unlockWallet(initLockedWalletState, WalletPassword(SecretString.create(pass)), usePreEip3Derivation = true).get
         unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
         unlockedWalletState.storage.readAllKeys().size shouldBe 1
         unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
@@ -319,7 +320,7 @@ class ErgoWalletServiceSpec
         lockedWalletState.secretStorageOpt.get.isLocked shouldBe true
         lockedWalletState.walletVars.proverOpt shouldBe empty
 
-        val finalUnlockedState = walletService.unlockWallet(lockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get
+        val finalUnlockedState = walletService.unlockWallet(lockedWalletState, WalletPassword(SecretString.create(pass)), usePreEip3Derivation = true).get
         finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
         finalUnlockedState.storage.readAllKeys().size shouldBe 1
         finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
@@ -336,7 +337,7 @@ class ErgoWalletServiceSpec
 
         val walletService = new ErgoWalletServiceImpl(settings)
         val ws1 = initialState(store, versionedStore)
-        val ws2 = walletService.initWallet(ws1, settings, pass, Some(SecretString.create(mnemonic))).get._2
+        val ws2 = walletService.initWallet(ws1, settings, WalletPassword(pass), Some(MnemonicPassword(SecretString.create(mnemonic)))).get._2
         ws2.secretStorageOpt.get.unlock(pass)
 
         val path = DerivationPath.fromEncoded("m/44/1/1/0/0").get

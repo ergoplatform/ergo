@@ -10,6 +10,7 @@ import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
@@ -301,7 +302,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def addressesR: Route = (path("addresses") & get) {
-    withWallet(_.publicKeys(0, Int.MaxValue): Future[Seq[ErgoAddress]])
+    withWallet(_.publicKeys(BoxIndex(0), BoxIndex(Int.MaxValue)): Future[Seq[ErgoAddress]])
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) {
@@ -390,7 +391,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def initWalletR: Route = (path("init") & post & initRequest) {
     case (pass, mnemonicPassOpt) =>
-      withWalletOp(_.initWallet(SecretString.create(pass), mnemonicPassOpt.map(SecretString.create(_)))) {
+      withWalletOp(_.initWallet(WalletPassword(SecretString.create(pass)), mnemonicPassOpt.map(s => MnemonicPassword(SecretString.create(s))))) {
         _.fold(
           e => BadRequest(e.getMessage),
           mnemonic => {
@@ -404,7 +405,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
     case (usePre1627KeyDerivation, pass, mnemo, mnemoPassOpt) =>
-      withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)), usePre1627KeyDerivation)) {
+      withWalletOp(_.restoreWallet(WalletPassword(SecretString.create(pass)), WalletMnemonic(SecretString.create(mnemo)), mnemoPassOpt.map(s => MnemonicPassword(SecretString.create(s))), UsePre1627KeyDerivation(usePre1627KeyDerivation))) {
         _.fold(
           e => BadRequest(e.getMessage),
           _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -413,7 +414,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def unlockWalletR: Route = (path("unlock") & post & password) { pass =>
-    withWalletOp(_.unlockWallet(SecretString.create(pass))) {
+    withWalletOp(_.unlockWallet(WalletPassword(SecretString.create(pass)))) {
       _.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)
@@ -440,7 +441,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def deriveKeyR: Route = (path("deriveKey") & post & derivationPath) { path =>
-    withWalletOp(_.deriveKey(path)) {
+    withWalletOp(_.deriveKey(DerivationPathString(path))) {
       _.fold(
         e => BadRequest(e.getMessage),
         address => ApiResponse(Json.obj("address" -> address.toString.asJson))

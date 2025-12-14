@@ -7,6 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
+import org.ergoplatform.nodeView.wallet.WalletTypes._
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
@@ -69,7 +70,7 @@ object ErgoWalletActorMessages {
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest],
                                        inputsRaw: Seq[String],
                                        dataInputsRaw: Seq[String],
-                                       sign: Boolean)
+                                       sign: ShouldSignTransaction)
 
   /**
    * Request to generate commitments for an unsigned transaction
@@ -118,7 +119,7 @@ object ErgoWalletActorMessages {
    * @param from
    * @param until
    */
-  final case class ReadPublicKeys(from: Int, until: Int)
+  final case class ReadPublicKeys(from: BoxIndex, until: BoxIndex)
 
   /**
    * Read all wallet public keys
@@ -141,7 +142,7 @@ object ErgoWalletActorMessages {
    * @param walletPass
    * @param mnemonicPassOpt
    */
-  final case class InitWallet(walletPass: SecretString, mnemonicPassOpt: Option[SecretString])
+  final case class InitWallet(walletPass: WalletPassword, mnemonicPassOpt: Option[MnemonicPassword])
 
   /**
    * Restore wallet with mnemonic, optional mnemonic password and (mandatory) wallet encryption password
@@ -150,21 +151,21 @@ object ErgoWalletActorMessages {
    * @param mnemonicPassOpt
    * @param walletPass
    */
-  final case class RestoreWallet(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString], walletPass: SecretString, usePre1627KeyDerivation: Boolean)
+  final case class RestoreWallet(mnemonic: WalletMnemonic, mnemonicPassOpt: Option[MnemonicPassword], walletPass: WalletPassword, usePre1627KeyDerivation: UsePre1627KeyDerivation)
 
   /**
    * Unlock wallet with wallet password
    *
    * @param walletPass
    */
-  final case class UnlockWallet(walletPass: SecretString)
+  final case class UnlockWallet(walletPass: WalletPassword)
 
   /**
    * Derive key with given path according to BIP-32
    *
    * @param path
    */
-  final case class DeriveKey(path: String)
+  final case class DeriveKey(path: DerivationPathString)
 
   /**
    * Get boxes related to P2PK payments
@@ -173,7 +174,7 @@ object ErgoWalletActorMessages {
    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
    *                            boxes created in the pool for both values of unspentOnly).
    */
-  final case class GetWalletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean)
+  final case class GetWalletBoxes(unspentOnly: UnspentOnly, considerUnconfirmed: ConsiderUnconfirmed)
 
   /**
    * Get boxes by requested params
@@ -181,7 +182,7 @@ object ErgoWalletActorMessages {
    * @param targetBalance - Balance requested by user
    * @param targetAssets  - IDs and amounts of other tokens
    */
-  final case class CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long])
+  final case class CollectWalletBoxes(targetBalance: TargetBalance, targetAssets: Map[ErgoBox.TokenId, Long])
 
   /**
    * Wallet's response for requested boxes
@@ -196,7 +197,7 @@ object ErgoWalletActorMessages {
    * @param scanId  - Scan identifier
    * @param includeUnconfirmed  - whether to include transactions from mempool that match given scanId
    */
-  final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: Boolean)
+  final case class GetScanTransactions(scanId: ScanId, includeUnconfirmed: IncludeUnconfirmed)
 
   /**
    * Response for requested scan related transactions
@@ -213,7 +214,7 @@ object ErgoWalletActorMessages {
    * @param minHeight - min inclusion height of unspent boxes
    * @param maxHeight - max inclusion height of unspent boxes
    */
-  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: ConsiderUnconfirmed, minHeight: MinInclusionHeight, maxHeight: MaxInclusionHeight)
 
   /**
    * Get spent boxes related to a scan

@@ -92,7 +92,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           self ! UnlockWallet(walletPass)
           sender() ! Success(mnemonic)
         case Failure(t) =>
-          walletPass.erase()
+          walletPass.value.erase()
           val f = wrapLegalExc(t) // getting nicer message for illegal key size exception
           log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -107,7 +107,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           self ! UnlockWallet(walletPass)
           sender() ! Success(())
         case Failure(t) =>
-          walletPass.erase()
+          walletPass.value.erase()
           val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
           log.error(s"Wallet restoration is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -141,7 +141,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! res
 
     case ReadPublicKeys(from, until) =>
-      sender() ! state.walletVars.publicKeyAddresses.slice(from, until)
+      sender() ! state.walletVars.publicKeyAddresses.slice(from.value, until.value)
 
     case ReadExtendedPublicKeys() =>
       sender() ! state.storage.readAllKeys()
@@ -175,11 +175,11 @@ class ErgoWalletActor(settings: ErgoSettings,
      * If considerUnconfirmed flag is set, mempool contents is considered as well.
      */
     case GetWalletBoxes(unspent, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
+      val boxes = ergoWalletService.getWalletBoxes(state, unspent.value, considerUnconfirmed.value)
       sender() ! boxes
 
     case GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight) =>
-      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed, minHeight, maxHeight)
+      val boxes = ergoWalletService.getScanUnspentBoxes(state, scanId, considerUnconfirmed.value, minHeight.value, maxHeight.value)
       sender() ! boxes
 
     case GetScanSpentBoxes(scanId) =>
@@ -316,11 +316,11 @@ class ErgoWalletActor(settings: ErgoSettings,
       ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation) match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
-          walletPass.erase()
+          walletPass.value.erase()
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
-          walletPass.erase()
+          walletPass.value.erase()
           log.warn("Wallet unlock failed with: ", t)
           sender() ! f
       }
@@ -364,7 +364,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
-      val txTry = ergoWalletService.generateTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw, sign)
+      val txTry = ergoWalletService.generateTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw, sign.value)
       sender() ! txTry
 
     case GenerateCommitmentsFor(unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt) =>
@@ -390,7 +390,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! ExtractHintsResult(bag)
 
     case DeriveKey(encodedPath) =>
-      ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {
+      ergoWalletService.deriveKeyFromPath(state, encodedPath.value, ergoAddressEncoder) match {
         case Success((p2pkAddress, newState)) =>
           context.become(loadedWallet(newState))
           sender() ! Success(p2pkAddress)
@@ -443,11 +443,11 @@ class ErgoWalletActor(settings: ErgoSettings,
     case StopTracking(scanId: ScanId, boxId: BoxId) =>
       sender() ! StopTrackingResponse(state.registry.removeScan(boxId, scanId))
 
-    case CollectWalletBoxes(targetBalance: Long, targetAssets: Map[ErgoBox.TokenId, Long]) =>
-      sender() ! ReqBoxesResponse(ergoWalletService.collectBoxes(state, boxSelector, targetBalance, targetAssets))
+    case CollectWalletBoxes(targetBalance, targetAssets) =>
+      sender() ! ReqBoxesResponse(ergoWalletService.collectBoxes(state, boxSelector, targetBalance.value, targetAssets))
 
     case GetScanTransactions(scanId: ScanId, includeUnconfirmed) =>
-      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.fullHeight, includeUnconfirmed)
+      val scanTxs = ergoWalletService.getScanTransactions(state, scanId, state.fullHeight, includeUnconfirmed.value)
       sender() ! ScanRelatedTxsResponse(scanTxs)
 
     case GetFilteredScanTxs(scanIds, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed)  =>

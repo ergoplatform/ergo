@@ -67,7 +67,7 @@ case class MiningApiRoute(miner: ActorRef,
     & post & entity(as[MiningRequest]) & withAuth) { txsAndPk =>
     val tryPk = Try(GroupElementSerializer.fromBytes(Hex.decode(txsAndPk.pk)))
     val result = tryPk match {
-      case Failure(e) =>
+      case Failure(_) =>
         Future.failed(new Exception("Could not decode hexadecimal string for given public key"))
       case Success(pk) =>
         val prepareCmd = CandidateGenerator.GenerateCandidate(txsAndPk.txs, reply = true,

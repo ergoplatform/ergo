@@ -7,6 +7,8 @@
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -105,19 +107,80 @@ In this section, we provide overview of input blocks design. Details then provid
 \subsection{Dual Blockchain Structure}
 
 Following ideas in PRISM~\cite{bagaria2019prism}, parallel Proof-of-Work~\cite{garay2024proof}, and Tailstorm~\cite{keller2023tailstorm}, we introduce two kinds of blocks in the Ergo
-via non-breaking consensus protocol update. The input/ordering blocks architecture introduces a two-tier blockchain structure like:
+via non-breaking consensus protocol update. The input/ordering blocks architecture introduces a two-tier blockchain structure as shown in Figure~\ref{fig:input-ordering-architecture}:
 
-\begin{align*}
-\text{Ordering Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Ordering Block}
-\end{align*}
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    orderingblock/.style={rectangle, draw, fill=blue!20, minimum width=1.5cm, minimum height=0.8cm, font=\tiny\bfseries, align=center},
+    inputblock/.style={rectangle, draw, fill=orange!20, minimum width=1.2cm, minimum height=0.6cm, font=\scriptsize, align=center},
+    arrow/.style={-{Latex[length=2mm]}, thick}
+]
+
+% Define coordinates for the blocks (making them more spaced out)
+\node[orderingblock] (ob1) at (0,0) {\shortstack{Ordering\\Block}};
+\node[inputblock] (ib1) at (2.2,0) {\shortstack{Input\\Block}};
+\node[inputblock] (ib2) at (3.8,0) {\shortstack{Input\\Block}};
+\node[inputblock] (ib3) at (5.4,0) {\shortstack{Input\\Block}};
+\node[orderingblock] (ob2) at (7.5,0) {\shortstack{Ordering\\Block}};
+
+% Draw arrows between blocks
+\draw[arrow] (ob1) -- (ib1);
+\draw[arrow] (ib1) -- (ib2);
+\draw[arrow] (ib2) -- (ib3);
+\draw[arrow] (ib3) -- (ob2);
+
+% Add frequency annotation
+\node[above=0.1cm of ib2.north] {\tiny \textit{High Freq.}};
+\node[above=0.6cm of ob1.north] {\tiny \textit{Low Freq.}};
+
+% Add legend box at the bottom
+\node[draw, fill=gray!10, rounded corners, minimum width=7cm, minimum height=0.4cm, font=\tiny] at (3.75,-1.3) {\textbf{Input Blocks Architecture:} Fast transaction processing via multiple input blocks between ordering blocks};
+
+\end{tikzpicture}
+\vspace{0.2cm}
+\caption{Input-Ordering Block Architecture: Multiple input blocks (higher frequency, lower difficulty) are generated between traditional ordering blocks (lower frequency, full difficulty), enabling faster transaction confirmations.}
+\label{fig:input-ordering-architecture}
+\end{figure}
 
 So instead of having just full-blocks, we have blocks of two roles here. In our design, though, this new structure is only used
 for limited number of last ordering blocks, then input blocks are pruned, and ordering blocks along with input blocks they are witnessing
-are compressed into full-blocks we have in the Ergo protocol right now:
+are compressed into full-blocks we have in the Ergo protocol right now, as illustrated in Figure~\ref{fig:compression-process}:
 
-\begin{align*}
-    \text{Full Block}  \leftarrow \text{Full Block}  \leftarrow \text{Ordering Block} \leftarrow \text{Input Block} \leftarrow \text{Input Block} \leftarrow \text{Ordering Block}
-\end{align*}
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    fullblock/.style={rectangle, draw, fill=purple!20, minimum width=1.2cm, minimum height=0.6cm, font=\scriptsize, align=center},
+    orderingblock/.style={rectangle, draw, fill=blue!20, minimum width=1.2cm, minimum height=0.6cm, font=\scriptsize, align=center},
+    inputblock/.style={rectangle, draw, fill=orange!20, minimum width=0.9cm, minimum height=0.5cm, font=\tiny, align=center},
+    arrow/.style={-{Latex[length=1.5mm]}, thick},
+    fullblockarrow/.style={-{Latex[length=2.5mm]}, line width=2pt}
+]
+
+% Define coordinates for the blocks - showing the compression process (more spaced out)
+\node[fullblock] (fb1) at (0,0) {\shortstack{Full\\Block}};
+\node[fullblock] (fb2) at (2.5,0) {\shortstack{Full\\Block}};
+\node[orderingblock] (ob1) at (4.0,0) {\shortstack{Ord.\\Block}};
+\node[inputblock] (ib1) at (5.5,0) {\shortstack{In.\\Blk}};
+\node[inputblock] (ib2) at (6.8,0) {\shortstack{In.\\Blk}};
+\node[orderingblock] (ob2) at (8.4,0) {\shortstack{Ord.\\Block}};
+
+% Draw arrows between blocks
+\draw[fullblockarrow] (fb1) -- (fb2);
+\draw[arrow] (fb2) -- (ob1);
+\draw[arrow] (ob1) -- (ib1);
+\draw[arrow] (ib1) -- (ib2);
+\draw[arrow] (ib2) -- (ob2);
+
+
+% Legend box at the bottom
+\node[draw, fill=gray!10, rounded corners, minimum width=6.5cm, minimum height=0.3cm, font=\tiny] at (4.2,-1.2) {\textbf{Storage and Compression:} Input blocks are combined into full blocks for archival};
+
+\end{tikzpicture}
+\vspace{0.2cm}
+\caption{Storage Compression Process: Input blocks and ordering blocks are eventually compressed into traditional full blocks for archival storage, maintaining backward compatibility with existing Ergo infrastructure.}
+\label{fig:compression-process}
+\end{figure}
 
 An input block is a by-product of mining process, i.e. they are block candidates with lower difficulty. For starters,
 lets revisit blocks in current Ergo protocol, which is classic Proof-of-Work protocol formalized in~\cite{garay2024bitcoin}. A valid block
@@ -177,6 +240,7 @@ impossible in Ergo, as a transaction in input block may use blockchain header fi
 \subsection{Transaction Classification}
 
 Transactions are classified into two categories based on their validation requirements:
+
 
 \subsubsection{First-class Transactions}
 \begin{itemize}

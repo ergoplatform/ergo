@@ -13,13 +13,34 @@ if [ ! -f "llncs.cls" ]; then
     fi
 fi
 
-# Compile LaTeX document
-pdflatex main.tex
+echo "Compiling Input Blocks documentation with TikZ diagrams..."
+
+# Compile LaTeX document (with nonstopmode to continue despite potential warnings)
+pdflatex -interaction=nonstopmode main.tex
+if [ $? -ne 0 ]; then
+    echo "Error during first pdflatex compilation"
+    exit 1
+fi
+
 bibtex main
-pdflatex main.tex
-pdflatex main.tex
+if [ $? -ne 0 ]; then
+    echo "Error during bibtex compilation"
+    exit 1
+fi
+
+pdflatex -interaction=nonstopmode main.tex
+if [ $? -ne 0 ]; then
+    echo "Error during second pdflatex compilation"
+    exit 1
+fi
+
+pdflatex -interaction=nonstopmode main.tex
+if [ $? -ne 0 ]; then
+    echo "Error during third pdflatex compilation"
+    exit 1
+fi
 
 # Clean up auxiliary files
-rm -f main.aux main.log main.out main.toc main.bbl main.blg
+rm -f main.aux main.log main.out main.toc main.bbl main.blg main.lof main.lot
 
 echo "Compilation complete. Output: main.pdf"

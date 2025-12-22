@@ -98,13 +98,14 @@ a variety of applications.
 
 The rest of the paper is organized as follows. In Section~\ref{sec:architectural-overview} we outline architectural overview of the proposal. In
 Section~\ref{sec:security} we provide security arguments, namely, prove that security-wise Ergo protocol will be the same after update.
-In Section~\ref{sec:implementation} we provide implementation details.
+In Section~\ref{sec:implementation} we provide implementation details. In Section~\ref{sec:deployment} we outline possible way for
+protocol deployment. With Section~\ref{sec:conclusion} we conclude.
 
 
 \section{Architectural Overview}
 \label{sec:architectural-overview}
 
-In this section, we provide overview of input blocks design. Details then provided in the follow-up Implementation section.
+In this section, we provide overview of \protname{} design. Details are provided in the follow-up implementation section~\ref{sec:implementation}.
 
 \subsection{Dual Blockchain Structure}
 \label{subsec:dual-blockchain}
@@ -282,7 +283,7 @@ compacting blockchain space.
 \section{Implementation}
 \label{sec:implementation}
 
-In this section we describe how to implement input blocks without breaking current full and light Ergo client. Our
+In this section we describe how to implement input blocks without breaking current full and light Ergo clients. Our
 proposal is generic enough and can be reused for other classic Proof-of-Work blockchains (such as Bitcoin).
 
 \subsection{Extension}
@@ -302,20 +303,24 @@ There are three new fields in extension field of a block:
 \subsection{Proof-of-Work Inequality}
 \label{subsec:pow-inequality}
 
-The Proof-of-Work system is extended to support two difficulty targets:
+The Proof-of-Work system is extended to support two difficulty targets.:
 
-\begin{lstlisting}[language=Scala,caption=Input Block PoW Validation]
-def checkInputBlockPoW(header: Header): Boolean = {
-  hash(header) < Target / 64  // 64x easier than ordering blocks
-}
+\begin{itemize}
+
+\item{} Ordering blocks maintain the traditional PoW requirement:
+
+\begin{lstlisting}[language=Scala]
+  hash(header) < Target
 \end{lstlisting}
 
-Ordering blocks maintain the traditional PoW requirement:
-\begin{lstlisting}[language=Scala,caption=Ordering Block PoW Validation]
-def checkOrderingBlockPoW(header: Header): Boolean = {
-  hash(header) < Target  // Traditional PoW requirement
-}
+\item{} For input blocks, we use lower  difficulty, i.e. higher target, e.g. 64x of block target to have input block
+generation average delay to be $\frac{1}{64} th$ of ordering (full) block delay :
+
+\begin{lstlisting}[language=Scala]
+  hash(header) < Target * 64
 \end{lstlisting}
+
+\end{itemize}
 
 \subsection{Network Protocol Extensions}
 \label{subsec:network-protocol}
@@ -461,7 +466,7 @@ We plan to deploy \protname{} gradually:
 \subsection{Expected Impact}
 \label{subsec:expected-impact}
 
-The Input Blocks implementation represents a significant advancement in Ergo's scalability and user experience without compromising security or decentralization. By separating transaction processing from consensus finalization, this architecture enables faster confirmations, improved throughput, and better network efficiency while maintaining full backward compatibility.
+The \protname{} implementation represents a significant advancement in Ergo's scalability and user experience without compromising security or decentralization. By separating transaction processing from consensus finalization, this architecture enables faster confirmations, improved throughput, and better network efficiency while maintaining full backward compatibility.
 
 The soft-fork compatible approach ensures smooth deployment, and the innovative use of Merkle proofs and transaction classification maintains the security properties that make Ergo a robust platform for contractual money. This implementation positions Ergo at the forefront of scalable blockchain solutions while preserving its commitment to decentralization and innovative smart contract capabilities.
 

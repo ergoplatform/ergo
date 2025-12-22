@@ -65,6 +65,7 @@ without compromising security or decentralization.
 \keywords{Blockchain, Scalability, Transaction Throughput, Proof-of-Work, Ergo Platform}
 
 \section{Introduction}
+\label{sec:introduction}
 
 Trustless nature of flat peer-to-peer network~\footnote{or more efficient design reasonably close to it, such as Bitcoin network}, along
 with democratic participation~(ability to run a peer software on commodity hardware with possibility to verify all the historical transactions)
@@ -95,16 +96,18 @@ delay would be broken), and security of consensus after reducing block delay und
 compromised [2]. Thus it makes sense to consider weaker notions of confirmation which still could be useful for
 a variety of applications.
 
-The rest of the paper is organized as follows. In Section ? we outline architectural overview of the proposal. In
-Section ? we provide security arguments, namely, prove that security-wise Ergo protocol will be the same after update.
-In Section ? we provide implementation details.
+The rest of the paper is organized as follows. In Section~\ref{sec:architectural-overview} we outline architectural overview of the proposal. In
+Section~\ref{sec:security} we provide security arguments, namely, prove that security-wise Ergo protocol will be the same after update.
+In Section~\ref{sec:implementation} we provide implementation details.
 
 
 \section{Architectural Overview}
+\label{sec:architectural-overview}
 
 In this section, we provide overview of input blocks design. Details then provided in the follow-up Implementation section.
 
 \subsection{Dual Blockchain Structure}
+\label{subsec:dual-blockchain}
 
 Following ideas in PRISM~\cite{bagaria2019prism}, parallel Proof-of-Work~\cite{garay2024proof}, and Tailstorm~\cite{keller2023tailstorm}, we introduce two kinds of blocks in the Ergo
 via non-breaking consensus protocol update. The input/ordering blocks architecture introduces a two-tier blockchain structure as shown in Figure~\ref{fig:input-ordering-architecture}:
@@ -203,6 +206,7 @@ per ordering block generation period. Please note that, unlike superblocks, inpu
 but an ordering block is passing input block check.
 
 \subsection{Block Types and Properties}
+\label{subsec:block-types}
 
 \begin{table}[h]
 \centering
@@ -218,9 +222,11 @@ Miner Rewards & Fees + Storage rent & Emission + Fees \\
 \hline
 \end{tabular}
 \caption{Comparison of Input Blocks and Ordering Blocks}
+\label{tab:block-comparison}
 \end{table}
 
 \subsection{Linking Structure}
+\label{subsec:linking-structure}
 
 Every input block is referencing previous input block and also parent ordering block. An ordering block is referencing
 previous ordering block as well as last seen input block. In both cases, a reference to an ordering block is written into
@@ -231,18 +237,21 @@ Linear relationship with linking is coming along linear relationship in regards 
 possible between input block transactions). See the next subsection for details.
 
 \subsection{Transactions Validation and Confirmation}
+\label{subsec:transactions-validation}
 
-Ideally, all the transactions should be in input blocks only. In a simplest blockchain with payment transactions only that would 
-be doable by introducing a requirement to have transactions in input blocks only. However, with rich blockchain context that would be 
+Ideally, all the transactions should be in input blocks only. In a simplest blockchain with payment transactions only that would
+be doable by introducing a requirement to have transactions in input blocks only. However, with rich blockchain context that would be
 impossible in Ergo, as a transaction in input block may use blockchain header fields which could be different in ordering block~(timestamp, miner pubkey, votes). Then old clients which are validating ordering blocks only would fail. Thus we break transactions into two classes. Normally, we expect that about 99\% of transactions would be of class one, and they would be included into input blocks only.
 
 
 \subsection{Transaction Classification}
+\label{subsec:transaction-classification}
 
 Transactions are classified into two categories based on their validation requirements:
 
 
 \subsubsection{First-class Transactions}
+\label{subsubsec:first-class}
 \begin{itemize}
 \item Validation outcome independent of block context
 \item Can only be included in input blocks
@@ -250,6 +259,7 @@ Transactions are classified into two categories based on their validation requir
 \end{itemize}
 
 \subsubsection{Second-class Transactions}
+\label{subsubsec:second-class}
 \begin{itemize}
 \item Validation depends on block context (block timestamp, miner pubkey, block votes)
 \item Can be included in both input and ordering blocks
@@ -260,6 +270,7 @@ In the UTXO model, a transaction is second-class if a script of any input of it 
 (block timestamp, miner pubkey, block votes), otherwise, the transaction belongs to first class.
 
 \subsubsection{Fees}
+\label{subsubsec:fees}
 
 A transaction fee is not a part of the core Ergo protocol. A reference client implementation is currently recognizing
 as a transaction fee contract one which is locking fee under miner's public key, and no alternative options
@@ -269,11 +280,13 @@ fee contracts. The simplest option is to use just TRUE (anyone-can-spend) propos
 compacting blockchain space.
 
 \section{Implementation}
+\label{sec:implementation}
 
 In this section we describe how to implement input blocks without breaking current full and light Ergo client. Our
 proposal is generic enough and can be reused for other classic Proof-of-Work blockchains (such as Bitcoin).
 
 \subsection{Extension}
+\label{subsec:extension}
 
 There are three new fields in extension field of a block:
 \begin{itemize}
@@ -287,6 +300,7 @@ There are three new fields in extension field of a block:
 
 
 \subsection{Proof-of-Work Inequality}
+\label{subsec:pow-inequality}
 
 The Proof-of-Work system is extended to support two difficulty targets:
 
@@ -304,6 +318,7 @@ def checkOrderingBlockPoW(header: Header): Boolean = {
 \end{lstlisting}
 
 \subsection{Network Protocol Extensions}
+\label{subsec:network-protocol}
 
 The P2P network protocol is extended with new message types:
 
@@ -316,6 +331,7 @@ The P2P network protocol is extended with new message types:
 \end{itemize}
 
 \subsection{Data Structures}
+\label{subsec:data-structures}
 
 \begin{lstlisting}[language=Scala,caption=Input Block Data Structures]
 case class InputBlockInfo(
@@ -334,11 +350,14 @@ class InputBlockFields(
 \end{lstlisting}
 
 \section{Transaction Processing}
+\label{sec:transaction-processing}
 
 
 \section{Network Propagation Protocol}
+\label{sec:network-protocol}
 
 \subsection{Announcement Phase}
+\label{subsec:announcement-phase}
 
 \begin{enumerate}
 \item Miner generates input block
@@ -348,6 +367,7 @@ class InputBlockFields(
 \end{enumerate}
 
 \subsection{Data Retrieval Phase}
+\label{subsec:data-retrieval-phase}
 
 \begin{enumerate}
 \item Peer receives announcement
@@ -357,6 +377,7 @@ class InputBlockFields(
 \end{enumerate}
 
 \subsection{Ordering Block Finalization}
+\label{subsec:ordering-block-finalization}
 
 \begin{enumerate}
 \item Miner generates ordering block
@@ -366,8 +387,10 @@ class InputBlockFields(
 \end{enumerate}
 
 \section{Security}
+\label{sec:security}
 
 \subsection{Consensus Security}
+\label{subsec:consensus-security}
 
 \begin{itemize}
 \item Input blocks cannot finalize chain state
@@ -377,6 +400,7 @@ class InputBlockFields(
 \end{itemize}
 
 \subsection{Network Security}
+\label{subsec:network-security}
 
 \begin{itemize}
 \item Spam protection through penalty system
@@ -384,6 +408,7 @@ class InputBlockFields(
 \end{itemize}
 
 \subsection{Economic Security}
+\label{subsec:economic-security}
 
 \begin{itemize}
 \item Fee market remains functional
@@ -393,8 +418,10 @@ class InputBlockFields(
 
 
 \section{Light Clients}
+\label{sec:light-clients}
 
 \subsection{Stateless clients}
+\label{subsec:stateless-clients}
 
 Ergo has a support for partially stateless clients, where only miners need to store UTXO sets, and stateless clients
 can ask stateful ones for authenticated AVL+ tree based proofs of UTXO set transformations~\cite{reyzin2017improving}.
@@ -402,6 +429,7 @@ can ask stateful ones for authenticated AVL+ tree based proofs of UTXO set trans
 % TODO: do we need to leave stateless clients intact or can modify
 
 \subsection{SPV and NiPoPoW clients}
+\label{subsec:spv-nipopow-clients}
 
 An SPV client is not downloading full blocks, only block headers or short proof of headers-chain, such as NiPoPoW~(a
 non-interactive proof of proof-of-work)~\cite{kiayias2020non}, and then ask for transactions.
@@ -410,6 +438,7 @@ Input blocks perfectly compatible with SPV clients. An SPV client can still ask 
 the same minimal bandwidth requirements, or it may ask for input-blocks additionally, to enjoy faster confirmations.
 
 \section{Deployment}
+\label{sec:deployment}
 
 We plan to deploy \protname{} gradually:
 
@@ -427,15 +456,10 @@ We plan to deploy \protname{} gradually:
 
 
 \section{Conclusion}
+\label{sec:conclusion}
 
 \subsection{Expected Impact}
-
-\begin{itemize}
-\item Sub-minute initial confirmations
-\item Better user experience for payments
-\item Improved DeFi and trading applications
-\item Enhanced scalability without consensus changes
-\end{itemize}
+\label{subsec:expected-impact}
 
 The Input Blocks implementation represents a significant advancement in Ergo's scalability and user experience without compromising security or decentralization. By separating transaction processing from consensus finalization, this architecture enables faster confirmations, improved throughput, and better network efficiency while maintaining full backward compatibility.
 

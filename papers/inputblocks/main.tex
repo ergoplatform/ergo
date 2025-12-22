@@ -354,11 +354,11 @@ class InputBlockFields(
 )
 \end{lstlisting}
 
-\section{Transaction Processing}
+\subsection{Transaction Processing}
 \label{sec:transaction-processing}
 
 
-\section{Network Propagation Protocol}
+\subsection{Network Propagation Protocol}
 \label{sec:network-protocol}
 
 \subsection{Announcement Phase}
@@ -391,41 +391,10 @@ class InputBlockFields(
 \item Provides canonical ordering
 \end{enumerate}
 
-\section{Security}
-\label{sec:security}
-
-\subsection{Consensus Security}
-\label{subsec:consensus-security}
-
-\begin{itemize}
-\item Input blocks cannot finalize chain state
-\item Only ordering blocks provide finality
-\item 51\% attack resistance maintained
-\item Soft-fork activation requires 90\% hashrate
-\end{itemize}
-
-\subsection{Network Security}
-\label{subsec:network-security}
-
-\begin{itemize}
-\item Spam protection through penalty system
-\item Eclipse attack resistance through peer validation
-\end{itemize}
-
-\subsection{Economic Security}
-\label{subsec:economic-security}
-
-\begin{itemize}
-\item Fee market remains functional
-\item Miner incentives aligned with network health
-\item No inflation changes required
-\end{itemize}
-
-
-\section{Light Clients}
+\subsection{Light Clients}
 \label{sec:light-clients}
 
-\subsection{Stateless clients}
+\subsubsection{Stateless clients}
 \label{subsec:stateless-clients}
 
 Ergo has a support for partially stateless clients, where only miners need to store UTXO sets, and stateless clients
@@ -433,7 +402,7 @@ can ask stateful ones for authenticated AVL+ tree based proofs of UTXO set trans
 
 % TODO: do we need to leave stateless clients intact or can modify
 
-\subsection{SPV and NiPoPoW clients}
+\subsubsection{SPV and NiPoPoW clients}
 \label{subsec:spv-nipopow-clients}
 
 An SPV client is not downloading full blocks, only block headers or short proof of headers-chain, such as NiPoPoW~(a
@@ -441,6 +410,13 @@ non-interactive proof of proof-of-work)~\cite{kiayias2020non}, and then ask for 
 
 Input blocks perfectly compatible with SPV clients. An SPV client can still ask for headers or NiPoPoW just, and so enjoy
 the same minimal bandwidth requirements, or it may ask for input-blocks additionally, to enjoy faster confirmations.
+
+
+\section{Security}
+\label{sec:security}
+
+\knote{provide formalization of security properties}
+
 
 \section{Deployment}
 \label{sec:deployment}
@@ -462,9 +438,6 @@ We plan to deploy \protname{} gradually:
 
 \section{Conclusion}
 \label{sec:conclusion}
-
-\subsection{Expected Impact}
-\label{subsec:expected-impact}
 
 The \protname{} implementation represents a significant advancement in Ergo's scalability and user experience without compromising security or decentralization. By separating transaction processing from consensus finalization, this architecture enables faster confirmations, improved throughput, and better network efficiency while maintaining full backward compatibility.
 

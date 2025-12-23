@@ -41,7 +41,7 @@
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\todo}[1]{{\color{red}TODO: #1}}
 
-\newcommand{\knote}[1]{{\authnote{\textcolor{green}{kushti notes}}{#1}}}
+\newcommand{\knote}[1]{{\textcolor{green}{[kushti: #1]}}}
 
 \begin{document}
 
@@ -292,9 +292,9 @@ proposal is generic enough and can be reused for other classic Proof-of-Work blo
 There are three new fields in extension field of a block:
 \begin{itemize}
   \item a digest (Merkle tree root) of new first-class transactions since last input-block. Key is 0x0300,
-        value is Merkle tree root bytes (32 byts).
+        value is Merkle tree root bytes (32 bytes).
   \item a digest (Merkle tree root) first class transactions since ordering block till last input-block. Key is 0x0301,
-  value is Merkle tree root bytes (32 byts).
+  value is Merkle tree root bytes (32 bytes).
   \item reference to a last seen input block. Key is 0x0302, value is input block id (32 bytes).
 \end{itemize}
 

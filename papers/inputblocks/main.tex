@@ -206,26 +206,6 @@ condition as $ T < H(i) < t$, then a miner can generate on average 63 input bloc
 per ordering block generation period. Please note that, unlike superblocks, input blocks are not passing ordering-block PoW check,
 but an ordering block is passing input block check.
 
-\subsection{Block Types and Properties}
-\label{subsec:block-types}
-
-\begin{table}[h]
-\centering
-\begin{tabular}{lcc}
-\hline
-\textbf{Property} & \textbf{Input Blocks} & \textbf{Ordering Blocks} \\
-\hline
-PoW Target & $T/64$ & $T$ \\
-Frequency & 64x more frequent & Standard \\
-Finality & Provisional & Final \\
-Transaction Types & First-class only & All types \\
-Miner Rewards & Fees + Storage rent & Emission + Fees \\
-\hline
-\end{tabular}
-\caption{Comparison of Input Blocks and Ordering Blocks}
-\label{tab:block-comparison}
-\end{table}
-
 \subsection{Linking Structure}
 \label{subsec:linking-structure}
 
@@ -280,6 +260,28 @@ transactions can be included into ordering blocks only. So to bring miners trans
 fee contracts. The simplest option is to use just TRUE (anyone-can-spend) proposition. It is also the best option for
 compacting blockchain space.
 
+\subsection{Block Types and Properties}
+\label{subsec:block-types}
+
+Here we summarize difference between input and ordering blocks.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcc}
+\hline
+\textbf{Property} & \textbf{Input Blocks} & \textbf{Ordering Blocks} \\
+\hline
+PoW Target & $T/64$ & $T$ \\
+Frequency & 64x more frequent & Standard \\
+Finality & Provisional & Final \\
+Transaction Types & First-class only & All types \\
+Miner Rewards & Fees + Storage rent & Emission + Fees \\
+\hline
+\end{tabular}
+\caption{Comparison of Input Blocks and Ordering Blocks}
+\label{tab:block-comparison}
+\end{table}
+
 \section{Implementation}
 \label{sec:implementation}
 
@@ -323,17 +325,19 @@ generation average delay to be $\frac{1}{64} th$ of ordering (full) block delay 
 \end{itemize}
 
 \subsection{Network Protocol Extensions}
-\label{subsec:network-protocol}
+\label{subsec:network-protocol-extensions}
 
-The P2P network protocol is extended with new message types:
+The P2P network protocol is extended with new message types to support the dual-block architecture:
 
 \begin{itemize}
-\item \code{InputBlockMessageSpec} (code: 100) - Sub-block announcements
-\item \code{InputBlockTransactionIdsMessageSpec} - Transaction ID lists
-\item \code{InputBlockTransactionsMessageSpec} - Actual transaction data
-\item \code{InputBlockTransactionsRequest} - Transaction requests
-\item \code{OrderingBlockAnnouncement} - Ordering block notifications
+\item \code{InputBlockMessageSpec} (code: 100) - Input block announcements containing header, extension fields, and weak transaction IDs
+\item \code{InputBlockTransactionIdsMessageSpec} (code: 101) - Lists transaction IDs for verification against Merkle proofs in input blocks
+\item \code{InputBlockTransactionsMessageSpec} (code: 102) - Transmits actual transaction data for input blocks
+\item \code{InputBlockTransactionsRequest} (code: 103) - Requests specific transactions from input blocks
+\item \code{OrderingBlockAnnouncement} (code: 104) - Ordering block announcements with additional input block references
 \end{itemize}
+
+These message extensions allow nodes to efficiently propagate and validate both input and ordering blocks, enabling the faster confirmation times while maintaining network security.
 
 \subsection{Data Structures}
 \label{subsec:data-structures}
@@ -359,7 +363,7 @@ class InputBlockFields(
 
 
 \subsection{Network Propagation Protocol}
-\label{sec:network-protocol}
+\label{subsec:network-propagation-protocol}
 
 \subsection{Announcement Phase}
 \label{subsec:announcement-phase}

@@ -295,7 +295,7 @@ There are three new fields in extension field of a block:
 \begin{itemize}
   \item a digest (Merkle tree root) of new first-class transactions since last input-block. Key is 0x0300,
         value is Merkle tree root bytes (32 bytes).
-  \item a digest (Merkle tree root) first class transactions since ordering block till last input-block. Key is 0x0301,
+  \item a digest (Merkle tree root) of first-class transactions since ordering block till last input-block. Key is 0x0301,
   value is Merkle tree root bytes (32 bytes).
   \item reference to a last seen input block. Key is 0x0302, value is input block id (32 bytes).
 \end{itemize}
@@ -305,17 +305,17 @@ There are three new fields in extension field of a block:
 \subsection{Proof-of-Work Inequality}
 \label{subsec:pow-inequality}
 
-The Proof-of-Work system is extended to support two difficulty targets.:
+Instead of one classic Proof-of-Work inequality, two are used now:
 
 \begin{itemize}
 
-\item{} Ordering blocks maintain the traditional PoW requirement:
+\item{} ordering blocks maintain the traditional PoW requirement:
 
 \begin{lstlisting}[language=Scala]
   hash(header) < Target
 \end{lstlisting}
 
-\item{} For input blocks, we use lower  difficulty, i.e. higher target, e.g. 64x of block target to have input block
+\item{} for input blocks, we use lower  difficulty, i.e. higher target, e.g. 64x of block target to have input block
 generation average delay to be $\frac{1}{64} th$ of ordering (full) block delay :
 
 \begin{lstlisting}[language=Scala]
@@ -365,7 +365,7 @@ class InputBlockFields(
 \subsection{Network Propagation Protocol}
 \label{subsec:network-propagation-protocol}
 
-\subsection{Announcement Phase}
+\subsubsection{Announcement Phase}
 \label{subsec:announcement-phase}
 
 \begin{enumerate}
@@ -375,7 +375,7 @@ class InputBlockFields(
 \item Peers propagate until first external announcement received
 \end{enumerate}
 
-\subsection{Data Retrieval Phase}
+\subsubsection{Data Retrieval Phase}
 \label{subsec:data-retrieval-phase}
 
 \begin{enumerate}
@@ -385,7 +385,7 @@ class InputBlockFields(
 \item Applies transactions to mempool/state
 \end{enumerate}
 
-\subsection{Ordering Block Finalization}
+\subsubsection{Ordering Block Finalization}
 \label{subsec:ordering-block-finalization}
 
 \begin{enumerate}
@@ -394,6 +394,17 @@ class InputBlockFields(
 \item Finalizes the chain of input blocks
 \item Provides canonical ordering
 \end{enumerate}
+
+\subsection{Chain Selection and Fork Handling}
+\label{subsec:chain-selection}
+
+Unlike DAG systems, Ergo has classic linking structure, like in Bitcoin. For ordering blocks, a chain with most
+Proof-of-Work (cumulative difficulty) is considered as canonical. When a new block on the same height as best one
+arrives, it is not accepted as best one (so first seen is considered best). However, if better suffix of the chain
+arrives, then node is rolling back its state to common block and apply the better suffix.
+
+The same rules apply to input blocks...
+
 
 \subsection{Light Clients}
 \label{sec:light-clients}

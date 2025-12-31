@@ -339,72 +339,28 @@ The P2P network protocol is extended with new message types to support the dual-
 
 These message extensions allow nodes to efficiently propagate and validate both input and ordering blocks, enabling the faster confirmation times while maintaining network security.
 
-\subsection{Data Structures}
-\label{subsec:data-structures}
 
-\begin{lstlisting}[language=Scala,caption=Input Block Data Structures]
-case class InputBlockInfo(
-  version: Byte,
-  header: Header,
-  inputBlockFields: InputBlockFields,
-  weakTxIds: Option[Seq[ErgoTransaction.WeakId]]
-)
-
-class InputBlockFields(
-  prevInputBlockId: Option[Array[Byte]],
-  transactionsDigest: Digest32,
-  prevTransactionsDigest: Digest32,
-  inputBlockFieldsProof: BatchMerkleProof[Digest32]
-)
-\end{lstlisting}
+\knote{fill, make interaction diagrams}
 
 \subsection{Transaction Processing}
 \label{sec:transaction-processing}
 
+\knote{fill}
 
-\subsection{Network Propagation Protocol}
-\label{subsec:network-propagation-protocol}
-
-\subsubsection{Announcement Phase}
-\label{subsec:announcement-phase}
-
-\begin{enumerate}
-\item Miner generates input block
-\item Sends \code{InputBlockMessage} to peers
-\item Message contains header, Merkle proofs, and weak transaction IDs
-\item Peers propagate until first external announcement received
-\end{enumerate}
-
-\subsubsection{Data Retrieval Phase}
-\label{subsec:data-retrieval-phase}
-
-\begin{enumerate}
-\item Peer receives announcement
-\item Immediately requests transactions via \code{InputBlockTransactionsRequest}
-\item Validates transactions against Merkle proofs
-\item Applies transactions to mempool/state
-\end{enumerate}
-
-\subsubsection{Ordering Block Finalization}
-\label{subsec:ordering-block-finalization}
-
-\begin{enumerate}
-\item Miner generates ordering block
-\item Includes digests of all input block transactions
-\item Finalizes the chain of input blocks
-\item Provides canonical ordering
-\end{enumerate}
 
 \subsection{Chain Selection and Fork Handling}
 \label{subsec:chain-selection}
 
 Unlike DAG systems, Ergo has classic linking structure, like in Bitcoin. For ordering blocks, a chain with most
-Proof-of-Work (cumulative difficulty) is considered as canonical. When a new block on the same height as best one
+Proof-of-Work (cumulative difficulty) is considered canonical. When a new block on the same height as best one
 arrives, it is not accepted as best one (so first seen is considered best). However, if better suffix of the chain
 arrives, then node is rolling back its state to common block and apply the better suffix.
 
-The same rules apply to input blocks...
-
+The same rules apply to input blocks. For ordering blocks of the same difficulty, chain with most Proof-of-Work
+(cumulative difficulty) is considered best. However, for input blocks we consider not difficulty which should be met,
+ but real one (which is used in NiPoPoWs), which is similar approach to PoEM (Proof of Enthropy Minima).
+ For input blocks chains with the same real difficulty, one which is seen first is chosen.
+ \knote{ordering block with most of input blocks difficulty is the best?}
 
 \subsection{Light Clients}
 \label{sec:light-clients}

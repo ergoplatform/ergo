@@ -339,14 +339,80 @@ The P2P network protocol is extended with new message types to support the dual-
 
 These message extensions allow nodes to efficiently propagate and validate both input and ordering blocks, enabling the faster confirmation times while maintaining network security.
 
+\subsubsection{Input Block Announcement}
+\label{subsubsec:input-block-announcement}
 
-\knote{fill, make interaction diagrams}
+When a miner successfully generates an input block, the following announcement procedure is executed:
+
+\begin{enumerate}
+\item The miner creates an \code{InputBlockMessageSpec} (message code 100) containing the input block header, extension fields (including the link to the previous input block), and weak transaction IDs if available.
+The extension fields contain the Merkle root of new first-class transactions since the last input block (key 0x0300), the Merkle root of all first-class transactions since the parent ordering block (key 0x0301), and a reference to the previous input block (key 0x0302).
+The input block is announced to peers via the P2P network.
+
+\item Upon receiving an input block announcement, a peer node validates the PoW solution and Merkle proof against the extension root in the header.
+
+\item If validation passes, the peer requests the corresponding transaction IDs using \code{InputBlockTransactionIdsMessageSpec} (code 101) to verify the weak transaction IDs against the extension digest.
+
+\item The peer then downloads the actual transactions and validates them against the input block's commitment.
+
+\item Once validated, the input block is processed and added to the appropriate input block chain or fork.
+\end{enumerate}
+
+This announcement procedure ensures rapid propagation of input blocks across the network while maintaining security through validation of PoW and transaction commitments. The separation of header announcement from transaction data allows for efficient bandwidth utilization, as most transactions are already available in the mempool.
+
+It is possible that a peer receives an input block with a missing parent input block or ordering block. The system handles these scenarios as follows:
+
+\begin{itemize}
+\item{} when a peer receives an input block but does not have its parent input block (identified by the \texttt{prevInputBlockId} field in the extension), the peer adds the received input block to a disconnected waitlist. The peer then requests the missing parent input block from the network. Once the parent block is received and validated, the peer processes the child block from the waitlist. This can be done
+recursively.
+
+\item{} if an input block references an ordering block that is not yet known to the peer, the input block is temporarily stored in the disconnected waitlist. The peer then attempts to download the missing ordering block from the network. Once the ordering block is received and validated, the input block can be processed normally. Thus input blocks
+allow to quickly find all the forks around the network and finalize a best one.
+
+\end{itemize}
+
+To prevent the waitlist from growing indefinitely, input blocks with missing parents are evicted after a certain timeout period if their dependencies are not resolved.
+
+\knote{make interaction diagrams}
 
 \subsection{Transaction Processing}
 \label{sec:transaction-processing}
 
-\knote{fill}
+Transaction processing in \protname{} divides transactions into two classes based on their dependency on block context, first-class transactions
+which do not use non-fixed upcoming block related context in any of input scripts, and second-class, which are doing so. Formally, a transaction is second-class if any input script accesses any of (timestamp, miner public key, block votes) fields of upcoming block; otherwise, it belongs to the first class.
 
+Input blocks exclusively carry first-class transactions. When an input block is received, the following processing occurs:
+
+\begin{enumerate}
+\item The node validates the PoW solution and Merkle proof against the extension root in the header.
+\item Transaction IDs are verified against the Merkle root of new first-class transactions since the last input block (extension field key 0x0300).
+\item All transactions are validated against the current UTXO set and state.
+\item Transaction costs are calculated and accumulated to ensure block limits are not exceeded.
+\item Validated transactions are applied to update the UTXO set.
+\end{enumerate}
+
+
+Transaction dependency consistency across input block chains is maintained. In particular, that does mean following:
+
+\begin{itemize}
+\item Outputs spent in later input blocks remain available until the spending transaction is processed
+\item Double-spending attempts are detected and rejected
+\item Chain reorganizations properly handle transaction dependencies
+\end{itemize}
+
+\subsubsection{Fork Handling and Transaction Rollback}
+\label{subsubsec:fork-handling-transactions}
+
+When switching between competing input block forks, the system handles transaction rollback and reapplication:
+
+\begin{enumerate}
+\item When a longer competing fork is detected, transactions from the abandoned fork are marked as unconfirmed and returned to the mempool.
+\item Transactions from the new best fork are applied to the state in sequence.
+\item The UTXO set is updated accordingly to reflect the new transaction ordering.
+\item Mempool is refreshed to remove transactions that are now confirmed in the new best chain.
+\end{enumerate}
+
+This mechanism ensures that transaction confirmations remain consistent even when input block forks are resolved.
 
 \subsection{Chain Selection and Fork Handling}
 \label{subsec:chain-selection}

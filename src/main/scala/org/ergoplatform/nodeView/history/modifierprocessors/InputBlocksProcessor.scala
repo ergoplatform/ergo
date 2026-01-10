@@ -14,6 +14,14 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
+
+/**
+  * todo check following:
+  * * implement input block info support in sync tracker
+  * * input blocks support in /mining API
+  * * sub confirmations API
+  */
+
 /**
   * Storing and processing input-blocks related data
   * Desiderata:

@@ -3031,6 +3031,145 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /blocks/bestInputBlock:
+    get:
+      summary: Get the best ordering and input block IDs
+      description: Returns the IDs of the best ordering block and best input block in the blockchain
+      operationId: getBestInputBlock
+      tags:
+        - blocks
+      responses:
+        '200':
+          description: Object containing the best ordering and input block IDs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bestOrdering:
+                    type: string
+                    description: ID of the best ordering block
+                    example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+                  bestInputBlock:
+                    type: string
+                    description: ID of the best input block
+                    example: '9c8fe20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16456'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/bestInputChain:
+    get:
+      summary: Get the best input blocks chain
+      description: Returns the IDs of the best input blocks chain along with the ordering block ID
+      operationId: getBestInputChain
+      tags:
+        - blocks
+      responses:
+        '200':
+          description: Object containing the best ordering block and the chain of best input blocks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bestOrdering:
+                    type: string
+                    description: ID of the best ordering block
+                    example: '8b7ae20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16337'
+                  bestInputBlocks:
+                    type: array
+                    description: Array of input block IDs in the best input blocks chain
+                    items:
+                      type: string
+                      description: ID of an input block in the chain
+                      example: '9c8fe20a4acd23e3f1bf38671ce97103ad96d8f1c780b5e5e865e4873ae16456'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/{id}/inputBlockTransactions:
+    get:
+      summary: Get transactions of an input block by its ID
+      description: Returns the transactions contained in the input block with the given ID
+      operationId: getInputBlockTransactions
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: ID of the input block to retrieve transactions from
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Array of transactions from the specified input block
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of transactions in the input block
+                items:
+                  $ref: '#/components/schemas/ErgoTransaction'
+        '404':
+          description: Input block with this ID doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /blocks/{id}/inputBlockTransactionIds:
+    get:
+      summary: Get transaction IDs of an input block by its ID
+      description: Returns the transaction IDs contained in the input block with the given ID
+      operationId: getInputBlockTransactionIds
+      tags:
+        - blocks
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: ID of the input block to retrieve transaction IDs from
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Array of transaction IDs from the specified input block
+          content:
+            application/json:
+              schema:
+                type: array
+                description: Array of transaction IDs in the input block
+                items:
+                  type: string
+                  description: ID of a transaction in the input block
+                  example: 'd9e2fa1234567890abcdef1234567890abcdef1234567890abcdef1234567890'
+        '404':
+          description: Input block with this ID doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /nipopow/popowHeaderById/{headerId}:
     get:
       summary: Construct PoPow header according to given header id

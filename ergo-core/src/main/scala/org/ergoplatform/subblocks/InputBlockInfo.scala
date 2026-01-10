@@ -28,7 +28,6 @@ case class InputBlockInfo(version: Byte,
 
   lazy val id: ModifierId = header.id
 
-  // todo: only pow && Merkle proof validated for now, check if it is enough
   def valid(powScheme: AutolykosPowScheme): Boolean = {
     // todo: check difficulty
 

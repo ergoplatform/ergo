@@ -41,6 +41,7 @@ import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, Subtr
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
+import spire.syntax.all.cfor
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -1249,6 +1250,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   case class InputBlockDiffData(created: Long, weakTxsIds: Seq[ErgoTransaction.WeakId], txs: Seq[ErgoTransaction])
 
+  /**
+   * Cache to store input block transaction differences temporarily while waiting for
+   * missing transactions to be received from peers.
+   * Key: input block id
+   * Value: InputBlockDiffData containing creation time, weak transaction IDs, and cached transactions
+   */
   // todo: clean old records not removed on diff delivery
   private val localInputBlockChunks = mutable.Map[ModifierId, InputBlockDiffData]()
 
@@ -1484,15 +1491,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       allTxs ++= localTxsData.txs // mempoool txs
       allTxs ++= transactionsData.transactions // peer txs
 
-      // todo: replace w. cfor
-      (0 until totalTxs).foreach {i =>
+      var allFound = true
+      cfor(0)(_ < totalTxs, _ + 1) { i =>
         val weakId = weakTxIds(i)
-        val tx = allTxs.find(_.weakId.sameElements(weakId)).get // todo: err processing instead of .get
-        resTxs(i) = tx
+        allTxs.find(_.weakId.sameElements(weakId)) match {
+          case Some(tx) =>
+            resTxs(i) = tx
+          case None =>
+            log.warn(s"Transaction with weakId ${Algos.encode(weakId)} not found for input block $subBlockId")
+            allFound = false
+        }
       }
 
-      val res = InputBlockTransactionsData(subBlockId, resTxs)
-      viewHolderRef ! ProcessInputBlockTransactions(res)
+      if (allFound) {
+        val res = InputBlockTransactionsData(subBlockId, resTxs)
+        viewHolderRef ! ProcessInputBlockTransactions(res)
+      } else {
+        log.warn(s"Not all transactions found for input block $subBlockId, skipping processing")
+        // todo: penalizeMisbehavingPeer(remote)
+      }
     }
   }
 
@@ -1539,7 +1556,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Processing ordering block ${oba.header.id}") // todo: make it .debug
         viewHolderRef ! ProcessOrderingBlock(oba)
       } else {
-        // todo: sub-blocks: request full block for now
+        // todo: request full block for now, see todo notes above
         log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
         val ext = Extension(oba.header.id, oba.extensionFields)
         viewHolderRef ! ModifiersFromRemote(Seq(ext))
@@ -1928,7 +1945,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         case None =>
           // shouldnt be there by input block processing logic
-          log.error(s"NewBestInputBlock arrived for input block not in the database $id")
+          log.error(s"NewBestInputBlock arrived for unknown input block $id")
       }
 
     case NewBestInputBlock(None, _) =>

@@ -609,9 +609,12 @@ object CandidateGenerator extends ScorexLogging {
 
       val extensionCandidate = preExtensionCandidate ++ inputBlockExtCandidate
 
-      val inputBlockFieldsProof = extensionCandidate.proofForInputBlockData.get // todo: .get
-
-      val inputBlockFields = new InputBlockFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsDigest, inputBlockFieldsProof)
+      val inputBlockFields = extensionCandidate.proofForInputBlockData match {
+        case Some(inputBlockFieldsProof) =>
+          new InputBlockFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsDigest, inputBlockFieldsProof)
+        case None =>
+          throw new IllegalArgumentException("Input block fields proof not available in extension candidate")
+      }
 
       def deriveWorkMessage(block: CandidateBlock) = {
         ergoSettings.chainSettings.powScheme.deriveExternalCandidate(

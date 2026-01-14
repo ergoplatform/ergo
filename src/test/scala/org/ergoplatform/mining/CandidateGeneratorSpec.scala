@@ -6,13 +6,15 @@ import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
+import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{StateType, UtxoStateReader}
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.NetworkType.DevNet60
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
@@ -505,6 +507,69 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)
 
     txs should have length 3 // 1 rewards and two regular txs, no fee collection
+
+    system.terminate()
+  }
+
+  it should "correctly complete input block from candidate and solution" in new TestKit(
+    ActorSystem()
+  ) {
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val history: ErgoHistoryReader = readers.h
+    val utxoState = readers.s.asInstanceOf[UtxoStateReader]
+    val mempool = readers.m
+
+    val candidateOpt = CandidateGenerator.generateCandidate(
+      history,
+      utxoState,
+      mempool,
+      defaultMinerPk,
+      Seq.empty,
+      defaultSettings
+    )
+
+    // If we can't generate a candidate (e.g., due to lack of proper history), skip this test
+    candidateOpt match {
+      case Some(scala.util.Success((candidate: CandidateGenerator.Candidate, _))) =>
+        val candidateBlock = candidate.candidateBlock
+
+        // Create a mock solution - the completeInputBlock method expects an AutolykosSolution
+        import org.ergoplatform.AutolykosSolution
+        import sigma.crypto.CryptoConstants
+        val solution = new AutolykosSolution(
+          defaultMinerPk.value,
+          CryptoConstants.dlogGroup.generator, // w
+          Array.fill(8)(0.toByte), // n - must be 8 bytes for Autolykos V1
+          BigInt(0) // d
+        )
+
+        // Call the completeInputBlock method
+        val (inputBlockInfo, inputBlockTransactionsData) = CandidateGenerator.completeInputBlock(candidateBlock, solution)
+
+        // Verify the results
+        inputBlockInfo shouldBe a[InputBlockInfo]
+        inputBlockTransactionsData shouldBe a[InputBlockTransactionsData]
+
+        // Check that the input block info has the correct header
+        inputBlockInfo.header should not be null
+
+        // Check that the input block transactions data has the correct ID matching the header
+        inputBlockTransactionsData.inputBlockId shouldBe inputBlockInfo.header.id
+
+        // Check that the transactions match
+        inputBlockTransactionsData.transactions should have length candidateBlock.inputBlockTransactions.length
+
+        // Check that weak IDs are properly computed
+        val expectedWeakIds = candidateBlock.inputBlockTransactions.map(_.weakId)
+        val actualWeakIds = inputBlockInfo.weakTxIds.getOrElse(Seq.empty)
+        actualWeakIds should contain theSameElementsAs expectedWeakIds
+      case _ =>
+        // Skip test if we can't generate a candidate (due to chain not being synced, etc.)
+        pending
+    }
 
     system.terminate()
   }

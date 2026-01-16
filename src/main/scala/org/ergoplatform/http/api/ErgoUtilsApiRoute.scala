@@ -239,7 +239,7 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
               case scala.util.Failure(_) =>
                 BadRequest("InvalidAddress")
             }
-          case scala.util.Failure(e) =>
+          case scala.util.Failure(_) =>
             BadRequest("InvalidMessage")
         }
       case Left(ex) =>

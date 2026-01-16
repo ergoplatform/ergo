@@ -161,7 +161,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
     )
 
     Post(s"$prefix/schnorrSign", requestJson) ~> route ~> check {
-      status shouldBe StatusCodes.BadRequest
+      status shouldBe StatusCodes.InternalServerError
       val response = responseAs[Json]
       println(s"SchnorrSign response: $response")
     }

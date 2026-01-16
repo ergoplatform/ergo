@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
+import io.circe.syntax._
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
@@ -28,7 +29,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   val prefix = "/utils"
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
-  val route: Route = ErgoUtilsApiRoute(settings).route
+  val route: Route = ErgoUtilsApiRoute(digestReadersRef, settings).route
   val p2pkaddress = P2PKAddress(defaultMinerPk)(settings.addressEncoder)
   val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
   val p2saddress = Pay2SAddress(feeProp)(settings.addressEncoder)
@@ -150,6 +151,59 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("address").as[String] shouldEqual Right(invalidAddress)
       c.downField("isValid").as[Boolean] shouldEqual Right(false)
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
+    }
+  }
+
+  it should "return error for schnorrSign when wallet is not initialized" in {
+    val requestJson = Json.obj(
+      "address" -> p2pkaddress.toString.asJson,
+      "message" -> "02415748f8eef16c5ea6896cec3a8defccc8a0dace245248be66ffd6ff2159da32000000000003d09000000000694fa26d".asJson
+    )
+
+    Post(s"$prefix/schnorrSign", requestJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[Json]
+      println(s"SchnorrSign response: $response")
+    }
+  }
+
+  it should "return error for schnorrSign with non-P2PK address" in {
+    val requestJson = Json.obj(
+      "address" -> p2shaddress.toString.asJson,
+      "message" -> "02415748f8eef16c5ea6896cec3a8defccc8a0dace245248be66ffd6ff2159da32000000000003d09000000000694fa26d".asJson
+    )
+
+    Post(s"$prefix/schnorrSign", requestJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      println(responseAs[Json])
+      val response = responseAs[Json]
+      response.hcursor.downField("detail").as[String] shouldEqual Right("InvalidAddressType")
+    }
+  }
+
+  it should "return error for schnorrSign with invalid hex message" in {
+    val requestJson = Json.obj(
+      "address" -> p2pkaddress.toString.asJson,
+      "message" -> "invalid_hex_message".asJson
+    )
+
+    Post(s"$prefix/schnorrSign", requestJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[Json]
+      response.hcursor.downField("detail").as[String] shouldEqual Right("InvalidMessage")
+    }
+  }
+
+  it should "return error for schnorrSign with invalid address" in {
+    val requestJson = Json.obj(
+      "address" -> "invalid_address".asJson,
+      "message" -> "02415748f8eef16c5ea6896cec3a8defccc8a0dace245248be66ffd6ff2159da32000000000003d09000000000694fa26d".asJson
+    )
+
+    Post(s"$prefix/schnorrSign", requestJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[Json]
+      response.hcursor.downField("detail").as[String] shouldEqual Right("InvalidAddress")
     }
   }
 

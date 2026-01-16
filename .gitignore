@@ -8,6 +8,9 @@ devnet
 .ensime_cache/
 scorex.yaml
 
+# LLM generated content (specs etc)
+llm_generated
+
 # scala build folders
 target
 

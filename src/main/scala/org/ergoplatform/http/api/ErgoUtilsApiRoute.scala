@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import io.circe.Json
 import io.circe.syntax._
-import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.api.http.{ApiResponse, ApiRoute}
@@ -17,8 +17,14 @@ import sigma.data.ProveDlog
 import java.security.SecureRandom
 import scala.util.Failure
 import sigma.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
+import akka.actor.ActorRef
+import akka.pattern.ask
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 
-class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
+import scala.concurrent.duration._
+import scala.concurrent.Await
+
+class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSettings)(
   implicit val context: ActorRefFactory
 ) extends ApiRoute
   with ScorexEncoding {
@@ -40,7 +46,8 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     validateAddressPostR ~
     validateAddressGetR ~
     ergoTreeToAddressPostR ~
-    ergoTreeToAddressGetR
+    ergoTreeToAddressGetR ~
+    schnorrSignR
   }
 
   private def seed(length: Int): String = {
@@ -132,14 +139,123 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
       case Left(ex)          => ApiError(StatusCodes.BadRequest, ex.getMessage())
     }
   }
+
+  def schnorrSignR: Route = (post & path("schnorrSign") & entity(as[Json])) { json =>
+
+    import io.circe.generic.auto._
+
+    // Define case class for the request (without derivation path)
+    case class SchnorrSignRequest(address: String, message: String)
+
+    json.as[SchnorrSignRequest] match {
+      case Right(req) =>
+        // Validate hex encoding of message
+        scorex.util.encode.Base16.decode(req.message) match {
+          case scala.util.Success(messageBytes) =>
+            // Validate address format
+            ergoAddressEncoder.fromString(req.address) match {
+              case scala.util.Success(p2pkAddress: P2PKAddress) =>
+                try {
+                  // Access wallet to get the private key
+                  val readersFuture = (readersHolder ? GetReaders).mapTo[Readers]
+                  val readers = Await.result(readersFuture, 5.seconds)
+                  val walletReader = readers.w
+
+                  // Find the private key for the given address by looking up the public key
+                  val extKeysFuture = walletReader.allExtendedPublicKeys()
+                  val extKeys = Await.result(extKeysFuture, 5.seconds)
+
+                  extKeys.find(_.key.value.equals(p2pkAddress.pubkey.value)) match {
+                    case Some(extKey) =>
+                      val path = extKey.path
+                      // Get the private key for the derivation path
+                      val privateKeyFuture = walletReader.getPrivateKeyFromPath(path)
+                      val privateKeyTry = Await.result(privateKeyFuture, 5.seconds)
+
+                      privateKeyTry match {
+                        case scala.util.Success(privateKeyInput) =>
+                          // Extract public key from private key
+                          val publicKeyPoint = privateKeyInput.publicImage.value
+                          val publicKeyBytes = GroupElementSerializer.toBytes(publicKeyPoint)
+
+                          // Generate the Schnorr signature following the specification
+                          import sigma.crypto.CryptoConstants
+                          import scorex.crypto.hash.Blake2b256
+                          import java.security.SecureRandom
+                          import org.bouncycastle.util.BigIntegers
+
+                          // Generate a random nonce
+                          val secureRandom = new SecureRandom()
+                          val kBytes = new Array[Byte](32)
+                          secureRandom.nextBytes(kBytes)
+                          val kBI = BigInt(BigIntegers.fromUnsignedByteArray(kBytes))
+
+                          // Calculate R = k*G (random point)
+                          val rPoint = CryptoConstants.dlogGroup.exponentiate(CryptoConstants.dlogGroup.generator, kBI.bigInteger)
+
+                          // Calculate challenge e = H(R || message || public_key)
+                          val rBytes = GroupElementSerializer.toBytes(rPoint)
+                          val challengeInput = rBytes ++ messageBytes ++ publicKeyBytes
+                          val eFull = Blake2b256(challengeInput)
+                          val eBI = BigInt(BigIntegers.fromUnsignedByteArray(eFull)) % CryptoConstants.groupOrder
+
+                          // Calculate response z = k + e * s (mod n) where s is the private key
+                          val privateKeyBI = privateKeyInput.w
+                          val zBI = (kBI.bigInteger.add(eBI.bigInteger.multiply(privateKeyBI))).remainder(CryptoConstants.groupOrder)
+                          val z = BigInt(zBI)
+
+                          // Get the compressed form of R for the signature format
+                          val rCompressed = GroupElementSerializer.toBytes(rPoint)
+
+                          // Take the first byte as prefix, next 32 as a-component, and z as z-component
+                          val prefixByte = rCompressed.head
+                          val aComponent = rCompressed.tail // 32 bytes (compressed point without prefix)
+                          val zComponent = BigIntegers.asUnsignedByteArray(32, z.bigInteger)
+
+
+                          val formattedSignature = Array(prefixByte.toByte) ++ aComponent ++ zComponent
+
+                          val response = Json.obj(
+                            "signedMessage" -> scorex.util.encode.Base16.encode(messageBytes).asJson,
+                            "signature" -> scorex.util.encode.Base16.encode(formattedSignature).asJson,
+                            "publicKey" -> scorex.util.encode.Base16.encode(publicKeyBytes).asJson
+                          )
+                          ApiResponse(response)
+
+                        case scala.util.Failure(exception) =>
+                          BadRequest(s"Node does not have the secret key for the specified address - ${exception.getMessage}")
+                      }
+                    case None =>
+                      BadRequest("Node does not have the secret key for the specified address")
+                  }
+                } catch {
+                  case _: Throwable =>
+                    InternalError("WalletError")
+                }
+
+              case scala.util.Success(_) =>
+                BadRequest("InvalidAddressType")
+
+              case scala.util.Failure(_) =>
+                BadRequest("InvalidAddress")
+            }
+          case scala.util.Failure(e) =>
+            BadRequest("InvalidMessage")
+        }
+      case Left(ex) =>
+        InternalError(ex.getMessage())
+    }
+  }
+
 }
 
 object ErgoUtilsApiRoute {
 
   def apply(
+    readersHolder: ActorRef,
     ergoSettings: ErgoSettings
   )(implicit context: ActorRefFactory): ErgoUtilsApiRoute = {
-    new ErgoUtilsApiRoute(ergoSettings)
+    new ErgoUtilsApiRoute(readersHolder, ergoSettings)
   }
 
 }

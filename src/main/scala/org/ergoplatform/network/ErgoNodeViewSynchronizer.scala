@@ -403,10 +403,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (diff > PerPeerSyncLockTime) {
       // process sync if sent in more than 200 ms after previous sync
       log.debug(s"Processing sync from $remote")
+      val currentStatus = syncTracker.getStatus(remote)
+      log.info(s"Peer ${remote.connectionId.remoteAddress} sync status before processing: $currentStatus")
+
       syncInfo match {
         case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
         case syncV2: ErgoSyncInfoV2 => processSyncV2(hr, syncV2, remote)
       }
+
+      val updatedStatus = syncTracker.getStatus(remote)
+      log.info(s"Peer ${remote.connectionId.remoteAddress} sync status after processing: $updatedStatus")
     } else {
       log.debug(s"Spammy sync detected from $remote")
     }

@@ -4183,6 +4183,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utils/schnorrSign:
+    post:
+      summary: Generate a Schnorr signature for a given message using the private key associated with the specified address
+      operationId: schnorrSign
+      tags:
+        - utils
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - address
+                - message
+              properties:
+                address:
+                  description: The P2PK address whose associated private key will be used for signing
+                  type: string
+                  example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'
+                message:
+                  description: The hex-encoded message to be signed
+                  type: string
+                  example: '68656c6c6f20776f726c64'  # "hello world" in hex
+      responses:
+        '200':
+          description: Schnorr signature and related data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signedMessage:
+                    description: The hex-encoded signed message
+                    type: string
+                    example: '68656c6c6f20776f726c64'
+                  signature:
+                    description: The hex-encoded Schnorr signature
+                    type: string
+                    example: '01abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'
+                  publicKey:
+                    description: The hex-encoded public key used for signing
+                    type: string
+                    example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+        '400':
+          description: Invalid address, message, or node does not have the secret key for the specified address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /wallet/init:
     post:
       security:

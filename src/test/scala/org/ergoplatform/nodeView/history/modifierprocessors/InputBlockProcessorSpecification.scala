@@ -1914,6 +1914,121 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
   // test: test follow-up ordering blocks application, check that reference to bestInputBlock etc reset
 
+  property("exponential fork multiplication reproduction test") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val initialTxs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create a base chain: ib1 -> ib2 -> ib3 -> ib4 -> ib5
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, initialTxs, us)
+
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2)
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us)
+
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    h.applyInputBlock(ib3)
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us)
+
+    val c5 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib4 = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
+    h.applyInputBlock(ib4)
+    h.applyInputBlockTransactions(ib4.id, Seq.empty, us)
+
+    val c6 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib5 = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib4.id)), None)
+    h.applyInputBlock(ib5)
+    h.applyInputBlockTransactions(ib5.id, Seq.empty, us)
+
+    // Now create multiple competing forks that all reference the same parent (ib3 at index 2)
+    // This simulates the scenario from the logs where multiple input blocks reference the same parent
+    val competingForks = (1 to 10).map { i =>
+      val c = genChain(2, h, stateOpt = Some(us)).tail
+      InputBlockInfo(1, c(0).header, parentOnly(idToBytes(ib3.id)), None)
+    }
+
+    // Apply all competing forks rapidly
+    competingForks.foreach { forkBlock =>
+      h.applyInputBlock(forkBlock)
+      h.applyInputBlockTransactions(forkBlock.id, Seq.empty, us)
+    }
+
+    // Check the number of forks - this should demonstrate the exponential growth
+    val forkCount = h.inputBlocksTree().map(_.forks.length).getOrElse(0)
+    println(s"Number of competing forks after test: $forkCount")
+
+    // The fork count should be significantly higher than the number of input blocks added
+    // due to the exponential multiplication effect
+    forkCount should be > 10  // More than just the 10 competing forks we added
+
+    println(s"Final state: ${forkCount} competing forks created from ${competingForks.length} input blocks")
+  }
+
+  property("extreme exponential fork multiplication test") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val initialTxs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create a longer base chain to have more places to fork from
+    val baseChain = (1 to 5).foldLeft(List.empty[InputBlockInfo]) { (acc, i) =>
+      val c = genChain(2, h, stateOpt = Some(us)).tail
+      val parentId = if (acc.isEmpty) Array.empty[Byte] else idToBytes(acc.last.id)
+      val parentFields = if (parentId.isEmpty) InputBlockFields.empty else parentOnly(parentId)
+      val ib = InputBlockInfo(1, c(0).header, parentFields, None)
+
+      h.applyInputBlock(ib)
+      if (i == 1) {
+        h.applyInputBlockTransactions(ib.id, initialTxs, us)
+      } else {
+        h.applyInputBlockTransactions(ib.id, Seq.empty, us)
+      }
+
+      acc :+ ib
+    }
+
+    // Now create multiple competing forks that reference different points in the chain
+    // This amplifies the exponential effect
+    val competingForks = for {
+      parentIdx <- 0 until baseChain.length - 1  // Don't fork from the last element
+      forkNum <- 1 to 3  // 3 forks per parent position
+    } yield {
+      val c = genChain(2, h, stateOpt = Some(us)).tail
+      InputBlockInfo(1, c(0).header, parentOnly(idToBytes(baseChain(parentIdx).id)), None)
+    }
+
+    // Apply all competing forks rapidly
+    competingForks.foreach { forkBlock =>
+      h.applyInputBlock(forkBlock)
+      h.applyInputBlockTransactions(forkBlock.id, Seq.empty, us)
+    }
+
+    // Check the number of forks - this should demonstrate the exponential growth
+    val forkCount = h.inputBlocksTree().map(_.forks.length).getOrElse(0)
+    println(s"Extreme test - Number of competing forks: $forkCount")
+    println(s"Extreme test - Number of input blocks added: ${competingForks.length}")
+
+    // The fork count should be much higher than the number of input blocks added
+    // due to the exponential multiplication effect
+    forkCount should be > competingForks.length
+
+    println(s"Extreme test result: ${forkCount} competing forks created from ${competingForks.length} input blocks")
+  }
+
   // todo : tests for digest state
 
 }

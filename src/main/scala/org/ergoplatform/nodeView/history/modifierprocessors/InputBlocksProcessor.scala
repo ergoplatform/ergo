@@ -62,7 +62,7 @@ trait InputBlocksProcessor extends ScorexLogging {
                 chain.take(idx + 1) :+ newInputBlock.id,
                 processedBlocks.take(idx + 1)
               )
-              log.info(s"Fork detected: creating new fork from ${prevId} at index $idx. " +
+              log.info(s"Fork detected: creating new fork from ${prevId} at index $idx with input block ${newInputBlock.id} " +
                 s"Original chain length: ${chain.length}, forked chain length: ${forkedChain.chain.length}")
               Seq(this, forkedChain)
             } else {

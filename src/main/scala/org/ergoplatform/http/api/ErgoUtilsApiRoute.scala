@@ -190,14 +190,14 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
                           secureRandom.nextBytes(kBytes)
                           val kBI = BigInt(BigIntegers.fromUnsignedByteArray(kBytes))
 
-                          // Calculate R = k*G (random point)
-                          val rPoint = CryptoConstants.dlogGroup.exponentiate(CryptoConstants.dlogGroup.generator, kBI.bigInteger)
+                          // Calculate a = g^k (random point)
+                          val aPoint = CryptoConstants.dlogGroup.exponentiate(CryptoConstants.dlogGroup.generator, kBI.bigInteger)
 
                           // Calculate challenge e = H(R || message || public_key)
-                          val rBytes = GroupElementSerializer.toBytes(rPoint)
-                          val challengeInput = rBytes ++ messageBytes ++ publicKeyBytes
+                          val aBytes = GroupElementSerializer.toBytes(aPoint)
+                          val challengeInput = aBytes ++ messageBytes ++ publicKeyBytes
                           val eFull = Blake2b256(challengeInput)
-                          val eBI = BigInt(BigIntegers.fromUnsignedByteArray(eFull)) % CryptoConstants.groupOrder
+                          val eBI = BigInt(BigIntegers.fromUnsignedByteArray(eFull)).mod(CryptoConstants.groupOrder)
 
                           // Calculate response z = k + e * s (mod n) where s is the private key
                           val privateKeyBI = privateKeyInput.w
@@ -205,15 +205,14 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
                           val z = BigInt(zBI)
 
                           // Get the compressed form of R for the signature format
-                          val rCompressed = GroupElementSerializer.toBytes(rPoint)
+                          val aComponent = GroupElementSerializer.toBytes(aPoint)
 
-                          // Take the first byte as prefix, next 32 as a-component, and z as z-component
-                          val prefixByte = rCompressed.head
-                          val aComponent = rCompressed.tail // 32 bytes (compressed point without prefix)
                           val zComponent = BigIntegers.asUnsignedByteArray(32, z.bigInteger)
 
+                          // todo: make .debug before release
+                          log.info(s"For message ${req.message} a: ${Base16.encode(aComponent)} , z: ${Base16.encode(zComponent)}")
 
-                          val formattedSignature = Array(prefixByte.toByte) ++ aComponent ++ zComponent
+                          val formattedSignature = aComponent ++ zComponent
 
                           val response = Json.obj(
                             "signedMessage" -> scorex.util.encode.Base16.encode(messageBytes).asJson,

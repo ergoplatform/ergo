@@ -210,7 +210,7 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
                           val zComponent = BigIntegers.asUnsignedByteArray(32, z.bigInteger)
 
                           // todo: make .debug before release
-                          log.info(s"For message ${req.message} a: ${Base16.encode(aComponent)} , z: ${Base16.encode(zComponent)}")
+                          log.info(s"For message ${req.message} a: ${Base16.encode(aComponent)} , z: ${Base16.encode(zComponent)} , e: $eBI")
 
                           val formattedSignature = aComponent ++ zComponent
 

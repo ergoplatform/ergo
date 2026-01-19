@@ -200,17 +200,16 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
                           val eBI = BigInt(BigIntegers.fromUnsignedByteArray(eFull)).mod(CryptoConstants.groupOrder)
 
                           // todo: remove before release
-                          log.info(s"e: $eBI , challenge input: $challengeInput")
+                          log.info(s"e: $eBI , challenge input: ${Base16.encode(challengeInput)}")
 
                           // Calculate response z = k + e * s (mod n) where s is the private key
                           val privateKeyBI = privateKeyInput.w
-                          val zBI = (kBI.bigInteger.add(eBI.bigInteger.multiply(privateKeyBI))).mod(CryptoConstants.groupOrder)
-                          val z = BigInt(zBI)
+                          val zBI = kBI.bigInteger.add(eBI.bigInteger.multiply(privateKeyBI)).mod(CryptoConstants.groupOrder)
 
                           // Get the compressed form of R for the signature format
                           val aComponent = GroupElementSerializer.toBytes(aPoint)
 
-                          val zComponent = BigIntegers.asUnsignedByteArray(32, z.bigInteger)
+                          val zComponent = BigIntegers.asUnsignedByteArray(32, zBI)
 
                           // todo: make .debug before release
                           log.info(s"For message ${req.message} a: ${Base16.encode(aComponent)} , z: ${Base16.encode(zComponent)} , e: $eBI")

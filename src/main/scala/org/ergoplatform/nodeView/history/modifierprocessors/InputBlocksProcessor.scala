@@ -243,6 +243,11 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     /**
+      * Processes input block transactions, handling both linear progression and fork switching.
+      *
+      * @param ib The input block info to apply transactions to
+      * @param txs The transactions to apply to the input block
+      * @param state The current Ergo state for transaction validation
       * @return A tuple containing:
       *         - Sequence of new best input blocks applied (forward progress)
       *         - Sequence of input blocks rolled back (when switching forks)
@@ -253,6 +258,21 @@ trait InputBlocksProcessor extends ScorexLogging {
       state: ErgoState[_]
     ): (Seq[ModifierId], Seq[ModifierId]) = {
 
+      /**
+       * Recursively applies transactions to an input block chain, continuing to process
+       * subsequent blocks in the chain if they have available transactions.
+       *
+       * @param ib The input block info to apply transactions to
+       * @param txs The transactions to apply to the input block
+       * @param acc A tuple containing:
+       *           - The current input block chain being processed
+       *           - A sequence of modifier IDs that have been processed so far
+       * @return A tuple containing:
+       *         - The updated input block chain after applying transactions
+       *         - A sequence of modifier IDs representing all blocks that were processed
+       *           in this application step (including the current block and any subsequent
+       *           blocks that were also processed)
+       */
       @tailrec
       def applicationStep(ib: InputBlockInfo,
                           txs: Seq[ErgoTransaction],

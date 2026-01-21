@@ -224,17 +224,22 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
       epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+
+    // Create and apply base chain of 2 blocks
     val c1 = genChain(height = 2, history = h).toList
     applyChain(h, c1)
 
+    // Generate c2: a chain segment that extends from the best header
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
+    // Generate c3: another chain segment that also extends from the same best header (fork at ordering block level)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
+    // Create first input block from c2(0) - this is the root input block
     val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
@@ -242,55 +247,67 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set.empty
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe -1
 
+    // Apply transactions to ib1 - this should make ib1 part of the best chain
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
 
-
+    // Create second input block from c3(0) as child of ib1 - extending the chain
     val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r2 = h.applyInputBlock(ib2)
     r2 shouldBe None
+
+    // Apply transactions to ib2 - this should extend the best chain to [ib1, ib2]
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
+    // Generate c4: third chain segment that extends from the same best header
     val c4 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
 
+    // Generate c5: fourth chain segment that extends from the same best header
     val c5 = genChain(height = 2, history = h, stateOpt = Some(us)).tail
     c5.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    // apply forked input block which is another child of current best input block's parent
+    // Create ib3: forked input block that is another child of ib1 (creating fork with ib2)
     val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib3)
 
+    // Verify fork structure: first fork should be [ib1, ib2] with ib2 processed
     val ibc0 = h.inputBlocksTree().get.forks.head
     ibc0.chain shouldBe Seq(ib1.id, ib2.id)
-    ibc0.processedIndex shouldBe 1
+    ibc0.processedIndex shouldBe 1  // ib2 is processed
     ibc0.processedBlocks.length shouldBe 2
 
+    // Verify fork structure: second fork should be [ib1, ib3] with ib3 not processed yet
     val ibc1 = h.inputBlocksTree().get.forks.last
     ibc1.chain shouldBe Seq(ib1.id, ib3.id)
-    ibc1.processedIndex shouldBe 0
+    ibc1.processedIndex shouldBe 0  // ib3 is not yet processed
     ibc1.processedBlocks.length shouldBe 1
 
     r shouldBe None
-    // both tips of depth == 2 are recognized now
+    // Both tips of depth == 2 are recognized now - ib2 is the current best, ib3 is competing
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should not contain(ib3.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
-    // apply transactions
-    // todo: test out-of-order application, currently failing but maybe it is ok?
+    // Apply transactions to ib3 - this is the critical test point
+    // At this point, [ib1, ib2] is still the best fork, so applying transactions to ib3
+    // should not cause forward progress (return empty sequences)
+    // TODO: This test is currently failing because the fork switching logic may be triggered prematurely
     h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should contain(ib2.id)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should not contain(ib3.id)
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
+    // Create ib4: child of ib3, extending the ib3 fork
     val ib4 = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
     val r4 = h.applyInputBlock(ib4)
     r4 shouldBe None
-    h.applyInputBlockTransactions(ib4.id, Seq.empty, us) shouldBe (Seq(ib3.id, ib4.id) -> Seq.empty)
+    // Apply transactions to ib4 - this should now switch the best chain to [ib1, ib3, ib4]
+    h.applyInputBlockTransactions(ib4.id, Seq.empty, us) shouldBe (Seq(ib3.id, ib4.id) -> Seq(ib2.id))
 
+    // Final verification: the best chain should now be [ib4, ib3, ib1] (most recent first)
     h.bestInputBlocksChain() shouldBe Seq(ib4.id, ib3.id, ib1.id)
   }
 
@@ -2022,9 +2039,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     println(s"Extreme test - Number of competing forks: $forkCount")
     println(s"Extreme test - Number of input blocks added: ${competingForks.length}")
 
-    // The fork count should be much higher than the number of input blocks added
-    // due to the exponential multiplication effect
-    forkCount should be > competingForks.length
+    // The fork count should NOT be much higher than the number of input blocks added
+    // If it is, this indicates the exponential fork multiplication bug exists
+    // Making this test fail to highlight the issue
+    withClue("Exponential fork multiplication bug detected: fork count significantly exceeds input block count") {
+      forkCount should be <= (competingForks.length * 2)  // Fail if exponential growth occurs
+    }
 
     println(s"Extreme test result: ${forkCount} competing forks created from ${competingForks.length} input blocks")
   }

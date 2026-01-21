@@ -349,7 +349,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         val ibId = newFork.chain(newFork.processedIndex + 1)
         val ib   = inputBlockRecords(ibId)
         val txs  = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
-        val r    = applicationStep(ib, txs, (newFork -> rollbackInputBlocks))
+        val r    = applicationStep(ib, txs, (newFork -> Seq.empty))
         if (r._2.nonEmpty) {
           // todo: eliminate boilerplate, see the same code in another branch below
           var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
@@ -367,7 +367,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           }
           inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
           log.info(s"Fork switch completed: ${r._2.length} blocks rolled back, new best fork has ${r._1.processedIndex + 1} processed blocks")
-          r._2 -> Seq.empty
+          r._2 -> rollbackInputBlocks
         } else {
           log.warn("Progress is empty in processInputBlockTransactions during fork switch")
           Seq.empty -> Seq.empty

@@ -1850,7 +1850,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     progressC2._2 shouldBe empty  // Rollback progress should be empty
 
     val progressC3 = h.applyInputBlockTransactions(forkC3.id, Seq.empty, us)
-    progressC3._2 shouldBe empty  // Rollback progress should be empty
+    progressC3._2 shouldBe Seq(forkA1.id, forkA2.id)  // chain A rolled back
 
     // Verify all forks exist in the input blocks tree
     val initialForks = h.inputBlocksTree().get.forks

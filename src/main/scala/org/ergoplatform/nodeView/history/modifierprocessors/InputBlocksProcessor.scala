@@ -134,6 +134,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     def apply(ib: InputBlockInfo): InputBlocksChain = {
       new InputBlocksChain(Seq(ib.id), Seq.empty)
     }
+
   }
 
   case class InputBlocksTree(forks: Seq[InputBlocksChain]) {

@@ -36,7 +36,7 @@ case class MiningApiRoute(miner: ActorRef,
     * Get block candidate. Useful for external miners.
     */
   def candidateR: Route = (path("candidate") & pathEndOrSingleSlash & get) {
-    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true)
+    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true, forced = false)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }
@@ -48,7 +48,7 @@ case class MiningApiRoute(miner: ActorRef,
   def candidateWithTxsR: Route = (path("candidateWithTxs")
     & post & entity(as[Seq[ErgoTransaction]]) & withAuth) { txs =>
 
-    val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true)
+    val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true, forced = false)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
   }

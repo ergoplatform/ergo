@@ -20,6 +20,7 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
@@ -347,4 +348,89 @@ class ErgoWalletServiceSpec
       }
     }
   }
+
+  property("key derivation after init wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wpass = SecretString.create("y")
+        val prover = ErgoProvingInterpreter(defaultRootSecret, parameters)
+        val walletState = ErgoWalletState(
+          new WalletStorage(store, settings),
+          secretStorageOpt = Option.empty,
+          new WalletRegistry(versionedStore)(settings.walletSettings),
+          OffChainRegistry.empty,
+          outputsFilter = Option.empty,
+          WalletVars(Some(prover), Seq.empty, None),
+          stateReaderOpt = Option.empty,
+          mempoolReaderOpt = None,
+          utxoStateReaderOpt = Option.empty,
+          parameters,
+          maxInputsToUse = 1000,
+          rescanInProgress = false
+        )
+        val s = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1))
+        val walletService = new ErgoWalletServiceImpl(s)
+        val ws = walletService.initWallet(
+          walletState,
+          s,
+          walletPass = wpass,
+          None
+        ).get._2
+
+        ws.secretStorageOpt.get.unlock(wpass)
+        ws.walletVars.trackedPubKeys.size shouldBe 1
+        val uws = ws
+
+        val uws2 = walletService.deriveNextKey(uws, usePreEip3Derivation = true).get._2
+        uws2.walletVars.trackedPubKeys.size shouldBe 2
+
+        val uws3 = walletService.deriveNextKey(uws2, usePreEip3Derivation = false).get._2
+        uws3.walletVars.trackedPubKeys.size shouldBe 3
+      }
+    }
+  }
+
+  property("key derivation after restoring wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wpass = SecretString.create("y")
+        val prover = ErgoProvingInterpreter(defaultRootSecret, parameters)
+        val walletState = ErgoWalletState(
+          new WalletStorage(store, settings),
+          secretStorageOpt = Option.empty,
+          new WalletRegistry(versionedStore)(settings.walletSettings),
+          OffChainRegistry.empty,
+          outputsFilter = Option.empty,
+          WalletVars(Some(prover), Seq.empty, None),
+          stateReaderOpt = Option.empty,
+          mempoolReaderOpt = None,
+          utxoStateReaderOpt = Option.empty,
+          parameters,
+          maxInputsToUse = 1000,
+          rescanInProgress = false
+        )
+        val s = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1))
+        val walletService = new ErgoWalletServiceImpl(s)
+        val ws = walletService.restoreWallet(
+          walletState,
+          s,
+          mnemonic = SecretString.create("x"),
+          mnemonicPassOpt = None,
+          walletPass = wpass,
+          usePre1627KeyDerivation = false
+        ).get
+
+        ws.secretStorageOpt.get.unlock(wpass)
+        ws.walletVars.trackedPubKeys.size shouldBe 1
+        val uws = ws
+
+        val uws2 = walletService.deriveNextKey(uws, false).get._2
+        uws2.walletVars.trackedPubKeys.size shouldBe 2
+
+        val uws3 = walletService.deriveNextKey(uws2, false).get._2
+        uws3.walletVars.trackedPubKeys.size shouldBe 3
+      }
+    }
+  }
+
 }

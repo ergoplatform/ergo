@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationReject
 import akka.pattern.ask
 import io.circe.Json
 import io.circe.syntax._
+import org.ergoplatform.{ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
@@ -80,9 +81,78 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   private def getState: Future[ErgoStateReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
 
-  private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getMemPool.map { p =>
-    p.getAll.slice(offset, offset + limit).map(_.transaction.asJson).asJson
+  private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] = (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
+
+
+  /**
+    * Resolves transaction inputs to full boxes using both UTXO state and mempool.
+    * Returns a map from box ID to resolved ErgoBox for successful resolutions.
+  */
+  private def resolveTransactionInputs(inputs: IndexedSeq[Input], state: ErgoStateReader, pool: ErgoMemPoolReader): Map[BoxId, ErgoBox] = {
+    state match {
+      case utxoState: UtxoStateReader =>
+        inputs.flatMap { input =>
+          utxoState.withMempool(pool).boxById(input.boxId).map(box => input.boxId -> box)
+        }.toMap
+      case _ =>
+        Map.empty
+    }
   }
+
+  /**
+    * Creates a transaction JSON representation with resolved input boxes.
+  */
+  private def createTransactionWithResolvedInputs(tx: ErgoTransaction, resolvedInputs: Map[BoxId, ErgoBox]): Json = {
+
+    val enrichedInputs = tx.inputs.map { input =>
+      val baseInput = Json.obj(
+        "boxId"         -> input.boxId.asJson,
+        "spendingProof" -> input.spendingProof.asJson
+      )
+
+      resolvedInputs.get(input.boxId) match {
+        case Some(box) =>
+          baseInput.deepMerge(box.asJson)
+        case None =>
+          baseInput
+      }
+    }
+
+    Json.obj(
+      "id"         -> tx.id.asJson,
+      "inputs"     -> enrichedInputs.asJson,
+      "dataInputs" -> tx.dataInputs.asJson,
+      "outputs"    -> tx.outputs.asJson,
+      "size"       -> tx.size.asJson
+    )
+  }
+
+  /**
+    * Resolves inputs for multiple transactions and returns them with resolved inputs.
+  */
+  private def getUnconfirmedTransactionsWithResolvedInputs(offset: Int, limit: Int): Future[Json] =
+    getStateAndPool.map {
+      case (state, pool) =>
+        val transactions = pool.getAll.slice(offset, offset + limit)
+        val enrichedTxs = transactions.map { unconfirmedTx =>
+          val tx             = unconfirmedTx.transaction
+          val resolvedInputs = resolveTransactionInputs(tx.inputs, state, pool)
+          createTransactionWithResolvedInputs(tx, resolvedInputs)
+        }
+        enrichedTxs.asJson
+    }
+
+  /**
+    * Resolves inputs for a single transaction and returns it with resolved inputs.
+  */
+  private def getUnconfirmedTransactionWithResolvedInputs(transaction: ErgoTransaction): Future[Json] =
+    getStateAndPool.map {
+      case (state, pool) =>
+        val resolvedInputs = resolveTransactionInputs(transaction.inputs, state, pool)
+      createTransactionWithResolvedInputs(transaction, resolvedInputs)
+    }
+
+  private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getUnconfirmedTransactionsWithResolvedInputs(offset, limit)
 
   private def validateTransactionAndProcess(tx: ErgoTransaction)
                                            (processFn: UnconfirmedTransaction => Route): Route = {
@@ -175,7 +245,16 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   /** Get unconfirmed transaction by its id */
   def getUnconfirmedTxByIdR: Route =
     (pathPrefix("unconfirmed" / "byTransactionId") & get & modifierId) { modifierId =>
-      ApiResponse(getMemPool.map(_.modifierById(modifierId)))
+      ApiResponse(
+        getMemPool.flatMap { pool =>
+          pool.modifierById(modifierId) match {
+            case Some(unconfirmedTx) =>
+              getUnconfirmedTransactionWithResolvedInputs(unconfirmedTx)
+            case None =>
+              Future.successful(Json.Null)
+          }
+        }
+      )
     }
 
   /** Get list of unconfirmed transaction ids */
@@ -217,7 +296,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
                     tx.transaction
                   }.toSet
 
-              getState.map {
+              getState.flatMap {
                 case state: UtxoStateReader =>
                   val txWithInputMatch =
                     allTxs
@@ -225,10 +304,16 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
                           tx.transaction.inputs.exists(i => state.boxById(i.boxId).exists(_.ergoTree.bytesHex == ergoTree)) =>
                         tx.transaction
                       }
-                  txsWithOutputMatch ++ txWithInputMatch
+                      val allMatchingTxs = (txsWithOutputMatch ++ txWithInputMatch).toSeq.slice(offset, offset + limit)
+                      Future.sequence(allMatchingTxs.map(getUnconfirmedTransactionWithResolvedInputs)).map(_.asJson)
                 case _ =>
-                  txsWithOutputMatch
-              }.map(_.slice(offset, offset + limit))
+                      Future.successful(
+                        txsWithOutputMatch
+                          .slice(offset, offset + limit)
+                          .map(_.asJson)
+                          .asJson
+                      )
+              }
             }
           )
       }
@@ -242,8 +327,17 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
           getState.map {
             case state: UtxoStateReader =>
               pool.getAll
-                .flatMap(_.transaction.inputs.filter(_.boxId.sameElements(boxId)).flatMap(i => state.boxById(i.boxId).toList))
+                .flatMap(_.transaction.inputs.filter(_.boxId.sameElements(boxId)))
                 .headOption
+                .flatMap { input =>
+                  state.boxById(input.boxId).map { box =>
+                    val baseInput = Json.obj(
+                      "boxId"         -> input.boxId.asJson,
+                      "spendingProof" -> input.spendingProof.asJson
+                    )
+                    baseInput.deepMerge(box.asJson)
+                  }
+                }
             case _ =>
               Option.empty
           }

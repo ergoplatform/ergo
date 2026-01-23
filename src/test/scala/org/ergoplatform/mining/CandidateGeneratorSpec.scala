@@ -260,6 +260,117 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "accept solution for previous candidate after regeneration" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val settingsWithShortRegeneration: ErgoSettings =
+      ErgoSettingsReader.read()
+        .copy(
+          nodeSettings = defaultSettings.nodeSettings
+            .copy(blockCandidateGenerationInterval = 1.millis),
+          chainSettings =
+            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
+        )
+
+    val viewHolderRef: ActorRef =
+      ErgoNodeViewRef(settingsWithShortRegeneration)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        settingsWithShortRegeneration
+      )
+
+    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+
+    val powScheme = settingsWithShortRegeneration.chainSettings.powScheme
+
+    // generate block to use reward as our tx input
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        val block = powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
+            }
+            true
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
+    }
+
+    // build new transaction that uses miner's reward as input
+    val prop: ProveDlog =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
+    val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
+    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
+    rewardBox.propositionBytes shouldBe ErgoTreePredef
+      .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
+      .bytes
+    val input = Input(rewardBox.id, emptyProverResult)
+
+    val outputs = IndexedSeq(
+      new ErgoBoxCandidate(rewardBox.value, ErgoTree.fromSigmaBoolean(prop), readers.s.stateContext.currentHeight)
+    )
+    val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
+
+    val tx = ErgoTransaction(
+      defaultProver
+        .sign(unsignedTx, IndexedSeq(rewardBox), IndexedSeq(), readers.s.stateContext)
+        .get
+    )
+
+    // candidate should be regenerated immediately after a mempool change
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+
+        // solve a block
+
+        val block = powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+
+        // this triggers mempool change that triggers candidate regeneration
+        viewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None))
+        expectNoMessage(candidateGenDelay)
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+        testProbe.expectMsgPF(candidateGenDelay) {
+          case StatusReply.Success(regeneratedCandidate: Candidate) =>
+            // regeneratedCandidate now contains new transaction
+            regeneratedCandidate.candidateBlock shouldNot be(
+              candidate.candidateBlock
+            )
+        }
+
+        // we are submitting solution for previous candidate
+        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
+        // we fish either for ack or SSM as the order is non-deterministic
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
+            }
+            true
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
+    }
+    system.terminate()
+  }
+
   it should "pool transactions should be removed from pool when block is mined" in new TestKit(
     ActorSystem()
   ) {

@@ -567,6 +567,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
   override def receive: Receive = {
 
     case StartExtraIndexer(history: ErgoHistory) =>
+      log.info(s"Starting extra indexer")
       _history = history
       val state = IndexerState.fromHistory(history)
       context.become(receive.orElse(loaded(state)))

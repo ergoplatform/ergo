@@ -35,3 +35,4 @@
 - **Code Changes**: Only modify code in `src/test/` folders
 - **Production Code**: Do not touch production code in `src/main/` directories
 - **Test Focus**: All development work should be test-related only
+- **Generated Specs**: All LLM-generated specifications should be placed in the `llm_generated/` folder

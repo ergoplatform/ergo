@@ -10,8 +10,9 @@ import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.{StateType, UtxoStateReader}
@@ -19,7 +20,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.NetworkType.DevNet60
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingBlockFound}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
@@ -144,10 +145,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     val block = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
     }
 
     // now block should be cached
@@ -193,12 +197,16 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val powScheme = settingsWithShortRegeneration.chainSettings.powScheme
 
     // generate block to use reward as our tx input
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = powScheme
+        val result = powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
@@ -235,20 +243,24 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     )
 
     // candidate should be regenerated immediately after a mempool change
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
 
         // solve a block
 
-        val block = powScheme
+        val result = powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
 
         // this triggers mempool change that triggers candidate regeneration
         viewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None))
         expectNoMessage(candidateGenDelay)
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
         testProbe.expectMsgPF(candidateGenDelay) {
           case StatusReply.Success(regeneratedCandidate: Candidate) =>
             // regeneratedCandidate now contains new transaction
@@ -299,10 +311,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
@@ -346,10 +361,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 
@@ -406,10 +424,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
@@ -463,10 +484,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 
@@ -527,10 +551,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         // let's pretend we are mining at least a bit so it is realistic
         expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
@@ -584,10 +611,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val result = defaultSettings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .asInstanceOf[OrderingBlockFound]  // todo: fix
-          .fb
+        val block = result match {
+          case org.ergoplatform.OrderingBlockFound(h) => h
+          case org.ergoplatform.InputBlockFound(fb) => fb
+          case _ => throw new RuntimeException("Unexpected result from proveCandidate")
+        }
         testProbe.expectNoMessage(200.millis)
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
 

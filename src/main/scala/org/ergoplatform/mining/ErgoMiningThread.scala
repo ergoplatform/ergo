@@ -37,6 +37,11 @@ class ErgoMiningThread(
     )(context.dispatcher, self)
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted mining thread restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def postStop(): Unit =
     log.info(s"Stopping miner thread: ${self.path.name}")
 

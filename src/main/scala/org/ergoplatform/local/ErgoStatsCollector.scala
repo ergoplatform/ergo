@@ -46,6 +46,11 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted stats collector restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   private var nodeInfo = NodeInfo(
     settings.scorexSettings.network.nodeName,
     Version.VersionString,

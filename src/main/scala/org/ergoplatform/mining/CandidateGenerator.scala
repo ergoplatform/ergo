@@ -59,6 +59,11 @@ class CandidateGenerator(
     readersHolderRef ! GetReaders
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted candidate generator restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   /** Send solved ordering block to processing */
   private def sendOrderingToNodeView(newBlock: ErgoFullBlock,
                                      orderingBlockTransactions: Seq[ErgoTransaction]): Unit = {

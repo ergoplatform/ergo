@@ -48,6 +48,11 @@ class ErgoWalletActor(settings: ErgoSettings,
         Restart
     }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted wallet actor restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def postRestart(reason: Throwable): Unit = {
     log.error(s"Wallet actor restarted due to ${reason.getMessage}", reason)
     super.postRestart(reason)

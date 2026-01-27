@@ -33,6 +33,11 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     log.info("Cleanup worker started")
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted cleanup worker restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def receive: Receive = {
     case RunCleanup(validator, mempool) =>
       val s = sender()

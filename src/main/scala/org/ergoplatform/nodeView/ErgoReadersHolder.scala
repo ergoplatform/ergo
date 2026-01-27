@@ -20,6 +20,11 @@ class ErgoReadersHolder(viewHolderRef: ActorRef) extends Actor with ScorexLoggin
     viewHolderRef ! GetNodeViewChanges(history = true, state = true, vault = true, mempool = true)
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted readers holder restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   var historyReaderOpt: Option[ErgoHistoryReader] = None
   var stateReaderOpt: Option[ErgoStateReader] = None
   var mempoolReaderOpt: Option[ErgoMemPoolReader] = None

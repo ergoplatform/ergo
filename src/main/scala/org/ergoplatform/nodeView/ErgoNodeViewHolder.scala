@@ -88,6 +88,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Escalate
     }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted node view holder restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()

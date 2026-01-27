@@ -52,6 +52,11 @@ class ErgoMiner(
     }
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted ergo miner restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   /** Initializes miner state with secrets and candidate generator */
   private def onStart(
     secretKeyOpt: Option[DLogProverInput],

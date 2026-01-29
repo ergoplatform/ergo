@@ -226,8 +226,10 @@ trait InputBlocksProcessor extends ScorexLogging {
         Some(InputBlocksTree(forks ++ chains))
       } else {
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
+          var processed = false
           val newForks = forks.flatMap { c =>
-            if (c.chain.contains(prevId.get)) {
+            if (!processed && c.chain.contains(prevId.get)) {
+              processed = true
               val forked = c.fork(ibi)
               applyDisconnected(forked)
             } else {

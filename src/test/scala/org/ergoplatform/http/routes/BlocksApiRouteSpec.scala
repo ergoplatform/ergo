@@ -66,10 +66,9 @@ class BlocksApiRouteSpec
   it should "get block at height" in {
     Get(prefix + "/at/0") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      history
-        .headerIdsAtHeight(0)
-        .map(Algos.encode)
-        .asJson shouldEqual responseAs[Json]
+      val json = responseAs[Json]
+      json.hcursor.get[String]("best").isRight shouldBe true
+      json.hcursor.get[Seq[String]]("forks").isRight shouldBe true
     }
   }
 

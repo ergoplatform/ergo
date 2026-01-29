@@ -122,7 +122,22 @@ class ErgoWalletActor(settings: ErgoSettings,
       val walletDigest = if (chainStatus.onChain) {
         state.registry.fetchDigest()
       } else {
-        state.offChainRegistry.digest
+        // Calculate off-chain digest from registry + mempool
+        val onChainDigest = state.registry.fetchDigest()
+        val offChainBoxes = state.extractOffChainBoxes
+        val offChainBalance = offChainBoxes.map(_.box.value).sum
+        val offChainAssets = offChainBoxes.flatMap(_.box.additionalTokens.toArray)
+          .groupBy(_._1)
+          .map { case (id, tokens) => (IdUtils.encodedTokenId(id), tokens.map(_._2).sum) }
+          .toSeq
+        
+        import org.ergoplatform.nodeView.wallet.IdUtils.EncodedTokenId
+        val combinedAssets = (onChainDigest.walletAssetBalances ++ offChainAssets)
+          .groupBy(_._1)
+          .map { case (id, amounts) => id -> amounts.map(_._2).sum }
+          .toSeq
+        
+        WalletDigest(onChainDigest.height, onChainDigest.walletBalance + offChainBalance, combinedAssets)
       }
       val res = if (settings.walletSettings.checkEIP27) {
         // If re-emission token in the wallet, subtract it from ERG balance
@@ -221,16 +236,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     /* SCAN COMMANDS */
-    //scan mempool transaction
-    case ScanOffChain(tx) =>
-      val dustLimit = settings.walletSettings.dustLimit
-      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
-      val inputs = WalletScanLogic.extractInputBoxes(tx)
-      val newState = state.copy(offChainRegistry =
-        state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
-      )
-      context.become(loadedWallet(newState))
-
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)

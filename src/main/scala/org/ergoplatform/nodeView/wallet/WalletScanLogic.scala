@@ -42,14 +42,13 @@ object WalletScanLogic extends ScorexLogging {
                          relatedTransactions: Seq[WalletTransaction])
 
   def scanBlockTransactions(registry: WalletRegistry,
-                            offChainRegistry: OffChainRegistry,
                             walletVars: WalletVars,
                             block: ErgoFullBlock,
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
                             dustLimit: Option[Long],
-                            walletProfile: WalletProfile): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                            walletProfile: WalletProfile): Try[(WalletRegistry, BloomFilter[Array[Byte]])] = {
     scanBlockTransactions(
-      registry, offChainRegistry, walletVars,
+      registry, walletVars,
       block.height, block.id, block.transactions, cachedOutputsFilter, dustLimit, walletProfile)
   }
 
@@ -57,23 +56,21 @@ object WalletScanLogic extends ScorexLogging {
     * Updates wallet database by scanning and processing block transactions.
     *
     * @param registry            - versioned wallet database which is tracking on-chain state
-    * @param offChainRegistry    - in-memory snapshot of current state, including off-chain transactions
     * @param walletVars          - current wallet state
     * @param height              - block height
     * @param blockId             - block id
     * @param transactions        - block transactions
     * @param cachedOutputsFilter - Bloom filter for previously created outputs
-    * @return updated wallet database, offchain snapshot and the Bloom filter for wallet outputs
+    * @return updated wallet database and the Bloom filter for wallet outputs
     */
   def scanBlockTransactions(registry: WalletRegistry,
-                            offChainRegistry: OffChainRegistry,
                             walletVars: WalletVars,
                             height: Int,
                             blockId: ModifierId,
                             transactions: Seq[ErgoTransaction],
                             cachedOutputsFilter: Option[BloomFilter[Array[Byte]]],
                             dustLimit: Option[Long],
-                            walletProfile: WalletProfile): Try[(WalletRegistry, OffChainRegistry, BloomFilter[Array[Byte]])] = {
+                            walletProfile: WalletProfile): Try[(WalletRegistry, BloomFilter[Array[Byte]])] = {
 
     // Take unspent wallet outputs Bloom Filter from cache
     // or recreate it from unspent outputs stored in the database
@@ -172,7 +169,7 @@ object WalletScanLogic extends ScorexLogging {
         val newOnChainIds = scanRes.outputs.map(x => encodedBoxId(x.box.id))
         val updatedOffchainRegistry = offChainRegistry.updateOnBlock(height, walletUnspent, newOnChainIds.to[TreeSet])
 
-        (registry, updatedOffchainRegistry, outputsFilter)
+        (registry, outputsFilter)
       }
   }
 

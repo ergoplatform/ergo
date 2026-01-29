@@ -3,6 +3,7 @@ package org.ergoplatform.http.api
 import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
+import akka.util.Timeout
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.modifiers.history.header.Header
@@ -11,14 +12,17 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSe
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
-import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ResetBlockchainTo
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
                          (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
@@ -41,7 +45,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockTransactionsByHeaderIdR ~
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
-      getModifierByIdR
+      getModifierByIdR ~
+      resetBlockchainR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -184,4 +189,48 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     ApiResponse(getFullBlockByHeaderIds(ids))
   }
 
+  /**
+    * Reset blockchain to specified height by removing all blocks after that height.
+    * This is useful when blockchain database is in invalid state and full resync needs to be avoided.
+    * Requires API key authentication for security.
+    */
+  def resetBlockchainR: Route = (post & path("reset") & withAuth & entity(as[ResetRequest])) { request =>
+    // Additional API-level validation
+    if (request.height < 0) {
+      BadRequest("Height must be non-negative")
+    } else {
+      implicit val timeoutDuration: Timeout = Timeout(60.seconds) // Increased timeout for potentially long operation
+      
+      val resetFuture = (viewHolderRef ? ResetBlockchainTo(request.height))(timeoutDuration).mapTo[scala.util.Try[String]]
+      
+      onComplete(resetFuture) {
+        case Success(Success(message)) =>
+          ApiResponse(Json.obj(
+            "success" -> Json.fromBoolean(true), 
+            "message" -> Json.fromString(message),
+            "resetHeight" -> Json.fromInt(request.height)
+          ))
+        case Success(Failure(ex: IllegalArgumentException)) =>
+          BadRequest(s"Invalid request: ${ex.getMessage}")
+        case Success(Failure(ex)) =>
+          InternalError(s"Reset failed: ${ex.getMessage}")
+        case Failure(ex) =>
+          InternalError(s"Reset operation timed out or failed: ${ex.getMessage}")
+      }
+    }
+  }
+
+}
+
+/**
+  * Request case class for blockchain reset
+  */
+case class ResetRequest(height: Int)
+
+object ResetRequest {
+  import io.circe.{Decoder, Encoder}
+  import io.circe.generic.semiauto._
+  
+  implicit val decoder: Decoder[ResetRequest] = deriveDecoder
+  implicit val encoder: Encoder[ResetRequest] = deriveEncoder
 }

@@ -95,6 +95,14 @@ trait InputBlocksProcessor extends ScorexLogging {
       * references a parent that is not the tip of the current chain, indicating a fork in the
       * input block sequence.
       *
+      * Algorithm:
+      * 1. If the new input block references the current chain tip, extend the chain linearly
+      * 2. If the new input block references an earlier block in the chain:
+      *    - Find the position of the referenced parent in the current chain
+      *    - Create a new forked chain starting from the referenced parent and including the new block
+      *    - Return both the original chain and the new forked chain
+      * 3. If the parent is unknown, return the original chain unchanged
+      *
       * @param newInputBlock The new input block to add to the chain
       * @return A sequence containing the original chain and any newly created forked chains
       */
@@ -102,19 +110,22 @@ trait InputBlocksProcessor extends ScorexLogging {
       newInputBlock.prevInputBlockId match {
         case Some(prevId) =>
           if (prevId == chain.lastOption.getOrElse("")) {
+            // Linear extension: new block references the current chain tip
             val updChain =
               InputBlocksChain(chain :+ newInputBlock.id, processedBlocks)
             Seq(updChain)
           } else {
+            // Fork scenario: new block references an earlier block in the chain
             val idx = chain.indexOf(prevId)
             if (idx >= 0) {
+              // Create a new forked chain from the referenced parent onwards
               val forkedChain = InputBlocksChain(
-                chain.take(idx + 1) :+ newInputBlock.id,
-                processedBlocks.take(idx + 1)
+                chain.take(idx + 1) :+ newInputBlock.id,  // Chain from genesis to parent + new block
+                processedBlocks.take(idx + 1)             // Processed blocks up to parent
               )
               log.info(s"Fork detected: creating new fork from ${prevId} at index $idx with input block ${newInputBlock.id} " +
                 s"Original chain length: ${chain.length}, forked chain length: ${forkedChain.chain.length}")
-              Seq(this, forkedChain)
+              Seq(this, forkedChain)  // Return both original and forked chains
             } else {
               log.warn(s"Input block ${newInputBlock.id} references unknown parent $prevId, cannot fork")
               Seq(this)
@@ -335,21 +346,40 @@ trait InputBlocksProcessor extends ScorexLogging {
       * fork in the tree. If the input block creates a new fork, it will be added
       * to the tree structure.
       *
+      * Algorithm:
+      * 1. Process any disconnected blocks that can now be connected
+      * 2. If the input block has no parent, create a new chain
+      * 3. If the parent is known, find the appropriate chain and insert the block
+      * 4. If the parent is unknown, add the block to the disconnected waitlist
+      *
       * @param ibi The input block information to insert
       * @return Some(updated InputBlocksTree) if the block was inserted successfully,
       *         None if the parent block is unknown and the block was added to the disconnected waitlist
       */
     def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
+      /**
+       * Processes disconnected input blocks that may now be connectable to the current chains.
+       *
+       * This helper function attempts to connect any previously disconnected input blocks
+       * to the current set of chains. It checks if any disconnected blocks have parents
+       * that are now present in the accumulated chains.
+       *
+       * @param acc The sequence of input block chains to try connecting to
+       * @return Updated sequence of chains with any newly connected blocks
+       */
       def applyDisconnected(acc: Seq[InputBlocksChain]): Seq[InputBlocksChain] = {
         disconnectedWaitlist.foldLeft(acc) {
           case (a, ib) =>
+            // Find the index of the chain whose tip matches the parent of the disconnected block
             val idx = acc.indexWhere(_.chain.lastOption == ib.prevInputBlockId)
 
             if (idx > -1) {
+              // Found a chain to attach to, create fork if needed
               val c         = a(idx)
-              val newChains = c.fork(ib)
-              a.updated(idx, newChains.head) ++ newChains.tail
+              val newChains = c.fork(ib)  // May create a fork if ib references an earlier block in the chain
+              a.updated(idx, newChains.head) ++ newChains.tail  // Update the chain with new forks
             } else {
+              // No matching parent found, leave the chain unchanged
               a
             }
         }
@@ -357,25 +387,30 @@ trait InputBlocksProcessor extends ScorexLogging {
 
       val prevId = ibi.prevInputBlockId
       if (prevId.isEmpty) {
+        // No parent specified - create a new chain starting with this input block
         val newChain = InputBlocksChain(ibi)
-        val chains   = applyDisconnected(Seq(newChain))
+        val chains   = applyDisconnected(Seq(newChain))  // Process any disconnected blocks that can attach to the new chain
         log.debug(s"Created new input block chain for ${ibi.id}")
         Some(InputBlocksTree(forks ++ chains))
       } else {
+        // Parent is specified - check if we know the parent block
         if (prevId.exists(id => knownInputBlocks.contains(id))) {
-          var processed = false
+          // Parent is known, find the appropriate chain to insert into
+          var processed = false  // Flag to ensure we only process one chain (avoid duplicates)
           val newForks = forks.flatMap { c =>
             if (!processed && c.chain.contains(prevId.get)) {
+              // Found the chain that contains the parent block
               processed = true
-              val forked = c.fork(ibi)
-              applyDisconnected(forked)
+              val forked = c.fork(ibi)  // Create fork if needed, or extend the chain
+              applyDisconnected(forked)  // Process any disconnected blocks that can attach to the new fork(s)
             } else {
-              Seq(c)
+              Seq(c)  // Return the unchanged chain
             }
           }
           log.debug(s"Inserted input block ${ibi.id} into existing chain, now ${newForks.length} forks")
           Some(InputBlocksTree(newForks))
         } else {
+          // Parent is unknown - add to disconnected waitlist for later processing
           log.debug(s"Input block ${ibi.id} has unknown parent ${prevId.get}, adding to disconnected waitlist")
           None
         }
@@ -383,15 +418,29 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
 
     /**
-      * Processes input block transactions, handling both linear progression and fork switching.
-      *
-      * @param ib The input block info to apply transactions to
-      * @param txs The transactions to apply to the input block
-      * @param state The current Ergo state for transaction validation
-      * @return A tuple containing:
-      *         - Sequence of new best input blocks applied (forward progress)
-      *         - Sequence of input blocks rolled back (when switching forks)
-      */
+     * Processes input block transactions, handling both linear progression and fork switching.
+     *
+     * This is the core algorithm for processing input block transactions, managing both
+     * linear chain extension and fork switching scenarios. The method determines whether
+     * to continue on the current best chain or switch to a longer competing chain.
+     *
+     * Algorithm:
+     * 1. Determine if a fork switch is needed by comparing the longest chain with the best chain
+     * 2. If a fork switch is needed:
+     *    - Identify the common ancestor between current and new best chains
+     *    - Rollback processed blocks from the old chain
+     *    - Apply transactions from the new best chain
+     * 3. If no fork switch is needed but the block belongs to the best chain:
+     *    - Process the block on the current best chain
+     * 4. Return the sequence of applied blocks and rolled back blocks
+     *
+     * @param ib The input block info to apply transactions to
+     * @param txs The transactions to apply to the input block
+     * @param state The current Ergo state for transaction validation
+     * @return A tuple containing:
+     *         - Sequence of new best input blocks applied (forward progress)
+     *         - Sequence of input blocks rolled back (when switching forks)
+     */
     def processInputBlockTransactions(
       ib: InputBlockInfo,
       txs: Seq[ErgoTransaction],
@@ -401,6 +450,10 @@ trait InputBlocksProcessor extends ScorexLogging {
       /**
        * Recursively applies transactions to an input block chain, continuing to process
        * subsequent blocks in the chain if they have available transactions.
+       *
+       * This tail-recursive helper function processes a chain of input blocks sequentially,
+       * applying transactions to each block in order until no more blocks are available
+       * or a failure occurs.
        *
        * @param ib The input block info to apply transactions to
        * @param txs The transactions to apply to the input block
@@ -420,14 +473,17 @@ trait InputBlocksProcessor extends ScorexLogging {
         acc._1.applyTransactions(ib, txs, state) match {
           case Success(updChain) =>
             val res = (updChain -> (acc._2 ++ Seq(ib.id)))
+            // Check if the next block in the chain has available transactions to process
             updChain.firstToComplete().filter(inputBlockTransactions.contains) match {
               case Some(nextId) =>
+                // Continue processing the next block in the chain
                 val nextIb = inputBlockRecords(nextId)
                 val txs =
                   inputBlockTransactions(nextId).map(transactionsCache.getIfPresent)
                 log.debug(s"Continuing input block chain with $nextId")
                 applicationStep(nextIb, txs, res)
               case _ =>
+                // No more blocks to process in this chain
                 log.debug(s"No more input blocks to process in chain after ${ib.id}")
                 res
             }
@@ -437,6 +493,7 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
+      // Determine the best fork index (prefer processed blocks over longest chain)
       val bestIndex = if (this.bestIndex == -1) {
         this.longestIndex
       } else {
@@ -447,13 +504,22 @@ trait InputBlocksProcessor extends ScorexLogging {
         return Seq.empty -> Seq.empty
       }
 
+      /**
+       * Determines if a fork switch is needed based on chain lengths and available transactions.
+       *
+       * A fork switch is needed when:
+       * 1. The longest chain is different from the best chain
+       * 2. The depth of the current block in the longest chain is greater than the best chain depth
+       * 3. All blocks from the current processing point to the target depth have available transactions
+       */
       def switchNeeded(id: ModifierId): Boolean = {
-        val lf = forks(longestIndex)
-        val d  = lf.depthOf(id)
-        val needed = d > bestDepth && {
+        val lf = forks(longestIndex)  // Get the longest fork
+        val d  = lf.depthOf(id)      // Get the depth of the current block in the longest fork
+        val needed = d > bestDepth && {  // Switch if longest fork is deeper than best fork
+          // Verify that all blocks from current processing point to target depth have transactions
           (lf.processedIndex + 1 to d).forall { i =>
             val id = lf.chain(i)
-            inputBlockTransactions.contains(id)
+            inputBlockTransactions.contains(id)  // Check if transactions are available
           }
         }
         if (needed) {
@@ -465,12 +531,14 @@ trait InputBlocksProcessor extends ScorexLogging {
       if (longestIndex != bestIndex && switchNeeded(ib.id)) { // forking case
         log.info(s"Performing fork switch from fork ${bestIndex} to fork ${longestIndex}")
 
-        val currentFork = forks(bestIndex)
-        val newFork    = forks(longestIndex)
+        val currentFork = forks(bestIndex)  // Current best fork (to be abandoned)
+        val newFork    = forks(longestIndex)  // New best fork (to be switched to)
 
+        // Calculate which blocks need to be rolled back
         val rollbackInputBlocks = {
-          var commonIdx = -1
+          var commonIdx = -1  // Index of the common ancestor
           (0 until currentFork.chain.length).foreach { idx =>
+            // Find the highest index that exists in both chains and is processed in the new chain
             if (idx < newFork.chain.length &&
                 currentFork.chain(idx) == newFork.chain(idx) &&
                 idx <= newFork.processedIndex) {
@@ -478,22 +546,27 @@ trait InputBlocksProcessor extends ScorexLogging {
             }
           }
           if(commonIdx == -1 || commonIdx == currentFork.processedIndex){
-            Seq.empty
+            Seq.empty  // Nothing to roll back if common ancestor is at the same level or higher
           } else {
+            // Extract the blocks that need to be rolled back (from common ancestor + 1 to processed tip)
             val rolledBack = currentFork.chain.slice(commonIdx + 1, currentFork.processedIndex + 1)
             log.info(s"Fork switch: rolling back ${rolledBack.length} input blocks from fork ${bestIndex}")
             rolledBack
           }
         }
 
-        val ibId = newFork.chain(newFork.processedIndex + 1)
+        // Process the next block in the new best chain
+        val ibId = newFork.chain(newFork.processedIndex + 1)  // Next unprocessed block in new chain
         val ib   = inputBlockRecords(ibId)
         val txs  = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
-        val r    = applicationStep(ib, txs, (newFork -> Seq.empty))
+        val r    = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
+
         if (r._2.nonEmpty) {
-          // todo: eliminate boilerplate, see the same code in another branch below
+          // Update the tree with the processed chain
           var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
           val updForks = updTree.forks
+
+          // Register completion for any other forks that were waiting for this block
           (0 until updForks.length).foreach { idx =>
             val f = updForks(idx)
             if (f.firstToComplete().contains(ib.id)) {
@@ -505,21 +578,24 @@ trait InputBlocksProcessor extends ScorexLogging {
               }
             }
           }
-          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
+          inputBlockTrees.put(ib.header.parentId, updTree) // Update global tree storage
           log.info(s"Fork switch completed: ${r._2.length} blocks rolled back, new best fork has ${r._1.processedIndex + 1} processed blocks")
-          r._2 -> rollbackInputBlocks
+          r._2 -> rollbackInputBlocks  // Return forward progress and rollback blocks
         } else {
           log.warn("Progress is empty in processInputBlockTransactions during fork switch")
           Seq.empty -> Seq.empty
         }
-      } else if (forks(bestIndex).firstToComplete().contains(ib.id)) { // no forking
+      } else if (forks(bestIndex).firstToComplete().contains(ib.id)) { // no forking - linear processing
         log.debug(s"Processing input block ${ib.id} on best fork ${bestIndex}")
         val f = forks(bestIndex)
-        val r = applicationStep(ib, txs, (f -> Seq.empty))
+        val r = applicationStep(ib, txs, (f -> Seq.empty))  // Process the block on the current best chain
+
         if (r._2.nonEmpty) {
-          // todo: eliminate boilerplate, see the same code in another branch below
+          // Update the tree with the processed chain
           var updTree  = new InputBlocksTree(forks.updated(bestIndex, r._1))
           val updForks = updTree.forks
+
+          // Register completion for any other forks that were waiting for this block
           (0 until updForks.length).foreach { idx =>
             val f = updForks(idx)
             if (f.firstToComplete().contains(ib.id)) {
@@ -531,9 +607,9 @@ trait InputBlocksProcessor extends ScorexLogging {
               }
             }
           }
-          inputBlockTrees.put(ib.header.parentId, updTree) // todo: more beautiful modification of mutable state
+          inputBlockTrees.put(ib.header.parentId, updTree) // Update global tree storage
           log.debug(s"Input block ${ib.id} processed successfully, ${r._2.length} blocks added to chain")
-          r._2 -> Seq.empty
+          r._2 -> Seq.empty  // Return forward progress, no rollback since no fork switch
         } else {
           log.warn("Progress is empty in processInputBlockTransactions during linear processing")
           Seq.empty -> Seq.empty
@@ -618,11 +694,23 @@ trait InputBlocksProcessor extends ScorexLogging {
     bestOrdering -> bestInputForOrdering
   }
 
-  //todo: recheck that all the structures are cleared
+  /**
+   * Removes outdated input block data to free memory and maintain optimal performance.
+   *
+   * This pruning algorithm removes input block data that is considered too far behind
+   * the current best chain height. It operates in two phases:
+   * 1. Removes input block trees associated with ordering blocks that are behind the best chain
+   * 2. Removes individual input blocks that are beyond the pruning threshold from the best height
+   *
+   * The pruning threshold is defined as 2 ordering blocks, meaning input blocks that are
+   * more than 2 ordering blocks behind the current best chain will be removed.
+   */
   private def prune(): Unit = {
     val bestHeight = bestBlocks._1.map(_.height).getOrElse(0)
 
+    // Phase 1: Remove input block trees for ordering blocks that are behind the best chain
     val orderingBlockIdsToRemove = inputBlockTrees.keys.filter { orderingId =>
+      // Remove if the ordering block height is behind the current best height
       bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
     }.toSeq
 
@@ -630,21 +718,25 @@ trait InputBlocksProcessor extends ScorexLogging {
       inputBlockTrees.remove(id)
     }
 
+    // Phase 2: Remove individual input blocks that are too far behind the best chain
     val inputBlockIdsToRemove = inputBlockRecords.flatMap {
       case (id, ibi) =>
+        // Calculate if the input block is beyond the pruning threshold
         val res = (bestHeight - ibi.header.height) > PruningThreshold
         if (res) {
-          Some(id)
+          Some(id)  // Mark for removal
         } else {
-          None
+          None      // Keep the input block
         }
     }
 
     inputBlockIdsToRemove.foreach { id =>
       log.debug(s"Pruning input block # $id")
+      // Remove from records and also clean up from disconnected waitlist if present
       inputBlockRecords.remove(id).foreach { ibi =>
         disconnectedWaitlist.remove(ibi)
       }
+      // Also remove associated transaction data
       inputBlockTransactions.remove(id)
     }
 

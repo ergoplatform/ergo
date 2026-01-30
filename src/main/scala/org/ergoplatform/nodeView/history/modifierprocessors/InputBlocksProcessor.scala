@@ -16,9 +16,23 @@ import scala.util.{Failure, Success, Try}
 
 
 /**
-  * Storing and processing input-blocks related data
-  * Desiderata:
-  * * store input blocks for short time only
+  * Trait responsible for storing and processing input-blocks related data in the Ergo blockchain protocol.
+  *
+  * Input blocks are a key component of Ergo's two-tier blockchain architecture, where full blocks (ordering blocks)
+  * contain headers and proofs-of-work, while input blocks contain transactions that reference these full blocks.
+  * This processor manages the relationship between ordering blocks and input blocks, handles transaction processing,
+  * manages chain forks, and performs state transitions.
+  *
+  * Key responsibilities:
+  * - Store input blocks temporarily (pruned after a threshold to conserve memory)
+  * - Manage multiple competing input block chains (forks) for the same ordering block
+  * - Process transactions within input blocks and validate them against the current state
+  * - Handle fork switching when a longer chain is discovered
+  * - Maintain transaction caches and indexes for efficient retrieval
+  * - Coordinate with the history reader to stay synchronized with the best chain
+  *
+  * The processor implements a sophisticated caching and pruning strategy to balance memory usage
+  * with the need to handle multiple chain forks and maintain transaction availability.
   */
 trait InputBlocksProcessor extends ScorexLogging {
 
@@ -29,11 +43,26 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   private val PruningThreshold = 2 // we remove input-blocks data after 2 ordering blocks
 
-  // input blocks chain since ordering
+  /**
+    * Represents a chain of input blocks forming a sequence from an ordering block.
+    *
+    * This class tracks both the logical chain of input block IDs and the processing state
+    * of each block in the chain. It supports fork detection and creation when new input
+    * blocks reference earlier blocks in the chain.
+    *
+    * @param chain The sequence of input block IDs forming the chain
+    * @param processedBlocks The sequence of processing costs for each successfully processed block
+    */
   case class InputBlocksChain(chain: Seq[ModifierId], processedBlocks: Seq[Long]) {
 
+    /** Current index of the last processed block in the chain (-1 if none processed) */
     val processedIndex: Int = processedBlocks.length - 1
 
+    /**
+      * Gets the ID of the tip (most recent processed) input block in the chain.
+      *
+      * @return Some(modifier ID) if there are processed blocks, None otherwise
+      */
     def tip: Option[ModifierId] = {
       if (processedIndex == -1) {
         None
@@ -42,12 +71,33 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
+    /**
+      * Calculates the depth (position) of a given input block in the chain.
+      *
+      * @param id The modifier ID to find the depth for
+      * @return The zero-based index of the block in the chain, or -1 if not found
+      */
     def depthOf(id: ModifierId): Int = {
       chain.indexOf(id)
     }
 
+    /**
+      * Checks if the entire input block chain has been processed.
+      *
+      * @return true if all blocks in the chain have been processed, false otherwise
+      */
     def complete: Boolean = processedIndex == chain.length
 
+    /**
+      * Creates a new fork in the input block chain when a new block references an earlier block.
+      *
+      * This method handles the creation of competing input block chains when a new input block
+      * references a parent that is not the tip of the current chain, indicating a fork in the
+      * input block sequence.
+      *
+      * @param newInputBlock The new input block to add to the chain
+      * @return A sequence containing the original chain and any newly created forked chains
+      */
     def fork(newInputBlock: InputBlockInfo): Seq[InputBlocksChain] = {
       newInputBlock.prevInputBlockId match {
         case Some(prevId) =>
@@ -76,6 +126,14 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
+    /**
+      * Collects all transactions from the processed portion of the input block chain.
+      *
+      * This method aggregates transactions from all blocks that have been successfully
+      * processed in the chain, up to the current processedIndex.
+      *
+      * @return A sequence of all transactions from processed input blocks in the chain
+      */
     lazy val collectedTransactions: Seq[ErgoTransaction] = {
       (0 to processedIndex).flatMap { i =>
         val id = chain(i)
@@ -91,6 +149,11 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
+    /**
+      * Gets the ID of the next input block that needs to be processed in the chain.
+      *
+      * @return Some(modifier ID) of the next block to process, or None if all are processed
+      */
     def firstToComplete(): Option[ModifierId] = {
       if ((processedIndex + 1) < chain.length && chain.nonEmpty) {
         Some(chain(processedIndex + 1))
@@ -99,6 +162,17 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
+    /**
+      * Registers the successful completion of an input block processing.
+      *
+      * Updates the chain state to reflect that the given input block has been processed
+      * with the specified computational cost.
+      *
+      * @param id The ID of the input block that was completed
+      * @param costDelta The computational cost of processing this block
+      * @return Success with the updated InputBlocksChain if the completion is valid,
+      *         Failure with an exception if the completion is unexpected
+      */
     def registerCompletion(id: ModifierId, costDelta: Long): Try[InputBlocksChain] = {
       firstToComplete() match {
         case Some(expectedId) if expectedId == id =>
@@ -110,6 +184,18 @@ trait InputBlocksProcessor extends ScorexLogging {
       }
     }
 
+    /**
+      * Applies transactions from an input block to the current state and registers completion.
+      *
+      * This method validates the transactions against the current Ergo state and, if successful,
+      * updates the chain's processing state to include this block.
+      *
+      * @param ib The input block information to process
+      * @param txs The transactions contained in the input block
+      * @param state The current Ergo state to validate transactions against
+      * @return Success with the updated InputBlocksChain if transactions are valid,
+      *         Failure with an exception if validation fails
+      */
     def applyTransactions(
       ib: InputBlockInfo,
       txs: Seq[ErgoTransaction],
@@ -137,6 +223,15 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   }
 
+  /**
+    * Represents a tree structure of competing input block chains for a single ordering block.
+    *
+    * This class manages multiple possible input block chains (forks) that compete to become
+    * the canonical chain for a given ordering block. It tracks the longest chain and the
+    * best (most processed) chain, enabling fork resolution and chain selection.
+    *
+    * @param forks The sequence of competing input block chains
+    */
   case class InputBlocksTree(forks: Seq[InputBlocksChain]) {
 
     // Log fork information
@@ -144,9 +239,14 @@ trait InputBlocksProcessor extends ScorexLogging {
       log.info(s"InputBlocksTree has ${forks.length} competing forks. Best depth: ${bestDepth}, Longest depth: ${longestDepth.getOrElse(0)}")
     }
 
+    /**
+      * Set of all known input block IDs across all competing forks.
+      * Used for quick lookup to determine if an input block is already known.
+      */
     // todo: cache it?
     lazy val knownInputBlocks = forks.flatMap(_.chain).toSet
 
+    /** Index of the fork with the longest chain (by number of blocks) */
     private lazy val longestIndex = {
       var bl = -1
       var i  = -1
@@ -159,12 +259,18 @@ trait InputBlocksProcessor extends ScorexLogging {
       i
     }
 
+    /**
+      * Gets the length of the longest fork in terms of number of input blocks.
+      *
+      * @return Some(length) of the longest fork, or None if no forks exist
+      */
     def longestDepth: Option[Int] = {
       if (longestIndex != -1) {
         Some(forks(longestIndex).chain.length)
       } else None
     }
 
+    /** Index of the fork with the highest processing depth (most processed blocks) */
     private lazy val bestIndex = {
       var bl = -1
       var i  = -1
@@ -177,18 +283,33 @@ trait InputBlocksProcessor extends ScorexLogging {
       i
     }
 
+    /**
+      * Gets the processing depth of the best fork (number of processed blocks).
+      *
+      * @return The number of processed blocks in the best fork, or -1 if no forks exist
+      */
     def bestDepth: Int = {
       if (bestIndex != -1) {
         forks(bestIndex).processedIndex
       } else -1
     }
 
+    /**
+      * Gets the ID of the tip (last processed block) of the best fork.
+      *
+      * @return Some(modifier ID) of the best fork's tip, or None if no forks exist
+      */
     def bestTip: Option[ModifierId] = {
       if (bestIndex != -1) {
         forks(bestIndex).chain.lastOption
       } else None
     }
 
+    /**
+      * Gets the complete chain of processed input blocks from the best fork.
+      *
+      * @return A sequence of modifier IDs representing the best chain of processed blocks
+      */
     def bestChain: Seq[ModifierId] = {
       if (bestIndex != -1) {
         val f = forks(bestIndex)
@@ -196,12 +317,28 @@ trait InputBlocksProcessor extends ScorexLogging {
       } else Seq.empty
     }
 
+    /**
+      * Gets all transactions from the processed portion of the best fork.
+      *
+      * @return A sequence of all transactions from processed blocks in the best fork
+      */
     def bestChainTransactions: Seq[ErgoTransaction] = {
       if (bestIndex != -1) {
         forks(bestIndex).collectedTransactions
       } else Seq.empty
     }
 
+    /**
+      * Inserts a new input block into the tree, potentially creating new forks.
+      *
+      * This method handles the insertion of a new input block into the appropriate
+      * fork in the tree. If the input block creates a new fork, it will be added
+      * to the tree structure.
+      *
+      * @param ibi The input block information to insert
+      * @return Some(updated InputBlocksTree) if the block was inserted successfully,
+      *         None if the parent block is unknown and the block was added to the disconnected waitlist
+      */
     def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
       def applyDisconnected(acc: Seq[InputBlocksChain]): Seq[InputBlocksChain] = {
         disconnectedWaitlist.foldLeft(acc) {
@@ -460,7 +597,15 @@ trait InputBlocksProcessor extends ScorexLogging {
   private def extractOrderingId(ib: InputBlockInfo) = ib.header.parentId
 
   /**
-    * @return best ordering and input blocks
+    * Gets the current best ordering block and best input block pair.
+    *
+    * This method returns the combination of the best known ordering block (full block)
+    * and the corresponding best input block (transaction block) in the current view
+    * of the blockchain state.
+    *
+    * @return A tuple containing:
+    *         - Option[Header] for the best ordering block (if any exists)
+    *         - Option[InputBlockInfo] for the best input block (if any exists)
     */
   def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
     val bestOrdering = bestOrderingBlock()
@@ -510,19 +655,30 @@ trait InputBlocksProcessor extends ScorexLogging {
     val oldTreeCount = inputBlockTrees.size
     val oldRecordCount = inputBlockRecords.size
     val oldTxCount = inputBlockTransactions.size
-    
+
     prune()
-    
+
     log.info(s"State reset: pruned ${oldTreeCount - inputBlockTrees.size} trees, " +
       s"${oldRecordCount - inputBlockRecords.size} records, " +
       s"${oldTxCount - inputBlockTransactions.size} transactions")
   }
 
   /**
-    * Update input block related structures with a new input block got from a local miner or p2p network
-    * We dont have input block transactions yet (usually) when this method is called.
+    * Updates input block related structures with a new input block received from a local miner or P2P network.
     *
-    * @return id of parent input block to download, if it is not known to us
+    * This method integrates a new input block into the internal data structures, handling chain linking
+    * and fork management. At this stage, input block transactions are typically not yet available,
+    * so this method focuses on establishing the structural relationships between blocks.
+    *
+    * The method handles several scenarios:
+    * - Creating new chains for input blocks that don't have parents
+    * - Linking input blocks to existing chains
+    * - Managing disconnected input blocks that reference unknown parents
+    * - Performing state resets when significant height jumps are detected
+    *
+    * @param ib The input block information to be integrated
+    * @return Option containing the ID of a parent input block to download if the current block
+    *         references an unknown parent, or None if the block was successfully integrated
     */
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
     try {
@@ -578,14 +734,23 @@ trait InputBlocksProcessor extends ScorexLogging {
     *
     * This method is the core of input block processing, handling both linear chain extension
     * and fork switching scenarios. It manages the state transitions when new input blocks
-    * with transactions are received.
+    * with transactions are received. The method performs transaction validation against the
+    * current state, updates internal caches, and coordinates with the InputBlocksTree to
+    * manage competing chain forks.
     *
-    * @param sbId The input block ID to process
-    * @param transactions The transactions contained in the input block
-    * @param state The current Ergo state for transaction validation
+    * Key responsibilities:
+    * - Validates transactions against the current Ergo state
+    * - Updates transaction caches and indexes
+    * - Processes transactions through the InputBlocksTree structure
+    * - Handles fork switching when a longer chain becomes available
+    * - Maintains the relationship between ordering blocks and input blocks
+    *
+    * @param sbId The input block ID for which transactions are being applied
+    * @param transactions The sequence of transactions contained in the input block
+    * @param state The current Ergo state used for transaction validation
     * @return A tuple containing:
-    *         - Sequence of new best input blocks applied (forward progress)
-    *         - Sequence of input blocks rolled back (when switching forks)
+    *         - Sequence of new best input block IDs that were successfully applied (forward progress)
+    *         - Sequence of input block IDs that were rolled back (when switching from one fork to another)
     */
   // todo: use PoEM to store only 2-3 best chains and select best one quickly
   def applyInputBlockTransactions(
@@ -637,6 +802,15 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   }
 
+  /**
+    * Updates the internal state when a new ordering block is received.
+    *
+    * This method handles the state transition when a new ordering block (full block) is processed,
+    * triggering a state reset if the new block represents a height advancement. This ensures
+    * that input block data is properly maintained relative to the current best ordering block.
+    *
+    * @param h The header of the new ordering block to update state with
+    */
   def updateStateWithOrderingBlock(h: Header): Unit = {
     if (h.height >= bestOrderingBlock().map(_.height).getOrElse(-1)) {
       log.info(s"Updating state with new ordering block ${h.encodedId}, height: ${h.height}")
@@ -666,7 +840,11 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Returns the best known input blocks chain for the current best-known ordering block.
-    * The chain is returned in reverse order (from tip to genesis).
+    *
+    * This method returns the sequence of input block IDs that form the best (most processed)
+    * chain for the current best ordering block, ordered from tip to genesis.
+    *
+    * @return A sequence of modifier IDs representing the best input block chain, in reverse order (from tip to genesis)
     */
   def bestInputBlocksChain(): Seq[ModifierId] = {
     bestOrderingBlock()
@@ -679,6 +857,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Retrieves an input block by its modifier ID.
+    *
+    * @param sbId The modifier ID of the input block to retrieve
+    * @return Some(InputBlockInfo) if the input block exists, None otherwise
     */
   def getInputBlock(sbId: ModifierId): Option[InputBlockInfo] = {
     inputBlockRecords.get(sbId)
@@ -686,6 +867,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Retrieves the transaction IDs contained in a specified input block.
+    *
+    * @param sbId The modifier ID of the input block to query
+    * @return Some(sequence of transaction IDs) if the input block exists, None otherwise
     */
   def getInputBlockTransactionIds(sbId: ModifierId): Option[Seq[ModifierId]] = {
     inputBlockTransactions.get(sbId)
@@ -693,6 +877,12 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Retrieves transactions for a specified input block.
+    *
+    * This method fetches the actual transaction objects associated with an input block
+    * from the internal transaction cache.
+    *
+    * @param sbId The modifier ID of the input block to query
+    * @return Some(sequence of ErgoTransaction objects) if the input block exists, None otherwise
     */
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
@@ -705,19 +895,35 @@ trait InputBlocksProcessor extends ScorexLogging {
   // todo: pruning
   private val orderingBlockAnnouncements = mutable.Map[ModifierId, OrderingBlockAnnouncement]()
 
+  /**
+    * Stores an ordering block announcement for later retrieval.
+    *
+    * @param announcement The ordering block announcement to store
+    */
   def storeOrderingBlockAnnouncement(announcement: OrderingBlockAnnouncement): Unit = {
     val id = announcement.header.id
     orderingBlockAnnouncements.put(id, announcement)
   }
 
+  /**
+    * Retrieves an ordering block announcement by its ID.
+    *
+    * @param id The modifier ID of the ordering block announcement to retrieve
+    * @return Some(OrderingBlockAnnouncement) if it exists, None otherwise
+    */
   def getOrderingBlockAnnouncement(id: ModifierId): Option[OrderingBlockAnnouncement] = {
     orderingBlockAnnouncements.get(id)
   }
 
   /**
-    * @param sbId
-    * @param toFilter - weak ids of transactions which SHOULD BE in resul
-    * @return
+    * Retrieves specific transactions from an input block based on weak transaction IDs.
+    *
+    * This method filters the transactions in an input block to return only those that
+    * match the provided weak transaction IDs.
+    *
+    * @param sbId The modifier ID of the input block to query
+    * @param toFilter A sequence of weak transaction IDs to filter for
+    * @return Some(sequence of matching ErgoTransaction objects) if the input block exists, None otherwise
     */
   def getInputBlockTransactions(sbId: ModifierId,
                                 toFilter: Seq[ErgoTransaction.WeakId]): Option[Seq[ErgoTransaction]] = {
@@ -735,6 +941,15 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
+  /**
+    * Retrieves the weak transaction IDs from a specified input block.
+    *
+    * Weak transaction IDs are compact representations of transaction IDs used for
+    * efficient filtering and comparison operations.
+    *
+    * @param sbId The modifier ID of the input block to query
+    * @return Some(sequence of weak transaction IDs) if the input block exists, None otherwise
+    */
   def getInputBlockTransactionWeakIds(sbId: ModifierId): Option[Seq[ErgoTransaction.WeakId]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below
@@ -744,8 +959,13 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
-    * @param id ordering block (header) id
-    * @return tips (leaf input blocks) for the ordering block with identifier `id`
+    * Gets the tip input blocks for an ordering block at the best processing depth.
+    *
+    * This method returns the leaf nodes (tips) of all competing input block chains
+    * that have reached the best processing depth for a given ordering block.
+    *
+    * @param id The modifier ID of the ordering block to query
+    * @return Some(set of input block IDs that represent the tips) if the ordering block exists, None otherwise
     */
   def getOrderingBlockTips(id: ModifierId): Option[Set[ModifierId]] = {
     val treeOpt = inputBlockTrees.get(id)
@@ -754,20 +974,31 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
-    * @param id ordering block (header) id
-    * @return height of the best input block tip for the ordering block with identifier `id`
+    * Gets the processing depth of the best input block chain for an ordering block.
+    *
+    * @param id The modifier ID of the ordering block to query
+    * @return The processing depth (number of processed blocks) of the best input block chain,
+    *         or -1 if the ordering block is not found
     */
   def getOrderingBlockTipHeight(id: ModifierId): Int = {
     inputBlockTrees.get(id).map(_.bestDepth).getOrElse(-1)
   }
 
+  /**
+    * Gets the length of the longest input block chain for an ordering block.
+    *
+    * @param id The modifier ID of the ordering block to query
+    * @return The length of the longest input block chain, or -1 if the ordering block is not found
+    */
   def getLongestChainLength(id: ModifierId): Int = {
     inputBlockTrees.get(id).flatMap(_.longestDepth).getOrElse(-1)
   }
 
   /**
-    * @param id ordering block (header) id
-    * @return transactions included in best input blocks chain since ordering block with identifier `id`
+    * Gets transactions from the best input block chain for a specific ordering block.
+    *
+    * @param id The modifier ID of the ordering block to query
+    * @return Some(sequence of transactions from the best input block chain) if the ordering block exists, None otherwise
     */
   def getCollectedInputBlocksTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
     bestOrderingBlock()
@@ -777,7 +1008,12 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
-    * @return all the transaction in best input-blocks chain collected after current best ordering block
+    * Gets all transactions from the best input block chain since the current best ordering block.
+    *
+    * This method retrieves all transactions that have been collected in the best input block chain
+    * since the current best ordering block was established.
+    *
+    * @return A sequence of all transactions in the best input block chain since the current best ordering block
     */
   def getBestOrderingCollectedInputBlocksTransactions(): Seq[ErgoTransaction] = {
     bestOrderingBlock()
@@ -786,11 +1022,24 @@ trait InputBlocksProcessor extends ScorexLogging {
       .getOrElse(Seq.empty)
   }
 
+  /**
+    * Saves transactions associated with an ordering block.
+    *
+    * @param orderingBlockId The modifier ID of the ordering block
+    * @param transactions The sequence of transactions to associate with the ordering block
+    * @return Some(previous sequence of transactions) if any existed, None otherwise
+    */
   def saveOrderingBlockTransactions(orderingBlockId: ModifierId,
                                     transactions: Seq[ErgoTransaction]): Option[Seq[ErgoTransaction]] = {
     orderingBlockTransactions.put(orderingBlockId, transactions)
   }
 
+  /**
+    * Gets transactions associated with an ordering block.
+    *
+    * @param orderingBlockId The modifier ID of the ordering block to query
+    * @return Some(sequence of transactions) if the ordering block exists, None otherwise
+    */
   def getOrderingBlockTransactions(
     orderingBlockId: ModifierId
   ): Option[Seq[ErgoTransaction]] = {

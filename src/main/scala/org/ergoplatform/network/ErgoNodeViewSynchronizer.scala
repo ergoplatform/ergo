@@ -1183,7 +1183,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  //other node asking for objects by their ids
+  /**
+   * Handle a request from a peer for specific modifiers by their IDs.
+   *
+   * This method processes requests from peers for specific modifiers (blocks, transactions, etc.)
+   * by their IDs. It handles different types of modifiers differently, with special handling
+   * for input blocks, input block transaction IDs, and ordering block announcements.
+   * For regular modifiers, it retrieves them from history or mempool and sends them back
+   * to the requesting peer in appropriately sized batches.
+   *
+   * Algorithm:
+   * 1. Check if the requested modifier type is a special case (input block related)
+   * 2. For special cases, delegate to specific handling methods
+   * 3. For regular modifiers, retrieve from history or mempool based on type
+   * 4. Split the response into appropriately sized batches to comply with message size limits
+   * 5. Send the batches to the requesting peer
+   *
+   * @param hr The history reader interface
+   * @param mp The mempool reader interface
+   * @param invData The inventory data containing requested modifier IDs and type
+   * @param remote The peer requesting the modifiers
+   */
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
     if (invData.typeId == InputBlockTypeId.value) {
       invData.ids.foreach {id =>
@@ -1279,12 +1299,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // INPUT BLOCKS RELATED LOGIC
 
+  /**
+   * Request an input block from a peer by its ID.
+   *
+   * This method sends a request to the specified peer to download an input block with the given ID.
+   * Input blocks are part of Ergo's two-tier blockchain architecture and contain transactions
+   * that reference ordering blocks.
+   *
+   * @param sbId The ID of the input block to request
+   * @param remote The peer to request the input block from
+   */
   def requestInputBlock(sbId: ModifierId, remote: ConnectedPeer): Unit = {
     // currently we request input block only once // todo: recheck this
     val msg = Message(RequestModifierSpec, Right(InvData(InputBlockTypeId.value, Seq(sbId))), None)
     networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
   }
 
+  /**
+   * Request transaction IDs for an input block from a peer.
+   *
+   * This method sends a request to the specified peer to download the transaction IDs
+   * associated with the given input block. This is used when an input block is received
+   * without transaction IDs, allowing the node to request them separately.
+   *
+   * @param inputBlockInfo The input block information to request transaction IDs for
+   * @param remote The peer to request the transaction IDs from
+   */
   def requestInputBlockTransactionIds(inputBlockInfo: InputBlockInfo, remote: ConnectedPeer): Unit = {
     // currently we request input block transactions only once // todo: recheck this
     val data = InvData(InputBlockTransactionIdsTypeId.value, Seq(inputBlockInfo.header.id))
@@ -1293,6 +1333,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
 
+  /**
+   * Process an input block received from a peer.
+   *
+   * This method handles the validation and processing of input blocks, which are part of Ergo's
+   * two-tier blockchain architecture. Input blocks contain transactions that reference ordering blocks.
+   * The method performs PoW validation, processes transaction differences with the local mempool,
+   * and coordinates with the node view holder to apply the input block.
+   *
+   * Algorithm:
+   * 1. Validate the input block height against the current full block height
+   * 2. Check PoW validity of the input block
+   * 3. Handle different cases based on whether transaction IDs are announced:
+   *    - If transaction IDs are provided, calculate difference with local mempool
+   *    - If all transactions are available locally, process immediately
+   *    - If some transactions are missing, request them from the peer
+   *    - If no transaction IDs are provided, request them separately
+   * 4. Handle edge cases where the input block references a future ordering block
+   *
+   * @param inputBlockInfo The input block information to process
+   * @param hr The history reader interface
+   * @param mp The mempool reader interface
+   * @param remote The peer that sent the input block
+   */
   def processInputBlock(inputBlockInfo: InputBlockInfo,
                         hr: ErgoHistoryReader,
                         mp: ErgoMemPoolReader,
@@ -1382,6 +1445,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process a request from a peer for an input block by its ID.
+   *
+   * This method handles requests from peers for specific input blocks. If the input block
+   * exists in local storage, it is sent back to the requesting peer. Otherwise, a warning
+   * is logged indicating the block was not found.
+   *
+   * @param subBlockId The ID of the requested input block
+   * @param hr The history reader interface
+   * @param remote The peer requesting the input block
+   */
   def processInputBlockRequest(subBlockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     hr.getInputBlock(subBlockId) match {
       case Some(sbi) =>
@@ -1396,6 +1470,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process a request from a peer for transaction IDs associated with an input block.
+   *
+   * This method handles requests from peers for the weak transaction IDs associated with
+   * a specific input block. If the IDs exist in local storage, they are sent back to
+   * the requesting peer. Otherwise, a warning is logged.
+   *
+   * @param subblockId The ID of the input block to get transaction IDs for
+   * @param hr The history reader interface
+   * @param remote The peer requesting the transaction IDs
+   */
   def processInputBlockTransactionIdsRequest(subblockId: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     hr.getInputBlockTransactionWeakIds(subblockId) match {
       case Some(ids) =>
@@ -1411,6 +1496,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process a request from a peer for an ordering block announcement by its ID.
+   *
+   * This method handles requests from peers for specific ordering block announcements.
+   * If the announcement exists in local storage, it is sent back to the requesting peer.
+   * Otherwise, a warning is logged indicating the announcement was not found.
+   *
+   * @param id The ID of the requested ordering block announcement
+   * @param hr The history reader interface
+   * @param remote The peer requesting the announcement
+   */
   def processOrderingBlockAnnouncementRequest(id: ModifierId, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     hr.getOrderingBlockAnnouncement(id) match {
       case Some(obAnn) =>
@@ -1422,6 +1518,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process input block transaction IDs received from a peer.
+   *
+   * This method handles the receipt of transaction IDs for an input block from a peer.
+   * It calculates the difference between the received IDs and what's available in the
+   * local mempool, then either processes the input block immediately if all transactions
+   * are available, or requests the missing transactions from the peer.
+   *
+   * @param txIds The input block transaction IDs data received from peer
+   * @param mp The mempool reader interface
+   * @param remote The peer that sent the transaction IDs
+   */
   def processInputBlockTransactionIds(txIds: InputBlockTransactionIdsData, mp: ErgoMemPoolReader, remote: ConnectedPeer): Unit = {
     val subBlockId = txIds.inputBlockId
     val wIds = txIds.transactionIds
@@ -1452,6 +1560,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process a request from a peer for specific input block transactions.
+   *
+   * This method handles requests from peers for specific transactions associated with
+   * an input block. It retrieves the requested transactions from local storage and
+   * sends them back to the requesting peer. If the transactions are not found,
+   * a warning is logged.
+   *
+   * @param req The request containing the input block ID and transaction IDs
+   * @param hr The history reader interface
+   * @param remote The peer requesting the transactions
+   */
   def processInputBlockTransactionsRequest(req: InputBlockTransactionsRequest, hr: ErgoHistoryReader, remote: ConnectedPeer): Unit = {
     val subBlockId = req.inputBlockId
 
@@ -1469,6 +1589,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process input block transactions received from a peer.
+   *
+   * This method combines input block transactions received from a peer with locally cached
+   * transactions from the mempool, then sends the complete set for processing. It handles
+   * the reconstruction of the full transaction set for an input block by combining locally
+   * available transactions with those received from peers.
+   *
+   * Algorithm:
+   * 1. Check if there are locally cached transaction differences for this input block
+   * 2. If no local transactions are cached, process the received transactions directly
+   * 3. If local transactions exist, merge them with received transactions by matching
+   *    against the expected weak transaction IDs
+   * 4. Verify all expected transactions are present before forwarding for processing
+   *
+   * @param transactionsData The input block transaction data received from peer
+   * @param hr The history reader interface
+   * @param remote The peer that sent the transactions
+   */
   def processInputBlockTransactions(transactionsData: InputBlockTransactionsData,
                                     hr: ErgoHistoryReader,
                                     remote: ConnectedPeer): Unit = {
@@ -1519,6 +1658,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+   * Process an ordering block announcement received from a peer.
+   *
+   * This method handles ordering block announcements, which are part of Ergo's two-tier
+   * blockchain architecture. It validates the announcement, stores it locally, and forwards
+   * it to appropriate peers. The method also determines whether to process the ordering block
+   * directly or request the full block depending on whether referenced input blocks are available.
+   *
+   * Algorithm:
+   * 1. Validate the ordering block announcement against the PoW scheme
+   * 2. Store the announcement in the history reader
+   * 3. Forward the announcement to peers that support sub-blocks and have compatible status
+   * 4. Check if referenced input blocks are available in local storage
+   * 5. If input blocks are available, process the ordering block directly
+   * 6. If input blocks are missing, request the full block sections instead
+   *
+   * @param oba The ordering block announcement to process
+   * @param hr The history reader interface
+   * @param remote The peer that sent the announcement
+   */
   private def processOrderingBlockAnnouncement(oba: OrderingBlockAnnouncement,
                                                hr: ErgoHistoryReader,
                                                remote: ConnectedPeer): Unit = {
@@ -1592,11 +1751,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Scheduler asking node view synchronizer to check whether requested modifiers have been delivered.
-    * Do nothing, if modifier is already in a different state (it might be already received, applied, etc.),
-    * wait for delivery until the number of checks exceeds the maximum if the peer sent `Inv` for this modifier
-    * re-request modifier from a different random peer, if our node does not know a peer who have it
-    */
+   * Scheduler asking node view synchronizer to check whether requested modifiers have been delivered.
+   * Do nothing, if modifier is already in a different state (it might be already received, applied, etc.),
+   * wait for delivery until the number of checks exceeds the maximum if the peer sent `Inv` for this modifier
+   * re-request modifier from a different random peer, if our node does not know a peer who have it
+   */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
@@ -1745,6 +1904,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
 
+  /**
+   * Handler for messages from the node view holder, coordinating the synchronization of node state.
+   *
+   * This method handles various events from the node view holder including block applications,
+   * transaction processing results, state changes, and cache updates. It manages the coordination
+   * between the network layer and the node's internal state, including requesting more modifiers
+   * when needed, broadcasting new blocks, and maintaining transaction caches.
+   *
+   * Key responsibilities:
+   * - Requesting more modifiers when the download queue is low
+   * - Broadcasting locally generated blocks to appropriate peers
+   * - Processing transaction acceptance/rejection outcomes
+   * - Handling state changes and cache updates
+   * - Managing input block broadcasting for sub-blocks architecture
+   * - Coordinating with delivery tracker for modifier status updates
+   *
+   * @param historyReader Interface to read historical blockchain data
+   * @param mempoolReader Interface to read mempool data
+   * @param utxoStateReaderOpt Optional interface to read UTXO state data
+   * @param blockAppliedTxsCache Cache of recently applied transaction IDs
+   * @return A partial function handling various node view holder messages
+   */
   private def viewHolderEvents(historyReader: ErgoHistory,
                                mempoolReader: ErgoMemPool,
                                utxoStateReaderOpt: Option[UtxoStateReader],

@@ -156,7 +156,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   it should "return error for schnorrSign when wallet is not initialized" in {
     val requestJson = Json.obj(
-      "address" -> p2pkaddress.toString.asJson,
+      "signerAddress" -> p2pkaddress.toString.asJson,
       "message" -> "02415748f8eef16c5ea6896cec3a8defccc8a0dace245248be66ffd6ff2159da32000000000003d09000000000694fa26d".asJson
     )
 
@@ -169,7 +169,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   it should "return error for schnorrSign with non-P2PK address" in {
     val requestJson = Json.obj(
-      "address" -> p2shaddress.toString.asJson,
+      "signerAddress" -> p2shaddress.toString.asJson,
       "message" -> "02415748f8eef16c5ea6896cec3a8defccc8a0dace245248be66ffd6ff2159da32000000000003d09000000000694fa26d".asJson
     )
 
@@ -183,7 +183,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   it should "return error for schnorrSign with invalid hex message" in {
     val requestJson = Json.obj(
-      "address" -> p2pkaddress.toString.asJson,
+      "signerAddress" -> p2pkaddress.toString.asJson,
       "message" -> "invalid_hex_message".asJson
     )
 
@@ -196,7 +196,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   it should "return error for schnorrSign with invalid address" in {
     val requestJson = Json.obj(
-      "address" -> "invalid_address".asJson,
+      "signerAddress" -> "invalid_address".asJson,
       "message" -> "02415748f8eef16c5ea6896cec3a8defccc8a0dace245248be66ffd6ff2159da32000000000003d09000000000694fa26d".asJson
     )
 

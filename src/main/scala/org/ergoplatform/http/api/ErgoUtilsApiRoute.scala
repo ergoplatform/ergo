@@ -145,7 +145,7 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
     import io.circe.generic.auto._
 
     // Define case class for the request (without derivation path)
-    case class SchnorrSignRequest(address: String, message: String)
+    case class SchnorrSignRequest(signerAddress: String, message: String)
 
     json.as[SchnorrSignRequest] match {
       case Right(req) =>
@@ -153,7 +153,7 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
         scorex.util.encode.Base16.decode(req.message) match {
           case scala.util.Success(messageBytes) =>
             // Validate address format
-            ergoAddressEncoder.fromString(req.address) match {
+            ergoAddressEncoder.fromString(req.signerAddress) match {
               case scala.util.Success(p2pkAddress: P2PKAddress) =>
                 try {
                   // Access wallet to get the private key
@@ -210,9 +210,6 @@ class ErgoUtilsApiRoute(val readersHolder: ActorRef, val ergoSettings: ErgoSetti
                           val aComponent = GroupElementSerializer.toBytes(aPoint)
 
                           val zComponent = BigIntegers.asUnsignedByteArray(32, zBI)
-
-                          // todo: make .debug before release
-                          log.info(s"For message ${req.message} a: ${Base16.encode(aComponent)} , z: ${Base16.encode(zComponent)} , e: $eBI")
 
                           val formattedSignature = aComponent ++ zComponent
 

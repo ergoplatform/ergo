@@ -4196,10 +4196,10 @@ paths:
             schema:
               type: object
               required:
-                - address
+                - signerAddress
                 - message
               properties:
-                address:
+                signerAddress:
                   description: The P2PK address whose associated private key will be used for signing
                   type: string
                   example: '3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt'

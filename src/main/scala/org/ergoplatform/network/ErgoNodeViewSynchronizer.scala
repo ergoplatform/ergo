@@ -289,6 +289,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val healthCheckDelay = settings.nodeSettings.acceptableChainUpdateDelay
     val healthCheckRate = settings.nodeSettings.acceptableChainUpdateDelay / 3
     context.system.scheduler.scheduleAtFixedRate(healthCheckDelay, healthCheckRate, viewHolderRef, IsChainHealthy)(ex, self)
+
+    // Schedule periodic cleanup of old local input block chunks to prevent memory exhaustion
+    context.system.scheduler.scheduleAtFixedRate(
+      ErgoNodeViewSynchronizer.LocalInputBlockChunksCleanupInterval,
+      ErgoNodeViewSynchronizer.LocalInputBlockChunksCleanupInterval,
+      self,
+      ErgoNodeViewSynchronizer.CleanupLocalInputBlockChunks
+    )(ex, self)
   }
 
   protected def broadcastModifierInv(modTypeId: NetworkObjectTypeId.Value,
@@ -1274,16 +1282,42 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // PROCESS LOGIC FOR INPUT- AND ORDERING BLOCKS RELATED DATA
 
-  case class InputBlockDiffData(created: Long, weakTxsIds: Seq[ErgoTransaction.WeakId], txs: Seq[ErgoTransaction])
-
   /**
    * Cache to store input block transaction differences temporarily while waiting for
    * missing transactions to be received from peers.
    * Key: input block id
    * Value: InputBlockDiffData containing creation time, weak transaction IDs, and cached transactions
+   *
+   * Entries are automatically cleaned up after LocalInputBlockChunksTTL (10 minutes) to prevent memory exhaustion.
    */
-  // todo: clean old records not removed on diff delivery
-  private val localInputBlockChunks = mutable.Map[ModifierId, InputBlockDiffData]()
+  private val localInputBlockChunks = mutable.Map[ModifierId, ErgoNodeViewSynchronizer.InputBlockDiffData]()
+
+  /**
+   * Cleanup old entries from localInputBlockChunks cache.
+   * 
+   * This method removes entries that have been in the cache longer than LocalInputBlockChunksTTL.
+   * It should be called periodically to prevent memory exhaustion from stale entries.
+   * 
+   * Algorithm:
+   * 1. Calculate the cutoff time (current time - TTL)
+   * 2. Filter out entries older than the cutoff time
+   * 3. Log the number of cleaned entries for monitoring
+   */
+  private def cleanupLocalInputBlockChunks(): Unit = {
+    val now = System.currentTimeMillis()
+    val cutoffTime = now - ErgoNodeViewSynchronizer.LocalInputBlockChunksTTL.toMillis
+
+    val oldEntries = localInputBlockChunks.filter { case (_, data) =>
+      data.created < cutoffTime
+    }
+
+    if (oldEntries.nonEmpty) {
+      oldEntries.keys.foreach { id =>
+        localInputBlockChunks.remove(id)
+      }
+      log.debug(s"Cleaned up ${oldEntries.size} expired local input block chunk entries")
+    }
+  }
 
   private def weakIdsDiff(mp: ErgoMemPoolReader,
                           wIds: Seq[WeakId]): (Seq[WeakId], Seq[ErgoTransaction]) = {
@@ -1390,7 +1424,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             } else {
               // in the first place, ask peer announced input-block for diff
 
-              // todo: do removal from localInputBlockChunks
+              // Store the diff in cache while waiting for missing transactions from peer
               val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
               localInputBlockChunks.put(subBlockId, ibdd)
 
@@ -1549,7 +1583,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     } else {
       // in the first place, ask peer announced input-block for diff
 
-      // todo: do removal from localInputBlockChunks
+      // Store the diff in cache while waiting for missing transactions from peer
       val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
       localInputBlockChunks.put(subBlockId, ibdd)
 
@@ -2206,6 +2240,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       viewHolderEvents(hr, mp, usr, blockAppliedTxsCache) orElse
       peerManagerEvents orElse
       checkDelivery(hr) orElse {
+      case CleanupLocalInputBlockChunks =>
+        cleanupLocalInputBlockChunks()
       case a: Any => log.error("Strange input: " + a)
     }
   }
@@ -2283,6 +2319,30 @@ object ErgoNodeViewSynchronizer {
   class TransactionProcessingCacheRecord(val txBytes: Array[Byte], val source: ConnectedPeer)
 
   case object CheckModifiersToDownload
+
+  /**
+   * Message to trigger cleanup of old local input block chunks
+   */
+  case object CleanupLocalInputBlockChunks
+
+  /**
+   * TTL for local input block chunks cache.
+   * Entries older than this will be cleaned up to prevent memory exhaustion.
+   */
+  val LocalInputBlockChunksTTL: FiniteDuration = 10.minutes
+
+  /**
+   * How often to run cleanup of old local input block chunks
+   */
+  val LocalInputBlockChunksCleanupInterval: FiniteDuration = 5.minutes
+
+  /**
+   * Data class for caching input block transaction differences
+   * @param created timestamp when the entry was created
+   * @param weakTxsIds weak transaction IDs
+   * @param txs cached transactions
+   */
+  case class InputBlockDiffData(created: Long, weakTxsIds: Seq[ErgoTransaction.WeakId], txs: Seq[ErgoTransaction])
 
   /**
    * Serializers for block sections and transactions

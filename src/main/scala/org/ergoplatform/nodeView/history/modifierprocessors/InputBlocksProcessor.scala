@@ -479,7 +479,9 @@ trait InputBlocksProcessor extends ScorexLogging {
                 // Continue processing the next block in the chain
                 val nextIb = inputBlockRecords(nextId)
                 val txs =
-                  inputBlockTransactions(nextId).map(transactionsCache.getIfPresent)
+                  inputBlockTransactions(nextId).flatMap { tid =>
+                    Option(transactionsCache.getIfPresent(tid))
+                  }
                 log.debug(s"Continuing input block chain with $nextId")
                 applicationStep(nextIb, txs, res)
               case _ =>
@@ -558,7 +560,9 @@ trait InputBlocksProcessor extends ScorexLogging {
         // Process the next block in the new best chain
         val ibId = newFork.chain(newFork.processedIndex + 1)  // Next unprocessed block in new chain
         val ib   = inputBlockRecords(ibId)
-        val txs  = inputBlockTransactions(ibId).map(transactionsCache.getIfPresent)
+        val txs  = inputBlockTransactions(ibId).flatMap { tid =>
+          Option(transactionsCache.getIfPresent(tid))
+        }
         val r    = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
 
         if (r._2.nonEmpty) {
@@ -980,7 +984,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
-      ids.map(transactionsCache.getIfPresent)
+      ids.flatMap { tid =>
+        Option(transactionsCache.getIfPresent(tid))
+      }
     }
   }
 
@@ -1023,11 +1029,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
       ids.flatMap { id =>
-        val tx = transactionsCache.getIfPresent(id)
-        if (toFilter.exists(fId => tx.weakId.sameElements(fId))) {
-          Some(tx)
-        } else {
-          None
+        Option(transactionsCache.getIfPresent(id)).filter { tx =>
+          toFilter.exists(fId => tx.weakId.sameElements(fId))
         }
       }
     }
@@ -1046,7 +1049,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
-      ids.map(transactionsCache.getIfPresent).map(_.weakId)
+      ids.flatMap { tid =>
+        Option(transactionsCache.getIfPresent(tid)).map(_.weakId)
+      }
     }
   }
 

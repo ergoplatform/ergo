@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging}
+import spire.syntax.all.cfor
 
 import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
@@ -146,18 +147,20 @@ trait InputBlocksProcessor extends ScorexLogging {
       * @return A sequence of all transactions from processed input blocks in the chain
       */
     lazy val collectedTransactions: Seq[ErgoTransaction] = {
-      (0 to processedIndex).flatMap { i =>
+      val result = mutable.ArrayBuffer[ErgoTransaction]()
+      cfor(0)(_ <= processedIndex, _ + 1) { i =>
         val id = chain(i)
         inputBlockTransactions.get(id) match {
           case Some(txIds) =>
-            //todo: more efficient loading
-            txIds.flatMap { tid =>
-              Option(transactionsCache.getIfPresent(tid))
+            cfor(0)(_ < txIds.length, _ + 1) { j =>
+              val tid = txIds(j)
+              val tx = transactionsCache.getIfPresent(tid)
+              if (tx != null) result += tx
             }
-          case None =>
-            Seq.empty
+          case None => // skip
         }
       }
+      result
     }
 
     /**
@@ -478,10 +481,13 @@ trait InputBlocksProcessor extends ScorexLogging {
               case Some(nextId) =>
                 // Continue processing the next block in the chain
                 val nextIb = inputBlockRecords(nextId)
-                val txs =
-                  inputBlockTransactions(nextId).flatMap { tid =>
-                    Option(transactionsCache.getIfPresent(tid))
-                  }
+                val txIds = inputBlockTransactions(nextId)
+                val txs = mutable.ArrayBuffer[ErgoTransaction]()
+                cfor(0)(_ < txIds.length, _ + 1) { j =>
+                  val tid = txIds(j)
+                  val tx = transactionsCache.getIfPresent(tid)
+                  if (tx != null) txs += tx
+                }
                 log.debug(s"Continuing input block chain with $nextId")
                 applicationStep(nextIb, txs, res)
               case _ =>
@@ -560,8 +566,12 @@ trait InputBlocksProcessor extends ScorexLogging {
         // Process the next block in the new best chain
         val ibId = newFork.chain(newFork.processedIndex + 1)  // Next unprocessed block in new chain
         val ib   = inputBlockRecords(ibId)
-        val txs  = inputBlockTransactions(ibId).flatMap { tid =>
-          Option(transactionsCache.getIfPresent(tid))
+        val txIds = inputBlockTransactions(ibId)
+        val txs = mutable.ArrayBuffer[ErgoTransaction]()
+        cfor(0)(_ < txIds.length, _ + 1) { j =>
+          val tid = txIds(j)
+          val tx = transactionsCache.getIfPresent(tid)
+          if (tx != null) txs += tx
         }
         val r    = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
 
@@ -982,11 +992,13 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
-    // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
-      ids.flatMap { tid =>
-        Option(transactionsCache.getIfPresent(tid))
+      val result = mutable.ArrayBuffer[ErgoTransaction]()
+      cfor(0)(_ < ids.length, _ + 1) { i =>
+        val tx = transactionsCache.getIfPresent(ids(i))
+        if (tx != null) result += tx
       }
+      result
     }
   }
 
@@ -1026,13 +1038,15 @@ trait InputBlocksProcessor extends ScorexLogging {
   def getInputBlockTransactions(sbId: ModifierId,
                                 toFilter: Seq[ErgoTransaction.WeakId]): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
-    // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
-      ids.flatMap { id =>
-        Option(transactionsCache.getIfPresent(id)).filter { tx =>
-          toFilter.exists(fId => tx.weakId.sameElements(fId))
+      val result = mutable.ArrayBuffer[ErgoTransaction]()
+      cfor(0)(_ < ids.length, _ + 1) { i =>
+        val tx = transactionsCache.getIfPresent(ids(i))
+        if (tx != null && toFilter.exists(fId => tx.weakId.sameElements(fId))) {
+          result += tx
         }
       }
+      result
     }
   }
 
@@ -1047,11 +1061,13 @@ trait InputBlocksProcessor extends ScorexLogging {
     */
   def getInputBlockTransactionWeakIds(sbId: ModifierId): Option[Seq[ErgoTransaction.WeakId]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
-    // todo: optimize the code below
     inputBlockTransactions.get(sbId).map { ids =>
-      ids.flatMap { tid =>
-        Option(transactionsCache.getIfPresent(tid)).map(_.weakId)
+      val result = mutable.ArrayBuffer[ErgoTransaction.WeakId]()
+      cfor(0)(_ < ids.length, _ + 1) { i =>
+        val tx = transactionsCache.getIfPresent(ids(i))
+        if (tx != null) result += tx.weakId
       }
+      result
     }
   }
 

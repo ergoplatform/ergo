@@ -1395,6 +1395,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         mp: ErgoMemPoolReader,
                         remote: ConnectedPeer): Unit = {
 
+    // Input blocks are only useful when nearly synced (within 2 blocks)
+    // If we're far behind, ignore them and continue with normal header/block sync
+    if (inputBlockInfo.header.height > hr.fullBlockHeight + 2) {
+      //todo: change to .debug before release
+      log.info(s"Ignoring input block at height ${inputBlockInfo.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
+      return
+    }
+
     val subBlockHeader = inputBlockInfo.header
     val subBlockId = inputBlockInfo.id
 
@@ -1701,12 +1709,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * directly or request the full block depending on whether referenced input blocks are available.
    *
    * Algorithm:
-   * 1. Validate the ordering block announcement against the PoW scheme
-   * 2. Store the announcement in the history reader
-   * 3. Forward the announcement to peers that support sub-blocks and have compatible status
-   * 4. Check if referenced input blocks are available in local storage
-   * 5. If input blocks are available, process the ordering block directly
-   * 6. If input blocks are missing, request the full block sections instead
+   * 1. Check if we're nearly synced (ordering blocks are only useful when within 2 blocks of sync)
+   * 2. Validate the ordering block announcement against the PoW scheme
+   * 3. Store the announcement in the history reader
+   * 4. Forward the announcement to peers that support sub-blocks and have compatible status
+   * 5. Check if referenced input blocks are available in local storage
+   * 6. If input blocks are available, process the ordering block directly
+   * 7. If input blocks are missing, request the full block sections instead
    *
    * @param oba The ordering block announcement to process
    * @param hr The history reader interface
@@ -1715,6 +1724,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def processOrderingBlockAnnouncement(oba: OrderingBlockAnnouncement,
                                                hr: ErgoHistoryReader,
                                                remote: ConnectedPeer): Unit = {
+
+    // Ordering blocks are only useful when nearly synced (within 2 blocks)
+    // If we're far behind, ignore the announcement and continue with normal header/block sync
+    if (oba.header.height > hr.fullBlockHeight + 2) {
+      log.debug(s"Ignoring ordering block announcement at height ${oba.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
+      return
+    }
 
     //todo : make debug
     log.info(s"Processing ordering block announcement for ${oba.header.id}")
@@ -1729,15 +1745,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       hr.storeOrderingBlockAnnouncement(oba)
 
       // Send ordering block announcement to peers supporting sub-blocks and having equal or forked status
+      // Also check that peers are nearly synced (within 2 blocks)
       val peers = syncTracker.statuses.filter { s =>
         val status = s._2.status
+        val peerHeight = s._2.height
         // send ordering block announcement to peers on same height and also supporting sub-blocks
-        SubBlocksFilter.condition(s._1) && (status == Equal || status == Fork)
+        // Don't send to peers that are far behind (> 2 blocks gap)
+        SubBlocksFilter.condition(s._1) && 
+          (status == Equal || status == Fork) &&
+          (peerHeight <= hr.fullBlockHeight + 2)
       }.keys.toSeq
-      // announce id via inv message
-      val invData = InvData(OrderingBlockAnnouncementTypeId.value, Seq(oba.header.id))
-      val msg = Message(InvSpec, Right(invData), None)
-      networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+      
+      if (peers.nonEmpty) {
+        // announce id via inv message
+        val invData = InvData(OrderingBlockAnnouncementTypeId.value, Seq(oba.header.id))
+        val msg = Message(InvSpec, Right(invData), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
+      }
 
       // todo: for now, we just check if referenced input block is stored
       // todo: if so, input blocks are used, otherwise, full block is downloaded
@@ -1982,11 +2006,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // If new enough semantically valid ErgoFullBlock was applied:
     // 1) send inv for block header and all its sections to peers not supporting input/ordering blocks
     // 2) send ordering block announcement to peers supporting input/ordering blocks
+    // Note: Ordering blocks are only broadcast when nearly synced (within 2 blocks)
     case LocallyGeneratedOrderingBlock(efb, orderingBlockTransactions) =>
       val knownPeers = syncTracker.fullInfo()
       val sendOrderingTo = knownPeers.filter { peerStatus =>
+        val peerHeight = peerStatus.height
         if (peerStatus.status == Equal || peerStatus.status == Fork) {
-          peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion)
+          peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion) &&
+            peerHeight <= historyReader.fullBlockHeight + 2
         } else {
           false
         }
@@ -2012,7 +2039,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val knownPeers = syncTracker.fullInfo()
 
         // Split known peers into ones supporting input/ordering blocks and ones not
-        val (sendOrderingToStatuses, sendFullToStatuses) = knownPeers.partition { peerStatus =>
+        val sendFullToStatuses = knownPeers.filter { peerStatus =>
           if (peerStatus.status == Equal || peerStatus.status == Fork) {
             peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion)
           } else {
@@ -2020,22 +2047,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         }
 
-        val sendOrderingTo = sendOrderingToStatuses.map(_.peer)
         val sendFullTo = sendFullToStatuses.map(_.peer)
 
         // todo: make debug
-        log.info(s"Sending ordering block id to $sendOrderingTo , sending old format block sections to $sendFullTo")
+        log.info(s"Sending old format block sections to $sendFullTo")
 
         // send block sections in full for older peers not supporting sub-blocks
         if (sendFullTo.nonEmpty) {
           val peersOpt = Some(sendFullTo.toSeq)
           broadcastModifierInv(Header.modifierTypeId, header.id, peersOpt)
           header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id, peersOpt) }
-        }
-
-        if (sendOrderingTo.nonEmpty) {
-          // broadcast ordering block id
-          // todo: broadcast inv
         }
       }
       clearDeclined()

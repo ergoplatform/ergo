@@ -833,6 +833,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       }
       history().saveOrderingBlockTransactions(efb.id, orderingBlockTransactions)
 
+      context.system.eventStream.publish(FullBlockApplied(efb.header))
+
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")
       val toDownloadOpt = history().applyInputBlock(subblockInfo)

@@ -21,7 +21,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
-import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60, MainNet, TestNet}
+import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60, MainNet, TestNet, Tests}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NetworkType}
 import scorex.util.ScorexLogging
 
@@ -145,7 +145,7 @@ class Docker(
     val networkPort        = initialSettings.scorexSettings.network.bindAddress.getPort
 
     val nodeConfig: Config =
-      enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig, ip, networkPort)
+      enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig)
     val settings: ErgoSettings = buildErgoSettings(networkType, nodeConfig)
     val containerBuilder: CreateContainerCmd =
       buildPeerContainerCmd(networkType, nodeConfig, settings, ip, specialVolumeOpt)
@@ -219,9 +219,7 @@ class Docker(
   private def enrichNodeConfig(
     networkType: NetworkType,
     nodeConfig: Config,
-    extraConfig: ExtraConfig,
-    ip: String,
-    port: Int
+    extraConfig: ExtraConfig
   ) = {
     val publicPeerConfig = nodeConfig //.withFallback(declaredAddressConfig(ip, port))
     val withPeerConfig = nodeRepository.headOption.fold(publicPeerConfig) { node =>
@@ -296,6 +294,7 @@ class Docker(
     val networkTypeCmdOption = networkType match {
       case MainNet => "--mainnet"
       case TestNet => "--testnet"
+      case Tests => "--testnet"
       case DevNet  => ""
       case DevNet60  => ""
     }

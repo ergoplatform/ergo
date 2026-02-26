@@ -152,7 +152,7 @@ class CandidateGenerator(
         context.become(initialized(state))
       }
 
-    case gen @ GenerateCandidate(txsToInclude, reply, forced) =>
+    case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       if (!forced && cachedFor(state.cachedCandidate, txsToInclude)) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
@@ -162,7 +162,7 @@ class CandidateGenerator(
           state.hr,
           state.sr,
           state.mpr,
-          minerPk,
+          optPk.getOrElse(minerPk),
           txsToInclude,
           ergoSettings
         ) match {
@@ -260,7 +260,8 @@ object CandidateGenerator extends ScorexLogging {
   case class GenerateCandidate(
     txsToInclude: Seq[ErgoTransaction],
     reply: Boolean,
-    forced: Boolean
+    forced: Boolean,
+    optPk: Option[ProveDlog] = None
   )
 
   /** Local state of candidate generator to avoid mutable vars */

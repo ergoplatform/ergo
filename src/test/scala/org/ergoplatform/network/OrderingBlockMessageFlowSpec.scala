@@ -2,9 +2,7 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.message.InvSpec
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec}

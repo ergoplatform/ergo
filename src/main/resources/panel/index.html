@@ -164,13 +164,78 @@
       color: var(--text) !important;
       border-color: var(--border) !important;
     }
-    /* Modals (Bootstrap-esque) */
-    .modal-content, .modal-header, .modal-body, .modal-footer {
-      background-color: var(--panel) !important;
-      color: var(--text) !important;
-      border-color: var(--border) !important;
+    /* Override app CSS variables for dark mode */
+    html.panel-dark {
+      --white: #0f141d;
+      --black: #e5e7eb;
+      --gray1: #1f2937;
+      --gray2: #374151;
+      --gray3: #4b5563;
+      --gray4: #9ca3af;
+      --gray5: #d1d5db;
+    }
+    /* Bootstrap .modal-content has hardcoded #fff */
+    html.panel-dark .modal-content {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark .modal-header {
+      background-color: #0f141d !important;
+      border-bottom-color: #1f2937 !important;
+    }
+    html.panel-dark .modal-body {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .modal-footer {
+      background-color: #0f141d !important;
+      border-top-color: #1f2937 !important;
+    }
+    html.panel-dark .modal-body *,
+    html.panel-dark .modal-content * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .modal-content a,
+    html.panel-dark .modal-body a {
+      color: var(--accent) !important;
+    }
+    /* info-modal (app-specific React modal) uses var(--white)/var(--black) */
+    html.panel-dark .info-modal {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal *,
+    html.panel-dark .info-modal__content,
+    html.panel-dark .info-modal__content * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal a {
+      color: var(--accent) !important;
+    }
+    html.panel-dark .info-modal__button--close svg path {
+      fill: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal-backdrop {
+      background-color: rgba(0,0,0,0.7) !important;
+    }
+    /* HTML dialog element has hardcoded #fff */
+    html.panel-dark dialog {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
     }
     .modal-backdrop, .modal-backdrop.show { background-color: rgba(0,0,0,0.65) !important; }
+    /* Catch-all for #modal-root portal */
+    html.panel-dark #modal-root > *,
+    html.panel-dark #modal-root div {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark #modal-root a {
+      color: var(--accent) !important;
+    }
     /* Generic fallbacks to squash stray white blocks */
     .container-fluid, .content-block, .widget-block, .panel-block, .info-block, .card-block {
       background-color: var(--panel) !important;
@@ -201,58 +266,6 @@
     html.panel-dark .navbar-brand path {
       filter: none;
     }
-    /* NFT viewer styles */
-    #nft-viewer { display: none; }
-    #nft-viewer h3 { margin: 0 0 8px 0; color: var(--text); }
-    #nft-viewer small { color: var(--muted); }
-    #nft-viewer .nft-controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 10px;
-      align-items: center;
-    }
-    #nft-viewer input, #nft-viewer button {
-      background-color: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 6px 10px;
-      border-radius: 6px;
-    }
-    #nft-viewer button {
-      cursor: pointer;
-      background: linear-gradient(135deg, #1f2a44, #182132);
-      color: var(--text);
-    }
-    html:not(.panel-dark) #nft-viewer button {
-      background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-      color: #0f172a;
-    }
-    #nft-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 12px;
-    }
-    .nft-card {
-      background: var(--surface);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-height: 220px;
-    }
-    .nft-card img {
-      width: 100%;
-      max-height: 140px;
-      object-fit: contain;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-    }
-    .nft-error { color: #ef4444; font-size: 12px; }
     /* Modal and toast readability */
     .modal-content input,
     .modal-content input::placeholder {
@@ -307,55 +320,6 @@
       background-color: #ffffff !important;
       color: #0f172a !important;
       border-color: #cbd5e1 !important;
-    }
-    .nft-token-link {
-      cursor: pointer;
-      color: var(--accent);
-      text-decoration: underline;
-    }
-    /* NFT modal */
-    #nft-modal-overlay {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.65);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100000;
-    }
-    #nft-modal {
-      background: var(--panel);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      max-width: 540px;
-      width: 90%;
-      box-shadow: 0 12px 28px rgba(0,0,0,0.35);
-    }
-    #nft-modal img {
-      width: 100%;
-      max-height: 260px;
-      object-fit: contain;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      margin-bottom: 10px;
-    }
-    #nft-modal .nft-meta { font-size: 12px; color: var(--muted); word-break: break-all; }
-    #nft-modal .nft-actions { margin-top: 8px; text-align: right; }
-    #nft-modal .nft-actions button {
-      background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-      color: #0f172a;
-      border: 1px solid var(--border);
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    html.panel-dark #nft-modal .nft-actions button {
-      background: linear-gradient(135deg, #1f2a44, #182132);
-      color: var(--text);
-      border: 1px solid var(--border);
     }
     #theme-toggle {
       position: absolute;
@@ -444,324 +408,171 @@
   <script>
 !function(l){function e(e){for(var r,t,n=e[0],o=e[1],u=e[2],f=0,i=[];f<n.length;f++)t=n[f],Object.prototype.hasOwnProperty.call(c,t)&&c[t]&&i.push(c[t][0]),c[t]=0;for(r in o)Object.prototype.hasOwnProperty.call(o,r)&&(l[r]=o[r]);for(s&&s(e);i.length;)i.shift()();return p.push.apply(p,u||[]),a()}function a(){for(var e,r=0;r<p.length;r++){for(var t=p[r],n=!0,o=1;o<t.length;o++){var u=t[o];0!==c[u]&&(n=!1)}n&&(p.splice(r--,1),e=f(f.s=t[0]))}return e}var t={},c={1:0},p=[];function f(e){if(t[e])return t[e].exports;var r=t[e]={i:e,l:!1,exports:{}};return l[e].call(r.exports,r,r.exports,f),r.l=!0,r.exports}f.m=l,f.c=t,f.d=function(e,r,t){f.o(e,r)||Object.defineProperty(e,r,{enumerable:!0,get:t})},f.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},f.t=function(r,e){if(1&e&&(r=f(r)),8&e)return r;if(4&e&&"object"==typeof r&&r&&r.__esModule)return r;var t=Object.create(null);if(f.r(t),Object.defineProperty(t,"default",{enumerable:!0,value:r}),2&e&&"string"!=typeof r)for(var n in r)f.d(t,n,function(e){return r[e]}.bind(null,n));return t},f.n=function(e){var r=e&&e.__esModule?function(){return e.default}:function(){return e};return f.d(r,"a",r),r},f.o=function(e,r){return Object.prototype.hasOwnProperty.call(e,r)},f.p="/";var r=this["webpackJsonpergo-node-interface"]=this["webpackJsonpergo-node-interface"]||[],n=r.push.bind(r);r.push=e,r=r.slice();for(var o=0;o<r.length;o++)e(r[o]);var s=n;a()}([]);
   </script>
-  <script>
-    // Simple NFT viewer injected outside the React bundle
-    (function() {
-      function apiBase() {
-        var url = new URL(window.location.href);
-        return url.origin;
-      }
-      function getExplorerBase() {
-        var base = "";
-        try { base = localStorage.getItem("panel-explorer-base") || ""; } catch (e) {}
-        if (base && base.endsWith("/")) base = base.slice(0, -1);
-        return base;
-      }
-      function setExplorerBase(base) {
-        try { localStorage.setItem("panel-explorer-base", base || ""); } catch (e) {}
-      }
-      function askExplorerBase() {
-        var input = window.prompt("Enter explorer base URL (e.g. https://api.ergoplatform.com/)", getExplorerBase());
-        if (input) {
-          input = input.trim().replace(/\/+$/, "");
-          setExplorerBase(input);
-          return input;
-        }
-        return "";
-      }
-      function fetchJson(url, opts) {
-        return fetch(url, opts).then(function(r) {
-          if (!r.ok) throw new Error(r.status + " " + r.statusText);
-          return r.json();
-        });
-      }
-      function fetchBoxByToken(tokenId) {
-        var localUrl = apiBase() + "/blockchain/token/byId/" + encodeURIComponent(tokenId);
-        return fetchJson(localUrl).then(function(res){
-          // Normalize to explorer-like shape {items:[...]}
-          if (res && res.items) return res;
-          if (res && res.box) return {items: [res.box]};
-          if (res && res.additionalRegisters) return {items: [res]};
-          if (Array.isArray(res)) return {items: res};
-          return {items: res ? [res] : []};
-        }).catch(function() {
-          var explorerBase = getExplorerBase() || askExplorerBase();
-          if (!explorerBase) throw new Error("No explorer URL configured");
-          var url = explorerBase + "/api/v1/boxes/byTokenId/" + encodeURIComponent(tokenId);
-          return fetchJson(url);
-        });
-      }
-      function hexToBytes(hex) {
-        if (!hex) return [];
-        if (hex.startsWith("0x")) hex = hex.slice(2);
-        var arr = [];
-        for (var i = 0; i < hex.length; i += 2) {
-          var b = parseInt(hex.substr(i, 2), 16);
-          if (!isNaN(b)) arr.push(b);
-        }
-        return arr;
-      }
-      function bytesToText(bytes) {
-        try { return decodeURIComponent(escape(String.fromCharCode.apply(null, bytes))); }
-        catch (e) { return bytes.map(function(b){return (b>=32&&b<=126)?String.fromCharCode(b):"";}).join(""); }
-      }
-      function decodeRegister(reg) {
-        if (!reg) return "";
-        if (reg.serializedValue) reg = reg.serializedValue;
-        if (typeof reg !== "string") return "";
-        var bytes = hexToBytes(reg);
-        if (!bytes.length) return "";
-        if (bytes[0] === 0x0e || bytes[0] === 0x0c) bytes = bytes.slice(1);
-        if (bytes.length > 1 && bytes[0] === bytes.length - 1) bytes = bytes.slice(1);
-        return bytesToText(bytes).trim();
-      }
-      function extractCid(str) {
-        if (!str) return "";
-        var cid = "";
-        var lower = str.toLowerCase();
-        if (lower.indexOf("ipfs://") >= 0) {
-          cid = str.slice(lower.indexOf("ipfs://") + 7).trim();
-          while (cid.startsWith("/")) cid = cid.slice(1);
-        }
-        if (!cid && /^[A-Za-z0-9]{46,}$/.test(str)) cid = str;
-        return cid;
-      }
-      function createEl(tag, attrs, children) {
-        var el = document.createElement(tag);
-        if (attrs) Object.keys(attrs).forEach(function(k) {
-          if (k === "class") el.className = attrs[k]; else el.setAttribute(k, attrs[k]);
-        });
-        (children || []).forEach(function(c) {
-          if (typeof c === "string") el.appendChild(document.createTextNode(c));
-          else if (c) el.appendChild(c);
-        });
-        return el;
-      }
-      function renderError(target, msg) {
-        target.innerHTML = "";
-        target.appendChild(createEl("div", {class:"nft-error"}, [msg]));
-      }
-      function parseTokenIds(data) {
-        if (!data) return [];
-        if (Array.isArray(data)) return data.map(function(t){return {id:t.tokenId || t.id, name:t.name};}).filter(function(t){return t.id;});
-        if (data.tokens && Array.isArray(data.tokens)) return data.tokens.map(function(t){return {id:t.tokenId || t.id, name:t.name};}).filter(function(t){return t.id;});
-        if (data.confirmed && Array.isArray(data.confirmed)) return data.confirmed.map(function(t){return {id:t.tokenId || t.id, name:t.name};}).filter(function(t){return t.id;});
-        if (data.balances && Array.isArray(data.balances)) return data.balances.map(function(t){return {id:t.tokenId || t.id, name:t.name};}).filter(function(t){return t.id;});
-        return [];
-      }
-      function buildViewer() {
-        var container = createEl("div", {id:"nft-viewer"});
-        var header = createEl("h3", null, ["NFT Viewer"]);
-        var desc = createEl("small", null, ["Fetches wallet tokens via /wallet/balances and shows NFT images via ipfs.io/ipfs/<cid>."]);
-        var controls = createEl("div", {class:"nft-controls"});
-        var apiKeyInput = createEl("input", {type:"password", placeholder:"API key (if required)", value: localStorage.getItem("panel-api-key") || ""});
-        var loadBtn = createEl("button", null, ["Load NFTs"]);
-        var status = createEl("div", {class:"muted", style:"font-size:12px; color: var(--muted);" });
-        var grid = createEl("div", {id:"nft-grid"});
-        controls.appendChild(apiKeyInput);
-        controls.appendChild(loadBtn);
-        controls.appendChild(status);
-        container.appendChild(header);
-        container.appendChild(desc);
-        container.appendChild(controls);
-        container.appendChild(grid);
-
-        function setStatus(msg) { status.textContent = msg || ""; }
-
-        loadBtn.addEventListener("click", function() {
-          var key = apiKeyInput.value.trim();
-          localStorage.setItem("panel-api-key", key);
-          setStatus("Loading wallet balances...");
-          grid.innerHTML = "";
-          fetchJson(apiBase() + "/wallet/balances", {
-            headers: {
-              "accept": "application/json",
-              "api_key": key || ""
-            }
-          }).then(function(data) {
-            var tokens = parseTokenIds(data);
-            if (!tokens.length) {
-              renderError(grid, "No tokens found in wallet.");
-              setStatus("Done");
-              return;
-            }
-            setStatus("Found " + tokens.length + " tokens. Fetching metadata...");
-            return Promise.all(tokens.map(function(tok) {
-              var url = "https://api.ergoplatform.com/api/v1/boxes/byTokenId/" + encodeURIComponent(tok.id);
-              return fetchJson(url).then(function(res) {
-                var items = res && res.items ? res.items : [];
-                var metaText = "";
-                var cid = "";
-                if (items.length) {
-                  var regs = items[0].additionalRegisters || {};
-                  var fields = [regs.R9, regs.R8, regs.R7];
-                  for (var i = 0; i < fields.length; i++) {
-                    var txt = decodeRegister(fields[i]);
-                    if (txt && txt.length > metaText.length) metaText = txt;
-                    var candidate = extractCid(txt);
-                    if (candidate) { cid = candidate; break; }
-                  }
-                }
-                return {
-                  id: tok.id,
-                  name: tok.name || "",
-                  cid: cid,
-                  meta: metaText
-                };
-              }).catch(function(e) {
-                return { id: tok.id, name: tok.name || "", error: e.message };
-              });
-            })).then(function(results) {
-              grid.innerHTML = "";
-              results.forEach(function(res) {
-                var card = createEl("div", {class:"nft-card"});
-                card.appendChild(createEl("div", null, [res.name || "Unnamed NFT"]));
-                card.appendChild(createEl("small", null, [res.id]));
-                if (res.cid) {
-                  var img = createEl("img", {src: "https://ipfs.io/ipfs/" + res.cid, alt: res.name || res.id});
-                  card.appendChild(img);
-                } else if (res.error) {
-                  card.appendChild(createEl("div", {class:"nft-error"}, ["Error: " + res.error]));
-                } else {
-                  card.appendChild(createEl("div", {class:"nft-error"}, ["No IPFS CID found in registers R7/R8/R9."]));
-                }
-                if (res.meta) card.appendChild(createEl("small", null, ["Meta: " + res.meta]));
-                grid.appendChild(card);
-              });
-              setStatus("Done");
-            });
-          }).catch(function(err) {
-            renderError(grid, "Wallet fetch failed: " + err.message);
-            setStatus("Error");
-          });
-        });
-
-        return container;
-      }
-
-      // Inline asset click handler → fetch metadata and show modal
-      function truncateToken(id) {
-        if (!id || id.length <= 16) return id || "";
-        return id.slice(0, 10) + "..." + id.slice(-6);
-      }
-
-      function showNftModal(tokenId, content) {
-        var overlay = document.getElementById("nft-modal-overlay");
-        var modal = document.getElementById("nft-modal");
-        if (!overlay) {
-          overlay = document.createElement("div"); overlay.id = "nft-modal-overlay";
-          modal = document.createElement("div"); modal.id = "nft-modal";
-          overlay.appendChild(modal);
-          document.body.appendChild(overlay);
-        }
-        modal.innerHTML = "";
-        var h = document.createElement("h4");
-        h.textContent = "Token: " + truncateToken(tokenId);
-        var full = document.createElement("div");
-        full.className = "nft-meta";
-        full.textContent = tokenId;
-        modal.appendChild(h);
-        modal.appendChild(full);
-        if (content.name) modal.appendChild(createEl("div", {class:"nft-meta"}, ["Name: ", content.name]));
-        if (content.desc) modal.appendChild(createEl("div", {class:"nft-meta"}, ["Description: ", content.desc]));
-        if (content.img) { var img = document.createElement("img"); img.src = content.img; img.alt = tokenId; modal.appendChild(img); }
-        if (content.meta) modal.appendChild(createEl("div", {class:"nft-meta"}, ["Metadata: ", content.meta]));
-        if (content.cid) modal.appendChild(createEl("div", {class:"nft-meta"}, ["CID: ", content.cid]));
-        var actions = document.createElement("div"); actions.className = "nft-actions";
-        var close = document.createElement("button"); close.textContent = "Close"; close.onclick = function(){ overlay.style.display = "none"; };
-        actions.appendChild(close); modal.appendChild(actions);
-        overlay.style.display = "flex";
-      }
-
-      function parseRegistersForMeta(regs) {
-        var metaText = "";
-        var cid = "";
-        var name = "";
-        var desc = "";
-        var fields = [regs && regs.R9, regs && regs.R8, regs && regs.R7, regs && regs.R6, regs && regs.R5, regs && regs.R4];
-        fields.forEach(function(val, idx){
-          if (!val) return;
-          var txt = "";
-          if (val.renderedValue) {
-            txt = /^[0-9a-fA-F]+$/.test(val.renderedValue) ? decodeRegister(val.serializedValue || val.renderedValue) : val.renderedValue;
-          }
-          if (!txt) txt = decodeRegister(val.serializedValue) || decodeRegister(val);
-          if (idx === 5 && txt && !name) name = txt; // R4 often name
-          if (idx === 4 && txt && !desc) desc = txt; // R5 often description
-          if (txt && txt.length > metaText.length) metaText = txt;
-          if (!cid && txt) {
-            var lower = txt.toLowerCase();
-            if (lower.indexOf("ipfs://") >= 0) {
-              var tmp = txt.slice(lower.indexOf("ipfs://") + 7).trim();
-              while (tmp.startsWith("/")) tmp = tmp.slice(1);
-              cid = tmp;
-            } else if (/^[A-Za-z0-9]{46,}$/.test(txt)) {
-              cid = txt;
-            }
-          }
-        });
-        return {meta: metaText, cid: cid, name: name, desc: desc};
-      }
-
-      function attachAssetClicks() {
-        if (!/wallet/i.test(window.location.pathname)) return;
-        var tds = document.querySelectorAll("td");
-        tds.forEach(function(td){
-          if (td.dataset.nftHook) return;
-         var matches = td.textContent.match(/[0-9a-fA-F]{64}/g);
-          if (matches && matches.length) {
-            td.dataset.nftHook = "1";
-            var html = td.innerHTML;
-            matches.forEach(function(tok){
-              // wrap only plain text occurrences, avoid messing with existing tags
-              html = html.replace(tok, '<span class="nft-token-link" data-token="'+tok+'">'+tok+'</span>');
-            });
-            td.innerHTML = html;
-            td.querySelectorAll(".nft-token-link").forEach(function(link){
-              link.addEventListener("click", function(e){
-                e.preventDefault();
-                e.stopPropagation();
-                var tokenId = this.dataset.token;
-                showNftModal(tokenId, {meta:"Loading..."});
-                fetchBoxByToken(tokenId)
-                  .then(function(res){
-                    var items = res && res.items ? res.items : [];
-                    var meta = ""; var cid = ""; var name = ""; var desc = "";
-                    if (items.length) {
-                      var parsed = parseRegistersForMeta(items[0].additionalRegisters || {});
-                      meta = parsed.meta; cid = parsed.cid; name = parsed.name; desc = parsed.desc;
-                      if (!name && items[0].assets && items[0].assets.length) {
-                        var asset = items[0].assets.find(function(a){return a.tokenId === tokenId;}) || items[0].assets[0];
-                        if (asset && asset.name) name = asset.name;
-                      }
-                      if (!desc && meta) desc = meta;
-                    }
-                    var img = cid ? ("https://ipfs.io/ipfs/" + cid) : "";
-                    showNftModal(tokenId, {
-                      meta: meta || "No metadata found",
-                      cid: cid,
-                      img: img,
-                      name: name,
-                      desc: desc
-                    });
-                  })
-                  .catch(function(err){
-                    showNftModal(tokenId, {meta: "Metadata fetch failed: " + err.message});
-                  });
-              });
-            });
-          }
-        });
-      }
-
-      (function(){
-        attachAssetClicks();
-        var obs = new MutationObserver(function(){ attachAssetClicks(); });
-        obs.observe(document.body, {childList: true, subtree: true});
-      })();
-    })();
-  </script>
   <script src="/static/js/2.82289ad5.chunk.js"></script>
   <script src="/static/js/main.4a62f34b.chunk.js"></script>
+  <style id="dark-modal-fix">
+    /* Last-loaded overrides — wins cascade over all chunk CSS */
+    html.panel-dark {
+      --white: #0f141d !important;
+      --black: #e5e7eb !important;
+    }
+    /* Bootstrap modal — shared styling for all modals */
+    html.panel-dark .modal-content {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #1f2937 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
+      overflow: hidden !important;
+    }
+    html.panel-dark .modal-header {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      border-bottom: 1px solid #1f2937 !important;
+      padding: 1.2rem 1.5rem !important;
+    }
+    html.panel-dark .modal-body {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      color: #e5e7eb !important;
+      padding: 1.2rem 1.5rem !important;
+    }
+    html.panel-dark .modal-footer {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      border-top: 1px solid #1f2937 !important;
+      padding: 1rem 1.5rem !important;
+    }
+    html.panel-dark .modal-content *,
+    html.panel-dark .modal-body *,
+    html.panel-dark .modal-header *,
+    html.panel-dark .modal-footer * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .modal-content a,
+    html.panel-dark .modal-body a {
+      color: #66d9ef !important;
+    }
+    /* Modal title styling */
+    html.panel-dark .modal-title,
+    html.panel-dark .modal-styling-title,
+    html.panel-dark .modal-header h4,
+    html.panel-dark .modal-header h5 {
+      color: #e5e7eb !important;
+      font-weight: 600 !important;
+    }
+    /* Modal inputs (API key, wallet password) */
+    html.panel-dark .modal-content input,
+    html.panel-dark .modal-content input[type="text"],
+    html.panel-dark .modal-content input[type="password"],
+    html.panel-dark .modal-body input,
+    html.panel-dark .password-input,
+    html.panel-dark .wallet-password-input {
+      background-color: #0b0d11 !important;
+      background: #0b0d11 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #374151 !important;
+      border-radius: 8px !important;
+      padding: 8px 12px !important;
+    }
+    html.panel-dark .modal-content input::placeholder,
+    html.panel-dark .modal-body input::placeholder {
+      color: #6b7280 !important;
+    }
+    /* Modal buttons */
+    html.panel-dark .modal-footer .btn,
+    html.panel-dark .modal-footer button,
+    html.panel-dark .modal-content .btn,
+    html.panel-dark .modal-body button {
+      background: linear-gradient(135deg, #1f2a44, #182132) !important;
+      color: #e5e7eb !important;
+      border: 1px solid #374151 !important;
+      border-radius: 8px !important;
+      padding: 6px 16px !important;
+      cursor: pointer !important;
+    }
+    html.panel-dark .modal-footer .btn:hover,
+    html.panel-dark .modal-footer button:hover {
+      background: linear-gradient(135deg, #2a3654, #1e2940) !important;
+    }
+    /* Close button (X) in modals */
+    html.panel-dark .modal-header .close,
+    html.panel-dark .modal-header button.close,
+    html.panel-dark .modal__button--close {
+      color: #9ca3af !important;
+      opacity: 0.9 !important;
+      text-shadow: none !important;
+      background: none !important;
+      border: none !important;
+    }
+    html.panel-dark .modal-header .close:hover {
+      color: #e5e7eb !important;
+    }
+    /* info-modal (success/congratulations/burn modals) */
+    html.panel-dark .info-modal {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #1f2937 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
+    }
+    html.panel-dark .info-modal * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal a {
+      color: #66d9ef !important;
+    }
+    html.panel-dark .info-modal__button--close svg path {
+      fill: #9ca3af !important;
+    }
+    html.panel-dark .info-modal__button--close:hover svg path {
+      fill: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal button,
+    html.panel-dark .info-modal .btn {
+      background: linear-gradient(135deg, #1f2a44, #182132) !important;
+      color: #e5e7eb !important;
+      border: 1px solid #374151 !important;
+      border-radius: 8px !important;
+    }
+    /* HTML dialog element */
+    html.panel-dark dialog {
+      background-color: #111827 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #1f2937 !important;
+      border-radius: 16px !important;
+    }
+    /* Wallet table dark mode */
+    html.panel-dark .wallet-table {
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark .wallet-table__header {
+      background: #0f141d !important;
+      border-bottom-color: #1f2937 !important;
+    }
+    html.panel-dark .wallet-table__item {
+      background: #111827 !important;
+    }
+    html.panel-dark .wallet-table__title,
+    html.panel-dark .wallet-table-item-body,
+    html.panel-dark .wallet-table-item-header__title {
+      color: #e5e7eb !important;
+    }
+    /* #modal-root catch-all */
+    html.panel-dark #modal-root > *,
+    html.panel-dark #modal-root div {
+      background-color: #111827 !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark #modal-root a {
+      color: #66d9ef !important;
+    }
+    html.panel-dark .modal-backdrop.show {
+      opacity: 0.7 !important;
+    }
+  </style>
 </body>
 </html>

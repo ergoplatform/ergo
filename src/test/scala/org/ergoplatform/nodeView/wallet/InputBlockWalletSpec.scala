@@ -1,13 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
-import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.scalatest.concurrent.Eventually
-import scorex.util.ModifierId
 
 import scala.concurrent.duration._
 
@@ -179,9 +175,6 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       val genesisBlock = makeGenesisBlock(pubkey, Seq.empty)
       applyBlock(genesisBlock) shouldBe 'success
 
-      val balanceBefore = eventually {
-        await(wallet.balancesWithUnconfirmed)
-      }
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
 
@@ -322,14 +315,6 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
         await(wallet.generateTransaction(req)).get
       }
-
-      // Create input block transactions data
-      val inputBlockId: ModifierId = tx.id
-      val txData = InputBlockTransactionsData(
-        inputBlockId = inputBlockId,
-        transactions = Seq(tx),
-        sizeOpt = None
-      )
 
       // Verify transaction outputs are tracked after scan
       wallet.scanInputBlock(Seq(tx))

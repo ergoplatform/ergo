@@ -208,4 +208,58 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     p2shTreeV1.bytes.head shouldEqual 0
   }
 
+  it should "handle tree version 2 for P2SH address" in {
+    val suffix = "/p2shAddress"
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 2.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
+
+      // P2SH should always have version 0 regardless of treeVersion parameter
+      val tree = addressEncoder.fromString(addressStr).get.script
+      tree.bytes.head shouldEqual 0
+    }
+  }
+
+  it should "generate consistent addresses for same script and version" in {
+    val suffix = "/p2sAddress"
+
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 1.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr1 = responseAs[Json].hcursor.downField("address").as[String].right.get
+
+      Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 1.asJson)) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        val addressStr2 = responseAs[Json].hcursor.downField("address").as[String].right.get
+        addressStr1 shouldEqual addressStr2
+      }
+    }
+  }
+
+  it should "generate different addresses for different tree versions" in {
+    val suffix = "/p2sAddress"
+
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 0.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr0 = responseAs[Json].hcursor.downField("address").as[String].right.get
+
+      Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 1.asJson)) ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        val addressStr1 = responseAs[Json].hcursor.downField("address").as[String].right.get
+        addressStr0 should not equal addressStr1
+      }
+    }
+  }
+
+  it should "handle P2SH with tree version 1 (should still use version 0)" in {
+    val suffix = "/p2shAddress"
+    Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 1.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      val tree = addressEncoder.fromString(addressStr).get.script
+      // P2SH always uses version 0
+      tree.bytes.head shouldEqual 0
+    }
+  }
+
 }

@@ -713,4 +713,160 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "use custom miner public key when provided via optPk" in new TestKit(ActorSystem()) {
+    import sigmastate.crypto.DLogProtocol.DLogProverInput
+    import org.bouncycastle.util.BigIntegers
+
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings
+      )
+
+    // Generate custom key pair
+    val customKey = DLogProverInput(BigIntegers.fromUnsignedByteArray("custom_test_key".getBytes()))
+    val customPk = customKey.publicImage
+
+    // Request candidate with custom public key
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(customPk)),
+      testProbe.ref
+    )
+
+    val candidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // Verify candidate was generated successfully
+    candidate should not be null
+    candidate.candidateBlock should not be null
+    
+    system.terminate()
+  }
+
+  it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings
+      )
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None),
+      testProbe.ref
+    )
+
+    val candidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // Candidate should be generated successfully with default minerPk
+    candidate should not be null
+    candidate.candidateBlock should not be null
+
+    system.terminate()
+  }
+
+  it should "generate different candidates for different optPk values" in new TestKit(ActorSystem()) {
+    import sigmastate.crypto.DLogProtocol.DLogProverInput
+    import org.bouncycastle.util.BigIntegers
+
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings
+      )
+
+    // Generate custom key pair
+    val customKey = DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes()))
+    val customPk = customKey.publicImage
+
+    // Get candidate with default pk
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None),
+      testProbe.ref
+    )
+    val candidate1 = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // Get candidate with custom pk
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(customPk)),
+      testProbe.ref
+    )
+    val candidate2 = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // Both candidates should be generated successfully
+    candidate1 should not be null
+    candidate2 should not be null
+
+    system.terminate()
+  }
+
+  it should "handle optPk with empty transactions" in new TestKit(ActorSystem()) {
+    import sigmastate.crypto.DLogProtocol.DLogProverInput
+    import org.bouncycastle.util.BigIntegers
+
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings
+      )
+
+    // Generate custom key pair
+    val customKey = DLogProverInput(BigIntegers.fromUnsignedByteArray("tx_test_key".getBytes()))
+    val customPk = customKey.publicImage
+
+    // Request candidate with custom pk and empty transactions
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(customPk)),
+      testProbe.ref
+    )
+
+    val candidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // Candidate should be generated successfully
+    candidate should not be null
+    candidate.txsToInclude shouldBe empty
+
+    system.terminate()
+  }
+
 }

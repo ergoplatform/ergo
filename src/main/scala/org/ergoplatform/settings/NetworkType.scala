@@ -13,7 +13,10 @@ object NetworkType {
 
   def all: Seq[NetworkType] = Seq(MainNet, TestNet, DevNet)
 
-  def fromString(name: String): Option[NetworkType] = all.find(_.verboseName == name)
+  def fromString(name: String): Option[NetworkType] = {
+    val allIncludingSynthetic: Seq[NetworkType] = all ++ Seq(DevNet60)
+    allIncludingSynthetic.find(_.verboseName == name)
+  }
 
   case object MainNet extends NetworkType {
     override val verboseName: String = "mainnet"

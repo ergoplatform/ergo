@@ -4,7 +4,8 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, Json}
+import io.circe.Encoder
+import io.circe.Json
 import org.bouncycastle.util.encoders.Hex
 import org.ergoplatform.http.api.requests.MiningRequest
 import org.ergoplatform.mining.CandidateGenerator.Candidate
@@ -27,12 +28,7 @@ case class MiningApiRoute(miner: ActorRef,
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
-  implicit val miningRequestDecoder: Decoder[MiningRequest] = { cursor =>
-    for {
-      txs <- cursor.downField("txs").as[Seq[ErgoTransaction]]
-      pk <- cursor.downField("pk").as[String]
-    } yield MiningRequest(txs, pk)
-  }
+
   override val route: Route = pathPrefix("mining") {
     candidateR ~
       candidateWithTxsR ~

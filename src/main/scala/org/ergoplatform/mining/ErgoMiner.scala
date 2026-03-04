@@ -117,25 +117,40 @@ class ErgoMiner(
     b.isNew(ergoSettings.chainSettings.blockInterval * 2)
   }
 
+  /** Check if blockchain is synced (headers height is within 2 blocks of full blocks height) */
+  private def isBlockchainSynced(headersHeight: Int, fullBlockHeight: Int): Boolean = {
+    headersHeight < fullBlockHeight + 2
+  }
+
   /** Let's wait for a signal to start mining, either from ErgoApp or when a latest blocks get applied to blockchain */
   def starting(minerState: MinerState): Receive = {
     case StartMining
         if minerState.secretKeyOpt.isDefined || ergoSettings.nodeSettings.useExternalMiner =>
-      if (!ergoSettings.nodeSettings.useExternalMiner && ergoSettings.nodeSettings.internalMinersCount != 0) {
-        log.info(
-          s"Starting ${ergoSettings.nodeSettings.internalMinersCount} native miner(s)"
-        )
-        (1 to ergoSettings.nodeSettings.internalMinersCount) foreach { _ =>
-          ErgoMiningThread(
-            ergoSettings,
-            minerState.candidateGeneratorRef,
-            minerState.secretKeyOpt.get.w
-          )(context)
+      // Check if blockchain is synced before starting mining
+      viewHolderRef ! GetDataFromCurrentView[DigestState, Unit] { v =>
+        val headersHeight = v.history.headersHeight
+        val fullBlockHeight = v.history.fullBlockHeight
+        if (isBlockchainSynced(headersHeight, fullBlockHeight)) {
+          log.info(s"Blockchain is synced (headers: $headersHeight, full blocks: $fullBlockHeight), starting mining")
+          if (!ergoSettings.nodeSettings.useExternalMiner && ergoSettings.nodeSettings.internalMinersCount != 0) {
+            log.info(
+              s"Starting ${ergoSettings.nodeSettings.internalMinersCount} native miner(s)"
+            )
+            (1 to ergoSettings.nodeSettings.internalMinersCount) foreach { _ =>
+              ErgoMiningThread(
+                ergoSettings,
+                minerState.candidateGeneratorRef,
+                minerState.secretKeyOpt.get.w
+              )(context)
+            }
+          }
+          context.system.eventStream
+            .unsubscribe(self, classOf[FullBlockApplied])
+          context.become(started(minerState))
+        } else {
+          log.info(s"Blockchain not synced yet (headers: $headersHeight, full blocks: $fullBlockHeight), waiting for sync")
         }
       }
-      context.system.eventStream
-        .unsubscribe(self, classOf[FullBlockApplied])
-      context.become(started(minerState))
 
     case StartMining =>
       // unexpected, we made sure that either external mining is used or secret key is set at this state for internal mining

@@ -210,7 +210,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Run mining immediately, i.e. without syncing if mining = true and offlineGeneration = true
   // Useful for local blockchains (devnet)
   if (ergoSettings.nodeSettings.mining && ergoSettings.nodeSettings.offlineGeneration) {
-    require(minerRefOpt.isDefined, "Miner does not exist but mining = true in config")
+    require(minerRefOpt.isDefined, "Miner thread does not exist but mining = true in config")
     log.info(s"Starting mining with offlineGeneration")
     minerRefOpt.get ! StartMining
   }

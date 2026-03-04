@@ -148,4 +148,64 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
   }
 
+  it should "generate addresses with different tree versions" in {
+    val p2sSuffix = "/p2sAddress"
+    val p2shSuffix = "/p2shAddress"
+
+    var p2sAddressV0: String = ""
+    var p2shAddressV0: String = ""
+    var p2sAddressV1: String = ""
+    var p2shAddressV1: String = ""
+
+    // Test with tree version 0
+    Post(prefix + p2sSuffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
+      p2sAddressV0 = addressStr
+    }
+
+    Post(prefix + p2shSuffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
+      p2shAddressV0 = addressStr
+    }
+
+    // Test with tree version 1
+    Post(prefix + p2sSuffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 1.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SAddress.addressTypePrefix
+      p2sAddressV1 = addressStr
+    }
+
+    Post(prefix + p2shSuffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 1.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val addressStr = responseAs[Json].hcursor.downField("address").as[String].right.get
+      addressEncoder.fromString(addressStr).get.addressTypePrefix shouldEqual Pay2SHAddress.addressTypePrefix
+      p2shAddressV1 = addressStr
+    }
+
+    // Get the actual Ergo trees and verify they have different version bytes
+    val p2sTreeV0 = addressEncoder.fromString(p2sAddressV0).get.script
+    val p2sTreeV1 = addressEncoder.fromString(p2sAddressV1).get.script
+    val p2shTreeV0 = addressEncoder.fromString(p2shAddressV0).get.script
+    val p2shTreeV1 = addressEncoder.fromString(p2shAddressV1).get.script
+
+    // Check that the trees have different version bytes
+    p2sTreeV0.bytes should not equal p2sTreeV1.bytes
+    p2shTreeV0.bytes shouldBe p2shTreeV1.bytes
+
+    // Specifically check the version byte (first byte of ErgoTree)
+    p2sTreeV0.bytes.head should not equal p2sTreeV1.bytes.head
+    p2shTreeV0.bytes.head shouldBe p2shTreeV1.bytes.head
+
+    // Verify the actual version bytes match what we requested
+    p2sTreeV0.bytes.head shouldEqual 16
+    p2sTreeV1.bytes.head shouldEqual 25
+    p2shTreeV0.bytes.head shouldEqual 0
+    p2shTreeV1.bytes.head shouldEqual 0
+  }
+
 }

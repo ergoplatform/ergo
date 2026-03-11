@@ -3,11 +3,11 @@ package org.ergoplatform.mining
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import cats.syntax.either._
 import org.ergoplatform.OrderingSolutionFound
 
 class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
@@ -16,6 +16,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
 
   property("generated solution should be valid") {
     val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
     forAll(invalidHeaderGen,
             Gen.choose(100, 120),
             Gen.choose[Byte](1, 2)) { (inHeader, difficulty, ver) =>
@@ -27,7 +28,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
       val b = pow.getB(h.nBits)
       val hbs = Ints.toByteArray(h.height)
       val N = pow.calcN(h)
-      pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000) match {
+      pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000, defaultParams) match {
         case OrderingSolutionFound(as) =>
           val nh = h.copy(powSolution = as)
           pow.validate(nh) shouldBe 'success
@@ -37,7 +38,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
             require(HeaderSerializer.bytesWithoutPow(h).last == 0)
             val msg2 = Blake2b256(HeaderSerializer.bytesWithoutPow(h).dropRight(1))
 
-            pow.checkNonces(ver, hbs, msg2, sk, x, b, N, 0, 1000) match {
+            pow.checkNonces(ver, hbs, msg2, sk, x, b, N, 0, 1000, defaultParams) match {
               case OrderingSolutionFound(as2) =>
                 val nh2 = h.copy(powSolution = as2)
                 pow.validate(nh2) shouldBe 'failure

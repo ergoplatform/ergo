@@ -146,7 +146,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val block = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -201,7 +201,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -250,7 +250,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         // solve a block
 
         val result = powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -312,7 +312,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -362,7 +362,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -425,7 +425,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -485,7 +485,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -552,7 +552,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb
@@ -612,7 +612,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
         val result = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
         val block = result match {
           case org.ergoplatform.OrderingBlockFound(h) => h
           case org.ergoplatform.InputBlockFound(fb) => fb

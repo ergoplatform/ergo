@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import org.ergoplatform.settings.Parameters
 import org.ergoplatform.{AutolykosSolution, OrderingBlockHeaderFound, ProveBlockResult}
 import org.ergoplatform.modifiers.history.header.Header
 import scorex.crypto.authds.ADDigest
@@ -26,7 +27,8 @@ class DefaultFakePowScheme(k: Int, n: Int) extends AutolykosPowScheme(k, n) {
                      votes: Array[Byte],
                      sk: PrivateKey,
                      minNonce: Long = Long.MinValue,
-                     maxNonce: Long = Long.MaxValue): ProveBlockResult = {
+                     maxNonce: Long = Long.MaxValue,
+                     parameters: Parameters): ProveBlockResult = {
     val (parentId, height) = AutolykosPowScheme.derivedHeaderFields(parentOpt)
     val pk: EcPointType = genPk(sk)
     val w: EcPointType = genPk(Random.nextLong())

@@ -7,6 +7,7 @@ import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.ErgoTestHelpers
 import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 
@@ -80,7 +81,8 @@ object MinerBench extends App with ErgoTestHelpers {
       Seq.empty,
       Seq.empty
     )
-    val newHeader = pow.proveCandidate(candidate, sk)
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+    val newHeader = pow.proveCandidate(candidate, sk, Long.MinValue, Long.MaxValue, defaultParams)
       .asInstanceOf[OrderingBlockFound]  // todo: fix
       .fb
       .header

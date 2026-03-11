@@ -4,7 +4,7 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.{InputSolutionFound, OrderingSolutionFound}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.settings.Algos
+import org.ergoplatform.settings.{Algos, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.subblocks.InputBlockInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
@@ -18,6 +18,7 @@ import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 class InputBlockInfoSpec extends ErgoCorePropertyTest {
 
   private val powScheme = new AutolykosPowScheme(32, 26)
+  private val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
   // Helper to create valid Merkle proof for input block fields
   private def createValidMerkleProof(
@@ -74,11 +75,11 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
         val hbs = Ints.toByteArray(h.height)
         val N = powScheme.calcN(h)
 
-        powScheme.checkNonces(2, hbs, msg, sk, x, b, N, 0, 10000) match {
+        powScheme.checkNonces(2, hbs, msg, sk, x, b, N, 0, 10000, defaultParams) match {
           case InputSolutionFound(as) =>
             // Found valid input block solution
             val inputBlockHeader = h.copy(powSolution = as)
-            
+
             val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
             val merkleProof = createValidMerkleProof(
               prevInputBlockId,
@@ -97,7 +98,7 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
             )
 
             // Test PoW validity on the original header (before extension root change)
-            powScheme.checkInputBlockPoW(inputBlockHeader) shouldBe true
+            powScheme.checkInputBlockPoW(inputBlockHeader, defaultParams) shouldBe true
             
             val inputBlockFields = new InputBlockFields(
               prevInputBlockId,

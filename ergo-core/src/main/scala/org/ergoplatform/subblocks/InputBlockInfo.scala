@@ -4,7 +4,7 @@ import org.ergoplatform.mining.{AutolykosPowScheme, InputBlockFields}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.serialization.ErgoSerializer
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, Parameters}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.{Blake2b256, CryptographicHash, Digest32}
@@ -28,10 +28,10 @@ case class InputBlockInfo(version: Byte,
 
   lazy val id: ModifierId = header.id
 
-  def valid(powScheme: AutolykosPowScheme): Boolean = {
+  def valid(powScheme: AutolykosPowScheme, parameters: Parameters): Boolean = {
     // todo: check difficulty
 
-    val powValid = powScheme.checkInputBlockPoW(header)
+    val powValid = powScheme.checkInputBlockPoW(header, parameters)
     val extValid = inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
 
     if (!powValid) {

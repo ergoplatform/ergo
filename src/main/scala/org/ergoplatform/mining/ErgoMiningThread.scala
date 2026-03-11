@@ -4,7 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
 import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -46,9 +46,9 @@ class ErgoMiningThread(
     log.info(s"Stopping miner thread: ${self.path.name}")
 
   override def receive: Receive = {
-    case StatusReply.Success(Candidate(candidateBlock, _, _)) =>
+    case StatusReply.Success(Candidate(candidateBlock, _, _, parameters)) =>
       log.info(s"Initiating block mining")
-      context.become(mining(nonce = 0, candidateBlock, solvedBlocksCount = 0))
+      context.become(mining(nonce = 0, candidateBlock, parameters, solvedBlocksCount = 0))
       self ! MineCmd
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
@@ -57,24 +57,25 @@ class ErgoMiningThread(
   def mining(
     nonce: Int,
     candidateBlock: CandidateBlock,
+    parameters: Parameters,
     solvedBlocksCount: Int
   ): Receive = {
-    case StatusReply.Success(Candidate(cb, _, _)) =>
+    case StatusReply.Success(Candidate(cb, _, _, newParameters)) =>
       // if we get new candidate instead of a cached one, mine it
       if (cb.timestamp != candidateBlock.timestamp) {
-        context.become(mining(nonce = 0, cb, solvedBlocksCount))
+        context.become(mining(nonce = 0, cb, newParameters, solvedBlocksCount))
         self ! MineCmd
       }
     case StatusReply.Error(ex) =>
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
-      context.become(mining(nonce + 1, candidateBlock, solvedBlocksCount))
+      context.become(mining(nonce + 1, candidateBlock, parameters, solvedBlocksCount))
       self ! MineCmd
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
-      context.become(mining(nonce, candidateBlock, solvedBlocksCount + 1))
+      context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount + 1))
     case MineCmd =>
       val lastNonceToCheck = nonce + NonceStep
-      powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck) match {
+      powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
           log.info(s"Found solution for ordering block, sending it for validation")
           candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
@@ -83,7 +84,7 @@ class ErgoMiningThread(
           candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
-          context.become(mining(lastNonceToCheck, candidateBlock, solvedBlocksCount))
+          context.become(mining(lastNonceToCheck, candidateBlock, parameters, solvedBlocksCount))
           self ! MineCmd
         case _ =>
           //todo : rework ProveBlockResult hierarchy to avoid this branch

@@ -12,6 +12,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState, UtxoStateReader}
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
 import org.ergoplatform.core.idToVersion
@@ -210,8 +211,9 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   @tailrec
   private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
-    pow.proveCandidate(candidate, defaultProver.hdKeys.head.privateInput.w) match {
+    pow.proveCandidate(candidate, defaultProver.hdKeys.head.privateInput.w, Long.MinValue, Long.MaxValue, defaultParams) match {
       case OrderingBlockFound(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt

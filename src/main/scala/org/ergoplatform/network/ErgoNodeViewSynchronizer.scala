@@ -1393,7 +1393,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def processInputBlock(inputBlockInfo: InputBlockInfo,
                         hr: ErgoHistoryReader,
                         mp: ErgoMemPoolReader,
-                        remote: ConnectedPeer): Unit = {
+                        remote: ConnectedPeer,
+                        usrOpt: Option[UtxoStateReader]): Unit = {
 
     // Input blocks are only useful when nearly synced (within 2 blocks)
     // If we're far behind, ignore them and continue with normal header/block sync
@@ -1409,7 +1410,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       val powScheme = settings.chainSettings.powScheme
-      if (inputBlockInfo.valid(powScheme)) { // check PoW / Merkle proofs before processing todo: check diff
+      // todo : for digest mode, input-blocks validation is skipped here, however, in digest mode they
+      //  should not be broadcasted to digest mode peers and accepted by them at all
+      val valid = usrOpt
+        .map(_.stateContext.currentParameters)
+        .map(ps => inputBlockInfo.valid(powScheme, ps))
+        .getOrElse(true)
+      if (valid) { // check PoW / Merkle proofs before processing todo: check diff
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block
         val weakTxIdsOpt = inputBlockInfo.weakTxIds
 
@@ -2240,7 +2247,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       processNipopowProof(proofBytes, hr, remote)
     // Sub-blocks related messages
     case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockInfo, remote) =>
-      processInputBlock(subBlockInfo, hr, mp, remote)
+      processInputBlock(subBlockInfo, hr, mp, remote, usrOpt)
     case (_: InputBlockTransactionIdsMessageSpec.type, transactionIds: InputBlockTransactionIdsData, remote) =>
       processInputBlockTransactionIds(transactionIds, mp, remote)
     case (_: InputBlockTransactionsRequestMessageSpec.type, req: InputBlockTransactionsRequest, remote) =>

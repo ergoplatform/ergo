@@ -206,8 +206,9 @@ object ChainGenerator extends App with ErgoTestHelpers with Matchers {
   @tailrec
   private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
-    pow.proveCandidate(candidate, prover.hdKeys.head.privateInput.w) match {
+    pow.proveCandidate(candidate, prover.hdKeys.head.privateInput.w, Long.MinValue, Long.MaxValue, defaultParams) match {
       case OrderingBlockFound(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt

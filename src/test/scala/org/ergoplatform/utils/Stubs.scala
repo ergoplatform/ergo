@@ -114,7 +114,8 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     def receive: Receive = {
       case CandidateGenerator.GenerateCandidate(_, reply) =>
         if (reply) {
-          val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
+          val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+          val candidate = Candidate(null, externalWorkMessage, Seq.empty, defaultParams) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())
@@ -396,6 +397,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
     powScheme.prove(
       history.bestHeaderOpt,
@@ -407,7 +409,10 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       Math.max(System.currentTimeMillis(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
-      defaultMinerSecretNumber
+      defaultMinerSecretNumber,
+      Long.MinValue,
+      Long.MaxValue,
+      defaultParams
     ).asInstanceOf[OrderingBlockFound]  // todo: fix
      .fb
       .header

@@ -214,8 +214,11 @@ class CandidateGenerator(
                 )
             }
           case _: InputSolutionFound =>
-            val (sbi, sbt) = completeInputBlock(state.cache.get.candidateBlock, solution)
-            if (ergoSettings.chainSettings.powScheme.checkInputBlockPoW(sbi.header)) { // check PoW only
+            val cachedCandidate = state.cache.get
+            val (sbi, sbt) = completeInputBlock(cachedCandidate.candidateBlock, solution)
+            val parameters = cachedCandidate.parameters
+            val powValid = ergoSettings.chainSettings.powScheme.checkInputBlockPoW(sbi.header, parameters)
+            if (powValid) { // check PoW only
               // todo: finish input block mining API
               log.info(s"Input-block ${sbi.id} mined @ height ${sbi.header.height}!")
               sendInputToNodeView(sbi, sbt)
@@ -225,7 +228,7 @@ class CandidateGenerator(
               log.warn(s"Removing candidate due to invalid input block")
               context.become(initialized(state.copy(cache = None)))
               StatusReply.error(
-                new Exception(s"Invalid input block! PoW valid: ${ergoSettings.chainSettings.powScheme.checkInputBlockPoW(sbi.header)}")
+                new Exception(s"Invalid input block! PoW valid: $powValid")
               )
             }
         }
@@ -251,11 +254,13 @@ object CandidateGenerator extends ScorexLogging {
     * @param candidateBlock  - block candidate
     * @param externalVersion - message for external miner
     * @param txsToInclude    - transactions which were prioritized for inclusion in the block candidate
+    * @param parameters      - blockchain parameters at the time of candidate creation
     */
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction]
+    txsToInclude: Seq[ErgoTransaction],
+    parameters: Parameters
   )
 
   case class GenerateCandidate(
@@ -653,7 +658,7 @@ object CandidateGenerator extends ScorexLogging {
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
+            Candidate(candidate, ext, prioritizedTransactions, upcomingContext.currentParameters) -> eliminateTransactions
           )
         case Failure(t: Throwable) =>
           // We can not produce a block for some reason, so print out an error
@@ -685,7 +690,8 @@ object CandidateGenerator extends ScorexLogging {
                   Candidate(
                     candidate,
                     deriveWorkMessage(candidate),
-                    prioritizedTransactions
+                    prioritizedTransactions,
+                    upcomingContext.currentParameters
                   ) -> eliminateTransactions
               }
             case None =>

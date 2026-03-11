@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.BoxUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
@@ -102,6 +103,7 @@ object ChainGenerator {
                  tsOpt: Option[Long] = None,
                  diffBitsOpt: Option[Long] = None,
                  useRealTs: Boolean): Header = {
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
     powScheme.prove(
       prev,
       Header.InitialVersion,
@@ -113,7 +115,10 @@ object ChainGenerator {
         .getOrElse(if (useRealTs) System.currentTimeMillis() else 0)),
       extensionHash,
       Array.fill(3)(0: Byte),
-      defaultMinerSecretNumber
+      defaultMinerSecretNumber,
+      Long.MinValue,
+      Long.MaxValue,
+      defaultParams
     ).asInstanceOf[OrderingBlockHeaderFound]  // todo: fix
     .h
   }
@@ -163,6 +168,7 @@ object ChainGenerator {
     val interlinks = prev.toSeq.flatMap(x =>
       nipopowAlgos.updateInterlinks(x.header, NipopowAlgos.unpackInterlinks(x.extension.fields).get))
     val validExtension = extension ++ nipopowAlgos.interlinksToExtension(interlinks)
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
     powScheme.proveBlock(
       prev.map(_.header),
       blockVersion,
@@ -173,7 +179,10 @@ object ChainGenerator {
       Math.max(System.currentTimeMillis(), prev.map(_.header.timestamp + 1).getOrElse(System.currentTimeMillis())),
       validExtension,
       Array.fill(3)(0: Byte),
-      defaultMinerSecretNumber
+      defaultMinerSecretNumber,
+      Long.MinValue,
+      Long.MaxValue,
+      defaultParams
     ).asInstanceOf[OrderingBlockFound]  // todo: fix
       .fb
   }

@@ -449,9 +449,37 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
         }
 
+        applyFromCacheLoop(headersCache)
+
         // todo: check ADProofs section generation
+        
       case None =>
-        log.error(s"parent header not found in processOrderingBlock, its id is $parentId")
+        // Parent header is missing - cache the ordering block and request the parent
+        log.warn(s"Parent header not found for ordering block $headerId, caching its header and requesting parent $parentId")
+        
+        // Also put the header into headersCache so it can be applied when parent arrives
+        headersCache.put(headerId, header)
+        
+        // Request the parent header from peers
+        context.system.eventStream.publish(
+          DownloadRequest(Map(Header.modifierTypeId -> Seq(parentId)))
+        )
+        
+        log.info(s"Requested parent header $parentId for ordering block $headerId")
+    }
+  }
+
+  @tailrec
+  private def applyFromCacheLoop(cache: ErgoModifiersCache): Unit = {
+    val at0 = System.currentTimeMillis()
+    cache.popCandidate(history()) match {
+      case Some(mod) =>
+        pmodModify(mod, local = false)
+        val at = System.currentTimeMillis()
+        log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
+        applyFromCacheLoop(cache)
+      case None =>
+        ()
     }
   }
 
@@ -463,20 +491,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
-      @tailrec
-      def applyFromCacheLoop(cache: ErgoModifiersCache): Unit = {
-        val at0 = System.currentTimeMillis()
-        cache.popCandidate(history()) match {
-          case Some(mod) =>
-            pmodModify(mod, local = false)
-            val at = System.currentTimeMillis()
-            log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
-            applyFromCacheLoop(cache)
-          case None =>
-            ()
-        }
-      }
-
       mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)

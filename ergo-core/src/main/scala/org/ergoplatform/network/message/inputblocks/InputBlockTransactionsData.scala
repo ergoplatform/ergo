@@ -9,6 +9,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
+import spire.syntax.all.cfor
 
 case class InputBlockTransactionsData(inputBlockId: ModifierId,
                                       transactions: Seq[ErgoTransaction],
@@ -37,8 +38,8 @@ object InputBlockTransactionsDataSerializer extends ErgoSerializer[InputBlockTra
   override def serialize(obj: InputBlockTransactionsData, w: Writer): Unit = {
     w.putBytes(idToBytes(obj.inputBlockId))
     w.putUInt(obj.transactions.size.toLong)
-    obj.transactions.foreach { tx => // todo: replace with cfor
-      ErgoTransactionSerializer.serialize(tx, w)
+    cfor(0)(_ < obj.transactions.length, _ + 1) { i =>
+      ErgoTransactionSerializer.serialize(obj.transactions(i), w)
     }
   }
 
@@ -49,8 +50,9 @@ object InputBlockTransactionsDataSerializer extends ErgoSerializer[InputBlockTra
     val headerId: ModifierId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txCount = r.getUInt().toIntExact
 
-    val txs = (1 to txCount).map { _ => // todo: replace with cfor
-      ErgoTransactionSerializer.parse(r)
+    val txs = new Array[ErgoTransaction](txCount)
+    cfor(0)(_ < txCount, _ + 1) { i =>
+      txs(i) = ErgoTransactionSerializer.parse(r)
     }
     InputBlockTransactionsData(headerId, txs, Some(r.position - startPos))
   }

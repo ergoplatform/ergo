@@ -12,7 +12,7 @@ import spire.syntax.all.cfor
 
 object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[OrderingBlockAnnouncement] {
 
-  private val maxSize = 32000
+  private val maxSize = 32000 // todo: check and describe why always ok
   
   /**
     * Current protocol version for OrderingBlockAnnouncement messages
@@ -60,13 +60,13 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
       txs(i) = ErgoTransactionSerializer.parse(r)
     }
     require(r.position - startPosition < maxSize)
-    val txIdsCount = r.getUInt().toIntExact
+    val txIdsCount = r.getUInt().toIntExact // todo: check for spam, ie too big
     val txIds = new Array[ModifierId](txIdsCount)
     cfor(0)(_ < txIdsCount, _ + 1) { i =>
       txIds(i) = bytesToId(r.getBytes(32))
     }
     require(r.position - startPosition < maxSize)
-    val fieldsSize = r.getUShort()
+    val fieldsSize = r.getUShort() // todo: check for spam, ie too big
     val fields = new Array[(Array[Byte], Array[Byte])](fieldsSize)
     cfor(0)(_ < fieldsSize, _ + 1) { i =>
       val key = r.getBytes(Extension.FieldKeySize)

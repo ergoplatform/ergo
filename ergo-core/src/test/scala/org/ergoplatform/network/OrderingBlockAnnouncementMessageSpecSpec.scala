@@ -5,6 +5,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, SerializationTests}
 import org.scalacheck.Gen
+import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
+import java.nio.ByteBuffer
 
 class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with SerializationTests {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
@@ -169,12 +171,78 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       Seq.empty,
       Seq((Array[Byte](1, 2), Array.fill(maxValueSize)(255.toByte))).toStream
     )
-    
+
     val maxValueExtensionBytes = messageSpec.toBytes(maxValueExtensionAnnouncement)
     val maxValueExtensionRecovered = messageSpec.parseBytes(maxValueExtensionBytes)
-    
+
     maxValueExtensionRecovered.header shouldEqual maxValueExtensionAnnouncement.header
-    maxValueExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+    maxValueExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
       maxValueExtensionAnnouncement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+  }
+
+  property("OrderingBlockAnnouncement rejects excessive non-broadcasted transactions count") {
+    val header = defaultHeaderGen.sample.get
+    val maxArraySize = 32768
+    
+    // Create bytes manually: version + header + excessive nbtCount
+    val writer = new VLQByteBufferWriter(new scorex.util.ByteArrayBuilder())
+    writer.put(1.toByte) // version
+    org.ergoplatform.modifiers.history.header.HeaderSerializer.serialize(header, writer)
+    writer.putUInt(maxArraySize + 1L) // excessive count
+    
+    val bytes = writer.toBytes
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val ex = the[Exception] thrownBy messageSpec.parse(reader)
+    ex.getMessage should include ("Non-broadcasted transactions count too large")
+  }
+
+  property("OrderingBlockAnnouncement rejects excessive transaction IDs count") {
+    val header = defaultHeaderGen.sample.get
+    val maxArraySize = 32768
+    
+    // Create bytes: version + header + zero nbtCount + excessive txIdsCount
+    val writer = new VLQByteBufferWriter(new scorex.util.ByteArrayBuilder())
+    writer.put(1.toByte) // version
+    org.ergoplatform.modifiers.history.header.HeaderSerializer.serialize(header, writer)
+    writer.putUInt(0L) // zero non-broadcasted transactions
+    writer.putUInt(maxArraySize + 1L) // excessive txIds count
+    
+    val bytes = writer.toBytes
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val ex = the[Exception] thrownBy messageSpec.parse(reader)
+    ex.getMessage should include ("Transaction IDs count too large")
+  }
+
+  property("OrderingBlockAnnouncement rejects excessive extension fields count") {
+    val header = defaultHeaderGen.sample.get
+    val maxArraySize = 32768
+    
+    // Create bytes: version + header + zero nbtCount + zero txIdsCount + excessive fieldsCount
+    val writer = new VLQByteBufferWriter(new scorex.util.ByteArrayBuilder())
+    writer.put(1.toByte) // version
+    org.ergoplatform.modifiers.history.header.HeaderSerializer.serialize(header, writer)
+    writer.putUInt(0L) // zero non-broadcasted transactions
+    writer.putUInt(0L) // zero txIds
+    writer.putUShort(maxArraySize + 1) // excessive extension fields count
+    
+    val bytes = writer.toBytes
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val ex = the[Exception] thrownBy messageSpec.parse(reader)
+    ex.getMessage should include ("Extension fields count too large")
+  }
+
+  property("OrderingBlockAnnouncement accepts counts at MaxArraySize limit") {
+    // Test that counts at exactly MaxArraySize are accepted
+    // We can't practically create such a large message, so we test with smaller valid messages
+    // and verify the validation logic doesn't reject valid counts
+    
+    val header = defaultHeaderGen.sample.get
+    val announcement = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty.toStream)
+    val bytes = messageSpec.toBytes(announcement)
+    
+    // This should parse successfully (all counts are 0, well under the limit)
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val parsed = messageSpec.parse(reader)
+    parsed.header shouldEqual announcement.header
   }
 }

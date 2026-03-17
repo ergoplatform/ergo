@@ -50,23 +50,34 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
   }
 
   override def parse(r: Reader): OrderingBlockAnnouncement = {
-    // todo: check for max message size
+
+    /**
+      * Maximum allowed count for array allocations during message parsing to prevent DoS attacks
+      */
+    val MaxArraySize: Int = 32768
+
     val startPosition = r.position
     val version = r.getByte()
     val header = HeaderSerializer.parse(r)
-    val nbtCount = r.getUInt().toIntExact // todo: check for spam, ie too big value
+    
+    val nbtCount = r.getUInt().toIntExact
+    require(nbtCount <= MaxArraySize, s"Non-broadcasted transactions count too large: $nbtCount")
     val txs = new Array[ErgoTransaction](nbtCount)
     cfor(0)(_ < nbtCount, _ + 1) { i =>
       txs(i) = ErgoTransactionSerializer.parse(r)
     }
     require(r.position - startPosition < maxSize)
-    val txIdsCount = r.getUInt().toIntExact // todo: check for spam, ie too big
+    
+    val txIdsCount = r.getUInt().toIntExact
+    require(txIdsCount <= MaxArraySize, s"Transaction IDs count too large: $txIdsCount")
     val txIds = new Array[ModifierId](txIdsCount)
     cfor(0)(_ < txIdsCount, _ + 1) { i =>
       txIds(i) = bytesToId(r.getBytes(32))
     }
     require(r.position - startPosition < maxSize)
-    val fieldsSize = r.getUShort() // todo: check for spam, ie too big
+    
+    val fieldsSize = r.getUShort()
+    require(fieldsSize <= MaxArraySize, s"Extension fields count too large: $fieldsSize")
     val fields = new Array[(Array[Byte], Array[Byte])](fieldsSize)
     cfor(0)(_ < fieldsSize, _ + 1) { i =>
       val key = r.getBytes(Extension.FieldKeySize)

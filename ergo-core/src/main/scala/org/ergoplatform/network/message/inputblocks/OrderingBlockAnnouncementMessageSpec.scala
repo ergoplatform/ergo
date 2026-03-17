@@ -47,6 +47,12 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
       w.putUByte(value.length)
       w.putBytes(value)
     }
+    // Write unparsed bytes for forward compatibility
+    // Always write the unparsed bytes length and data (even if empty)
+    w.putUByte(ann.unparsedBytes.length)
+    if (ann.unparsedBytes.nonEmpty) {
+      w.putBytes(ann.unparsedBytes)
+    }
   }
 
   override def parse(r: Reader): OrderingBlockAnnouncement = {
@@ -57,9 +63,9 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
     val MaxArraySize: Int = 32768
 
     val startPosition = r.position
-    val version = r.getByte()
+    val version = r.getByte() // version byte (currently unused, reserved for future protocol upgrades)
     val header = HeaderSerializer.parse(r)
-    
+
     val nbtCount = r.getUInt().toIntExact
     require(nbtCount <= MaxArraySize, s"Non-broadcasted transactions count too large: $nbtCount")
     val txs = new Array[ErgoTransaction](nbtCount)
@@ -67,7 +73,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
       txs(i) = ErgoTransactionSerializer.parse(r)
     }
     require(r.position - startPosition < maxSize)
-    
+
     val txIdsCount = r.getUInt().toIntExact
     require(txIdsCount <= MaxArraySize, s"Transaction IDs count too large: $txIdsCount")
     val txIds = new Array[ModifierId](txIdsCount)
@@ -75,7 +81,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
       txIds(i) = bytesToId(r.getBytes(32))
     }
     require(r.position - startPosition < maxSize)
-    
+
     val fieldsSize = r.getUShort()
     require(fieldsSize <= MaxArraySize, s"Extension fields count too large: $fieldsSize")
     val fields = new Array[(Array[Byte], Array[Byte])](fieldsSize)
@@ -86,8 +92,17 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
       fields(i) = (key, value)
     }
     require(r.position - startPosition < maxSize)
-    OrderingBlockAnnouncement(header, txs, txIds, fields)
-    // todo: consider versioning by skipping unparsed bytes if version > 1
+
+    // Read unparsed bytes for forward compatibility
+    // Future protocol versions can add new fields after extensionFields
+    val unparsedSize = r.getUByte()
+    val unparsedBytes = if (unparsedSize > 0) {
+      r.getBytes(unparsedSize)
+    } else {
+      Array.emptyByteArray
+    }
+
+    OrderingBlockAnnouncement(header, txs, txIds, fields, unparsedBytes)
   }
 
 }

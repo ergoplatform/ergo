@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, SerializationTests}
 import org.scalacheck.Gen
+import org.scalacheck.Arbitrary.arbitrary
 import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
 import java.nio.ByteBuffer
 
@@ -20,11 +21,13 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     nonBroadcastedTransactions <- Gen.listOf(invalidErgoTransactionGen).map(_.take(5))
     broadcastedTransactionIds <- Gen.listOf(modifierIdGen).map(_.take(5))
     extensionFields <- Gen.listOf(extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize)).map(_.take(5).toStream)
+    unparsedBytes <- Gen.oneOf(Gen.const(Array.emptyByteArray), Gen.listOf(arbitrary[Byte]).map(_.toArray))
   } yield OrderingBlockAnnouncement(
     header,
     nonBroadcastedTransactions,
     broadcastedTransactionIds,
-    extensionFields
+    extensionFields,
+    unparsedBytes
   )
 
   property("OrderingBlockAnnouncement serialization roundtrip") {
@@ -36,15 +39,17 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       recovered.header shouldEqual announcement.header
       recovered.nonBroadcastedTransactions shouldEqual announcement.nonBroadcastedTransactions
       recovered.broadcastedTransactionIds shouldEqual announcement.broadcastedTransactionIds
-      recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+      recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
         announcement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+      recovered.unparsedBytes shouldEqual announcement.unparsedBytes
 
       // Verify the entire object
       recovered.header shouldEqual announcement.header
       recovered.nonBroadcastedTransactions shouldEqual announcement.nonBroadcastedTransactions
       recovered.broadcastedTransactionIds shouldEqual announcement.broadcastedTransactionIds
-      recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+      recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
         announcement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+      recovered.unparsedBytes shouldEqual announcement.unparsedBytes
     }
   }
 
@@ -54,7 +59,8 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
         header,
         Seq.empty[ErgoTransaction],
         Seq.empty,
-        Seq.empty
+        Seq.empty,
+        Array.emptyByteArray
       )
 
       val bytes = messageSpec.toBytes(emptyAnnouncement)
@@ -63,8 +69,9 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       recovered.header shouldEqual emptyAnnouncement.header
       recovered.nonBroadcastedTransactions shouldEqual emptyAnnouncement.nonBroadcastedTransactions
       recovered.broadcastedTransactionIds shouldEqual emptyAnnouncement.broadcastedTransactionIds
-      recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+      recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
         emptyAnnouncement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+      recovered.unparsedBytes shouldEqual emptyAnnouncement.unparsedBytes
     }
   }
 
@@ -75,31 +82,35 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
-      Seq.empty
+      Seq.empty,
+      Array.emptyByteArray
     )
-    
+
     val minimalBytes = messageSpec.toBytes(minimalAnnouncement)
     val minimalRecovered = messageSpec.parseBytes(minimalBytes)
-    
+
     minimalRecovered.header shouldEqual minimalAnnouncement.header
     minimalRecovered.nonBroadcastedTransactions shouldBe empty
     minimalRecovered.broadcastedTransactionIds shouldBe empty
     minimalRecovered.extensionFields shouldBe empty
+    minimalRecovered.unparsedBytes shouldBe empty
 
     // Test with single extension field (keys must be exactly 2 bytes)
     val singleExtensionAnnouncement = OrderingBlockAnnouncement(
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
-      Seq((Array[Byte](1, 2), Array[Byte](3, 4, 5))).toStream
+      Seq((Array[Byte](1, 2), Array[Byte](3, 4, 5))).toStream,
+      Array.emptyByteArray
     )
-    
+
     val singleExtensionBytes = messageSpec.toBytes(singleExtensionAnnouncement)
     val singleExtensionRecovered = messageSpec.parseBytes(singleExtensionBytes)
-    
+
     singleExtensionRecovered.header shouldEqual singleExtensionAnnouncement.header
-    singleExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+    singleExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
       singleExtensionAnnouncement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+    singleExtensionRecovered.unparsedBytes shouldBe empty
 
     // Test with multiple extension fields (keys must be exactly 2 bytes)
     val multipleExtensionAnnouncement = OrderingBlockAnnouncement(
@@ -110,15 +121,17 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
         (Array[Byte](1, 2), Array[Byte](3, 4, 5)),
         (Array[Byte](6, 7), Array[Byte](8)),
         (Array[Byte](8, 9), Array[Byte](10, 11, 12, 13))
-      ).toStream
+      ).toStream,
+      Array.emptyByteArray
     )
-    
+
     val multipleExtensionBytes = messageSpec.toBytes(multipleExtensionAnnouncement)
     val multipleExtensionRecovered = messageSpec.parseBytes(multipleExtensionBytes)
-    
+
     multipleExtensionRecovered.header shouldEqual multipleExtensionAnnouncement.header
-    multipleExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+    multipleExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
       multipleExtensionAnnouncement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+    multipleExtensionRecovered.unparsedBytes shouldBe empty
 
     // Test with transaction IDs only
     val txId = modifierIdGen.sample.get
@@ -126,16 +139,18 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq(txId),
-      Seq.empty
+      Seq.empty,
+      Array.emptyByteArray
     )
-    
+
     val txIdsOnlyBytes = messageSpec.toBytes(txIdsOnlyAnnouncement)
     val txIdsOnlyRecovered = messageSpec.parseBytes(txIdsOnlyBytes)
-    
+
     txIdsOnlyRecovered.header shouldEqual txIdsOnlyAnnouncement.header
     txIdsOnlyRecovered.broadcastedTransactionIds shouldEqual Seq(txId)
     txIdsOnlyRecovered.nonBroadcastedTransactions shouldBe empty
     txIdsOnlyRecovered.extensionFields shouldBe empty
+    txIdsOnlyRecovered.unparsedBytes shouldBe empty
 
     // Verify serialized bytes have expected structure and size relationships
     minimalBytes should not be empty
@@ -153,15 +168,17 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
-      Seq((Array[Byte](1, 2), Array[Byte]())).toStream
+      Seq((Array[Byte](1, 2), Array[Byte]())).toStream,
+      Array.emptyByteArray
     )
-    
+
     val emptyValueExtensionBytes = messageSpec.toBytes(emptyValueExtensionAnnouncement)
     val emptyValueExtensionRecovered = messageSpec.parseBytes(emptyValueExtensionBytes)
-    
+
     emptyValueExtensionRecovered.header shouldEqual emptyValueExtensionAnnouncement.header
-    emptyValueExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual 
+    emptyValueExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
       emptyValueExtensionAnnouncement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+    emptyValueExtensionRecovered.unparsedBytes shouldBe empty
 
     // Test edge case: extension field with maximum allowed value size
     val maxValueSize = 64 // Reasonable limit for testing
@@ -169,7 +186,8 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
-      Seq((Array[Byte](1, 2), Array.fill(maxValueSize)(255.toByte))).toStream
+      Seq((Array[Byte](1, 2), Array.fill(maxValueSize)(255.toByte))).toStream,
+      Array.emptyByteArray
     )
 
     val maxValueExtensionBytes = messageSpec.toBytes(maxValueExtensionAnnouncement)
@@ -178,6 +196,29 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     maxValueExtensionRecovered.header shouldEqual maxValueExtensionAnnouncement.header
     maxValueExtensionRecovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
       maxValueExtensionAnnouncement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
+    maxValueExtensionRecovered.unparsedBytes shouldBe empty
+  }
+
+  property("OrderingBlockAnnouncement handles unparsed bytes for forward compatibility") {
+    val header = defaultHeaderGen.sample.get
+    
+    // Create announcement with unparsed bytes (simulating future version data)
+    val unparsedData = Array[Byte](1.toByte, 2.toByte, 3.toByte, 4.toByte)
+    val announcement = OrderingBlockAnnouncement(
+      header,
+      Seq.empty,
+      Seq.empty,
+      Seq.empty.toStream,
+      unparsedData
+    )
+    
+    // Serialize and deserialize
+    val bytes = messageSpec.toBytes(announcement)
+    val recovered = messageSpec.parseBytes(bytes)
+    
+    // Verify unparsed bytes are preserved
+    recovered.unparsedBytes shouldEqual unparsedData
+    recovered.header shouldEqual announcement.header
   }
 
   property("OrderingBlockAnnouncement rejects excessive non-broadcasted transactions count") {

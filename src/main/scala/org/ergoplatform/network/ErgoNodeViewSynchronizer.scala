@@ -1214,27 +1214,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    */
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
     if (invData.typeId == InputBlockTypeId.value) {
-      invData.ids.foreach {id =>
+      invData.ids.foreach { id =>
         processInputBlockRequest(id, hr, remote)
       }
-      return // todo: better control flow
-    }
-
-    if (invData.typeId == InputBlockTransactionIdsTypeId.value) {
-      invData.ids.foreach {id =>
+    } else if (invData.typeId == InputBlockTransactionIdsTypeId.value) {
+      invData.ids.foreach { id =>
         processInputBlockTransactionIdsRequest(id, hr, remote)
       }
-      return // todo: better control flow
-    }
-
-    if (invData.typeId == OrderingBlockAnnouncementTypeId.value) {
-      invData.ids.foreach {id =>
+    } else if (invData.typeId == OrderingBlockAnnouncementTypeId.value) {
+      invData.ids.foreach { id =>
         processOrderingBlockAnnouncementRequest(id, hr, remote)
       }
-      return // todo: better control flow
-    }
-
-    val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
+    } else {
+      val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
         case typeId: NetworkObjectTypeId.Value if typeId == ErgoTransaction.modifierTypeId =>
           mp.getAll(invData.ids).map { unconfirmedTx =>
             unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
@@ -1255,28 +1247,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
                 s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
 
-    @tailrec
-    def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
-      var size = 5 //message type id + message size
-      var batch = mods.takeWhile { case (_, modBytes) =>
-        size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
-        size < ModifiersSpec.maxMessageSize
+      @tailrec
+      def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
+        var size = 5 //message type id + message size
+        var batch = mods.takeWhile { case (_, modBytes) =>
+          size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
+          size < ModifiersSpec.maxMessageSize
+        }
+        if (batch.isEmpty) {
+          // send modifier anyway
+          val ho = mods.headOption
+          batch = ho.toSeq
+          log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
+        }
+        remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+        val remaining = mods.drop(batch.length)
+        if (remaining.nonEmpty) {
+          sendByParts(remaining)
+        }
       }
-      if (batch.isEmpty) {
-        // send modifier anyway
-        val ho = mods.headOption
-        batch = ho.toSeq
-        log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
-      }
-      remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
-      val remaining = mods.drop(batch.length)
-      if (remaining.nonEmpty) {
-        sendByParts(remaining)
-      }
-    }
 
-    if (objs.nonEmpty) {
-      sendByParts(objs)
+      if (objs.nonEmpty) {
+        sendByParts(objs)
+      }
     }
   }
 

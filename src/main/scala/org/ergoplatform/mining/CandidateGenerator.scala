@@ -457,7 +457,7 @@ object CandidateGenerator extends ScorexLogging {
     * @param prioritizedTransactions - transactions which are going into the block in the first place
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
     *
-    * Block formed via createCandidate() should be validated via // todo: ref to validation procedure
+    * Block formed via createCandidate() should be validated in the same way as a block coming from outside.
     *
     * @return - block candidate or an error
     */

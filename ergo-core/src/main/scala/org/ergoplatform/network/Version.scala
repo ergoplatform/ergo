@@ -39,7 +39,7 @@ object Version {
 
   val Eip37ForkVersion: Version = Version(4, 0, 100)
 
-  val SubblocksVersion: Version = Version(6, 0, 0)  // todo: set to proper value before activation, to send input block related messages only to peers able to parse them
+  val SubblocksVersion: Version = Version(6, 5, 0)
 
   val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 12)
 

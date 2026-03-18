@@ -437,6 +437,9 @@ trait InputBlocksProcessor extends ScorexLogging {
      *    - Process the block on the current best chain
      * 4. Return the sequence of applied blocks and rolled back blocks
      *
+     * TODO: Support sequential spending within the SAME input block.
+     * TODO: See test: "Input block should REJECT chained transactions in the same input block (not yet supported)"
+     *
      * @param ib The input block info to apply transactions to
      * @param txs The transactions to apply to the input block
      * @param state The current Ergo state for transaction validation

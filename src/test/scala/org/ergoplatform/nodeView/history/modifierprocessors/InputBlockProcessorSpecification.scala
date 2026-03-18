@@ -668,6 +668,109 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq(ib2.id, ib1.id)
   }
 
+  /**
+   * Note: Sequential spending within the SAME input block is not yet supported.
+   * The current implementation validates all transactions against the base UTXO state,
+   * not incrementally. This means TX2 cannot spend outputs from TX1 if both are in
+   * the same input block.
+   *
+   * However, sequential spending ACROSS different input blocks IS supported:
+   * - TX1 in input block IB1 creates output O1
+   * - TX2 in input block IB2 can spend output O1
+   * See test: "apply input block with double spending - spending from output created in an input block"
+   */
+
+  property("Input block should ACCEPT chained transactions in the same input block (TODO: not yet supported)") {
+    // This test documents the DESIRED behavior: transactions within the same input block
+    // SHOULD be able to spend from each other's outputs through incremental validation.
+    //
+    // TODO: When same-block sequential spending is implemented, update the processing logic to:
+    // 1. Sort transactions topologically by dependencies
+    // 2. Validate transactions incrementally, updating state after each successful validation
+    // 3. Track which outputs were created by transactions in the current input block
+    // 4. Allow subsequent transactions to spend those outputs
+    //
+    // CURRENTLY THIS TEST FAILS - expecting success but getting failure.
+
+    // Create UTXO state with funding boxes
+    val bh = BoxHolder(Seq(eb1, eb2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    // Create ordering block for input blocks
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    // Create first input block after ordering block
+    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val r1 = h.applyInputBlock(ib1)
+    r1 shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+
+    // Create TX1: spend eb1 (TrueProp - anyone can spend) -> create intermediate box + fee
+    val intermediateValue = 900000000L
+    val feeValue = 100000000L  // Fee to balance the transaction
+    val intermediateBoxCandidate = new ErgoBoxCandidate(
+      intermediateValue, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val feeBoxCandidate = new ErgoBoxCandidate(
+      feeValue, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val tx1 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(intermediateBoxCandidate, feeBoxCandidate)
+    )
+
+    // Calculate the box ID that TX1 would create (first output, index 0)
+    val intermediateBoxId = scorex.crypto.authds.ADKey(
+      scorex.crypto.hash.Blake2b256.hash(scorex.util.idToBytes(tx1.id) :+ 0.toByte).toArray
+    )
+
+    // Create TX2: spend intermediate box (from TX1) -> create final box + fee
+    // DESIRED BEHAVIOR: TX2 should succeed because TX1's output should be available
+    // when transactions are validated incrementally within the same input block
+    val finalValue = 800000000L
+    val feeValue2 = 100000000L
+    val finalBoxCandidate = new ErgoBoxCandidate(
+      finalValue, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val feeBoxCandidate2 = new ErgoBoxCandidate(
+      feeValue2, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(Input(intermediateBoxId, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(finalBoxCandidate, feeBoxCandidate2)
+    )
+
+    // Verify transaction dependencies
+    tx2.inputs.head.boxId shouldBe intermediateBoxId
+
+    // Both transactions should be statelessly valid (structure is correct)
+    tx1.statelessValidity() shouldBe 'success
+    tx2.statelessValidity() shouldBe 'success
+
+    // Apply BOTH transactions in the SAME input block
+    // DESIRED BEHAVIOR: Both transactions should be accepted through incremental validation
+    val result = h.applyInputBlockTransactions(ib1.id, Seq(tx1, tx2), us)
+
+    // EXPECTED SUCCESS (TODO: currently fails): Both transactions should be accepted
+    // because TX2 spends from TX1's output, which should be available after TX1 is validated
+    result._1 shouldBe Seq(ib1.id)  // Input block is processed with forward progress
+    result._2 shouldBe Seq.empty
+
+    // The best input block chain should contain ib1
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // TODO: Fix implementation to make this test pass
+  }
+
   property("apply new best input block on another ordering block on the same height") {
     val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
 

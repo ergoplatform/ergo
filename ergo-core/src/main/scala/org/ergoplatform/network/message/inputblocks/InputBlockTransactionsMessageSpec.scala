@@ -7,6 +7,7 @@ import org.ergoplatform.settings.Constants
 import scorex.util.{bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import sigma.util.Extensions.LongOps
+import spire.syntax.all.cfor
 
 object InputBlockTransactionsMessageSpec extends MessageSpecInputBlocks[InputBlockTransactionsData] {
   /**
@@ -30,11 +31,11 @@ object InputBlockTransactionsMessageSpec extends MessageSpecInputBlocks[InputBlo
     val subBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txsCount = r.getUInt().toIntExact
 
-    // todo: optimize w. cfor
-    val transactionIds = (1 to txsCount).map { _ =>
-      ErgoTransactionSerializer.parse(r)
+    val txs = new Array[ErgoTransaction](txsCount)
+    cfor(0)(_ < txsCount, _ + 1) { i =>
+      txs(i) = ErgoTransactionSerializer.parse(r)
     }
-    InputBlockTransactionsData(subBlockId, transactionIds)
+    InputBlockTransactionsData(subBlockId, txs)
   }
 
 }

@@ -126,7 +126,6 @@ class ErgoStatsCollector(readersHolder: ActorRef,
       }
 
       // clearing best input block id on getting new full block
-      // todo: better to send signal NewBestInputBlock(None) on new best full block
       if(nodeInfo.bestFullBlockOpt.map(_.id).getOrElse("") != h.bestFullBlockOpt.map(_.id).getOrElse("")){
         nodeInfo = nodeInfo.copy(bestInputBlockId = None)
       }

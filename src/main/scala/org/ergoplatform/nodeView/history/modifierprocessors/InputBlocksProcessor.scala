@@ -790,6 +790,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     *         references an unknown parent, or None if the block was successfully integrated
     */
   def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
+    val HeightThreshold = 2
+
     try {
       lazy val orderingId = extractOrderingId(ib)
 
@@ -797,7 +799,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       // todo: make sure PoW and difficulty checked, to avoid low-diff block being sent in order to break input blocks chain
       if (ib.header.height > bestBlocks._1
         .map(_.height)
-        .getOrElse(0) + 2) { // todo: beautify
+        .getOrElse(0) + HeightThreshold) {
         log.info(s"Resetting state due to height jump: input block height ${ib.header.height}, " +
           s"best ordering height ${bestBlocks._1.map(_.height).getOrElse(0)}")
         resetState()

@@ -1,37 +1,19 @@
 package org.ergoplatform.network.message.inputblocks
 
-import org.ergoplatform.modifiers.NetworkObjectTypeId.Value
-import org.ergoplatform.modifiers.{NetworkObjectTypeId, NonHeaderBlockSection, TransactionsCarryingBlockSection}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Constants
-import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 import spire.syntax.all.cfor
 
+/**
+  * Data carrier for input block transactions in P2P messaging.
+  */
 case class InputBlockTransactionsData(inputBlockId: ModifierId,
                                       transactions: Seq[ErgoTransaction],
-                                      override val sizeOpt: Option[Int] = None)
-  extends NonHeaderBlockSection with TransactionsCarryingBlockSection {  // todo: inheritance needed ?
-
-  override def headerId: ModifierId = inputBlockId
-
-  override def digest: Digest32 = ??? // todo: include witnesses ?
-
-  /**
-    * Type of node view modifier (transaction, header etc)
-    */
-  override val modifierTypeId: Value = NetworkObjectTypeId.fromByte(40.toByte) // todo: check / improve
-  override type M = InputBlockTransactionsData
-
-  /**
-    * Serializer which can convert self to bytes
-    */
-  override def serializer: ErgoSerializer[InputBlockTransactionsData] = InputBlockTransactionsDataSerializer
-
-}
+                                      sizeOpt: Option[Int] = None)
 
 object InputBlockTransactionsDataSerializer extends ErgoSerializer[InputBlockTransactionsData] {
 

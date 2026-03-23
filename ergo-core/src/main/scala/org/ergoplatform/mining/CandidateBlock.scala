@@ -81,8 +81,14 @@ object CandidateBlock {
       "transactions" -> c.transactions.map(_.asJson).asJson,
       "transactionsNumber" -> c.transactions.length.asJson,
       "votes" -> Algos.encode(c.votes).asJson,
-      "extensionHash" -> Algos.encode(c.extension.digest).asJson
-      // todo: add input block related fields
+      "extensionHash" -> Algos.encode(c.extension.digest).asJson,
+      "inputBlockFields" -> Map(
+        "prevInputBlockId" -> c.inputBlockFields.prevInputBlockId.map(Algos.encode).asJson,
+        "transactionsDigest" -> Algos.encode(c.inputBlockFields.transactionsDigest).asJson,
+        "prevTransactionsDigest" -> Algos.encode(c.inputBlockFields.prevTransactionsDigest).asJson
+      ).asJson,
+      "inputBlockTransactionIds" -> c.inputBlockTransactions.map(tx => Algos.encode(tx.id)).asJson,
+      "orderingBlockTransactionIds" -> c.orderingBlockTransactions.map(tx => Algos.encode(tx.id)).asJson
     ).asJson)
 
 }

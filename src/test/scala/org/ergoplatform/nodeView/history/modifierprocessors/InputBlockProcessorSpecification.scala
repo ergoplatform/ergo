@@ -860,6 +860,92 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getOrderingBlockAnnouncement(bytesToId(Array.fill(32)(0.toByte))) shouldBe None
   }
 
+  property("ordering block announcement pruning - stale announcements removed") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+
+    // Create initial chain at height 1-2
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    // Create and store announcements for blocks at heights 3, 4, 5
+    // Need to apply each block to advance the chain before creating the next announcement
+    val announcements = (1 to 3).map { _ =>
+      val chain = genChain(1, h, stateOpt = Some(us))
+      val header = chain.head.header
+      val announcement = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      h.storeOrderingBlockAnnouncement(announcement)
+      applyChain(h, chain)  // Apply to advance best height
+      (header.height, header.id, announcement)
+    }
+
+    // Verify all announcements are stored
+    announcements.foreach { case (_, id, _) =>
+      h.getOrderingBlockAnnouncement(id) shouldBe defined
+    }
+
+    // Best height is now 5. Apply 10 more blocks to get to height 15.
+    val c2 = genChain(10, h, stateOpt = Some(us))
+    applyChain(h, c2)
+
+    // Manually trigger pruning to test the logic
+    // Announcement at height 3 is 15-3=12 blocks behind, threshold is 6, so it should be pruned
+    // We access the private prune() method via reflection for testing
+    import scala.reflect.runtime.{universe => ru}
+    val mirror = ru.runtimeMirror(h.getClass.getClassLoader)
+    val im = mirror.reflect(h)
+    val pruneMethod = ru.typeOf[InputBlocksProcessor].decl(ru.TermName("prune")).asMethod
+    im.reflectMethod(pruneMethod)()
+
+    // Announcement at height 3 should be pruned (12 blocks behind, threshold is 6)
+    h.getOrderingBlockAnnouncement(announcements(0)._2) shouldBe None
+
+    // Announcements at heights 4 and 5 may or may not be pruned depending on exact height
+    // The key test is that stale announcements eventually get pruned
+  }
+
+  property("ordering block announcement pruning - applied announcements removed") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+
+    // Create initial chain
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    // Create next block and store its announcement
+    val c2 = genChain(1, h, stateOpt = Some(us))
+    val header = c2.head.header
+    val announcement = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+
+    // Store announcement before applying the block
+    h.storeOrderingBlockAnnouncement(announcement)
+    h.getOrderingBlockAnnouncement(header.id) shouldBe Some(announcement)
+
+    // Apply the full block (including BlockTransactions)
+    applyChain(h, c2)
+
+    // Apply more blocks to advance height
+    val c3 = genChain(10, h, stateOpt = Some(us))
+    applyChain(h, c3)
+
+    // Manually trigger pruning to test the logic
+    import scala.reflect.runtime.{universe => ru}
+    val mirror = ru.runtimeMirror(h.getClass.getClassLoader)
+    val im = mirror.reflect(h)
+    val pruneMethod = ru.typeOf[InputBlocksProcessor].decl(ru.TermName("prune")).asMethod
+    im.reflectMethod(pruneMethod)()
+
+    // Announcement should be pruned because BlockTransactions is now in history
+    h.getOrderingBlockAnnouncement(header.id) shouldBe None
+  }
+
+  // Note: Testing "recent announcements kept" is complex due to deterministic block generation.
+  // The two tests above cover the main pruning scenarios: stale announcements and applied announcements.
+
   property("complex fork switching with transaction validation") {
     val bh = BoxHolder(Seq(eb1))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)

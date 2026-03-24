@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockInfo
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
@@ -757,6 +758,25 @@ trait InputBlocksProcessor extends ScorexLogging {
       inputBlockTransactions.remove(id)
     }
 
+    val OrderingBlockAnnouncementPruningThreshold = PruningThreshold * 3
+
+    // Remove ordering block announcements that are stale or fully applied
+    val announcementsToRemove = orderingBlockAnnouncements.collect {
+      case (id, announcement) if
+        (bestHeight - announcement.header.height) > OrderingBlockAnnouncementPruningThreshold ||
+        historyReader.contains(announcement.header.transactionsId)
+      => id
+    }.toSeq
+
+    announcementsToRemove.foreach { id =>
+      orderingBlockAnnouncements.remove(id)
+      log.debug(s"Pruned ordering block announcement: ${Algos.encode(id)}")
+    }
+
+    if (announcementsToRemove.nonEmpty) {
+      log.debug(s"Pruned ${announcementsToRemove.size} ordering block announcements, best height: $bestHeight")
+    }
+
   }
 
   // reset sub-blocks structures, should be called on receiving ordering block (or slightly later?)
@@ -764,12 +784,14 @@ trait InputBlocksProcessor extends ScorexLogging {
     val oldTreeCount = inputBlockTrees.size
     val oldRecordCount = inputBlockRecords.size
     val oldTxCount = inputBlockTransactions.size
+    val oldAnnouncementCount = orderingBlockAnnouncements.size
 
     prune()
 
     log.info(s"State reset: pruned ${oldTreeCount - inputBlockTrees.size} trees, " +
       s"${oldRecordCount - inputBlockRecords.size} records, " +
-      s"${oldTxCount - inputBlockTransactions.size} transactions")
+      s"${oldTxCount - inputBlockTransactions.size} transactions, " +
+      s"${oldAnnouncementCount - orderingBlockAnnouncements.size} announcements")
   }
 
   /**
@@ -1007,7 +1029,6 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
-  // todo: pruning
   private val orderingBlockAnnouncements = mutable.Map[ModifierId, OrderingBlockAnnouncement]()
 
   /**

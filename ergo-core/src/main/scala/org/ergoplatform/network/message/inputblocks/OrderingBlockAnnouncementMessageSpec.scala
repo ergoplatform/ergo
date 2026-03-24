@@ -12,7 +12,8 @@ import spire.syntax.all.cfor
 
 object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[OrderingBlockAnnouncement] {
 
-  private val maxSize = 32000 // todo: check and describe why always ok
+  // bigger than block size in classic propagation
+  private val maxSize = 3200000
   
   /**
     * Current protocol version for OrderingBlockAnnouncement messages
@@ -101,6 +102,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
     } else {
       Array.emptyByteArray
     }
+    require(r.position - startPosition < maxSize)
 
     OrderingBlockAnnouncement(header, txs, txIds, fields, unparsedBytes)
   }

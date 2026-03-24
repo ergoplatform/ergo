@@ -156,7 +156,11 @@ trait InputBlocksProcessor extends ScorexLogging {
             cfor(0)(_ < txIds.length, _ + 1) { j =>
               val tid = txIds(j)
               val tx = transactionsCache.getIfPresent(tid)
-              if (tx != null) result += tx
+              if (tx != null) {
+                result += tx
+              } else {
+                log.warn(s"Transaction $tid not found in cache (expired or evicted)")
+              }
             }
           case None => // skip
         }
@@ -490,7 +494,11 @@ trait InputBlocksProcessor extends ScorexLogging {
                 cfor(0)(_ < txIds.length, _ + 1) { j =>
                   val tid = txIds(j)
                   val tx = transactionsCache.getIfPresent(tid)
-                  if (tx != null) txs += tx
+                  if (tx != null) {
+                    txs += tx
+                  } else {
+                    log.warn(s"Transaction $tid not found in cache during chain continuation (expired or evicted)")
+                  }
                 }
                 log.debug(s"Continuing input block chain with $nextId")
                 applicationStep(nextIb, txs, res)
@@ -575,7 +583,11 @@ trait InputBlocksProcessor extends ScorexLogging {
         cfor(0)(_ < txIds.length, _ + 1) { j =>
           val tid = txIds(j)
           val tx = transactionsCache.getIfPresent(tid)
-          if (tx != null) txs += tx
+          if (tx != null) {
+            txs += tx
+          } else {
+            log.warn(s"Transaction $tid not found in cache during fork switch (expired or evicted)")
+          }
         }
         val r    = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
 
@@ -665,9 +677,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     * We use Google Guava's cache with expiration, remove from cache after few ordering blocks of confirmation,
     * but in case of a transaction got into an input-blocks fork not confirmed by ordering blocks it can be stuck in
     * the cache till expiration (8 hours now)
+    *
+    * All cache accesses check for null results and log warnings if transactions are missing.
     */
-  // todo: elements of the cache are accessed via getIfPresent without being checked for null result
-  // todo: as they should be in the cache always, but in some extreme cases could be possible exceptions
   private val transactionsCache = CacheBuilder
     .newBuilder()
     .maximumSize(1000000)
@@ -1023,7 +1035,11 @@ trait InputBlocksProcessor extends ScorexLogging {
       val result = mutable.ArrayBuffer[ErgoTransaction]()
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
-        if (tx != null) result += tx
+        if (tx != null) {
+          result += tx
+        } else {
+          log.warn(s"Transaction ${ids(i)} not found in cache for input block $sbId (expired or evicted)")
+        }
       }
       result
     }
@@ -1068,8 +1084,12 @@ trait InputBlocksProcessor extends ScorexLogging {
       val result = mutable.ArrayBuffer[ErgoTransaction]()
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
-        if (tx != null && toFilter.exists(fId => tx.weakId.sameElements(fId))) {
-          result += tx
+        if (tx != null) {
+          if (toFilter.exists(fId => tx.weakId.sameElements(fId))) {
+            result += tx
+          }
+        } else {
+          log.warn(s"Transaction ${ids(i)} not found in cache for filtered request (expired or evicted)")
         }
       }
       result
@@ -1091,7 +1111,11 @@ trait InputBlocksProcessor extends ScorexLogging {
       val result = mutable.ArrayBuffer[ErgoTransaction.WeakId]()
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
-        if (tx != null) result += tx.weakId
+        if (tx != null) {
+          result += tx.weakId
+        } else {
+          log.warn(s"Transaction ${ids(i)} not found in cache for weak ID lookup (expired or evicted)")
+        }
       }
       result
     }

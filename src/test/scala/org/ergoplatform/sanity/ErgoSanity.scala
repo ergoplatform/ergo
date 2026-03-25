@@ -1,7 +1,7 @@
 package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.{ErgoBox, OrderingBlockFound}
+import org.ergoplatform.{ErgoBox, InputBlockFound, InputBlockHeaderFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -65,9 +65,13 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
       Long.MinValue,
       Long.MaxValue,
       defaultParams
-    ).asInstanceOf[OrderingBlockFound]  // todo: fix
-      .fb
-      .header
+    ) match {
+      case InputBlockHeaderFound(h) => h
+      case OrderingBlockHeaderFound(h) => h
+      case InputBlockFound(fb) => fb.header
+      case OrderingBlockFound(fb) => fb.header
+      case NothingFound => throw new RuntimeException("No valid PoW found")
+    }
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =

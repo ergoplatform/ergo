@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputBlockFound, InputBlockHeaderFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
@@ -262,14 +262,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     minerRef.tell(GenerateCandidate(Seq(tx2), reply = true), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters) match {
-            case InputBlockFound(fb) => fb
-            case OrderingBlockFound(fb) => fb
-            case NothingFound => throw new RuntimeException("No valid PoW found")
-            case InputBlockHeaderFound(_) | OrderingBlockHeaderFound(_) =>
-              throw new RuntimeException("Unexpected header-only result from proveCandidate")
-          }
+        val block = extractFullBlockFromProveResult(
+          defaultSettings.chainSettings.powScheme
+            .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
+        )
         testProbe.expectNoMessage(200.millis)
         minerRef.tell(block.header.powSolution, testProbe.ref)
 

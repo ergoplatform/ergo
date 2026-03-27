@@ -3,7 +3,7 @@ package org.ergoplatform.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{AutolykosSolution, OrderingBlockFound, P2PKAddress}
+import org.ergoplatform.{AutolykosSolution, P2PKAddress}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -399,7 +399,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
     val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
-    powScheme.prove(
+    extractHeaderFromProveResult(powScheme.prove(
       history.bestHeaderOpt,
       Header.InitialVersion,
       settings.chainSettings.initialNBits,
@@ -413,9 +413,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       Long.MinValue,
       Long.MaxValue,
       defaultParams
-    ).asInstanceOf[OrderingBlockFound]  // todo: fix
-     .fb
-      .header
+    ))
   }
 
 }

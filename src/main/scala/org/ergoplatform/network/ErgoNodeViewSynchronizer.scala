@@ -783,7 +783,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
           penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} from ${remote.toString}")
+          log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} " +
+                    s"from ${remote.toString}, reason: ${parseResult.map(_.id)}")
       }
     }
   }

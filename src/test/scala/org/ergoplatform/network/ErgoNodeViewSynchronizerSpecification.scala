@@ -596,4 +596,34 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: NewBestInputBlock(None, _) does nothing") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // NewBestInputBlock(None, _) is sent when an ordering block is applied,
+      // resetting the best input block reference. The P2P layer should do nothing.
+      synchronizerMockRef ! NewBestInputBlock(None, local = true)
+
+      // Verify no SendToNetwork message is emitted (the handler is a no-op)
+      Thread.sleep(200)
+      ncProbe.expectNoMessage()
+    }
+  }
+
+  property("NodeViewSynchronizer: NewBestInputBlock with local=false does not broadcast") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // When an input block is received from a remote peer (local=false),
+      // the P2P layer should not re-broadcast it.
+      // The handler's else branch is currently a todo — no messages should be sent.
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val randomId = org.ergoplatform.utils.generators.CoreObjectGenerators.modifierIdGen.sample.get
+      synchronizerMockRef ! NewBestInputBlock(Some(randomId), local = false)
+
+      Thread.sleep(200)
+      ncProbe.expectNoMessage()
+    }
+  }
+
 }

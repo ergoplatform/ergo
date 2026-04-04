@@ -626,4 +626,115 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: NewBestInputBlock for unknown input block does not crash") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // When NewBestInputBlock references an input block ID not in history,
+      // the handler should log an error and continue without crashing.
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val unknownId = org.ergoplatform.utils.generators.CoreObjectGenerators.modifierIdGen.sample.get
+      synchronizerMockRef ! NewBestInputBlock(Some(unknownId), local = true)
+
+      // Should not throw — the error path is handled gracefully.
+      Thread.sleep(200)
+      ncProbe.expectNoMessage()
+    }
+  }
+
+  property("NodeViewSynchronizer: processOrderingBlockAnnouncement from far-behind peer is ignored") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+
+      // Generate a chain of 10 blocks so the last header has height 10.
+      // Our history is empty (height 0), so 10 > 0 + 2 → the OBA should be ignored.
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(10, hist)
+      val header = chain.last.header
+
+      val oba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(OrderingBlockAnnouncementMessageSpec, Left(msgBytes), Some(peer))
+
+      // OBA is from a peer far ahead of our height (> 2 blocks), so it should be silently ignored.
+      // No inv or ordering block announcement should be sent.
+      Thread.sleep(200)
+      ncProbe.expectNoMessage()
+    }
+  }
+
+  property("NodeViewSynchronizer: processOrderingBlockAnnouncement ignores already-known OBA") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import org.ergoplatform.utils.generators.ChainGenerator.applyBlock
+
+      // Generate a chain of 2 blocks with valid PoW
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      // Append the block to history so hr.contains(header.id) returns true
+      applyBlock(hist, chain.head)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      // Create and store the OBA
+      val oba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      hist.storeOrderingBlockAnnouncement(oba)
+
+      // Send the same OBA message — should be a no-op since header is already known
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(OrderingBlockAnnouncementMessageSpec, Left(msgBytes), Some(peer))
+
+      // Header already in history → no messages sent to network controller
+      Thread.sleep(200)
+      ncProbe.expectNoMessage()
+    }
+  }
+
+  property("NodeViewSynchronizer: requestInputBlock sends correct message to peer") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val inputBlockId: scorex.util.ModifierId = bytesToId(Array.fill(32)(1.toByte))
+
+      synchronizerMockRef.underlyingActor.requestInputBlock(inputBlockId, peer)
+
+      val msg = ncProbe.expectMsgClass(classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      val invData = msg.message.data.get.asInstanceOf[InvData]
+      invData.typeId shouldBe InputBlockTypeId.value
+      invData.ids shouldBe Seq(inputBlockId)
+      msg.sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
+  property("NodeViewSynchronizer: processOrderingBlockAnnouncementRequest serves stored OBA to peer") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import scorex.core.network.SendToPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      val oba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      hist.storeOrderingBlockAnnouncement(oba)
+
+      synchronizerMockRef.underlyingActor.processOrderingBlockAnnouncementRequest(header.id, hist, peer)
+
+      val msg = ncProbe.expectMsgClass(classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
 }

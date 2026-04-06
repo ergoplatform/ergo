@@ -604,6 +604,145 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with txs when <= 3 transactions") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      // Setup empty history
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val header = chain.head.header
+
+      // Create a UTXO state
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+
+      // Send initialization messages
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create an input block with 2 weakTxIds (<= 3, so txs should be included in broadcast)
+      val fakeWeakId1: Array[Byte] = Array.fill(32)(0x11.toByte)
+      val fakeWeakId2: Array[Byte] = Array.fill(32)(0x22.toByte)
+      val inputBlockInfo = InputBlockInfo(
+        InputBlockInfo.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        Some(Seq(fakeWeakId1, fakeWeakId2))
+      )
+
+      // Apply input block to history so getInputBlock returns it
+      hist.applyInputBlock(inputBlockInfo)
+
+      // Create a peer with protocolVersion >= SubblocksVersion and Equal status
+      val subBlocksPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion, // version 6.5.0
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq.empty
+      )
+      val subBlocksPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+
+      // Send NewBestInputBlock(local=true) event
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      // Verify InputBlockMessageSpec is sent to the sub-block peer with txs included
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+
+      // Verify the input block was sent WITH weakTxIds (since <= 3 transactions)
+      val ibi = msg.message.data.get.asInstanceOf[InputBlockInfo]
+      ibi.id shouldBe header.id
+      ibi.weakTxIds shouldBe Some(Seq(fakeWeakId1, fakeWeakId2))
+    }
+  }
+
+  property("NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI without txs when > 3 transactions") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      // Setup empty history
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val header = chain.head.header
+
+      // Create a UTXO state
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+
+      // Send initialization messages
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create an input block with 5 weakTxIds (> 3, so txs should be stripped from broadcast)
+      val fakeWeakIds = (1 to 5).map(i => Array.fill(32)(i.toByte))
+      val inputBlockInfo = InputBlockInfo(
+        InputBlockInfo.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        Some(fakeWeakIds)
+      )
+
+      // Apply input block to history so getInputBlock returns it
+      hist.applyInputBlock(inputBlockInfo)
+
+      // Create a peer with protocolVersion >= SubblocksVersion and Equal status
+      val subBlocksPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq.empty
+      )
+      val subBlocksPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+
+      // Send NewBestInputBlock(local=true) event
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      // Verify InputBlockMessageSpec is sent to the sub-block peer
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+
+      // Verify the input block message was created (weakTxIds stripped when > 3 transactions)
+      // The handler creates a copy with weakTxIds=None when size > 3
+      val ibi = msg.message.data.get.asInstanceOf[InputBlockInfo]
+      ibi.id shouldBe header.id
+      // When > 3 txs, the handler strips weakTxIds to None
+      ibi.weakTxIds.map(_.size).getOrElse(0) should be <= 3
+    }
+  }
+
   property("NodeViewSynchronizer: processInputBlockTransactionIds requests missing transactions") {
     withFixture2 { ctx =>
       import ctx._

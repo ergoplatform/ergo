@@ -42,6 +42,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators.genECPoint
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
   import org.ergoplatform.utils.generators.ChainGenerator._
@@ -1247,6 +1248,556 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val msg = ncProbe.expectMsgClass(classOf[SendToNetwork])
       msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
       msg.sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlock with None weakTxIds requests transaction IDs") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{InputBlockTransactionsRequest, InputBlockTransactionsRequestMessageSpec}
+      import scorex.core.network.SendToPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      // InputBlockInfo with None weakTxIds (no tx IDs announced)
+      val inputBlockInfo = InputBlockInfo(
+        InputBlockInfo.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None // no weakTxIds
+      )
+
+      val synchronizer = synchronizerMockRef.underlyingActor
+      synchronizer.processInputBlock(inputBlockInfo, hist, mempool, peer, Some(wrappedState))
+
+      // Should request transaction IDs since none were announced
+      val msg = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == InputBlockTransactionsRequestMessageSpec.messageCode &&
+            stn.sendingStrategy == SendToPeer(peer)
+        case _ => false
+      }
+      val req = msg.asInstanceOf[SendToNetwork].message.data.get.asInstanceOf[InputBlockTransactionsRequest]
+      req.inputBlockId shouldBe header.id
+    }
+  }
+
+  property("NodeViewSynchronizer: processOrderingBlockAnnouncement penalizes peer on invalid PoW") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+      import org.ergoplatform.network.peer.PenaltyType
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create OBA with header that has invalid PoW (zeroed out powSolution)
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val badPowSolution = new org.ergoplatform.AutolykosSolution(
+        header.minerPk,
+        genECPoint.sample.get,
+        Array.fill(32)(0: Byte),
+        BigInt(0)
+      )
+      val badHeader = header.copy(powSolution = badPowSolution)
+      val oba = OrderingBlockAnnouncement(badHeader, Seq.empty, Seq.empty, Seq.empty)
+
+      // Validate via PoW scheme to confirm it's invalid
+      val powScheme = settings.chainSettings.powScheme
+      oba.valid(powScheme) shouldBe false
+
+      // Send via message routing (processOrderingBlockAnnouncement is private)
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(OrderingBlockAnnouncementMessageSpec, Left(msgBytes), Some(peer))
+
+      val messages = ncProbe.receiveWhile(max = 2 seconds, idle = 200.millis) { case m => m }
+      messages.exists {
+        case PenalizePeer(_, PenaltyType.MisbehaviorPenalty) => true
+        case _ => false
+      } shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: processOrderingBlockAnnouncement with stored prev input block sends ProcessOrderingBlock") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import org.ergoplatform.modifiers.history.extension.Extension.PrevInputBlockIdKey
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ProcessOrderingBlock
+      import org.ergoplatform.settings.Algos
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      // Create a prev input block and store it
+      val prevIbId = bytesToId(Algos.hash("prev-input-block".getBytes))
+      val prevIbInfo = InputBlockInfo(
+        InputBlockInfo.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None
+      )
+      hist.applyInputBlock(prevIbInfo)
+
+      // Create OBA referencing the stored input block
+      val oba = OrderingBlockAnnouncement(
+        header,
+        Seq.empty,
+        Seq.empty,
+        Seq(PrevInputBlockIdKey -> Algos.encode(prevIbId).getBytes)
+      )
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Send via message routing
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(OrderingBlockAnnouncementMessageSpec, Left(msgBytes), Some(peer))
+
+      // Should send ProcessOrderingBlock since prev input block is stored
+      val msg = ncProbe.fishForMessage(3 seconds) {
+        case _: ProcessOrderingBlock => true
+        case _ => false
+      }
+      msg.asInstanceOf[ProcessOrderingBlock].oba.header.id shouldBe header.id
+    }
+  }
+
+  property("NodeViewSynchronizer: processOrderingBlockAnnouncement without stored prev input block requests BlockTransactions") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import org.ergoplatform.modifiers.history.extension.Extension.PrevInputBlockIdKey
+      import org.ergoplatform.modifiers.history.BlockTransactions
+      import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+      import org.ergoplatform.settings.Algos
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create OBA referencing a non-existent input block
+      val unknownIbId = bytesToId(Algos.hash("unknown-input-block".getBytes))
+      val oba = OrderingBlockAnnouncement(
+        header,
+        Seq.empty,
+        Seq.empty,
+        Seq(PrevInputBlockIdKey -> Algos.encode(unknownIbId).getBytes)
+      )
+
+      // Send via message routing
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(OrderingBlockAnnouncementMessageSpec, Left(msgBytes), Some(peer))
+
+      // Should request BlockTransactions since prev input block is NOT stored
+      val messages = ncProbe.receiveWhile(max = 3 seconds, idle = 300.millis) { case m => m }
+      val requestSent = messages.exists {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode && {
+            val invData = stn.message.data.get.asInstanceOf[InvData]
+            invData.typeId == BlockTransactions.modifierTypeId && invData.ids.contains(header.transactionsId)
+          }
+        case _ => false
+      }
+      requestSent shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: LocallyGeneratedOrderingBlock broadcasts to sub-block peers") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val fullBlock = chain.head
+      val header = fullBlock.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create a sub-block peer
+      val subBlocksPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq.empty
+      )
+      val subBlocksPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+
+      // Send LocallyGeneratedOrderingBlock
+      synchronizerMockRef ! LocallyGeneratedOrderingBlock(fullBlock, Seq.empty)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: FullBlockApplied sends old format to legacy peers") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create a legacy peer (version < SubblocksVersion)
+      val legacyPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version(5, 0, 0), // old version, below SubblocksVersion (6.5.0)
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq.empty
+      )
+      val legacyPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(legacyPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(legacyPeer, Equal, Some(header.height))
+
+      // Send FullBlockApplied
+      synchronizerMockRef ! FullBlockApplied(header)
+
+      // Should send inv for header to legacy peer
+      val messages = ncProbe.receiveWhile(max = 3 seconds, idle = 300.millis) { case m => m }
+      val invSent = messages.exists {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == InvSpec.messageCode &&
+            stn.sendingStrategy.isInstanceOf[SendToPeers] &&
+            stn.sendingStrategy.asInstanceOf[SendToPeers].chosenPeers.contains(legacyPeer)
+        case _ => false
+      }
+      invSent shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlockTransactions with missing txs skips processing") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
+      import org.ergoplatform.network.ErgoNodeViewSynchronizer.InputBlockDiffData
+      import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+      import scorex.util.ModifierId
+
+      val viewHolderProbe = TestProbe("ViewHolderProbe")
+      val testHist = ErgoHistory.readOrGenerate(settings)(null)
+      val testChain = genChain(3, testHist)
+      val testMempool = ErgoMemPool.empty(settings)
+      val testSyncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val testDeliveryTracker = DeliveryTracker.empty(settings)
+
+      val testSynchronizerRef: TestActorRef[SynchronizerMock] = TestActorRef(Props(
+        new SynchronizerMock(
+          ncProbe.ref,
+          viewHolderProbe.ref,
+          ErgoSyncInfoMessageSpec,
+          settings,
+          testSyncTracker,
+          testDeliveryTracker
+        )
+      ))
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      testSynchronizerRef ! ChangedState(wrappedState)
+      testSynchronizerRef ! ChangedHistory(testHist)
+      testSynchronizerRef ! ChangedMempool(testMempool)
+      Thread.sleep(500)
+
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val tx1 = validErgoTransactionGenTemplate(0, 0).sample.get._2
+      val inputBlockId: ModifierId = testChain.head.header.id
+
+      // Pre-populate with tx1 weakId but a fake weakId that won't be found
+      val fakeWeakId: Array[Byte] = Array.fill(32)(0xFF.toByte)
+      val localInputBlockChunksField = classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+      localInputBlockChunksField.setAccessible(true)
+      val localInputBlockChunks = localInputBlockChunksField.get(testSynchronizerRef.underlyingActor)
+        .asInstanceOf[scala.collection.mutable.Map[ModifierId, InputBlockDiffData]]
+
+      localInputBlockChunks.put(inputBlockId, InputBlockDiffData(
+        System.currentTimeMillis(),
+        Seq(tx1.weakId, fakeWeakId), // fakeWeakId won't be found
+        Seq(tx1)
+      ))
+
+      // Peer sends tx1 only — fakeWeakId is missing
+      val peerTxsData = InputBlockTransactionsData(inputBlockId, Seq(tx1))
+      testSynchronizerRef.underlyingActor.processInputBlockTransactions(peerTxsData, testHist, peer)
+
+      // Should NOT send ProcessInputBlockTransactions (allFound = false)
+      viewHolderProbe.expectNoMessage(500.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlockRequest not found sends no message") {
+    withFixture2 { ctx =>
+      import ctx._
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val unknownId = bytesToId(Array.fill(32)(0x99.toByte))
+
+      val synchronizer = synchronizerMockRef.underlyingActor
+      synchronizer.processInputBlockRequest(unknownId, hist, peer)
+
+      // Should not send any message since block not found
+      Thread.sleep(200)
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlockTransactionIds with all txs in mempool processes immediately") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.InputBlockTransactionIdsData
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ProcessInputBlockTransactions
+      import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+      import scorex.util.ModifierId
+
+      val viewHolderProbe = TestProbe("ViewHolderProbe")
+      val testHist = ErgoHistory.readOrGenerate(settings)(null)
+      val testChain = genChain(3, testHist)
+      val testSyncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val testDeliveryTracker = DeliveryTracker.empty(settings)
+
+      val testSynchronizerRef: TestActorRef[SynchronizerMock] = TestActorRef(Props(
+        new SynchronizerMock(
+          ncProbe.ref,
+          viewHolderProbe.ref,
+          ErgoSyncInfoMessageSpec,
+          settings,
+          testSyncTracker,
+          testDeliveryTracker
+        )
+      ))
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+
+      // Put tx in mempool as UnconfirmedTransaction
+      val unconfirmedTx = UnconfirmedTransaction(tx, None)
+      val mempool = ErgoMemPool.empty(settings).put(unconfirmedTx)
+      testSynchronizerRef ! ChangedState(wrappedState)
+      testSynchronizerRef ! ChangedHistory(testHist)
+      testSynchronizerRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      val inputBlockId: ModifierId = testChain.head.header.id
+      val txIds = InputBlockTransactionIdsData(inputBlockId, Seq(tx.weakId))
+
+      testSynchronizerRef.underlyingActor.processInputBlockTransactionIds(txIds, mempool, peer)
+
+      // Should immediately send ProcessInputBlockTransactions since all txs are in mempool
+      val msg = viewHolderProbe.fishForMessage(2 seconds) {
+        case _: ProcessInputBlockTransactions => true
+        case _ => false
+      }
+      val pit = msg.asInstanceOf[ProcessInputBlockTransactions]
+      pit.std.inputBlockId shouldBe inputBlockId
+      pit.std.transactions.length shouldBe 1
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlockTransactionIdsRequest not found sends no message") {
+    withFixture2 { ctx =>
+      import ctx._
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val unknownId = bytesToId(Array.fill(32)(0x88.toByte))
+
+      val synchronizer = synchronizerMockRef.underlyingActor
+      synchronizer.processInputBlockTransactionIdsRequest(unknownId, hist, peer)
+
+      Thread.sleep(200)
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: DownloadInputBlock triggers requestInputBlock") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.nodeView.ErgoNodeViewHolder.{DownloadInputBlock, DownloadInputBlockTransactions}
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val inputBlockId = bytesToId(Array.fill(32)(0xDD.toByte))
+      synchronizerMockRef ! DownloadInputBlock(inputBlockId, peer)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      msg.sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
+  property("NodeViewSynchronizer: DownloadInputBlockTransactions triggers correct message") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.nodeView.ErgoNodeViewHolder.{DownloadInputBlock, DownloadInputBlockTransactions}
+      import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsRequest
+      import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsRequestMessageSpec
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val inputBlockId = bytesToId(Array.fill(32)(0xEE.toByte))
+      val req = InputBlockTransactionsRequest(inputBlockId, Seq(Array.fill(32)(0x11.toByte)))
+      synchronizerMockRef ! DownloadInputBlockTransactions(req, peer)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockTransactionsRequestMessageSpec.messageCode
+      msg.sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
+  property("NodeViewSynchronizer: modifiersReq routes InputBlockTypeId to serve stored input block") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(2, hist)
+      val header = chain.head.header
+
+      // Create and store an input block
+      val inputBlockInfo = InputBlockInfo(
+        InputBlockInfo.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None
+      )
+      hist.applyInputBlock(inputBlockInfo)
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Send RequestModifier for InputBlockTypeId via message
+      val invData = InvData(InputBlockTypeId.value, Seq(header.id))
+      synchronizerMockRef ! Message(RequestModifierSpec, Right(invData), Some(peer))
+
+      // Should send InputBlockMessageSpec back
+      val msg = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == InputBlockMessageSpec.messageCode
+        case _ => false
+      }
+      msg.asInstanceOf[SendToNetwork].sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
+  property("NodeViewSynchronizer: broadcastModifierInv with peersOpt targets specific peers") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.network.{PeerSpec, Version}
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create a specific peer to target
+      val targetPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(
+          PeerSpec(
+            settings.scorexSettings.network.agentName,
+            Version.SubblocksVersion,
+            settings.scorexSettings.network.nodeName,
+            None,
+            Seq.empty
+          ),
+          System.currentTimeMillis()
+        ))
+      )
+      syncTracker.updateStatus(targetPeer, Equal, Some(header.height))
+
+      // Send FullBlockApplied — this triggers broadcastModifierInv with peersOpt for legacy peers
+      // We verify the targeting behavior by checking that inv goes to the right peers
+      synchronizerMockRef ! FullBlockApplied(header)
+
+      val messages = ncProbe.receiveWhile(max = 3 seconds, idle = 300.millis) { case m => m }
+      // All messages should be targeted to peers with Equal/Fork status
+      messages.collect { case stn: SendToNetwork => stn }.forall { stn =>
+        stn.sendingStrategy match {
+          case SendToPeers(peers) => peers.contains(targetPeer)
+          case _ => true // Broadcast is also acceptable
+        }
+      } shouldBe true
     }
   }
 

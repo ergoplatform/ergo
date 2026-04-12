@@ -1437,7 +1437,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
       import org.ergoplatform.consensus.Equal
-      import org.ergoplatform.network.message.inputblocks.{OrderingBlockAnnouncement, OrderingBlockAnnouncementMessageSpec}
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
       import org.ergoplatform.network.{PeerSpec, Version}
       import scorex.core.network.{ConnectedPeer, SendToPeers}
       import org.ergoplatform.network.peer.PeerInfo
@@ -1535,7 +1535,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
       import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
       import org.ergoplatform.network.ErgoNodeViewSynchronizer.InputBlockDiffData
-      import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
       import scorex.util.ModifierId
 
       val viewHolderProbe = TestProbe("ViewHolderProbe")
@@ -1677,7 +1676,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: DownloadInputBlock triggers requestInputBlock") {
     withFixture2 { ctx =>
       import ctx._
-      import org.ergoplatform.nodeView.ErgoNodeViewHolder.{DownloadInputBlock, DownloadInputBlockTransactions}
+      import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadInputBlock
       import scorex.core.network.SendToPeer
       import scorex.util.bytesToId
 
@@ -1693,7 +1692,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: DownloadInputBlockTransactions triggers correct message") {
     withFixture2 { ctx =>
       import ctx._
-      import org.ergoplatform.nodeView.ErgoNodeViewHolder.{DownloadInputBlock, DownloadInputBlockTransactions}
+      import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadInputBlockTransactions
       import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsRequest
       import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsRequestMessageSpec
       import scorex.core.network.SendToPeer
@@ -1715,7 +1714,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import org.ergoplatform.modifiers.InputBlockTypeId
       import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
       import scorex.core.network.SendToPeer
-      import scorex.util.bytesToId
 
       val hist = ErgoHistory.readOrGenerate(settings)(null)
       val chain = genChain(2, hist)
@@ -1754,7 +1752,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
       import org.ergoplatform.consensus.Equal
-      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
       import scorex.core.network.{ConnectedPeer, SendToPeers}
       import org.ergoplatform.network.peer.PeerInfo
       import org.ergoplatform.network.{PeerSpec, Version}

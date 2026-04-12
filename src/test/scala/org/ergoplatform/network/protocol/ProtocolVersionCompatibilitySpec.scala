@@ -45,7 +45,7 @@ class ProtocolVersionCompatibilitySpec extends AnyPropSpec
   }
 
   property("should parse version from string correctly") {
-    Version("6.0.0") shouldEqual Version.SubblocksVersion
+    Version("6.5.0") shouldEqual Version.SubblocksVersion
     Version("0.0.1") shouldEqual Version.initial
     Version("4.0.100") shouldEqual Version.Eip37ForkVersion
   }

@@ -41,7 +41,7 @@ case class ErgoSettings(directory: String,
       TestnetLaunchParameters
     } else if (networkType == NetworkType.Tests) {
       MainnetLaunchParameters
-    }else {
+    } else {
       MainnetLaunchParameters
     }
   }

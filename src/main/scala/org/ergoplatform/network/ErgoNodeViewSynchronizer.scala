@@ -1405,9 +1405,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val powScheme = settings.chainSettings.powScheme
       // todo : for digest mode, input-blocks validation is skipped here, however, in digest mode they
       //  should not be broadcasted to digest mode peers and accepted by them at all
+      val parentHeaderOpt = hr.modifierById(subBlockHeader.parentId).collect { case h: Header => h }
+      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
+        val expectedDiff = hr.requiredDifficultyAfter(parent)
+        import org.ergoplatform.mining.difficulty.DifficultySerializer
+        DifficultySerializer.encodeCompactBits(expectedDiff)
+      }
       val valid = usrOpt
         .map(_.stateContext.currentParameters)
-        .map(ps => inputBlockInfo.valid(powScheme, ps))
+        .map(ps => inputBlockInfo.valid(powScheme, ps, expectedNBits))
         .getOrElse(true)
       if (valid) { // check PoW / Merkle proofs before processing todo: check diff
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block

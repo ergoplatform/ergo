@@ -28,11 +28,12 @@ case class InputBlockInfo(version: Byte,
 
   lazy val id: ModifierId = header.id
 
-  def valid(powScheme: AutolykosPowScheme, parameters: Parameters): Boolean = {
-    // todo: check difficulty
-
+  def valid(powScheme: AutolykosPowScheme,
+             parameters: Parameters,
+             expectedNBits: Option[Long] = None): Boolean = {
     val powValid = powScheme.checkInputBlockPoW(header, parameters)
     val extValid = inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
+    val nBitsValid = expectedNBits.forall(header.nBits == _)
 
     if (!powValid) {
       log.warn(s"PoW check fails for sub-block ${header.id}")
@@ -40,7 +41,11 @@ case class InputBlockInfo(version: Byte,
     if (!extValid) {
       log.warn(s"Extension section check fails for sub-block ${header.id}")
     }
-    powValid && extValid
+    if (!nBitsValid) {
+      log.warn(s"Difficulty (nBits) mismatch for sub-block ${header.id}: " +
+        s"header.nBits=${header.nBits}, expected=${expectedNBits.getOrElse("unknown")}")
+    }
+    powValid && extValid && nBitsValid
   }
 
   lazy val prevInputBlockId: Option[ModifierId] = inputBlockFields.prevInputBlockId.map(bytesToId)

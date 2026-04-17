@@ -138,6 +138,140 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
+   * Tests that InputBlockInfo.valid() returns false when expectedNBits is provided
+   * and does not match the header's nBits, even if PoW and Merkle proof are valid.
+   * This verifies that an attacker cannot submit an input block with a lower difficulty
+   * (smaller nBits) to bypass PoW validation.
+   */
+  property("InputBlockInfo.valid() should return false when nBits does not match expectedNBits") {
+    forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen, stateRootGen, Gen.choose(0, 200)) {
+      (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest, stateRoot, wrongDifficulty) =>
+
+        val nBits = DifficultySerializer.encodeCompactBits(difficulty)
+        val wrongNBits = DifficultySerializer.encodeCompactBits(Math.max(1, wrongDifficulty.toLong))
+
+        val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
+        val extensionRoot = Algos.merkleTreeRoot(
+          Extension.merkleTree(
+            InputBlockFields.toExtensionFields(
+              prevInputBlockId,
+              transactionsDigest,
+              prevTransactionsDigest
+            ).fields
+          )
+        )
+
+        val h = baseHeader.copy(nBits = nBits, version = 2, extensionRoot = extensionRoot)
+        val sk = randomSecret()
+        val x = randomSecret()
+        val msg = powScheme.msgByHeader(h)
+        val b = powScheme.getB(h.nBits)
+        val hbs = Ints.toByteArray(h.height)
+        val N = powScheme.calcN(h)
+
+        whenever(wrongNBits != nBits) {
+          powScheme.checkNonces(2, hbs, msg, sk, x, b, N, 0, 10000, defaultParams) match {
+            case InputSolutionFound(as) =>
+              val inputBlockHeader = h.copy(powSolution = as)
+
+              powScheme.checkInputBlockPoW(inputBlockHeader, defaultParams) shouldBe true
+
+              val merkleProof = createValidMerkleProof(
+                prevInputBlockId,
+                transactionsDigest,
+                prevTransactionsDigest
+              )
+
+              val inputBlockFields = new InputBlockFields(
+                prevInputBlockId,
+                transactionsDigest,
+                prevTransactionsDigest,
+                merkleProof
+              )
+
+              val inputBlockInfo = InputBlockInfo(
+                InputBlockInfo.initialMessageVersion,
+                inputBlockHeader,
+                inputBlockFields,
+                None
+              )
+
+              inputBlockInfo.inputBlockFields.inputBlockFieldsProof.valid(inputBlockHeader.extensionRoot) shouldBe true
+              inputBlockInfo.valid(powScheme, defaultParams, Some(nBits)) shouldBe true
+              inputBlockInfo.valid(powScheme, defaultParams, Some(wrongNBits)) shouldBe false
+
+            case _ =>
+              succeed
+          }
+        }
+    }
+  }
+
+  /**
+   * Tests that InputBlockInfo.valid() returns true when expectedNBits matches header.nBits.
+   */
+  property("InputBlockInfo.valid() should return true when nBits matches expectedNBits") {
+    forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen, stateRootGen) {
+      (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest, stateRoot) =>
+
+        val nBits = DifficultySerializer.encodeCompactBits(difficulty)
+
+        val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
+        val extensionRoot = Algos.merkleTreeRoot(
+          Extension.merkleTree(
+            InputBlockFields.toExtensionFields(
+              prevInputBlockId,
+              transactionsDigest,
+              prevTransactionsDigest
+            ).fields
+          )
+        )
+
+        val h = baseHeader.copy(nBits = nBits, version = 2, extensionRoot = extensionRoot)
+        val sk = randomSecret()
+        val x = randomSecret()
+        val msg = powScheme.msgByHeader(h)
+        val b = powScheme.getB(h.nBits)
+        val hbs = Ints.toByteArray(h.height)
+        val N = powScheme.calcN(h)
+
+        powScheme.checkNonces(2, hbs, msg, sk, x, b, N, 0, 10000, defaultParams) match {
+          case InputSolutionFound(as) =>
+            val inputBlockHeader = h.copy(powSolution = as)
+
+            powScheme.checkInputBlockPoW(inputBlockHeader, defaultParams) shouldBe true
+
+            val merkleProof = createValidMerkleProof(
+              prevInputBlockId,
+              transactionsDigest,
+              prevTransactionsDigest
+            )
+
+            val inputBlockFields = new InputBlockFields(
+              prevInputBlockId,
+              transactionsDigest,
+              prevTransactionsDigest,
+              merkleProof
+            )
+
+            val inputBlockInfo = InputBlockInfo(
+              InputBlockInfo.initialMessageVersion,
+              inputBlockHeader,
+              inputBlockFields,
+              None
+            )
+
+            inputBlockInfo.inputBlockFields.inputBlockFieldsProof.valid(inputBlockHeader.extensionRoot) shouldBe true
+
+            inputBlockInfo.valid(powScheme, defaultParams, Some(nBits)) shouldBe true
+
+          case _ =>
+            succeed
+        }
+    }
+  }
+
+  /**
    * Tests that InputBlockInfo.valid() returns false when the Merkle proof is invalid.
    * Creates a Merkle proof with a wrong transactions digest, then verifies that
    * the proof fails validation against the correct extension root.

@@ -185,7 +185,7 @@ docker / dockerfile := {
   val configMainNet = (IntegrationTest / resourceDirectory).value / "mainnetTemplate.conf"
 
   new Dockerfile {
-    from("openjdk:11-jre-slim")
+    from("eclipse-temurin:11-jre-jammy")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configDevNet), "/opt/ergo")

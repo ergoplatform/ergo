@@ -8,8 +8,8 @@ devnet
 .ensime_cache/
 scorex.yaml
 
-# AI agent files
-.crush
+# LLM reports on code analysis etc
+llm_generated
 
 # scala build folders
 target
@@ -70,4 +70,3 @@ out/
 
 # scala worksheets
 *.worksheet.sc
-llm_generated/

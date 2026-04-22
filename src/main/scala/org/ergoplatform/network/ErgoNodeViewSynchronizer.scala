@@ -820,7 +820,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
           // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
           penalizeMisbehavingPeer(remote)
-          log.warn(s"Failed to parse transaction with declared id ${ScorexEncoder.encodeId(id)} from ${remote.toString}")
+          log.warn(s"Failed to parse transaction with declared id ${ScorexEncoder.encodeId(id)} " +
+                    s"from ${remote.toString}, reason: ${parseResult.map(_.id)}")
       }
     }
   }
@@ -1287,10 +1288,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
    * Cleanup old entries from localInputBlockChunks cache.
-   * 
+   *
    * This method removes entries that have been in the cache longer than LocalInputBlockChunksTTL.
    * It should be called periodically to prevent memory exhaustion from stale entries.
-   * 
+   *
    * Algorithm:
    * 1. Calculate the cutoff time (current time - TTL)
    * 2. Filter out entries older than the cutoff time
@@ -1757,11 +1758,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val peerHeight = s._2.height
         // send ordering block announcement to peers on same height and also supporting sub-blocks
         // Don't send to peers that are far behind (> 2 blocks gap)
-        SubBlocksFilter.condition(s._1) && 
+        SubBlocksFilter.condition(s._1) &&
           (status == Equal || status == Fork) &&
           (peerHeight <= hr.fullBlockHeight + 2)
       }.keys.toSeq
-      
+
       if (peers.nonEmpty) {
         // announce id via inv message
         val invData = InvData(OrderingBlockAnnouncementTypeId.value, Seq(oba.header.id))

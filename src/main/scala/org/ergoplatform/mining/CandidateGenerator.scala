@@ -90,16 +90,17 @@ class CandidateGenerator(
       context.become(
         initialized(
           CandidateGeneratorState(
-            cache       = None,
+            cachedCandidate       = None,
+            cachedPreviousCandidate = None,
             solvedBlock = None,
-            h,
-            s,
-            m,
+            hr = h,
+            sr = s,
+            mpr = m,
             avgGenTime = 1000.millis
           )
         )
       )
-      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false, optPk = None)
       context.system.eventStream
         .subscribe(self, classOf[FullBlockApplied])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
@@ -129,27 +130,27 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
-      if (needNewCandidate(state.cache, header)) {
+      if (needNewCandidate(state.cachedCandidate, header)) {
         if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(state.copy(cache = None, solvedBlock = None)))
+          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
         else
-          context.become(initialized(state.copy(cache = None)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false)
+          context.become(initialized(state.copy(cachedCandidate = None)))
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false, optPk = None)
       } else {
         context.become(initialized(state))
       }
 
-    case gen @ GenerateCandidate(txsToInclude, reply) =>
+    case gen @ GenerateCandidate(txsToInclude, reply, _, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (cachedFor(state.cache, txsToInclude)) {
-        senderOpt.foreach(_ ! StatusReply.success(state.cache.get))
+      if (cachedFor(state.cachedCandidate, txsToInclude)) {
+        senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
         CandidateGenerator.generateCandidate(
           state.hr,
           state.sr,
           state.mpr,
-          minerPk,
+          optPk.getOrElse(minerPk),
           txsToInclude,
           ergoSettings
         ) match {
@@ -166,7 +167,7 @@ class CandidateGenerator(
             log.info(s"Generated new candidate in $generationTook ms")
             context.become(
               initialized(
-                state.copy(cache = Some(candidate), avgGenTime = generationTook.millis)
+                state.copy(cachedCandidate = Some(candidate), cachedPreviousCandidate = state.cachedCandidate, avgGenTime = generationTook.millis)
               )
             )
             senderOpt.foreach(_ ! StatusReply.success(candidate))
@@ -184,7 +185,7 @@ class CandidateGenerator(
       }
 
     case sf: SolutionFound
-        if state.solvedBlock.isEmpty && state.cache.nonEmpty =>
+        if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
       val preSolution = sf.as
       val solution =
@@ -197,7 +198,7 @@ class CandidateGenerator(
         sf match {
           case _: OrderingSolutionFound =>
             // todo: account for input blocks
-            val cachedCandidate = state.cache.get.candidateBlock
+            val cachedCandidate = state.cachedCandidate.get.candidateBlock
             val newBlock = completeOrderingBlock(cachedCandidate, solution)
             log.info(s"New block mined, header: ${newBlock.header}")
             ergoSettings.chainSettings.powScheme
@@ -209,13 +210,13 @@ class CandidateGenerator(
                 StatusReply.success(())
               case Failure(exception) =>
                 log.warn(s"Removing candidate due to invalid block", exception)
-                context.become(initialized(state.copy(cache = None)))
+                context.become(initialized(state.copy(cachedCandidate = None)))
                 StatusReply.error(
                   new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
                 )
             }
           case _: InputSolutionFound =>
-            val cachedCandidate = state.cache.get
+            val cachedCandidate = state.cachedCandidate.get
             val (sbi, sbt) = completeInputBlock(cachedCandidate.candidateBlock, solution)
             val parameters = cachedCandidate.parameters
             val powValid = ergoSettings.chainSettings.powScheme.checkInputBlockPoW(sbi.header, parameters)
@@ -223,11 +224,11 @@ class CandidateGenerator(
               // todo: finish input block mining API
               log.info(s"Input-block ${sbi.id} mined @ height ${sbi.header.height}!")
               sendInputToNodeView(sbi, sbt)
-              context.become(initialized(state.copy(cache = None))) // todo: cache input block ?
+              context.become(initialized(state.copy(cachedCandidate = None))) // todo: cache input block ?
               StatusReply.success(())
             } else {
               log.warn(s"Removing candidate due to invalid input block")
-              context.become(initialized(state.copy(cache = None)))
+              context.become(initialized(state.copy(cachedCandidate = None)))
               StatusReply.error(
                 new Exception(s"Invalid input block! PoW valid: $powValid")
               )
@@ -266,12 +267,15 @@ object CandidateGenerator extends ScorexLogging {
 
   case class GenerateCandidate(
     txsToInclude: Seq[ErgoTransaction],
-    reply: Boolean
+    reply: Boolean,
+    forced: Boolean,
+    optPk: Option[ProveDlog] = None
   )
 
   /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(
-    cache: Option[Candidate],
+    cachedCandidate: Option[Candidate],
+    cachedPreviousCandidate: Option[Candidate],
     solvedBlock: Option[ErgoFullBlock],
     hr: ErgoHistoryReader,
     sr: UtxoStateReader,
@@ -325,6 +329,49 @@ object CandidateGenerator extends ScorexLogging {
   ): Boolean = {
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
   }
+
+  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
+    * interval so they switch to it.
+    * If blockCandidateGenerationInterval elapsed since last block generation,
+    * then new tx in mempool is a reasonable trigger of candidate regeneration
+    */
+  def hasCandidateExpired(
+    cachedCandidate: Option[Candidate],
+    solvedBlock: Option[ErgoFullBlock],
+    candidateGenInterval: FiniteDuration
+   ): Boolean = {
+    def candidateAge(c: Candidate): FiniteDuration =
+      (System.currentTimeMillis() - c.candidateBlock.timestamp).millis
+    // non-empty solved block means we wait for newly mined block to be applied
+    if (solvedBlock.isDefined) {
+      false
+    } else {
+      cachedCandidate match {
+        // if current candidate is older than candidateGenInterval
+        case Some(c) if candidateGenInterval.compare(candidateAge(c)) <= 0 =>
+          log.info(s"Regenerating block candidate")
+          true
+        case _ =>
+          false
+      }
+    }
+  }
+
+  /** Calculate average mining time from latest block header timestamps */
+  def getBlockMiningTimeAvg(
+    timestamps: IndexedSeq[Header.Timestamp]
+  ): FiniteDuration = {
+    val miningTimes =
+      timestamps.sorted
+        .sliding(2, 1)
+        .map { case IndexedSeq(prev, next) => next - prev }
+        .toVector
+    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+  }
+
+  /** Get average count of transactions per block */
+  def getTxsPerBlockCountAvg(txsPerBlock: IndexedSeq[Int]): Long =
+    Math.round(txsPerBlock.sum / txsPerBlock.length.toDouble)
 
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =

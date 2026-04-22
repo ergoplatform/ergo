@@ -112,7 +112,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case CandidateGenerator.GenerateCandidate(_, reply) =>
+      case CandidateGenerator.GenerateCandidate(_, reply, _, _) =>
         if (reply) {
           val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
           val candidate = Candidate(null, externalWorkMessage, Seq.empty, defaultParams) // API does not use CandidateBlock

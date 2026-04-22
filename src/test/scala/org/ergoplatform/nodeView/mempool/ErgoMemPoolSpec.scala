@@ -15,6 +15,9 @@ import sigma.ast.ByteArrayConstant
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.{ErgoTreeSerializer, SerializerException}
 
+import scala.collection.immutable.TreeMap
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
   with ScalaCheckPropertyChecks {
@@ -524,6 +527,76 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       outputCandidates = IndexedSeq(o3)), None)
     val (_, outcome2) = pool.process(tx3, wus)
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
+  }
+
+  it should "not produce duplicate ids when stale registry entry prevents proper removal" in {
+    // TreeMap requires an Ordering for WeightedTxId keys
+    implicit val wtxOrdering: Ordering[WeightedTxId] = Ordering.by(wtx => (-wtx.weight, wtx.id))
+
+    val tx = invalidErgoTransactionGen.sample.get
+    val now = System.currentTimeMillis()
+    val utx = UnconfirmedTransaction(tx, None)
+
+    // Create two WeightedTxIds for the same transaction with different weights.
+    // WeightedTxId.equals uses only 'id', but Ordering[WeightedTxId] compares (-weight, id).
+    // Therefore TreeMap treats them as distinct keys, allowing the same transaction
+    // to exist under multiple keys.
+    val wtxStale = WeightedTxId(tx.id, 100, 100, now)
+    val wtxActual = WeightedTxId(tx.id, 200, 200, now)
+
+    // Verify the structural vulnerability
+    wtxStale shouldBe wtxActual
+    wtxOrdering.compare(wtxStale, wtxActual) should not be 0
+
+    // Simulate an out-of-sync state: registry points to wtxStale,
+    // but orderedTransactions stores the tx under wtxActual.
+    // This can happen after updateFamily or other weight changes
+    // fail to keep the two collections in sync.
+    val emptyPool = OrderedTxPool.empty(settings)
+    val brokenPool = new OrderedTxPool(
+      TreeMap(wtxActual -> utx),
+      TreeMap(tx.id -> wtxStale),
+      emptyPool.invalidatedTxIds,
+      emptyPool.outputs,
+      emptyPool.inputs
+    )(settings)
+
+    // pool.get traverses registry -> wtxStale -> orderedTransactions,
+    // but wtxStale is not a key in orderedTransactions, so get returns None.
+    brokenPool.get(tx.id) shouldBe None
+
+    // Yet the transaction IS present under wtxActual
+    brokenPool.orderedTransactions.valuesIterator.toSeq.map(_.id) should contain(tx.id)
+
+    val mempool = new ErgoMemPool(
+      brokenPool,
+      MemPoolStatistics(now, 0, now, 0),
+      SortingOption.FeePerByte
+    )(settings)
+
+    // invalidate() first tries pool.get (returns None), then falls back to
+    // scanning orderedTransactions.valuesIterator. It finds the tx and calls
+    // OrderedTxPool.invalidate(utx). Inside that method,
+    // transactionsRegistry.get(tx.id) returns Some(wtxStale).
+    // With the fix, the stale entry is detected (wtxStale not in orderedTransactions)
+    // and the fallback path filters orderedTransactions by transaction id.
+    val afterInvalidate = mempool.invalidate(tx.id)
+
+    // Transaction is properly removed from orderedTransactions despite stale registry
+    afterInvalidate.pool.orderedTransactions.valuesIterator.toSeq.map(_.id) should not contain(tx.id)
+    afterInvalidate.pool.transactionsRegistry.contains(tx.id) shouldBe false
+
+    // Now put the same transaction again. With no registry entry, put()
+    // creates a NEW WeightedTxId based on the actual feeFactor.
+    val afterPut = afterInvalidate.put(utx)
+
+    // Only ONE entry for the transaction ID exists
+    afterPut.pool.orderedTransactions.valuesIterator.toSeq.count(_.id == tx.id) shouldBe 1
+
+    // getAll (used by /transactions/unconfirmed/transactionIds) returns no duplicates
+    val all = afterPut.getAll
+    all.count(_.id == tx.id) shouldBe 1
+    all.map(_.id).distinct.size shouldBe 1
   }
 
 }

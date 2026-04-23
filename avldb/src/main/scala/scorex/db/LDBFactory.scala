@@ -89,9 +89,17 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
       add(path, factory.open(path, options))
     } catch {
       case x: Throwable =>
-        log.error(s"Failed to initialize storage: $x. Please check that directory $path exists and is not used by some other active node")
-        java.lang.System.exit(2)
-        null
+        log.warn(s"Failed to initialize storage at $path due to: $x. Attempting to repair...")
+        remove(path)
+        try {
+          repair(path, options)
+          add(path, factory.open(path, options))
+        } catch {
+          case y: Throwable =>
+            log.error(s"Failed to initialize storage after repair attempt: $y. Please check that directory $path exists and is not used by some other active node")
+            java.lang.System.exit(2)
+            null
+        }
     } finally {
       lock.writeLock().unlock()
     }
@@ -127,10 +135,18 @@ object LDBFactory extends ScorexLogging {
       new LDBKVStore(db)
     } catch {
       case x: Throwable =>
-        log.error(s"Failed to initialize storage: $x. Please check that directory $path could be accessed " +
-          s"and is not used by some other active node")
-        java.lang.System.exit(2)
-        null
+        log.warn(s"Failed to initialize storage at $path due to: $x. Attempting to repair...")
+        try {
+          factory.repair(dir, options)
+          val db = factory.open(dir, options)
+          new LDBKVStore(db)
+        } catch {
+          case y: Throwable =>
+            log.error(s"Failed to initialize storage after repair attempt: $y. Please check that directory $path could be accessed " +
+              s"and is not used by some other active node")
+            java.lang.System.exit(2)
+            null
+        }
     }
   }
 

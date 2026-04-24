@@ -1,6 +1,7 @@
 package org.ergoplatform.network.message.inputblocks
 
 import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.util.ModifierId
@@ -19,9 +20,10 @@ case class OrderingBlockAnnouncement(header: Header,
                                      extensionFields: Seq[(Array[Byte], Array[Byte])],
                                      unparsedBytes: Array[Byte] = Array.emptyByteArray) {
 
-  def valid(powScheme: AutolykosPowScheme): Boolean = {
-    // todo: check extension ?
-    // todo: check diff
-    powScheme.validate(header).isSuccess
+  def valid(powScheme: AutolykosPowScheme,
+            expectedNBits: Option[Long] = None): Boolean = {
+    val extValid = ExtensionCandidate(extensionFields).digest == header.extensionRoot
+    val nBitsValid = expectedNBits.forall(header.nBits == _)
+    powScheme.validate(header).isSuccess && extValid && nBitsValid
   }
 }

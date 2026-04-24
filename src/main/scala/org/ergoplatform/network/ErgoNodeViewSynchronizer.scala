@@ -1744,7 +1744,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (!hr.contains(oba.header.id)) {
 
-      if (!oba.valid(settings.chainSettings.powScheme)) {
+      val parentHeaderOpt = hr.modifierById(oba.header.parentId).collect { case h: Header => h }
+      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
+        val expectedDiff = hr.requiredDifficultyAfter(parent)
+        import org.ergoplatform.mining.difficulty.DifficultySerializer
+        DifficultySerializer.encodeCompactBits(expectedDiff)
+      }
+
+      if (!oba.valid(settings.chainSettings.powScheme, expectedNBits)) {
         penalizeMisbehavingPeer(remote)
         return
       }

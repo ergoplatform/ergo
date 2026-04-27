@@ -3,9 +3,10 @@ package org.ergoplatform.utils
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.{AutolykosSolution, P2PKAddress}
+import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.OrderingSolutionFound
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -118,7 +119,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
           val candidate = Candidate(null, externalWorkMessage, Seq.empty, defaultParams) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
         }
-      case _: AutolykosSolution => sender() ! StatusReply.success(())
+      case _: OrderingSolutionFound => sender() ! StatusReply.success(())
       case ErgoMiner.ReadMinerPk => sender() ! StatusReply.success(pk)
     }
   }

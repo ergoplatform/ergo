@@ -15,7 +15,7 @@ import scorex.core.network.ModifiersStatus.Requested
 import org.ergoplatform.core.idsToString
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, UtxoSetSnapshotPersistence, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{ErgoStateReader, SnapshotsInfo, StateType, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.message.{InvSpec, MessageSpec, ModifiersSpec, RequestModifierSpec}
 import scorex.core.network._
@@ -1398,6 +1398,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       return
     }
 
+    // Input blocks should only be processed by UTXO mode nodes
+    // Digest mode nodes cannot validate input blocks properly (validation is skipped when usrOpt is empty)
+    if (usrOpt.isEmpty) {
+      log.warn(s"Received input block but local node is in digest mode - input blocks cannot be validated in digest mode, ignoring")
+      return
+    }
+
     val subBlockHeader = inputBlockInfo.header
     val subBlockId = inputBlockInfo.id
 
@@ -2190,9 +2197,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             }
             val peers = syncTracker.statuses.filter { s =>
               val status = s._2.status
-              // todo: send to ones in utxo mode only, send to height of ours minues one
-              // send input block to peers on same height and also supporting sub-blocks
-              SubBlocksFilter.condition(s._1) && (status == Equal || status == Fork)
+              val peer = s._1
+              // send input block to peers on same height and also supporting sub-blocks and in utxo mode
+              SubBlocksFilter.condition(peer) &&
+                peer.mode.exists(_.stateType == StateType.Utxo) &&
+                (status == Equal || status == Fork)
             }.keys.toSeq
             val msg = Message(InputBlockMessageSpec, Right(ibi), None)
             networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))

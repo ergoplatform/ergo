@@ -1411,8 +1411,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       val powScheme = settings.chainSettings.powScheme
-      // todo : for digest mode, input-blocks validation is skipped here, however, in digest mode they
-      //  should not be broadcasted to digest mode peers and accepted by them at all
       val parentHeaderOpt = hr.modifierById(subBlockHeader.parentId).collect { case h: Header => h }
       val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
         val expectedDiff = hr.requiredDifficultyAfter(parent)

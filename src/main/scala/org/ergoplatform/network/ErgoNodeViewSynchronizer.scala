@@ -1325,6 +1325,39 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     diffIds -> mempoolTxs
   }
 
+  /**
+    * Resolves input block transactions by calculating the diff between announced weak transaction IDs
+    * and the local mempool. If all transactions are available, invokes `onReady` immediately.
+    * Otherwise, stores the partial data in cache, requests missing transactions from the peer,
+    * and invokes `onMissing`.
+    *
+    * @param subBlockId The ID of the input block
+    * @param wIds       The announced weak transaction IDs
+    * @param mp         The mempool reader
+    * @param remote     The peer to request missing transactions from
+    * @param onReady    Callback invoked when all transactions are immediately available
+    * @param onMissing  Callback invoked with the missing weak IDs when a request is sent
+    */
+  private def resolveInputBlockTransactions(subBlockId: ModifierId,
+                                            wIds: Seq[WeakId],
+                                            mp: ErgoMemPoolReader,
+                                            remote: ConnectedPeer)
+                                           (onReady: Seq[ErgoTransaction] => Unit,
+                                            onMissing: Seq[WeakId] => Unit): Unit = {
+    val (diff, mempoolTxs) = weakIdsDiff(mp, wIds)
+    if (diff.isEmpty) {
+      onReady(mempoolTxs)
+    } else {
+      val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
+      localInputBlockChunks.put(subBlockId, ibdd)
+
+      val req = InputBlockTransactionsRequest(subBlockId, diff)
+      val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+      onMissing(diff)
+    }
+  }
+
   // INPUT BLOCKS RELATED LOGIC
 
   /**
@@ -1429,36 +1462,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         weakTxIdsOpt match {
           case Some(wIds) =>
-            // tx ids announced, calc diff with the mempool immediately
-            val (diff, mempoolTxs) = weakIdsDiff(mp, wIds)
-            if (diff.isEmpty) {
-              // all the txs found or wIds empty, process immediately
+            resolveInputBlockTransactions(subBlockId, wIds, mp, remote)(
+              onReady = { mempoolTxs =>
+                // todo: make it debug before release
+                log.info(s"Diff is empty $subBlockId , processing immediately")
 
-              // todo: make it debug before release
-              log.info(s"Diff is empty $subBlockId , processing immediately")
+                // write sub-block and transactions to db
+                viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+                val transactionsData = InputBlockTransactionsData(inputBlockInfo.id, mempoolTxs)
+                viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
+              },
+              onMissing = { diff =>
+                // todo: make it debug before release
+                log.info(s"Diff is abt ${diff.length} transactions, asking them from $remote")
 
-              // write sub-block and transactions to db
-              viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
-              val transactionsData = InputBlockTransactionsData(inputBlockInfo.id, mempoolTxs)
-              viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
-            } else {
-              // in the first place, ask peer announced input-block for diff
-
-              // Store the diff in cache while waiting for missing transactions from peer
-              val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
-              localInputBlockChunks.put(subBlockId, ibdd)
-
-              val req = InputBlockTransactionsRequest(inputBlockInfo.id, diff)
-
-              // todo: make it debug before release
-              log.info(s"Diff is abt ${diff.length} transactions, asking them from $remote")
-
-              val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
-              networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-
-              // write sub-block and transactions to db
-              viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
-            }
+                // write sub-block to db
+                viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+              }
+            )
 
           case None =>
             // input block coming with no transaction ids announced
@@ -1584,35 +1605,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * @param mp The mempool reader interface
    * @param remote The peer that sent the transaction IDs
    */
-  def processInputBlockTransactionIds(txIds: InputBlockTransactionIdsData, mp: ErgoMemPoolReader, remote: ConnectedPeer): Unit = {
-    val subBlockId = txIds.inputBlockId
-    val wIds = txIds.transactionIds
-    val (diff, mempoolTxs) = weakIdsDiff(mp, wIds)
+   def processInputBlockTransactionIds(txIds: InputBlockTransactionIdsData, mp: ErgoMemPoolReader, remote: ConnectedPeer): Unit = {
+     val subBlockId = txIds.inputBlockId
+     val wIds = txIds.transactionIds
 
-    // todo: make it debug before release
-    log.info(s"Processing input-block tx ids for ${subBlockId}")
+     // todo: make it debug before release
+     log.info(s"Processing input-block tx ids for ${subBlockId}")
 
-
-    // todo: the code below is similar to processInputBlock, aside of sending inputBlock to ENVH, fix boilerplate
-    if (diff.isEmpty) {
-      // all the txs found or wIds empty, process immediately
-
-      // write sub-block and transactions to db
-      val transactionsData = InputBlockTransactionsData(subBlockId, mempoolTxs)
-      viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
-    } else {
-      // in the first place, ask peer announced input-block for diff
-
-      // Store the diff in cache while waiting for missing transactions from peer
-      val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
-      localInputBlockChunks.put(subBlockId, ibdd)
-
-      val req = InputBlockTransactionsRequest(subBlockId, diff)
-
-      val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
-      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-    }
-  }
+      resolveInputBlockTransactions(subBlockId, wIds, mp, remote)(
+        onReady = { mempoolTxs =>
+          // all the txs found or wIds empty, process immediately
+          // write sub-block and transactions to db
+          val transactionsData = InputBlockTransactionsData(subBlockId, mempoolTxs)
+          viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
+        },
+        onMissing = _ => () // nothing extra to do; cache and network request handled by resolveInputBlockTransactions
+      )
+   }
 
   /**
    * Process a request from a peer for specific input block transactions.

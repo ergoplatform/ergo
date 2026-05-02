@@ -12,8 +12,10 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base16
 import sigma.ast.ByteArrayConstant
+import sigma.Colls
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.{ErgoTreeSerializer, SerializerException}
+import sigmastate.eval.Extensions._
 
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
@@ -239,6 +241,70 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
       pool = newPool
     }
+  }
+
+  // Regression test for https://github.com/ergoplatform/ergo/issues/1448
+  it should "accept chained unconfirmed transactions with minted tokens (issue #1448)" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    // Pick a spendable box from the UTXO state (anyoneCanSpend / TrueTree)
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+
+    // TX1: Mint a new token. Per Ergo rules, the token ID must equal the first input's boxId.
+    val mintedTokenId = inputBox.id
+    val mintedTokenAmount = 1000L
+    val tx1ValueOut = inputBox.value - 100000L // leave room for fee
+    val tx1FeeOut = new ErgoBoxCandidate(100000L, feeProp, creationHeight = 0)
+    val tx1TokenOut = new ErgoBoxCandidate(
+      tx1ValueOut,
+      TrueTree,
+      creationHeight = 0,
+      additionalTokens = Colls.fromItems((mintedTokenId.toTokenId, mintedTokenAmount))
+    )
+    val tx1 = ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, emptyProverResult)),
+      IndexedSeq(tx1TokenOut, tx1FeeOut)
+    )
+
+    // Verify TX1 is stateless-valid (correct asset minting)
+    tx1.statelessValidity().isSuccess shouldBe true
+
+    // Process TX1 through the mempool — should be accepted
+    val pool0 = ErgoMemPool.empty(settings)
+    val (pool1, tx1Outcome) = pool0.process(UnconfirmedTransaction(tx1, None), wus)
+    tx1Outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool1.modifierById(tx1.id) shouldBe defined
+
+    // TX2: Spend the token-carrying output of TX1 (which is still unconfirmed).
+    // This is the exact scenario from issue #1448: the token was minted in TX1 and
+    // TX2 tries to transfer it while TX1 is only in the mempool.
+    // Before the fix, verifyAssets() would return inAmount = -1 because the
+    // augmented UTXO view did not correctly surface tokens from unconfirmed outputs.
+    val tx1Output = tx1.outputs.head // the box carrying the minted token
+    val tx2ValueOut = tx1Output.value - 100000L
+    val tx2FeeOut = new ErgoBoxCandidate(100000L, feeProp, creationHeight = 0)
+    val tx2TokenOut = new ErgoBoxCandidate(
+      tx2ValueOut,
+      TrueTree,
+      creationHeight = 0,
+      additionalTokens = Colls.fromItems((mintedTokenId.toTokenId, mintedTokenAmount))
+    )
+    val tx2 = ErgoTransaction(
+      IndexedSeq(new Input(tx1Output.id, emptyProverResult)),
+      IndexedSeq(tx2TokenOut, tx2FeeOut)
+    )
+
+    tx2.statelessValidity().isSuccess shouldBe true
+
+    // Process TX2 through the mempool — historically failed with:
+    // "For every token, its amount in outputs should not exceed its amount in inputs. Amount in = -1, out = 1000"
+    val (pool2, tx2Outcome) = pool1.process(UnconfirmedTransaction(tx2, None), wus)
+    tx2Outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool2.modifierById(tx2.id) shouldBe defined
   }
 
   it should "consider families for replacement policy" in {

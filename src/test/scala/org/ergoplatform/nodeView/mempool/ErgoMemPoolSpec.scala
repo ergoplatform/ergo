@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -524,6 +524,64 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       outputCandidates = IndexedSeq(o3)), None)
     val (_, outcome2) = pool.process(tx3, wus)
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
+  }
+
+
+  /**
+    * Regression test for issue #1156: CPFP (Child Pays For Parent) via dataInputs.
+    *
+    * When a child transaction references a parent's output via dataInputs (read-only),
+    * the parent's weight in the mempool should be boosted. This enables unconditional CPFP
+    * without requiring spend authority — critical for oracle pools, DeFi dApps, and any
+    * protocol that reads unconfirmed state via data inputs.
+    *
+    * @see https://github.com/ergoplatform/ergo/issues/1156
+    */
+  it should "boost parent weight when child references it via dataInputs (Issue #1156)" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val trueTree = TrueTree
+
+    // Take two separate input boxes from the UTXO state
+    val boxes = wus.takeBoxes(100).filter(_.ergoTree == trueTree).take(2).toIndexedSeq
+    require(boxes.size >= 2, "Need at least 2 spendable boxes for this test")
+    val parentInputBox = boxes(0)
+    val childInputBox = boxes(1)
+
+    // TX-A (Parent): spends parentInputBox, creates an output + fee
+    val parentOutValue = parentInputBox.value / 2
+    val parentFeeValue = parentInputBox.value - parentOutValue
+    val parentOutput = new ErgoBoxCandidate(parentOutValue, trueTree, creationHeight = 0)
+    val parentFee = new ErgoBoxCandidate(parentFeeValue, feeProp, creationHeight = 0)
+    val txParent = ErgoTransaction(
+      IndexedSeq(new Input(parentInputBox.id, ProverResult.empty)),
+      IndexedSeq.empty, // no dataInputs
+      IndexedSeq(parentOutput, parentFee)
+    )
+
+    // Add parent to pool, record its initial weight
+    var pool = ErgoMemPool.empty(settings)
+    pool = pool.put(UnconfirmedTransaction(txParent, None))
+    val parentWeightBefore = pool.pool.transactionsRegistry(txParent.id).weight
+
+    // TX-B (Child): spends childInputBox, references txParent's output via dataInputs ONLY
+    val childFeeValue = childInputBox.value
+    val childFee = new ErgoBoxCandidate(childFeeValue, feeProp, creationHeight = 0)
+    val txChild = ErgoTransaction(
+      IndexedSeq(new Input(childInputBox.id, ProverResult.empty)),
+      IndexedSeq(DataInput(txParent.outputs.head.id)), // dataInput referencing parent's output
+      IndexedSeq(childFee)
+    )
+
+    // Add child to pool
+    pool = pool.put(UnconfirmedTransaction(txChild, None))
+    val parentWeightAfter = pool.pool.transactionsRegistry(txParent.id).weight
+
+    // The parent's weight must have been boosted by the child's weight
+    parentWeightAfter should be > parentWeightBefore
   }
 
 }

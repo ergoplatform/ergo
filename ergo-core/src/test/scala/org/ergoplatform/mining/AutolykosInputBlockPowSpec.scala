@@ -5,7 +5,7 @@ import org.ergoplatform.{InputSolutionFound, OrderingSolutionFound}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.util.{bytesToId, idToBytes}
@@ -105,11 +105,11 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo components (PoW and Merkle proof) validate correctly
+   * Tests that InputBlockAnnouncement components (PoW and Merkle proof) validate correctly
    * when constructed with a valid input block solution. Tests each validation separately
    * since inputBlockInfo.valid() checks both PoW and Merkle proof together.
    */
-  property("InputBlockInfo.valid() should work with valid input block PoW") {
+  property("InputBlockAnnouncement.valid() should work with valid input block PoW") {
     forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen) { 
       (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest) =>
         
@@ -146,11 +146,12 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
               merkleProof
             )
             
-            val inputBlockInfo = InputBlockInfo(
-              InputBlockInfo.initialMessageVersion,
+            val inputBlockInfo = InputBlockAnnouncement(
+              InputBlockAnnouncement.initialMessageVersion,
               inputBlockHeader,
               inputBlockFields,
-              None
+              None,
+              Array.emptyByteArray
             )
             
             // Merkle proof validation should succeed (independent of PoW)
@@ -337,11 +338,11 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo with valid PoW and Merkle proof passes all component validations.
+   * Tests that InputBlockAnnouncement with valid PoW and Merkle proof passes all component validations.
    * Verifies that property accessors work correctly and both PoW and Merkle proof validate
    * independently (note: full inputBlockInfo.valid() requires header extensionRoot to match proof).
    */
-  property("InputBlockInfo with valid PoW and proof should pass all validations") {
+  property("InputBlockAnnouncement with valid PoW and proof should pass all validations") {
     forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen) { 
       (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest) =>
         
@@ -371,7 +372,7 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
             // PoW validation should succeed (tests checkInputBlockPoW)
             powScheme.checkInputBlockPoW(inputBlockHeader, defaultParams) shouldBe true
             
-            // Create InputBlockInfo with the original header (PoW valid)
+            // Create InputBlockAnnouncement with the original header (PoW valid)
             // and separate Merkle proof (valid for extensionRoot)
             val inputBlockFields = new InputBlockFields(
               prevInputBlockId,
@@ -380,11 +381,12 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
               merkleProof
             )
             
-            val inputBlockInfo = InputBlockInfo(
-              InputBlockInfo.initialMessageVersion,
+            val inputBlockInfo = InputBlockAnnouncement(
+              InputBlockAnnouncement.initialMessageVersion,
               inputBlockHeader,
               inputBlockFields,
-              None
+              None,
+              Array.emptyByteArray
             )
             
             // All property accessors should work

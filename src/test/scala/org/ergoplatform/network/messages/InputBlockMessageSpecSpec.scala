@@ -2,7 +2,7 @@ package org.ergoplatform.network.messages
 
 import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.propspec.AnyPropSpec
@@ -13,12 +13,12 @@ class InputBlockMessageSpecSpec extends AnyPropSpec
   with ScalaCheckPropertyChecks
   with Matchers {
 
-  val inputBlockInfoGen: Gen[InputBlockInfo] = 
+  val inputBlockInfoGen: Gen[InputBlockAnnouncement] = 
     for {
       header <- defaultHeaderGen
       weakTxIds <- Gen.option(Gen.listOfN(3, Gen.listOfN(6, Arbitrary.arbitrary[Byte]).map(_.toArray)))
-    } yield InputBlockInfo(
-      InputBlockInfo.initialMessageVersion,
+    } yield InputBlockAnnouncement(
+      InputBlockAnnouncement.initialMessageVersion,
       header,
       InputBlockFields.empty,
       weakTxIds
@@ -43,8 +43,8 @@ class InputBlockMessageSpecSpec extends AnyPropSpec
   property("should handle optional fields correctly") {
     forAll(defaultHeaderGen) { header =>
       // Test with all optional fields as None
-      val emptyIbi = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val emptyIbi = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         None

@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.{ErgoTestHelpers, HistoryTestHelpers, NodeViewTestOps, RandomWrapper}
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createTempDir, createUtxoState, validFullBlock, validTransactionsFromBoxes, validTransactionsFromBoxHolder, validTransactionsFromUtxoState}
@@ -261,7 +261,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create first input block after ordering block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val inputBlock = InputBlockInfo(1, c2(0).header, emptyInputBlockFields, None)
+    val inputBlock = InputBlockAnnouncement(1, c2(0).header, emptyInputBlockFields, None)
 
     // Apply input block to history (registers the input block)
     h.applyInputBlock(inputBlock) shouldBe None
@@ -310,13 +310,13 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, emptyInputBlockFields, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, emptyInputBlockFields, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
 
     // Create Fork A: ib1 -> ib2a
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
 
     // Apply transactions to Fork A
@@ -334,7 +334,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create Fork B: ib1 -> ib2b -> ib3b (longer fork to trigger switch)
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c4(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c4(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     // Create different transactions for Fork B
@@ -343,7 +343,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Extend Fork B to make it longer
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3b = InputBlockInfo(1, c5(0).header, parentOnlyFields(idToBytes(ib2b.id)), None)
+    val ib3b = InputBlockAnnouncement(1, c5(0).header, parentOnlyFields(idToBytes(ib2b.id)), None)
     h.applyInputBlock(ib3b)
 
     // Apply transactions to Fork B first, then extend with ib3b
@@ -387,7 +387,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, emptyInputBlockFields, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, emptyInputBlockFields, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
 
@@ -409,19 +409,19 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create Fork A with txA
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
     val (newBestA, _) = h.applyInputBlockTransactions(ib2a.id, Seq(txA), us)
     newBestA should contain(ib2a.id)
 
     // Create Fork B with txB (longer fork to trigger switch)
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c4(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c4(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     // Create additional blocks in Fork B to make it longer
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3b = InputBlockInfo(1, c5(0).header, parentOnlyFields(idToBytes(ib2b.id)), None)
+    val ib3b = InputBlockAnnouncement(1, c5(0).header, parentOnlyFields(idToBytes(ib2b.id)), None)
     h.applyInputBlock(ib3b)
 
     // Apply txB to ib2b
@@ -476,7 +476,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create empty input block (no transactions)
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val inputBlock = InputBlockInfo(1, c2(0).header, emptyInputBlockFields, None)
+    val inputBlock = InputBlockAnnouncement(1, c2(0).header, emptyInputBlockFields, None)
     h.applyInputBlock(inputBlock)
 
     // Apply empty transaction list
@@ -530,7 +530,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create input block with only subset of transactions
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val inputBlock = InputBlockInfo(1, c2(0).header, emptyInputBlockFields, None)
+    val inputBlock = InputBlockAnnouncement(1, c2(0).header, emptyInputBlockFields, None)
     h.applyInputBlock(inputBlock)
 
     // Apply only inputBlockTxs to the input block
@@ -592,7 +592,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create first input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, emptyInputBlockFields, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, emptyInputBlockFields, None)
     h.applyInputBlock(ib1)
     val (newBest1, _) = h.applyInputBlockTransactions(ib1.id, txsBatch1, us)
 
@@ -613,7 +613,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create second input block (child of first)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnlyFields(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
     val (newBest2, _) = h.applyInputBlockTransactions(ib2.id, txsBatch2, us)
 
@@ -637,7 +637,7 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
 
     // Create third input block
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnlyFields(idToBytes(ib2.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnlyFields(idToBytes(ib2.id)), None)
     h.applyInputBlock(ib3)
     val (newBest3, _) = h.applyInputBlockTransactions(ib3.id, txsBatch3, us)
 

@@ -5,7 +5,7 @@ import org.ergoplatform.{InputSolutionFound, OrderingSolutionFound}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.settings.{Algos, ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.authds.merkle.BatchMerkleProof
@@ -15,7 +15,7 @@ import scorex.util.{bytesToId, idToBytes}
 import org.ergoplatform.utils.generators.CoreObjectGenerators._
 import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
-class InputBlockInfoSpec extends ErgoCorePropertyTest {
+class InputBlockAnnouncementSpec extends ErgoCorePropertyTest {
 
   private val powScheme = new AutolykosPowScheme(32, 26)
   private val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
@@ -58,11 +58,11 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo.valid() returns true when both PoW and Merkle proof are valid.
+   * Tests that InputBlockAnnouncement.valid() returns true when both PoW and Merkle proof are valid.
    * Creates a valid input block solution with correct PoW, constructs proper Merkle proof
-   * for the extension fields, and verifies the InputBlockInfo structure.
+   * for the extension fields, and verifies the InputBlockAnnouncement structure.
    */
-  property("InputBlockInfo.valid() should return true for valid input block with correct PoW and Merkle proof") {
+  property("InputBlockAnnouncement.valid() should return true for valid input block with correct PoW and Merkle proof") {
     forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen, stateRootGen) { 
       (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest, stateRoot) =>
         
@@ -107,11 +107,11 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
               merkleProof
             )
 
-            // Create InputBlockInfo with the original header (PoW valid)
+            // Create InputBlockAnnouncement with the original header (PoW valid)
             // Note: In a real block, extensionRoot in header would match the Merkle proof
             // Here we test that both components are valid independently
-            val inputBlockInfo = InputBlockInfo(
-              InputBlockInfo.initialMessageVersion,
+            val inputBlockInfo = InputBlockAnnouncement(
+              InputBlockAnnouncement.initialMessageVersion,
               inputBlockHeader,
               inputBlockFields,
               None
@@ -138,12 +138,12 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo.valid() returns false when expectedNBits is provided
+   * Tests that InputBlockAnnouncement.valid() returns false when expectedNBits is provided
    * and does not match the header's nBits, even if PoW and Merkle proof are valid.
    * This verifies that an attacker cannot submit an input block with a lower difficulty
    * (smaller nBits) to bypass PoW validation.
    */
-  property("InputBlockInfo.valid() should return false when nBits does not match expectedNBits") {
+  property("InputBlockAnnouncement.valid() should return false when nBits does not match expectedNBits") {
     forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen, stateRootGen, Gen.choose(0, 200)) {
       (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest, stateRoot, wrongDifficulty) =>
 
@@ -189,12 +189,13 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
                 merkleProof
               )
 
-              val inputBlockInfo = InputBlockInfo(
-                InputBlockInfo.initialMessageVersion,
-                inputBlockHeader,
-                inputBlockFields,
-                None
-              )
+            val inputBlockInfo = InputBlockAnnouncement(
+              InputBlockAnnouncement.initialMessageVersion,
+              inputBlockHeader,
+              inputBlockFields,
+              None,
+              Array.emptyByteArray
+            )
 
               inputBlockInfo.inputBlockFields.inputBlockFieldsProof.valid(inputBlockHeader.extensionRoot) shouldBe true
               inputBlockInfo.valid(powScheme, defaultParams, Some(nBits)) shouldBe true
@@ -208,9 +209,9 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo.valid() returns true when expectedNBits matches header.nBits.
+   * Tests that InputBlockAnnouncement.valid() returns true when expectedNBits matches header.nBits.
    */
-  property("InputBlockInfo.valid() should return true when nBits matches expectedNBits") {
+  property("InputBlockAnnouncement.valid() should return true when nBits matches expectedNBits") {
     forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen, stateRootGen) {
       (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest, stateRoot) =>
 
@@ -254,15 +255,15 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
               merkleProof
             )
 
-            val inputBlockInfo = InputBlockInfo(
-              InputBlockInfo.initialMessageVersion,
+            val inputBlockInfo = InputBlockAnnouncement(
+              InputBlockAnnouncement.initialMessageVersion,
               inputBlockHeader,
               inputBlockFields,
-              None
+              None,
+              Array.emptyByteArray
             )
 
             inputBlockInfo.inputBlockFields.inputBlockFieldsProof.valid(inputBlockHeader.extensionRoot) shouldBe true
-
             inputBlockInfo.valid(powScheme, defaultParams, Some(nBits)) shouldBe true
 
           case _ =>
@@ -272,11 +273,11 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo.valid() returns false when the Merkle proof is invalid.
+   * Tests that InputBlockAnnouncement.valid() returns false when the Merkle proof is invalid.
    * Creates a Merkle proof with a wrong transactions digest, then verifies that
    * the proof fails validation against the correct extension root.
    */
-  property("InputBlockInfo.valid() should return false when Merkle proof is invalid") {
+  property("InputBlockAnnouncement.valid() should return false when Merkle proof is invalid") {
     forAll(invalidHeaderGen, digest32Gen, digest32Gen, stateRootGen) { 
       (baseHeader, transactionsDigest, prevTransactionsDigest, stateRoot) =>
         
@@ -313,11 +314,12 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
           invalidMerkleProof
         )
 
-        val inputBlockInfo = InputBlockInfo(
-          InputBlockInfo.initialMessageVersion,
+        val inputBlockInfo = InputBlockAnnouncement(
+          InputBlockAnnouncement.initialMessageVersion,
           header,
           inputBlockFields,
-          None
+          None,
+          Array.emptyByteArray
         )
 
         // Merkle proof validation should fail
@@ -326,10 +328,10 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo.valid() returns false when the Merkle proof is empty but fields exist.
+   * Tests that InputBlockAnnouncement.valid() returns false when the Merkle proof is empty but fields exist.
    * An empty BatchMerkleProof cannot validate against a non-empty extension root.
    */
-  property("InputBlockInfo.valid() should return false when Merkle proof is empty but fields exist") {
+  property("InputBlockAnnouncement.valid() should return false when Merkle proof is empty but fields exist") {
     forAll(invalidHeaderGen, digest32Gen, digest32Gen, stateRootGen) { 
       (baseHeader, transactionsDigest, prevTransactionsDigest, stateRoot) =>
         
@@ -362,11 +364,12 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
           emptyMerkleProof
         )
 
-        val inputBlockInfo = InputBlockInfo(
-          InputBlockInfo.initialMessageVersion,
+        val inputBlockInfo = InputBlockAnnouncement(
+          InputBlockAnnouncement.initialMessageVersion,
           header,
           inputBlockFields,
-          None
+          None,
+          Array.emptyByteArray
         )
 
         // Empty proof should not validate against non-empty extension root
@@ -375,15 +378,15 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Tests that InputBlockInfo.id correctly returns the underlying header's id.
+   * Tests that InputBlockAnnouncement.id correctly returns the underlying header's id.
    */
-  property("InputBlockInfo.id should return header id") {
+  property("InputBlockAnnouncement.id should return header id") {
     forAll(invalidHeaderGen, digest32Gen, digest32Gen) { (header, transactionsDigest, prevTransactionsDigest) =>
       
       val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
       val merkleProof = createValidMerkleProof(prevInputBlockId, transactionsDigest, prevTransactionsDigest)
       val fields = new InputBlockFields(prevInputBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
-      val ibi = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, fields, None)
+      val ibi = InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, fields, None, Array.emptyByteArray)
       
       ibi.id shouldBe header.id
     }
@@ -393,7 +396,7 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
    * Tests that the Merkle proof validates correctly against its own extension root
    * and fails validation against a wrong root.
    */
-  property("InputBlockInfo Merkle proof should validate with correct extension root") {
+  property("InputBlockAnnouncement Merkle proof should validate with correct extension root") {
     forAll(digest32Gen, digest32Gen) { (transactionsDigest, prevTransactionsDigest) =>
 
       val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
@@ -421,7 +424,7 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
    * Tests that the first input block (after an ordering block, with no prevInputBlockId)
    * creates a valid Merkle proof with only 2 extension fields.
    */
-  property("InputBlockInfo with first input block (no prevInputBlockId) should create valid proof") {
+  property("InputBlockAnnouncement with first input block (no prevInputBlockId) should create valid proof") {
     forAll(digest32Gen, digest32Gen) { (transactionsDigest, prevTransactionsDigest) =>
 
       // First input block after ordering block has no previous input block
@@ -448,7 +451,7 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
    * Tests that all extension field values created by InputBlockFields have the correct size of 32 bytes.
    * Verifies prevInputBlockId, transactionsDigest, and prevTransactionsDigest are all 32 bytes.
    */
-  property("InputBlockInfo extension field values should have correct sizes") {
+  property("InputBlockAnnouncement extension field values should have correct sizes") {
     forAll(digest32Gen, digest32Gen, modifierIdGen) { (transactionsDigest, prevTransactionsDigest, prevId) =>
       
       val prevInputBlockId: Option[Array[Byte]] = Some(idToBytes(prevId))
@@ -475,7 +478,7 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
    * Verifies that a proof created with correct fields doesn't validate against a tampered root,
    * and a proof created with tampered fields doesn't validate against the original root.
    */
-  property("InputBlockInfo Merkle proof should fail with tampered transactions digest") {
+  property("InputBlockAnnouncement Merkle proof should fail with tampered transactions digest") {
     forAll(digest32Gen, digest32Gen) { (transactionsDigest, prevTransactionsDigest) =>
 
       val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
@@ -508,6 +511,72 @@ class InputBlockInfoSpec extends ErgoCorePropertyTest {
       // Tampered proof should not validate against original root
       val tamperedProof = tamperedFields.proofForInputBlockData.get
       tamperedProof.valid(extensionRoot) shouldBe false
+    }
+  }
+
+  /**
+   * Tests that InputBlockAnnouncement with version 1 roundtrips correctly with empty unparsed bytes.
+   */
+  property("InputBlockAnnouncement version 1 serialization roundtrip") {
+    forAll(invalidHeaderGen, digest32Gen, digest32Gen) { (header, transactionsDigest, prevTransactionsDigest) =>
+      val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
+      val merkleProof = createValidMerkleProof(prevInputBlockId, transactionsDigest, prevTransactionsDigest)
+      val fields = new InputBlockFields(prevInputBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
+      val ibi = InputBlockAnnouncement(1.toByte, header, fields, None, Array.emptyByteArray)
+
+      val bytes = InputBlockAnnouncement.serializer.toBytes(ibi)
+      val recovered = InputBlockAnnouncement.serializer.parseBytes(bytes)
+
+      recovered.version shouldBe ibi.version
+      recovered.header shouldBe ibi.header
+      recovered.inputBlockFields.prevInputBlockId.map(_.toSeq) shouldBe ibi.inputBlockFields.prevInputBlockId.map(_.toSeq)
+      recovered.inputBlockFields.transactionsDigest shouldBe ibi.inputBlockFields.transactionsDigest
+      recovered.inputBlockFields.prevTransactionsDigest shouldBe ibi.inputBlockFields.prevTransactionsDigest
+      recovered.weakTxIds shouldBe ibi.weakTxIds
+      recovered.unparsedBytes.toSeq shouldBe ibi.unparsedBytes.toSeq
+    }
+  }
+
+  /**
+   * Tests that InputBlockAnnouncement with future version stores unparsed bytes for forward compatibility.
+   */
+  property("InputBlockAnnouncement future version stores unparsed bytes") {
+    forAll(invalidHeaderGen, digest32Gen, digest32Gen) { (header, transactionsDigest, prevTransactionsDigest) =>
+      val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
+      val merkleProof = createValidMerkleProof(prevInputBlockId, transactionsDigest, prevTransactionsDigest)
+      val fields = new InputBlockFields(prevInputBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
+      val futureBytes = Array[Byte](0xAB.toByte, 0xCD.toByte, 0xEF.toByte)
+      val ibi = InputBlockAnnouncement(2.toByte, header, fields, None, futureBytes)
+
+      val bytes = InputBlockAnnouncement.serializer.toBytes(ibi)
+      val recovered = InputBlockAnnouncement.serializer.parseBytes(bytes)
+
+      recovered.version shouldBe ibi.version
+      recovered.header shouldBe ibi.header
+      recovered.inputBlockFields.prevInputBlockId.map(_.toSeq) shouldBe ibi.inputBlockFields.prevInputBlockId.map(_.toSeq)
+      recovered.inputBlockFields.transactionsDigest shouldBe ibi.inputBlockFields.transactionsDigest
+      recovered.inputBlockFields.prevTransactionsDigest shouldBe ibi.inputBlockFields.prevTransactionsDigest
+      recovered.weakTxIds shouldBe ibi.weakTxIds
+      recovered.unparsedBytes.toSeq shouldBe ibi.unparsedBytes.toSeq
+    }
+  }
+
+  /**
+   * Tests that parsing a higher version message does not throw and preserves unknown data.
+   */
+  property("InputBlockAnnouncement higher version does not throw and preserves unparsed bytes") {
+    forAll(invalidHeaderGen, digest32Gen, digest32Gen) { (header, transactionsDigest, prevTransactionsDigest) =>
+      val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
+      val merkleProof = createValidMerkleProof(prevInputBlockId, transactionsDigest, prevTransactionsDigest)
+      val fields = new InputBlockFields(prevInputBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
+      val futureBytes = Array[Byte](0x12, 0x34, 0x56, 0x78)
+      val ibi = InputBlockAnnouncement(3.toByte, header, fields, None, futureBytes)
+
+      val bytes = InputBlockAnnouncement.serializer.toBytes(ibi)
+      val recovered = InputBlockAnnouncement.serializer.parseBytes(bytes)
+
+      recovered.version shouldBe 3.toByte
+      recovered.unparsedBytes shouldBe futureBytes
     }
   }
 

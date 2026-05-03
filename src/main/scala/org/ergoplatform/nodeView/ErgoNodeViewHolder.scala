@@ -26,7 +26,7 @@ import spire.syntax.all.cfor
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.network.message.inputblocks.{InputBlockTransactionsRequest, OrderingBlockAnnouncement}
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import scorex.core.network.ConnectedPeer
 
 import scala.annotation.tailrec
@@ -915,7 +915,7 @@ object ErgoNodeViewHolder {
     /**
       * Wrapper for a locally generated input-block submitted via API
       */
-    case class LocallyGeneratedInputBlock(sbi: InputBlockInfo)
+    case class LocallyGeneratedInputBlock(sbi: InputBlockAnnouncement)
 
     /**
       * Wrapper for a transaction submitted via API

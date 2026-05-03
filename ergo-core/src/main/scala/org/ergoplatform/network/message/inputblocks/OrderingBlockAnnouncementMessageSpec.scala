@@ -14,11 +14,6 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
 
   // bigger than block size in classic propagation
   private val maxSize = 3200000
-  
-  /**
-    * Current protocol version for OrderingBlockAnnouncement messages
-    */
-  private val CurrentVersion: Byte = 1.toByte
 
   /**
     * Code which identifies what message type is contained in the payload
@@ -31,7 +26,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
   override val messageName: String = "OrderingBlockAnnouncement"
 
   override def serialize(ann: OrderingBlockAnnouncement, w: Writer): Unit = {
-    w.put(CurrentVersion)
+    w.put(ann.version)
     HeaderSerializer.serialize(ann.header, w)
     w.putUInt(ann.nonBroadcastedTransactions.length)
     cfor(0)(_ < ann.nonBroadcastedTransactions.length, _ + 1) { i =>
@@ -104,7 +99,7 @@ object OrderingBlockAnnouncementMessageSpec extends MessageSpecInputBlocks[Order
     }
     require(r.position - startPosition < maxSize)
 
-    OrderingBlockAnnouncement(header, txs, txIds, fields, unparsedBytes)
+    OrderingBlockAnnouncement(version, header, txs, txIds, fields, unparsedBytes)
   }
 
 }

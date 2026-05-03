@@ -22,7 +22,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{AutolykosSolution, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound}
@@ -75,7 +75,7 @@ class CandidateGenerator(
   }
 
   /** Send solved input block to processing */
-  private def sendInputToNodeView(sbi: InputBlockInfo, sbt: InputBlockTransactionsData): Unit = {
+  private def sendInputToNodeView(sbi: InputBlockAnnouncement, sbt: InputBlockTransactionsData): Unit = {
     log.info(
       s"New input block ${sbi.header.id} w. nonce ${Longs.fromByteArray(sbi.header.powSolution.n)}"
     )
@@ -1113,7 +1113,7 @@ object CandidateGenerator extends ScorexLogging {
   }
 
   def completeInputBlock(candidate: CandidateBlock,
-                         solution: AutolykosSolution): (InputBlockInfo, InputBlockTransactionsData) = {
+                         solution: AutolykosSolution): (InputBlockAnnouncement, InputBlockTransactionsData) = {
 
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val txs = candidate.inputBlockTransactions
@@ -1131,7 +1131,7 @@ object CandidateGenerator extends ScorexLogging {
 
     val weakIds = txs.map(_.weakId)
 
-    val sbi: InputBlockInfo = InputBlockInfo(InputBlockInfo.initialMessageVersion, header, ibf, Some(weakIds))
+    val sbi: InputBlockAnnouncement = InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, ibf, Some(weakIds))
     val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)
 
     (sbi, sbt)

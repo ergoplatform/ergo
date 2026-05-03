@@ -12,7 +12,7 @@ import org.ergoplatform.network.message.inputblocks.{
   InputBlockTransactionsRequestMessageSpec
 }
 import org.ergoplatform.settings.Constants
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.{ErgoCorePropertyTest, SerializationTests}
 import org.scalacheck.Gen
 import scorex.crypto.authds.merkle.BatchMerkleProof
@@ -28,7 +28,7 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
   private val inputBlockTransactionsMessageSpec = InputBlockTransactionsMessageSpec
   private val inputBlockTransactionsRequestMessageSpec = InputBlockTransactionsRequestMessageSpec
 
-  private def inputBlockInfoGen: Gen[InputBlockInfo] = for {
+  private def inputBlockInfoGen: Gen[InputBlockAnnouncement] = for {
     header <- defaultHeaderGen
     prevInputBlockId <- Gen.option(genBytes(Constants.ModifierIdSize))
     transactionsDigest <- digest32Gen
@@ -37,7 +37,7 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
   } yield {
     val merkleProof = BatchMerkleProof(Seq.empty, Seq.empty)(Blake2b256)
     val inputBlockFields = new InputBlockFields(prevInputBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
-    InputBlockInfo(InputBlockInfo.initialMessageVersion, header, inputBlockFields, weakTxIds)
+    InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, inputBlockFields, weakTxIds)
   }
 
   private def inputBlockTransactionIdsDataGen: Gen[InputBlockTransactionIdsData] = for {
@@ -55,7 +55,7 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
     txIds <- Gen.listOf(genBytes(ErgoTransaction.WeakIdLength)).map(_.take(5))
   } yield InputBlockTransactionsRequest(inputBlockId, txIds)
 
-  property("InputBlockInfo serialization roundtrip") {
+  property("InputBlockAnnouncement serialization roundtrip") {
     forAll(inputBlockInfoGen) { info =>
       val bytes = inputBlockMessageSpec.toBytes(info)
       val recovered = inputBlockMessageSpec.parseBytes(bytes)

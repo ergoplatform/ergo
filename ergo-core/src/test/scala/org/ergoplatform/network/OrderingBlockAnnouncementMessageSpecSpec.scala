@@ -17,12 +17,14 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
   private val messageSpec = OrderingBlockAnnouncementMessageSpec
 
   private def orderingBlockAnnouncementGen: Gen[OrderingBlockAnnouncement] = for {
+    version <- Gen.choose(1, 3).map(_.toByte)
     header <- defaultHeaderGen
     nonBroadcastedTransactions <- Gen.listOf(invalidErgoTransactionGen).map(_.take(5))
     broadcastedTransactionIds <- Gen.listOf(modifierIdGen).map(_.take(5))
     extensionFields <- Gen.listOf(extensionKvGen(Extension.FieldKeySize, Extension.FieldValueMaxSize)).map(_.take(5).toStream)
     unparsedBytes <- Gen.oneOf(Gen.const(Array.emptyByteArray), Gen.listOf(arbitrary[Byte]).map(_.toArray))
   } yield OrderingBlockAnnouncement(
+    version,
     header,
     nonBroadcastedTransactions,
     broadcastedTransactionIds,
@@ -42,8 +44,10 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
       recovered.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) } shouldEqual
         announcement.extensionFields.toSeq.map { case (k, v) => (k.toSeq, v.toSeq) }
       recovered.unparsedBytes shouldEqual announcement.unparsedBytes
+      recovered.version shouldEqual announcement.version
 
       // Verify the entire object
+      recovered.version shouldEqual announcement.version
       recovered.header shouldEqual announcement.header
       recovered.nonBroadcastedTransactions shouldEqual announcement.nonBroadcastedTransactions
       recovered.broadcastedTransactionIds shouldEqual announcement.broadcastedTransactionIds
@@ -56,6 +60,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
   property("OrderingBlockAnnouncement serialization with empty collections") {
     forAll(defaultHeaderGen) { header =>
       val emptyAnnouncement = OrderingBlockAnnouncement(
+        1.toByte,
         header,
         Seq.empty[ErgoTransaction],
         Seq.empty,
@@ -79,6 +84,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     // Test with minimal data - completely empty
     val minimalHeader = defaultHeaderGen.sample.get
     val minimalAnnouncement = OrderingBlockAnnouncement(
+      1.toByte,
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
@@ -97,6 +103,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
 
     // Test with single extension field (keys must be exactly 2 bytes)
     val singleExtensionAnnouncement = OrderingBlockAnnouncement(
+      1.toByte,
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
@@ -114,6 +121,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
 
     // Test with multiple extension fields (keys must be exactly 2 bytes)
     val multipleExtensionAnnouncement = OrderingBlockAnnouncement(
+      1.toByte,
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
@@ -136,6 +144,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     // Test with transaction IDs only
     val txId = modifierIdGen.sample.get
     val txIdsOnlyAnnouncement = OrderingBlockAnnouncement(
+      1.toByte,
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq(txId),
@@ -165,6 +174,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
 
     // Test edge case: extension field with empty value
     val emptyValueExtensionAnnouncement = OrderingBlockAnnouncement(
+      1.toByte,
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
@@ -183,6 +193,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     // Test edge case: extension field with maximum allowed value size
     val maxValueSize = 64 // Reasonable limit for testing
     val maxValueExtensionAnnouncement = OrderingBlockAnnouncement(
+      1.toByte,
       minimalHeader,
       Seq.empty[ErgoTransaction],
       Seq.empty,
@@ -205,6 +216,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     // Create announcement with unparsed bytes (simulating future version data)
     val unparsedData = Array[Byte](1.toByte, 2.toByte, 3.toByte, 4.toByte)
     val announcement = OrderingBlockAnnouncement(
+      2.toByte,
       header,
       Seq.empty,
       Seq.empty,
@@ -278,12 +290,33 @@ class OrderingBlockAnnouncementMessageSpecSpec extends ErgoCorePropertyTest with
     // and verify the validation logic doesn't reject valid counts
     
     val header = defaultHeaderGen.sample.get
-    val announcement = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty.toStream)
+    val announcement = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty.toStream)
     val bytes = messageSpec.toBytes(announcement)
     
     // This should parse successfully (all counts are 0, well under the limit)
     val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
     val parsed = messageSpec.parse(reader)
     parsed.header shouldEqual announcement.header
+  }
+
+  property("OrderingBlockAnnouncement version is serialized and parsed correctly") {
+    forAll(defaultHeaderGen, Gen.choose(1, 5).map(_.toByte)) { (header, version) =>
+      val unparsedBytes = Array[Byte](0x12, 0x34)
+      val announcement = OrderingBlockAnnouncement(
+        version,
+        header,
+        Seq.empty,
+        Seq.empty,
+        Seq.empty.toStream,
+        unparsedBytes
+      )
+
+      val bytes = messageSpec.toBytes(announcement)
+      val recovered = messageSpec.parseBytes(bytes)
+
+      recovered.version shouldBe version
+      recovered.unparsedBytes shouldBe unparsedBytes
+      recovered.header shouldBe header
+    }
   }
 }

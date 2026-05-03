@@ -21,10 +21,11 @@ import sigma.util.Extensions.LongOps
   * @param inputBlockFields - input block related fields in extension section along with Merkle proof of their inclusion
   * @param weakTxIds - optionally, weak transaction ids if they are known during instance construction
   */
-case class InputBlockInfo(version: Byte,
+case class InputBlockAnnouncement(version: Byte,
                           header: Header,
                           inputBlockFields: InputBlockFields,
-                          weakTxIds: Option[Seq[ErgoTransaction.WeakId]]) extends ScorexLogging {
+                          weakTxIds: Option[Seq[ErgoTransaction.WeakId]],
+                          unparsedBytes: Array[Byte] = Array.emptyByteArray) extends ScorexLogging {
 
   lazy val id: ModifierId = header.id
 
@@ -56,14 +57,14 @@ case class InputBlockInfo(version: Byte,
 
 }
 
-object InputBlockInfo {
+object InputBlockAnnouncement {
 
   val initialMessageVersion: Byte = 1.toByte
 
   private val bmp = new BatchMerkleProofSerializer[Digest32, CryptographicHash[Digest32]]()(Blake2b256)
 
-  def serializer: ErgoSerializer[InputBlockInfo] = new ErgoSerializer[InputBlockInfo] {
-    override def serialize(sbi: InputBlockInfo, w: Writer): Unit = {
+  def serializer: ErgoSerializer[InputBlockAnnouncement] = new ErgoSerializer[InputBlockAnnouncement] {
+    override def serialize(sbi: InputBlockAnnouncement, w: Writer): Unit = {
       w.put(sbi.version)
       HeaderSerializer.serialize(sbi.header, w)
       w.putOption(sbi.prevInputBlockId){case (w, id) => w.putBytes(idToBytes(id))}
@@ -76,28 +77,37 @@ object InputBlockInfo {
         w.putUInt(ids.length)
         ids.foreach(w.putBytes)
       }
+      if (sbi.version > initialMessageVersion) {
+        w.putUByte(sbi.unparsedBytes.length)
+        w.putBytes(sbi.unparsedBytes)
+      }
     }
 
-    override def parse(r: Reader): InputBlockInfo = {
+    override def parse(r: Reader): InputBlockAnnouncement = {
       val version = r.getByte()
-      if (version == initialMessageVersion) {
-        val subBlock = HeaderSerializer.parse(r)
-        val prevSubBlockId = r.getOption(r.getBytes(Constants.ModifierIdSize))
-        val transactionsDigest = Digest32 @@ r.getBytes(Constants.ModifierIdSize)
-        val prevTransactionsDigest = Digest32 @@ r.getBytes(Constants.ModifierIdSize)
-        val merkleProofSize = r.getUShort().toShortExact
-        val merkleProofBytes = r.getBytes(merkleProofSize)
-        val merkleProof = bmp.deserialize(merkleProofBytes).get // parse Merkle proof
-        val weakTxIds = r.getOption({
-          val cnt = r.getUInt().toIntExact
-          (1 to cnt).map(_ => r.getBytes(ErgoTransaction.WeakIdLength))
-        })
-        val fields = new InputBlockFields(prevSubBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
-        new InputBlockInfo(version, subBlock, fields, weakTxIds)
+      val subBlock = HeaderSerializer.parse(r)
+      val prevSubBlockId = r.getOption(r.getBytes(Constants.ModifierIdSize))
+      val transactionsDigest = Digest32 @@ r.getBytes(Constants.ModifierIdSize)
+      val prevTransactionsDigest = Digest32 @@ r.getBytes(Constants.ModifierIdSize)
+      val merkleProofSize = r.getUShort().toShortExact
+      val merkleProofBytes = r.getBytes(merkleProofSize)
+      val merkleProof = bmp.deserialize(merkleProofBytes).get // parse Merkle proof
+      val weakTxIds = r.getOption({
+        val cnt = r.getUInt().toIntExact
+        (1 to cnt).map(_ => r.getBytes(ErgoTransaction.WeakIdLength))
+      })
+      val fields = new InputBlockFields(prevSubBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
+      val unparsedBytes = if (version > initialMessageVersion) {
+        val newFieldsSize = r.getUByte()
+        if (newFieldsSize > 0) {
+          r.getBytes(newFieldsSize)
+        } else {
+          Array.emptyByteArray
+        }
       } else {
-        // todo: consider proper versioning, eg by adding unparsed bytes like done in Header
-        throw new Exception("Unsupported sub-block message version")
+        Array.emptyByteArray
       }
+      new InputBlockAnnouncement(version, subBlock, fields, weakTxIds, unparsedBytes)
     }
   }
 

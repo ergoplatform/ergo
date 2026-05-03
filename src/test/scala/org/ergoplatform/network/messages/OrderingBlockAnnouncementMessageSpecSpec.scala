@@ -17,7 +17,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends AnyPropSpec
       header <- defaultHeaderGen
       // Use empty collections to avoid complex serialization issues
       txIds <- Gen.listOfN(2, modifierIdGen)
-    } yield OrderingBlockAnnouncement(header, Seq.empty, txIds, Seq.empty)
+    } yield OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, txIds, Seq.empty)
 
   property("should serialize and deserialize ordering block announcement") {
     forAll(orderingBlockAnnouncementGen) { oba =>
@@ -33,7 +33,7 @@ class OrderingBlockAnnouncementMessageSpecSpec extends AnyPropSpec
 
   property("should handle empty transactions and extension fields") {
     forAll(defaultHeaderGen) { header =>
-      val emptyOba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      val emptyOba = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty)
       val bytes = OrderingBlockAnnouncementMessageSpec.toBytes(emptyOba)
       val result = OrderingBlockAnnouncementMessageSpec.parseBytes(bytes)
       

@@ -7,7 +7,7 @@ import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -108,7 +108,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       * @param newInputBlock The new input block to add to the chain
       * @return A sequence containing the original chain and any newly created forked chains
       */
-    def fork(newInputBlock: InputBlockInfo): Seq[InputBlocksChain] = {
+    def fork(newInputBlock: InputBlockAnnouncement): Seq[InputBlocksChain] = {
       newInputBlock.prevInputBlockId match {
         case Some(prevId) =>
           if (prevId == chain.lastOption.getOrElse("")) {
@@ -216,7 +216,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       *         Failure with an exception if validation fails
       */
     def applyTransactions(
-      ib: InputBlockInfo,
+      ib: InputBlockAnnouncement,
       txs: Seq[ErgoTransaction],
       state: ErgoState[_]
     ): Try[(InputBlocksChain)] = {
@@ -236,7 +236,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   object InputBlocksChain {
 
-    def apply(ib: InputBlockInfo): InputBlocksChain = {
+    def apply(ib: InputBlockAnnouncement): InputBlocksChain = {
       new InputBlocksChain(Seq(ib.id), Seq.empty)
     }
 
@@ -364,7 +364,7 @@ trait InputBlocksProcessor extends ScorexLogging {
       * @return Some(updated InputBlocksTree) if the block was inserted successfully,
       *         None if the parent block is unknown and the block was added to the disconnected waitlist
       */
-    def insertInputBlock(ibi: InputBlockInfo): Option[InputBlocksTree] = {
+    def insertInputBlock(ibi: InputBlockAnnouncement): Option[InputBlocksTree] = {
       /**
        * Processes disconnected input blocks that may now be connectable to the current chains.
        *
@@ -453,7 +453,7 @@ trait InputBlocksProcessor extends ScorexLogging {
      *         - Sequence of input blocks rolled back (when switching forks)
      */
     def processInputBlockTransactions(
-      ib: InputBlockInfo,
+      ib: InputBlockAnnouncement,
       txs: Seq[ErgoTransaction],
       state: ErgoState[_]
     ): (Seq[ModifierId], Seq[ModifierId]) = {
@@ -478,7 +478,7 @@ trait InputBlocksProcessor extends ScorexLogging {
        *           blocks that were also processed)
        */
       @tailrec
-      def applicationStep(ib: InputBlockInfo,
+      def applicationStep(ib: InputBlockAnnouncement,
                           txs: Seq[ErgoTransaction],
                           acc: (InputBlocksChain, Seq[ModifierId])): (InputBlocksChain, Seq[ModifierId]) = {
         acc._1.applyTransactions(ib, txs, state) match {
@@ -661,7 +661,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Input block id -> input block index
     */
-  private val inputBlockRecords = mutable.Map[ModifierId, InputBlockInfo]()
+  private val inputBlockRecords = mutable.Map[ModifierId, InputBlockAnnouncement]()
 
   /**
     * input block id -> input block transaction ids index
@@ -695,12 +695,12 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Temporary cache of children which do not have parents downloaded yet
     */
-  private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockInfo]()
+  private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockAnnouncement]()
 
   private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
 
   // extracts ordering block id from input block data provided
-  private def extractOrderingId(ib: InputBlockInfo) = ib.header.parentId
+  private def extractOrderingId(ib: InputBlockAnnouncement) = ib.header.parentId
 
   /**
     * Gets the current best ordering block and best input block pair.
@@ -711,9 +711,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     *
     * @return A tuple containing:
     *         - Option[Header] for the best ordering block (if any exists)
-    *         - Option[InputBlockInfo] for the best input block (if any exists)
+    *         - Option[InputBlockAnnouncement] for the best input block (if any exists)
     */
-  def bestBlocks: (Option[Header], Option[InputBlockInfo]) = {
+  def bestBlocks: (Option[Header], Option[InputBlockAnnouncement]) = {
     val bestOrdering = bestOrderingBlock()
     val bestInputForOrdering =
       bestOrdering
@@ -823,7 +823,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return Option containing the ID of a parent input block to download if the current block
     *         references an unknown parent, or None if the block was successfully integrated
     */
-  def applyInputBlock(ib: InputBlockInfo): Option[ModifierId] = {
+  def applyInputBlock(ib: InputBlockAnnouncement): Option[ModifierId] = {
     val HeightThreshold = 2
 
     try {
@@ -970,7 +970,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     *
     * @return the best input block information if available, None otherwise
     */
-  def bestInputBlock(): Option[InputBlockInfo] = {
+  def bestInputBlock(): Option[InputBlockAnnouncement] = {
     bestBlocks._2
   }
 
@@ -1004,9 +1004,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     * Retrieves an input block by its modifier ID.
     *
     * @param sbId The modifier ID of the input block to retrieve
-    * @return Some(InputBlockInfo) if the input block exists, None otherwise
+    * @return Some(InputBlockAnnouncement) if the input block exists, None otherwise
     */
-  def getInputBlock(sbId: ModifierId): Option[InputBlockInfo] = {
+  def getInputBlock(sbId: ModifierId): Option[InputBlockAnnouncement] = {
     inputBlockRecords.get(sbId)
   }
 

@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
@@ -70,7 +70,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
     
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -92,7 +92,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -104,7 +104,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
     
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get.isEmpty shouldBe true
@@ -135,9 +135,9 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
     // Generate parent and child input blocks
-    val parentIb = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val parentIb = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val childIb = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(parentIb.id)), None)
+    val childIb = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(parentIb.id)), None)
 
     // Apply child first - should return parent id as needed
     val r1 = h.applyInputBlock(childIb)
@@ -179,7 +179,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -198,8 +198,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 0
 
-    val ib2 = InputBlockInfo(1, c3(0).header, InputBlockFields.empty, None)
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, InputBlockFields.empty, None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
 
     h.applyInputBlock(ib2)
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set(ib1.id)
@@ -240,7 +240,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
     // Create first input block from c2(0) - this is the root input block
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -251,7 +251,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
 
     // Create second input block from c3(0) as child of ib1 - extending the chain
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r2 = h.applyInputBlock(ib2)
     r2 shouldBe None
 
@@ -270,7 +270,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
     // Create ib3: forked input block that is another child of ib1 (creating fork with ib2)
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib3)
 
     // Verify fork structure: first fork should be [ib1, ib2] with ib2 processed
@@ -301,7 +301,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     // Create ib4: child of ib3, extending the ib3 fork
-    val ib4 = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
+    val ib4 = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
     val r4 = h.applyInputBlock(ib4)
     r4 shouldBe None
     // Apply transactions to ib4 - this should now switch the best chain to [ib1, ib3, ib4]
@@ -339,7 +339,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     )
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib = InputBlockInfo(1, c2(0).header.copy(stateRoot = digestAfter(Seq(tx), us)), InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c2(0).header.copy(stateRoot = digestAfter(Seq(tx), us)), InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -376,7 +376,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     )
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib = InputBlockInfo(1, c2(0).header.copy(stateRoot = digestAfter(Seq(tx), us)), InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c2(0).header.copy(stateRoot = digestAfter(Seq(tx), us)), InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -393,7 +393,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.isDefined shouldBe false
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -415,7 +415,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val c3 = genChain(1, h, stateOpt = Some(us)).tail
     applyChain(h, c3)
 
-    val ib = InputBlockInfo(1, c1(0).header, InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c1(0).header, InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -441,7 +441,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c3)
     h.bestFullBlockOpt.get.id shouldBe c3.last.id
 
-    val ib = InputBlockInfo(1, c4(0).header, InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c4(0).header, InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -464,7 +464,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -491,7 +491,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -520,7 +520,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -534,7 +534,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     var r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set.empty
@@ -551,7 +551,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
     r = h.applyInputBlock(ib3)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get should not contain(ib3.id)
@@ -578,7 +578,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.bestInputBlocksChain() shouldBe Seq()
@@ -593,7 +593,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r = h.applyInputBlock(ib2)
     r shouldBe None
     h.bestInputBlocksChain() shouldBe Seq()
@@ -624,7 +624,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -638,7 +638,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c3.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     var r = h.applyInputBlock(ib2)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set.empty
@@ -648,7 +648,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     c4.head.header.parentId shouldBe h.bestHeaderOpt.get.id
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
     r = h.applyInputBlock(ib3)
     r shouldBe None
     h.getOrderingBlockTips(h.bestHeaderOpt.get.id).get shouldBe Set.empty
@@ -707,7 +707,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestFullBlockOpt.get.id shouldBe c1.last.id
 
     // Create first input block after ordering block
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
     h.getInputBlock(ib1.id) shouldBe Some(ib1)
@@ -781,13 +781,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create first input block chain
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
 
     // Create second ordering block at same height
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, InputBlockFields.empty, None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib2)
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us)
 
@@ -811,12 +811,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create input blocks chain
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
 
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us)
 
@@ -848,7 +848,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val announcement = OrderingBlockAnnouncement(c2(0).header, Seq.empty, Seq.empty, Seq.empty)
+    val announcement = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, c2(0).header, Seq.empty, Seq.empty, Seq.empty)
 
     // Store announcement
     h.storeOrderingBlockAnnouncement(announcement)
@@ -875,7 +875,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val announcements = (1 to 3).map { _ =>
       val chain = genChain(1, h, stateOpt = Some(us))
       val header = chain.head.header
-      val announcement = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      val announcement = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty)
       h.storeOrderingBlockAnnouncement(announcement)
       applyChain(h, chain)  // Apply to advance best height
       (header.height, header.id, announcement)
@@ -919,7 +919,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // Create next block and store its announcement
     val c2 = genChain(1, h, stateOpt = Some(us))
     val header = c2.head.header
-    val announcement = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+    val announcement = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty)
 
     // Store announcement before applying the block
     h.storeOrderingBlockAnnouncement(announcement)
@@ -957,29 +957,29 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     // Create fork A
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
 
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3a = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2a.id)), None)
+    val ib3a = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2a.id)), None)
     h.applyInputBlock(ib3a)
 
     // Create fork B (longer chain)
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3b = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib2b.id)), None)
+    val ib3b = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(ib2b.id)), None)
     h.applyInputBlock(ib3b)
 
     val c7 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4b = InputBlockInfo(1, c7(0).header, parentOnly(idToBytes(ib3b.id)), None)
+    val ib4b = InputBlockAnnouncement(1, c7(0).header, parentOnly(idToBytes(ib3b.id)), None)
     h.applyInputBlock(ib4b)
 
     // Apply transactions to fork A
@@ -1012,7 +1012,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // Try to apply input block with non-existent parent ordering block
     // Note: The system may still accept the input block but it won't be part of the valid chain
     val invalidHeader = c1(0).header.copy(parentId = bytesToId(Array.fill(32)(0.toByte)))
-    val invalidIb = InputBlockInfo(1, invalidHeader, InputBlockFields.empty, None)
+    val invalidIb = InputBlockAnnouncement(1, invalidHeader, InputBlockFields.empty, None)
     
     h.applyInputBlock(invalidIb) shouldBe None
     // The input block may be stored but won't be part of the valid chain
@@ -1032,7 +1032,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create input blocks chain
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
 
@@ -1059,11 +1059,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create initial chain
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
 
     // Apply transactions to initial chain
@@ -1074,15 +1074,15 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create reorganization chain
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1alt = InputBlockInfo(1, c4(0).header, InputBlockFields.empty, None)
+    val ib1alt = InputBlockAnnouncement(1, c4(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1alt)
 
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2alt = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib1alt.id)), None)
+    val ib2alt = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib1alt.id)), None)
     h.applyInputBlock(ib2alt)
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3alt = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib2alt.id)), None)
+    val ib3alt = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(ib2alt.id)), None)
     h.applyInputBlock(ib3alt)
 
     // Apply transactions to reorganization chain (longer chain)
@@ -1104,7 +1104,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     // Test transaction ID retrieval
@@ -1164,7 +1164,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -1189,7 +1189,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     val validTransactions = Seq.empty[ErgoTransaction]
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r = h.applyInputBlock(ib)
     r shouldBe None
 
@@ -1280,13 +1280,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create first input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     val r1 = h.applyInputBlock(ib1)
     r1 shouldBe None
 
     // Create second input block (child of first)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     val r2 = h.applyInputBlock(ib2)
     r2 shouldBe None
 
@@ -1323,7 +1323,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // Create input block with invalid parent (non-existent ordering block)
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
     val invalidParentHeader = c2(0).header.copy(parentId = bytesToId(Array.fill(32)(0.toByte)))
-    val invalidIb = InputBlockInfo(1, invalidParentHeader, InputBlockFields.empty, None)
+    val invalidIb = InputBlockAnnouncement(1, invalidParentHeader, InputBlockFields.empty, None)
     
     // The input block should be stored but won't be part of valid chain
     h.applyInputBlock(invalidIb) shouldBe None
@@ -1345,7 +1345,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     // Try to apply duplicate transactions in same input block
@@ -1366,7 +1366,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     // Create transaction spending a non-existent box (use a different box ID)
@@ -1411,7 +1411,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     // Create transaction spending the always-fail box
@@ -1438,7 +1438,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block - this must be the first input block after the current best ordering block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
 
     // Apply transactions to root first - this should succeed as it's the first input block
@@ -1447,11 +1447,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create Fork A: ib1 -> ib2a -> ib3a (with empty transactions)
     val c3a = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3a(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3a(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
 
     val c4a = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3a = InputBlockInfo(1, c4a(0).header, parentOnly(idToBytes(ib2a.id)), None)
+    val ib3a = InputBlockAnnouncement(1, c4a(0).header, parentOnly(idToBytes(ib2a.id)), None)
     h.applyInputBlock(ib3a)
 
     // Apply transactions to Fork A - these should succeed as they're direct children of current best
@@ -1463,19 +1463,19 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create Fork B: ib1 -> ib2b -> ib3b -> ib4b -> ib5b (5 blocks long, longer than Fork A)
     val c3b = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c3b(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c3b(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     val c4b = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3b = InputBlockInfo(1, c4b(0).header, parentOnly(idToBytes(ib2b.id)), None)
+    val ib3b = InputBlockAnnouncement(1, c4b(0).header, parentOnly(idToBytes(ib2b.id)), None)
     h.applyInputBlock(ib3b)
 
     val c5b = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4b = InputBlockInfo(1, c5b(0).header, parentOnly(idToBytes(ib3b.id)), None)
+    val ib4b = InputBlockAnnouncement(1, c5b(0).header, parentOnly(idToBytes(ib3b.id)), None)
     h.applyInputBlock(ib4b)
 
     val c6b = genChain(2, h, stateOpt = Some(us)).tail
-    val ib5b = InputBlockInfo(1, c6b(0).header, parentOnly(idToBytes(ib4b.id)), None)
+    val ib5b = InputBlockAnnouncement(1, c6b(0).header, parentOnly(idToBytes(ib4b.id)), None)
     h.applyInputBlock(ib5b)
 
     // Apply transactions to Fork B (longer chain) - these should succeed and cause chain switching
@@ -1495,19 +1495,19 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create Fork C: ib1 -> ib2c -> ib3c -> ib4c -> ib5c (5 blocks long, same length as Fork B)
     val c3c = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2c = InputBlockInfo(1, c3c(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2c = InputBlockAnnouncement(1, c3c(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2c)
 
     val c4c = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3c = InputBlockInfo(1, c4c(0).header, parentOnly(idToBytes(ib2c.id)), None)
+    val ib3c = InputBlockAnnouncement(1, c4c(0).header, parentOnly(idToBytes(ib2c.id)), None)
     h.applyInputBlock(ib3c)
 
     val c5c = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4c = InputBlockInfo(1, c5c(0).header, parentOnly(idToBytes(ib3c.id)), None)
+    val ib4c = InputBlockAnnouncement(1, c5c(0).header, parentOnly(idToBytes(ib3c.id)), None)
     h.applyInputBlock(ib4c)
 
     val c6c = genChain(2, h, stateOpt = Some(us)).tail
-    val ib5c = InputBlockInfo(1, c6c(0).header, parentOnly(idToBytes(ib4c.id)), None)
+    val ib5c = InputBlockAnnouncement(1, c6c(0).header, parentOnly(idToBytes(ib4c.id)), None)
     h.applyInputBlock(ib5c)
 
     // Apply transactions to Fork C (same length as Fork B) - these may or may not cause switching
@@ -1552,18 +1552,18 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, initialTxs, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Create single fork: ib1 -> ib2 -> ib3 (with transactions spending outputs from ib2)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
 
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
     h.applyInputBlock(ib3)
 
     // Create transactions for the fork (spending outputs from previous transactions in the same fork)
@@ -1610,14 +1610,14 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, initialTxs, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Create short fork: ib1 -> ib2
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq(ib2.id) -> Seq.empty)
 
@@ -1626,23 +1626,23 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create long fork: ib1 -> ib2alt -> ib3alt -> ib4alt -> ib5alt -> ib6alt (5 blocks total)
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2alt = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2alt = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2alt)
 
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3alt = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib2alt.id)), None)
+    val ib3alt = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib2alt.id)), None)
     h.applyInputBlock(ib3alt)
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4alt = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib3alt.id)), None)
+    val ib4alt = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(ib3alt.id)), None)
     h.applyInputBlock(ib4alt)
 
     val c7 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib5alt = InputBlockInfo(1, c7(0).header, parentOnly(idToBytes(ib4alt.id)), None)
+    val ib5alt = InputBlockAnnouncement(1, c7(0).header, parentOnly(idToBytes(ib4alt.id)), None)
     h.applyInputBlock(ib5alt)
 
     val c8 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib6alt = InputBlockInfo(1, c8(0).header, parentOnly(idToBytes(ib5alt.id)), None)
+    val ib6alt = InputBlockAnnouncement(1, c8(0).header, parentOnly(idToBytes(ib5alt.id)), None)
     h.applyInputBlock(ib6alt)
 
     // Apply transactions to the long fork
@@ -1685,19 +1685,19 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Create Fork A: ib1 -> ib2a (with transaction spending the same box as in Fork B)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
 
     // Create Fork B: ib1 -> ib2b (with different transaction spending the same box as in Fork A)
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     // Apply the same transaction to the first fork - this should succeed
@@ -1747,36 +1747,36 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Create Fork A: ib1 -> ib2a -> ib3a
     val c3a = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3a(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3a(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
 
     val c4a = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3a = InputBlockInfo(1, c4a(0).header, parentOnly(idToBytes(ib2a.id)), None)
+    val ib3a = InputBlockAnnouncement(1, c4a(0).header, parentOnly(idToBytes(ib2a.id)), None)
     h.applyInputBlock(ib3a)
 
     // Create Fork B: ib1 -> ib2b -> ib3b
     val c3b = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c3b(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c3b(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     val c4b = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3b = InputBlockInfo(1, c4b(0).header, parentOnly(idToBytes(ib2b.id)), None)
+    val ib3b = InputBlockAnnouncement(1, c4b(0).header, parentOnly(idToBytes(ib2b.id)), None)
     h.applyInputBlock(ib3b)
 
     // Create Fork C: ib1 -> ib2c -> ib3c
     val c3c = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2c = InputBlockInfo(1, c3c(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2c = InputBlockAnnouncement(1, c3c(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2c)
 
     val c4c = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3c = InputBlockInfo(1, c4c(0).header, parentOnly(idToBytes(ib2c.id)), None)
+    val ib3c = InputBlockAnnouncement(1, c4c(0).header, parentOnly(idToBytes(ib2c.id)), None)
     h.applyInputBlock(ib3c)
 
     // Generate transactions for each fork
@@ -1855,12 +1855,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create input blocks for the first fork on the first ordering block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val fork1ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val fork1ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(fork1ib1)
     h.applyInputBlockTransactions(fork1ib1.id, Seq.empty, us) shouldBe (Seq(fork1ib1.id) -> Seq.empty)
 
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val fork1ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(fork1ib1.id)), None)
+    val fork1ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(fork1ib1.id)), None)
     h.applyInputBlock(fork1ib2)
     h.applyInputBlockTransactions(fork1ib2.id, Seq.empty, us) shouldBe (Seq(fork1ib2.id) -> Seq.empty)
 
@@ -1877,12 +1877,12 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Now create input blocks for the second fork on the competing ordering block
     val c5 = genChain(2, h, stateOpt = Some(us)).tail  // These are input blocks for the competing ordering block
-    val fork2ib1 = InputBlockInfo(1, c5(0).header, InputBlockFields.empty, None)
+    val fork2ib1 = InputBlockAnnouncement(1, c5(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(fork2ib1)
     h.applyInputBlockTransactions(fork2ib1.id, Seq.empty, us) shouldBe (Seq(fork2ib1.id) -> Seq.empty)
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val fork2ib2 = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(fork2ib1.id)), None)
+    val fork2ib2 = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(fork2ib1.id)), None)
     h.applyInputBlock(fork2ib2)
     h.applyInputBlockTransactions(fork2ib2.id, Seq.empty, us) shouldBe (Seq(fork2ib2.id) -> Seq.empty)
 
@@ -1894,7 +1894,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // Create a scenario where we have competing forks across ordering blocks
     // Create alternative input blocks for the competing ordering block
     val c7 = genChain(2, h, stateOpt = Some(us)).tail
-    val fork2ib3 = InputBlockInfo(1, c7(0).header, InputBlockFields.empty, None)
+    val fork2ib3 = InputBlockAnnouncement(1, c7(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(fork2ib3)
 
     // Verify that both ordering blocks have their respective input blocks
@@ -1970,40 +1970,40 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create a common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val rootIb = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val rootIb = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(rootIb)
     h.applyInputBlockTransactions(rootIb.id, Seq.empty, us) shouldBe (Seq(rootIb.id) -> Seq.empty)
 
     // Create multiple competing forks from the root
     // Fork A: rootIb -> forkA1 -> forkA2
     val forkA1Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkA1 = InputBlockInfo(1, forkA1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
+    val forkA1 = InputBlockAnnouncement(1, forkA1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
     h.applyInputBlock(forkA1)
 
     val forkA2Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkA2 = InputBlockInfo(1, forkA2Block(0).header, parentOnly(idToBytes(forkA1.id)), None)
+    val forkA2 = InputBlockAnnouncement(1, forkA2Block(0).header, parentOnly(idToBytes(forkA1.id)), None)
     h.applyInputBlock(forkA2)
 
     // Fork B: rootIb -> forkB1 -> forkB2
     val forkB1Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkB1 = InputBlockInfo(1, forkB1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
+    val forkB1 = InputBlockAnnouncement(1, forkB1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
     h.applyInputBlock(forkB1)
 
     val forkB2Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkB2 = InputBlockInfo(1, forkB2Block(0).header, parentOnly(idToBytes(forkB1.id)), None)
+    val forkB2 = InputBlockAnnouncement(1, forkB2Block(0).header, parentOnly(idToBytes(forkB1.id)), None)
     h.applyInputBlock(forkB2)
 
     // Fork C: rootIb -> forkC1 -> forkC2 -> forkC3
     val forkC1Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkC1 = InputBlockInfo(1, forkC1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
+    val forkC1 = InputBlockAnnouncement(1, forkC1Block(0).header, parentOnly(idToBytes(rootIb.id)), None)
     h.applyInputBlock(forkC1)
 
     val forkC2Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkC2 = InputBlockInfo(1, forkC2Block(0).header, parentOnly(idToBytes(forkC1.id)), None)
+    val forkC2 = InputBlockAnnouncement(1, forkC2Block(0).header, parentOnly(idToBytes(forkC1.id)), None)
     h.applyInputBlock(forkC2)
 
     val forkC3Block = genChain(2, h, stateOpt = Some(us)).tail
-    val forkC3 = InputBlockInfo(1, forkC3Block(0).header, parentOnly(idToBytes(forkC2.id)), None)
+    val forkC3 = InputBlockAnnouncement(1, forkC3Block(0).header, parentOnly(idToBytes(forkC2.id)), None)
     h.applyInputBlock(forkC3)
 
     // Verify that all input blocks exist before processing transactions
@@ -2132,27 +2132,27 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create a base chain: ib1 -> ib2 -> ib3 -> ib4 -> ib5
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, initialTxs, us)
 
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us)
 
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
     h.applyInputBlock(ib3)
     h.applyInputBlockTransactions(ib3.id, Seq.empty, us)
 
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4 = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
+    val ib4 = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib3.id)), None)
     h.applyInputBlock(ib4)
     h.applyInputBlockTransactions(ib4.id, Seq.empty, us)
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib5 = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib4.id)), None)
+    val ib5 = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(ib4.id)), None)
     h.applyInputBlock(ib5)
     h.applyInputBlockTransactions(ib5.id, Seq.empty, us)
 
@@ -2160,7 +2160,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // This simulates the scenario from the logs where multiple input blocks reference the same parent
     val competingForks = (1 to 10).map { i =>
       val c = genChain(2, h, stateOpt = Some(us)).tail
-      InputBlockInfo(1, c(0).header, parentOnly(idToBytes(ib3.id)), None)
+      InputBlockAnnouncement(1, c(0).header, parentOnly(idToBytes(ib3.id)), None)
     }
 
     // Apply all competing forks rapidly
@@ -2191,11 +2191,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     applyChain(h, c1)
 
     // Create a longer base chain to have more places to fork from
-    val baseChain = (1 to 5).foldLeft(List.empty[InputBlockInfo]) { (acc, i) =>
+    val baseChain = (1 to 5).foldLeft(List.empty[InputBlockAnnouncement]) { (acc, i) =>
       val c = genChain(2, h, stateOpt = Some(us)).tail
       val parentId = if (acc.isEmpty) Array.empty[Byte] else idToBytes(acc.last.id)
       val parentFields = if (parentId.isEmpty) InputBlockFields.empty else parentOnly(parentId)
-      val ib = InputBlockInfo(1, c(0).header, parentFields, None)
+      val ib = InputBlockAnnouncement(1, c(0).header, parentFields, None)
 
       h.applyInputBlock(ib)
       if (i == 1) {
@@ -2214,7 +2214,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
       forkNum <- 1 to 3  // 3 forks per parent position
     } yield {
       val c = genChain(2, h, stateOpt = Some(us)).tail
-      InputBlockInfo(1, c(0).header, parentOnly(idToBytes(baseChain(parentIdx).id)), None)
+      InputBlockAnnouncement(1, c(0).header, parentOnly(idToBytes(baseChain(parentIdx).id)), None)
     }
 
     // Apply all competing forks rapidly
@@ -2257,14 +2257,14 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, initialTxs, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Create short fork: ib1 -> ib2 -> ib3 (3 blocks with transactions)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2 = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2)
 
     // Create transaction for ib2 that spends output from initialTxs
@@ -2280,7 +2280,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib2.id, txForIb2, us) shouldBe (Seq(ib2.id) -> Seq.empty)
 
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3 = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
     h.applyInputBlock(ib3)
 
     // Create transaction for ib3 that spends output from txForIb2
@@ -2300,7 +2300,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create long fork: ib1 -> ib2alt -> ib3alt -> ib4alt -> ib5alt -> ib6alt -> ib7alt -> ib8alt (8 blocks total)
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2alt = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2alt = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2alt)
 
     // Create transaction for ib2alt that spends output from initialTxs (same as used in short fork)
@@ -2316,7 +2316,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     require(txForIb2Alt.nonEmpty && txForIb2Alt.head.outputs.nonEmpty)
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3alt = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib2alt.id)), None)
+    val ib3alt = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(ib2alt.id)), None)
     h.applyInputBlock(ib3alt)
 
     // Create transaction for ib3alt
@@ -2332,7 +2332,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     require(txForIb3Alt.nonEmpty && txForIb3Alt.head.outputs.nonEmpty)
 
     val c7 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4alt = InputBlockInfo(1, c7(0).header, parentOnly(idToBytes(ib3alt.id)), None)
+    val ib4alt = InputBlockAnnouncement(1, c7(0).header, parentOnly(idToBytes(ib3alt.id)), None)
     h.applyInputBlock(ib4alt)
 
     // Create transaction for ib4alt
@@ -2346,7 +2346,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c8 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib5alt = InputBlockInfo(1, c8(0).header, parentOnly(idToBytes(ib4alt.id)), None)
+    val ib5alt = InputBlockAnnouncement(1, c8(0).header, parentOnly(idToBytes(ib4alt.id)), None)
     h.applyInputBlock(ib5alt)
 
     // Create transaction for ib5alt
@@ -2360,7 +2360,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c9 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib6alt = InputBlockInfo(1, c9(0).header, parentOnly(idToBytes(ib5alt.id)), None)
+    val ib6alt = InputBlockAnnouncement(1, c9(0).header, parentOnly(idToBytes(ib5alt.id)), None)
     h.applyInputBlock(ib6alt)
 
     // Create transaction for ib6alt
@@ -2374,7 +2374,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c10 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib7alt = InputBlockInfo(1, c10(0).header, parentOnly(idToBytes(ib6alt.id)), None)
+    val ib7alt = InputBlockAnnouncement(1, c10(0).header, parentOnly(idToBytes(ib6alt.id)), None)
     h.applyInputBlock(ib7alt)
 
     // Create transaction for ib7alt
@@ -2388,7 +2388,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c11 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib8alt = InputBlockInfo(1, c11(0).header, parentOnly(idToBytes(ib7alt.id)), None)
+    val ib8alt = InputBlockAnnouncement(1, c11(0).header, parentOnly(idToBytes(ib7alt.id)), None)
     h.applyInputBlock(ib8alt)
 
     // Create transaction for ib8alt
@@ -2457,14 +2457,14 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create common root input block
     val c2 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib1 = InputBlockInfo(1, c2(0).header, InputBlockFields.empty, None)
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
     h.applyInputBlock(ib1)
     h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
 
     // Create Fork A: ib1 -> ib2a (with transaction spending the box)
     val c3 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2a = InputBlockInfo(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2a = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2a)
 
     // Apply transaction to first fork - this should succeed
@@ -2477,7 +2477,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Create Fork B: ib1 -> ib2b -> ib3b -> ib4b (longer fork)
     val c4 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib2b = InputBlockInfo(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    val ib2b = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
     h.applyInputBlock(ib2b)
 
     // Create transaction for ib2b that spends the same box as in Fork A (double-spending attempt)
@@ -2491,7 +2491,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c5 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib3b = InputBlockInfo(1, c5(0).header, parentOnly(idToBytes(ib2b.id)), None)
+    val ib3b = InputBlockAnnouncement(1, c5(0).header, parentOnly(idToBytes(ib2b.id)), None)
     h.applyInputBlock(ib3b)
 
     // Create transaction for ib3b
@@ -2505,7 +2505,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
 
     val c6 = genChain(2, h, stateOpt = Some(us)).tail
-    val ib4b = InputBlockInfo(1, c6(0).header, parentOnly(idToBytes(ib3b.id)), None)
+    val ib4b = InputBlockAnnouncement(1, c6(0).header, parentOnly(idToBytes(ib3b.id)), None)
     h.applyInputBlock(ib4b)
 
     // Create transaction for ib4b

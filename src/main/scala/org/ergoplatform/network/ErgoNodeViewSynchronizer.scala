@@ -38,7 +38,7 @@ import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.network.message.inputblocks._
 import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
 import spire.syntax.all.cfor
@@ -1386,7 +1386,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * @param inputBlockInfo The input block information to request transaction IDs for
    * @param remote The peer to request the transaction IDs from
    */
-  def requestInputBlockTransactionIds(inputBlockInfo: InputBlockInfo, remote: ConnectedPeer): Unit = {
+  def requestInputBlockTransactionIds(inputBlockInfo: InputBlockAnnouncement, remote: ConnectedPeer): Unit = {
     // currently we request input block transactions only once // todo: recheck this
     val data = InvData(InputBlockTransactionIdsTypeId.value, Seq(inputBlockInfo.header.id))
     val msg = Message(RequestModifierSpec, Right(data), None)
@@ -1417,7 +1417,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * @param mp The mempool reader interface
    * @param remote The peer that sent the input block
    */
-  def processInputBlock(inputBlockInfo: InputBlockInfo,
+  def processInputBlock(inputBlockInfo: InputBlockAnnouncement,
                         hr: ErgoHistoryReader,
                         mp: ErgoMemPoolReader,
                         remote: ConnectedPeer,
@@ -2056,7 +2056,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       // todo: send ids for previously broadcasted txs, not .empty
       val obAnn = {
-        OrderingBlockAnnouncement(header, ot, Seq.empty, ext.fields)
+        OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, ot, Seq.empty, ext.fields)
       }
       historyReader.storeOrderingBlockAnnouncement(obAnn)
       val msg = Message(OrderingBlockAnnouncementMessageSpec, Right(obAnn), None)
@@ -2269,7 +2269,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (_: NipopowProofSpec.type , proofBytes: Array[Byte], remote) =>
       processNipopowProof(proofBytes, hr, remote)
     // Sub-blocks related messages
-    case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockInfo, remote) =>
+    case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockAnnouncement, remote) =>
       processInputBlock(subBlockInfo, hr, mp, remote, usrOpt)
     case (_: InputBlockTransactionIdsMessageSpec.type, transactionIds: InputBlockTransactionIdsData, remote) =>
       processInputBlockTransactionIds(transactionIds, mp, remote)

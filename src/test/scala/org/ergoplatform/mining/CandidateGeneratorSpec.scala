@@ -7,7 +7,7 @@ import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
@@ -1139,7 +1139,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         val (inputBlockInfo, inputBlockTransactionsData) = CandidateGenerator.completeInputBlock(candidateBlock, solution)
 
         // Verify the results
-        inputBlockInfo shouldBe a[InputBlockInfo]
+        inputBlockInfo shouldBe a[InputBlockAnnouncement]
         inputBlockTransactionsData shouldBe a[InputBlockTransactionsData]
 
         // Check that the input block info has the correct header

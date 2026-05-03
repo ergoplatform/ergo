@@ -2,7 +2,7 @@ package org.ergoplatform.network.message.inputblocks
 
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.MessageSpecInputBlocks
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -10,20 +10,20 @@ import scorex.util.serialization.{Reader, Writer}
   * Contains header and extension section fields related to sub-blocks (such as link to previous sub block),
   * along with Merkle proof for them.
   */
-object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockInfo] {
+object InputBlockMessageSpec extends MessageSpecInputBlocks[InputBlockAnnouncement] {
 
   val MaxMessageSize = 16384
 
   override val messageCode: MessageCode = 100: Byte
   override val messageName: String = "SubBlock"
 
-  override def serialize(data: InputBlockInfo, w: Writer): Unit = {
-    InputBlockInfo.serializer.serialize(data, w)
+  override def serialize(data: InputBlockAnnouncement, w: Writer): Unit = {
+    InputBlockAnnouncement.serializer.serialize(data, w)
   }
 
-  override def parse(r: Reader): InputBlockInfo = {
+  override def parse(r: Reader): InputBlockAnnouncement = {
     require(r.remaining < MaxMessageSize, "Too big input block info message")
-    InputBlockInfo.serializer.parse(r)
+    InputBlockAnnouncement.serializer.parse(r)
   }
 
 }

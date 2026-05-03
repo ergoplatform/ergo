@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.mining.InputBlockFields
-import org.ergoplatform.subblocks.InputBlockInfo
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -455,7 +455,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: process valid InputBlockInfo") {
+  property("NodeViewSynchronizer: process valid InputBlockAnnouncement") {
     withFixture2 { ctx =>
       import ctx._
 
@@ -464,8 +464,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val chain = genChain(2, hist)
       val header = chain.last.header
 
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         None
@@ -483,7 +483,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: process InputBlockInfo with transaction IDs") {
+  property("NodeViewSynchronizer: process InputBlockAnnouncement with transaction IDs") {
     withFixture2 { ctx =>
       import ctx._
 
@@ -496,8 +496,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
       val weakTxIds = Some(Seq(tx.weakId))
 
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         weakTxIds
@@ -519,7 +519,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: processInputBlock penalizes peer on invalid InputBlockInfo") {
+  property("NodeViewSynchronizer: processInputBlock penalizes peer on invalid InputBlockAnnouncement") {
     withFixture2 { ctx =>
       import ctx._
       import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
@@ -540,9 +540,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
       Thread.sleep(500)
 
-      // Create an InputBlockInfo with empty Merkle proof that won't match the header's extensionRoot
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      // Create an InputBlockAnnouncement with empty Merkle proof that won't match the header's extensionRoot
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         None
@@ -580,9 +580,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val farAheadHeader = chain.last.header
       // fullBlockHeight is 0, header height is 5, so: header.height (5) > 0 + 2
 
-      // Create an InputBlockInfo with the far-ahead header
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      // Create an InputBlockAnnouncement with the far-ahead header
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         farAheadHeader,
         InputBlockFields.empty,
         None
@@ -631,8 +631,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Create an input block with 2 weakTxIds (<= 3, so txs should be included in broadcast)
       val fakeWeakId1: Array[Byte] = Array.fill(32)(0x11.toByte)
       val fakeWeakId2: Array[Byte] = Array.fill(32)(0x22.toByte)
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         Some(Seq(fakeWeakId1, fakeWeakId2))
@@ -668,7 +668,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       // Verify the input block was sent WITH weakTxIds (since <= 3 transactions)
-      val ibi = msg.message.data.get.asInstanceOf[InputBlockInfo]
+      val ibi = msg.message.data.get.asInstanceOf[InputBlockAnnouncement]
       ibi.id shouldBe header.id
       ibi.weakTxIds shouldBe Some(Seq(fakeWeakId1, fakeWeakId2))
     }
@@ -699,8 +699,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Create an input block with 5 weakTxIds (> 3, so txs should be stripped from broadcast)
       val fakeWeakIds = (1 to 5).map(i => Array.fill(32)(i.toByte))
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         Some(fakeWeakIds)
@@ -753,8 +753,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         case other => fail(s"Expected SendToPeers, got $other")
       }
 
-      // Verify the message contains an InputBlockInfo with the correct header id
-      val ibi = sendToNetworkMsg.message.data.get.asInstanceOf[InputBlockInfo]
+      // Verify the message contains an InputBlockAnnouncement with the correct header id
+      val ibi = sendToNetworkMsg.message.data.get.asInstanceOf[InputBlockAnnouncement]
       ibi.id shouldBe header.id
       // Note: The handler should strip weakTxIds when size > 3, but due to message routing
       // in test environments, we verify the core behavior (message sent to correct peer).
@@ -796,9 +796,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Create a copy of the header with the fake parentId
       val modifiedHeader = originalHeader.copy(parentId = fakeParentId)
 
-      // Create InputBlockInfo with the modified header
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      // Create InputBlockAnnouncement with the modified header
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         modifiedHeader,
         InputBlockFields.empty,
         None
@@ -998,8 +998,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Create input block info with the transaction's weakId
       val expectedWeakId = tx.weakId
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         inputBlockHeader,
         InputBlockFields.empty,
         Some(Seq(expectedWeakId))
@@ -1167,7 +1167,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val chain = genChain(10, hist)
       val header = chain.last.header
 
-      val oba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      val oba = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty)
 
       val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
       synchronizerMockRef ! Message(OrderingBlockAnnouncementMessageSpec, Left(msgBytes), Some(peer))
@@ -1196,7 +1196,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
 
       // Create and store the OBA
-      val oba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      val oba = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty)
       hist.storeOrderingBlockAnnouncement(oba)
 
       // Send the same OBA message — should be a no-op since header is already known
@@ -1240,7 +1240,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val chain = genChain(2, hist)
       val header = chain.head.header
 
-      val oba = OrderingBlockAnnouncement(header, Seq.empty, Seq.empty, Seq.empty)
+      val oba = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, header, Seq.empty, Seq.empty, Seq.empty)
       hist.storeOrderingBlockAnnouncement(oba)
 
       synchronizerMockRef.underlyingActor.processOrderingBlockAnnouncementRequest(header.id, hist, peer)
@@ -1269,9 +1269,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! ChangedMempool(mempool)
       Thread.sleep(500)
 
-      // InputBlockInfo with None weakTxIds (no tx IDs announced)
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      // InputBlockAnnouncement with None weakTxIds (no tx IDs announced)
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         None // no weakTxIds
@@ -1318,11 +1318,10 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         BigInt(0)
       )
       val badHeader = header.copy(powSolution = badPowSolution)
-      val oba = OrderingBlockAnnouncement(badHeader, Seq.empty, Seq.empty, Seq.empty)
+      val oba = OrderingBlockAnnouncement(OrderingBlockAnnouncement.CurrentVersion, badHeader, Seq.empty, Seq.empty, Seq.empty)
 
       // Validate via PoW scheme to confirm it's invalid
-      val powScheme = settings.chainSettings.powScheme
-      oba.valid(powScheme) shouldBe false
+      oba.valid(settings.chainSettings.powScheme) shouldBe false
 
       // Send via message routing (processOrderingBlockAnnouncement is private)
       val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
@@ -1351,8 +1350,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Create a prev input block and store it
       val prevIbId = bytesToId(Algos.hash("prev-input-block".getBytes))
-      val prevIbInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val prevIbInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         None
@@ -1361,6 +1360,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Create OBA referencing the stored input block
       val oba = OrderingBlockAnnouncement(
+        1.toByte,
         header,
         Seq.empty,
         Seq.empty,
@@ -1409,6 +1409,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Create OBA referencing a non-existent input block
       val unknownIbId = bytesToId(Algos.hash("unknown-input-block".getBytes))
       val oba = OrderingBlockAnnouncement(
+        1.toByte,
         header,
         Seq.empty,
         Seq.empty,
@@ -1720,8 +1721,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val header = chain.head.header
 
       // Create and store an input block
-      val inputBlockInfo = InputBlockInfo(
-        InputBlockInfo.initialMessageVersion,
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
         header,
         InputBlockFields.empty,
         None

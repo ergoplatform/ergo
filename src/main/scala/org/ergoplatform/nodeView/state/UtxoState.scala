@@ -242,13 +242,45 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     }
   }
 
+  /**
+    * Validates transactions within an input block against the current UTXO state.
+    *
+    * Input blocks contain transactions that reference a specific ordering (full) block but do not
+    * modify the persistent UTXO set directly. This method performs stateless and stateful validation
+    * of the input block's transactions, ensuring they are consistent with the current state and
+    * with any previously processed transactions in the input block chain.
+    *
+    * The validation is performed in two phases:
+    * 1. Transaction validation: each transaction is checked against a state view enriched with
+    *    outputs from `previousTransactions` (transactions from earlier input blocks in the chain).
+    *    Soft-forkable fields are disallowed, and no persistent state transformations are applied.
+    * 2. Double-spend detection: ensures no input box is consumed more than once across all
+    *    transactions in the current input block and previous input blocks.
+    *
+    * @param txs transactions contained in the current input block
+    * @param previousTransactions transactions from previously processed input blocks in the same chain,
+    *                             whose outputs are considered available for spending
+    * @param header the ordering block header this input block references
+    * @return total validation cost on success, or a failure if validation or double-spend check fails
+    */
   override def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Long] = {
-    // check transactions with class II transactions disabled and no UTXO set transformations checked and written
-    val res = this.withTransactions(previousTransactions).applyTransactions(txs, header.id, header.stateRoot, stateContext,
+    // Create a state view that includes outputs from previous input blocks in the chain.
+    // This allows transactions in the current input block to spend outputs created by
+    // transactions in earlier input blocks (cross-block sequential spending).
+    val stateWithPrevTxs = this.withTransactions(previousTransactions)
+
+    // Validate transactions without applying persistent UTXO set transformations.
+    // softFieldsAllowed = false enforces strict validation for input blocks.
+    val res = stateWithPrevTxs.applyTransactions(txs, header.id, header.stateRoot, stateContext,
       softFieldsAllowed = false, checkUtxoSetTransformations = false)
+
     if (res.isFailure) {
       log.warn(s"Input block validation failed for ${header.id} : " + res)
     }
+
+    // Check for double spending across all transactions in the input block chain.
+    // This includes both the current input block's transactions and previous transactions.
+    // An input box may only be spent once in total across the entire chain.
     val inputs = (txs ++ previousTransactions).flatMap(_.inputs).map(_.boxId) // todo: optimize
     if (inputs.size != inputs.distinct.size) { // todo: optimize
       log.warn("Double spending")

@@ -61,7 +61,18 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
   def rollbackVersions: Iterable[VersionTag]
 
   /**
-    * @return cost of validation
+    * Validates transactions within an input block against the current state.
+    *
+    * Input blocks are part of Ergo's two-tier architecture, where full (ordering) blocks
+    * contain headers and proofs, while input blocks contain transactions referencing them.
+    * This method validates the input block's transactions without modifying persistent state,
+    * checking both stateless and stateful validity, and ensuring no double spending occurs
+    * across the current and previous input block transactions.
+    *
+    * @param txs transactions in the current input block
+    * @param previousTransactions transactions from earlier input blocks in the chain
+    * @param header the ordering block header this input block references
+    * @return total validation cost on success, or failure if validation or double-spend check fails
     */
   def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Long]
 

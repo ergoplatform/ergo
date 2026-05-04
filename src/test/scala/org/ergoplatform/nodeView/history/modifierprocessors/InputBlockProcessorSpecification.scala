@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.modifierprocessors
 
 import com.google.common.io.Files.createTempDir
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
@@ -45,6 +45,16 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     additionalRegisters = Map.empty,
     transactionId = bytesToId(Algos.hash("dummyTx2")),
     index = 1
+  )
+
+  val eb3 = new ErgoBox(
+    value = 1000000000L,
+    ergoTree = ErgoTree.fromProposition(TrueProp),
+    creationHeight = 0,
+    additionalTokens = Colls.emptyColl,
+    additionalRegisters = Map.empty,
+    transactionId = bytesToId(Algos.hash("dummyTx3")),
+    index = 2
   )
 
   def digestAfter(txs: Seq[ErgoTransaction], us: UtxoState): ADDigest = {
@@ -894,6 +904,131 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     result._1 shouldBe Seq.empty
     result._2 shouldBe Seq.empty
     h.bestInputBlocksChain() shouldBe Seq.empty
+  }
+
+  property("Input block should ACCEPT data-inputs referencing outputs from the same input block") {
+    // Data-inputs are read-only references and do not modify state.
+    // They may reference outputs created by other transactions in the same
+    // input block, as all outputs are pre-populated in createdOutputs before
+    // validation begins.
+
+    val bh = BoxHolder(Seq(eb1, eb2, eb3))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1) shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+
+    // TX1: spend eb1 -> create output1 + fee
+    val value1 = 900000000L
+    val fee1 = 100000000L
+    val output1Candidate = new ErgoBoxCandidate(
+      value1, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val feeCandidate1 = new ErgoBoxCandidate(
+      fee1, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val tx1 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(output1Candidate, feeCandidate1)
+    )
+    val output1Id = tx1.outputs.head.id
+
+    // TX2: spend eb3 (TrueProp, so empty proof works), use output1 as data-input -> create output2 + fee
+    val value2 = 900000000L
+    val fee2 = 100000000L
+    val output2Candidate = new ErgoBoxCandidate(
+      value2, eb3.ergoTree, us.stateContext.currentHeight, eb3.additionalTokens, Map.empty
+    )
+    val feeCandidate2 = new ErgoBoxCandidate(
+      fee2, eb3.ergoTree, us.stateContext.currentHeight, eb3.additionalTokens, Map.empty
+    )
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(Input(eb3.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq(DataInput(output1Id)),
+      IndexedSeq(output2Candidate, feeCandidate2)
+    )
+
+    // Apply tx1 then tx2 (in-order)
+    val result = h.applyInputBlockTransactions(ib1.id, Seq(tx1, tx2), us)
+
+    result._1 shouldBe Seq(ib1.id)
+    result._2 shouldBe Seq.empty
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+  }
+
+  property("Input block should ACCEPT out-of-order data-inputs within the same input block") {
+    // Data-inputs may reference outputs from transactions that appear LATER
+    // in the block because they are read-only and do not affect state.
+    // createdOutputs is pre-populated with all outputs before validation.
+
+    val bh = BoxHolder(Seq(eb1, eb2, eb3))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1) shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+
+    // TX2 (appears first in the list): spend eb3 (TrueProp), use output1 as data-input
+    val value2 = 900000000L
+    val fee2 = 100000000L
+    val output2Candidate = new ErgoBoxCandidate(
+      value2, eb3.ergoTree, us.stateContext.currentHeight, eb3.additionalTokens, Map.empty
+    )
+    val feeCandidate2 = new ErgoBoxCandidate(
+      fee2, eb3.ergoTree, us.stateContext.currentHeight, eb3.additionalTokens, Map.empty
+    )
+
+    // We need output1's ID before tx1 is constructed, so compute it from tx1's structure
+    // TX1 (appears second): spend eb1 -> create output1 + fee
+    val value1 = 900000000L
+    val fee1 = 100000000L
+    val output1Candidate = new ErgoBoxCandidate(
+      value1, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val feeCandidate1 = new ErgoBoxCandidate(
+      fee1, eb1.ergoTree, us.stateContext.currentHeight, eb1.additionalTokens, Map.empty
+    )
+    val tx1 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(output1Candidate, feeCandidate1)
+    )
+    val output1Id = tx1.outputs.head.id
+
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(Input(eb3.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq(DataInput(output1Id)),
+      IndexedSeq(output2Candidate, feeCandidate2)
+    )
+
+    // Apply tx2 BEFORE tx1 (out-of-order data-input dependency)
+    val result = h.applyInputBlockTransactions(ib1.id, Seq(tx2, tx1), us)
+
+    // Should succeed because data-inputs are read-only and createdOutputs
+    // is pre-populated with all outputs before validation.
+    result._1 shouldBe Seq(ib1.id)
+    result._2 shouldBe Seq.empty
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
   }
 
   property("apply new best input block on another ordering block on the same height") {

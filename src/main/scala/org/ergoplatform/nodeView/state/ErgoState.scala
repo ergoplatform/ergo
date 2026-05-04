@@ -130,8 +130,9 @@ object ErgoState extends ScorexLogging {
 
     val firstViolation = txs.zipWithIndex.collectFirst {
       case (tx, idx) =>
-        val inputIds = tx.inputs.map(_.boxId) ++ tx.dataInputs.map(_.boxId)
-        val outOfOrderInput = inputIds.iterator.find { boxId =>
+        // Only check regular inputs (spending). Data-inputs may reference
+        // outputs from transactions that appear later in the block.
+        val outOfOrderInput = tx.inputs.iterator.map(_.boxId).find { boxId =>
           outputToTxIndex.get(ByteArrayWrapper(boxId)) match {
             case Some(creatingIdx) if creatingIdx >= idx => true
             case _ => false

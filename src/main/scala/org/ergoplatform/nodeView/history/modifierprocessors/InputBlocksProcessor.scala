@@ -437,15 +437,16 @@ trait InputBlocksProcessor extends ScorexLogging {
      * 2. If a fork switch is needed:
      *    - Identify the common ancestor between current and new best chains
      *    - Rollback processed blocks from the old chain
-     *    - Apply transactions from the new best chain
-     * 3. If no fork switch is needed but the block belongs to the best chain:
-     *    - Process the block on the current best chain
-     * 4. Return the sequence of applied blocks and rolled back blocks
-     *
-     * TODO: Support sequential spending within the SAME input block.
-     * TODO: See test: "Input block should REJECT chained transactions in the same input block (not yet supported)"
-     *
-     * @param ib The input block info to apply transactions to
+      *    - Apply transactions from the new best chain
+      * 3. If no fork switch is needed but the block belongs to the best chain:
+      *    - Process the block on the current best chain
+      * 4. Return the sequence of applied blocks and rolled back blocks
+      *
+      * Note: Sequential spending within the same input block is supported.
+      * applyTransactions pre-populates createdOutputs with all outputs from the batch,
+      * so transactions can spend outputs created by other transactions in the same block.
+      *
+      * @param ib The input block info to apply transactions to
      * @param txs The transactions to apply to the input block
      * @param state The current Ergo state for transaction validation
      * @return A tuple containing:

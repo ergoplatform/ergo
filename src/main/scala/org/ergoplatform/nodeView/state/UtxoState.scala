@@ -297,6 +297,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       return Failure[Long](new Exception("Double spending"))
     }
 
+    // Validate topological ordering: transactions must be sorted so that each
+    // transaction only spends outputs from transactions that appear BEFORE it.
+    // This ensures deterministic validation and matches full block semantics.
+    val orderingCheck = ErgoState.validateTopologicalOrdering(txs)
+    if (orderingCheck.isFailure) {
+      log.warn(s"Topological ordering violation in input block ${header.id}: ${orderingCheck.failed.get.getMessage}")
+      return orderingCheck.map(_ => 0L)
+    }
+
     // Create a state view that includes outputs from previous input blocks in the chain.
     // This allows transactions in the current input block to spend outputs created by
     // transactions in earlier input blocks (cross-block sequential spending).

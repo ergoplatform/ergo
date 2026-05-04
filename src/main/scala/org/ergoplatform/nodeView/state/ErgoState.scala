@@ -12,8 +12,9 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
+import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import scorex.db.ByteArrayWrapper
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
@@ -109,6 +110,44 @@ object ErgoState extends ScorexLogging {
     boxChanges(txs).map { case (toRemoveChanges, toInsertChanges) =>
       val toLookup: IndexedSeq[Lookup] = txs.flatMap(_.dataInputs).map(b => Lookup(b.boxId))(breakOut)
       StateChanges(toRemoveChanges, toInsertChanges, toLookup)
+    }
+  }
+
+  /**
+    * Validates that transactions within a single input block are topologically sorted.
+    *
+    * A transaction can only spend outputs from transactions that appear BEFORE it
+    * in the sequence. This ensures deterministic validation and matches full block semantics.
+    *
+    * @param txs transactions in a single input block
+    * @return Success if transactions are properly ordered, Failure otherwise
+    */
+  def validateTopologicalOrdering(txs: Seq[ErgoTransaction]): Try[Unit] = {
+    val outputToTxIndex = mutable.HashMap.empty[ByteArrayWrapper, Int]
+    txs.zipWithIndex.foreach { case (tx, idx) =>
+      tx.outputs.foreach(o => outputToTxIndex.put(ByteArrayWrapper(o.id), idx))
+    }
+
+    val firstViolation = txs.zipWithIndex.collectFirst {
+      case (tx, idx) =>
+        val inputIds = tx.inputs.map(_.boxId) ++ tx.dataInputs.map(_.boxId)
+        val outOfOrderInput = inputIds.iterator.find { boxId =>
+          outputToTxIndex.get(ByteArrayWrapper(boxId)) match {
+            case Some(creatingIdx) if creatingIdx >= idx => true
+            case _ => false
+          }
+        }
+        outOfOrderInput.map(boxId => (idx, boxId, outputToTxIndex(ByteArrayWrapper(boxId))))
+    }.flatten
+
+    firstViolation match {
+      case Some((spendingIdx, boxId, creatingIdx)) =>
+        Failure(new Exception(
+          s"Out-of-order spending in input block: transaction at index $spendingIdx " +
+            s"references box ${Algos.encode(boxId)} created by transaction at index $creatingIdx. " +
+            s"Transactions must be topologically sorted within an input block."))
+      case None =>
+        Success(())
     }
   }
 

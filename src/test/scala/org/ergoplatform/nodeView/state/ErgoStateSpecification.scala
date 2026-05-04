@@ -229,4 +229,62 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
     execRes2.isInstanceOf[Valid[_]] shouldBe true
   }
 
+  property("Full blocks accept sequential transactions in order") {
+    // Full blocks (with checkUtxoSetTransformations=true) require transactions
+    // to be topologically ordered. A transaction can only spend outputs from
+    // transactions that appear BEFORE it in the block.
+
+    // Use a simple TrueProp box as starting point (not emission box which has complex script)
+    val startBox = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+
+    // Create a valid chain: tx1 spends startBox, tx2 spends tx1's output
+    val tx1 = validTransactionFromBoxes(IndexedSeq(startBox), outputsProposition = TrueTree)
+    val tx2 = validTransactionFromBoxes(tx1.outputs, outputsProposition = TrueTree)
+
+    // In-order: tx1 creates output, tx2 spends it
+    val orderedTxs = IndexedSeq(tx1, tx2)
+
+    // Validation should succeed
+    val boxes = (IndexedSeq(startBox) ++ orderedTxs.flatMap(_.outputs))
+      .map(o => ByteArrayWrapper(o.id) -> o).toMap
+    val stateContext = emptyStateContext
+    ErgoState.execTransactions(orderedTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe 'valid
+
+    // State changes should succeed
+    ErgoState.stateChanges(orderedTxs) shouldBe 'success
+  }
+
+  property("Full blocks REJECT out-of-order sequential transactions") {
+    // Unlike input blocks, full blocks apply AVL+ tree operations.
+    // If tx2 spends an output from tx1 but tx2 comes BEFORE tx1 in the block,
+    // validation passes (createdOutputs has all outputs), but applying the
+    // operations to the AVL+ tree fails because tx2 tries to remove a box
+    // that hasn't been inserted yet.
+
+    // Use a simple TrueProp box as starting point
+    val startBox = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+
+    // Create transactions: tx1 spends startBox, tx2 spends tx1's output
+    val tx1 = validTransactionFromBoxes(IndexedSeq(startBox), outputsProposition = TrueTree)
+    val tx2 = validTransactionFromBoxes(tx1.outputs, outputsProposition = TrueTree)
+
+    // Out-of-order: tx2 tries to spend tx1's output, but tx2 comes first
+    val outOfOrderTxs = IndexedSeq(tx2, tx1)
+
+    // Validation still passes when all boxes are provided (simulating input block behavior
+    // where createdOutputs is pre-populated)
+    val boxes = (IndexedSeq(startBox) ++ outOfOrderTxs.flatMap(_.outputs))
+      .map(o => ByteArrayWrapper(o.id) -> o).toMap
+    val stateContext = emptyStateContext
+    val execRes = ErgoState.execTransactions(outOfOrderTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id))))
+    execRes shouldBe 'valid
+
+    // But applying to UtxoState with checkUtxoSetTransformations fails
+    // because tx2 tries to remove tx1's output before it's inserted into the AVL+ tree
+    val bh = BoxHolder(IndexedSeq(startBox))
+    val us = createUtxoState(bh, parameters)
+    val applyRes = us.applyTransactions(outOfOrderTxs, bytesToId(Array.fill(32)(0.toByte)), us.rootDigest, stateContext, checkUtxoSetTransformations = true)
+    applyRes shouldBe 'failure
+  }
+
 }

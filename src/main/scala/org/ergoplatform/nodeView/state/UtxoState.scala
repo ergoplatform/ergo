@@ -22,6 +22,7 @@ import scorex.crypto.hash.Digest32
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.ModifierId
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -264,6 +265,38 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     * @return total validation cost on success, or a failure if validation or double-spend check fails
     */
   override def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Long] = {
+    // Fail-fast: check for double spending before running expensive validation.
+    // An input box may only be spent once across the current input block and all
+    // previously processed input blocks in the chain.
+    val seenInputs = mutable.HashSet.empty[ByteArrayWrapper]
+
+    // Check inputs from previously processed input blocks.
+    // These should not overlap with inputs from the current input block.
+    val prevDoubleSpend = previousTransactions.exists { tx =>
+      tx.inputs.exists { input =>
+        val wrapped = ByteArrayWrapper(input.boxId)
+        !seenInputs.add(wrapped)
+      }
+    }
+
+    if (prevDoubleSpend) {
+      log.warn(s"Double spending detected in previous transactions for input block ${header.id}")
+      return Failure[Long](new Exception("Double spending"))
+    }
+
+    // Check inputs from the current input block.
+    val currentDoubleSpend = txs.exists { tx =>
+      tx.inputs.exists { input =>
+        val wrapped = ByteArrayWrapper(input.boxId)
+        !seenInputs.add(wrapped)
+      }
+    }
+
+    if (currentDoubleSpend) {
+      log.warn(s"Double spending detected in current input block ${header.id}")
+      return Failure[Long](new Exception("Double spending"))
+    }
+
     // Create a state view that includes outputs from previous input blocks in the chain.
     // This allows transactions in the current input block to spend outputs created by
     // transactions in earlier input blocks (cross-block sequential spending).
@@ -278,16 +311,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       log.warn(s"Input block validation failed for ${header.id} : " + res)
     }
 
-    // Check for double spending across all transactions in the input block chain.
-    // This includes both the current input block's transactions and previous transactions.
-    // An input box may only be spent once in total across the entire chain.
-    val inputs = (txs ++ previousTransactions).flatMap(_.inputs).map(_.boxId) // todo: optimize
-    if (inputs.size != inputs.distinct.size) { // todo: optimize
-      log.warn("Double spending")
-      Failure[Long](new Exception("Double spending"))
-    } else {
-      res
-    }
+    res
   }
 
 }

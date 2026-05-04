@@ -2552,6 +2552,126 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     // and the new fork's transactions should be in the collected set
   }
 
+  property("apply input block with double spending within same input block should be rejected") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    val r1 = h.applyInputBlock(ib1)
+    r1 shouldBe None
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+
+    // Create two transactions that both spend the same UTXO (eb1)
+    val tx1 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb1.toCandidate)
+    )
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb1.toCandidate)
+    )
+
+    // Apply both transactions in the SAME input block - should be rejected due to double spending
+    h.applyInputBlockTransactions(ib1.id, Seq(tx1, tx2), us) shouldBe (Seq.empty -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq()
+  }
+
+  property("apply input block with double spending across previous and current transactions should be rejected") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1) shouldBe None
+
+    // First input block spends eb1
+    val tx1 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb1.toCandidate)
+    )
+
+    h.applyInputBlockTransactions(ib1.id, Seq(tx1), us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    // Create second input block that tries to spend eb1 again (double spending across blocks)
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2) shouldBe None
+
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb1.toCandidate)
+    )
+
+    // Should be rejected because eb1 was already spent in ib1
+    h.applyInputBlockTransactions(ib2.id, Seq(tx2), us) shouldBe (Seq.empty -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+  }
+
+  property("apply input block with valid non-overlapping transactions should succeed") {
+    // Use two boxes with TrueProp (no soft fields) since input blocks disallow soft fields
+    val eb3 = new ErgoBox(
+      value = 1000000000L,
+      ergoTree = ErgoTree.fromProposition(TrueProp),
+      creationHeight = 0,
+      additionalTokens = Colls.emptyColl,
+      additionalRegisters = Map.empty,
+      transactionId = bytesToId(Algos.hash("dummyTx3")),
+      index = 2
+    )
+    val bh = BoxHolder(Seq(eb1, eb3))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    c2.head.header.parentId shouldBe h.bestHeaderOpt.get.id
+    h.bestFullBlockOpt.get.id shouldBe c1.last.id
+
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1) shouldBe None
+
+    // Create two transactions spending different boxes (no overlap)
+    val tx1 = new ErgoTransaction(
+      IndexedSeq(Input(eb1.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb1.toCandidate)
+    )
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(Input(eb3.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(eb3.toCandidate)
+    )
+
+    // Should succeed - no double spending
+    h.applyInputBlockTransactions(ib1.id, Seq(tx1, tx2), us) shouldBe (Seq(ib1.id) -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+  }
+
   // todo : tests for digest state
 
 }

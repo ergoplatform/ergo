@@ -61,14 +61,22 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
   }
 
   /**
+    * Validates and optionally applies a sequence of transactions to the current UTXO state.
+    *
+    * When `checkUtxoSetTransformations` is true, the method performs AVL+ tree operations,
+    * updates the persistent prover, and validates that the resulting digest matches `expectedDigest`.
     *
     * @param transactions to be applied to state
     * @param headerId of the block these transactions belong to
     * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
     * @param currentStateContext Additional data required for transactions validation
-    * @param softFieldsAllowed
-    * @param checkUtxoSetTransformations
-    * @return
+    * @param softFieldsAllowed if true, allows soft-forkable fields in transaction validation;
+    *                          if false, strict validation is enforced (used for input blocks)
+    * @param checkUtxoSetTransformations if true, applies state changes to the AVL+ tree and
+    *                                    verifies the resulting digest; if false, only validates
+    *                                    transactions without modifying persistent state
+    * @return total cost of transaction validation on success, or a failure if validation
+    *         or state transformation fails
     */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        headerId: ModifierId,

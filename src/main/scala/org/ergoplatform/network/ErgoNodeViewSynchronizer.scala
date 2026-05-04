@@ -1454,7 +1454,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .map(_.stateContext.currentParameters)
         .map(ps => inputBlockInfo.valid(powScheme, ps, expectedNBits))
         .getOrElse(true)
-      if (valid) { // check PoW / Merkle proofs before processing todo: check diff
+      if (valid) { // check PoW / Merkle proofs before processing
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block
         val weakTxIdsOpt = inputBlockInfo.weakTxIds
 

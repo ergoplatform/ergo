@@ -1716,7 +1716,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         viewHolderRef ! ProcessInputBlockTransactions(res)
       } else {
         log.warn(s"Not all transactions found for input block $subBlockId, skipping processing")
-        // todo: penalizeMisbehavingPeer(remote)
+        // todo: investigate whether penalization is appropriate here.
+        // The peer may be a relay node that doesn't have all transactions,
+        // or transactions may have been evicted from mempool since the input
+        // block was created. Need to determine if missing transactions
+        // indicate malicious behavior (spam/unrequested data) or just
+        // normal network/relay conditions. See also a todo at about
+        // spam checking (transaction request validation).
       }
     }
   }

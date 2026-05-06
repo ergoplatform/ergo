@@ -87,5 +87,164 @@ class OffChainRegistrySpec
     }
   }
 
+  // ============================================================================
+  // Input Block Diff and Rollback Tests
+  // ============================================================================
+
+  it should "record diff when applying input block transactions" in {
+    forAll(Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen)) { (existingBoxes, newBoxes) =>
+      whenever(existingBoxes.nonEmpty || newBoxes.nonEmpty) {
+        val registry = OffChainRegistry.empty.updateOnTransaction(existingBoxes, Seq.empty, Seq.empty)
+        val spentIds = existingBoxes.take(2).map(EncodedBoxId @@@ _.boxId)
+
+        val (updatedRegistry, removedOffChain, _) =
+          registry.updateOnTransactionWithDiff(newBoxes, spentIds, Seq.empty)
+
+        // Verify the diff captures what was removed
+        removedOffChain.map(_.boxId) should contain theSameElementsAs spentIds
+        removedOffChain.foreach { rb =>
+          updatedRegistry.offChainBoxes should not contain rb
+        }
+        updatedRegistry.offChainBoxes should contain allElementsOf newBoxes
+      }
+    }
+  }
+
+  it should "rollback input block and restore removed boxes" in {
+    forAll(Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen)) { (existingBoxes, newBoxes) =>
+      whenever(existingBoxes.nonEmpty || newBoxes.nonEmpty) {
+        val inputBlockId = scorex.util.ModifierId @@ "test-input-block-1"
+        val registry = OffChainRegistry.empty.updateOnTransaction(existingBoxes, Seq.empty, Seq.empty)
+        val spentIds = existingBoxes.take(2).map(EncodedBoxId @@@ _.boxId)
+
+        val (updatedRegistry, removedOffChain, removedOnChain) =
+          registry.updateOnTransactionWithDiff(newBoxes, spentIds, Seq.empty)
+
+        val diff = InputBlockDiff(newBoxes, removedOffChain, removedOnChain)
+        val registryWithDiff = updatedRegistry.copy(
+          inputBlockDiffs = updatedRegistry.inputBlockDiffs + (inputBlockId -> diff)
+        )
+
+        val rolledBack = registryWithDiff.rollbackInputBlock(inputBlockId)
+
+        // Verify rolled back state matches original (minus added boxes, plus restored boxes)
+        rolledBack.offChainBoxes.map(_.boxId) should contain theSameElementsAs existingBoxes.map(_.boxId)
+        newBoxes.foreach { nb =>
+          rolledBack.offChainBoxes should not contain nb
+        }
+        rolledBack.inputBlockDiffs should not contain key(inputBlockId)
+      }
+    }
+  }
+
+  it should "rollback chained input blocks in reverse order" in {
+    forAll(Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen)) {
+      (initialBoxes, block1Boxes, block2Boxes, block3Boxes) =>
+        whenever(block1Boxes.nonEmpty && block2Boxes.nonEmpty && block3Boxes.nonEmpty) {
+          val blockId1 = scorex.util.ModifierId @@ "test-block-1"
+          val blockId2 = scorex.util.ModifierId @@ "test-block-2"
+          val blockId3 = scorex.util.ModifierId @@ "test-block-3"
+
+          val registry = OffChainRegistry.empty.updateOnTransaction(initialBoxes, Seq.empty, Seq.empty)
+
+          // Block 1: adds new boxes, spends some initial boxes
+          val spendIds1 = initialBoxes.take(1).map(EncodedBoxId @@@ _.boxId)
+          val (reg1, rem1Off, rem1On) = registry.updateOnTransactionWithDiff(
+            block1Boxes, spendIds1, Seq.empty
+          )
+          val diff1 = InputBlockDiff(block1Boxes, rem1Off, rem1On)
+          val regWithDiff1 = reg1.copy(inputBlockDiffs = reg1.inputBlockDiffs + (blockId1 -> diff1))
+
+          // Block 2: adds new boxes, spends some block1 boxes
+          val spendIds2 = block1Boxes.take(1).map(EncodedBoxId @@@ _.boxId)
+          val (reg2, rem2Off, rem2On) = regWithDiff1.updateOnTransactionWithDiff(
+            block2Boxes, spendIds2, Seq.empty
+          )
+          val diff2 = InputBlockDiff(block2Boxes, rem2Off, rem2On)
+          val regWithDiff2 = reg2.copy(inputBlockDiffs = reg2.inputBlockDiffs + (blockId2 -> diff2))
+
+          // Block 3: adds new boxes, spends some block2 boxes
+          val spendIds3 = block2Boxes.take(1).map(EncodedBoxId @@@ _.boxId)
+          val (reg3, rem3Off, rem3On) = regWithDiff2.updateOnTransactionWithDiff(
+            block3Boxes, spendIds3, Seq.empty
+          )
+          val diff3 = InputBlockDiff(block3Boxes, rem3Off, rem3On)
+          val regWithDiff3 = reg3.copy(inputBlockDiffs = reg3.inputBlockDiffs + (blockId3 -> diff3))
+
+          // Record expected state after all blocks
+          // Rollback block 3: block3Boxes removed, spent block2 boxes restored
+          val afterRollback3 = regWithDiff3.rollbackInputBlock(blockId3)
+          afterRollback3.offChainBoxes should contain allElementsOf block2Boxes
+          block3Boxes.foreach { b =>
+            afterRollback3.offChainBoxes should not contain b
+          }
+
+          // Rollback block 2: block2Boxes removed, spent block1 boxes restored
+          val afterRollback2 = afterRollback3.rollbackInputBlock(blockId2)
+          afterRollback2.offChainBoxes should contain allElementsOf block1Boxes
+          block2Boxes.foreach { b =>
+            afterRollback2.offChainBoxes should not contain b
+          }
+
+          // Rollback block 1: block1Boxes removed, initial state restored
+          val afterRollback1 = afterRollback2.rollbackInputBlock(blockId1)
+          afterRollback1.offChainBoxes.map(_.boxId) should contain theSameElementsAs initialBoxes.map(_.boxId)
+          block1Boxes.foreach { b =>
+            afterRollback1.offChainBoxes should not contain b
+          }
+        }
+    }
+  }
+
+  it should "return same registry when rolling back non-existent input block" in {
+    val registry = OffChainRegistry.empty.updateOnTransaction(
+      Seq.empty,
+      Seq.empty,
+      Seq.empty
+    )
+    val nonExistentId = scorex.util.ModifierId @@ "non-existent"
+    val rolledBack = registry.rollbackInputBlock(nonExistentId)
+    rolledBack shouldBe registry
+  }
+
+  it should "handle input block diff with on-chain balance removal" in {
+    val box = trackedBoxGen.sample.get
+    val balance = Balance(box)
+    val registry = OffChainRegistry.empty.copy(
+      onChainBalances = Seq(balance)
+    )
+
+    val spentId = EncodedBoxId @@@ box.boxId
+    val (updated, _, removedOn) = registry.updateOnTransactionWithDiff(
+      Seq.empty, Seq(spentId), Seq.empty
+    )
+
+    removedOn should contain(balance)
+    updated.onChainBalances should not contain(balance)
+
+    // Restore via rollback
+    val diff = InputBlockDiff(Seq.empty, Seq.empty, removedOn)
+    val regWithDiff = updated.copy(inputBlockDiffs = updated.inputBlockDiffs + (scorex.util.ModifierId @@ "ib-1" -> diff))
+    val rolledBack = regWithDiff.rollbackInputBlock(scorex.util.ModifierId @@ "ib-1")
+    rolledBack.onChainBalances should contain(balance)
+  }
+
+  it should "not duplicate boxes when rolling back and restoring" in {
+    val box = trackedBoxGen.sample.get
+    val registry = OffChainRegistry.empty.updateOnTransaction(Seq(box), Seq.empty, Seq.empty)
+
+    val inputBlockId = scorex.util.ModifierId @@ "test-dedup"
+    val (updated, _, removedOn) = registry.updateOnTransactionWithDiff(
+      Seq.empty, Seq(EncodedBoxId @@@ box.boxId), Seq.empty
+    )
+
+    val diff = InputBlockDiff(Seq.empty, Seq(box), removedOn)
+    val regWithDiff = updated.copy(inputBlockDiffs = updated.inputBlockDiffs + (inputBlockId -> diff))
+
+    // The box was in offChainBoxes, got removed, then should be restored
+    val rolledBack = regWithDiff.rollbackInputBlock(inputBlockId)
+    rolledBack.offChainBoxes.count(_.boxId == box.boxId) shouldBe 1
+  }
+
 
 }

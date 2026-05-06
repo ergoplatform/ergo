@@ -365,7 +365,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             val updMp = memoryPool().put(txs.map(tx => UnconfirmedTransaction(tx, None)))
             updateNodeView(updatedMempool = Some(updMp))
 
-            // todo: process rollbacks for the wallet
+            val newVault = vault().rollbackInputBlock(id)
+            updateNodeView(updatedVault = Some(newVault))
           case None =>
         }
       }
@@ -377,7 +378,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             val updMp = memoryPool().removeWithDoubleSpends(txs)
             updateNodeView(updatedMempool = Some(updMp))
 
-            val newVault = vault().scanInputBlock(txs)
+            val newVault = vault().scanInputBlock(id, txs)
             updateNodeView(updatedVault = Some(newVault))
           case None =>
         }

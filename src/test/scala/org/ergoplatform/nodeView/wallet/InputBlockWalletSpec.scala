@@ -4,6 +4,7 @@ import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.scalatest.concurrent.Eventually
+import scorex.util.ModifierId
 
 import scala.concurrent.duration._
 
@@ -14,6 +15,13 @@ import scala.concurrent.duration._
   * as off-chain transactions via scanInputBlock.
   */
 class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
+
+  private var inputBlockCounter = 0
+
+  private def nextInputBlockId(): ModifierId = {
+    inputBlockCounter += 1
+    ModifierId @@ s"test-input-block-$inputBlockCounter"
+  }
 
   // ============================================================================
   // Core Functionality Tests
@@ -38,7 +46,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan the transaction as a locally generated input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Wait for wallet state to update
       eventually {
@@ -71,7 +79,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Apply first transaction as an input block (making outputs spendable)
-      wallet.scanInputBlock(Seq(tx1))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx1))
 
       Thread.sleep(100)
 
@@ -119,7 +127,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       val boxesCountBefore = boxesBefore.size
 
       // Scan the transaction as an input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // After scanInputBlock, new boxes should appear in off-chain registry
       eventually {
@@ -155,7 +163,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan both transactions as input block
-      wallet.scanInputBlock(Seq(tx1, tx2))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx1, tx2))
 
       // Verify both transactions' outputs are tracked
       eventually {
@@ -186,7 +194,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Balance should be updated (considering unconfirmed)
       eventually {
@@ -216,7 +224,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Verify asset is tracked in wallet
       eventually {
@@ -244,7 +252,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
         await(wallet.generateTransaction(req)).get
       }
-      wallet.scanInputBlock(Seq(tx1))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx1))
 
       // Generate second transaction and scan as offchain
       val tx2 = eventually {
@@ -281,7 +289,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Verify boxes have proper scan IDs (PaymentsScanId)
       eventually {
@@ -317,7 +325,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Verify transaction outputs are tracked after scan
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       eventually {
         val boxes = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
@@ -345,7 +353,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Boxes should be available immediately (off-chain)
       val boxesAfterInputBlock = eventually {
@@ -382,7 +390,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan first input block
-      wallet.scanInputBlock(Seq(tx1))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx1))
 
       // Generate second transaction spending from first
       val tx2 = eventually {
@@ -391,7 +399,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan second input block
-      wallet.scanInputBlock(Seq(tx2))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx2))
 
       // Both transactions should be tracked
       eventually {
@@ -425,7 +433,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Balance should be updated
       eventually {
@@ -457,7 +465,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Boxes should be available with considerUnconfirmed = true
       // (because they're in off-chain registry)
@@ -492,7 +500,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      wallet.scanInputBlock(Seq(tx))
+      wallet.scanInputBlock(nextInputBlockId(), Seq(tx))
 
       // Confirmed balance should not change (input block boxes are off-chain)
       eventually {
@@ -504,6 +512,163 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       eventually {
         val balanceWithUnconfirmed = await(wallet.balancesWithUnconfirmed)
         balanceWithUnconfirmed.walletBalance should be > 0L
+      }
+    }
+  }
+
+  // ============================================================================
+  // Rollback Tests
+  // ============================================================================
+
+  property("rollbackInputBlock restores boxes from rolled back input block") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+
+      // Generate a transaction
+      val tx = eventually {
+        val sumToSpend = MinBoxValue * 10
+        val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId = nextInputBlockId()
+
+      // Get boxes before input block
+      val boxesBefore = eventually {
+        await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+      }
+
+      // Scan as input block
+      wallet.scanInputBlock(inputBlockId, Seq(tx))
+
+      // Verify boxes changed after input block
+      eventually {
+        val boxesAfter = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfter.size should not be boxesBefore.size
+      }
+
+      // Rollback the input block
+      wallet.rollbackInputBlock(inputBlockId)
+
+      // Verify boxes are restored to pre-input-block state
+      eventually {
+        val boxesAfterRollback = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfterRollback.size shouldBe boxesBefore.size
+      }
+    }
+  }
+
+  property("rollbackInputBlock allows re-spending after rollback") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 500.millis)
+
+      // Generate first transaction
+      val tx1 = eventually {
+        val sumToSpend = MinBoxValue * 10
+        val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId1 = nextInputBlockId()
+
+      // Scan first input block
+      wallet.scanInputBlock(inputBlockId1, Seq(tx1))
+
+      // Generate second transaction spending from first
+      val tx2 = eventually {
+        val req = Seq(PaymentRequest(addresses.head, MinBoxValue, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId2 = nextInputBlockId()
+
+      // Scan second input block
+      wallet.scanInputBlock(inputBlockId2, Seq(tx2))
+
+      // Verify tx2 outputs are tracked
+      eventually {
+        val boxes = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxes.size should be >= 1
+      }
+
+      // Rollback second input block
+      wallet.rollbackInputBlock(inputBlockId2)
+
+      // Verify tx1 outputs are restored and can be spent again
+      eventually {
+        val req = Seq(PaymentRequest(addresses.head, MinBoxValue, Array.empty, Map.empty))
+        val result = await(wallet.generateTransaction(req))
+        result.isSuccess shouldBe true
+      }
+    }
+  }
+
+  property("rollbackInputBlock does not affect other input blocks") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state with more funds
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 500.millis)
+
+      // Generate first transaction
+      val tx1 = eventually {
+        val sumToSpend = MinBoxValue * 10
+        val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId1 = nextInputBlockId()
+
+      // Scan first input block
+      wallet.scanInputBlock(inputBlockId1, Seq(tx1))
+
+      // Generate second transaction
+      val tx2 = eventually {
+        val req = Seq(PaymentRequest(addresses.head, MinBoxValue, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId2 = nextInputBlockId()
+
+      // Scan second input block
+      wallet.scanInputBlock(inputBlockId2, Seq(tx2))
+
+      // Verify state changed after second input block (check that tx2 outputs exist)
+      eventually {
+        val boxesAfterSecond = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        // tx2 should have produced at least 1 output (even if it spent tx1 outputs)
+        boxesAfterSecond.size should be >= 1
+      }
+
+      // Rollback first input block only
+      wallet.rollbackInputBlock(inputBlockId1)
+
+      // Second input block should still be effective
+      // (its diff was not rolled back, so its boxes should still be tracked)
+      eventually {
+        val boxesAfterRollback = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfterRollback.size should be >= 1
       }
     }
   }

@@ -9,6 +9,25 @@ import org.ergoplatform.wallet.boxes.TrackedBox
 import scala.collection.compat.immutable.ArraySeq
 import scala.collection.immutable.TreeSet
 import scala.collection.mutable
+import scorex.util.ModifierId
+
+/**
+  * Represents the diff of applying an input block to the off-chain registry.
+  * Used for efficient rollback without rebuilding from mempool.
+  *
+  * @param addedOffChain   - boxes added to offChainBoxes by the input block
+  * @param removedOffChain - boxes removed from offChainBoxes by the input block
+  * @param removedOnChain  - balances removed from onChainBalances by the input block
+  */
+case class InputBlockDiff(
+  addedOffChain: Seq[TrackedBox],
+  removedOffChain: Seq[TrackedBox],
+  removedOnChain: Seq[Balance]
+)
+
+object InputBlockDiff {
+  def empty: InputBlockDiff = InputBlockDiff(Seq.empty, Seq.empty, Seq.empty)
+}
 
 /**
   * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
@@ -17,10 +36,12 @@ import scala.collection.mutable
   * @param height           - latest processed block height
   * @param offChainBoxes    - boxes from off-chain transactions
   * @param onChainBalances  - on-chain balances snapshot (required to calculate off-chain indexes)
+  * @param inputBlockDiffs  - map of input block id to diff, tracking changes for rollback support
   */
 case class OffChainRegistry(height: Int,
                             offChainBoxes: Seq[TrackedBox],
-                            onChainBalances: Seq[Balance]) {
+                            onChainBalances: Seq[Balance],
+                            inputBlockDiffs: Map[ModifierId, InputBlockDiff] = Map.empty) {
 
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
@@ -40,10 +61,14 @@ case class OffChainRegistry(height: Int,
 
   /**
     * Update on receiving new off-chain transaction.
+    * Also returns the boxes and balances that were removed during the update.
     */
-  def updateOnTransaction(newBoxes: Seq[TrackedBox],
-                          spentIds: Seq[EncodedBoxId],
-                          scans: Seq[Scan]): OffChainRegistry = {
+  def updateOnTransactionWithDiff(newBoxes: Seq[TrackedBox],
+                                  spentIds: Seq[EncodedBoxId],
+                                  scans: Seq[Scan]): (OffChainRegistry, Seq[TrackedBox], Seq[Balance]) = {
+    val removedOffChain = offChainBoxes.filter(tb => spentIds.contains(tb.boxId))
+    val removedOnChain = onChainBalances.filter(b => spentIds.contains(b.id))
+
     val unspentCertain = offChainBoxes.flatMap { x: TrackedBox =>
       val spent = spentIds.contains(x.boxId)
       if (spent) {
@@ -62,10 +87,53 @@ case class OffChainRegistry(height: Int,
       }
     } ++ newBoxes
     val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
-    this.copy(
+    val newRegistry = this.copy(
       offChainBoxes = unspentCertain.distinct,
       onChainBalances = onChainBalancesUpdated
     )
+    (newRegistry, removedOffChain, removedOnChain)
+  }
+
+  /**
+    * Update on receiving new off-chain transaction.
+    */
+  def updateOnTransaction(newBoxes: Seq[TrackedBox],
+                          spentIds: Seq[EncodedBoxId],
+                          scans: Seq[Scan]): OffChainRegistry = {
+    updateOnTransactionWithDiff(newBoxes, spentIds, scans)._1
+  }
+
+  /**
+    * Rollback changes from a specific input block using stored diff.
+    * Removes added boxes and restores removed boxes/balances.
+    *
+    * @param inputBlockId - id of the input block to rollback
+    * @return updated registry with the input block changes undone
+    */
+  def rollbackInputBlock(inputBlockId: ModifierId): OffChainRegistry = {
+    inputBlockDiffs.get(inputBlockId) match {
+      case Some(diff) =>
+        val cleanedOffChain = offChainBoxes.filterNot(tb =>
+          diff.addedOffChain.exists(_.boxId == tb.boxId)
+        )
+        val restoredOffChain = diff.removedOffChain.filterNot(rb =>
+          cleanedOffChain.exists(_.boxId == rb.boxId)
+        )
+        val newOffChainBoxes = (cleanedOffChain ++ restoredOffChain).distinct
+
+        val restoredOnChain = diff.removedOnChain.filterNot(rb =>
+          onChainBalances.exists(_.id == rb.id)
+        )
+        val newOnChainBalances = (onChainBalances ++ restoredOnChain).distinct
+
+        this.copy(
+          offChainBoxes = newOffChainBoxes,
+          onChainBalances = newOnChainBalances,
+          inputBlockDiffs = inputBlockDiffs - inputBlockId
+        )
+      case None =>
+        this
+    }
   }
 
   /**
@@ -92,12 +160,12 @@ case class OffChainRegistry(height: Int,
 object OffChainRegistry {
 
   def empty: OffChainRegistry =
-    OffChainRegistry(EmptyHistoryHeight, ArraySeq.empty, ArraySeq.empty)
+    OffChainRegistry(EmptyHistoryHeight, ArraySeq.empty, ArraySeq.empty, Map.empty)
 
-  def init(walletRegistry: WalletRegistry):OffChainRegistry = {
+  def init(walletRegistry: WalletRegistry): OffChainRegistry = {
     val unspent = walletRegistry.unspentBoxes(PaymentsScanId)
     val h = walletRegistry.fetchDigest().height
-    OffChainRegistry(h, ArraySeq.empty, unspent.map(Balance.apply))
+    OffChainRegistry(h, ArraySeq.empty, unspent.map(Balance.apply), Map.empty)
   }
 
 }

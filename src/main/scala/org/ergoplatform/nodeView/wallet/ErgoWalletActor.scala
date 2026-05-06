@@ -12,8 +12,9 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResu
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.BoxSelector
+import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
+import org.ergoplatform.nodeView.wallet.persistence.{Balance, InputBlockDiff}
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
@@ -236,15 +237,41 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    case ScanInputBlock(txs) =>
-      // todo: more efficient processing
-      txs.foreach { tx =>
-        self ! ScanOffChain(tx)
-      }
+    case ScanInputBlock(inputBlockId, txs) =>
+      val dustLimit = settings.walletSettings.dustLimit
 
-      // todo: utxoStateReaderOpt will be reset on first mempool update or another input block, fix
+      // Process all transactions atomically and record the net diff for rollback support
+      val (finalRegistry, allAdded, allRemovedOffChain, allRemovedOnChain) =
+        txs.foldLeft(
+          (state.offChainRegistry, Seq.empty[TrackedBox], Seq.empty[TrackedBox], Seq.empty[Balance])
+        ) { case ((registry, addedAcc, removedOffAcc, removedOnAcc), tx) =>
+          val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+          val inputs = WalletScanLogic.extractInputBoxes(tx)
+          val (newRegistry, removedOff, removedOn) =
+            registry.updateOnTransactionWithDiff(newWalletBoxes, inputs, state.walletVars.externalScans)
+          (newRegistry, addedAcc ++ newWalletBoxes, removedOffAcc ++ removedOff, removedOnAcc ++ removedOn)
+        }
+
+      val diff = InputBlockDiff(allAdded, allRemovedOffChain, allRemovedOnChain)
+      val registryWithDiff = finalRegistry.copy(
+        inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff)
+      )
+
       val sOpt = state.utxoStateReaderOpt.map(_.withTransactions(txs))
-      val newState = state.copy(utxoStateReaderOpt = sOpt)
+      val newState = state.copy(
+        offChainRegistry = registryWithDiff,
+        utxoStateReaderOpt = sOpt
+      )
+      context.become(loadedWallet(newState))
+
+    case RollbackInputBlock(inputBlockId) =>
+      val newRegistry = state.offChainRegistry.rollbackInputBlock(inputBlockId)
+      // Reset UTXO state reader to force re-creation from current state on next update,
+      // as we cannot easily un-apply transactions from the UTXO reader
+      val newState = state.copy(
+        offChainRegistry = newRegistry,
+        utxoStateReaderOpt = None
+      )
       context.become(loadedWallet(newState))
 
 

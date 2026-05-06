@@ -1444,11 +1444,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
       e match {
         case phError: ParentHeaderNotFoundError =>
-          // For missing parent header, request the parent header from peers
-          logger.info(s"Parent header ${phError.parentHeaderId} not found for modifier $modId, requesting it from peers")
-          val msg = Message(RequestModifierSpec, Right(InvData(Header.modifierTypeId, Seq(phError.parentHeaderId))), None)
-          val stn = SendToNetwork(msg, SendToRandom)
-          networkControllerRef ! stn
+          // For missing parent header, request the parent header from peers if not already known
+          val parentId = phError.parentHeaderId
+          if (deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
+            val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
+            if (olderPeers.nonEmpty) {
+              val randomPeer = olderPeers(scala.util.Random.nextInt(olderPeers.size))
+              requestBlockSection(Header.modifierTypeId, Seq(parentId), randomPeer)
+            } else {
+              logger.warn(s"No older peer available to download missing parent header $parentId for modifier $modId")
+            }
+          }
           deliveryTracker.setUnknown(modId, modTypeId)
         case _ =>
           deliveryTracker.setUnknown(modId, modTypeId)

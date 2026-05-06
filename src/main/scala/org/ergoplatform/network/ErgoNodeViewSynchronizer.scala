@@ -23,7 +23,7 @@ import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
 import org.ergoplatform.utils.ScorexEncoding
-import org.ergoplatform.validation.MalformedModifierError
+import org.ergoplatform.validation.{MalformedModifierError, ParentHeaderNotFoundError}
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
@@ -1263,15 +1263,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 case Some(newPeer) => requestUtxoSetChunk(Digest32 @@ Algos.decode(modifierId).get, newPeer)
                 case None => log.warn(s"No peer found to download UTXO set chunk $modifierId")
               }
-            } else {
-              // randomly choose a peer for another block sections download attempt
+             } else {
+               // randomly choose a peer for another block sections download attempt
               val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
                 getPeersForDownloadingHeaders(peer).toSeq
               } else {
                 getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
               }
-              val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
-              val newPeer = newPeerCandidates(newPeerIndex)
+              val newPeer = if (newPeerCandidates.isEmpty) {
+                if (checksDone > 5) {
+                  // after many failed attempts, try Equal peers instead of the same peer
+                  val equalPeers = syncTracker.peersByStatus.getOrElse(Equal, Seq.empty)
+                  if (equalPeers.nonEmpty) {
+                    equalPeers(scala.util.Random.nextInt(equalPeers.size))
+                  } else {
+                    peer
+                  }
+                } else {
+                  peer
+                }
+              } else {
+                val newPeerIndex = scala.util.Random.nextInt(newPeerCandidates.size)
+                newPeerCandidates(newPeerIndex)
+              }
               log.info(s"Rescheduling request for $modifierId , new peer $newPeer")
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               requestBlockSection(modifierTypeId, Seq(modifierId), newPeer, checksDone)
@@ -1426,7 +1440,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case RecoverableFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
-      deliveryTracker.setUnknown(modId, modTypeId)
+      e match {
+        case phError: ParentHeaderNotFoundError =>
+          // For missing parent header, request the parent header from peers
+          logger.info(s"Parent header ${phError.parentHeaderId} not found for modifier $modId, requesting it from peers")
+          val msg = Message(RequestModifierSpec, Right(InvData(Header.modifierTypeId, Seq(phError.parentHeaderId))), None)
+          val stn = SendToNetwork(msg, SendToRandom)
+          networkControllerRef ! stn
+          deliveryTracker.setUnknown(modId, modTypeId)
+        case _ =>
+          deliveryTracker.setUnknown(modId, modTypeId)
+      }
 
     case SyntacticallyFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Invalidating syntactically failed modifier $modId", e)

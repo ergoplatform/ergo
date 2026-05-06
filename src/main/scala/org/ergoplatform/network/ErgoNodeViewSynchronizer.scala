@@ -1274,8 +1274,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 if (checksDone > 5) {
                   // after many failed attempts, try Equal peers instead of the same peer
                   val equalPeers = syncTracker.peersByStatus.getOrElse(Equal, Seq.empty)
-                  if (equalPeers.nonEmpty) {
-                    equalPeers(scala.util.Random.nextInt(equalPeers.size))
+                  val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
+                  val equalOrOlder = equalPeers ++ olderPeers
+                  if (equalOrOlder.nonEmpty) {
+                    equalOrOlder(scala.util.Random.nextInt(equalOrOlder.size))
                   } else {
                     peer
                   }

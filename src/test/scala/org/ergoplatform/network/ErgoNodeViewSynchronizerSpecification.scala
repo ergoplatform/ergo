@@ -514,6 +514,75 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should not request if parent already known") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val parentHeader = baseChain.last
+      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // Set up sync tracker with an older peer
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
+
+      // Send ChangedHistory to set up historyReader in the synchronizer
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Parent header IS in history, so no request should be made
+      val parentId = parentHeader.id
+      val modifierId = childHeader.id
+      val error = new ParentHeaderNotFoundError(parentId, modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
+      // Should NOT request the parent header since it's already in history
+      // Wait a short time and verify no request was sent
+      Thread.sleep(500)
+      ncProbe.expectNoMessage(1.second)
+
+      // The modifier should still be set to Unknown
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should warn when no older peers") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val parentHeader = baseChain.last
+      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // NO older peers set up - only the original peer as Younger
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Younger, Some(childHeader.height))
+
+      // Send ChangedHistory to set up historyReader in the synchronizer
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Use a random parent ID that is NOT in the history
+      val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      val modifierId = childHeader.id
+      val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
+      // Should NOT send any network request since no older peers available
+      Thread.sleep(500)
+      ncProbe.expectNoMessage(1.second)
+
+      // The modifier should still be set to Unknown
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: checkDelivery should not crash with empty peer candidates") {
     withFixture2 { ctx =>
       import ctx._
@@ -576,6 +645,65 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       eventually {
         val status = deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty)
       status should (be(Unknown) or be(Requested))
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should set non-header modifier to Unknown after max attempts") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Use a non-header modifier type (e.g., BlockTransactions)
+      val nonHeaderTypeId = org.ergoplatform.modifiers.history.BlockTransactions.modifierTypeId
+
+      // Set up delivery tracker with requested status
+      deliveryTracker.setRequested(nonHeaderTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
+
+      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
+      (1 to maxDeliveryChecks + 2).foreach { _ =>
+        synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId)
+        Thread.sleep(50)
+      }
+
+      // After max attempts, non-header modifier should be set to Unknown (not Invalid)
+      eventually {
+        deliveryTracker.status(modifierId, nonHeaderTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should invalidate header after max attempts") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Set up delivery tracker with requested status for header
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
+
+      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
+      (1 to maxDeliveryChecks + 2).foreach { _ =>
+        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
+        Thread.sleep(50)
+      }
+
+      // After max attempts, header should be marked as Invalid
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe scorex.core.network.ModifiersStatus.Invalid
       }
     }
   }

@@ -885,12 +885,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     poolAfter.size shouldBe 1
     poolAfter.contains(tx3.transaction.id) shouldBe true
 
-    // After replacement, TX4 (lower fee) should be rejected as double-spending loser.
-    // BUG: acceptIfNoDoubleSpend does pool.put(newTx).remove(oldTxs), so the
-    // new tx's inputs are added first, then the old txs' inputs are removed.
-    // Because the old and new txs spend the SAME boxes, the removal wipes the
-    // input entries for the new tx.  Consequently pool.inputs no longer tracks
-    // the boxes spent by TX3, and TX4 is not recognised as a double-spender.
+    // After replacement, TX4 (lower fee) should be rejected as double-spending loser
     val (_, outcome4) = poolAfter.process(tx4, wus)
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
   }

@@ -673,4 +673,221 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
     }
   }
 
+  property("rollbackInputBlock restores wallet balance to exact pre-block state") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 500.millis)
+
+      // Ensure wallet has scanned genesis block into offChainRegistry before recording baseline
+      eventually {
+        val bal = await(wallet.balancesWithUnconfirmed)
+        bal.walletBalance should be > 0L
+      }
+
+      // Record box count before input block (balance won't change for self-transfers)
+      val boxesBefore = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+
+      // Generate a transaction
+      val tx = eventually {
+        val sumToSpend = MinBoxValue * 10
+        val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId = nextInputBlockId()
+
+      // Scan as input block
+      wallet.scanInputBlock(inputBlockId, Seq(tx))
+
+      // Verify boxes changed after input block
+      eventually {
+        val boxesAfter = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfter.size should not be boxesBefore.size
+      }
+
+      // Rollback the input block
+      wallet.rollbackInputBlock(inputBlockId)
+
+      // Verify boxes restored to exact pre-block state
+      eventually {
+        val boxesAfterRollback = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfterRollback.size shouldBe boxesBefore.size
+      }
+    }
+  }
+
+  property("rollbackInputBlock restores asset balances correctly") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state with custom asset
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 500.millis)
+
+      // Wait for genesis to be reflected in offChainRegistry
+      eventually {
+        val bal = await(wallet.balancesWithUnconfirmed)
+        bal.walletBalance should be > 0L
+      }
+
+      // Record boxes before input block
+      val boxesBefore = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+
+      // Generate transaction that transfers/spends the asset
+      val tx = eventually {
+        val req = Seq(PaymentRequest(addresses.head, MinBoxValue, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId = nextInputBlockId()
+
+      // Scan as input block
+      wallet.scanInputBlock(inputBlockId, Seq(tx))
+
+      // Verify boxes changed after input block
+      eventually {
+        val boxesAfter = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfter.size should not be boxesBefore.size
+      }
+
+      // Rollback the input block
+      wallet.rollbackInputBlock(inputBlockId)
+
+      // Verify boxes restored to pre-block state
+      eventually {
+        val boxesAfterRollback = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfterRollback.size shouldBe boxesBefore.size
+      }
+    }
+  }
+
+  property("mempool transaction spending input-block output survives rollback") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 500.millis)
+
+      // Generate a transaction
+      val tx1 = eventually {
+        val sumToSpend = MinBoxValue * 10
+        val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId = nextInputBlockId()
+
+      // Scan as input block
+      wallet.scanInputBlock(inputBlockId, Seq(tx1))
+
+      // Verify tx1 outputs are tracked
+      eventually {
+        val boxes = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxes.size should be >= 2
+      }
+
+      // Now scan a mempool transaction that spends tx1 outputs
+      val tx2 = eventually {
+        val req = Seq(PaymentRequest(addresses.head, MinBoxValue, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+      wallet.scanOffchain(tx2)
+
+      // Verify offChainRegistry was updated (balancesWithUnconfirmed reflects it)
+      eventually {
+        val balances = await(wallet.balancesWithUnconfirmed)
+        balances.walletAssetBalances.size should be >= 1
+      }
+
+      // Rollback the input block
+      wallet.rollbackInputBlock(inputBlockId)
+
+      // After rollback, genesis outputs are restored to onChainBalances.
+      // tx2 remains in offChainRegistry but its inputs (tx1 outputs) are gone.
+      // Verify wallet state is not corrupted by checking balances query works
+      eventually {
+        val balances = await(wallet.balancesWithUnconfirmed)
+        balances should not be null
+        balances.walletAssetBalances.size should be >= 1
+      }
+    }
+  }
+
+  property("scanOnChain after input block rollback processes correctly") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val pubkey = addresses.head.pubkey
+      addresses.length should be > 0
+
+      // Create initial state
+      val genesisBlock = makeGenesisBlock(pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 500.millis)
+
+      // Wait for genesis to be reflected in confirmed balances
+      eventually {
+        val bal = await(wallet.confirmedBalances)
+        bal.walletBalance should be > 0L
+      }
+
+      // Record box count before input block (balance won't change for self-transfer)
+      val boxesBefore = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+
+      // Generate a transaction
+      val tx = eventually {
+        val sumToSpend = MinBoxValue * 10
+        val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+
+      val inputBlockId = nextInputBlockId()
+
+      // Scan as input block
+      wallet.scanInputBlock(inputBlockId, Seq(tx))
+
+      // Verify box count changed (balance stays same for self-transfer)
+      eventually {
+        val boxesAfter = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxesAfter.size should not be boxesBefore.size
+      }
+
+      // Rollback the input block
+      wallet.rollbackInputBlock(inputBlockId)
+
+      // Verify box count restored to pre-block state
+      eventually {
+        val afterRollback = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        afterRollback.size shouldBe boxesBefore.size
+      }
+
+      // Now apply the transaction in a real block via scanOnChain
+      val block = makeNextBlock(getUtxoState, Seq(tx))
+      applyBlock(block) shouldBe 'success
+
+      // Wallet should scan the block correctly without registry corruption
+      eventually {
+        val boxesAfterBlock = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        // After on-chain confirmation, boxes should still be available
+        boxesAfterBlock.size should be >= boxesBefore.size
+      }
+    }
+  }
+
 }

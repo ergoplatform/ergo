@@ -246,5 +246,143 @@ class OffChainRegistrySpec
     rolledBack.offChainBoxes.count(_.boxId == box.boxId) shouldBe 1
   }
 
+  it should "re-apply input block after rollback" in {
+    forAll(Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen)) { (existingBoxes, newBoxes) =>
+      whenever(existingBoxes.nonEmpty || newBoxes.nonEmpty) {
+        val inputBlockId = scorex.util.ModifierId @@ "test-reapply"
+        val registry = OffChainRegistry.empty.updateOnTransaction(existingBoxes, Seq.empty, Seq.empty)
+        val spentIds = existingBoxes.take(2).map(EncodedBoxId @@@ _.boxId)
+
+        val (updatedRegistry, removedOffChain, removedOnChain) =
+          registry.updateOnTransactionWithDiff(newBoxes, spentIds, Seq.empty)
+
+        val diff = InputBlockDiff(newBoxes, removedOffChain, removedOnChain)
+        val registryWithDiff = updatedRegistry.copy(
+          inputBlockDiffs = updatedRegistry.inputBlockDiffs + (inputBlockId -> diff)
+        )
+
+        // Rollback the input block
+        val afterRollback = registryWithDiff.rollbackInputBlock(inputBlockId)
+        afterRollback.inputBlockDiffs should not contain key(inputBlockId)
+
+        // Re-apply the same input block by actually re-running the update
+        val (afterReapply, newRemovedOff, newRemovedOn) =
+          afterRollback.updateOnTransactionWithDiff(newBoxes, spentIds, Seq.empty)
+        val newDiff = InputBlockDiff(newBoxes, newRemovedOff, newRemovedOn)
+        val registryWithNewDiff = afterReapply.copy(
+          inputBlockDiffs = afterReapply.inputBlockDiffs + (inputBlockId -> newDiff)
+        )
+
+        // Verify state matches the original updated registry
+        registryWithNewDiff.offChainBoxes.map(_.boxId) should contain theSameElementsAs updatedRegistry.offChainBoxes.map(_.boxId)
+        registryWithNewDiff.inputBlockDiffs should contain key(inputBlockId)
+      }
+    }
+  }
+
+  it should "rollback and restore asset balances correctly" in {
+    forAll(Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen)) { (existingBoxes, newBoxes) =>
+      whenever(existingBoxes.nonEmpty || newBoxes.nonEmpty) {
+        val inputBlockId = scorex.util.ModifierId @@ "test-assets"
+        val registry = OffChainRegistry.empty.updateOnTransaction(existingBoxes, Seq.empty, Seq.empty)
+        val initialDigest = registry.digest
+        val spentIds = existingBoxes.take(2).map(EncodedBoxId @@@ _.boxId)
+
+        val (updatedRegistry, removedOffChain, removedOnChain) =
+          registry.updateOnTransactionWithDiff(newBoxes, spentIds, Seq.empty)
+
+        val diff = InputBlockDiff(newBoxes, removedOffChain, removedOnChain)
+        val registryWithDiff = updatedRegistry.copy(
+          inputBlockDiffs = updatedRegistry.inputBlockDiffs + (inputBlockId -> diff)
+        )
+
+        val updatedDigest = registryWithDiff.digest
+        // Digest should have changed after applying input block
+        (updatedDigest.walletBalance != initialDigest.walletBalance ||
+          updatedDigest.walletAssetBalances != initialDigest.walletAssetBalances) shouldBe true
+
+        // Rollback should restore digest to initial state
+        val afterRollback = registryWithDiff.rollbackInputBlock(inputBlockId)
+        val rolledBackDigest = afterRollback.digest
+        rolledBackDigest.walletBalance shouldBe initialDigest.walletBalance
+        rolledBackDigest.walletAssetBalances.toMap shouldBe initialDigest.walletAssetBalances.toMap
+      }
+    }
+  }
+
+  it should "handle out-of-order rollback correctly" in {
+    forAll(Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen), Gen.listOf(trackedBoxGen)) {
+      (initialBoxes, block1Boxes, block2Boxes) =>
+        whenever(block1Boxes.nonEmpty && block2Boxes.nonEmpty && initialBoxes.nonEmpty) {
+          val blockId1 = scorex.util.ModifierId @@ "test-oo-block-1"
+          val blockId2 = scorex.util.ModifierId @@ "test-oo-block-2"
+
+          val registry = OffChainRegistry.empty.updateOnTransaction(initialBoxes, Seq.empty, Seq.empty)
+
+          // Block 1: adds new boxes, spends some initial boxes
+          val spendIds1 = initialBoxes.take(1).map(EncodedBoxId @@@ _.boxId)
+          val (reg1, rem1Off, rem1On) = registry.updateOnTransactionWithDiff(
+            block1Boxes, spendIds1, Seq.empty
+          )
+          val diff1 = InputBlockDiff(block1Boxes, rem1Off, rem1On)
+          val regWithDiff1 = reg1.copy(inputBlockDiffs = reg1.inputBlockDiffs + (blockId1 -> diff1))
+
+          // Block 2: adds new boxes, spends some block1 boxes
+          val spendIds2 = block1Boxes.take(1).map(EncodedBoxId @@@ _.boxId)
+          val (reg2, rem2Off, rem2On) = regWithDiff1.updateOnTransactionWithDiff(
+            block2Boxes, spendIds2, Seq.empty
+          )
+          val diff2 = InputBlockDiff(block2Boxes, rem2Off, rem2On)
+          val regWithDiff2 = reg2.copy(inputBlockDiffs = reg2.inputBlockDiffs + (blockId2 -> diff2))
+
+          // Out-of-order: Rollback block 1 first while block 2 is still active
+          val afterRollback1 = regWithDiff2.rollbackInputBlock(blockId1)
+
+          // Block 1's added boxes should be removed, but block 2's boxes should remain
+          block1Boxes.foreach { b =>
+            afterRollback1.offChainBoxes should not contain b
+          }
+          // Block 2 boxes should still be present (they were added by block 2, not block 1)
+          block2Boxes.foreach { b =>
+            afterRollback1.offChainBoxes should contain(b)
+          }
+
+          // Then rollback block 2
+          val afterRollback2 = afterRollback1.rollbackInputBlock(blockId2)
+          block2Boxes.foreach { b =>
+            afterRollback2.offChainBoxes should not contain b
+          }
+
+          // Out-of-order rollback leaves intermediate state:
+          // block 2 restores boxes it spent (from block 1), but block 1 was already rolled back
+          // so we have initialBoxes + the box block2 spent (which was from block1)
+          val expectedFinalBoxes = initialBoxes ++ block1Boxes.take(1)
+          afterRollback2.offChainBoxes.map(_.boxId) should contain theSameElementsAs expectedFinalBoxes.map(_.boxId)
+        }
+    }
+  }
+
+  it should "handle empty input block diff" in {
+    val registry = OffChainRegistry.empty.updateOnTransaction(
+      Seq.empty, Seq.empty, Seq.empty
+    )
+
+    val inputBlockId = scorex.util.ModifierId @@ "test-empty"
+    val (updated, removedOff, removedOn) = registry.updateOnTransactionWithDiff(
+      Seq.empty, Seq.empty, Seq.empty
+    )
+
+    // Empty diff should have no added or removed boxes
+    removedOff shouldBe empty
+    removedOn shouldBe empty
+
+    val diff = InputBlockDiff(Seq.empty, Seq.empty, Seq.empty)
+    val regWithDiff = updated.copy(inputBlockDiffs = updated.inputBlockDiffs + (inputBlockId -> diff))
+
+    // Rollback empty diff should not change state
+    val rolledBack = regWithDiff.rollbackInputBlock(inputBlockId)
+    rolledBack shouldBe updated.copy(inputBlockDiffs = updated.inputBlockDiffs - inputBlockId)
+  }
+
 
 }

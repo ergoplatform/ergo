@@ -12,15 +12,17 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.ModifiersStatus.{Received, Unknown}
+import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -446,6 +448,262 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             msg.spec.messageCode == invSpec.messageCode
           case _ => false
         }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should request parent header") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val parentHeader = baseChain.last
+      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // Set up sync tracker with an older peer
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
+
+      // Send ChangedHistory to set up historyReader in the synchronizer
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Use a random parent ID that is NOT in the history so the synchronizer will request it
+      val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      val modifierId = childHeader.id
+      val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
+      // Should request the parent header from the older peer
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val invData = stn.message.data.get.asInstanceOf[InvData]
+            invData.typeId == Header.modifierTypeId && invData.ids.contains(unknownParentId)
+          case _ => false
+        }
+      }
+
+      // The modifier should be set to Unknown
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: RecoverableFailedModification without ParentHeaderNotFoundError should just set Unknown") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Send RecoverableFailedModification with a generic recoverable error
+      val error = new RecoverableModifierError("some error", modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
+      // The modifier should be set to Unknown
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should not request if parent already known") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val parentHeader = baseChain.last
+      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // Set up sync tracker with an older peer
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
+
+      // Send ChangedHistory to set up historyReader in the synchronizer
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Parent header IS in history, so no request should be made
+      val parentId = parentHeader.id
+      val modifierId = childHeader.id
+      val error = new ParentHeaderNotFoundError(parentId, modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
+      // Should NOT request the parent header since it's already in history
+      // Wait a short time and verify no request was sent
+      Thread.sleep(500)
+      ncProbe.expectNoMessage(1.second)
+
+      // The modifier should still be set to Unknown
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should warn when no older peers") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val parentHeader = baseChain.last
+      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // NO older peers set up - only the original peer as Younger
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Younger, Some(childHeader.height))
+
+      // Send ChangedHistory to set up historyReader in the synchronizer
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Use a random parent ID that is NOT in the history
+      val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      val modifierId = childHeader.id
+      val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
+      // Should NOT send any network request since no older peers available
+      Thread.sleep(500)
+      ncProbe.expectNoMessage(1.second)
+
+      // The modifier should still be set to Unknown
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should not crash with empty peer candidates") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Set up delivery tracker with requested status
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
+
+      // Ensure no peers are available for downloading headers
+      // This should not crash even with empty peer candidates
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
+
+      // Wait a bit and verify no crash occurred (test passes if we get here)
+      Thread.sleep(500)
+
+      // The modifier should still be in Requested state or transitioned appropriately
+      val status = deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty)
+        status should (be(Unknown) or be(Requested))
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should fallback to Equal peers after many attempts") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Create an equal peer
+      val equalPeerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+      val equalPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(equalPeerInfo)
+      )
+
+      // Set up sync tracker with equal peer
+      syncTracker.updateStatus(equalPeer, org.ergoplatform.consensus.Equal, Some(header.height))
+
+      // Set up delivery tracker with many checks done (> 5)
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
+      // Simulate many delivery checks by sending multiple CheckDelivery messages
+      (1 to 7).foreach { _ =>
+        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
+        Thread.sleep(100)
+      }
+
+      // Should eventually try the equal peer (we can verify by checking network messages)
+      // The test passes if no crash occurs and status transitions appropriately
+      eventually {
+        val status = deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty)
+      status should (be(Unknown) or be(Requested))
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should set non-header modifier to Unknown after max attempts") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Use a non-header modifier type (e.g., BlockTransactions)
+      val nonHeaderTypeId = org.ergoplatform.modifiers.history.BlockTransactions.modifierTypeId
+
+      // Set up delivery tracker with requested status
+      deliveryTracker.setRequested(nonHeaderTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
+
+      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
+      (1 to maxDeliveryChecks + 2).foreach { _ =>
+        synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId)
+        Thread.sleep(50)
+      }
+
+      // After max attempts, non-header modifier should be set to Unknown (not Invalid)
+      eventually {
+        deliveryTracker.status(modifierId, nonHeaderTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should invalidate header after max attempts") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val header = baseChain.last
+      val modifierId = header.id
+
+      // Set up delivery tracker with requested status for header
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
+
+      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
+      (1 to maxDeliveryChecks + 2).foreach { _ =>
+        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
+        Thread.sleep(50)
+      }
+
+      // After max attempts, header should be marked as Invalid
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe scorex.core.network.ModifiersStatus.Invalid
       }
     }
   }

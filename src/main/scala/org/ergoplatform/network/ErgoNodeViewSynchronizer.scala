@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, Cancellable, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
@@ -146,11 +146,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Cache which contains bytes of transactions we received but not parsed and processed yet
     */
   private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
-
-  /**
-    * Variable which is caching height of last header which was extracted from sync info message
-    */
-  private var lastSyncHeaderApplied: Option[Int] = Option.empty
 
   /**
     * Timestamp of last CheckModifiersToDownload command processing, used to not to process it too extensively
@@ -496,7 +491,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
-    * to nodeViewHolder as a remote modifier for it to be applied
+    * to nodeViewHolder as a remote modifier for it to be applied.
+    *
+    * Uses deliveryTracker as the single source of truth for whether a header has already been
+    * sent / is in-flight. This avoids the previous bug where a separate `lastSyncHeaderApplied`
+    * variable could get out of sync with reality (e.g. header sent to view holder but never
+    * applied), causing the node to stop making progress via sync v2.
     *
     * @param syncInfo other's node sync info
     */
@@ -504,20 +504,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                              history: ErgoHistory,
                                              peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
-      if (deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-        if (continuationHeader.height > lastSyncHeaderApplied.getOrElse(0)) {
-          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
-          lastSyncHeaderApplied = Some(continuationHeader.height)
-          viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
-          val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
-          log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
-          modifiersToDownload.foreach {
-            case (modifierTypeId, modifierId) =>
-              if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-                requestBlockSection(modifierTypeId, Seq(modifierId), peer)
-              }
-          }
+      // Pass `history` as a modifier keeper so that `Held` status is returned
+      // when the header has already been applied to history.
+      val headerStatus = deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq(history))
+      if (headerStatus == ModifiersStatus.Unknown) {
+        // Header not yet tracked — transition through Requested to Received
+        // (we already have the full object from the sync message, so no download needed).
+        // This allows the delivery tracker to properly manage the modifier lifecycle:
+        // Unknown -> Requested -> Received -> Held (on success) or
+        // Unknown -> Requested -> Received -> Unknown (on recoverable failure).
+        log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
+        deliveryTracker.setRequested(Header.modifierTypeId, continuationHeader.id, peer, checksDone = 0) { _ =>
+          Cancellable.alreadyCancelled
         }
+        deliveryTracker.setReceived(continuationHeader.id, Header.modifierTypeId, peer)
+        viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
+        val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
+        log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
+        modifiersToDownload.foreach {
+          case (modifierTypeId, modifierId) =>
+            if (deliveryTracker.status(modifierId, modifierTypeId, Seq(history)) == ModifiersStatus.Unknown) {
+              requestBlockSection(modifierTypeId, Seq(modifierId), peer)
+            }
+        }
+      } else {
+        // Header already tracked (Requested, Received, Held, or Invalid) — skip to avoid duplicates.
+        log.debug(s"SyncV2 header ${continuationHeader.encodedId} already tracked with status $headerStatus, skipping")
       }
     }
   }
@@ -1407,6 +1419,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
+      log.debug(s"Full block applied at height ${header.height}, header id: ${header.encodedId}")
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction

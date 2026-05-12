@@ -66,6 +66,15 @@ class CandidateGenerator(
     log.info(
       s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
+
+    // Immediately announce newly mined block to network BEFORE local application.
+    // This reduces propagation latency by avoiding the wait for NodeViewHolder
+    // to fully validate and apply the block. LocalBlockApplied arrives later
+    // and skips broadcast since the block was already announced.
+    // TODO: Consider switching to direct actor message for lower latency
+    //       instead of event bus publish.
+    context.system.eventStream.publish(NewBlockMined(newBlock.header))
+
     viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
     val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
       newBlock.blockSections

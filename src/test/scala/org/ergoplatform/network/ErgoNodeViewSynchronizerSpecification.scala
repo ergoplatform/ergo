@@ -914,4 +914,251 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  /**
+    * Test that NewBlockMined immediately broadcasts invs for header and all block sections.
+    */
+  property("NodeViewSynchronizer: NewBlockMined should immediately broadcast invs") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send NewBlockMined to synchronizer
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock.header.id)
+
+      // Verify all block section invs were broadcast
+      newBlock.header.sectionIds.foreach { case (mtId, id) =>
+        receivedInvs.get(mtId) shouldBe defined
+        receivedInvs(mtId) should contain(id)
+      }
+    }
+  }
+
+  /**
+    * Test that LocalBlockApplied does not duplicate broadcast when NewBlockMined already fired.
+    */
+  property("NodeViewSynchronizer: NewBlockMined should prevent duplicate broadcast on LocalBlockApplied") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build base chain and state
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(h => hhistory.append(h).get)
+
+      val (us, bh) = createUtxoState(settings)
+      val bestBlockOpt = hhistory.bestFullBlockOpt
+      val newBlock = validFullBlock(bestBlockOpt, us, bh)
+
+      // First: NewBlockMined triggers immediate broadcast
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Consume all inv messages from NewBlockMined
+      val deadline1 = System.currentTimeMillis() + 2000
+      while (System.currentTimeMillis() < deadline1) {
+        ncProbe.receiveOne(100.millis) match {
+          case Some(_: SendToNetwork) => // consume
+          case _ => // ignore
+        }
+      }
+
+      // Second: LocalBlockApplied for same header should NOT send additional invs
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+
+      // Should receive no additional InvSpec messages
+      ncProbe.expectNoMessage(1.second)
+    }
+  }
+
+  /**
+    * Test that LocalBlockApplied does not broadcast (already done via NewBlockMined).
+    */
+  property("NodeViewSynchronizer: LocalBlockApplied should skip broadcast") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build base chain and state
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(h => hhistory.append(h).get)
+
+      val (us, bh) = createUtxoState(settings)
+      val bestBlockOpt = hhistory.bestFullBlockOpt
+      val newBlock = validFullBlock(bestBlockOpt, us, bh)
+
+      // NewBlockMined should broadcast
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Consume the inv messages
+      val deadline1 = System.currentTimeMillis() + 2000
+      while (System.currentTimeMillis() < deadline1) {
+        ncProbe.receiveOne(100.millis) match {
+          case Some(_: SendToNetwork) => // consume
+          case _ => // ignore
+        }
+      }
+
+      // LocalBlockApplied for same block should NOT broadcast again
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+
+      // Should receive no additional InvSpec messages
+      ncProbe.expectNoMessage(1.second)
+    }
+  }
+
+  /**
+    * Test that RemoteBlockApplied broadcasts invs for peer-received blocks.
+    */
+  property("NodeViewSynchronizer: RemoteBlockApplied should broadcast invs") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send RemoteBlockApplied to synchronizer
+      synchronizerMockRef ! RemoteBlockApplied(newBlock.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock.header.id)
+
+      // Verify all block section invs were broadcast
+      newBlock.header.sectionIds.foreach { case (mtId, id) =>
+        receivedInvs.get(mtId) shouldBe defined
+        receivedInvs(mtId) should contain(id)
+      }
+    }
+  }
+
+  /**
+    * Test that NewBlockMined broadcasts invs for a newly mined block.
+    */
+  property("NodeViewSynchronizer: NewBlockMined should broadcast invs for newly mined block") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send NewBlockMined to synchronizer
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock.header.id)
+
+      // Verify all block section invs were broadcast
+      newBlock.header.sectionIds.foreach { case (mtId, id) =>
+        receivedInvs.get(mtId) shouldBe defined
+        receivedInvs(mtId) should contain(id)
+      }
+    }
+  }
+
+  /**
+    * Test that LocalBlockApplied and RemoteBlockApplied should perform cleanup.
+    */
+  property("NodeViewSynchronizer: LocalBlockApplied and RemoteBlockApplied should perform cleanup") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send LocalBlockApplied - should not broadcast but should perform cleanup
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      ncProbe.expectNoMessage(500.millis)
+
+      // Send RemoteBlockApplied - should broadcast (different block)
+      val newBlock2 = statefulyValidFullBlock(wus)
+      synchronizerMockRef ! RemoteBlockApplied(newBlock2.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast for the second block
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock2.header.id)
+    }
+  }
+
 }

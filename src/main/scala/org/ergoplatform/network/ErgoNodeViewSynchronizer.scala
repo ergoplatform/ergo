@@ -166,8 +166,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
   /**
-    * Peers provided nipopow poofs
-    */
+   * Peers provided nipopow poofs
+   */
   //todo: clear after bootstrapping
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
 
@@ -266,6 +266,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
+
+    // subscribe for immediate block mining announcements (fast propagation)
+    context.system.eventStream.subscribe(self, classOf[NewBlockMined])
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
@@ -1409,17 +1412,49 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-    // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
-    case FullBlockApplied(header) =>
+    /**
+      * Immediately announce a newly mined block to all connected peers.
+      * This is called before the block is applied by NodeViewHolder, reducing
+      * propagation latency. LocalBlockApplied arrives later and skips broadcast
+      * since the block was already announced.
+      */
+    case NewBlockMined(header) =>
+      log.info(
+        s"Immediately announcing newly mined block ${header.encodedId} " +
+        s"at height ${header.height} to all peers"
+      )
+      broadcastModifierInv(Header.modifierTypeId, header.id)
+      header.sectionIds.foreach { case (mtId, id) =>
+        broadcastModifierInv(mtId, id)
+      }
+
+    // Locally mined block applied - skip broadcast (already done via NewBlockMined)
+    case LocalBlockApplied(header) =>
+      log.debug(
+        s"Local block applied at height ${header.height}, " +
+        s"header id: ${header.encodedId}, skipping broadcast"
+      )
+      clearDeclined()
+      clearInterblockCost()
+      perPeerCost.clear()
+      processFirstTxProcessingCacheRecord() // resume cache processing
+
+    // Peer-received block applied - broadcast to our peers
+    case RemoteBlockApplied(header) =>
       if (header.isNew(2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
-        header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
+        header.sectionIds.foreach { case (mtId, id) =>
+          broadcastModifierInv(mtId, id)
+        }
       }
       clearDeclined()
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
-      log.debug(s"Full block applied at height ${header.height}, header id: ${header.encodedId}")
+      log.debug(
+        s"Remote block applied at height ${header.height}, " +
+        s"header id: ${header.encodedId}"
+      )
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction

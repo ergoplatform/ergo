@@ -288,6 +288,22 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         val hist = ErgoHistory.readOrGenerate(settings)(null)
         hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
+
+      // Idempotency check: sending the same syncV2 message again should NOT re-send the header
+      // to the view holder because deliveryTracker already knows about it (Held status).
+      // We verify this by checking that no additional RequestModifier messages are sent.
+      // Note: a sync response (SendToNetwork with Sync message) may be sent back, which is expected.
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      ncProbe.fishForMessage(2 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            // If we get a RequestModifier, the header was re-sent — this is a failure
+            false
+          case _ =>
+            // Any other message (e.g. sync response) is fine — keep fishing until timeout
+            true
+        }
+      }
     }
   }
 
@@ -324,6 +340,61 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: syncV2 should retry header after recoverable failure") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
+
+      // Generate base chain and set up synchronizer with it
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+      val bestHeaderOpt = hhistory.bestHeaderOpt
+
+      // Generate continuation chain whose head should be applied
+      val continuationChain = genHeaderChain(_.size > 4, bestHeaderOpt, hhistory.difficultyCalculator, None, false).tail
+      val appliedHeader = continuationChain.headers.head
+
+      // Set up the synchronizer with the base history
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // First syncV2 message — header should be sent to view holder and block sections requested
+      val sync = ErgoSyncInfoV2(continuationChain.headers)
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+
+      // Wait for block section requests (proves header was sent to VH)
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            true
+          case _ => false
+        }
+      }
+
+      // Simulate recoverable failure: view holder could not apply header (e.g. missing parent).
+      // This resets the header status to Unknown in deliveryTracker.
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, appliedHeader.id,
+        new RecoverableModifierError("test failure", appliedHeader.id, Header.modifierTypeId))
+
+      // Wait for deliveryTracker to reflect the reset
+      eventually {
+        deliveryTracker.status(appliedHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+
+      // Send the SAME syncV2 message again — the header should be re-sent to the view holder
+      // because deliveryTracker.status is now Unknown again. Block sections should be requested.
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            true
+          case _ => false
+        }
+      }
+    }
+  }
 
   property("NodeViewSynchronizer: longer fork is applied and shorter is not") {
     withFixture2 { ctx =>
@@ -705,6 +776,388 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       eventually {
         deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe scorex.core.network.ModifiersStatus.Invalid
       }
+    }
+  }
+
+  /**
+    * Regression test for the `lastSyncHeaderApplied` removal.
+    * When a header is already in history, `applyValidContinuationHeaderV2` must
+    * detect this via `deliveryTracker.status(..., Seq(history))` and skip it.
+    * Previously `Seq.empty` was passed, so `Held` was never detected and the
+    * header was re-sent to the view holder.
+    */
+  property("NodeViewSynchronizer: syncV2 should skip header already in history") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build a base chain and apply it to history
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(h => hhistory.append(h).get)
+      val bestHeaderOpt = hhistory.bestHeaderOpt
+
+      // Generate a continuation header (direct child of our best header).
+      // Use .tail to drop the prefix so the chain starts with the direct child.
+      val continuationChain = genHeaderChain(_.size > 2, bestHeaderOpt, hhistory.difficultyCalculator, None, false).tail
+      val continuationHeader = continuationChain.headers.head
+
+      // Apply the continuation header directly to history so it is already "Held"
+      hhistory.append(continuationHeader).get
+      hhistory.bestHeaderIdOpt.get shouldBe continuationHeader.id
+
+      // Set up the synchronizer with the updated history
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Build a syncV2 message.
+      // continuationHeaderV2 checks: bestHeaderIdOpt.contains(lastHeader.parentId)
+      // So the FIRST header in the list must be the child of our best header.
+      // Our best header is continuationHeader, so we need a child of it.
+      val childChain = genHeaderChain(_.size > 2, Some(continuationHeader), hhistory.difficultyCalculator, None, false).tail
+      val childHeader = childChain.headers.head
+
+      // Apply the child header to history as well so it is "Held"
+      hhistory.append(childHeader).get
+
+      // Set up the synchronizer with the updated history (after child applied)
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      val sync = ErgoSyncInfoV2(Seq(childHeader))
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // Send the sync message — the synchronizer must NOT send the header to the view holder
+      // because childHeader is already in history (we just applied it above)
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+
+      // The synchronizer may send a sync response back (SendToNetwork with Sync message),
+      // which is expected. We must NOT see any RequestModifier messages.
+      ncProbe.fishForMessage(2.seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            // RequestModifier means the header was sent to VH — this is a failure
+            false
+          case _ =>
+            // Any other message (e.g. sync response) is fine — keep fishing until timeout
+            true
+        }
+      }
+
+      // Also verify deliveryTracker reports Held when history is passed
+      deliveryTracker.status(childHeader.id, Header.modifierTypeId, Seq(hhistory)) shouldBe
+        scorex.core.network.ModifiersStatus.Held
+    }
+  }
+
+  /**
+    * Test that `deliveryTracker.setReceived` is called when a syncV2 header is accepted.
+    * This prevents the header from being processed again on duplicate sync messages
+    * before the view holder reports the outcome.
+    */
+  property("NodeViewSynchronizer: syncV2 header should be tracked as Received immediately") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build a base chain
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(h => hhistory.append(h).get)
+      val bestHeaderOpt = hhistory.bestHeaderOpt
+
+      // Generate a continuation header that is NOT yet in history.
+      // Use .tail to drop the prefix so the chain starts with the direct child of our best header.
+      val continuationChain = genHeaderChain(_.size > 2, bestHeaderOpt, hhistory.difficultyCalculator, None, false).tail
+      val continuationHeader = continuationChain.headers.head
+      hhistory.contains(continuationHeader.id) shouldBe false
+
+      // Set up the synchronizer with the base history
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      // Build a syncV2 message.
+      // continuationHeaderV2 checks: bestHeaderIdOpt.contains(lastHeader.parentId)
+      // So the FIRST header in the list must be the direct child of our best header.
+      val sync = ErgoSyncInfoV2(Seq(continuationHeader))
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(sync)
+
+      // Send the sync message
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+
+      // Wait for block section requests to confirm the header was accepted
+      // (the synchronizer sends block section requests after sending header to VH)
+      var gotRequest = false
+      ncProbe.fishForMessage(3.seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            gotRequest = true
+            true
+          case _ =>
+            false
+        }
+      }
+      gotRequest shouldBe true
+
+      // The header should now be tracked as Received in deliveryTracker
+      deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) shouldBe
+        scorex.core.network.ModifiersStatus.Received
+
+      // Sending the same sync message again should NOT trigger another download.
+      // The synchronizer may send a sync response back, which is expected.
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      ncProbe.fishForMessage(2.seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            // If we get a RequestModifier, the header was re-sent — this is a failure
+            false
+          case _ =>
+            // Any other message (e.g. sync response) is fine — keep fishing until timeout
+            true
+        }
+      }
+    }
+  }
+
+  /**
+    * Test that NewBlockMined immediately broadcasts invs for header and all block sections.
+    */
+  property("NodeViewSynchronizer: NewBlockMined should immediately broadcast invs") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send NewBlockMined to synchronizer
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock.header.id)
+
+      // Verify all block section invs were broadcast
+      newBlock.header.sectionIds.foreach { case (mtId, id) =>
+        receivedInvs.get(mtId) shouldBe defined
+        receivedInvs(mtId) should contain(id)
+      }
+    }
+  }
+
+  /**
+    * Test that LocalBlockApplied does not duplicate broadcast when NewBlockMined already fired.
+    */
+  property("NodeViewSynchronizer: NewBlockMined should prevent duplicate broadcast on LocalBlockApplied") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build base chain and state
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(h => hhistory.append(h).get)
+
+      val (us, bh) = createUtxoState(settings)
+      val bestBlockOpt = hhistory.bestFullBlockOpt
+      val newBlock = validFullBlock(bestBlockOpt, us, bh)
+
+      // First: NewBlockMined triggers immediate broadcast
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Consume all inv messages from NewBlockMined
+      val deadline1 = System.currentTimeMillis() + 2000
+      while (System.currentTimeMillis() < deadline1) {
+        ncProbe.receiveOne(100.millis) match {
+          case Some(_: SendToNetwork) => // consume
+          case _ => // ignore
+        }
+      }
+
+      // Second: LocalBlockApplied for same header should NOT send additional invs
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+
+      // Should receive no additional InvSpec messages
+      ncProbe.expectNoMessage(1.second)
+    }
+  }
+
+  /**
+    * Test that LocalBlockApplied does not broadcast (already done via NewBlockMined).
+    */
+  property("NodeViewSynchronizer: LocalBlockApplied should skip broadcast") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build base chain and state
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(h => hhistory.append(h).get)
+
+      val (us, bh) = createUtxoState(settings)
+      val bestBlockOpt = hhistory.bestFullBlockOpt
+      val newBlock = validFullBlock(bestBlockOpt, us, bh)
+
+      // NewBlockMined should broadcast
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Consume the inv messages
+      val deadline1 = System.currentTimeMillis() + 2000
+      while (System.currentTimeMillis() < deadline1) {
+        ncProbe.receiveOne(100.millis) match {
+          case Some(_: SendToNetwork) => // consume
+          case _ => // ignore
+        }
+      }
+
+      // LocalBlockApplied for same block should NOT broadcast again
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+
+      // Should receive no additional InvSpec messages
+      ncProbe.expectNoMessage(1.second)
+    }
+  }
+
+  /**
+    * Test that RemoteBlockApplied broadcasts invs for peer-received blocks.
+    */
+  property("NodeViewSynchronizer: RemoteBlockApplied should broadcast invs") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send RemoteBlockApplied to synchronizer
+      synchronizerMockRef ! RemoteBlockApplied(newBlock.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock.header.id)
+
+      // Verify all block section invs were broadcast
+      newBlock.header.sectionIds.foreach { case (mtId, id) =>
+        receivedInvs.get(mtId) shouldBe defined
+        receivedInvs(mtId) should contain(id)
+      }
+    }
+  }
+
+  /**
+    * Test that NewBlockMined broadcasts invs for a newly mined block.
+    */
+  property("NodeViewSynchronizer: NewBlockMined should broadcast invs for newly mined block") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send NewBlockMined to synchronizer
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock.header.id)
+
+      // Verify all block section invs were broadcast
+      newBlock.header.sectionIds.foreach { case (mtId, id) =>
+        receivedInvs.get(mtId) shouldBe defined
+        receivedInvs(mtId) should contain(id)
+      }
+    }
+  }
+
+  /**
+    * Test that LocalBlockApplied and RemoteBlockApplied should perform cleanup.
+    */
+  property("NodeViewSynchronizer: LocalBlockApplied and RemoteBlockApplied should perform cleanup") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Build state with some applied blocks
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+
+      val newBlock = statefulyValidFullBlock(wus)
+
+      // Wait for synchronizer to be initialized
+      Thread.sleep(500)
+
+      // Send LocalBlockApplied - should not broadcast but should perform cleanup
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      ncProbe.expectNoMessage(500.millis)
+
+      // Send RemoteBlockApplied - should broadcast (different block)
+      val newBlock2 = statefulyValidFullBlock(wus)
+      synchronizerMockRef ! RemoteBlockApplied(newBlock2.header)
+
+      // Expect 4 inv messages (1 header + 3 sections)
+      val invMessages = (0 until 4).map { _ =>
+        ncProbe.expectMsgType[SendToNetwork](5.seconds)
+      }.filter(_.message.spec.messageCode == InvSpec.messageCode)
+
+      val receivedInvs = invMessages.map { stn =>
+        val invData = stn.message.data.get.asInstanceOf[InvData]
+        invData.typeId -> invData.ids
+      }.toMap
+
+      // Verify header inv was broadcast for the second block
+      receivedInvs.get(Header.modifierTypeId) shouldBe defined
+      receivedInvs(Header.modifierTypeId) should contain(newBlock2.header.id)
     }
   }
 

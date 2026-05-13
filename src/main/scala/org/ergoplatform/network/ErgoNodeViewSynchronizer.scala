@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, Cancellable, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
@@ -148,11 +148,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val txProcessingCache = mutable.Map[ModifierId, TransactionProcessingCacheRecord]()
 
   /**
-    * Variable which is caching height of last header which was extracted from sync info message
-    */
-  private var lastSyncHeaderApplied: Option[Int] = Option.empty
-
-  /**
     * Timestamp of last CheckModifiersToDownload command processing, used to not to process it too extensively
     */
   private var lastCheckForModifiersToDownload: Long = 0L
@@ -171,8 +166,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
 
   /**
-    * Peers provided nipopow poofs
-    */
+   * Peers provided nipopow poofs
+   */
   //todo: clear after bootstrapping
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
 
@@ -271,6 +266,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
+
+    // subscribe for immediate block mining announcements (fast propagation)
+    context.system.eventStream.subscribe(self, classOf[NewBlockMined])
 
     context.system.scheduler.scheduleAtFixedRate(toDownloadCheckInterval, toDownloadCheckInterval, self, CheckModifiersToDownload)
 
@@ -496,7 +494,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Calculates new continuation header from syncInfo message if any, validates it and sends it
-    * to nodeViewHolder as a remote modifier for it to be applied
+    * to nodeViewHolder as a remote modifier for it to be applied.
+    *
+    * Uses deliveryTracker as the single source of truth for whether a header has already been
+    * sent / is in-flight. This avoids the previous bug where a separate `lastSyncHeaderApplied`
+    * variable could get out of sync with reality (e.g. header sent to view holder but never
+    * applied), causing the node to stop making progress via sync v2.
     *
     * @param syncInfo other's node sync info
     */
@@ -504,20 +507,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                              history: ErgoHistory,
                                              peer: ConnectedPeer): Unit = {
     history.continuationHeaderV2(syncInfo).foreach { continuationHeader =>
-      if (deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-        if (continuationHeader.height > lastSyncHeaderApplied.getOrElse(0)) {
-          log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
-          lastSyncHeaderApplied = Some(continuationHeader.height)
-          viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
-          val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
-          log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
-          modifiersToDownload.foreach {
-            case (modifierTypeId, modifierId) =>
-              if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Unknown) {
-                requestBlockSection(modifierTypeId, Seq(modifierId), peer)
-              }
-          }
+      // Pass `history` as a modifier keeper so that `Held` status is returned
+      // when the header has already been applied to history.
+      val headerStatus = deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq(history))
+      if (headerStatus == ModifiersStatus.Unknown) {
+        // Header not yet tracked — transition through Requested to Received
+        // (we already have the full object from the sync message, so no download needed).
+        // This allows the delivery tracker to properly manage the modifier lifecycle:
+        // Unknown -> Requested -> Received -> Held (on success) or
+        // Unknown -> Requested -> Received -> Unknown (on recoverable failure).
+        log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
+        deliveryTracker.setRequested(Header.modifierTypeId, continuationHeader.id, peer, checksDone = 0) { _ =>
+          Cancellable.alreadyCancelled
         }
+        deliveryTracker.setReceived(continuationHeader.id, Header.modifierTypeId, peer)
+        viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
+        val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
+        log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
+        modifiersToDownload.foreach {
+          case (modifierTypeId, modifierId) =>
+            if (deliveryTracker.status(modifierId, modifierTypeId, Seq(history)) == ModifiersStatus.Unknown) {
+              requestBlockSection(modifierTypeId, Seq(modifierId), peer)
+            }
+        }
+      } else {
+        // Header already tracked (Requested, Received, Held, or Invalid) — skip to avoid duplicates.
+        log.debug(s"SyncV2 header ${continuationHeader.encodedId} already tracked with status $headerStatus, skipping")
       }
     }
   }
@@ -1397,16 +1412,49 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       }
 
-    // If new enough semantically valid ErgoFullBlock was applied, send inv for block header and all its sections
-    case FullBlockApplied(header) =>
+    /**
+      * Immediately announce a newly mined block to all connected peers.
+      * This is called before the block is applied by NodeViewHolder, reducing
+      * propagation latency. LocalBlockApplied arrives later and skips broadcast
+      * since the block was already announced.
+      */
+    case NewBlockMined(header) =>
+      log.info(
+        s"Immediately announcing newly mined block ${header.encodedId} " +
+        s"at height ${header.height} to all peers"
+      )
+      broadcastModifierInv(Header.modifierTypeId, header.id)
+      header.sectionIds.foreach { case (mtId, id) =>
+        broadcastModifierInv(mtId, id)
+      }
+
+    // Locally mined block applied - skip broadcast (already done via NewBlockMined)
+    case LocalBlockApplied(header) =>
+      log.debug(
+        s"Local block applied at height ${header.height}, " +
+        s"header id: ${header.encodedId}, skipping broadcast"
+      )
+      clearDeclined()
+      clearInterblockCost()
+      perPeerCost.clear()
+      processFirstTxProcessingCacheRecord() // resume cache processing
+
+    // Peer-received block applied - broadcast to our peers
+    case RemoteBlockApplied(header) =>
       if (header.isNew(2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
-        header.sectionIds.foreach { case (mtId, id) => broadcastModifierInv(mtId, id) }
+        header.sectionIds.foreach { case (mtId, id) =>
+          broadcastModifierInv(mtId, id)
+        }
       }
       clearDeclined()
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
+      log.debug(
+        s"Remote block applied at height ${header.height}, " +
+        s"header id: ${header.encodedId}"
+      )
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction

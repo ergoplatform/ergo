@@ -7,9 +7,9 @@ import akka.util.Timeout
 import org.ergoplatform.network.PeerSpec
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
-import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import org.ergoplatform.network.peer.{PeerAddressFilter, PeerInfo, PenaltyType}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
-import org.ergoplatform.settings.NetworkSettings
+import org.ergoplatform.settings.{NetworkSettings, NetworkType}
 import scorex.util.ScorexLogging
 import shapeless.syntax.typeable._
 
@@ -21,7 +21,8 @@ import scala.concurrent.duration._
   */
 class PeerSynchronizer(val networkControllerRef: ActorRef,
                        peerManager: ActorRef,
-                       settings: NetworkSettings)
+                       settings: NetworkSettings,
+                       networkType: NetworkType)
                       (implicit ec: ExecutionContext) extends Actor with Synchronizer with ScorexLogging {
 
 
@@ -41,8 +42,8 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   private val peersSpec = new PeersSpec(settings.maxPeerSpecObjects)
 
   private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
-    case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
-      addNewPeers(peers)
+    case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, source) if peers.cast[Seq[PeerSpec]].isDefined =>
+      addNewPeers(peers, source)
 
     case (spec, _, remote) if spec.messageCode == GetPeersSpec.messageCode =>
       gossipPeers(remote)
@@ -70,12 +71,30 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   }
 
   /**
-    * Handles adding new peers to the peer database if they were previously unknown
+    * Handles adding new peers to the peer database if they were previously unknown.
     *
-    * @param peers sequence of peer specs describing a remote peers details
+    * Each entry's declared address is checked against [[PeerAddressFilter]];
+    * bogus entries (link-local, multicast, loopback, RFC 1918 on mainnet, etc.)
+    * are dropped. If any entry in the body is bogus, the gossiping `source` peer
+    * is penalized — no legitimate Ergo node has any reason to advertise an
+    * unroutable address to other peers.
+    *
+    * @param peers  sequence of peer specs describing remote peers' details
+    * @param source the peer that sent us this `Peers` gossip message
     */
-  private def addNewPeers(peers: Seq[PeerSpec]): Unit = {
-    peers.foreach(peerSpec => peerManager ! AddPeerIfEmpty(peerSpec))
+  private def addNewPeers(peers: Seq[PeerSpec], source: ConnectedPeer): Unit = {
+    val (clean, bogus) = peers.partition { spec =>
+      spec.declaredAddress match {
+        case Some(addr) => !PeerAddressFilter.isBogus(addr, networkType)
+        case None       => true // no declared address to filter; let PeerManager handle
+      }
+    }
+    clean.foreach(peerSpec => peerManager ! AddPeerIfEmpty(peerSpec))
+    if (bogus.nonEmpty) {
+      val examples = bogus.flatMap(_.declaredAddress).take(3).mkString(", ")
+      log.warn(s"$source gossiped ${bogus.size} bogus peer address(es) (e.g. $examples) on ${networkType.verboseName} — penalizing")
+      networkControllerRef ! PenalizePeer(source.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+    }
   }
 
   /**
@@ -104,11 +123,11 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
 }
 
 object PeerSynchronizerRef {
-  def props(networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings)
+  def props(networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings, networkType: NetworkType)
            (implicit ec: ExecutionContext): Props =
-    Props(new PeerSynchronizer(networkControllerRef, peerManager, settings))
+    Props(new PeerSynchronizer(networkControllerRef, peerManager, settings, networkType))
 
-  def apply(name: String, networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings)
+  def apply(name: String, networkControllerRef: ActorRef, peerManager: ActorRef, settings: NetworkSettings, networkType: NetworkType)
            (implicit system: ActorSystem, ec: ExecutionContext): ActorRef =
-    system.actorOf(props(networkControllerRef, peerManager, settings), name)
+    system.actorOf(props(networkControllerRef, peerManager, settings, networkType), name)
 }

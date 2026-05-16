@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import scorex.crypto.authds.SerializedAdProof
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
@@ -53,6 +54,31 @@ class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
   property("ADProofs validation") {
     val (history, block) = init()
     commonChecks(history, block.adProofs.get, block.header)
+  }
+
+  property("Incorrect ADProofs do not mark full block as invalid") {
+    val (history, block) = init()
+    val header = block.header
+    val correctProofs = block.adProofs.get
+
+    // Build ADProofs with the right headerId but corrupted proof bytes.
+    // Changing even one byte changes Algos.hash(proofBytes), so the resulting
+    // modifier id differs from header.ADProofsId.
+    val wrongBytes: Array[Byte] = correctProofs.proofBytes.clone()
+    wrongBytes(0) = (wrongBytes(0) + 1).toByte
+    val incorrectProofs = ADProofs(header.id, SerializedAdProof @@ wrongBytes)
+
+    // Sanity: the ID really is different from what the header expects.
+    incorrectProofs.id should not equal header.ADProofsId
+
+    // Incorrect proofs must be rejected (bsCorrespondsToHeader fails).
+    history.applicableTry(incorrectProofs) shouldBe 'failure
+
+    // The rejection must NOT propagate to the full block / header.
+    history.isSemanticallyValid(header.id) should not be ModifierSemanticValidity.Invalid
+
+    // Correct proofs must still be accepted after the failed attempt.
+    history.applicableTry(correctProofs) shouldBe 'success
   }
 
   property("Extension validation") {

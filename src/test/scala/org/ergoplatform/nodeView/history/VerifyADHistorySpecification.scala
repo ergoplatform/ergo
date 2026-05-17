@@ -499,4 +499,30 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     }
   }
 
+  property("node rejects headers from a better chain with fork point older than keepVersions") {
+    // keepVersions controls rollback depth; use a small value (3) to keep the test fast.
+    // hdrTooOld fires when fullBlockHeight - parentHeight >= keepVersions.
+    val kv = 3
+    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false,
+      blocksToKeep = kv + 2, keepVersions = kv)
+    inHistory.writeMinimalFullBlockHeight(GenesisHeight)
+    inHistory.isHeadersChainSyncedVar = true
+
+    // Apply kv + 1 = 4 full blocks: fullBlockHeight = 4, keepVersions = 3.
+    val chain = genChain(kv + 1, inHistory)
+    val history = applyChain(inHistory, chain)
+
+    history.fullBlockHeight shouldBe (kv + 1)
+    chain.head.header.height shouldBe GenesisHeight
+
+    // Fork from chain.head (height 1). parentHeight = 1.
+    // fullBlockHeight - parentHeight = 4 - 1 = 3, which is NOT < keepVersions (3).
+    // => hdrTooOld validation rule fires and the header must be rejected.
+    val deepFork = genChain(kv + 3, chain.head) // chain.head is head; tail holds new fork blocks
+    val firstForkHeader = deepFork.tail.head.header
+
+    history.append(firstForkHeader).isFailure shouldBe true
+    history.bestFullBlockOpt.value shouldBe chain.last
+  }
+
 }

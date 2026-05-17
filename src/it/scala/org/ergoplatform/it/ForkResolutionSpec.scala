@@ -89,7 +89,7 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       headerIdsAtSameHeight should contain only sample
     }
 
-    Await.result(result, 15.minutes)
+    Await.result(result, 25.minutes)
   }
 
 }

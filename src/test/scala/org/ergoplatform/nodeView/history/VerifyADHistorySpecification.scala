@@ -63,6 +63,31 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   }
 
 
+  property("bestFullBlock must stay on the best-header chain when a sibling full block arrives") {
+    var (history, _) = genHistory()
+
+    val commonChain = genChain(2, history)
+    history = applyChain(history, commonChain)
+    val ancestor = commonChain.last
+    history.bestFullBlockOpt.get.header shouldBe ancestor.header
+    history.bestHeaderOpt.get shouldBe ancestor.header
+
+    val a3 = genChain(1, ancestor).tail.head
+    Thread.sleep(2)
+    val b3 = genChain(1, ancestor).tail.head
+    b3.header.id should not be a3.header.id
+
+    history = applyHeaderChain(history, HeaderChain(Seq(a3.header)))
+    history.bestHeaderOpt.get shouldBe a3.header
+    history.bestFullBlockOpt.get.header shouldBe ancestor.header
+
+    history = applyBlock(history, b3)
+
+    history.bestHeaderOpt.get shouldBe a3.header
+    history.bestFullBlockOpt.get.header shouldBe ancestor.header
+    history.isInBestChain(history.bestFullBlockOpt.get.header) shouldBe true
+  }
+
   property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {
     val modifiersCache = new ErgoModifiersCache(Int.MaxValue)
 

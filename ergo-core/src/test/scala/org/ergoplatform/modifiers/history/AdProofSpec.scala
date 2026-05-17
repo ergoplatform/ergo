@@ -89,8 +89,9 @@ class AdProofSpec extends ErgoCorePropertyTest {
     proof.verify(StateChanges(IndexedSeq.empty, operationsInDifferentOrder, IndexedSeq.empty), prevDigest, newDigest) shouldBe 'failure
   }
 
-  //todo: what to do with that?
-  ignore("verify should be failed if there are more proof bytes that needed") {
+  // Proofs with trailing bytes are rejected so that digest-mode peers can't be split off from utxo-mode peers by a
+  // miner that appends garbage and updates header.ADProofsRoot accordingly.
+  property("verify should be failed if there are more proof bytes that needed") {
     val (operations, prevDigest, newDigest, pf) = createEnv()
     val proof = ADProofs(emptyModifierId, SerializedAdProof @@ (pf :+ 't'.toByte))
     proof.verify(StateChanges(IndexedSeq.empty, operations, IndexedSeq.empty), prevDigest, newDigest) shouldBe 'failure

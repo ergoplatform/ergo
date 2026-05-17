@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.core._
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import sigma.interpreter.ProverResult
 
 class DigestStateSpecification extends ErgoCorePropertyTest {
@@ -134,6 +134,26 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
 
       val txs3 = IndexedSeq(txWithDataInputs, headTx, nextTx)
       ds.validateTransactions(txs3, digest2, proof2, emptyStateContext) shouldBe 'failure
+    }
+  }
+
+  // Without the trailing-bytes check in ADProofs.verify a miner can append garbage to a proof and
+  // set header.ADProofsRoot to its hash, splitting digest peers off the utxo peers' chain.
+  property("validateTransactions() - proof with trailing bytes is rejected") {
+    forAll(boxesHolderGen) { bh =>
+      val us = createUtxoState(bh, parameters)
+      val ds = createDigestState(us.version, us.rootDigest)
+      val block = validFullBlock(parentOpt = None, us, bh)
+
+      val origProofs = block.adProofs.get
+      val txs = block.blockTransactions.txs
+      val expectedHash = block.header.stateRoot
+
+      ds.validateTransactions(txs, expectedHash, origProofs, emptyStateContext) shouldBe 'success
+
+      val tamperedBytes = SerializedAdProof @@ (origProofs.proofBytes :+ 't'.toByte)
+      val tamperedProof = ADProofs(origProofs.headerId, tamperedBytes)
+      ds.validateTransactions(txs, expectedHash, tamperedProof, emptyStateContext) shouldBe 'failure
     }
   }
 

@@ -57,7 +57,18 @@ case class ADProofs(headerId: ModifierId,
       verifier.digest match {
         case Some(digest) =>
           if (java.util.Arrays.equals(digest, expectedHash)) {
-            Success(oldValues)
+            // Reject proofs with bytes past the last direction bit consumed by the
+            // verifier — without this, a malicious miner can append garbage to a
+            // canonical proof and have the block accepted by digest-mode peers while
+            // utxo-mode peers (which regenerate the proof) reject it.
+            val consumedBits = ADProofs.directionsIndexField.getInt(verifier)
+            val consumedBytes = (consumedBits + 7) / 8
+            if (consumedBytes == proofBytes.length) {
+              Success(oldValues)
+            } else {
+              val msg = s"ADProof has ${proofBytes.length - consumedBytes} trailing byte(s)"
+              Failure(new IllegalArgumentException(msg))
+            }
           } else {
             val msg = s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"
             Failure(new IllegalArgumentException(msg))
@@ -74,6 +85,16 @@ object ADProofs extends ApiCodecs {
   val modifierTypeId: NetworkObjectTypeId.Value = ProofsTypeId.value
 
   val KL = 32
+
+  // scrypto's BatchAVLVerifier tracks the number of direction bits consumed
+  // from the proof bytes in a `private var directionsIndex: Int`. We need it
+  // in `verify` to detect trailing bytes. Until scrypto exposes a public accessor,
+  // reach it via reflection. Cached as a static field so the JVM only does the lookup once.
+  private[history] val directionsIndexField: java.lang.reflect.Field = {
+    val f = classOf[BatchAVLVerifier[_, _]].getDeclaredField("directionsIndex")
+    f.setAccessible(true)
+    f
+  }
 
   def proofDigest(proofBytes: SerializedAdProof): Digest32 = Algos.hash(proofBytes)
 

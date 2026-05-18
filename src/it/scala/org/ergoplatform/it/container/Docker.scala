@@ -164,7 +164,7 @@ class Docker(
         hostNetworkPort      = extractHostPort(ports, networkPort),
         containerNetworkPort = networkPort,
         containerApiPort     = restApiPort,
-        apiIpAddress         = containerInfo.getNetworkSettings.getIpAddress,
+        apiIpAddress         = attachedNetwork.getIpAddress,
         networkIpAddress     = attachedNetwork.getIpAddress,
         containerId          = containerId
       )

@@ -2,14 +2,14 @@ package org.ergoplatform.it.container
 
 import java.io.{File, FileOutputStream}
 import java.net.InetAddress
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{Properties, UUID}
 import cats.implicits._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.github.dockerjava.api.DockerClient
-import com.github.dockerjava.api.command.{CreateContainerCmd, WaitContainerResultCallback}
+import com.github.dockerjava.api.command.CreateContainerCmd
 import com.github.dockerjava.api.exception.NotFoundException
 import com.github.dockerjava.api.model.{Bind, ContainerNetwork, ExposedPort, HostConfig, Network, PortBinding, Ports, Volume}
 import com.github.dockerjava.api.model.Network.Ipam
@@ -64,9 +64,8 @@ class Docker(
 
   private val client: DockerClient =
     DockerClientImpl.getInstance(configStandart, httpDockerClient)
-  private var nodeRepository                    = Seq.empty[Node]
-  private var apiCheckerOpt: Option[ApiChecker] = None
-  private val isStopped                         = new AtomicBoolean(false)
+  private var nodeRepository = Seq.empty[Node]
+  private val isStopped      = new AtomicBoolean(false)
 
   // This should be called after client is ready but before network created.
   // This allows resource cleanup for the network if we are running out of them
@@ -114,21 +113,6 @@ class Docker(
 
   def waitForStartup(nodes: List[Node]): Future[List[Node]] = {
     Future.sequence(nodes map { _.waitForStartup })
-  }
-
-  def waitContainer(id: String): WaitContainerResultCallback = client.waitContainerCmd(id).start()
-
-  def startOpenApiChecker(checkerInfo: ApiCheckerConfig): Try[ApiChecker] = Try {
-    val ip: String          = ipForNode(999, networkSeed)
-    val containerId: String = buildApiCheckerContainerCmd(checkerInfo, ip).exec().getId
-    connectToNetwork(containerId, ip)
-    client.startContainerCmd(containerId).exec()
-
-    log.info(s"Started ApiChecker: $containerId")
-
-    val checker: ApiChecker = ApiChecker(containerId, checkerInfo)
-    apiCheckerOpt = Some(checker)
-    checker
   }
 
   private def startNode(
@@ -232,30 +216,6 @@ class Docker(
       .withFallback(defaultConfigTemplate(networkType))
     log.info(actualConfig.toString)
     actualConfig
-  }
-
-  private def buildApiCheckerContainerCmd(
-    checkerInfo: ApiCheckerConfig,
-    ip: String
-  ): CreateContainerCmd = {
-    val hostConfig: HostConfig = new HostConfig()
-      .withBinds(
-        new Bind(checkerInfo.specFilePath, new Volume("/opt/ergo/openapi.yaml")),
-        new Bind(checkerInfo.paramsFilePath, new Volume("/opt/ergo/parameters.yaml"))
-      )
-
-    client
-      .createContainerCmd(ApiCheckerImageStable)
-      .withCmd(
-        "openapi.yaml",
-        "--api",
-        s"http://${checkerInfo.apiAddressToCheck}",
-        "--parameters",
-        "parameters.yaml"
-      )
-      .withHostConfig(hostConfig)
-      .withHostName(networkName)
-      .withIpv4Address(ip)
   }
 
   private def buildPeerContainerCmd(
@@ -412,11 +372,6 @@ class Docker(
 
       saveNodeLogs()
 
-      apiCheckerOpt.foreach { checker =>
-        saveLogs(checker.containerId, "openapi-checker")
-        client.removeContainerCmd(checker.containerId).withForce(true).exec()
-      }
-
       nodeRepository foreach { node =>
         client.removeContainerCmd(node.containerId).withForce(true).exec()
       }
@@ -428,25 +383,6 @@ class Docker(
         FileUtils.forceDeleteOnExit(dataVolume)
       }
     }
-  }
-
-  private def saveLogs(containerId: String, tag: String): Unit = {
-    val logDir: Path = Paths.get(System.getProperty("user.dir"), "target", "logs")
-    Files.createDirectories(logDir)
-
-    val fileName: String = s"$tag-$containerId"
-    val logFile: File    = logDir.resolve(s"$fileName.log").toFile
-    log.info(s"Writing logs of $tag-$containerId to ${logFile.getAbsolutePath}")
-
-    val fileStream: FileOutputStream = new FileOutputStream(logFile, false)
-    client
-      .logContainerCmd(containerId)
-      .withTimestamps(true)
-      .withFollowStream(true)
-      .withStdOut(true)
-      .withStdErr(true)
-      .start()
-      .onStart(fileStream)
   }
 
   private def saveNodeLogs(): Unit = {
@@ -525,9 +461,7 @@ class Docker(
 
 object Docker extends IntegrationTestConstants {
 
-  val ErgoImageLatest: String       = "org.ergoplatform/ergo"
-  val ApiCheckerImageLatest: String = "andyceo/openapi-checker"
-  val ApiCheckerImageStable: String = "andyceo/openapi-checker:0.1.0-openapi-core-0.5.0" // not present in docker anymore
+  val ErgoImageLatest: String = "org.ergoplatform/ergo"
 
   val dockerImageLabel          = "ergo-integration-tests"
   val networkNamePrefix: String = "ergo-itest-"

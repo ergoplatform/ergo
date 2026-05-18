@@ -119,11 +119,17 @@ class ErgoApp(args: Args) extends ScorexLogging {
     deliveryTracker
   )
 
+  private val criticalActorsWatcherRef: ActorRef = actorSystem.actorOf(
+    CriticalActorsWatcher.props(Seq(nodeViewHolderRef, readersHolderRef, peerManagerRef)),
+    "criticalActorsWatcher"
+  )
+
   private val messageHandlers: ActorRef => Map[MessageCode, ActorRef] =
     networkControllerRef => {
       val ergoNodeViewSynchronizerRef = ergoNodeViewSynchronizerRefPartial(
         networkControllerRef
       )
+      criticalActorsWatcherRef ! CriticalActorsWatcher.Watch(ergoNodeViewSynchronizerRef)
       var map: Map[MessageCode, ActorRef] = Map(
         InvSpec.messageCode                 -> ergoNodeViewSynchronizerRef,
         RequestModifierSpec.messageCode     -> ergoNodeViewSynchronizerRef,
@@ -164,6 +170,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
       scorexContext,
       messageHandlers
     )
+
+  criticalActorsWatcherRef ! CriticalActorsWatcher.Watch(networkControllerRef)
 
   private val statsCollectorRef: ActorRef = ErgoStatsCollectorRef(
     readersHolderRef,

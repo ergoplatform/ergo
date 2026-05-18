@@ -82,7 +82,10 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def processBetterChain: BlockProcessing = {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), _)
-      if bestFullBlockOpt.nonEmpty && isBetterChain(newBestBlockHeader.id) && isLinkable(fullBlock.header) =>
+      if bestFullBlockOpt.nonEmpty &&
+        isBetterChain(newBestBlockHeader.id) &&
+        isInBestChain(newBestBlockHeader.id) &&
+        isLinkable(fullBlock.header) =>
 
       val prevBest = bestFullBlockOpt.get
 

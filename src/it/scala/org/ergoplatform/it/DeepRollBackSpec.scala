@@ -4,12 +4,13 @@ import java.io.File
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
+import org.scalatest.concurrent.Eventually
 import org.scalatest.freespec.AnyFreeSpec
 import scala.async.Async
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 
-class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
+class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite with Eventually {
 
   val keepVersions = 350
   val chainLength = 50
@@ -114,15 +115,20 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       log.info("isminingB: " + isMiningBOpt)
       isMiningBOpt map (_ shouldBe false)
 
-      // 5. Wait until it switches to the better chain
-      Async.await(minerB.waitForHeight(minerABestHeight))
+      // 5. Wait until minerB converges with minerA's chain at the target height.
+      // We can't rely on waitForHeight alone here — minerB's on-disk chain may already
+      // exceed minerABestHeight (mining continued briefly between the fullHeight capture
+      // and the phase-2 stop), so reaching the height doesn't mean we've adopted
+      // minerA's chain. Wait for chain agreement (same block id at the target height).
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(2.minutes, 1.second)
+      eventually {
+        val a = minerA.headerIdsByHeight(minerABestHeight).futureValue.headOption
+        val b = minerB.headerIdsByHeight(minerABestHeight).futureValue.headOption
+        a shouldBe defined
+        b shouldEqual a
+      }
 
       log.info("Chain switching done")
-
-      val minerABestBlock = Async.await(minerA.headerIdsByHeight(minerABestHeight)).head
-      val minerBBestBlock = Async.await(minerB.headerIdsByHeight(minerABestHeight)).head
-
-      minerBBestBlock shouldEqual minerABestBlock
     }
 
     Await.result(result, 15.minutes)

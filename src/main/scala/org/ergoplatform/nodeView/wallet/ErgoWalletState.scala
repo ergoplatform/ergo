@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.Try
 
@@ -28,7 +28,8 @@ case class ErgoWalletState(
     parameters: Parameters,
     maxInputsToUse: Int,
     error: Option[String] = None,
-    rescanInProgress: Boolean
+    rescanInProgress: Boolean,
+    inputBlockIds: Seq[ModifierId] = Seq.empty
   ) extends ScorexLogging {
 
   /**
@@ -153,7 +154,8 @@ object ErgoWalletState {
         utxoStateReaderOpt = None,
         parameters,
         maxInputsToUse,
-        rescanInProgress = false
+        rescanInProgress = false,
+        inputBlockIds = Seq.empty
       )
     }
   }

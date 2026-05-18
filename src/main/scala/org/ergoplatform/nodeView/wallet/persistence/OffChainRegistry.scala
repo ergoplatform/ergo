@@ -33,10 +33,28 @@ object InputBlockDiff {
   * Holds version-agnostic off-chain data (such as off-chain boxes) in runtime memory.
   * Needed to obtain wallet state in regards with unconfirmed transactions with no reprocessing them on each request.
   *
+  * ==Input Block Transaction Accounting==
+  *
+  * Input blocks are a special kind of off-chain transaction batch that the wallet processes via `scanInputBlock`.
+  * Unlike regular mempool transactions, input blocks are explicitly tracked with
+  * reversible diffs to support rollback without rebuilding the entire offchain state.
+  *
+  * When input block transactions are confirmed on-chain (via `ScanOnChain`), the wallet:
+  *
+  *   - Removes the confirmed transactions from `inputBlockTxs` (see `ErgoWalletActor`)
+  *   - The on-chain scan process naturally updates `onChainBalances` via `updateOnBlock`
+  *   - Off-chain boxes that became on-chain are cleaned from `offChainBoxes`
+  *
+  * The wallet digest (balance) is computed as:
+  *   `sum(offChainBoxes) + sum(onChainBalances)`
+  *
+  * Input block outputs contribute via `offChainBoxes`, while spent inputs are removed from
+  * either `offChainBoxes` (if they were previously off-chain) or `onChainBalances` (if on-chain).
+  *
   * @param height           - latest processed block height
-  * @param offChainBoxes    - boxes from off-chain transactions
+  * @param offChainBoxes    - boxes from off-chain transactions (includes input block outputs)
   * @param onChainBalances  - on-chain balances snapshot (required to calculate off-chain indexes)
-  * @param inputBlockDiffs  - map of input block id to diff, tracking changes for rollback support
+  * @param inputBlockDiffs  - map of input block id to diff, tracking per-block changes for rollback support
   */
 case class OffChainRegistry(height: Int,
                             offChainBoxes: Seq[TrackedBox],

@@ -263,6 +263,15 @@ lazy val ergoCore = (project in file("ergo-core"))
     Test / parallelExecution := false,
   )
 
+lazy val ergoCore_benchmarks = (project in file("ergo-core/benchmarks"))
+  .settings(
+    commonSettings,
+    name := "ergo-core-benchmarks",
+    publishArtifact := false
+  )
+  .dependsOn(ergoCore)
+  .enablePlugins(JmhPlugin)
+
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(

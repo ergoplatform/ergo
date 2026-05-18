@@ -560,7 +560,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-      }.map(BlockSectionsDownloadFilter.filter)
+      }
+      .orElse {
+        // Defensive fallback: if no Older/Equal/Unknown/Fork peers, also try Younger.
+        // A peer's cached status can go stale — e.g. it advertised an older chain at
+        // initial handshake but has since caught up via gossip from other peers, while
+        // we still have it pinned as `Younger`. Without this fallback the node ends up
+        // locked out of block downloads in that case.
+        Option(peersByStatus.getOrElse(Younger, mutable.WrappedArray.empty))
+          .filter(_.nonEmpty)
+      }
+      .map(BlockSectionsDownloadFilter.filter)
   }
 
   /**

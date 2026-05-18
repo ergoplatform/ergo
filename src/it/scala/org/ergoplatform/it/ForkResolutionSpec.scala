@@ -80,10 +80,6 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
         isolatedNodes.foreach(node => docker.stopNode(node.containerId))
         Future.successful(startNodesWithBinds(minerConfig +: onlineMiningNodesConfig))
       }
-      // Wait for each restarted node to actually establish at least one peer connection before
-      // polling for heights. With offlineGeneration=false, nodes that haven't connected yet don't
-      // mine, so the height polling would deadline-out waiting on them.
-      Async.await(Future.traverse(regularNodes)(_.waitForPeers(targetPeersCount = 1)))
       Async.await(Future.traverse(regularNodes)(_.waitForHeight(forkHeight + syncLength)))
       val headers = Async.await(Future.traverse(regularNodes)(_.headerIdsByHeight(forkHeight)))
 

@@ -72,6 +72,7 @@ libraryDependencies ++= Seq(
   "com.github.docker-java" % "docker-java-core" % "3.3.4" % Test,
   "com.github.docker-java" % "docker-java-transport-httpclient5" % "3.3.4" % Test,
 
+  "com.atlassian.oai" % "swagger-request-validator-core" % "2.46.0" % Test,
 )
 
 updateOptions := updateOptions.value.withLatestSnapshots(false)

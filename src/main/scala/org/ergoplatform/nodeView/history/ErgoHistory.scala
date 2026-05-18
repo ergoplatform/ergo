@@ -15,8 +15,10 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
+import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -157,26 +159,68 @@ trait ErgoHistory
                 .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 
               val genesisInvalidated = invalidatedChain.lengthCompare(1) == 0
-              val branchPointHeader = if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
+              val validAncestor: Header =
+                if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
 
-              val validHeadersChain =
-                continuationHeaderChains(branchPointHeader,
-                  h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id))
+              val validFilter: Header => Boolean =
+                h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id)
+
+              // Walk back through the old best chain looking for the lowest ancestor that
+              // has a valid child *not* on the old best chain — that's a real fork point
+              // with an alternative valid continuation. Same-tip walking past the deepest
+              // valid ancestor would otherwise miss this fork when the invalidated block
+              // sits deeper than the branch block of the old best chain.
+              val bestChainMarker = ByteArrayWrapper(FullBlockProcessor.BestChainMarker)
+              def onOldBestFullChain(id: ModifierId): Boolean =
+                historyStorage.getIndex(FullBlockProcessor.chainStatusKey(id))
+                  .map(ByteArrayWrapper.apply)
+                  .contains(bestChainMarker)
+
+              @tailrec
+              def findBranchPoint(current: Header): Option[Header] = {
+                val hasAlternativeForkChild = headerIdsAtHeight(current.height + 1)
+                  .flatMap(typedModifierById[Header])
+                  .exists(h => h.parentId == current.id && validFilter(h) && !onOldBestFullChain(h.id))
+                if (hasAlternativeForkChild) Some(current)
+                else typedModifierById[Header](current.parentId) match {
+                  case Some(parent) if !invalidatedIds.contains(parent.id) => findBranchPoint(parent)
+                  case _ => None
+                }
+              }
+
+              val branchPointHeader: Header =
+                if (genesisInvalidated) validAncestor
+                else findBranchPoint(validAncestor).getOrElse(validAncestor)
+
+              val validHeadersChain: Seq[Header] =
+                continuationHeaderChains(branchPointHeader, validFilter)
                   .maxBy(_.lastOption.flatMap(x => scoreOf(x.id)).getOrElse(BigInt(0)))
 
               val validChain = validHeadersChain.tail.flatMap(getFullBlock)
 
+              // Old-best-chain segment between branchPoint (exclusive) and bestFullBlock —
+              // covers invalidated headers AND valid-but-now-demoted blocks. Resolve full
+              // blocks here, before the validity row is written: once invalidity is
+              // persisted, modifierById filters those modifiers out.
+              val demotedHeaders: Seq[Header] = bestFullBlockOpt.toSeq.flatMap(f =>
+                headerChainBack(
+                  fullBlockHeight + 1,
+                  f.header,
+                  h => h.id == branchPointHeader.id)
+                .headers
+                .drop(1))
+              val demotedFullBlocks: Seq[ErgoFullBlock] = demotedHeaders.flatMap(getFullBlock)
+
               val chainStatusRow = validChain.map(b =>
                 FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
-                invalidatedHeaders.map(h =>
+                demotedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
               val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
-                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
-                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+                this -> ProgressInfo(Some(branchPointHeader.id), demotedFullBlocks, validChain, Seq.empty)
               }
             }
         }

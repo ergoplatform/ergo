@@ -52,41 +52,50 @@ class VerifyNonADHistorySpecification extends ErgoCorePropertyTest {
       h.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)
     }
 
-    var history = genHistory()
-    val initChain = genChain(6, history)
+    // Invalidating any block in the better fork — branch block or not — must
+    // restore the original chain and demote the entire fork from best chain.
+    // We iterate only over indices where the valid altChain prefix stays shorter
+    // than initChain (length 6, stableChain of 3 + altChain index < 6, so index < 3),
+    // keeping the new-best-chain assertion deterministic.
+    (0 until 3).foreach { invalidIdx =>
+      var history = genHistory()
+      val initChain = genChain(6, history)
 
-    val stableChain = initChain.take(3)
-    val altChain = genChain(8, stableChain.last).tail
+      val stableChain = initChain.take(3)
+      val altChain = genChain(8, stableChain.last).tail
 
-    // apply initial initChain (1 to 6)
-    history = applyChain(history, initChain)
+      // apply initial initChain (1 to 6)
+      history = applyChain(history, initChain)
 
-    history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
-    initChain.forall(b => isInBestChain(b, history)) shouldBe true
+      history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
+      initChain.forall(b => isInBestChain(b, history)) shouldBe true
 
-    // apply better initChain forking initial one (1 to 3 (init initChain), 3 to 11 (new initChain))
-    history = applyChain(history, altChain)
+      // apply better initChain forking initial one (1 to 3 (init initChain), 3 to 11 (new initChain))
+      history = applyChain(history, altChain)
 
-    history.bestFullBlockIdOpt.get shouldEqual altChain.last.id
-    // first blocks from init chain are still marked as best chain
-    stableChain.forall(b => isInBestChain(b, history)) shouldBe true
-    // other blocks from init chain are no more in best chain
-    initChain.drop(3).forall(b => !isInBestChain(b, history)) shouldBe true
-    // all blocks from fork are marked as best chain
-    altChain.forall(b => isInBestChain(b, history)) shouldBe true
+      history.bestFullBlockIdOpt.get shouldEqual altChain.last.id
+      // first blocks from init chain are still marked as best chain
+      stableChain.forall(b => isInBestChain(b, history)) shouldBe true
+      // other blocks from init chain are no more in best chain
+      initChain.drop(3).forall(b => !isInBestChain(b, history)) shouldBe true
+      // all blocks from fork are marked as best chain
+      altChain.forall(b => isInBestChain(b, history)) shouldBe true
 
-    val invalidChainHead = altChain.head
+      val invalidChainHead = altChain(invalidIdx)
 
-    // invalidate modifier from fork
-    history.reportModifierIsInvalid(invalidChainHead.blockTransactions,
-      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
+      // invalidate modifier from fork
+      history.reportModifierIsInvalid(invalidChainHead.blockTransactions,
+        ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
 
-    history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
+      withClue(s"invalidating altChain($invalidIdx): ") {
+        history.bestFullBlockIdOpt.get shouldEqual initChain.last.id
 
-    // all blocks from init chain are marked as best chain again
-    initChain.forall(b => isInBestChain(b, history)) shouldBe true
-    // blocks from fork no longer marked as best chain
-    altChain.forall(b => !isInBestChain(b, history)) shouldBe true
+        // all blocks from init chain are marked as best chain again
+        initChain.forall(b => isInBestChain(b, history)) shouldBe true
+        // blocks from fork no longer marked as best chain
+        altChain.forall(b => !isInBestChain(b, history)) shouldBe true
+      }
+    }
   }
 
   property("bootstrap from headers and last full blocks") {

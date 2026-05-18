@@ -9,9 +9,10 @@ import cats.implicits._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.github.dockerjava.api.DockerClient
+import com.github.dockerjava.api.async.ResultCallback
 import com.github.dockerjava.api.command.{CreateContainerCmd, WaitContainerResultCallback}
 import com.github.dockerjava.api.exception.NotFoundException
-import com.github.dockerjava.api.model.{Bind, ContainerNetwork, ExposedPort, HostConfig, Network, PortBinding, Ports, Volume}
+import com.github.dockerjava.api.model.{Bind, ContainerNetwork, ExposedPort, Frame, HostConfig, Network, PortBinding, Ports, Volume}
 import com.github.dockerjava.api.model.Network.Ipam
 import com.google.common.primitives.Ints
 import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
@@ -392,6 +393,10 @@ class Docker(
     stopNode(node.containerId, secondsToWait)
 
   def stopNode(containerId: String, secondsToWait: Int = 5): Unit = {
+    // Save logs BEFORE stopping/removing the container — docker-java refuses log
+    // requests once the container is "dead or marked for removal".
+    Try(saveLogs(containerId, if (tag.isEmpty) containerId else tag))
+      .recover { case NonFatal(e) => log.warn(s"Failed to save logs for $containerId: ${e.getMessage}") }
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.stopContainerCmd(containerId).withTimeout(secondsToWait).exec()
   }
@@ -404,19 +409,26 @@ class Docker(
   override def close(): Unit = {
     if (isStopped.compareAndSet(false, true)) {
       log.info("Stopping containers")
+
+      // Save logs BEFORE stopping — once a container is stopped + marked for removal,
+      // docker-java's logContainerCmd returns 409 Conflict.
+      saveNodeLogs()
+      apiCheckerOpt.foreach { checker =>
+        Try(saveLogs(checker.containerId, "openapi-checker"))
+          .recover { case NonFatal(e) =>
+            log.warn(s"Failed to save openapi-checker logs: ${e.getMessage}")
+          }
+      }
+
       nodeRepository foreach { node =>
         node.close()
         client.stopContainerCmd(node.containerId).withTimeout(0).exec()
       }
       http.close()
 
-      saveNodeLogs()
-
       apiCheckerOpt.foreach { checker =>
-        saveLogs(checker.containerId, "openapi-checker")
         client.removeContainerCmd(checker.containerId).withForce(true).exec()
       }
-
       nodeRepository foreach { node =>
         client.removeContainerCmd(node.containerId).withForce(true).exec()
       }
@@ -439,36 +451,33 @@ class Docker(
     log.info(s"Writing logs of $tag-$containerId to ${logFile.getAbsolutePath}")
 
     val fileStream: FileOutputStream = new FileOutputStream(logFile, false)
-    client
-      .logContainerCmd(containerId)
-      .withTimestamps(true)
-      .withFollowStream(true)
-      .withStdOut(true)
-      .withStdErr(true)
-      .start()
-      .onStart(fileStream)
-  }
-
-  private def saveNodeLogs(): Unit = {
-    val logDir = Paths.get(System.getProperty("user.dir"), "target", "logs")
-    Files.createDirectories(logDir)
-    nodeRepository.foreach { node =>
-      import node.nodeInfo.containerId
-
-      val fileName = if (tag.isEmpty) containerId else s"$tag-$containerId"
-      val logFile  = logDir.resolve(s"$fileName.log").toFile
-      log.info(s"Writing logs of $containerId to ${logFile.getAbsolutePath}")
-
-      val fileStream = new FileOutputStream(logFile, false)
+    try {
       client
         .logContainerCmd(containerId)
         .withTimestamps(true)
-        .withFollowStream(true)
+        // false = grab existing log content and return; required for stopped containers
+        // and avoids racing the subsequent removeContainerCmd.
+        .withFollowStream(false)
         .withStdOut(true)
         .withStdErr(true)
-        .start()
-        .onStart(fileStream)
+        .exec(new ResultCallback.Adapter[Frame]() {
+          override def onNext(frame: Frame): Unit = {
+            try fileStream.write(frame.getPayload)
+            catch { case NonFatal(_) => () }
+          }
+        })
+        .awaitCompletion()
+    } finally {
+      fileStream.close()
+    }
+  }
 
+  private def saveNodeLogs(): Unit = {
+    nodeRepository.foreach { node =>
+      Try(saveLogs(node.nodeInfo.containerId, if (tag.isEmpty) node.nodeInfo.containerId else tag))
+        .recover { case NonFatal(e) =>
+          log.warn(s"Failed to save logs for ${node.nodeInfo.containerId}: ${e.getMessage}")
+        }
     }
   }
 

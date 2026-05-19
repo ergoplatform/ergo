@@ -5510,6 +5510,14 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
+      description: |
+        Returns the short Pay-to-Script-Hash address (network prefix + 192-bit
+        script hash) for the given source. Note that boxes sent to this address
+        are locked under the full P2SH contract template, not the short hash
+        itself, so block explorers and tools that re-encode the output's
+        ErgoTree (e.g. /utils/ergoTreeToAddress) will display a different,
+        longer address. Both refer to the same protection: spending the box
+        still requires the original script plus a valid proof.
       operationId: scriptP2SHAddress
       tags:
         - script
@@ -5521,7 +5529,7 @@ paths:
               $ref: '#/components/schemas/CompileRequest'
       responses:
         '200':
-          description: P2SH address derived from source
+          description: Short P2SH address (network prefix + 192-bit script hash) derived from source
           content:
             application/json:
               schema:

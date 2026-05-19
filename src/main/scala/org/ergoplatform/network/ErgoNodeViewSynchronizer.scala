@@ -544,7 +544,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    val nonFiltered: Iterable[ConnectedPeer] = syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
+    val nonFiltered: Iterable[ConnectedPeer] =
+      Option(syncTracker.peersByStatus.getOrElse(Older, mutable.WrappedArray.empty))
+        .filter(_.nonEmpty)
+        .orElse {
+          // Defensive fallback: cached peer status can go stale — a peer flagged
+          // `Younger` at initial handshake may have since caught up via gossip and be
+          // the only source of a header we need (e.g. when chasing back a missing
+          // parent after `ParentHeaderNotFoundError`). Falling straight through to
+          // `callingPeer` alone isn't enough because that peer may not have the
+          // specific header we're looking for.
+          Option(syncTracker.peersByStatus.getOrElse(Younger, mutable.WrappedArray.empty))
+            .filter(_.nonEmpty)
+        }
+        .getOrElse(Array(callingPeer))
     HeadersDownloadFilter.filter(nonFiltered)
   }
 

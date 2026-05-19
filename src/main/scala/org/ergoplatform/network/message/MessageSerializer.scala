@@ -2,6 +2,7 @@ package org.ergoplatform.network.message
 
 import java.nio.ByteOrder
 import akka.util.ByteString
+import org.ergoplatform.ErgoException
 import scorex.core.network.{ConnectedPeer, MaliciousBehaviorException}
 import scorex.crypto.hash.Blake2b256
 import scala.util.Try
@@ -59,7 +60,7 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
           )
         }
         val spec = specsMap
-          .getOrElse(msgCode, throw new Error(s"No message handler found for $msgCode"))
+          .getOrElse(msgCode, throw new ErgoException(ErgoException.NetworkError, s"No message handler found for $msgCode"))
         val msgData = if (length > 0) {
           val checksum = it.getBytes(ChecksumLength)
           val data     = it.getBytes(length)

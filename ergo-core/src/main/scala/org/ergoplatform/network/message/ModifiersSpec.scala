@@ -1,5 +1,6 @@
 package org.ergoplatform.network.message
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.modifiers.{ErgoNodeViewModifier, NetworkObjectTypeId}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
@@ -57,7 +58,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
       val objBytesCnt = r.getUInt().toIntExact
       val newMsgSize = msgSize + ErgoNodeViewModifier.ModifierIdSize + objBytesCnt
       if (newMsgSize > maxMsgSizeWithReserve) { // buffer for safety
-        throw new Exception("Too big message with modifiers, size: " + maxMsgSizeWithReserve)
+        throw new ErgoException(ErgoException.NetworkError, "Too big message with modifiers, size: " + maxMsgSizeWithReserve)
       }
       val obj = r.getBytes(objBytesCnt)
       resMap += (id -> obj)

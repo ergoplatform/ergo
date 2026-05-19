@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -23,7 +24,7 @@ object HistoryModifierSerializer extends ErgoSerializer[BlockSection] {
         w.put(Extension.modifierTypeId)
         ExtensionSerializer.serialize(m, w)
       case m =>
-        throw new Error(s"Serialization for unknown modifier: $m")
+        throw new ErgoException(ErgoException.UnknownTypeError, s"Serialization for unknown modifier: $m")
     }
   }
 
@@ -38,7 +39,7 @@ object HistoryModifierSerializer extends ErgoSerializer[BlockSection] {
       case Extension.`modifierTypeId` =>
         ExtensionSerializer.parse(r)
       case m =>
-        throw new Error(s"Deserialization for unknown type byte: $m")
+        throw new ErgoException(ErgoException.UnknownTypeError, s"Deserialization for unknown type byte: $m")
     }
   }
 }

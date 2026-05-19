@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, ErgoException}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.modifiers.history.header.Header
@@ -146,11 +146,11 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
 
             if (!store.get(org.ergoplatform.core.idToBytes(fb.id))
                   .exists(w => java.util.Arrays.equals(w, fb.header.stateRoot))) {
-              throw new Exception("Storage kept roothash is not equal to the declared one")
+              throw new ErgoException(ErgoException.StateError, "Storage kept roothash is not equal to the declared one")
             }
 
             if (!java.util.Arrays.equals(fb.header.stateRoot, persistentProver.digest)) {
-              throw new Exception("Calculated stateRoot is not equal to the declared one")
+              throw new ErgoException(ErgoException.StateError, "Calculated stateRoot is not equal to the declared one")
             }
 
             var proofHash = ADProofs.proofDigest(proofBytes)
@@ -186,10 +186,10 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
                   proofHash = ADProofs.proofDigest(proofBytes)
 
                   if(!java.util.Arrays.equals(fb.header.ADProofsRoot, proofHash)) {
-                    throw new Exception("Regenerated proofHash is not equal to the declared one")
+                    throw new ErgoException(ErgoException.StateError, "Regenerated proofHash is not equal to the declared one")
                   }
                 case Failure(e) =>
-                  throw new Exception("Can't generate state changes on proof regeneration ", e)
+                  throw new ErgoException(ErgoException.StateError, "Can't generate state changes on proof regeneration ", Some(e))
               }
             }
 

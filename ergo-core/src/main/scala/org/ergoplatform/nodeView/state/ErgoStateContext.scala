@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -162,7 +163,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
 
       if ((height >= finishingHeight && height < finishingHeight + votingEpochLength && !votingSettings.softForkApproved(votesCollected)) ||
         (height >= finishingHeight && height < afterActivationHeight && votingSettings.softForkApproved(votesCollected))) {
-        throw new Exception(s"Voting for fork is prohibited at height $height")
+        throw new ErgoException(ErgoException.ValidationError, s"Voting for fork is prohibited at height $height")
       }
     }
   }

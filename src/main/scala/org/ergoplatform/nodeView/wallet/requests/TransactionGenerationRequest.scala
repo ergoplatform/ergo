@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe._
-import org.ergoplatform.ErgoAddress
+import org.ergoplatform.{ErgoAddress, ErgoException}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
@@ -16,7 +16,7 @@ class TransactionRequestEncoder(ergoSettings: ErgoSettings) extends Encoder[Tran
     case pr: PaymentRequest => new PaymentRequestEncoder(ergoSettings)(pr)
     case ar: AssetIssueRequest => new AssetIssueRequestEncoder(ergoSettings)(ar)
     case br: BurnTokensRequest => new BurnTokensRequestEncoder()(br)
-    case other => throw new Exception(s"Unknown TransactionRequest type: $other")
+    case other => throw new ErgoException(ErgoException.UnknownTypeError, s"Unknown TransactionRequest type: $other")
   }
 
 }

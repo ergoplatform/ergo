@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history.extra
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 
@@ -29,7 +30,7 @@ object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
           w.put(IndexedToken.extraIndexTypeId)
           IndexedTokenSerializer.serialize(m, w)
         case m =>
-          throw new Error(s"Serialization for unknown index: $m")
+          throw new ErgoException(ErgoException.UnknownTypeError, s"Serialization for unknown index: $m")
       }
     }
 
@@ -50,7 +51,7 @@ object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
         case IndexedToken.`extraIndexTypeId` =>
           IndexedTokenSerializer.parse(r)
         case m =>
-          throw new Error(s"Deserialization for unknown type byte: $m")
+          throw new ErgoException(ErgoException.UnknownTypeError, s"Deserialization for unknown type byte: $m")
       }
     }
   }

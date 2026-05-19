@@ -299,7 +299,9 @@ trait ErgoWalletSupport extends ScorexLogging {
           //inputs are to be filtered by the wallet filter, which is removing boxes spent offchain
           state.getBoxesToSpend.filter(box => state.walletFilter(box))
         case None =>
-          throw new Exception(s"Cannot generateUnsignedTransaction($requests, $inputsRaw): wallet is locked")
+          throw new ErgoException(
+            ErgoException.WalletError,
+            s"Cannot generateUnsignedTransaction($requests, $inputsRaw): wallet is locked")
       }
     }
 

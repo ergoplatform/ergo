@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.mining.groupElemFromBytes
-import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
+import org.ergoplatform.{ErgoAddressEncoder, ErgoException, P2PKAddress}
 import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 
@@ -22,8 +22,12 @@ case class ErgoSettings(directory: String,
 
   val miningPubKey: Option[ProveDlog] = nodeSettings.miningPubKeyHex
     .flatMap { str =>
-      val keyBytes = Base16.decode(str)
-        .getOrElse(throw new Error(s"Failed to parse `miningPubKeyHex = ${nodeSettings.miningPubKeyHex}`"))
+      val keyBytes = Base16.decode(str).fold(
+        e => throw new ErgoException(
+          ErgoException.ConfigError,
+          s"Failed to parse `miningPubKeyHex = ${nodeSettings.miningPubKeyHex}`",
+          Some(e)),
+        identity)
       Try(ProveDlog(groupElemFromBytes(keyBytes)))
         .orElse(addressEncoder.fromString(str).collect { case p2pk: P2PKAddress => p2pk.pubkey })
         .toOption

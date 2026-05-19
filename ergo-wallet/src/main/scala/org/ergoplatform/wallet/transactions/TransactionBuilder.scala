@@ -230,7 +230,8 @@ object TransactionBuilder {
     val tokensOutWithBurned = AssetUtils.mergeAssets(tokensOutNoMinted.toMap, burnTokens)
 
     val selection = boxSelector.select(inputs.toIterator, outputTotal, tokensOutWithBurned) match {
-      case Left(err) => throw new IllegalArgumentException(
+      case Left(err) => throw new ErgoException(
+        ErgoException.ValidationError,
         s"failed to calculate change for outputTotal: $outputTotal, \ntokens: $tokensOut, \nburnTokens: $burnTokens, \ninputs: $inputs, \nreason: $err")
       case Right(v) => v
     }

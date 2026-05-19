@@ -7,6 +7,7 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.mining.emission.EmissionRules
 import scorex.crypto.authds.ADDigest
+import org.ergoplatform.ErgoException
 import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
@@ -37,14 +38,18 @@ case class ChainSettings(protocolVersion: Byte,
   val isMainnet: Boolean = addressPrefix == ErgoAddressEncoder.MainnetNetworkPrefix
 
   val genesisStateDigest: ADDigest = Base16.decode(genesisStateDigestHex)
-    .fold(_ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex"), ADDigest @@ _)
+    .fold(
+      e => throw new ErgoException(ErgoException.ConfigError, s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex", Some(e)),
+      ADDigest @@ _)
 
   val emissionRules: EmissionRules = new EmissionRules(monetary)
 
   val addressEncoder = new ErgoAddressEncoder(addressPrefix)
 
   val initialDifficulty: BigInt = Base16.decode(initialDifficultyHex)
-    .fold(_ => throw new Error(s"Failed to parse initialDifficultyHex = $initialDifficultyHex"), BigInt(_))
+    .fold(
+      e => throw new ErgoException(ErgoException.ConfigError, s"Failed to parse initialDifficultyHex = $initialDifficultyHex", Some(e)),
+      BigInt(_))
 
   /**
     * Initial (genesis block) difficulty encoded as nbits
@@ -52,6 +57,8 @@ case class ChainSettings(protocolVersion: Byte,
   val initialNBits: Long = DifficultySerializer.encodeCompactBits(initialDifficulty)
 
   val initialDifficultyVersion2: BigInt = Base16.decode(voting.version2ActivationDifficultyHex)
-    .fold(_ => throw new Error(s"Failed to parse initialDifficultyVersion2 = $initialDifficultyHex"), BigInt(_))
+    .fold(
+      e => throw new ErgoException(ErgoException.ConfigError, s"Failed to parse initialDifficultyVersion2 = $initialDifficultyHex", Some(e)),
+      BigInt(_))
 
 }

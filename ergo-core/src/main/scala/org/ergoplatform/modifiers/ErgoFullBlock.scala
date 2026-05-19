@@ -4,6 +4,7 @@ import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, HCursor, Json}
+import org.ergoplatform.ErgoException
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -41,7 +42,7 @@ case class ErgoFullBlock(header: Header,
   override lazy val size: Int = header.size + blockTransactions.size + adProofs.map(_.size).getOrElse(0)
 
   override def serializer: ErgoSerializer[ErgoFullBlock] =
-    throw new Error("Serialization for ErgoFullBlock is not (and will be not) implemented")
+    throw new ErgoException(ErgoException.UnknownTypeError, "Serialization for ErgoFullBlock is not (and will be not) implemented")
 
   def height: Int = header.height
 

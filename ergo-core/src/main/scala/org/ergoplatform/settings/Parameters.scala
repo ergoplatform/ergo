@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import com.google.common.primitives.Ints
 import io.circe.Encoder
 import io.circe.syntax._
+import org.ergoplatform.ErgoException
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
@@ -398,17 +399,17 @@ object Parameters {
     */
   def matchParameters(p1: Parameters, p2: Parameters): Try[Unit] = Try {
     if (p1.height != p2.height) {
-      throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
+      throw new ErgoException(ErgoException.ValidationError, s"Different height in parameters, p1 = $p1, p2 = $p2")
     }
     if (p1.parametersTable.size != p2.parametersTable.size) {
-      throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
+      throw new ErgoException(ErgoException.ValidationError, s"Parameters differ in size, p1 = $p1, p2 = $p2")
     }
     if (p1.proposedUpdate != p2.proposedUpdate) {
-      throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
+      throw new ErgoException(ErgoException.ValidationError, s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
     }
     p1.parametersTable.foreach { case (k, v) =>
       val v2 = p2.parametersTable(k)
-      if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+      if (v2 != v) throw new ErgoException(ErgoException.ValidationError, s"Calculated and received parameters differ in parameter $k ($v != $v2)")
     }
   }
 
@@ -423,17 +424,17 @@ object Parameters {
     } else {
       Try {
         if (p1.height != p2.height) {
-          throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
+          throw new ErgoException(ErgoException.ValidationError, s"Different height in parameters, p1 = $p1, p2 = $p2")
         }
         if (!(p1.parametersTable.size <= p2.parametersTable.size)) { // the only difference from matchParameters
-          throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
+          throw new ErgoException(ErgoException.ValidationError, s"Parameters differ in size, p1 = $p1, p2 = $p2")
         }
         if (p1.proposedUpdate != p2.proposedUpdate) {
-          throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
+          throw new ErgoException(ErgoException.ValidationError, s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
         }
         p1.parametersTable.foreach { case (k, v) =>
           val v2 = p2.parametersTable(k)
-          if (v2 != v) throw new Exception(s"Calculated and received parameters differ in parameter $k ($v != $v2)")
+          if (v2 != v) throw new ErgoException(ErgoException.ValidationError, s"Calculated and received parameters differ in parameter $k ($v != $v2)")
         }
       }
     }

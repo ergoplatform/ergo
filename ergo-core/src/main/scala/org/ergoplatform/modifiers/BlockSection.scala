@@ -1,6 +1,7 @@
 package org.ergoplatform.modifiers
 
 import io.circe.Encoder
+import org.ergoplatform.ErgoException
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
@@ -23,7 +24,7 @@ object BlockSection {
     case bt: BlockTransactions => BlockTransactions.jsonEncoder(bt)
     case adp: ADProofs => ADProofs.jsonEncoder(adp)
     case ext: Extension => Extension.jsonEncoder(ext)
-    case other => throw new Exception(s"Unknown block section type: $other")
+    case other => throw new ErgoException(ErgoException.UnknownTypeError, s"Unknown block section type: $other")
   }
 
   /** Immutable empty array can be shared to avoid allocations. */

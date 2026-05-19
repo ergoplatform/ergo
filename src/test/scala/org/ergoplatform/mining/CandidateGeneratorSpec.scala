@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.NetworkType.DevNet60
+import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
@@ -41,6 +41,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
+  private def publicImageFromString(value: String): ProveDlog =
+    DLogProverInput(BigIntegers.fromUnsignedByteArray(value.getBytes())).publicImage
+
   val defaultSettings: ErgoSettings = {
     val empty = ErgoSettingsReader.read()
     val nodeSettings = empty.nodeSettings.copy(
@@ -54,6 +57,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
+  private val defaultSettings50 = defaultSettings.copy(networkType = DevNet, directory = defaultSettings.directory + "50")
   private val defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
 
   it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
@@ -170,6 +174,98 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "not reuse cached candidate for a different miner public key" in new TestKit(
+    ActorSystem()
+  ) {
+    val testProbe = new TestProbe(system)
+
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings
+      )
+
+    expectNoMessage(1.second)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        candidate.externalVersion.pk shouldBe defaultMinerPk
+    }
+
+    val customMinerPk = publicImageFromString("custom miner public key")
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, Some(customMinerPk)),
+      testProbe.ref
+    )
+
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        candidate.externalVersion.pk shouldBe customMinerPk
+        candidate.candidateBlock.transactions.last.outputs.last.propositionBytes shouldBe
+          ErgoTreePredef.rewardOutputScript(
+            emission.settings.minerRewardDelay,
+            customMinerPk
+          ).bytes
+    }
+
+    system.terminate()
+  }
+
+  it should "use custom candidate public key when external Autolykos v2 solution omits pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings60)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings60
+      )
+
+    val customMinerPk = publicImageFromString("custom autolykos v2 miner")
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, Some(customMinerPk)),
+      testProbe.ref
+    )
+
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        candidate.externalVersion.pk shouldBe customMinerPk
+        val block = defaultSettings60.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+        val solutionWithoutPk = block.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+
+        candidateGenerator.tell(solutionWithoutPk, testProbe.ref)
+        testProbe.fishForMessage(blockValidationDelay) {
+          case StatusReply.Success(()) =>
+            testProbe.expectMsgPF(candidateGenDelay) {
+              case FullBlockApplied(header) if header.id != block.header.parentId =>
+                header.powSolution.pk shouldBe customMinerPk.value
+            }
+            true
+          case FullBlockApplied(header) if header.id != block.header.parentId =>
+            header.powSolution.pk shouldBe customMinerPk.value
+            testProbe.expectMsg(StatusReply.Success(()))
+            true
+        }
+    }
+
+    system.terminate()
+  }
+
   it should "regenerate candidate periodically" in new TestKit(
     ActorSystem()
   ) {
@@ -221,8 +317,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // build new transaction that uses miner's reward as input
-    val prop: ProveDlog =
-      DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
+    val prop: ProveDlog = publicImageFromString("test")
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
@@ -311,8 +406,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // build new transaction that uses miner's reward as input
-    val prop: ProveDlog =
-      DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
+    val prop: ProveDlog = publicImageFromString("test")
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
@@ -417,8 +511,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // build new transaction that uses miner's reward as input
-    val prop: ProveDlog =
-      DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
+    val prop: ProveDlog = publicImageFromString("test")
     val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
     val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
@@ -481,7 +574,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   ) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings50)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -489,7 +582,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        defaultSettings50
       )
 
     val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
@@ -501,7 +594,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val block = defaultSettings50.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         // let's pretend we are mining at least a bit so it is realistic
@@ -557,7 +650,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val block = defaultSettings50.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         testProbe.expectNoMessage(200.millis)

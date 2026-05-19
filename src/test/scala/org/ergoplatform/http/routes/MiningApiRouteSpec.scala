@@ -8,12 +8,16 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.MiningApiRoute
 import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ErgoCoreGenerators.genECPoint
 import org.ergoplatform.{ErgoTreePredef, Pay2SAddress}
+import org.bouncycastle.util.BigIntegers
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.util.encode.Base16
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.util.Try
 
@@ -38,6 +42,44 @@ class MiningApiRouteSpec
     Get(prefix + "/candidate") ~> route ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[Json]) shouldBe 'success
+    }
+  }
+
+  it should "return requested candidate with a custom miner public key" in {
+    val customPk = DLogProverInput(
+      BigIntegers.fromUnsignedByteArray("custom route miner".getBytes())
+    ).publicImage
+    val customPkHex = Base16.encode(customPk.pkBytes)
+    val request = Json.obj(
+      "txs" -> Seq.empty[ErgoTransaction].asJson,
+      "pk" -> customPkHex.asJson
+    )
+
+    Post(prefix + "/candidateWithTxsAndPk", request) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("pk").as[String] shouldEqual Right(customPkHex)
+    }
+  }
+
+  it should "reject candidate requests with an invalid custom miner public key" in {
+    val request = Json.obj(
+      "txs" -> Seq.empty[ErgoTransaction].asJson,
+      "pk" -> "not-a-public-key".asJson
+    )
+
+    Post(prefix + "/candidateWithTxsAndPk", request) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject candidate requests with malformed custom miner public key bytes" in {
+    val request = Json.obj(
+      "txs" -> Seq.empty[ErgoTransaction].asJson,
+      "pk" -> "00".asJson
+    )
+
+    Post(prefix + "/candidateWithTxsAndPk", request) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

@@ -26,8 +26,18 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
       val b = pow.getB(h.nBits)
       val hbs = Ints.toByteArray(h.height)
       val N = pow.calcN(h)
-      val newHeader = pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000)
-        .map(s => h.copy(powSolution = s)).get
+
+      def findHeader(message: Array[Byte], expected: Header => Boolean): Header = {
+        (0L until 100000L by 1000L).iterator
+          .flatMap { startNonce =>
+            pow.checkNonces(ver, hbs, message, sk, x, b, N, startNonce, startNonce + 1000)
+              .map(s => h.copy(powSolution = s))
+          }
+          .find(expected)
+          .getOrElse(fail("Unable to find a PoW solution matching test expectation"))
+      }
+
+      val newHeader = findHeader(msg, pow.validate(_).isSuccess)
       pow.validate(newHeader) shouldBe 'success
 
       if(ver > Header.InitialVersion) {
@@ -35,8 +45,8 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
         require(HeaderSerializer.bytesWithoutPow(h).last == 0)
         val msg2 = Blake2b256(HeaderSerializer.bytesWithoutPow(h).dropRight(1))
 
-        val newHeader2 = pow.checkNonces(ver, hbs, msg2, sk, x, b, N, 0, 1000)
-          .map(s => h.copy(powSolution = s)).get
+        // A solution mined against the legacy message can still meet the current target by chance.
+        val newHeader2 = findHeader(msg2, pow.validate(_).isFailure)
         pow.validate(newHeader2) shouldBe 'failure
       }
     }

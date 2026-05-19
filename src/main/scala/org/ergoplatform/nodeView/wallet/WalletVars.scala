@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -82,6 +82,20 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
         this
     }
   }
+
+  /**
+    * Add a non-HD primitive secret to the prover. Mirrors [[withExtendedKey]]
+    * but skips updating the cached HD pubkey list, since imported keys do not
+    * participate in HD derivation.
+    */
+  def withImportedKey(secret: DlogSecretKey): WalletVars =
+    proverOpt match {
+      case Some(prover) =>
+        this.copy(proverOpt = Some(prover.withNewImportedSecret(secret)))
+      case None =>
+        log.warn("Trying to add imported secret, but prover is not initialized")
+        this
+    }
 
   /**
     * Updates parameters of the prover

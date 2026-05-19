@@ -79,6 +79,12 @@ trait ErgoWalletReader extends NodeViewComponent {
   def getPrivateKeyFromPath(path: DerivationPath): Future[Try[DLogProverInput]] =
     (walletActor ? GetPrivateKeyFromPath(path)).mapTo[Try[DLogProverInput]]
 
+  def importPrivateKeyWif(wif: String): Future[Try[P2PKAddress]] =
+    (walletActor ? ImportPrivateKeyWif(wif)).mapTo[Try[P2PKAddress]]
+
+  def exportPrivateKeyWif(p2pk: P2PKAddress): Future[Try[String]] =
+    (walletActor ? ExportPrivateKeyWif(p2pk)).mapTo[Try[String]]
+
   def walletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean): Future[Seq[WalletBox]] =
     (walletActor ? GetWalletBoxes(unspentOnly, considerUnconfirmed)).mapTo[Seq[WalletBox]]
 

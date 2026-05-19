@@ -18,15 +18,17 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
-import org.ergoplatform.wallet.secrets.JsonSecretStorage
+import org.ergoplatform.wallet.secrets.{ImportedSecretsStorage, JsonSecretStorage, Wif}
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.ModifierId
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigma.Extensions.CollBytesOps
-import sigma.data.SigmaBoolean
+import sigma.crypto.{BigIntegers, CryptoConstants}
+import sigma.data.{ProveDlog, SigmaBoolean}
 
 import java.io.FileNotFoundException
+import java.nio.file.Files
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
@@ -180,6 +182,18 @@ trait ErgoWalletService {
   def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)]
 
   /**
+    * Decode a WIF-encoded secp256k1 private key and add it to the wallet as a
+    * non-HD (imported) signing key. Requires the wallet to be unlocked.
+    */
+  def importPrivateKeyWif(state: ErgoWalletState, wif: String): Try[(P2PKAddress, ErgoWalletState)]
+
+  /**
+    * Look up the secret for a P2PK address in either the HD set or the imported
+    * set, and return it WIF-encoded (Ergo mainnet/testnet version byte).
+    */
+  def exportPrivateKeyWif(state: ErgoWalletState, p2pk: P2PKAddress): Try[String]
+
+  /**
     * Get unconfirmed transactions from mempool that are associated with given scan id
     * @param state current wallet state
     * @param scanId to get transactions for
@@ -291,10 +305,30 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
           },
           secretStorage => {
             log.info("Wallet loaded successfully and locked")
-            state.copy(secretStorageOpt = Some(secretStorage))
+            state.copy(
+              secretStorageOpt = Some(secretStorage),
+              importedSecretsOpt = Some(importedStorageFor(secretStorage))
+            )
           }
         )
     }
+  }
+
+  private def importedStorageFor(secretStorage: JsonSecretStorage): ImportedSecretsStorage = {
+    // secretStorage.secretFile is a java.io.File from the SDK; bridge to NIO at this boundary only.
+    val parent = secretStorage.secretFile.toPath.toAbsolutePath.getParent.toString
+    new ImportedSecretsStorage(ImportedSecretsStorage.pathAt(parent))
+  }
+
+  /**
+    * Delete any imported-keys file that may be left over in the secret directory
+    * from a previous wallet. Used by init/restore so a fresh master seed never
+    * inherits encrypted records it can no longer decrypt.
+    */
+  private def freshImportedStorage(secretStorage: JsonSecretStorage): ImportedSecretsStorage = {
+    val storage = importedStorageFor(secretStorage)
+    Files.deleteIfExists(storage.path)
+    storage
   }
 
   override def initWallet(state: ErgoWalletState,
@@ -317,7 +351,11 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
             // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
             recreateRegistry(state, settings).flatMap { stateV1 =>
               recreateStorage(stateV1, settings).map { stateV2 =>
-                mnemonic -> stateV2.copy(secretStorageOpt = Some(newSecretStorage), walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings))
+                mnemonic -> stateV2.copy(
+                  secretStorageOpt = Some(newSecretStorage),
+                  importedSecretsOpt = Some(freshImportedStorage(newSecretStorage)),
+                  walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings)
+                )
               }
             }
           }
@@ -341,7 +379,11 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
           // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
           recreateRegistry(state, settings).flatMap { stateV1 =>
             recreateStorage(stateV1, settings).map { stateV2 =>
-              stateV2.copy(secretStorageOpt = Some(secretStorage), walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings))
+              stateV2.copy(
+                secretStorageOpt = Some(secretStorage),
+                importedSecretsOpt = Some(freshImportedStorage(secretStorage)),
+                walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings)
+              )
             }
           }
         }
@@ -373,6 +415,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
   override def lockWallet(state: ErgoWalletState): ErgoWalletState = {
     state.secretStorageOpt.foreach(_.lock())
+    state.importedSecretsOpt.foreach(_.lock())
     state.copy(walletVars = state.walletVars.resetProver())
   }
 
@@ -583,6 +626,49 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       case None =>
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
     }
+
+  override def importPrivateKeyWif(state: ErgoWalletState, wif: String): Try[(P2PKAddress, ErgoWalletState)] =
+    state.secretStorageOpt match {
+      case Some(secretStorage) if !secretStorage.isLocked =>
+        Wif.decode(wif).flatMap(addImportedSecret(state, _))
+      case Some(_) =>
+        Failure(new Exception("Unable to import key, wallet is locked"))
+      case None =>
+        Failure(new Exception("Unable to import key, wallet is not initialized"))
+    }
+
+  override def exportPrivateKeyWif(state: ErgoWalletState, p2pk: P2PKAddress): Try[String] = {
+    val mainnet = ergoSettings.chainSettings.isMainnet
+    val targetPk = p2pk.pubkey.value
+
+    // Try HD first: walletVars.trackedPubKeys covers HD-derived keys with real paths.
+    state.walletVars.trackedPubKeys.find { pk =>
+      pk.key.value == targetPk && !ImportedSecretsStorage.isImportedPath(pk.path)
+    } match {
+      case Some(hdPk) =>
+        getPrivateKeyFromPath(state, hdPk.path.toPrivateBranch).map { sk =>
+          Wif.encode(BigIntegers.asUnsignedByteArray(Wif.SecretLength, sk.w), mainnet)
+        }
+      case None =>
+        state.importedSecretsOpt match {
+          case Some(iss) if !iss.isLocked =>
+            val pubKeys = iss.publicKeys
+            val secrets = iss.secrets.getOrElse(IndexedSeq.empty)
+            val idx = pubKeys.indexWhere { encoded =>
+              Try(
+                ProveDlog(CryptoConstants.dlogGroup.ctx.decodePoint(encoded)).value == targetPk
+              ).getOrElse(false)
+            }
+            if (idx >= 0 && idx < secrets.length) {
+              Success(Wif.encode(secrets(idx), mainnet))
+            } else {
+              Failure(new Exception("Address not found in wallet database."))
+            }
+          case _ =>
+            Failure(new Exception("Address not found in wallet database."))
+        }
+    }
+  }
 
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
       WalletScanLogic.scanBlockTransactions(

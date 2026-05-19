@@ -215,6 +215,10 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
+      case ImportPrivateKeyWif(_) => sender() ! Success(WalletActorStub.address)
+
+      case ExportPrivateKeyWif(_) => sender() ! Success(WalletActorStub.exampleWif)
+
       case DeriveNextKey => sender() !
         DeriveNextKeyResult(Success((WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey)))
 
@@ -278,6 +282,9 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     val path = DerivationPath(List(0, 1, 2), publicBranch = false)
     val secretKey = ExtendedSecretKey.deriveMasterKey(Mnemonic.toSeed(SecretString.create(mnemonic)), usePre1627KeyDerivation = false).derive(path)
     val address = P2PKAddress(proveDlogGen.sample.get)
+    val exampleWif: String = org.ergoplatform.wallet.secrets.Wif.encode(
+      Array.fill(32)(7: Byte), mainnet = settings.chainSettings.isMainnet
+    )
 
     val walletBoxN_N: WalletBox = WalletBox(
       TrackedBox(

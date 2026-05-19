@@ -149,6 +149,18 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetPrivateKeyFromPath(path: DerivationPath) =>
       sender() ! ergoWalletService.getPrivateKeyFromPath(state, path)
 
+    case ImportPrivateKeyWif(wif) =>
+      ergoWalletService.importPrivateKeyWif(state, wif) match {
+        case Success((address, newState)) =>
+          context.become(loadedWallet(newState))
+          sender() ! Success(address)
+        case f @ Failure(_) =>
+          sender() ! f
+      }
+
+    case ExportPrivateKeyWif(p2pk) =>
+      sender() ! ergoWalletService.exportPrivateKeyWif(state, p2pk)
+
     case GetMiningPubKey =>
       state.walletVars.trackedPubKeys.headOption match {
         case Some(pk) =>

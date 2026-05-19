@@ -39,11 +39,10 @@ object InputBlockDiff {
   * Unlike regular mempool transactions, input blocks are explicitly tracked with
   * reversible diffs to support rollback without rebuilding the entire offchain state.
   *
-  * When input block transactions are confirmed on-chain (via `ScanOnChain`), the wallet:
-  *
-  *   - Removes the confirmed transactions from `inputBlockTxs` (see `ErgoWalletActor`)
-  *   - The on-chain scan process naturally updates `onChainBalances` via `updateOnBlock`
-  *   - Off-chain boxes that became on-chain are cleaned from `offChainBoxes`
+   * When input block transactions are confirmed on-chain (via `ScanOnChain`), the wallet:
+   *
+   *   - The on-chain scan process naturally updates `onChainBalances` via `updateOnBlock`
+   *   - Off-chain boxes that became on-chain are cleaned from `offChainBoxes`
   *
   * The wallet digest (balance) is computed as:
   *   `sum(offChainBoxes) + sum(onChainBalances)`

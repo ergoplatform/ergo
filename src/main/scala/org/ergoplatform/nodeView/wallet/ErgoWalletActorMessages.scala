@@ -44,7 +44,7 @@ object ErgoWalletActorMessages {
    */
   final case class ScanOffChain(tx: ErgoTransaction)
 
-  final case class ScanInputBlock(inputBlockId: ModifierId, txs: Seq[ErgoTransaction])
+  final case class ScanInputBlock(inputBlockId: ModifierId)
 
   /**
     * Rollback changes from a specific input block

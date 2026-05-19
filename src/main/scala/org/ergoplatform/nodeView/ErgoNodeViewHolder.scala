@@ -378,7 +378,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             val updMp = memoryPool().removeWithDoubleSpends(txs)
             updateNodeView(updatedMempool = Some(updMp))
 
-            val newVault = vault().scanInputBlock(id, txs)
+            val newVault = vault().scanInputBlock(id)
             updateNodeView(updatedVault = Some(newVault))
           case None =>
         }

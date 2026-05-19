@@ -46,8 +46,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
     this
   }
 
-  def scanInputBlock(inputBlockId: ModifierId, txs: Seq[ErgoTransaction]): ErgoWallet = {
-    walletActor ! ScanInputBlock(inputBlockId, txs)
+  def scanInputBlock(inputBlockId: ModifierId): ErgoWallet = {
+    walletActor ! ScanInputBlock(inputBlockId)
     this
   }
 

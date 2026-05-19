@@ -236,36 +236,41 @@ class ErgoWalletActor(settings: ErgoSettings,
       val newState = state.copy(offChainRegistry = newOffChainRegistry)
       context.become(loadedWallet(newState))
 
-    case ScanInputBlock(inputBlockId, txs) =>
+    case ScanInputBlock(inputBlockId) =>
       if (state.inputBlockIds.contains(inputBlockId)) {
         log.warn(s"Ignoring duplicate ScanInputBlock for $inputBlockId")
       } else {
-        val dustLimit = settings.walletSettings.dustLimit
+        historyReader.getInputBlockTransactions(inputBlockId) match {
+          case Some(txs) =>
+            val dustLimit = settings.walletSettings.dustLimit
 
-        // Process all transactions atomically and record the net diff for rollback support
-        val (finalRegistry, allAdded, allRemovedOffChain, allRemovedOnChain) =
-          txs.foldLeft(
-            (state.offChainRegistry, Seq.empty[TrackedBox], Seq.empty[TrackedBox], Seq.empty[Balance])
-          ) { case ((registry, addedAcc, removedOffAcc, removedOnAcc), tx) =>
-            val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
-            val inputs = WalletScanLogic.extractInputBoxes(tx)
-            val (newRegistry, removedOff, removedOn) =
-              registry.updateOnTransactionWithDiff(newWalletBoxes, inputs, state.walletVars.externalScans)
-            (newRegistry, addedAcc ++ newWalletBoxes, removedOffAcc ++ removedOff, removedOnAcc ++ removedOn)
-          }
+            // Process all transactions atomically and record the net diff for rollback support
+            val (finalRegistry, allAdded, allRemovedOffChain, allRemovedOnChain) =
+              txs.foldLeft(
+                (state.offChainRegistry, Seq.empty[TrackedBox], Seq.empty[TrackedBox], Seq.empty[Balance])
+              ) { case ((registry, addedAcc, removedOffAcc, removedOnAcc), tx) =>
+                val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+                val inputs = WalletScanLogic.extractInputBoxes(tx)
+                val (newRegistry, removedOff, removedOn) =
+                  registry.updateOnTransactionWithDiff(newWalletBoxes, inputs, state.walletVars.externalScans)
+                (newRegistry, addedAcc ++ newWalletBoxes, removedOffAcc ++ removedOff, removedOnAcc ++ removedOn)
+              }
 
-        val diff = InputBlockDiff(allAdded, allRemovedOffChain, allRemovedOnChain)
-        val registryWithDiff = finalRegistry.copy(
-          inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff)
-        )
+            val diff = InputBlockDiff(allAdded, allRemovedOffChain, allRemovedOnChain)
+            val registryWithDiff = finalRegistry.copy(
+              inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff)
+            )
 
-        val newInputBlockIds = state.inputBlockIds :+ inputBlockId
-        val baseState = state.copy(
-          offChainRegistry = registryWithDiff,
-          inputBlockIds = newInputBlockIds
-        )
-        val newState = ergoWalletService.updateUtxoState(baseState, historyReader)
-        context.become(loadedWallet(newState))
+            val newInputBlockIds = state.inputBlockIds :+ inputBlockId
+            val baseState = state.copy(
+              offChainRegistry = registryWithDiff,
+              inputBlockIds = newInputBlockIds
+            )
+            val newState = ergoWalletService.updateUtxoState(baseState, historyReader)
+            context.become(loadedWallet(newState))
+          case None =>
+            log.warn(s"No transactions found for input block $inputBlockId")
+        }
       }
 
     case RollbackInputBlock(inputBlockId) =>
@@ -274,11 +279,12 @@ class ErgoWalletActor(settings: ErgoSettings,
       // we must rollback the target block AND all blocks that were added after it.
       val keepIndex = state.inputBlockIds.indexOf(inputBlockId)
       val (newInputBlockIds, newRegistry) = if (keepIndex >= 0) {
-        val blocksToRollback = state.inputBlockIds.drop(keepIndex)
+        val rolledBackIds = state.inputBlockIds.drop(keepIndex)
         // Rollback in reverse chronological order (last block first) to maintain consistency
-        val rolledBackRegistry = blocksToRollback.reverse.foldLeft(state.offChainRegistry) { (reg, blockId) =>
+        val rolledBackRegistry = rolledBackIds.reverse.foldLeft(state.offChainRegistry) { (reg, blockId) =>
           reg.rollbackInputBlock(blockId)
         }
+        log.info(s"Rolled back input blocks: ${rolledBackIds.mkString(", ")}")
         (state.inputBlockIds.take(keepIndex), rolledBackRegistry)
       } else {
         // Block not found, nothing to rollback

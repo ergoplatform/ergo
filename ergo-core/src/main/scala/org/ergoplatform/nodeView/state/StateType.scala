@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.nodeView.state.StateType.StateTypeCode
 
 
@@ -39,7 +40,7 @@ object StateType {
   } else if (code == Digest.stateTypeCode) {
     Digest
   } else {
-    throw new Exception(s"Unkown state type code $code")
+    throw new ErgoException(ErgoException.UnknownTypeError, s"Unkown state type code $code")
   }
 
 }

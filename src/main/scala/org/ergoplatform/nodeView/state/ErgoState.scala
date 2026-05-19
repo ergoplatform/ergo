@@ -176,7 +176,9 @@ object ErgoState extends ScorexLogging {
         toInsert.remove(wrappedBoxId) match {
           case None =>
             if (toRemove.put(wrappedBoxId, Remove(i.boxId)).nonEmpty) {
-              throw new IllegalArgumentException(s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
+              throw new ErgoException(
+                ErgoException.ValidationError,
+                s"Tx : ${tx.id} is double-spending input id : $wrappedBoxId")
             }
           case _ => // old value removed, do nothing
         }

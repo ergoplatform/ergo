@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.consensus.SyncInfo
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -96,7 +97,7 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
         }
         ErgoSyncInfoV2(headers)
       } else {
-        throw new Exception(s"Wrong SyncInfo version: $r")
+        throw new ErgoException(ErgoException.NetworkError, s"Wrong SyncInfo version: $r")
       }
     } else { // parse v1 sync message
       require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
-import org.ergoplatform.{CriticalSystemException, ErgoApp}
+import org.ergoplatform.{CriticalSystemException, ErgoApp, ErgoException}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -590,7 +590,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           .getOrElse(recreatedState())
         val toApply = newChain.headers.map { h =>
           history.getFullBlock(h)
-            .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
+            .fold(
+              e => throw new ErgoException(ErgoException.StateError, s"Failed to get full block for header $h", Some(e)),
+              identity)
         }
         toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
           log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")

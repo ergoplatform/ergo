@@ -3,6 +3,7 @@ package org.ergoplatform.settings
 import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+import org.ergoplatform.ErgoException
 import org.ergoplatform.network.message.MessageConstants._
 import scorex.util.ScorexLogging
 
@@ -92,7 +93,7 @@ object ScorexSettings extends ScorexLogging with SettingsReaders {
       case Some(file) =>
         val cfg = ConfigFactory.parseFile(file)
         if (!cfg.hasPath(configPath)) {
-          throw new Error("Malformed configuration file was provided! Aborting!")
+          throw new ErgoException(ErgoException.ConfigError, "Malformed configuration file was provided! Aborting!")
         }
         ConfigFactory
           .defaultOverrides()

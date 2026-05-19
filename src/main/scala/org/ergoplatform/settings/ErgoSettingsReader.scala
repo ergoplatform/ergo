@@ -8,7 +8,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.nodeView.state.StateType.Digest
-import org.ergoplatform.ErgoApp
+import org.ergoplatform.{ErgoApp, ErgoException}
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.ErgoSettings.{configPath, scorexConfigPath}
 
@@ -31,7 +31,7 @@ object ErgoSettingsReader extends ScorexLogging
     val directory = config.as[String](s"$configPath.directory")
     val networkTypeName = config.as[String](s"$configPath.networkType")
     val networkType = NetworkType.fromString(networkTypeName)
-      .getOrElse(throw new Error(s"Unknown `networkType = $networkTypeName`"))
+      .getOrElse(throw new ErgoException(ErgoException.ConfigError, s"Unknown `networkType = $networkTypeName`"))
     val nodeSettings = config.as[NodeConfigurationSettings](s"$configPath.node")
     val chainSettings = config.as[ChainSettings](s"$configPath.chain")
     val walletSettings = config.as[WalletSettings](s"$configPath.wallet")

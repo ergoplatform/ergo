@@ -3,6 +3,7 @@ package org.ergoplatform.mining
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
 import com.google.common.primitives.Longs
+import org.ergoplatform.ErgoException
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
@@ -601,7 +602,8 @@ object CandidateGenerator extends ScorexLogging {
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
       if (txs.isEmpty) {
-        throw new IllegalArgumentException(
+        throw new ErgoException(
+          ErgoException.ValidationError,
           s"Proofs for 0 txs cannot be generated : emissionTxs: ${emissionTxs.size}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
         )
       }

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, ErgoException}
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
@@ -387,7 +387,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         putBox(bag0, newBox)
       case (true, true) =>
         //old and new scans are empty, can't do anything useful
-        throw new Exception("Can't remove a box which does not exist")
+        throw new ErgoException(ErgoException.WalletError, "Can't remove a box which does not exist")
     }
 
     // Flag showing that box has been added to the payments app (p2pk-wallet) or removed from it
@@ -415,7 +415,9 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
           digest.walletBalance - box.value,
           walletAssets.toArray[(EncodedTokenId, Long)])
       } else {
-        throw new Exception(s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
+        throw new ErgoException(
+          ErgoException.WalletError,
+          s"Wallet can't update digest for a box with old scans $oldScans, new ones $newScans")
       }
       putDigest(bag1, updDigest)
     } else {

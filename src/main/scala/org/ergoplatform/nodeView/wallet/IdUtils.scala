@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.ErgoException
 import org.ergoplatform.ErgoBox.{BoxId, TokenId}
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.ADKey
@@ -19,11 +20,15 @@ object IdUtils {
   def encodedBoxId(id: BoxId): EncodedBoxId = EncodedBoxId @@ Algos.encode(id)
 
   def decodedBoxId(id: EncodedBoxId): BoxId = ADKey @@ Algos.decode(id)
-    .getOrElse(throw new Error("Failed to decode box id"))
+    .fold(
+      e => throw new ErgoException(ErgoException.WalletError, "Failed to decode box id", Some(e)),
+      identity)
 
   def encodedTokenId(id: TokenId): EncodedTokenId = ModifierId @@ Algos.encode(id)
 
   def decodedTokenId(id: EncodedTokenId): TokenId =
-    Digest32Coll @@ (Algos.decode(id).getOrElse(throw new Error("Failed to decode token id"))).toColl
+    Digest32Coll @@ (Algos.decode(id).fold(
+      e => throw new ErgoException(ErgoException.WalletError, "Failed to decode token id", Some(e)),
+      identity)).toColl
 
 }

@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
-import org.ergoplatform.wallet.secrets.JsonSecretStorage
+import org.ergoplatform.wallet.secrets.{ImportedSecretsStorage, JsonSecretStorage}
 import scorex.util.ScorexLogging
 
 import scala.util.Try
@@ -18,6 +18,7 @@ import scala.util.Try
 case class ErgoWalletState(
     storage: WalletStorage,
     secretStorageOpt: Option[JsonSecretStorage],
+    importedSecretsOpt: Option[ImportedSecretsStorage],
     registry: WalletRegistry,
     offChainRegistry: OffChainRegistry,
     outputsFilter: Option[BloomFilter[Array[Byte]]], // Bloom filter for boxes not being spent to the moment
@@ -144,6 +145,7 @@ object ErgoWalletState {
       ErgoWalletState(
         ergoStorage,
         secretStorageOpt = None,
+        importedSecretsOpt = None,
         registry,
         offChainRegistry,
         outputsFilter = None,

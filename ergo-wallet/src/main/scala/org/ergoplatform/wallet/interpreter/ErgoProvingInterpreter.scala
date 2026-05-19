@@ -89,6 +89,18 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
+    * Produces updated instance of ErgoProvingInterpreter with a non-HD primitive
+    * secret included. The hierarchical-deterministic pubkey cache is left untouched
+    * since imported secrets do not participate in HD derivation.
+    *
+    * @param secret - imported secret to add
+    * @return modified prover
+    */
+  def withNewImportedSecret(secret: SecretKey): ErgoProvingInterpreter = {
+    new ErgoProvingInterpreter(secretKeys :+ secret, params, cachedHdPubKeysOpt)
+  }
+
+  /**
     * Produces updated instance of ErgoProvingInterpreter with updated parameters
     * @param newParams - updated parameters
     * @return modified prover

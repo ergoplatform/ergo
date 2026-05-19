@@ -5091,6 +5091,98 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /wallet/getPrivateKeyWif:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Get the private key for a known address in Wallet Import Format
+      description: >
+        Looks up the secret for a P2PK address (HD-derived or previously imported)
+        and returns it Base58-encoded with the Ergo WIF version byte and the
+        standard 0x01 compressed-pubkey flag.
+      operationId: walletGetPrivateKeyWif
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrivateKeyRequest"
+      responses:
+        '200':
+          description: Successfully retrieved WIF-encoded secret
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - wif
+                properties:
+                  wif:
+                    type: string
+                    description: Base58-encoded WIF private key
+                    example: "PJq..."
+        '404':
+          description: Address not found in wallet database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/importWif:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Import a private key from a Wallet Import Format string
+      description: >
+        Decode a WIF-encoded secp256k1 private key (Bitcoin-compatible 0x80/0xEF
+        prefixes are accepted in addition to the Ergo-specific bytes) and add it
+        as a non-HD signing key in the wallet. The imported key persists across
+        lock/unlock cycles, encrypted at rest under a KEK derived from the
+        wallet's master seed. Requires the wallet to be unlocked.
+      operationId: walletImportWif
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - wif
+              properties:
+                wif:
+                  type: string
+                  description: WIF-encoded private key
+                  example: "PJq..."
+      responses:
+        '200':
+          description: Imported private key, returning the resulting P2PK address
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - address
+                properties:
+                  address:
+                    type: string
+                    description: Encoded P2PK address of the imported key
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /mining/candidate:
     get:
       security:

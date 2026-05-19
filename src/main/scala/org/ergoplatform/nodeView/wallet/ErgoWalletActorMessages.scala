@@ -131,6 +131,18 @@ object ErgoWalletActorMessages {
   final case class GetPrivateKeyFromPath(path: DerivationPath)
 
   /**
+   * Decode a WIF-encoded private key and add it to the wallet as an imported
+   * (non-HD) secret. Returns the resulting P2PK address.
+   */
+  final case class ImportPrivateKeyWif(wif: String)
+
+  /**
+   * Look up the secret associated with the given P2PK address (HD or imported)
+   * and return it WIF-encoded.
+   */
+  final case class ExportPrivateKeyWif(p2pk: P2PKAddress)
+
+  /**
    * Read wallet either from mnemonic or from secret storage
    */
   final case class ReadWallet(state: ErgoWalletState)

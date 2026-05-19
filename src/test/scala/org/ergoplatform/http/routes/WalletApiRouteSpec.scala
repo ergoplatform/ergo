@@ -203,6 +203,26 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "import a WIF-encoded private key" in {
+    Post(prefix + "/importWif", Json.obj("wif" -> WalletActorStub.exampleWif.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(WalletActorStub.address.toString)
+    }
+  }
+
+  it should "reject importWif when wif field is missing" in {
+    Post(prefix + "/importWif", Json.obj("notWif" -> "x".asJson)) ~> route ~> check {
+      handled shouldBe false
+    }
+  }
+
+  it should "export a private key as WIF" in {
+    Post(prefix + "/getPrivateKeyWif", Json.obj("address" -> WalletActorStub.address.toString.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("wif").as[String] shouldEqual Right(WalletActorStub.exampleWif)
+    }
+  }
+
   it should "return wallet boxes" in {
     Get(prefix + "/boxes") ~> route ~> check {
       status shouldBe StatusCodes.OK

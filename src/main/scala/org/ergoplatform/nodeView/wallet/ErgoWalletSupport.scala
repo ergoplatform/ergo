@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResu
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey, ExtendedPublicKey, ExtendedSecretKey}
 import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.BoxUtils
@@ -18,11 +18,14 @@ import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.secrets.ImportedSecretsStorage
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import scorex.util.ScorexLogging
 import sigma.Colls
 import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.crypto.BigIntegers
 import sigma.data.ProveDlog
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
 import sigmastate.utils.Extensions._
@@ -50,6 +53,40 @@ trait ErgoWalletSupport extends ScorexLogging {
         }
       }
     }
+
+  /**
+    * Persist an imported (non-HD) secret to disk, register it with the prover, and
+    * surface its address through the wallet's scan cache so the wallet starts
+    * tracking incoming payments to it.
+    */
+  protected def addImportedSecret(state: ErgoWalletState,
+                                  scalar: Array[Byte]): Try[(P2PKAddress, ErgoWalletState)] = {
+    state.importedSecretsOpt match {
+      case None =>
+        Failure(new IllegalStateException("Imported-secrets storage not initialized"))
+      case Some(iss) if iss.isLocked =>
+        Failure(new IllegalStateException("Imported-secrets storage is locked"))
+      case Some(iss) =>
+        val secretKey = DlogSecretKey(DLogProverInput(BigIntegers.fromUnsignedByteArray(scalar)))
+        val newIdx = iss.secrets.fold(0)(_.length)
+        val sentinelPk = ImportedSecretsStorage.fakeExtendedPubKey(scalar, newIdx)
+        val newAddress = P2PKAddress(sentinelPk.key)(addressEncoder)
+
+        val alreadyImported = iss.publicKeys.exists(java.util.Arrays.equals(_, sentinelPk.keyBytes))
+        val hdConflict = state.walletVars.trackedPubKeys.exists(_.key.value == sentinelPk.key.value)
+        if (alreadyImported || hdConflict) {
+          Failure(new IllegalArgumentException(s"Address $newAddress is already in the wallet"))
+        } else {
+          iss.append(scalar, sentinelPk.keyBytes).flatMap { _ =>
+            val newWalletVars = state.walletVars.withImportedKey(secretKey)
+            newWalletVars.stateCacheOpt.get.withNewPubkey(sentinelPk).map { updCache =>
+              val newVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings)
+              newAddress -> state.copy(walletVars = newVars)
+            }
+          }
+        }
+    }
+  }
 
   // call nextPath and derive next key from it
   protected def deriveNextKeyForMasterKey(state: ErgoWalletState,
@@ -123,11 +160,34 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
   }
 
+  /**
+    * Decrypt the wallet's imported (non-HD) secrets with a KEK derived from the
+    * master seed and register them with the in-memory prover and scan cache.
+    * No-op if there is no imported-secrets storage or no imported keys yet.
+    */
+  protected def loadImportedSecrets(state: ErgoWalletState,
+                                    masterKey: ExtendedSecretKey): Try[ErgoWalletState] = Try {
+    state.importedSecretsOpt match {
+      case None => state
+      case Some(iss) =>
+        val kek = ImportedSecretsStorage.deriveKek(masterKey.keyBytes)
+        iss.unlock(kek).get
+        val scalars = iss.secrets.getOrElse(IndexedSeq.empty)
+        scalars.zipWithIndex.foldLeft(state) { case (st, (scalar, idx)) =>
+          val secretKey = DlogSecretKey(DLogProverInput(BigIntegers.fromUnsignedByteArray(scalar)))
+          val sentinelPk = ImportedSecretsStorage.fakeExtendedPubKey(scalar, idx)
+          val newVars = st.walletVars.withImportedKey(secretKey)
+          val newCache = newVars.stateCacheOpt.get.withNewPubkey(sentinelPk).get
+          st.copy(walletVars = newVars.copy(stateCacheProvided = Some(newCache))(newVars.settings))
+        }
+    }
+  }
+
   protected def processUnlock(state: ErgoWalletState,
                               masterKey: ExtendedSecretKey,
                               usePreEip3Derivation: Boolean): Try[ErgoWalletState] = {
     log.info("Starting wallet unlock")
-    convertLegacyClientPaths(state.storage, masterKey).flatMap { _ =>
+    val hdReady = convertLegacyClientPaths(state.storage, masterKey).flatMap { _ =>
       // Now we read previously stored, or just stored during the conversion procedure above, public keys
       // If no public keys in the database yet, add master's public key into it
       val pubKeys = state.storage.readAllKeys().toIndexedSeq
@@ -175,6 +235,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         Try(updatePublicKeys(state, masterKey, pubKeys))
       }
     }
+    hdReady.flatMap(loadImportedSecrets(_, masterKey))
   }
 
 

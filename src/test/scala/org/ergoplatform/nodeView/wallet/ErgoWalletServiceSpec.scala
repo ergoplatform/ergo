@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
@@ -20,18 +20,22 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.secrets.Wif
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
-import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigma.crypto.BigIntegers
+import sigma.ast.{ByteArrayConstant, ErgoTree, EvaluatedValue, FalseLeaf, SType}
+import sigma.interpreter.ContextExtension
 import sigmastate.helpers.TestingHelpers.testBox
+import scorex.util.ModifierId
 
 import scala.collection.compat.immutable.ArraySeq
-import scala.util.Random
+import scala.util.{Random, Try}
 
 class ErgoWalletServiceSpec
   extends ErgoCorePropertyTest
@@ -60,6 +64,7 @@ class ErgoWalletServiceSpec
     ErgoWalletState(
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,
+      importedSecretsOpt = Option.empty,
       new WalletRegistry(versionedStore)(settings.walletSettings),
       OffChainRegistry.empty,
       outputsFilter = Option.empty,
@@ -328,6 +333,121 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("WIF import survives lock/unlock and round-trips through export") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pass = SecretString.create(Random.nextString(10))
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val ws0 = initialState(store, versionedStore)
+
+        // initWallet only creates the encrypted file; we have to unlock to get
+        // a usable in-memory master + prover.
+        val initialized = walletService.initWallet(ws0, settings, pass, Option.empty).get._2
+        val ready = walletService.unlockWallet(
+          walletService.lockWallet(initialized), pass, usePreEip3Derivation = false
+        ).get
+
+        // Use a fixed scalar so the test is deterministic
+        val scalar: Array[Byte] = Base16.decode(
+          "0c28fca386c7a227600b2fe50b7cae11ec86d3bf1fbe471be89827e19d72aa1d"
+        ).get
+        val inputWif = Wif.encode(scalar, mainnet = settings.chainSettings.isMainnet)
+
+        val (importedAddr, afterImport) = walletService.importPrivateKeyWif(ready, inputWif).get
+        afterImport.importedSecretsOpt.get.secrets.get.length shouldBe 1
+        afterImport.walletVars.publicKeyAddresses should contain(importedAddr)
+
+        // Re-export must produce the same WIF (since we encoded with the wallet's network byte)
+        walletService.exportPrivateKeyWif(afterImport, importedAddr).get shouldBe inputWif
+
+        // Lock: imported plaintext is zeroed
+        val locked = walletService.lockWallet(afterImport)
+        locked.importedSecretsOpt.get.isLocked shouldBe true
+        locked.walletVars.proverOpt shouldBe empty
+
+        // Unlock again: imported key reappears with the same address
+        val unlocked = walletService.unlockWallet(locked, pass, usePreEip3Derivation = false).get
+        unlocked.importedSecretsOpt.get.isLocked shouldBe false
+        unlocked.walletVars.publicKeyAddresses should contain(importedAddr)
+        walletService.exportPrivateKeyWif(unlocked, importedAddr).get shouldBe inputWif
+
+        // The prover holds the imported scalar so it can sign with it
+        val proverSecrets = unlocked.walletVars.proverOpt.get.secretKeys
+        val hasImported = proverSecrets.exists {
+          case dlog: DlogSecretKey =>
+            BigIntegers.asUnsignedByteArray(Wif.SecretLength, dlog.privateInput.w).sameElements(scalar)
+          case _ => false
+        }
+        hasImported shouldBe true
+      }
+    }
+  }
+
+  property("imported WIF key can sign a transaction before and after lock/unlock") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pass = SecretString.create(Random.nextString(10))
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val initialized = walletService.initWallet(
+          initialState(store, versionedStore), settings, pass, Option.empty
+        ).get._2
+        val unlocked = walletService.unlockWallet(
+          walletService.lockWallet(initialized), pass, usePreEip3Derivation = false
+        ).get
+
+        val scalar = Base16.decode(
+          "0c28fca386c7a227600b2fe50b7cae11ec86d3bf1fbe471be89827e19d72aa1d"
+        ).get
+        val wif = Wif.encode(scalar, mainnet = settings.chainSettings.isMainnet)
+        val (importedAddr, withImported) = walletService.importPrivateKeyWif(unlocked, wif).get
+
+        // Build a tx that spends a box locked to the imported P2PK and sends it to itself.
+        val value = 100000000L
+        val height = 10000
+        val box = new ErgoBoxCandidate(value, ErgoTree.fromSigmaBoolean(importedAddr.pubkey), height)
+        val fakeTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+        val inputBox = box.toBox(fakeTxId, 0.toShort)
+        val unsignedInput = new UnsignedInput(inputBox.id, ContextExtension.empty)
+        val utx = new UnsignedErgoLikeTransaction(IndexedSeq(unsignedInput), IndexedSeq.empty, IndexedSeq(box))
+
+        def signWith(state: ErgoWalletState): Try[_] = state.walletVars.proverOpt.get.sign(
+          utx, IndexedSeq(inputBox), IndexedSeq.empty, state.stateContext, TransactionHintsBag.empty
+        )
+
+        signWith(withImported).isSuccess shouldBe true
+
+        // Lock and unlock; the imported key must still sign the same tx.
+        val reUnlocked = walletService.unlockWallet(
+          walletService.lockWallet(withImported), pass, usePreEip3Derivation = false
+        ).get
+        signWith(reUnlocked).isSuccess shouldBe true
+      }
+    }
+  }
+
+  property("WIF import rejects duplicate scalar") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val pass = SecretString.create(Random.nextString(10))
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val initialized = walletService.initWallet(
+          initialState(store, versionedStore), settings, pass, Option.empty
+        ).get._2
+        val ready = walletService.unlockWallet(
+          walletService.lockWallet(initialized), pass, usePreEip3Derivation = false
+        ).get
+
+        val scalar = Base16.decode(
+          "11d28fca386c7a227600b2fe50b7cae11ec86d3bf1fbe471be89827e19d72ab2"
+        ).get
+        val wif = Wif.encode(scalar, mainnet = settings.chainSettings.isMainnet)
+
+        val afterFirst = walletService.importPrivateKeyWif(ready, wif).get._2
+        walletService.importPrivateKeyWif(afterFirst, wif).isFailure shouldBe true
+      }
+    }
+  }
+
   property("it should derive private key correctly") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
@@ -357,6 +477,7 @@ class ErgoWalletServiceSpec
         val walletState = ErgoWalletState(
           new WalletStorage(store, settings),
           secretStorageOpt = Option.empty,
+          importedSecretsOpt = Option.empty,
           new WalletRegistry(versionedStore)(settings.walletSettings),
           OffChainRegistry.empty,
           outputsFilter = Option.empty,
@@ -398,6 +519,7 @@ class ErgoWalletServiceSpec
         val walletState = ErgoWalletState(
           new WalletStorage(store, settings),
           secretStorageOpt = Option.empty,
+          importedSecretsOpt = Option.empty,
           new WalletRegistry(versionedStore)(settings.walletSettings),
           OffChainRegistry.empty,
           outputsFilter = Option.empty,

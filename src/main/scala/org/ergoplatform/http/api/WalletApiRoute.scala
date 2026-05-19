@@ -67,7 +67,9 @@ case class WalletApiRoute(readersHolder: ActorRef,
         checkSeedR ~
         rescanWalletR ~
         extractHintsR ~
-        getPrivateKeyR
+        getPrivateKeyR ~
+        importWifR ~
+        getPrivateKeyWifR
     }
   }
 
@@ -496,6 +498,24 @@ case class WalletApiRoute(readersHolder: ActorRef,
           }
         case None => NotExists("Address not found in wallet database.")
       }
+    }
+  }
+
+  private val wifString: Directive1[String] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("wif").as[String].fold(_ => reject, provide)
+  }
+
+  def importWifR: Route = (path("importWif") & post & wifString) { wif =>
+    withWalletOp(_.importPrivateKeyWif(wif)) {
+      case Success(address) => ApiResponse(Json.obj("address" -> address.toString.asJson))
+      case Failure(t)       => BadRequest(t.getMessage)
+    }
+  }
+
+  def getPrivateKeyWifR: Route = (path("getPrivateKeyWif") & post & p2pkAddress) { p2pk =>
+    withWalletOp(_.exportPrivateKeyWif(p2pk)) {
+      case Success(wif) => ApiResponse(Json.obj("wif" -> wif.asJson))
+      case Failure(t)   => BadRequest(t.getMessage)
     }
   }
 

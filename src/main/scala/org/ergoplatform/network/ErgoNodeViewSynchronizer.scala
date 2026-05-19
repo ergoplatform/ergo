@@ -1515,15 +1515,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
       e match {
         case phError: ParentHeaderNotFoundError =>
-          // For missing parent header, request the parent header from peers if not already known
+          // For a missing parent header, fan the request out to every peer we
+          // think might have it. `Older` is the obvious source; we also include
+          // `Younger` because cached peer status can go stale — a peer flagged
+          // Younger at initial handshake may have caught up via gossip and now
+          // be the only source of the parent. Asking multiple peers is cheap
+          // and DeliveryTracker deduplicates the responses; the first useful
+          // reply wins.
           val parentId = phError.parentHeaderId
           if (deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-            val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
-            if (olderPeers.nonEmpty) {
-              val randomPeer = olderPeers(scala.util.Random.nextInt(olderPeers.size))
-              requestBlockSection(Header.modifierTypeId, Seq(parentId), randomPeer)
+            val candidatePeers =
+              syncTracker.peersByStatus.getOrElse(Older, mutable.WrappedArray.empty) ++
+                syncTracker.peersByStatus.getOrElse(Younger, mutable.WrappedArray.empty)
+            if (candidatePeers.nonEmpty) {
+              candidatePeers.foreach { peer =>
+                requestBlockSection(Header.modifierTypeId, Seq(parentId), peer)
+              }
             } else {
-              logger.warn(s"No older peer available to download missing parent header $parentId for modifier $modId")
+              logger.warn(s"No peers available to download missing parent header $parentId for modifier $modId")
             }
           }
           deliveryTracker.setUnknown(modId, modTypeId)

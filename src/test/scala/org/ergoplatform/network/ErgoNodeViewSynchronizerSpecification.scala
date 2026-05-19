@@ -620,7 +620,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should warn when no older peers") {
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should fall back to Younger peers when no Older peer is available") {
     withFixture2 { ctx =>
       import ctx._
 
@@ -631,23 +631,58 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val parentHeader = baseChain.last
       val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
 
-      // NO older peers set up - only the original peer as Younger
+      // No Older peer; only a Younger one. The handler should still ask it,
+      // because cached peer status can go stale (Younger at handshake → caught
+      // up via gossip) and Younger is the only realistic fallback for a missing
+      // parent header.
       syncTracker.updateStatus(peer, org.ergoplatform.consensus.Younger, Some(childHeader.height))
 
-      // Send ChangedHistory to set up historyReader in the synchronizer
       synchronizerMockRef ! ChangedHistory(hhistory)
 
-      // Use a random parent ID that is NOT in the history
       val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
       val modifierId = childHeader.id
       val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
-      // Should NOT send any network request since no older peers available
+      ncProbe.fishForMessage(3.seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val invData = stn.message.data.get.asInstanceOf[InvData]
+            invData.typeId == Header.modifierTypeId && invData.ids.contains(unknownParentId)
+          case _ => false
+        }
+      }
+
+      eventually {
+        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should warn when no Older or Younger peers are available") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
+      baseChain.headers.foreach(hhistory.append)
+
+      val parentHeader = baseChain.last
+      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // Peer is `Equal` — outside the Older/Younger candidate pool for parent chase.
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Equal, Some(childHeader.height))
+
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      val modifierId = childHeader.id
+      val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
+      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+
       Thread.sleep(500)
       ncProbe.expectNoMessage(1.second)
 
-      // The modifier should still be set to Unknown
       eventually {
         deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
       }

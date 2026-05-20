@@ -91,7 +91,21 @@ trait NodeApi {
   }
 
   def waitForHeight(expectedHeight: Int, retryingInterval: FiniteDuration = 1.second): Future[Int] = {
-    waitFor[Int](_.fullHeight, h => h >= expectedHeight, retryingInterval)
+    log.info(s"waitForHeight ENTER: expected=$expectedHeight retryingInterval=$retryingInterval")
+    val start = System.currentTimeMillis()
+    val attempts = new java.util.concurrent.atomic.AtomicInteger(0)
+    waitFor[Int](
+      _.fullHeight.map { h =>
+        val n = attempts.incrementAndGet()
+        if (n == 1 || n % 30 == 0) {
+          val elapsed = (System.currentTimeMillis() - start) / 1000
+          log.info(s"waitForHeight: expected=$expectedHeight observed=$h elapsed=${elapsed}s attempts=$n")
+        }
+        h
+      },
+      h => h >= expectedHeight,
+      retryingInterval
+    )
   }
 
   def waitForStartup: Future[this.type] = get("/info").map(_ => this)
@@ -129,8 +143,10 @@ trait NodeApi {
   def retrying(request: Request,
                interval: FiniteDuration = 1.second,
                statusCode: Int = HttpConstants.ResponseStatusCodes.OK_200): Future[Response] = {
+    val attempts = new java.util.concurrent.atomic.AtomicInteger(0)
     def executeRequest: Future[Response] = {
-      log.trace(s"Executing request '$request'")
+      val n = attempts.incrementAndGet()
+      log.trace(s"Executing request '$request' (attempt=$n)")
       client.executeRequest(request, new AsyncCompletionHandler[Response] {
         override def onCompleted(response: Response): Response = {
           if (response.getStatusCode == statusCode) {
@@ -145,7 +161,11 @@ trait NodeApi {
       }).toCompletableFuture.toScala
         .recoverWith {
           case e@(_: IOException | _: TimeoutException) =>
-            log.debug(s"Failed to execute request '$request' with error: ${e.getMessage}")
+            if (n == 1 || n % 30 == 0) {
+              log.info(s"Retrying request '${request.getUrl}' attempt=$n error=${e.getClass.getSimpleName}: ${e.getMessage}")
+            } else {
+              log.debug(s"Failed to execute request '$request' with error: ${e.getMessage}")
+            }
             timer.schedule(executeRequest, interval)
         }
     }

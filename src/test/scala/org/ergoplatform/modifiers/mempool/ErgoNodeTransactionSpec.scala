@@ -340,8 +340,28 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
       t - t0
     }
 
-    val gen = validErgoTransactionGenTemplate(0, 0, 2000, trueLeafGen)
-    val (from, tx) = gen.sample.get
+    // Build a deterministic many-input spam tx. We use a generated tx as a
+    // template (to get well-formed ergo trees / inputs / signatures), then
+    // replicate the single input/output to a known-large count. Relying on
+    // ScalaCheck to produce a many-input tx made the wall-clock assertion
+    // below flaky — small random samples would validate in under `Timeout`.
+    val InputCount = 2000
+    val (templateInputs, templateTx) = validErgoTransactionGenTemplate(1, 1, 1, trueLeafGen).sample.get
+    val in0 = templateInputs.head
+    val out0 = templateTx.outputs.head
+    val from = (0 until InputCount).map { i =>
+      testBox(10000000000L, in0.ergoTree, in0.creationHeight,
+        Seq.empty, in0.additionalRegisters, in0.transactionId, i.toShort)
+    }
+    val outs = (0 until InputCount).map { i =>
+      testBox(10000000000L, out0.ergoTree, out0.creationHeight,
+        Seq.empty, out0.additionalRegisters, out0.transactionId, i.toShort)
+    }
+    val inputPointers = {
+      val sampleInput = templateTx.inputs.head
+      (0 until InputCount).map(i => sampleInput.copy(boxId = from(i).id))
+    }
+    val tx = templateTx.copy(inputs = inputPointers, outputCandidates = outs)
     tx.statelessValidity().isSuccess shouldBe true
 
     //check that spam transaction is being rejected quickly

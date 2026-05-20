@@ -360,6 +360,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           applyFromCacheLoop(headersCache)
 
+          // Surface the deepest header still stuck in the cache (parent missing)
+          // as a RecoverableFailedModification event. The synchronizer's
+          // parent-chase handler will then request the missing ancestor and
+          // the chain switch can recurse back to the common ancestor. Without
+          // this, headers that arrive out-of-order at heights other than
+          // `headersHeight + 1` would silently sit in the cache and no further
+          // chase event would fire.
+          headersCache.findStuckHeader(history()).foreach { case (header, error) =>
+            context.system.eventStream.publish(
+              RecoverableFailedModification(header.modifierTypeId, header.id, error)
+            )
+          }
+
           val cleared = headersCache.cleanOverfull()
           val upd = BlockSectionsProcessingCacheUpdate(
             headersCache.size,
@@ -466,7 +479,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * @param local whether the modifier was generated locally or not
     */
   protected def pmodModify(pmod: BlockSection, local: Boolean): Unit = {
-    if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db
+    if (history().contains(pmod.id)) {
+      // Diagnostic: surface the otherwise-silent drop so we can see when many
+      // received modifiers are skipped because they were already applied.
+      log.info(s"Skipping modifier ${pmod.encodedId} of type ${pmod.modifierTypeId}: already in history")
+    } else { // todo: .contains reads modifier pmod fully here if in db
 
       // if ADProofs block section generated locally, just dump it into the database
       if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
@@ -556,8 +573,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             context.system.eventStream.publish(SyntacticallyFailedModification(pmod.modifierTypeId, pmod.id, e))
         }
       }
-    } else {
-      log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")
     }
   }
 

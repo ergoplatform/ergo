@@ -544,7 +544,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * @return available peers to download headers from together with the state/origin of the peer
     */
   private def getPeersForDownloadingHeaders(callingPeer: ConnectedPeer): Iterable[ConnectedPeer] = {
-    val nonFiltered: Iterable[ConnectedPeer] = syncTracker.peersByStatus.getOrElse(Older, Array(callingPeer))
+    val nonFiltered: Iterable[ConnectedPeer] =
+      Option(syncTracker.peersByStatus.getOrElse(Older, mutable.WrappedArray.empty))
+        .filter(_.nonEmpty)
+        .orElse {
+          // Defensive fallback: cached peer status can go stale — a peer flagged
+          // `Younger` at initial handshake may have since caught up via gossip and be
+          // the only source of a header we need (e.g. when chasing back a missing
+          // parent after `ParentHeaderNotFoundError`). Falling straight through to
+          // `callingPeer` alone isn't enough because that peer may not have the
+          // specific header we're looking for.
+          Option(syncTracker.peersByStatus.getOrElse(Younger, mutable.WrappedArray.empty))
+            .filter(_.nonEmpty)
+        }
+        .getOrElse(Array(callingPeer))
     HeadersDownloadFilter.filter(nonFiltered)
   }
 
@@ -560,7 +573,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       .orElse {
         Option(peersByStatus.getOrElse(Unknown, mutable.WrappedArray.empty) ++ peersByStatus.getOrElse(Fork, mutable.WrappedArray.empty))
           .filter(_.nonEmpty)
-      }.map(BlockSectionsDownloadFilter.filter)
+      }
+      .orElse {
+        // Defensive fallback: if no Older/Equal/Unknown/Fork peers, also try Younger.
+        // A peer's cached status can go stale — e.g. it advertised an older chain at
+        // initial handshake but has since caught up via gossip from other peers, while
+        // we still have it pinned as `Younger`. Without this fallback the node ends up
+        // locked out of block downloads in that case.
+        Option(peersByStatus.getOrElse(Younger, mutable.WrappedArray.empty))
+          .filter(_.nonEmpty)
+      }
+      .map(BlockSectionsDownloadFilter.filter)
   }
 
   /**
@@ -732,7 +755,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
         if (valid.nonEmpty) {
-          log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
+          log.info(s"Sending ${valid.size} modifiers (type=$typeId) to view holder, vh cache size: $modifiersCacheSize")
           modifiersCacheSize += valid.size // we increase estimated cache size now, before getting a precise number
           viewHolderRef ! ModifiersFromRemote(valid)
           // send sync message to the peer to get new headers quickly
@@ -845,6 +868,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .view.force
 
     val spam = modifiersByStatus.filterKeys(_ != Requested)
+
+    // Diagnostic: per-status breakdown of every batch (passed vs dropped).
+    // Helps trace cases where many modifiers arrive but only some are processed.
+    val countsByStatus = modifiersByStatus.map { case (st, ms) => st -> ms.size }
+    log.info(s"processSpam type=$typeId from $remote: $countsByStatus (Requested passes through, others are spam)")
 
     if (spam.nonEmpty) {
       if (typeId == ErgoTransaction.modifierTypeId) {
@@ -1492,15 +1520,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
       e match {
         case phError: ParentHeaderNotFoundError =>
-          // For missing parent header, request the parent header from peers if not already known
+          // For a missing parent header, fan the request out to every peer we
+          // think might have it. `Older` is the obvious source; we also include
+          // `Younger` because cached peer status can go stale — a peer flagged
+          // Younger at initial handshake may have caught up via gossip and now
+          // be the only source of the parent. Asking multiple peers is cheap
+          // and DeliveryTracker deduplicates the responses; the first useful
+          // reply wins.
           val parentId = phError.parentHeaderId
           if (deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-            val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
-            if (olderPeers.nonEmpty) {
-              val randomPeer = olderPeers(scala.util.Random.nextInt(olderPeers.size))
-              requestBlockSection(Header.modifierTypeId, Seq(parentId), randomPeer)
+            val candidatePeers =
+              syncTracker.peersByStatus.getOrElse(Older, mutable.WrappedArray.empty) ++
+                syncTracker.peersByStatus.getOrElse(Younger, mutable.WrappedArray.empty)
+            if (candidatePeers.nonEmpty) {
+              candidatePeers.foreach { peer =>
+                requestBlockSection(Header.modifierTypeId, Seq(parentId), peer)
+              }
             } else {
-              logger.warn(s"No older peer available to download missing parent header $parentId for modifier $modId")
+              logger.warn(s"No peers available to download missing parent header $parentId for modifier $modId")
             }
           }
           deliveryTracker.setUnknown(modId, modTypeId)

@@ -171,3 +171,11 @@ jobs:
            cd it
            mkdir tmp
            TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++${{ matrix.scala }} it:test
+
+       - name: Upload IT container logs
+         if: always()
+         uses: actions/upload-artifact@v4
+         with:
+           name: it-logs-${{ matrix.scala }}
+           path: it/target/logs/
+           if-no-files-found: warn

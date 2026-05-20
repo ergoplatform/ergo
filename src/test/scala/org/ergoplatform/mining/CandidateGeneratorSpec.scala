@@ -859,12 +859,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .proveCandidate(initCandidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
       .get
     candidateGenerator.tell(initBlock.header.powSolution, testProbe.ref)
-    // Wait for block application - can receive either StatusReply or FullBlockApplied first
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
-      case _: FullBlockApplied => true
-      case _ => false
-    }
+    // Wait for exactly two messages — StatusReply.Success(()) ack and FullBlockApplied — in any
+    // order, then assert nothing else is in flight. This guarantees the state update has fully
+    // propagated to CandidateGenerator before the forced regeneration below.
+    val initMsgs = testProbe.receiveN(2, blockValidationDelay)
+    initMsgs.collect { case StatusReply.Success(()) => () }.size shouldBe 1
+    initMsgs.collect { case FullBlockApplied(header) if header.id != initBlock.header.parentId => () }.size shouldBe 1
+    testProbe.expectNoMessage(200.millis)
 
     // Get first candidate after chain is established
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
@@ -892,12 +893,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Submit solution - should succeed because candidate1 should be in cachedPreviousCandidate
     candidateGenerator.tell(solvedBlock.header.powSolution, testProbe.ref)
 
-    // Should successfully apply the block
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
-      case _: FullBlockApplied => true
-      case _ => false
-    }
+    val solvedMsgs = testProbe.receiveN(2, blockValidationDelay)
+    solvedMsgs.collect { case StatusReply.Success(()) => () }.size shouldBe 1
+    solvedMsgs.collect { case FullBlockApplied(header) if header.id != solvedBlock.header.parentId => () }.size shouldBe 1
+    testProbe.expectNoMessage(200.millis)
 
     system.terminate()
   }

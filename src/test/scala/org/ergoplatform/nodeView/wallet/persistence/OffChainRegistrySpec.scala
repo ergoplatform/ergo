@@ -41,8 +41,12 @@ class OffChainRegistrySpec
       registry.digest.walletAssetBalances shouldEqual Seq.empty
 
 
-      //check remove-offchain flag
-      boxes.filter(_.scans.size > 1).flatMap(_.scans).find(_ != Constants.PaymentsScanId).map { scanId =>
+      //check remove-offchain flag — pick a user-scan id (> PaymentsScanId).
+      // OffChainRegistry only honours the `removeOffchain` flag for boxes tracked
+      // by user scans (size > 1, or single scan > PaymentsScanId). Single-scan
+      // boxes with system scan ids (<= PaymentsScanId, e.g. MiningScanId = 9)
+      // are unconditionally dropped, regardless of the flag.
+      boxes.filter(_.scans.size > 1).flatMap(_.scans).find(_ > Constants.PaymentsScanId).map { scanId =>
         val p = EqualsScanningPredicate(ErgoBox.R1, ByteArrayConstant(TrueTree.bytes))
         val scan = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = false)
         val filtered = boxes.filter(tb => tb.scans.contains(scanId))

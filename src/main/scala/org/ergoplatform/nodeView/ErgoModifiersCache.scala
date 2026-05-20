@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.{LRUCache, ModifiersCache}
-import org.ergoplatform.validation.MalformedModifierError
+import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import scorex.util.ScorexLogging
 
 import scala.util.Failure
@@ -42,6 +42,31 @@ class ErgoModifiersCache(override val maxSize: Int) extends ModifiersCache with 
         }
       }.map(_._1)
     }
+  }
+
+  /**
+    * Find the lowest-height header in the cache that fails `applicableTry` with a
+    * `RecoverableModifierError` (typically `ParentHeaderNotFoundError`).
+    *
+    * Used by `ErgoNodeViewHolder` to surface stuck cache entries via
+    * `RecoverableFailedModification` events so the synchronizer's parent-chase
+    * handler can request the missing ancestor and the chain switch can walk back
+    * to the common ancestor.
+    */
+  def findStuckHeader(history: ErgoHistory): Option[(Header, RecoverableModifierError)] = {
+    cache.values
+      .collect { case h: Header => h }
+      .toSeq
+      .sortBy(_.height)
+      .iterator
+      .flatMap { h =>
+        history.applicableTry(h) match {
+          case Failure(e: RecoverableModifierError) => Some(h -> e)
+          case _                                    => None
+        }
+      }
+      .toStream
+      .headOption
   }
 
 }

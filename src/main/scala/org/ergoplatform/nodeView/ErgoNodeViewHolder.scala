@@ -360,6 +360,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           applyFromCacheLoop(headersCache)
 
+          // Surface the deepest header still stuck in the cache (parent missing)
+          // as a RecoverableFailedModification event. The synchronizer's
+          // parent-chase handler will then request the missing ancestor and
+          // the chain switch can recurse back to the common ancestor. Without
+          // this, headers that arrive out-of-order at heights other than
+          // `headersHeight + 1` would silently sit in the cache and no further
+          // chase event would fire.
+          headersCache.findStuckHeader(history()).foreach { case (header, error) =>
+            context.system.eventStream.publish(
+              RecoverableFailedModification(header.modifierTypeId, header.id, error)
+            )
+          }
+
           val cleared = headersCache.cleanOverfull()
           val upd = BlockSectionsProcessingCacheUpdate(
             headersCache.size,

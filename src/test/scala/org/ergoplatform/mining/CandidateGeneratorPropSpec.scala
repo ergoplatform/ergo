@@ -4,7 +4,7 @@ import org.ergoplatform.ErgoTreePredef
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
-import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
+import org.ergoplatform.utils.{BoxUtils, ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import sigma.data.ProveDlog
@@ -129,7 +129,13 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       val bh          = boxesHolderGen.sample.get
       val rnd         = new RandomWrapper
       val us          = createUtxoState(bh, parameters)
-      val inputs      = bh.boxes.values.toIndexedSeq.takeRight(100)
+      // validTransactionFromBoxes requires each input box's value to be at least
+      // `BoxUtils.sufficientAmount(extendedParameters)` (see require at line 138 of
+      // ErgoNodeTransactionGenerators). The random `boxesHolderGen` occasionally
+      // produces undersized boxes; filter them out so the generator's precondition
+      // is satisfied deterministically.
+      val minBoxValue = BoxUtils.sufficientAmount(extendedParameters)
+      val inputs      = bh.boxes.values.toIndexedSeq.filter(_.value >= minBoxValue).takeRight(100)
       val txsWithFees = inputs.map(i =>
         validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = withTokens, feeProp)
       )

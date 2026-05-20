@@ -17,7 +17,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
+import scorex.core.network.ModifiersStatus.{Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
@@ -236,9 +236,13 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
       val modSpec = ModifiersSpec
       synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
-      // desired state of submitting valid headers is Received
+      // The header is an orphan (its parent isn't in this fixture's history), so
+      // ErgoNodeViewHolder detects it as stuck in the cache and publishes a
+      // RecoverableFailedModification event. The synchronizer's parent-chase
+      // handler then sets the status to Unknown so the missing parent can be
+      // re-requested.
       eventually {
-        deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+        deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
       }
     }
   }

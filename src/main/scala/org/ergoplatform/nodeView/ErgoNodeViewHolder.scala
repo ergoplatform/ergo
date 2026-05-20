@@ -466,7 +466,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * @param local whether the modifier was generated locally or not
     */
   protected def pmodModify(pmod: BlockSection, local: Boolean): Unit = {
-    if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db
+    if (history().contains(pmod.id)) {
+      // Diagnostic: surface the otherwise-silent drop so we can see when many
+      // received modifiers are skipped because they were already applied.
+      log.info(s"Skipping modifier ${pmod.encodedId} of type ${pmod.modifierTypeId}: already in history")
+    } else { // todo: .contains reads modifier pmod fully here if in db
 
       // if ADProofs block section generated locally, just dump it into the database
       if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
@@ -556,8 +560,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             context.system.eventStream.publish(SyntacticallyFailedModification(pmod.modifierTypeId, pmod.id, e))
         }
       }
-    } else {
-      log.warn(s"Trying to apply modifier ${pmod.encodedId} that's already in history")
     }
   }
 

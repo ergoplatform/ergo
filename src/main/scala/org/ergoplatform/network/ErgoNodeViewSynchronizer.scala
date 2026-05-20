@@ -755,7 +755,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // `deliveryTracker.setReceived()` called inside `validateAndSetStatus` for every correct modifier
         val valid = parsed.filter(validateAndSetStatus(hr, remote, _))
         if (valid.nonEmpty) {
-          log.debug(s"Sending ${valid.size} modifiers to view holder, vh cache size: $modifiersCacheSize")
+          log.info(s"Sending ${valid.size} modifiers (type=$typeId) to view holder, vh cache size: $modifiersCacheSize")
           modifiersCacheSize += valid.size // we increase estimated cache size now, before getting a precise number
           viewHolderRef ! ModifiersFromRemote(valid)
           // send sync message to the peer to get new headers quickly
@@ -868,6 +868,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .view.force
 
     val spam = modifiersByStatus.filterKeys(_ != Requested)
+
+    // Diagnostic: per-status breakdown of every batch (passed vs dropped).
+    // Helps trace cases where many modifiers arrive but only some are processed.
+    val countsByStatus = modifiersByStatus.map { case (st, ms) => st -> ms.size }
+    log.info(s"processSpam type=$typeId from $remote: $countsByStatus (Requested passes through, others are spam)")
 
     if (spam.nonEmpty) {
       if (typeId == ErgoTransaction.modifierTypeId) {

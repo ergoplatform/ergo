@@ -477,7 +477,10 @@ object ParametersSerializer extends ErgoSerializer[Parameters] with ApiCodecs {
       "inputCost" -> p.inputCost.asJson,
       "dataInputCost" -> p.dataInputCost.asJson,
       "outputCost" -> p.outputCost.asJson,
-      "subblocksPerBlock" -> p.subBlocksPerBlockOpt.asJson
+      "subblocksPerBlock" -> p.subBlocksPerBlockOpt.asJson,
+      "softForkStartingHeight" -> p.softForkStartingHeight.asJson,
+      "softForkVotesCollected" -> p.softForkVotesCollected.asJson,
+      "rulesToDisable" -> p.proposedUpdate.rulesToDisable.asJson
     ).asJson
   }
 

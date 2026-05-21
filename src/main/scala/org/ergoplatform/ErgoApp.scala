@@ -24,6 +24,7 @@ import org.ergoplatform.network.peer.PeerManagerRef
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
+import java.nio.file.{Files, Paths}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.{Codec, Source}
 
@@ -263,11 +264,13 @@ class ErgoApp(args: Args) extends ScorexLogging {
 object ErgoApp extends ScorexLogging {
   val ApplicationNameLimit: Int = 50
 
+  val DefaultConfigFileName: String = "ergo.conf"
+
   val argParser = new scopt.OptionParser[Args]("ergo") {
     opt[String]("config")
       .abbr("c")
       .action((x, c) => c.copy(userConfigPathOpt = Some(x)))
-      .text("location of ergo node configuration")
+      .text(s"location of ergo node configuration (default: ~/.ergo/$DefaultConfigFileName)")
       .optional()
     opt[Unit]("devnet")
       .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.DevNet)))
@@ -279,7 +282,7 @@ object ErgoApp extends ScorexLogging {
       .optional()
     opt[Unit]("mainnet")
       .action((_, c) => c.copy(networkTypeOpt = Some(NetworkType.MainNet)))
-      .text("set network to mainnet")
+      .text("set network to mainnet (default if no network flag is given)")
       .optional()
     help("help").text("prints this usage text")
   }
@@ -303,7 +306,39 @@ object ErgoApp extends ScorexLogging {
 
   def main(args: Array[String]): Unit = {
     argParser.parse(args, Args()).foreach { argsParsed =>
-      new ErgoApp(argsParsed).run()
+      new ErgoApp(applyDefaults(argsParsed)).run()
+    }
+  }
+
+  /**
+    * Fill in defaults for arguments not explicitly provided on the command line:
+    *  - `--config` defaults to `~/.ergo/ergo.conf` if that file exists
+    *  - network defaults to mainnet if no `--mainnet`/`--testnet`/`--devnet` was given
+    */
+  private[ergoplatform] def applyDefaults(args: Args): Args = {
+    val withConfig = args.userConfigPathOpt match {
+      case Some(_) => args
+      case None =>
+        defaultUserConfigPath(System.getProperty("user.home")) match {
+          case Some(path) =>
+            log.info(s"Using default user config: $path")
+            args.copy(userConfigPathOpt = Some(path))
+          case None => args
+        }
+    }
+    withConfig.networkTypeOpt match {
+      case Some(_) => withConfig
+      case None =>
+        log.info("No network flag provided; defaulting to mainnet")
+        withConfig.copy(networkTypeOpt = Some(NetworkType.MainNet))
+    }
+  }
+
+  /** Absolute path to `<baseDir>/.ergo/<DefaultConfigFileName>` if that file exists. */
+  private[ergoplatform] def defaultUserConfigPath(baseDir: String): Option[String] = {
+    Option(baseDir).flatMap { dir =>
+      val candidate = Paths.get(dir, ".ergo", DefaultConfigFileName)
+      if (Files.isRegularFile(candidate)) Some(candidate.toAbsolutePath.toString) else None
     }
   }
 

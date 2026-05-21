@@ -1,17 +1,19 @@
 package org.ergoplatform.nodeView.wallet.requests
 
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder, HCursor, Json}
+import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoTreePredef, Pay2SAddress}
+import sigma.interpreter.ContextExtension
 
 
 case class RequestsHolder(requests: Seq[TransactionGenerationRequest],
                           feeOpt: Option[Long],
                           inputsRaw: Seq[String],
                           dataInputsRaw: Seq[String],
+                          extensions: Seq[ContextExtension],
                           minerRewardDelay: Int)
                          (implicit val addressEncoder: ErgoAddressEncoder) {
 
@@ -32,17 +34,24 @@ class RequestsHolderEncoder(ergoSettings: ErgoSettings) extends Encoder[Requests
   implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
 
   def apply(holder: RequestsHolder): Json = {
-    Json.obj(
+    val base = Json.obj(
       "requests" -> holder.requests.asJson,
       "fee" -> holder.feeOpt.asJson,
       "inputsRaw" -> holder.inputsRaw.asJson,
       "dataInputsRaw" -> holder.dataInputsRaw.asJson
     )
+    if (holder.extensions.nonEmpty) {
+      base.deepMerge(Json.obj(
+        "context" -> Json.obj("extension" -> holder.extensions.asJson)
+      ))
+    } else {
+      base
+    }
   }
 
 }
 
-class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHolder] {
+class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHolder] with ApiCodecs {
 
   implicit val transactionRequestDecoder: TransactionRequestDecoder = new TransactionRequestDecoder(settings)
   implicit val addressEncoder: ErgoAddressEncoder = new ErgoAddressEncoder(settings.chainSettings.addressPrefix)
@@ -55,7 +64,18 @@ class RequestsHolderDecoder(settings: ErgoSettings) extends Decoder[RequestsHold
       fee <- cursor.downField("fee").as[Option[Long]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
-    } yield RequestsHolder(requests, fee, inputs.getOrElse(Seq.empty), dataInputs.getOrElse(Seq.empty), minerRewardDelay)
+      extensions <- cursor.downField("context").downField("extension").as[Option[Seq[ContextExtension]]]
+      inputsSeq = inputs.getOrElse(Seq.empty)
+      extSeq = extensions.getOrElse(Seq.empty)
+      _ <- if (extSeq.nonEmpty && extSeq.size != inputsSeq.size) {
+        Left(DecodingFailure(
+          s"context.extension length (${extSeq.size}) must match inputsRaw length (${inputsSeq.size})",
+          cursor.history
+        ))
+      } else {
+        Right(())
+      }
+    } yield RequestsHolder(requests, fee, inputsSeq, dataInputs.getOrElse(Seq.empty), extSeq, minerRewardDelay)
   }
 
 }

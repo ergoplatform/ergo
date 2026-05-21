@@ -23,9 +23,11 @@ import scorex.util.ScorexLogging
 import sigma.Colls
 import sigma.ast.{ByteArrayConstant, ErgoTree}
 import sigma.data.ProveDlog
+import sigma.interpreter.ContextExtension
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
 import sigmastate.utils.Extensions._
+import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.{Failure, Success, Try}
 
@@ -236,7 +238,8 @@ trait ErgoWalletSupport extends ScorexLogging {
                                            walletHeight: Int,
                                            selectionResult: BoxSelectionResult[TrackedBox],
                                            dataInputBoxes: IndexedSeq[ErgoBox],
-                                           changeAddressOpt: Option[ProveDlog]): Try[UnsignedErgoTransaction] = Try {
+                                           changeAddressOpt: Option[ProveDlog],
+                                           extensionByBoxId: Map[ModifierId, ContextExtension]): Try[UnsignedErgoTransaction] = Try {
     if (selectionResult.changeBoxes.nonEmpty) {
       require(changeAddressOpt.isDefined, "Does not have change address to send change to")
     }
@@ -259,7 +262,7 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
     new UnsignedErgoTransaction(
-      inputBoxes.map(tx => new UnsignedInput(tx.box.id)),
+      inputBoxes.map(tx => new UnsignedInput(tx.box.id, extensionByBoxId.getOrElse(bytesToId(tx.box.id), ContextExtension.empty))),
       dataInputs,
       (payTo ++ changeBoxCandidates).toIndexedSeq
     )
@@ -274,16 +277,24 @@ trait ErgoWalletSupport extends ScorexLogging {
     *                      the (sum(inputs) == sum(outputs)) preservation rule for ergs.
     * @param dataInputsRaw - user-provided data (read-only) inputs. Wallet is not able to figure out needed data inputs
     *                      (to spend the spendable inputs).
+    * @param extensions    - optional per-input context extensions, parallel to `inputsRaw`. When non-empty it must have
+    *                      the same length as `inputsRaw`; each entry is attached to the matching input's `UnsignedInput`.
+    *                      Empty means no context variables on any input.
     * @return generated transaction along with its inputs and data-inputs, or an error
     */
   protected def generateUnsignedTransaction(state: ErgoWalletState,
                                             boxSelector: BoxSelector,
                                             requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
-                                            dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
+                                            dataInputsRaw: Seq[String],
+                                            extensions: Seq[ContextExtension]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
     require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
+    require(extensions.isEmpty || extensions.size == inputsRaw.size,
+      s"extensions size (${extensions.size}) must match inputsRaw size (${inputsRaw.size})")
 
     val userInputs = ErgoWalletServiceUtils.stringsToBoxes(inputsRaw)
+    val extensionByBoxId: Map[ModifierId, ContextExtension] =
+      userInputs.zip(extensions).map { case (box, ext) => bytesToId(box.id) -> ext }.toMap
 
     val inputBoxes = if (userInputs.nonEmpty) {
       // make TrackedBox sequence out of boxes provided
@@ -340,7 +351,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt, extensionByBoxId) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

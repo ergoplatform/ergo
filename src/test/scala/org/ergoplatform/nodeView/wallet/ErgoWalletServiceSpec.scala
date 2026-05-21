@@ -27,7 +27,8 @@ import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
-import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, IntConstant, SType}
+import sigma.interpreter.ContextExtension
 import sigmastate.helpers.TestingHelpers.testBox
 
 import scala.collection.compat.immutable.ArraySeq
@@ -107,14 +108,14 @@ class ErgoWalletServiceSpec
     forAll(ergoBoxCandidateGen, ergoBoxCandidateGen, validErgoTransactionGen, proveDlogGen) {
       case (outputCandidate, outputChangeCandidate, (ergoBoxes, _), proveDlog) =>
         val selectionResult = new BoxSelectionResult(inputBoxes, Seq(outputChangeCandidate), None)
-        val tx = prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option(proveDlog)).get
+        val tx = prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option(proveDlog), Map.empty).get
         tx.inputs shouldBe inputBoxes.map(_.box.id).map(id => new UnsignedInput(id))
         tx.dataInputs shouldBe ergoBoxes.map(dataInputBox => DataInput(dataInputBox.id))
         tx.outputCandidates.size shouldBe 2
         tx.outputCandidates.map(_.value).sum shouldBe outputCandidate.value + outputChangeCandidate.value
 
         val txWithChangeBoxesButNoChangeAddress =
-          prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option.empty)
+          prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option.empty, Map.empty)
         txWithChangeBoxesButNoChangeAddress.isFailure shouldBe true
     }
   }
@@ -185,13 +186,14 @@ class ErgoWalletServiceSpec
               Seq(paymentRequest),
               inputsRaw = encodedBoxes,
               dataInputsRaw = Seq.empty,
+              extensions = Seq.empty,
               sign = true
             ).get.asInstanceOf[ErgoTransaction], None)
 
           // let's create wallet state with an unconfirmed transaction in mempool
           val wState = initialState(store, versionedStore, Some(new FakeMempool(Seq(unconfirmedTx))))
           val signedTx1 =
-            walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true)
+            walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, extensions = Seq.empty, sign = true)
               .get.asInstanceOf[ErgoTransaction]
           val walletTx1 = WalletTransaction(signedTx1, 100, Seq(ScanId @@ 0.shortValue()))
 
@@ -256,7 +258,7 @@ class ErgoWalletServiceSpec
         val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
         val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
 
-        val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).get
+        val (tx, inputs, dataInputs) = generateUnsignedTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, extensions = Seq.empty).get
         dataInputs shouldBe empty
         inputs.size shouldBe 1
         tx.inputs.size shouldBe 1
@@ -264,12 +266,70 @@ class ErgoWalletServiceSpec
         tx.outputs.map(_.value).sum shouldBe inputs.map(_.value).sum
 
         val walletService = new ErgoWalletServiceImpl(settings)
-        val signedTx = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
+        val signedTx = walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, extensions = Seq.empty, sign = true).get.asInstanceOf[ErgoTransaction]
 
         ErgoSignature.verify(signedTx.messageToSign, signedTx.inputs.head.spendingProof.proof, pks.head.pubkey.value) shouldBe true
         signedTx.inputs.size shouldBe 1
         signedTx.outputs.size shouldBe 2
 
+      }
+    }
+  }
+
+  property("it should attach context extensions to user-provided inputs") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+
+        val userBoxes = boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
+        val encodedBoxes = userBoxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+
+        val ext: ContextExtension = ContextExtension(
+          Map[Byte, EvaluatedValue[SType]](1.toByte -> IntConstant(42))
+        )
+        val extensions = Seq.fill(userBoxes.size)(ext)
+
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(
+          settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None
+        )
+
+        val (utx, inputs, _) = generateUnsignedTransaction(
+          wState, boxSelector, Seq(paymentRequest),
+          inputsRaw = encodedBoxes,
+          dataInputsRaw = Seq.empty,
+          extensions = extensions
+        ).get
+
+        inputs.size shouldBe userBoxes.size
+        utx.inputs.size shouldBe userBoxes.size
+        utx.inputs.foreach(_.extension shouldBe ext)
+      }
+    }
+  }
+
+  property("it should reject extensions whose size does not match inputsRaw") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+
+        val userBoxes = boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
+        val encodedBoxes = userBoxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(
+          settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None
+        )
+
+        val result = generateUnsignedTransaction(
+          wState, boxSelector, Seq(paymentRequest),
+          inputsRaw = encodedBoxes,
+          dataInputsRaw = Seq.empty,
+          extensions = Seq(ContextExtension.empty) // length mismatch when encodedBoxes.size > 1
+        )
+
+        // Either length is 1 (matches) or it fails — only check the mismatch case
+        if (encodedBoxes.size != 1) result.isFailure shouldBe true
       }
     }
   }

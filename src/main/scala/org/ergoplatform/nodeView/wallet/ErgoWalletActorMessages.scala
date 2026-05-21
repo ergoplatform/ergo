@@ -16,6 +16,7 @@ import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
 import scorex.util.ModifierId
 import sigma.data.{ProveDlog, SigmaBoolean}
+import sigma.interpreter.ContextExtension
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.util.Try
@@ -64,11 +65,13 @@ object ErgoWalletActorMessages {
    * @param requests
    * @param inputsRaw
    * @param dataInputsRaw
+   * @param extensions   context variables, one ContextExtension per inputsRaw entry (empty for empty extension)
    * @param sign
    */
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest],
                                        inputsRaw: Seq[String],
                                        dataInputsRaw: Seq[String],
+                                       extensions: Seq[ContextExtension],
                                        sign: Boolean)
 
   /**

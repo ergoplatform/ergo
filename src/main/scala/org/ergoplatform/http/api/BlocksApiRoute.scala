@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSe
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
-import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
@@ -35,6 +35,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       postBlocksR ~
       getLastHeadersR ~
       getChainSliceR ~
+      getBestAndForkIdsAtHeightR ~
       getBlockIdsAtHeightR ~
       getBlockHeaderByHeaderIdR ~
       getFullBlockByHeaderIdsR ~
@@ -50,6 +51,18 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   private def getHeaderIdsAtHeight(h: Int): Future[Json] =
     getHistory.map { history =>
       history.headerIdsAtHeight(h).map(Algos.encode).asJson
+    }
+
+  private def getBestAndForkIdsAtHeight(h: Int): Future[Option[Json]] =
+    getHistory.map { history =>
+      history.headerIdsAtHeight(h) match {
+        case Seq() => None
+        case best +: forks =>
+          Some(Json.obj(
+            "best"  -> Algos.encode(best).asJson,
+            "forks" -> forks.map(Algos.encode).asJson
+          ))
+      }
     }
 
   private def getLastHeaders(n: Int): Future[Json] =
@@ -166,6 +179,12 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getBlockIdsAtHeightR: Route = (pathPrefix("at" / IntNumber) & get) { height =>
     ApiResponse(getHeaderIdsAtHeight(height))
+  }
+
+  def getBestAndForkIdsAtHeightR: Route = (pathPrefix("chain" / "at" / IntNumber) & get) { height =>
+    onSuccess(getBestAndForkIdsAtHeight(height)) {
+      _.fold[Route](NotExists(s"No block at height $height"))(ApiResponse(_))
+    }
   }
 
   def getBlockHeaderByHeaderIdR: Route = (modifierId & pathPrefix("header") & get) { id =>

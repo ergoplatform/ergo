@@ -4,7 +4,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
 
-import java.net.{InetSocketAddress, URL}
+import java.net.{InetSocketAddress, URI}
 import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoCorePropertyTest {
@@ -65,7 +65,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
       apiKeyHash = None,
       corsAllowedOrigin = Some("*"),
       timeout = 5.seconds,
-      publicUrl = Some(new URL("https://example.com:80"))
+      publicUrl = Some(URI.create("https://example.com:80").toURL)
     )
   }
 
@@ -164,7 +164,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
         "http://0.0.0.0",
         "http://example.com/foo/bar",
         "http://example.com?foo=bar"
-      ).map(new URL(_))
+      ).map(s => URI.create(s).toURL)
 
     invalidUrls.forall(ErgoSettingsReader.invalidRestApiUrl) shouldBe true
 
@@ -174,7 +174,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
         "http://example.com:80",
         "http://82.90.21.31",
         "http://82.90.21.31:80"
-      ).map(new URL(_))
+      ).map(s => URI.create(s).toURL)
 
     validUrls.forall(url => !ErgoSettingsReader.invalidRestApiUrl(url)) shouldBe true
   }

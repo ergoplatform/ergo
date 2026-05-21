@@ -73,6 +73,27 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "get best and fork ids at height" in {
+    val height = history.lastHeaders(1).headers.head.height
+    Get(prefix + s"/chain/at/$height") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val ids   = history.headerIdsAtHeight(height)
+      val best  = Algos.encode(ids.head)
+      val forks = ids.tail.map(Algos.encode)
+      val expected = Json.obj(
+        "best"  -> best.asJson,
+        "forks" -> forks.asJson
+      )
+      responseAs[Json] shouldEqual expected
+    }
+  }
+
+  it should "return 404 from chain/at when no block exists at height" in {
+    Get(prefix + "/chain/at/1000000") ~> route ~> check {
+      status shouldBe StatusCodes.NotFound
+    }
+  }
+
   it should "get chain slice" in {
     Get(prefix + "/chainSlice?fromHeight=0") ~> route ~> check {
       status shouldBe StatusCodes.OK

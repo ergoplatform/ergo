@@ -29,7 +29,7 @@ object VotingTargets {
     val parameterTargets = votingObject
       .keySet()
       .asScala
-      .flatMap(id => Try(id.toByte -> votingObject.get(id).render().toInt).toOption)
+      .flatMap(id => Try(id.toByte -> votingObject.get(id).unwrapped().toString.toInt).toOption)
       .toMap
     val desiredUpdate = ErgoValidationSettingsUpdate(toDisable.map(_.toShort), Seq())
 

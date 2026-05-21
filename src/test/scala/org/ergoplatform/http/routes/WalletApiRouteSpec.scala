@@ -58,6 +58,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Some(10000L),
     Seq.empty,
     Seq.empty,
+    Seq.empty,
     minerRewardDelay = 720
   )(settings.addressEncoder)
 

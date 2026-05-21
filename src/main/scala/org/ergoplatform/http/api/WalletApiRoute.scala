@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.sdk.SecretString
+import sigma.interpreter.ContextExtension
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
@@ -158,9 +159,10 @@ case class WalletApiRoute(readersHolder: ActorRef,
   private def generateTransactionAndProcess(requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
+                                            extensions: Seq[ContextExtension],
                                             verifyFn: ErgoTransaction => Future[Try[UnconfirmedTransaction]],
                                             processFn: UnconfirmedTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw, extensions).flatMap(txTry => txTry match {
       case Success(tx) => verifyFn(tx)
       case Failure(e) => Future(Failure[UnconfirmedTransaction](e))
     })) {
@@ -171,11 +173,13 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private def generateTransaction(requests: Seq[TransactionGenerationRequest],
                                   inputsRaw: Seq[String],
-                                  dataInputsRaw: Seq[String]): Route = {
+                                  dataInputsRaw: Seq[String],
+                                  extensions: Seq[ContextExtension]): Route = {
     generateTransactionAndProcess(
       requests,
       inputsRaw,
       dataInputsRaw,
+      extensions,
       tx => Future(Success(UnconfirmedTransaction(tx, source = None))),
       utx => ApiResponse(utx.transaction)
     )
@@ -183,8 +187,9 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                                           inputsRaw: Seq[String],
-                                          dataInputsRaw: Seq[String]): Route = {
-    withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
+                                          dataInputsRaw: Seq[String],
+                                          extensions: Seq[ContextExtension]): Route = {
+    withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw, extensions)) {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(utx) => ApiResponse(utx)
     }
@@ -192,8 +197,9 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
-                              dataInputsRaw: Seq[String]): Route = {
-    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
+                              dataInputsRaw: Seq[String],
+                              extensions: Seq[ContextExtension]): Route = {
+    generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw, extensions,
       tx => verifyTransaction(tx, readersHolder, ergoSettings),
       validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx)
     )
@@ -201,17 +207,17 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def sendTransactionR: Route =
     (path("transaction" / "send") & post & entity(as[RequestsHolder])) { holder =>
-      sendTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
+      sendTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw, holder.extensions)
     }
 
   def generateTransactionR: Route =
     (path("transaction" / "generate") & post & entity(as[RequestsHolder])) { holder =>
-      generateTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
+      generateTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw, holder.extensions)
     }
 
   def generateUnsignedTransactionR: Route =
     (path("transaction" / "generateUnsigned") & post & entity(as[RequestsHolder])) { holder =>
-      generateUnsignedTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw)
+      generateUnsignedTransaction(holder.withFee(), holder.inputsRaw, holder.dataInputsRaw, holder.extensions)
     }
 
   def generateCommitmentsR: Route = (path("generateCommitments")
@@ -267,7 +273,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def sendPaymentTransactionR: Route = (path("payment" / "send") & post
     & entity(as[Seq[PaymentRequest]])) { requests =>
-    sendTransaction(withFee(requests), Seq.empty, Seq.empty)
+    sendTransaction(withFee(requests), Seq.empty, Seq.empty, Seq.empty)
   }
 
   def collectBoxesR: Route = (path("boxes" / "collect") & post

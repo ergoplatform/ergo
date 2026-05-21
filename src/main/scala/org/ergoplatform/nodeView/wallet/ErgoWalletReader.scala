@@ -19,6 +19,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.{ErgoBox, NodeViewComponent, P2PKAddress}
 import scorex.util.ModifierId
 import sigma.data.SigmaBoolean
+import sigma.interpreter.ContextExtension
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import java.util.concurrent.TimeUnit
@@ -99,8 +100,9 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
-                          dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true))
+                          dataInputsRaw: Seq[String] = Seq.empty,
+                          extensions: Seq[ContextExtension] = Seq.empty): Future[Try[ErgoTransaction]] =
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, extensions, sign = true))
       .mapTo[Try[ErgoTransaction]]
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
@@ -113,8 +115,9 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
-                          dataInputsRaw: Seq[String] = Seq.empty): Future[Try[UnsignedErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = false)).mapTo[Try[UnsignedErgoTransaction]]
+                          dataInputsRaw: Seq[String] = Seq.empty,
+                          extensions: Seq[ContextExtension] = Seq.empty): Future[Try[UnsignedErgoTransaction]] =
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, extensions, sign = false)).mapTo[Try[UnsignedErgoTransaction]]
 
 
   def signTransaction(tx: UnsignedErgoTransaction,

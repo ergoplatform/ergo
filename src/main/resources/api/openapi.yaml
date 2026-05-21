@@ -704,6 +704,20 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+        context:
+          description: |
+            Optional context variables to attach to inputsRaw, one ContextExtension per input in the same order.
+            Length of `context.extension` must equal length of `inputsRaw`.
+          type: object
+          properties:
+            extension:
+              type: array
+              items:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/SValue'
+                example:
+                  '1': 'a2aed72ff1b139f35d1ad2938cb44c9848a34d4dcfd6d8ab717ebde40a7304f2541cf628ffc8b5c496e6161eba3f169c6dd440704b1719e0'
 
     SourceHolder:
       type: object

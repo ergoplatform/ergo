@@ -117,7 +117,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
           val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
         }
-      case _: AutolykosSolution => sender() ! StatusReply.success(())
+      case _: AutolykosSolution => sender() ! StatusReply.success(CandidateGenerator.SolutionAck)
       case ErgoMiner.ReadMinerPk => sender() ! StatusReply.success(pk)
     }
   }
@@ -181,19 +181,19 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
     def receive: Receive = {
 
-      case _: InitWallet => sender() ! Success(SecretString.create(WalletActorStub.mnemonic))
+      case _: InitWallet => sender() ! InitWalletResponse(Success(SecretString.create(WalletActorStub.mnemonic)))
 
-      case _: RestoreWallet => sender() ! Success(())
+      case _: RestoreWallet => sender() ! RestoreWalletResponse(Success(()))
 
-      case _: UnlockWallet => sender() ! Success(())
+      case _: UnlockWallet => sender() ! UnlockWalletResponse(Success(()))
 
       case LockWallet => ()
 
-      case RescanWallet(_) => sender ! Success(())
+      case RescanWallet(_) => sender() ! RescanWalletResponse(Success(()))
 
       case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistoryUtils.GenesisHeight, error = None)
 
-      case _: CheckSeed => sender() ! true
+      case _: CheckSeed => sender() ! CheckSeedResponse(Success(true))
 
       case GetWalletBoxes(unspentOnly, _) =>
         val boxes = if (unspentOnly) {
@@ -201,7 +201,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
-        sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
+        sender() ! WalletBoxesResponse(boxes.sortBy(_.trackedBox.inclusionHeightOpt))
 
       case GetScanTransactions(scanId, includeUnconfirmed) =>
         if (includeUnconfirmed) {
@@ -211,18 +211,18 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         }
 
       case GetTransactions =>
-        sender() ! walletTxs
+        sender() ! WalletTransactionsResponse(walletTxs)
 
-      case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
+      case DeriveKey(_) => sender() ! DeriveKeyResponse(Success(WalletActorStub.address))
 
       case DeriveNextKey => sender() !
         DeriveNextKeyResult(Success((WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey)))
 
       case ReadPublicKeys(from, until) =>
-        sender() ! trackedAddresses.slice(from, until)
+        sender() ! PublicKeysResponse(trackedAddresses.slice(from, until))
 
       case ReadBalances(chainStatus) =>
-        sender() ! WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.WrappedArray.empty)
+        sender() ! BalancesResponse(WalletDigest(0, WalletActorStub.balance(chainStatus), mutable.WrappedArray.empty))
 
       case AddScan(req) =>
         val scanId = ScanId @@ (apps.lastOption.map(_._1).getOrElse(100: Short) + 1).toShort
@@ -249,10 +249,10 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
           box.trackedBox.inclusionHeightOpt.getOrElse(0) >= minHeight &&
             (maxHeight == -1 || box.trackedBox.inclusionHeightOpt.getOrElse(Int.MaxValue) <= maxHeight)
         }
-        sender() ! res
+        sender() ! ScanBoxesResponse(res)
 
       case GetScanSpentBoxes(_) =>
-        sender() ! Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
+        sender() ! ScanBoxesResponse(Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31))
 
       case StopTracking(_, _) =>
         sender() ! StopTrackingResponse(Success(()))
@@ -263,13 +263,13 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       case GenerateTransaction(_, _, _, _) =>
         val input = inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
-        sender() ! Success(tx)
+        sender() ! SignedTransactionResponse(Success(tx))
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
         val sc = ErgoStateContext.empty(settings.chainSettings, parameters)
-        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
+        sender() ! SignedTransactionResponse(ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
-        }
+        })
     }
   }
 

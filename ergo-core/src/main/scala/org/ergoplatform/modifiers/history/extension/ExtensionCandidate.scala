@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.extension
 
+import io.circe.Encoder
+import io.circe.syntax._
 import org.ergoplatform.modifiers.history.extension.Extension.InterlinksVectorPrefix
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.LeafData
@@ -57,4 +59,11 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
 
 object ExtensionCandidate {
   def apply(fields: Seq[(Array[Byte], Array[Byte])]): ExtensionCandidate = new ExtensionCandidate(fields)
+
+  implicit val jsonEncoder: Encoder[ExtensionCandidate] = Encoder.instance { e: ExtensionCandidate =>
+    Map(
+      "digest" -> Algos.encode(e.digest).asJson,
+      "fields" -> e.fields.map(kv => Algos.encode(kv._1) -> Algos.encode(kv._2).asJson).asJson
+    ).asJson
+  }
 }

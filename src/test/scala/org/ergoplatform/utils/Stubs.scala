@@ -5,9 +5,11 @@ import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateBlock, CandidateGenerator, ErgoMiner, WorkMessage}
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
+import scorex.crypto.authds.SerializedAdProof
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import org.ergoplatform.network.{Handshake, PeerSpec, Version}
@@ -99,6 +101,18 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
   val pk: ProveDlog = DLogProverInput(BigIntegers.fromUnsignedByteArray(Random.randomBytes(32))).publicImage
   val externalWorkMessage = WorkMessage(Array.fill(32)(2: Byte), BigInt(9999), None, pk, None)
 
+  val stubCandidateBlock: CandidateBlock = CandidateBlock(
+    parentOpt    = None,
+    version      = Header.InitialVersion,
+    nBits        = settings.chainSettings.initialNBits,
+    stateRoot    = ADDigest @@ Array.fill(HashLength + 1)(0: Byte),
+    adProofBytes = SerializedAdProof @@ Array.emptyByteArray,
+    transactions = Seq.empty,
+    timestamp    = 0L,
+    extension    = ExtensionCandidate(Seq.empty),
+    votes        = Array.fill(3)(0: Byte)
+  )
+
   class PeersManagerStub extends Actor {
     def receive: Receive = {
       case GetAllPeers => sender() ! peers
@@ -114,7 +128,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     def receive: Receive = {
       case CandidateGenerator.GenerateCandidate(_, reply, _) =>
         if (reply) {
-          val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
+          val candidate = Candidate(stubCandidateBlock, externalWorkMessage, Seq.empty)
           sender() ! StatusReply.success(candidate)
         }
       case _: AutolykosSolution => sender() ! StatusReply.success(())

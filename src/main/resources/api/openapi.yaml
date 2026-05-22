@@ -2021,6 +2021,118 @@ components:
           type: object
           $ref: '#/components/schemas/ProofOfUpcomingTransactions'
 
+    HeaderWithoutPow:
+      description: Block header fields without the Proof-of-Work solution, with all Merkle roots already computed
+      type: object
+      required:
+        - version
+        - parentId
+        - adProofsRoot
+        - stateRoot
+        - transactionsRoot
+        - timestamp
+        - nBits
+        - height
+        - extensionRoot
+        - votes
+        - unparsedBytes
+      properties:
+        version:
+          type: integer
+          format: int32
+          description: Block version
+          example: 3
+        parentId:
+          $ref: '#/components/schemas/ModifierId'
+        adProofsRoot:
+          $ref: '#/components/schemas/Digest32'
+        stateRoot:
+          $ref: '#/components/schemas/ADDigest'
+        transactionsRoot:
+          $ref: '#/components/schemas/Digest32'
+        timestamp:
+          $ref: '#/components/schemas/Timestamp'
+        nBits:
+          type: integer
+          format: int64
+          description: Encoded difficulty (unsigned int)
+          example: 100734821
+        height:
+          type: integer
+          format: int32
+          description: Block height
+          example: 1234567
+        extensionRoot:
+          $ref: '#/components/schemas/Digest32'
+        votes:
+          type: string
+          description: Base16-encoded parameter votes (3 bytes)
+          example: '000000'
+        unparsedBytes:
+          type: string
+          description: Base16-encoded bytes reserved for future protocol versions (may be empty)
+          example: ''
+
+    ExtensionCandidate:
+      description: Extension block section without an assigned header id
+      type: object
+      required:
+        - digest
+        - fields
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest32'
+        fields:
+          type: array
+          description: Extension key-value pairs (each entry is a 2-tuple of Base16-encoded key and value)
+          items:
+            type: array
+            items:
+              type: string
+            minItems: 2
+            maxItems: 2
+
+    BlockTemplate:
+      description: |
+        Bitcoin-style `getblocktemplate` response. Returns the pre-PoW header (with all
+        Merkle roots already computed), the block transactions, extension and AD proofs,
+        along with the PoW work parameters returned by `/mining/candidate`. Callers can
+        reassemble or modify the components and submit a solved block via
+        `POST /mining/solution`.
+      type: object
+      required:
+        - header
+        - transactions
+        - extension
+        - adProofBytes
+        - pk
+        - b
+        - msg
+      properties:
+        header:
+          $ref: '#/components/schemas/HeaderWithoutPow'
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransaction'
+        extension:
+          $ref: '#/components/schemas/ExtensionCandidate'
+        adProofBytes:
+          type: string
+          description: Base16-encoded serialized AD proofs
+        pk:
+          type: string
+          description: Base16-encoded miner public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        b:
+          type: integer
+          description: PoW target value (q / difficulty)
+          example: 987654321
+        msg:
+          type: string
+          description: Base16-encoded Blake2b256 hash of the pre-PoW header bytes — what GPU miners work on
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+
     Peer:
       type: object
       required:
@@ -5134,6 +5246,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WorkMessage'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/blockTemplate:
+    get:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Request full block template
+      description: |
+        Bitcoin-style `getblocktemplate` analogue. Returns the components of the current block
+        candidate — pre-PoW header (with computed Merkle roots), transactions, extension and AD
+        proofs — together with the PoW work parameters. Useful for external miners and
+        block-building extensions that need to inspect or reassemble the header bytes themselves.
+        Solutions are submitted via `POST /mining/solution`.
+      operationId: miningRequestBlockTemplate
+      tags:
+        - mining
+      responses:
+        '200':
+          description: Full block template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockTemplate'
         default:
           description: Error
           content:

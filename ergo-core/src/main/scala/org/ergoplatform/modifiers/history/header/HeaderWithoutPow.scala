@@ -1,6 +1,10 @@
 package org.ergoplatform.modifiers.history.header
 
+import io.circe.Encoder
+import io.circe.syntax._
+import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
@@ -24,13 +28,29 @@ class HeaderWithoutPow(val version: Header.Version, // 1 byte
       nBits, height, extensionRoot, powSolution, votes, unparsedBytes, headerSize)
 }
 
-object HeaderWithoutPow {
+object HeaderWithoutPow extends ApiCodecs {
 
   def apply(version: Header.Version, parentId: ModifierId, ADProofsRoot: Digest32, stateRoot: ADDigest,
             transactionsRoot: Digest32, timestamp: Header.Timestamp, nBits: Long, height: Int,
             extensionRoot: Digest32, votes: Array[Byte], unparsedBytes: Array[Byte]): HeaderWithoutPow = {
     new HeaderWithoutPow(version, parentId, ADProofsRoot, stateRoot, transactionsRoot, timestamp,
       nBits, height, extensionRoot, votes, unparsedBytes)
+  }
+
+  implicit val jsonEncoder: Encoder[HeaderWithoutPow] = Encoder.instance { h: HeaderWithoutPow =>
+    Map(
+      "version" -> h.version.asJson,
+      "parentId" -> Algos.encode(h.parentId).asJson,
+      "adProofsRoot" -> Algos.encode(h.ADProofsRoot).asJson,
+      "stateRoot" -> Algos.encode(h.stateRoot).asJson,
+      "transactionsRoot" -> Algos.encode(h.transactionsRoot).asJson,
+      "timestamp" -> h.timestamp.asJson,
+      "nBits" -> h.nBits.asJson,
+      "height" -> h.height.asJson,
+      "extensionRoot" -> Algos.encode(h.extensionRoot).asJson,
+      "votes" -> Algos.encode(h.votes).asJson,
+      "unparsedBytes" -> Algos.encode(h.unparsedBytes).asJson
+    ).asJson
   }
 
 }

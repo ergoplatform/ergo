@@ -6,7 +6,7 @@ import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Encoder, Json}
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
+import org.ergoplatform.mining.{AutolykosSolution, BlockTemplate, CandidateGenerator, ErgoMiner}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
@@ -27,6 +27,7 @@ case class MiningApiRoute(miner: ActorRef,
   override val route: Route = pathPrefix("mining") {
     candidateR ~
       candidateWithTxsR ~
+      blockTemplateR ~
       solutionR ~
       rewardAddressR ~
       rewardPublicKeyR
@@ -39,6 +40,23 @@ case class MiningApiRoute(miner: ActorRef,
     val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true, forced = false)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
+  }
+
+  /**
+    * Get full block template — pre-PoW header (with computed roots), transactions, extension and
+    * AD proofs, plus the same `pk`/`b`/`msg` work parameters returned by `/mining/candidate`.
+    *
+    * Analogue of Bitcoin's `getblocktemplate`: lets external miners and block-building extensions
+    * inspect or modify the components and assemble the header bytes themselves, then submit a
+    * solved block via `POST /mining/solution`.
+    */
+  def blockTemplateR: Route = (path("blockTemplate") & pathEndOrSingleSlash & get) {
+    val prepareCmd = CandidateGenerator.GenerateCandidate(Seq.empty, reply = true, forced = false)
+    val powScheme  = ergoSettings.chainSettings.powScheme
+    val templateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map { c =>
+      BlockTemplate.fromCandidateBlock(c.candidateBlock, c.externalVersion.pk, powScheme)
+    }
+    ApiResponse(templateF)
   }
 
   /**

@@ -19,6 +19,18 @@ import scala.annotation.nowarn
 
 /**
   * System parameters which could be readjusted via collective miners decision.
+  *
+  * Values are stored as `Int` because:
+  *   - the wire format is fixed at 4 bytes per value (consensus-locked, see
+  *     `toExtensionCandidate` / `parseExtension` and `ParametersSerializer`);
+  *   - the SDK trait `BlockchainParameters` exposes every typed getter as `Int`;
+  *   - `updateParams` caps growth at `Int.MaxValue / 2`, so voting cannot push
+  *     a value out of `Int` range.
+  *
+  * The `Long` types you may see in cost-related code (`ErgoTransaction.maxCost`,
+  * `CandidateGenerator.correctLimits`, `ErgoLikeContext.costLimit`) are about
+  * overflow-safe accumulation of many `Int` per-transaction costs, not about
+  * `Long` range for individual parameters.
   */
 class Parameters(val height: Height,
                  val parametersTable: Map[Byte, Int],

@@ -75,7 +75,7 @@ case class MiningApiRoute(miner: ActorRef,
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
     val result = if (ergoSettings.nodeSettings.useExternalMiner) {
-      miner.askWithStatus(solution).mapTo[Unit]
+      miner.askWithStatus(solution).mapTo[CandidateGenerator.SolutionAck.type].map(_ => ())
     } else {
       Future.failed(new Exception("External miner support is inactive"))
     }

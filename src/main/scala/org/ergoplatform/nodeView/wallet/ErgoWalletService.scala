@@ -158,10 +158,10 @@ trait ErgoWalletService {
   /**
     * Derive key from given encoded path according to BIP-32
     * @param state current wallet state
-    * @param encodedPath derivation path from the master key
+    * @param path derivation path from the master key
     * @return Try of pay-to-public-key-address and new wallet state
     */
-  def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
+  def deriveKeyFromPath(state: ErgoWalletState, path: DerivationPath, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)]
 
   /**
    * Get the secret key for a give derivation path.
@@ -537,23 +537,20 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     prover.bagForTransaction(tx, inputBoxes, dataBoxes, state.stateContext, real, simulated)
   }
 
-  override def deriveKeyFromPath(state: ErgoWalletState, encodedPath: String, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
+  override def deriveKeyFromPath(state: ErgoWalletState, path: DerivationPath, addrEncoder: ErgoAddressEncoder): Try[(P2PKAddress, ErgoWalletState)] =
     state.secretStorageOpt match {
       case Some(secretStorage) if !secretStorage.isLocked =>
         val rootSecret = secretStorage.secret.get // unlocked means Some(secret)
-        DerivationPath.fromEncoded(encodedPath) match {
-          case Success(path) if !path.publicBranch =>
-            val secret = rootSecret.derive(path)
-            addSecretToStorage(state, secret) match {
-              case Success(newState) =>
-                Success(P2PKAddress(secret.publicKey.key)(addrEncoder) -> newState)
-              case Failure(t) =>
-                Failure(t)
-            }
-          case Success(path) =>
-            Failure(new Exception(s"A private path is expected, but the public one given: $path"))
-          case Failure(t) =>
-            Failure(t)
+        if (path.publicBranch) {
+          Failure(new Exception(s"A private path is expected, but the public one given: $path"))
+        } else {
+          val secret = rootSecret.derive(path)
+          addSecretToStorage(state, secret) match {
+            case Success(newState) =>
+              Success(P2PKAddress(secret.publicKey.key)(addrEncoder) -> newState)
+            case Failure(t) =>
+              Failure(t)
+          }
         }
       case Some(_) =>
         Failure(new Exception("Unable to derive key from path, wallet is locked"))

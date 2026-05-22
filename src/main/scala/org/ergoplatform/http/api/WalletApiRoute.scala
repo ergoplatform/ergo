@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
@@ -76,9 +77,9 @@ case class WalletApiRoute(readersHolder: ActorRef,
       .fold(_ => reject, s => provide(s))
   }
 
-  private val derivationPath: Directive1[String] = entity(as[Json]).flatMap { p =>
+  private val derivationPath: Directive1[DerivationPath] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("derivationPath").as[String]
-      .fold(_ => reject, s => provide(s))
+      .fold(_ => reject, s => DerivationPath.fromEncoded(s).fold(_ => reject, provide))
   }
 
   private val restoreRequest: Directive1[(Boolean, String, String, Option[String])] = entity(as[Json]).flatMap { p =>
@@ -160,7 +161,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
                                             dataInputsRaw: Seq[String],
                                             verifyFn: ErgoTransaction => Future[Try[UnconfirmedTransaction]],
                                             processFn: UnconfirmedTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
+    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(_.tx match {
       case Success(tx) => verifyFn(tx)
       case Failure(e) => Future(Failure[UnconfirmedTransaction](e))
     })) {
@@ -185,8 +186,10 @@ case class WalletApiRoute(readersHolder: ActorRef,
                                           inputsRaw: Seq[String],
                                           dataInputsRaw: Seq[String]): Route = {
     withWalletOp(_.generateUnsignedTransaction(requests, inputsRaw, dataInputsRaw)) {
-      case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(utx) => ApiResponse(utx)
+      _.tx match {
+        case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
+        case Success(utx) => ApiResponse(utx)
+      }
     }
   }
 
@@ -244,12 +247,12 @@ case class WalletApiRoute(readersHolder: ActorRef,
           .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
 
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
+          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes)).map(_.tx)
         } else {
           Future(Failure(new Exception("Can't parse input boxes provided")))
         }
       } else {
-        r.w.signTransaction(tx, secrets, hints, None, None)
+        r.w.signTransaction(tx, secrets, hints, None, None).map(_.tx)
       }
     }
 
@@ -281,7 +284,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def balancesR: Route = (path("balances") & get) {
-    withWallet(_.confirmedBalances)
+    withWallet(_.confirmedBalances.map(_.digest))
   }
 
   def getWalletStatusR: Route = (path("status") & get) {
@@ -297,11 +300,11 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def unconfirmedBalanceR: Route = (path("balances" / "withUnconfirmed") & get) {
-    withWallet(_.balancesWithUnconfirmed)
+    withWallet(_.balancesWithUnconfirmed.map(_.digest))
   }
 
   def addressesR: Route = (path("addresses") & get) {
-    withWallet(_.publicKeys(0, Int.MaxValue): Future[Seq[ErgoAddress]])
+    withWallet(_.publicKeys(0, Int.MaxValue).map(_.addresses): Future[Seq[ErgoAddress]])
   }
 
   def unspentBoxesR: Route = (path("boxes" / "unspent") & get & boxParams) {
@@ -309,8 +312,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
       val considerUnconfirmed = minConfNum == -1
       withWallet { wallet =>
         wallet.walletBoxes(unspentOnly = true, considerUnconfirmed)
-          .map { boxes =>
-            boxes
+          .map { resp =>
+            resp.boxes
               .filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
               .slice(offset, offset + limit)
           }
@@ -323,8 +326,9 @@ case class WalletApiRoute(readersHolder: ActorRef,
       withWallet {
         _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
           .map {
-            _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
-            .slice(offset, offset + limit)
+            _.boxes
+              .filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
+              .slice(offset, offset + limit)
           }
       }
   }
@@ -340,7 +344,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
         withWallet {
           _.transactions
             .map {
-              _.filter(tx =>
+              _.txs.filter(tx =>
                 tx.wtx.scanIds.exists(scanId => scanId <= Constants.PaymentsScanId)
               )
             }
@@ -354,14 +358,14 @@ case class WalletApiRoute(readersHolder: ActorRef,
             minConfNum,
             maxConfNum,
             includeUnconfirmed = false
-          )
+          ).map(_.txs)
         }
       }
   }
 
   def getTransactionR: Route = (path("transactionById") & modifierIdGet & get) { id =>
     withWalletOp(_.transactionById(id)) {
-      _.fold[Route](NotExists)(tx => ApiResponse(tx.asJson))
+      _.tx.fold[Route](NotExists)(tx => ApiResponse(tx.asJson))
     }
   }
 
@@ -383,7 +387,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
           maxConfNum,
           includeUnconfirmed)
         ) {
-          resp => ApiResponse(resp.asJson)
+          resp => ApiResponse(resp.txs.asJson)
         }
       }
   }
@@ -391,7 +395,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   def initWalletR: Route = (path("init") & post & initRequest) {
     case (pass, mnemonicPassOpt) =>
       withWalletOp(_.initWallet(SecretString.create(pass), mnemonicPassOpt.map(SecretString.create(_)))) {
-        _.fold(
+        _.result.fold(
           e => BadRequest(e.getMessage),
           mnemonic => {
             val responseJson = Json.obj("mnemonic" -> mnemonic.asJson)
@@ -405,7 +409,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
   def restoreWalletR: Route = (path("restore") & post & restoreRequest) {
     case (usePre1627KeyDerivation, pass, mnemo, mnemoPassOpt) =>
       withWalletOp(_.restoreWallet(SecretString.create(pass), SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)), usePre1627KeyDerivation)) {
-        _.fold(
+        _.result.fold(
           e => BadRequest(e.getMessage),
           _ => ApiResponse.toRoute(ApiResponse.OK)
         )
@@ -414,7 +418,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def unlockWalletR: Route = (path("unlock") & post & password) { pass =>
     withWalletOp(_.unlockWallet(SecretString.create(pass))) {
-      _.fold(
+      _.result.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)
       )
@@ -423,11 +427,10 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def checkSeedR: Route = (path("check") & post & checkRequest) {
     case (mnemo, mnemoPassOpt) =>
-      withWalletOp(_.checkSeed(SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) { matched =>
-        ApiResponse(
-          Json.obj(
-            "matched" -> matched.asJson
-          )
+      withWalletOp(_.checkSeed(SecretString.create(mnemo), mnemoPassOpt.map(SecretString.create(_)))) {
+        _.matched.fold(
+          e => BadRequest(e.getMessage),
+          matched => ApiResponse(Json.obj("matched" -> matched.asJson))
         )
       }
   }
@@ -441,7 +444,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def deriveKeyR: Route = (path("deriveKey") & post & derivationPath) { path =>
     withWalletOp(_.deriveKey(path)) {
-      _.fold(
+      _.address.fold(
         e => BadRequest(e.getMessage),
         address => ApiResponse(Json.obj("address" -> address.toString.asJson))
       )
@@ -470,7 +473,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
     withWalletOp(_.rescanWallet(fromHeight)) {
-      _.fold(
+      _.result.fold(
         e => BadRequest(e.getMessage),
         _ => ApiResponse.toRoute(ApiResponse.OK)
       )
@@ -487,12 +490,14 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def getPrivateKeyR: Route = (path("getPrivateKey") & post & p2pkAddress) { p2pk =>
-    withWalletOp(_.allExtendedPublicKeys()) { extKeys =>
-      extKeys.find(_.key.value.equals(p2pk.pubkey.value)).map(_.path) match {
+    withWalletOp(_.allExtendedPublicKeys()) { resp =>
+      resp.keys.find(_.key.value.equals(p2pk.pubkey.value)).map(_.path) match {
         case Some(path) =>
           withWalletOp(_.getPrivateKeyFromPath(path)) {
-            case Success(secret) => ApiResponse(secret.w)
-            case Failure(f) => BadRequest(f.getMessage)
+            _.key match {
+              case Success(secret) => ApiResponse(secret.w)
+              case Failure(f) => BadRequest(f.getMessage)
+            }
           }
         case None => NotExists("Address not found in wallet database.")
       }

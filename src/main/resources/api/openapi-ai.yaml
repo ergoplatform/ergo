@@ -50,7 +50,6 @@ components:
       description: Spending proof for transaction input
       type: object
       required:
-        - proofBytes
         - extension
       properties:
         proofBytes:

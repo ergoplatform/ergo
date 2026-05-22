@@ -30,6 +30,7 @@ import sigmastate.interpreter._
 import org.ergoplatform.sdk.{JsonCodecs, SecretString}
 import sigma.crypto.EcPointType
 import sigma.data._
+import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.{OpCodes, SigSerializer}
 import sigma.Extensions.ArrayOps
 
@@ -81,6 +82,20 @@ trait ApiCodecs extends JsonCodecs {
   })
 
   implicit val proveDlogEncoder: Encoder[ProveDlog] = Encoder.instance(_.pkBytes.asJson)
+
+  override implicit val proverResultEncoder: Encoder[ProverResult] = Encoder.instance { v =>
+    Json.obj(
+      "proofBytes" -> Some(v.proof).filter(_.nonEmpty).asJson,
+      "extension"  -> v.extension.asJson
+    ).dropNullValues
+  }
+
+  override implicit val proverResultDecoder: Decoder[ProverResult] = Decoder.instance { cursor =>
+    for {
+      proofBytes <- cursor.downField("proofBytes").as[Option[Array[Byte]]]
+      extension  <- cursor.downField("extension").as[ContextExtension]
+    } yield new ProverResult(proofBytes.getOrElse(Array.emptyByteArray), extension)
+  }
 
   // this val is named "anyRegisterIdEncoder" because parent trait already contains
   // "registerIdEncoder" which is actually a KeyEncoder for NonMandatoryRegisterId

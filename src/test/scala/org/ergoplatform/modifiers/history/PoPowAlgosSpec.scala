@@ -83,6 +83,18 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
     chain.foreach(x => nipopowAlgos.maxLevelOf(x.header) >= 0 shouldBe true)
   }
 
+  property("log2 - precise and overflow-safe") {
+    NipopowAlgos.log2(BigInt(1)) shouldEqual 0.0
+    NipopowAlgos.log2(BigInt(2)) shouldEqual 1.0
+    NipopowAlgos.log2(BigInt(1) << 256) shouldEqual 256.0
+    // Beyond Double's exponent range: doubleValue alone would yield +Infinity.
+    val large = NipopowAlgos.log2(BigInt(1) << 1024)
+    large.isInfinite shouldBe false
+    math.abs(large - 1024.0) should be < 1e-9
+    NipopowAlgos.log2(BigInt(0)) shouldEqual Double.NegativeInfinity
+    NipopowAlgos.log2(BigInt(-1)).isNaN shouldBe true
+  }
+
   property("lowestCommonAncestor - diverging") {
     val sizes = Seq(10, 100, 1000)
     sizes.foreach { size =>

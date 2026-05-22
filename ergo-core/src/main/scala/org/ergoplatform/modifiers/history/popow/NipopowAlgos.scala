@@ -68,8 +68,8 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
       val requiredTarget = org.ergoplatform.mining.q / DifficultySerializer.decodeCompactBits(header.nBits)
-      val realTarget = powScheme.powHit(header).doubleValue
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      val realTarget = powScheme.powHit(header)
+      val level = log2(requiredTarget) - log2(realTarget)
       level.toInt
     } else {
       Int.MaxValue
@@ -163,7 +163,21 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
 
 object NipopowAlgos {
 
-  private def log2(x: Double): Double = math.log(x) / math.log(2)
+  // Bit-length threshold above which BigInt -> Double would overflow Double's exponent (max ~1023).
+  // ~ MAX_DIGITS_10 * LN(10)/LN(2)
+  private val Log2BigIntShiftThreshold = 977
+
+  private val Ln2: Double = math.log(2)
+
+  /** log2(BigInt) without losing precision when `x` exceeds Double's representable range. */
+  private[history] def log2(x: BigInt): Double =
+    if (x.signum == 0) Double.NegativeInfinity
+    else if (x.signum < 0) Double.NaN
+    else {
+      val blex = x.bitLength - Log2BigIntShiftThreshold
+      if (blex > 0) math.log((x >> blex).doubleValue) / Ln2 + blex
+      else math.log(x.doubleValue) / Ln2
+    }
 
   /**
     * Packs interlinks into key-value format of the block extension.

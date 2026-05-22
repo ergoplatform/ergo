@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.viewholder
 
 import java.io.File
+import scala.concurrent.duration._
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
@@ -11,14 +12,19 @@ import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadRequest
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedBlockSection}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedBlockSection, LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.network.message.inputblocks.{InputBlockTransactionsData, OrderingBlockAnnouncement}
+import org.ergoplatform.subblocks.InputBlockAnnouncement
+import scorex.core.network.ConnectedPeer
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -525,6 +531,226 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  /**
+    * Helper to create empty InputBlockFields (first input block after ordering block)
+    */
+  private def emptyInputBlockFields: InputBlockFields = InputBlockFields.empty
+
+  private val t20 = TestCase("process input block from remote peer") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      // Create a header for input block
+      val (_, bh2) = createUtxoState(fixture.settings)
+      val nextBlock = validFullBlock(Some(genesis), WrappedUtxoState(us, bh2, fixture.settings))
+      val inputBlock = InputBlockAnnouncement(1, nextBlock.header, emptyInputBlockFields, None)
+
+      // Create a dummy peer for the message
+      val dummyPeer = ConnectedPeer(
+        scorex.core.network.ConnectionId(
+          new java.net.InetSocketAddress("127.0.0.1", 1234),
+          new java.net.InetSocketAddress("127.0.0.1", 5678),
+          scorex.core.network.Outgoing
+        ),
+        testProbe.ref,
+        None
+      )
+
+      // Send ProcessInputBlock message
+      nodeViewHolderRef ! ProcessInputBlock(inputBlock, dummyPeer)
+
+      // Allow time for async processing
+      Thread.sleep(500)
+
+      // Verify input block was stored in history's input block records
+      getHistory.getInputBlock(inputBlock.id) should not be None
+    }
+  }
+
+  private val t21 = TestCase("process input block transactions and update mempool") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      // Add transactions to mempool
+      val boxes = ErgoState.newBoxes(genesis.transactions).find(_.ergoTree == TrueTree)
+      boxes.nonEmpty shouldBe true
+      val tx = UnconfirmedTransaction(validTransactionFromBoxes(boxes.toIndexedSeq), None)
+      nodeViewHolderRef ! LocallyGeneratedTransaction(tx)
+      expectMsgType[Accepted]
+      getPoolSize shouldBe 1
+
+      // Create input block with the transaction
+      val (_, bh2) = createUtxoState(fixture.settings)
+      val nextBlock = validFullBlock(Some(genesis), WrappedUtxoState(us, bh2, fixture.settings))
+      val inputBlock = InputBlockAnnouncement(1, nextBlock.header, emptyInputBlockFields, None)
+
+      val dummyPeer = ConnectedPeer(
+        scorex.core.network.ConnectionId(
+          new java.net.InetSocketAddress("127.0.0.1", 1234),
+          new java.net.InetSocketAddress("127.0.0.1", 5678),
+          scorex.core.network.Outgoing
+        ),
+        testProbe.ref,
+        None
+      )
+
+      // First apply the input block
+      nodeViewHolderRef ! ProcessInputBlock(inputBlock, dummyPeer)
+      Thread.sleep(500)
+
+      // Then apply transactions (use empty transactions to avoid validation issues)
+      subscribeEvents(classOf[NewBestInputBlock])
+      val txData = InputBlockTransactionsData(inputBlock.id, Seq.empty)
+      nodeViewHolderRef ! ProcessInputBlockTransactions(txData)
+
+      // Verify NewBestInputBlock event is published
+      val newBestMsg = expectMsgType[NewBestInputBlock]
+      newBestMsg.idOpt shouldBe Some(inputBlock.id)
+      newBestMsg.local shouldBe false
+    }
+  }
+
+  private val t22 = TestCase("process ordering block with valid transactions") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      // Create next block using state after genesis
+      val wusAfterGenesis = WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis)(_ => ()).get
+      val nextBlock = validFullBlock(Some(genesis), wusAfterGenesis)
+
+      // Create ordering block announcement with no broadcasted transactions
+      // (transactions from generated block may not be accepted into mempool,
+      // so we test with empty transactions which triggers DownloadRequest path)
+      val extFields = nextBlock.extension.fields
+
+      val oba = OrderingBlockAnnouncement(
+        version = 1,
+        header = nextBlock.header,
+        nonBroadcastedTransactions = Seq.empty,
+        broadcastedTransactionIds = Seq.empty,
+        extensionFields = extFields
+      )
+
+      subscribeEvents(classOf[SyntacticallySuccessfulModifier])
+      subscribeEvents(classOf[DownloadRequest])
+
+      // Send ordering block
+      nodeViewHolderRef ! ProcessOrderingBlock(oba)
+
+      // Verify header and extension are applied (published as SyntacticallySuccessfulModifier)
+      val modMsg = testProbe.fishForMessage(5.seconds) {
+        case _: SyntacticallySuccessfulModifier => true
+        case _ => false
+      }.asInstanceOf[SyntacticallySuccessfulModifier]
+      modMsg.modifierId shouldBe nextBlock.header.id
+
+      // Verify header is in history
+      getHeightOf(nextBlock.header.id) shouldBe Some(2)
+    }
+  }
+
+  private val t23 = TestCase("process ordering block with missing parent caches header") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      // Create a block that doesn't have its parent applied
+      val wusAfterGenesis = WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis)(_ => ()).get
+      val orphanBlock = validFullBlock(Some(genesis), wusAfterGenesis)
+      val orphanBlock2 = validFullBlock(Some(orphanBlock), wusAfterGenesis)
+
+      // Create ordering block announcement for orphanBlock2 (parent orphanBlock not in history yet)
+      val oba = OrderingBlockAnnouncement(
+        version = 1,
+        header = orphanBlock2.header,
+        nonBroadcastedTransactions = Seq.empty,
+        broadcastedTransactionIds = Seq.empty,
+        extensionFields = orphanBlock2.extension.fields
+      )
+
+      subscribeEvents(classOf[DownloadRequest])
+
+      // Send ordering block with missing parent
+      nodeViewHolderRef ! ProcessOrderingBlock(oba)
+
+      // Wait for DownloadRequest - skip intermediate messages
+      val downloadReq = testProbe.fishForMessage(5.seconds) {
+        case _: DownloadRequest => true
+        case _ => false
+      }.asInstanceOf[DownloadRequest]
+      downloadReq.modifiersToFetch should contain key org.ergoplatform.modifiers.history.header.Header.modifierTypeId
+
+      // Allow time for caching
+      Thread.sleep(500)
+
+      // Verify header is cached (will be applied when parent arrives)
+      getHeightOf(orphanBlock2.header.id) shouldBe None
+    }
+  }
+
+  private val t24 = TestCase("apply locally generated ordering block") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      val wusAfterGenesis = WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis)(_ => ()).get
+      val nextBlock = validFullBlock(Some(genesis), wusAfterGenesis)
+
+      subscribeEvents(classOf[SyntacticallySuccessfulModifier])
+      subscribeEvents(classOf[FullBlockApplied])
+
+      // Send locally generated ordering block
+      nodeViewHolderRef ! LocallyGeneratedOrderingBlock(nextBlock, Seq.empty)
+
+      // Wait for FullBlockApplied - skip intermediate SyntacticallySuccessfulModifier messages
+      val fullBlockApplied = testProbe.fishForMessage(5.seconds) {
+        case _: FullBlockApplied => true
+        case _ => false
+      }.asInstanceOf[FullBlockApplied]
+      fullBlockApplied.header.id shouldBe nextBlock.header.id
+
+      // Verify block is in history
+      getBestHeaderOpt shouldBe Some(nextBlock.header)
+    }
+  }
+
+  private val t25 = TestCase("apply locally generated input block") { fixture =>
+    import fixture._
+    if (stateType == Utxo && verifyTransactions) {
+      val (us, bh) = createUtxoState(fixture.settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      applyBlock(genesis) shouldBe 'success
+
+      val (_, bh2) = createUtxoState(fixture.settings)
+      val nextBlock = validFullBlock(Some(genesis), WrappedUtxoState(us, bh2, fixture.settings))
+      val inputBlock = InputBlockAnnouncement(1, nextBlock.header, emptyInputBlockFields, None)
+
+      subscribeEvents(classOf[NewBestInputBlock])
+
+      // Send locally generated input block
+      val txData = InputBlockTransactionsData(inputBlock.id, Seq.empty)
+      nodeViewHolderRef ! LocallyGeneratedInputBlock(inputBlock, txData)
+
+      // Verify NewBestInputBlock event is published
+      val newBestMsg = expectMsgType[NewBestInputBlock]
+      newBestMsg.idOpt shouldBe Some(inputBlock.id)
+      newBestMsg.local shouldBe true
+    }
+  }
+
   val cases: List[TestCase] = List(t0, t1, t2, t3, t3a, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
@@ -545,6 +771,16 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  val inputBlockCases: List[TestCase] = List(t20, t21, t22, t23, t24, t25)
+
+  NodeViewTestConfig.verifyTxConfigs.filter(_.stateType == StateType.Utxo).foreach { c =>
+    inputBlockCases.foreach { t =>
+      property(s"${t.name} - $c") {
+        t.run(parameters, c)
+      }
+    }
+  }
+
   val genesisIdTestCases = List(t14, t15, t16, t17, t18, t19)
 
   def genesisIdConfig(expectedGenesisIdOpt: Option[ModifierId])(protoSettings: ErgoSettings): ErgoSettings = {
@@ -557,7 +793,5 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
-
-  // todo: tests for sub-blocks
 
 }

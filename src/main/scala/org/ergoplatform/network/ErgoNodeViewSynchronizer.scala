@@ -1451,10 +1451,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
-      log.debug(
-        s"Remote block applied at height ${header.height}, " +
-        s"header id: ${header.encodedId}"
-      )
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction

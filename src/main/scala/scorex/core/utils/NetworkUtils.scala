@@ -24,4 +24,17 @@ object NetworkUtils {
       externalNodeAddress.contains(peerAddress)
   }
 
+  /**
+    * Check if a given address is a local address (site-local, link-local, or loopback).
+    * When localOnly is true, all addresses are allowed.
+    */
+  def checkLocalOnly(address: InetSocketAddress, localOnly: Boolean): Boolean = {
+    if (!localOnly) {
+      val addr = address.getAddress
+      addr.isSiteLocalAddress || addr.isLinkLocalAddress || addr.isLoopbackAddress
+    } else {
+      false
+    }
+  }
+
 }

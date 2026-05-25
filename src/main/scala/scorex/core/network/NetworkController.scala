@@ -312,30 +312,18 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   /**
-   * Check if a given IPv4 or IPv6 address is local.
-   * @param remote - address to check
-   * @return true if the address is local, false otherwise
-   */
-  private def checkLocalOnly(remote: InetSocketAddress): Boolean =
-    if(!networkSettings.localOnly) { // not only accept local
-      val address = remote.getAddress
-      address.isSiteLocalAddress || address.isLinkLocalAddress
-    } else {
-      false
-    }
-
-  /**
-    * Connect to peer
-    *
-    * @param peer - PeerInfo
-    */
+     * Connect to peer
+     *
+     * @param peer - PeerInfo
+     */
   private def connectTo(peer: PeerInfo): Unit = {
     log.info(s"Connecting to peer: $peer")
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          if (checkLocalOnly(remote)) {
+          if (NetworkUtils.checkLocalOnly(remote, networkSettings.localOnly)) {
             log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
+            peerManagerRef ! RemovePeer(remote)
           } else {
             unconfirmedConnections += remote
             tcpManager ! Connect(

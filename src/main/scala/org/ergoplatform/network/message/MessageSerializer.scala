@@ -2,8 +2,10 @@ package org.ergoplatform.network.message
 
 import java.nio.ByteOrder
 import akka.util.ByteString
+import org.ergoplatform.network.message.MessageConstants.MaxMessageSize
 import scorex.core.network.{ConnectedPeer, MaliciousBehaviorException}
 import scorex.crypto.hash.Blake2b256
+
 import scala.util.Try
 
 class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
@@ -47,6 +49,9 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
       //peer is trying to cause buffer overflow or breaking the parsing
       if (length < 0) {
         throw MaliciousBehaviorException("Data length is negative!")
+      }
+      if (length > MaxMessageSize) {
+        throw MaliciousBehaviorException("Data length is above limit!")
       }
 
       if (length != 0 && byteString.length < length + HeaderLength + ChecksumLength) {

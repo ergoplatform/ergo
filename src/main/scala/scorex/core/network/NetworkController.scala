@@ -72,6 +72,9 @@ class NetworkController(ergoSettings: ErgoSettings,
   private var lastIncomingMessageTime: Time = 0L
   private val activityDelta: Long = 60 * 1000 // 1 min
 
+  // incoming connections limit (number oof incoming connections should be strictly less than the limit)
+  private val incomingLimit = Math.max(networkSettings.maxConnections / 2, networkSettings.maxConnections - OutgoingConnections)
+
   //check own declared address for validity
   validateDeclaredAddress()
 
@@ -178,7 +181,7 @@ class NetworkController(ergoSettings: ErgoSettings,
         createPeerConnectionHandler(connectionId, sender())
       } else {
         val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
-        if (incomingCount >= networkSettings.maxConnections - OutgoingConnections) {
+        if (incomingCount >= incomingLimit) {
           log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
           sender() ! Close
         } else {

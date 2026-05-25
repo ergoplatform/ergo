@@ -103,7 +103,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
     NetworkUtils.checkLocalOnly(address, settings.scorexSettings.network.localOnly)
 
 }
-arab
+
 object PeerManager {
 
   object ReceivableMessages {

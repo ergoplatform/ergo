@@ -15,6 +15,7 @@ import org.ergoplatform.network.message.Message
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
 import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Time
+import scorex.core.network.NetworkController.OutgoingConnections
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
@@ -173,8 +174,17 @@ class NetworkController(ergoSettings: ErgoSettings,
         if (unconfirmedConnections.contains(remoteAddress)) Outgoing else Incoming
       val connectionId = ConnectionId(remoteAddress, localAddress, connectionDirection)
       log.info(s"Unconfirmed connection: ($remoteAddress, $localAddress) => $connectionId")
-      if (connectionDirection.isOutgoing) createPeerConnectionHandler(connectionId, sender())
-      else peerManagerRef ! ConfirmConnection(connectionId, sender())
+      if (connectionDirection.isOutgoing) {
+        createPeerConnectionHandler(connectionId, sender())
+      } else {
+        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
+        if (incomingCount >= networkSettings.maxConnections - OutgoingConnections) {
+          log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
+          sender() ! Close
+        } else {
+          peerManagerRef ! ConfirmConnection(connectionId, sender())
+        }
+      }
 
     case Connected(remoteAddress, _) =>
       log.warn(s"Connection to peer $remoteAddress is already established")
@@ -542,6 +552,8 @@ class NetworkController(ergoSettings: ErgoSettings,
 }
 
 object NetworkController {
+
+  val OutgoingConnections = 8
 
   val ChildActorHandlingRetriesNr: Int = 10
 

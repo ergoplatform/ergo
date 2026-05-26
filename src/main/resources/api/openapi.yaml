@@ -2634,6 +2634,53 @@ components:
         error:
           type: string
 
+    NodeConfig:
+      description: |
+        Mutable subset of node configuration. All fields are optional in PUT
+        bodies; only specified fields are updated.
+      type: object
+      properties:
+        voting:
+          type: object
+          properties:
+            targets:
+              type: object
+              additionalProperties:
+                type: integer
+                format: int32
+              description: |
+                Map of voting parameter byte-id (as a string key in 0..255) to
+                the integer target value the miner wants to vote for.
+              example:
+                "1": 1000000
+                "120": 1
+            rulesToDisable:
+              type: array
+              description: Validation rule ids the node would like to disable in a soft-fork.
+              items:
+                type: integer
+                format: int32
+              example: [215, 409]
+        mempool:
+          type: object
+          properties:
+            capacity:
+              type: integer
+              format: int32
+              description: Maximum number of transactions kept in the mempool.
+              example: 100000
+            minimalFeeAmount:
+              type: integer
+              format: int64
+              description: Minimum fee (nanoERG) required for a transaction to enter the mempool.
+              example: 1000000
+            cleanupDuration:
+              type: string
+              description: |
+                Mempool cleanup interval as a duration string (e.g. '10s',
+                '500ms'). A transaction can be rechecked only after this delay.
+              example: "10s"
+
     ApiError:
       description: Error response from API
       type: object
@@ -6065,6 +6112,78 @@ paths:
       responses:
         '200':
           description: The node will be shut down in 5 seconds
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /node/config:
+    get:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Get the mutable subset of the node configuration
+      description: |
+        Returns the subset of node settings that can be updated at runtime via
+        PUT /node/config: voting targets, rulesToDisable, and selected mempool
+        parameters. Other settings (state type, network bindings, paths) are
+        not exposed here.
+      operationId: getNodeConfig
+      tags:
+        - node
+      responses:
+        '200':
+          description: Current mutable configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeConfig'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      security:
+        - ApiKeyAuth: [ api_key ]
+      summary: Update one or more mutable node settings at runtime
+      description: |
+        Accepts a partial NodeConfig body. Validation is all-or-nothing: if any
+        field is invalid the entire patch is rejected with 400 and no state
+        changes. On success, changes are persisted to the user's HOCON config
+        file (appended in a sentinel-delimited block) and applied in memory.
+        Returns 409 if the node was started without a writable user config
+        file.
+      operationId: updateNodeConfig
+      tags:
+        - node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeConfig'
+      responses:
+        '200':
+          description: Updated configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeConfig'
+        '400':
+          description: Invalid patch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Node has no writable user config file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.mempool
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
-import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, MonetarySettings, SettingsHolder}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.collection.immutable.TreeMap
@@ -22,7 +22,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
                     val invalidatedTxIds: ApproximateCacheLike[String],
                     val outputs: TreeMap[BoxId, WeightedTxId],
                     val inputs: TreeMap[BoxId, WeightedTxId])
-                   (implicit settings: ErgoSettings) extends ScorexLogging {
+                   (implicit val holder: SettingsHolder) extends ScorexLogging {
 
   import OrderedTxPool.weighted
 
@@ -37,9 +37,13 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     */
   private val MaxParentScanTime = 500
 
+  private def settings: ErgoSettings = holder.current
+
+  // MonetarySettings is part of immutable chain config; safe to read once.
   private implicit val ms: MonetarySettings = settings.chainSettings.monetary
 
-  private val mempoolCapacity = settings.nodeSettings.mempoolCapacity
+  // Read live so runtime config changes take effect on next admission check.
+  private def mempoolCapacity: Int = holder.current.nodeSettings.mempoolCapacity
 
   def size: Int = orderedTransactions.size
 
@@ -246,7 +250,11 @@ object OrderedTxPool {
   private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (-x.weight, x.id))
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
-  def empty(settings: ErgoSettings): OrderedTxPool = {
+  def empty(settings: ErgoSettings): OrderedTxPool =
+    empty(SettingsHolder.readonly(settings))
+
+  def empty(holder: SettingsHolder): OrderedTxPool = {
+    val settings = holder.current
     val cacheSettings = settings.cacheSettings.mempool
     val frontCacheSize = cacheSettings.invalidModifiersCacheSize
     val frontCacheExpiration = cacheSettings.invalidModifiersCacheExpiration
@@ -255,7 +263,7 @@ object OrderedTxPool {
       TreeMap.empty[ModifierId, WeightedTxId],
       ExpiringApproximateCache.empty(frontCacheSize, frontCacheExpiration),
       TreeMap.empty[BoxId, WeightedTxId],
-      TreeMap.empty[BoxId, WeightedTxId])(settings)
+      TreeMap.empty[BoxId, WeightedTxId])(holder)
   }
 
   def weighted(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {

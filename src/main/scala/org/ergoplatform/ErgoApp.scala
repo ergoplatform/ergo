@@ -13,7 +13,7 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader, NetworkType, ScorexSettings}
+import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader, HoconConfigRewriter, NetworkType, PersistError, ScorexSettings, SettingsHolder}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -24,6 +24,7 @@ import org.ergoplatform.network.peer.PeerManagerRef
 import scorex.util.ScorexLogging
 
 import java.net.InetSocketAddress
+import java.nio.file.Paths
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.{Codec, Source}
 
@@ -51,6 +52,22 @@ class ErgoApp(args: Args) extends ScorexLogging {
   )
 
   implicit private val executionContext: ExecutionContext = actorSystem.dispatcher
+
+  /** Holds the current settings and (when the node was started with a user config) persists API-driven changes. */
+  private val settingsHolder: SettingsHolder = {
+    val persister: ErgoSettings => Either[PersistError, Unit] = args.userConfigPathOpt match {
+      case Some(path) =>
+        val rewriter = new HoconConfigRewriter(Paths.get(path))
+        rewriter.writeOverrides
+      case None =>
+        _ => Left(PersistError.NoWritableConfig)
+    }
+    new SettingsHolder(
+      ergoSettings,
+      persister,
+      (prev, curr) => actorSystem.eventStream.publish(SettingsHolder.SettingsUpdated(prev, curr))
+    )
+  }
 
   private val upnpGateway: Option[UPnPGateway] =
     if (scorexSettings.network.upnpEnabled) UPnP.getValidGateway(scorexSettings.network)
@@ -94,7 +111,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val peerManagerRef = PeerManagerRef(ergoSettings, scorexContext)
 
-  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
+  private val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings, settingsHolder)
 
   private val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
 
@@ -199,7 +216,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
     UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
     ScriptApiRoute(readersHolderRef, ergoSettings),
     ScanApiRoute(readersHolderRef, ergoSettings),
-    NodeApiRoute(ergoSettings)
+    NodeApiRoute(ergoSettings, settingsHolder)
   ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
   private val swaggerRoute = SwaggerRoute(scorexSettings.restApi, swaggerConfig)
@@ -232,7 +249,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   }
 
   if (!ergoSettings.nodeSettings.stateType.requireProofs) {
-    MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings)
+    MempoolAuditorRef(nodeViewHolderRef, networkControllerRef, ergoSettings, settingsHolder)
   }
 
   private def swaggerConfig: String =

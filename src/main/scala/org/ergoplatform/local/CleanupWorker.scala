@@ -6,7 +6,7 @@ import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoStateReader
-import org.ergoplatform.settings.NodeConfigurationSettings
+import org.ergoplatform.settings.{NodeConfigurationSettings, SettingsHolder}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, RecheckedTransactions}
 import scorex.util.{ModifierId, ScorexLogging}
 
@@ -21,13 +21,15 @@ import scala.concurrent.ExecutionContext.Implicits.global
   * Validation results sent directly to `NodeViewHolder`.
   */
 class CleanupWorker(nodeViewHolderRef: ActorRef,
-                    nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
+                    holder: SettingsHolder) extends Actor with ScorexLogging {
 
   // Limit for total cost of transactions to be re-checked. Hard-coded for now.
   private val CostLimit = 7000000
 
-  // Transaction can be re-checked only after this delay
-  private val TimeLimit = nodeSettings.mempoolCleanupDuration.toMillis
+  private def nodeSettings: NodeConfigurationSettings = holder.current.nodeSettings
+
+  // Transaction can be re-checked only after this delay (read live so runtime config changes apply).
+  private def TimeLimit: Long = nodeSettings.mempoolCleanupDuration.toMillis
 
   override def preStart(): Unit = {
     log.info("Cleanup worker started")

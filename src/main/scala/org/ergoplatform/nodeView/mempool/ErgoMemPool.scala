@@ -5,7 +5,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
-import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings, SettingsHolder}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 import org.ergoplatform.modifiers.history.header.Header
@@ -30,7 +30,7 @@ import scala.util.{Failure, Success, Try}
 class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                                    private[mempool] val stats: MemPoolStatistics,
                                    private[mempool] val sortingOption: SortingOption)
-                                  (implicit settings: ErgoSettings)
+                                  (implicit val holder: SettingsHolder)
   extends ErgoMemPoolReader with ScorexLogging {
 
   import EmissionRules.CoinsInOneErgo
@@ -40,8 +40,10 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     */
   private val FakeCost = 1000
 
-  private val nodeSettings: NodeConfigurationSettings = settings.nodeSettings
-  private implicit val monetarySettings: MonetarySettings = settings.chainSettings.monetary
+  private def settings: ErgoSettings = holder.current
+  private def nodeSettings: NodeConfigurationSettings = holder.current.nodeSettings
+  // MonetarySettings is chain-config and immutable per chain — safe to capture once.
+  private implicit val monetarySettings: MonetarySettings = holder.current.chainSettings.monetary
 
   override def size: Int = pool.size
 
@@ -366,16 +368,20 @@ object ErgoMemPool extends ScorexLogging {
    * @param settings - node settings (to get mempool settings from)
    * @return empty mempool
    */
-  def empty(settings: ErgoSettings): ErgoMemPool = {
+  def empty(settings: ErgoSettings): ErgoMemPool =
+    empty(SettingsHolder.readonly(settings))
+
+  def empty(holder: SettingsHolder): ErgoMemPool = {
+    val settings = holder.current
     val sortingOption = settings.nodeSettings.mempoolSorting
     sortingOption match {
       case SortingOption.FeePerByte => log.info("Sorting mempool by fee-per-byte")
       case SortingOption.FeePerCycle => log.info("Sorting mempool by fee-per-cycle")
     }
     new ErgoMemPool(
-      OrderedTxPool.empty(settings),
+      OrderedTxPool.empty(holder),
       MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()),
       sortingOption
-    )(settings)
+    )(holder)
   }
 }

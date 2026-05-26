@@ -15,6 +15,7 @@ import org.ergoplatform.network.message.Message
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
 import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Time
+import scorex.core.network.NetworkController.OutgoingConnections
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
@@ -70,6 +71,9 @@ class NetworkController(ergoSettings: ErgoSettings,
     */
   private var lastIncomingMessageTime: Time = 0L
   private val activityDelta: Long = 60 * 1000 // 1 min
+
+  // incoming connections limit (number oof incoming connections should be strictly less than the limit)
+  private val incomingLimit = Math.max(networkSettings.maxConnections / 2, networkSettings.maxConnections - OutgoingConnections)
 
   //check own declared address for validity
   validateDeclaredAddress()
@@ -173,8 +177,17 @@ class NetworkController(ergoSettings: ErgoSettings,
         if (unconfirmedConnections.contains(remoteAddress)) Outgoing else Incoming
       val connectionId = ConnectionId(remoteAddress, localAddress, connectionDirection)
       log.info(s"Unconfirmed connection: ($remoteAddress, $localAddress) => $connectionId")
-      if (connectionDirection.isOutgoing) createPeerConnectionHandler(connectionId, sender())
-      else peerManagerRef ! ConfirmConnection(connectionId, sender())
+      if (connectionDirection.isOutgoing) {
+        createPeerConnectionHandler(connectionId, sender())
+      } else {
+        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
+        if (incomingCount >= incomingLimit) {
+          log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
+          sender() ! Close
+        } else {
+          peerManagerRef ! ConfirmConnection(connectionId, sender())
+        }
+      }
 
     case Connected(remoteAddress, _) =>
       log.warn(s"Connection to peer $remoteAddress is already established")
@@ -312,30 +325,18 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   /**
-   * Check if a given IPv4 or IPv6 address is local.
-   * @param remote - address to check
-   * @return true if the address is local, false otherwise
-   */
-  private def checkLocalOnly(remote: InetSocketAddress): Boolean =
-    if(!networkSettings.localOnly) { // not only accept local
-      val address = remote.getAddress
-      address.isSiteLocalAddress || address.isLinkLocalAddress
-    } else {
-      false
-    }
-
-  /**
-    * Connect to peer
-    *
-    * @param peer - PeerInfo
-    */
+     * Connect to peer
+     *
+     * @param peer - PeerInfo
+     */
   private def connectTo(peer: PeerInfo): Unit = {
     log.info(s"Connecting to peer: $peer")
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          if (checkLocalOnly(remote)) {
+          if (NetworkUtils.checkLocalOnly(remote, networkSettings.localOnly)) {
             log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
+            peerManagerRef ! RemovePeer(remote)
           } else {
             unconfirmedConnections += remote
             tcpManager ! Connect(
@@ -554,6 +555,8 @@ class NetworkController(ergoSettings: ErgoSettings,
 }
 
 object NetworkController {
+
+  val OutgoingConnections = 8
 
   val ChildActorHandlingRetriesNr: Int = 10
 

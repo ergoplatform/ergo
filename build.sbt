@@ -43,7 +43,7 @@ val circeVersion = "0.13.0"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "6.0.2"
+val sigmaStateVersion = "6.0.3"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -185,7 +185,7 @@ docker / dockerfile := {
   val configMainNet = (IntegrationTest / resourceDirectory).value / "mainnetTemplate.conf"
 
   new Dockerfile {
-    from("openjdk:11-jre-slim")
+    from("eclipse-temurin:11-jre-jammy")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configDevNet), "/opt/ergo")

@@ -11,4 +11,6 @@ object MessageConstants {
   val ChecksumLength: Int = 4
 
   val HeaderLength: Int = MagicLength + 5
+
+  val MaxMessageSize: Int = 16 * 1024 * 1024
 }

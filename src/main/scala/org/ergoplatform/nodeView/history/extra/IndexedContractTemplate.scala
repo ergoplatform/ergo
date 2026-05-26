@@ -6,8 +6,9 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, f
 import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Algos
-import scorex.util.{ModifierId, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import scorex.util.serialization.{Reader, Writer}
+import sigma.VersionContext
 import sigma.ast.ErgoTree
 
 import scala.collection.mutable.ArrayBuffer
@@ -49,9 +50,19 @@ case class IndexedContractTemplate(templateHash: ModifierId,
     boxes.filter(box => hashTreeTemplate(box.ergoTree) == templateHash)
 }
 
-object IndexedContractTemplateSerializer extends ErgoSerializer[IndexedContractTemplate] {
+object IndexedContractTemplateSerializer extends ErgoSerializer[IndexedContractTemplate] with ScorexLogging {
 
-  def hashTreeTemplate(tree: ErgoTree): ModifierId = bytesToId(Algos.hash(tree.template))
+  def hashTreeTemplate(tree: ErgoTree): ModifierId = {
+    try {
+      VersionContext.withVersions(3, 3) {
+        bytesToId(Algos.hash(tree.template))
+      }
+    } catch {
+      case _: Throwable =>
+        log.error("Can't parse template for: " + tree.bytesHex)
+        bytesToId(Algos.hash(tree.bytes)) // just use tree bytes hash as fake template hash if we can't get template
+    }
+  }
 
   override def serialize(iCt: IndexedContractTemplate, w: Writer): Unit = {
     w.putBytes(iCt.serializedId)

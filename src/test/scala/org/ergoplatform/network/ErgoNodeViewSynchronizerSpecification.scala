@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, SettingsHolder}
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
@@ -67,7 +67,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
+  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings, SettingsHolder.readonly(settings))
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,

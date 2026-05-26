@@ -6,7 +6,7 @@ import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, SettingsHolder}
 import scorex.core.network.Broadcast
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.RecheckMempool
@@ -22,7 +22,8 @@ import scala.concurrent.duration._
   */
 class MempoolAuditor(nodeViewHolderRef: ActorRef,
                      networkControllerRef: ActorRef,
-                     settings: ErgoSettings) extends Actor with ScorexLogging {
+                     settings: ErgoSettings,
+                     settingsHolder: SettingsHolder) extends Actor with ScorexLogging {
 
   override def postRestart(reason: Throwable): Unit = {
     log.error(s"Mempool auditor actor restarted due to ${reason.getMessage}", reason)
@@ -52,7 +53,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private var stateReaderOpt: Option[ErgoStateReader] = None
 
   private val worker: ActorRef =
-    context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settings.nodeSettings)))
+    context.actorOf(Props(new CleanupWorker(nodeViewHolderRef, settingsHolder)))
 
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[RecheckMempool])
@@ -127,13 +128,15 @@ object MempoolAuditorRef {
 
   def props(nodeViewHolderRef: ActorRef,
             networkControllerRef: ActorRef,
-            settings: ErgoSettings): Props =
-    Props(new MempoolAuditor(nodeViewHolderRef, networkControllerRef, settings))
+            settings: ErgoSettings,
+            settingsHolder: SettingsHolder): Props =
+    Props(new MempoolAuditor(nodeViewHolderRef, networkControllerRef, settings, settingsHolder))
 
   def apply(nodeViewHolderRef: ActorRef,
             networkControllerRef: ActorRef,
-            settings: ErgoSettings)
+            settings: ErgoSettings,
+            settingsHolder: SettingsHolder)
            (implicit context: ActorRefFactory): ActorRef =
-    context.actorOf(props(nodeViewHolderRef, networkControllerRef, settings))
+    context.actorOf(props(nodeViewHolderRef, networkControllerRef, settings, settingsHolder))
 
 }

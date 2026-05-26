@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, So
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants.TrueTree
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters, SettingsHolder}
 import org.ergoplatform.utils.{ErgoTestHelpers, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -772,14 +772,15 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // but orderedTransactions stores the tx under wtxActual.
     // This can happen after updateFamily or other weight changes
     // fail to keep the two collections in sync.
-    val emptyPool = OrderedTxPool.empty(settings)
+    val holder = SettingsHolder.readonly(settings)
+    val emptyPool = OrderedTxPool.empty(holder)
     val brokenPool = new OrderedTxPool(
       TreeMap(wtxActual -> utx),
       TreeMap(tx.id -> wtxStale),
       emptyPool.invalidatedTxIds,
       emptyPool.outputs,
       emptyPool.inputs
-    )(settings)
+    )(holder)
 
     // pool.get traverses registry -> wtxStale -> orderedTransactions,
     // but wtxStale is not a key in orderedTransactions, so get returns None.
@@ -792,7 +793,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       brokenPool,
       MemPoolStatistics(now, 0, now, 0),
       SortingOption.FeePerByte
-    )(settings)
+    )(holder)
 
     // invalidate() first tries pool.get (returns None), then falls back to
     // scanning orderedTransactions.valuesIterator. It finds the tx and calls

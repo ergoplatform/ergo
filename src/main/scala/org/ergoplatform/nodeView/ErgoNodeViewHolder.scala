@@ -13,7 +13,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.wallet.utils.FileUtils
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings, SettingsHolder}
 import org.ergoplatform.core._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
@@ -39,8 +39,13 @@ import scala.util.{Failure, Success, Try}
   * Updates of the composite view instances are to be performed atomically.
   *
   */
-abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+abstract class ErgoNodeViewHolder[State <: ErgoState[State]](
+  settings: ErgoSettings,
+  settingsHolder: SettingsHolder
+) extends Actor 
+  with ScorexLogging
+  with ScorexEncoding
+  with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -424,7 +429,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val wallet = ErgoWallet.readOrGenerate(history.getReader, settings, settings.launchParameters)
 
-    val memPool = ErgoMemPool.empty(settings)
+    val memPool = ErgoMemPool.empty(settingsHolder)
 
     (history, state, wallet, memPool)
   }
@@ -439,7 +444,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   } else {
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
-    val memPool = ErgoMemPool.empty(settings)
+    val memPool = ErgoMemPool.empty(settingsHolder)
     restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
@@ -793,29 +798,33 @@ object ErgoNodeViewHolder {
   }
 }
 
-private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings)
-  extends ErgoNodeViewHolder[DigestState](settings)
+private[nodeView] class DigestNodeViewHolder(settings: ErgoSettings, settingsHolder: SettingsHolder)
+  extends ErgoNodeViewHolder[DigestState](settings, settingsHolder)
 
-private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings)
-  extends ErgoNodeViewHolder[UtxoState](settings)
+private[nodeView] class UtxoNodeViewHolder(settings: ErgoSettings, settingsHolder: SettingsHolder)
+  extends ErgoNodeViewHolder[UtxoState](settings, settingsHolder)
 
 
 
 object ErgoNodeViewRef {
 
-  private def digestProps(settings: ErgoSettings): Props =
-    Props.create(classOf[DigestNodeViewHolder], settings)
+  private def digestProps(settings: ErgoSettings, holder: SettingsHolder): Props =
+    Props.create(classOf[DigestNodeViewHolder], settings, holder)
 
-  private def utxoProps(settings: ErgoSettings): Props =
-    Props.create(classOf[UtxoNodeViewHolder], settings)
+  private def utxoProps(settings: ErgoSettings, holder: SettingsHolder): Props =
+    Props.create(classOf[UtxoNodeViewHolder], settings, holder)
 
-  private def props(settings: ErgoSettings): Props =
+  private def props(settings: ErgoSettings, holder: SettingsHolder): Props =
     (settings.nodeSettings.stateType match {
-      case StateType.Digest => digestProps(settings)
-      case StateType.Utxo => utxoProps(settings)
+      case StateType.Digest => digestProps(settings, holder)
+      case StateType.Utxo => utxoProps(settings, holder)
     }).withDispatcher("critical-dispatcher")
 
+  /** Backward-compatible entry: creates a read-only holder so tests don't have to thread one through. */
   def apply(settings: ErgoSettings)(implicit system: ActorSystem): ActorRef =
-    system.actorOf(props(settings))
-  
+    apply(settings, SettingsHolder.readonly(settings))
+
+  def apply(settings: ErgoSettings, holder: SettingsHolder)(implicit system: ActorSystem): ActorRef =
+    system.actorOf(props(settings, holder))
+
 }

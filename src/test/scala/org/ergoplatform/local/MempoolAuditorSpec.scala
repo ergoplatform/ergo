@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyG
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, SettingsHolder}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
@@ -82,7 +82,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
 
     getPoolSize shouldBe 2
 
-    val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest)
+    val _: ActorRef = MempoolAuditorRef(nodeViewHolderRef, nodeViewHolderRef, settingsToTest, SettingsHolder.readonly(settingsToTest))
 
     Thread.sleep(200) // give transactions in the pool enough time to become candidates for re-checking
 
@@ -110,10 +110,10 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val txs = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1
       .map(tx => UnconfirmedTransaction(tx, None))
 
-    implicit val system = ActorSystem()
+    implicit val system: ActorSystem = ActorSystem()
     val probe = TestProbe()
 
-    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
+    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest, SettingsHolder.readonly(settingsToTest)))
 
 
     auditor ! RecheckMempool(us, new FakeMempool(txs))

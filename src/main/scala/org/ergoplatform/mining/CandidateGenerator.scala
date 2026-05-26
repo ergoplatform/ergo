@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters, SettingsHolder}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
@@ -46,18 +46,27 @@ class CandidateGenerator(
   minerPk: ProveDlog,
   readersHolderRef: ActorRef,
   viewHolderRef: ActorRef,
-  ergoSettings: ErgoSettings
+  initialErgoSettings: ErgoSettings
 ) extends Actor
   with ScorexLogging {
 
   import org.ergoplatform.mining.CandidateGenerator._
 
+  // Tracks the latest settings; updated on SettingsHolder.SettingsUpdated events so
+  // voting targets and soft-fork preferences picked up at runtime take effect on the
+  // next candidate generation.
+  private var ergoSettings: ErgoSettings = initialErgoSettings
+
+  // Intentionally captured: live updates to blockCandidateGenerationInterval would
+  // require recreating the scheduler that drives candidate regeneration, which this
+  // actor doesn't do. Operators wanting a new interval must restart the node.
   private val candidateGenInterval =
     ergoSettings.nodeSettings.blockCandidateGenerationInterval
 
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
     log.info("CandidateGenerator is starting")
+    context.system.eventStream.subscribe(self, classOf[SettingsHolder.SettingsUpdated])
     readersHolderRef ! GetReaders
   }
 
@@ -142,6 +151,11 @@ class CandidateGenerator(
       }
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
+
+    case SettingsHolder.SettingsUpdated(_, current) =>
+      // Pick up new voting targets / soft-fork preference on the next candidate generation.
+      ergoSettings = current
+      log.info("CandidateGenerator picked up updated settings")
 
     /*
      * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,

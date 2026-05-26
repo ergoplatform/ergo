@@ -63,6 +63,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
+  private var unconfirmedIncomingConnections = Map.empty[InetSocketAddress, ActorRef]
 
   private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
@@ -72,7 +73,7 @@ class NetworkController(ergoSettings: ErgoSettings,
   private var lastIncomingMessageTime: Time = 0L
   private val activityDelta: Long = 60 * 1000 // 1 min
 
-  // incoming connections limit (number oof incoming connections should be strictly less than the limit)
+  // incoming connections limit (number of incoming connections should be strictly less than the limit)
   private val incomingLimit = Math.max(networkSettings.maxConnections / 2, networkSettings.maxConnections - OutgoingConnections)
 
   //check own declared address for validity
@@ -179,12 +180,16 @@ class NetworkController(ergoSettings: ErgoSettings,
       log.info(s"Unconfirmed connection: ($remoteAddress, $localAddress) => $connectionId")
       if (connectionDirection.isOutgoing) {
         createPeerConnectionHandler(connectionId, sender())
+      } else if (unconfirmedIncomingConnections.contains(remoteAddress)) {
+        log.warn(s"Connection to peer $remoteAddress is already pending")
+        sender() ! Close
       } else {
-        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
+        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming) + unconfirmedIncomingConnections.size
         if (incomingCount >= incomingLimit) {
           log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
           sender() ! Close
         } else {
+          unconfirmedIncomingConnections += remoteAddress -> sender()
           peerManagerRef ! ConfirmConnection(connectionId, sender())
         }
       }
@@ -195,10 +200,35 @@ class NetworkController(ergoSettings: ErgoSettings,
 
     case ConnectionConfirmed(connectionId, handlerRef) =>
       log.info(s"Connection confirmed to $connectionId")
-      createPeerConnectionHandler(connectionId, handlerRef)
+      if (connectionId.direction.isIncoming) {
+        val remoteAddress = connectionId.remoteAddress
+        if (!unconfirmedIncomingConnections.get(remoteAddress).contains(handlerRef)) {
+          log.info(s"Ignoring stale incoming connection confirmation from $remoteAddress")
+          handlerRef ! Close
+        } else {
+          unconfirmedIncomingConnections -= remoteAddress
+          val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
+          if (incomingCount >= incomingLimit) {
+            log.info(s"Incoming connection from ${connectionId.remoteAddress} denied: too many incoming connections ($incomingCount)")
+            handlerRef ! Close
+          } else {
+            createPeerConnectionHandler(connectionId, handlerRef)
+          }
+        }
+      } else {
+        createPeerConnectionHandler(connectionId, handlerRef)
+      }
 
     case ConnectionDenied(connectionId, handlerRef) =>
       log.info(s"Incoming connection from ${connectionId.remoteAddress} denied")
+      if (connectionId.direction.isIncoming) {
+        val remoteAddress = connectionId.remoteAddress
+        if (unconfirmedIncomingConnections.get(remoteAddress).contains(handlerRef)) {
+          unconfirmedIncomingConnections -= remoteAddress
+        } else {
+          log.info(s"Ignoring stale incoming connection denial from $remoteAddress")
+        }
+      }
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
@@ -228,12 +258,14 @@ class NetworkController(ergoSettings: ErgoSettings,
           val remoteAddress = connectedPeer.connectionId.remoteAddress
           connections -= remoteAddress
           unconfirmedConnections -= remoteAddress
+          unconfirmedIncomingConnections -= remoteAddress
           context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
         case None =>
           log.warn(s"No connection found for $ref during termination")
       }
 
     case _: ConnectionClosed =>
+      unconfirmedIncomingConnections = unconfirmedIncomingConnections.filterNot(_._2 == sender())
       log.info("Denied connection has been closed")
   }
 

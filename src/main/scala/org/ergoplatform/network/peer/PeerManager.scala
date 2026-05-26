@@ -25,12 +25,13 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
     // fill database with peers from config file if empty
     log.info("No peers in database, seeding peers database with nodes from config")
     settings.scorexSettings.network.knownPeers.foreach { address =>
-      if (!isSelf(address)) {
+      if (shouldKeep(address)) {
         peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
       }
     }
   } else {
     log.info(s"${peerDatabase.knownPeers.size} peers read from the database")
+    purgeRejectedPeers()
   }
 
   override def receive: Receive = peersManagement orElse apiInterface orElse {
@@ -50,8 +51,10 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
     case AddOrUpdatePeer(peerInfo) =>
       // We have connected to a peer and got his peerInfo from him
-      if (!isSelf(peerInfo.peerSpec) && !peerInfo.peerSpec.address.exists(checkLocalOnly(_))) {
+      if (shouldKeep(peerInfo.peerSpec)) {
         peerDatabase.addOrUpdateKnownPeer(peerInfo)
+      } else {
+        removePeer(peerInfo.peerSpec)
       }
 
     case Penalize(peer, penaltyType) =>
@@ -64,10 +67,13 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
     case AddPeerIfEmpty(peerSpec) =>
       // We have received peer data from other peers. It might be modified and should not affect existing data if any
-      if (peerSpec.address.forall(a => peerDatabase.get(a).isEmpty) && !isSelf(peerSpec) && !peerSpec.address.exists(checkLocalOnly(_))) {
+      val keepPeer = shouldKeep(peerSpec)
+      if (keepPeer && peerSpec.address.forall(a => peerDatabase.get(a).isEmpty)) {
         val peerInfo: PeerInfo = PeerInfo(peerSpec, 0, None)
         log.info(s"New discovered peer: $peerInfo")
         peerDatabase.addOrUpdateKnownPeer(peerInfo)
+      } else if (!keepPeer) {
+        removePeer(peerSpec)
       }
 
     case RemovePeer(address) =>
@@ -101,6 +107,22 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
   private def checkLocalOnly(address: InetSocketAddress): Boolean =
     NetworkUtils.checkLocalOnly(address, settings.scorexSettings.network.localOnly)
+
+  private def shouldKeep(address: InetSocketAddress): Boolean =
+    !isSelf(address) && !checkLocalOnly(address)
+
+  private def shouldKeep(peerSpec: PeerSpec): Boolean =
+    !isSelf(peerSpec) && !peerSpec.address.exists(checkLocalOnly)
+
+  private def removePeer(peerSpec: PeerSpec): Unit =
+    peerSpec.address.foreach(peerDatabase.remove)
+
+  private def purgeRejectedPeers(): Unit =
+    peerDatabase.knownPeers.values.toSeq.foreach { peerInfo =>
+      if (!shouldKeep(peerInfo.peerSpec)) {
+        removePeer(peerInfo.peerSpec)
+      }
+    }
 
 }
 

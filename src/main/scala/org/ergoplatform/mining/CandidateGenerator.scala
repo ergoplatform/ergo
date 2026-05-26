@@ -221,7 +221,6 @@ class CandidateGenerator(
             val parameters = cachedCandidate.parameters
             val powValid = ergoSettings.chainSettings.powScheme.checkInputBlockPoW(sbi.header, parameters)
             if (powValid) { // check PoW only
-              // todo: finish input block mining API
               log.info(s"Input-block ${sbi.id} mined @ height ${sbi.header.height}!")
               sendInputToNodeView(sbi, sbt)
               context.become(initialized(state.copy(cachedCandidate = None))) // todo: cache input block ?
@@ -356,22 +355,6 @@ object CandidateGenerator extends ScorexLogging {
       }
     }
   }
-
-  /** Calculate average mining time from latest block header timestamps */
-  def getBlockMiningTimeAvg(
-    timestamps: IndexedSeq[Header.Timestamp]
-  ): FiniteDuration = {
-    val miningTimes =
-      timestamps.sorted
-        .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
-        .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
-  }
-
-  /** Get average count of transactions per block */
-  def getTxsPerBlockCountAvg(txsPerBlock: IndexedSeq[Int]): Long =
-    Math.round(txsPerBlock.sum / txsPerBlock.length.toDouble)
 
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =

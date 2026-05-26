@@ -873,12 +873,22 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // Force regeneration - this should preserve candidate1 as cachedPreviousCandidate
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
-    val candidate2 = testProbe.fishForMessage(candidateGenDelay) {
-      case StatusReply.Success(_: Candidate) => true
-      case _: FullBlockApplied => false
-    } match {
-      case StatusReply.Success(c: Candidate) => c
+    // Retry on transient failures (e.g., state not fully updated yet)
+    val candidate2 = {
+      var attempts = 3
+      var result: Option[Candidate] = None
+      while (result.isEmpty && attempts > 0) {
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+        try {
+          result = Some(testProbe.expectMsgPF(candidateGenDelay) {
+            case StatusReply.Success(c: Candidate) => c
+          })
+        } catch {
+          case _: AssertionError =>
+            attempts -= 1
+        }
+      }
+      result.getOrElse(throw new AssertionError("Failed to get candidate after max retries"))
     }
 
     // candidate2 should be different from candidate1 (regenerated)

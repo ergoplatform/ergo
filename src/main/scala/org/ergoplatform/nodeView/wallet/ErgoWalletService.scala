@@ -6,6 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.IdUtils.encodedBoxId
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
@@ -28,6 +29,7 @@ import sigma.data.SigmaBoolean
 
 import java.io.FileNotFoundException
 import scala.collection.compat.immutable.ArraySeq
+import scala.collection.immutable.TreeSet
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -219,6 +221,14 @@ trait ErgoWalletService {
     * @param dustLimit - Boxes with value smaller than dustLimit are disregarded in wallet scan logic
     */
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
+
+  def scanUtxoSnapshotChunk(state: ErgoWalletState,
+                            boxes: Seq[ErgoBox],
+                            snapshotBlockId: ModifierId,
+                            snapshotHeight: Int,
+                            subtreeIndex: Int,
+                            finalChunk: Boolean,
+                            dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
     * Sign a transaction
@@ -595,6 +605,23 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
+
+  override def scanUtxoSnapshotChunk(state: ErgoWalletState,
+                                     boxes: Seq[ErgoBox],
+                                     snapshotBlockId: ModifierId,
+                                     snapshotHeight: Int,
+                                     subtreeIndex: Int,
+                                     finalChunk: Boolean,
+                                     dustLimit: Option[Long]): Try[ErgoWalletState] = {
+    val scanResults = WalletScanLogic.scanSnapshotBoxes(boxes, state.walletVars, dustLimit)
+    state.registry.updateOnSnapshotChunk(scanResults, snapshotBlockId, snapshotHeight, subtreeIndex, finalChunk).map { _ =>
+      val walletUnspent = state.registry.walletUnspentBoxes()
+      val newOnChainIds = scanResults.outputs.map(x => encodedBoxId(x.box.id)).to[TreeSet]
+      val offChainHeight = if (finalChunk) snapshotHeight else state.offChainRegistry.height
+      val offChainRegistry = state.offChainRegistry.updateOnBlock(offChainHeight, walletUnspent, newOnChainIds)
+      state.copy(registry = state.registry, offChainRegistry = offChainRegistry, outputsFilter = None)
+    }
+  }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

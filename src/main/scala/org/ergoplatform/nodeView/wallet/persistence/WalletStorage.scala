@@ -194,6 +194,23 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
       .getOrElse(PaymentsScanId)
   }
 
+  def readUtxoSnapshotScanStatus(): Option[UtxoSnapshotScanStatus] =
+    store.get(UtxoSnapshotScanStatusKey).flatMap { bytes =>
+      UtxoSnapshotScanStatusSerializer.parseBytesTry(bytes) match {
+        case Success(status) =>
+          Some(status)
+        case Failure(t) =>
+          log.error("Corrupted UTXO snapshot scan status", t)
+          None
+      }
+    }
+
+  def writeUtxoSnapshotScanStatus(status: UtxoSnapshotScanStatus): Try[Unit] =
+    store.insert(UtxoSnapshotScanStatusKey, UtxoSnapshotScanStatusSerializer.toBytes(status))
+
+  def removeUtxoSnapshotScanStatus(): Try[Unit] =
+    store.remove(Array(UtxoSnapshotScanStatusKey))
+
   /**
     * Close wallet storage database
     */
@@ -243,6 +260,7 @@ object WalletStorage {
   val SecretPathsKey: Array[Byte] = noPrefixKey("secret_paths")
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
   val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
+  val UtxoSnapshotScanStatusKey: Array[Byte] = noPrefixKey("utxo_snapshot_scan_status")
 
 
   /**

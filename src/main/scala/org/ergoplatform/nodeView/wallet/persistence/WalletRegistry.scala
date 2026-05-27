@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.ErgoLikeContext.Height
@@ -15,6 +16,7 @@ import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADKey
+import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
@@ -273,44 +275,81 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))
-      val spentAmt = spentWalletBoxes.map(_.box.value).sum
-      val spentTokensAmt = spentWalletBoxes
-        .flatMap(_.box.additionalTokens.toArray)
-        .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-          acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
-        }
-      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
-        .flatMap(_.box.additionalTokens.toArray)
-        .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-          acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
-        }
-
-      val wTokens = mutable.LinkedHashMap(wTokensSeq: _*)
-
-      val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
-        acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
-      }
-
-      val newTokensBalance = spentTokensAmt
-        .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
-          val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
-          if (decreasedAmt > 0) {
-            acc += encodedId -> decreasedAmt
-          } else {
-            acc -= encodedId
-          }
-        }
-
-      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
-      val newBalance = wBalance + receivedAmt - spentAmt
-      if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
-        Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
-      else
-        Failure(new IllegalStateException("Balance could not be negative"))
+      updateWalletDigest(WalletDigest(height, wBalance, wTokensSeq), scanResults.outputs, spentWalletBoxes, blockHeight)
     }.flatMap { bag4 =>
       bag4.transact(store, idToBytes(blockId))
     }
   }
+
+  /**
+    * Updates wallet indexes from a UTXO snapshot chunk without inventing pre-snapshot transactions.
+    */
+  def updateOnSnapshotChunk(scanResults: ScanResults,
+                            snapshotBlockId: ModifierId,
+                            snapshotHeight: Int,
+                            subtreeIndex: Int,
+                            finalChunk: Boolean): Try[Unit] = {
+    if (scanResults.inputsSpent.nonEmpty || scanResults.relatedTransactions.nonEmpty) {
+      Failure(new IllegalArgumentException("Snapshot chunk scan data must contain only outputs"))
+    } else {
+      cache ++= scanResults.outputs.map(b => b.boxId -> b)
+      val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+      updateDigest(bag1) { digest =>
+        val nextHeight = if (finalChunk) snapshotHeight else digest.height
+        updateWalletDigest(digest, scanResults.outputs, Seq.empty, nextHeight)
+      }.flatMap { bag2 =>
+        bag2.transact(store, snapshotChunkVersion(snapshotBlockId, subtreeIndex, finalChunk))
+      }
+    }
+  }
+
+  private def updateWalletDigest(currentDigest: WalletDigest,
+                                 receivedBoxes: Seq[TrackedBox],
+                                 spentWalletBoxes: Seq[TrackedBox],
+                                 nextHeight: Int): Try[WalletDigest] = {
+    val receivedWalletBoxes = receivedBoxes.filter(_.scans.contains(PaymentsScanId))
+    val spentAmt = spentWalletBoxes.map(_.box.value).sum
+    val spentTokensAmt = tokenAmounts(spentWalletBoxes)
+    val receivedTokensAmt = tokenAmounts(receivedWalletBoxes)
+
+    val wTokens = mutable.LinkedHashMap(currentDigest.walletAssetBalances: _*)
+
+    val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
+      acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
+    }
+
+    val newTokensBalance = spentTokensAmt
+      .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
+        val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
+        if (decreasedAmt > 0) {
+          acc += encodedId -> decreasedAmt
+        } else {
+          acc -= encodedId
+        }
+      }
+
+    val receivedAmt = receivedWalletBoxes.map(_.box.value).sum
+    val newBalance = currentDigest.walletBalance + receivedAmt - spentAmt
+    if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
+      Success(WalletDigest(nextHeight, newBalance, newTokensBalance.toSeq))
+    else
+      Failure(new IllegalStateException("Balance could not be negative"))
+  }
+
+  private def tokenAmounts(boxes: Seq[TrackedBox]): Map[EncodedTokenId, Long] =
+    boxes
+      .flatMap(_.box.additionalTokens.toArray)
+      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        val encodedId = encodedTokenId(id)
+        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+      }
+
+  private def snapshotChunkVersion(snapshotBlockId: ModifierId, subtreeIndex: Int, finalChunk: Boolean): Array[Byte] =
+    if (finalChunk) {
+      idToBytes(snapshotBlockId)
+    } else {
+      Blake2b256.hash(idToBytes(snapshotBlockId) ++ Ints.toByteArray(subtreeIndex))
+    }
 
   def rollback(version: VersionTag): Try[Unit] = {
     cache.clear()

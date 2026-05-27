@@ -8,6 +8,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.{ErgoBox, Input}
 import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
+import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -20,10 +21,11 @@ import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import sigma.VersionContext
 import sigma.ast.{EvaluatedValue, SType}
+import sigma.crypto.EcPointType
 import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 case class TransactionsApiRoute(readersHolder: ActorRef,
                                 nodeViewActorRef: ActorRef,
@@ -154,13 +156,14 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getUnconfirmedTransactionsWithResolvedInputs(offset, limit)
 
-  private def validateTransactionAndProcess(tx: ErgoTransaction)
+  private def validateTransactionAndProcess(tx: ErgoTransaction,
+                                            minerPkOverride: Option[EcPointType] = None)
                                            (processFn: UnconfirmedTransaction => Route): Route = {
     if (tx.size > ergoSettings.nodeSettings.maxTransactionSize) {
       BadRequest(s"Transaction $tx has too large size ${tx.size}")
     } else {
       onSuccess {
-        verifyTransaction(tx, readersHolder, ergoSettings)
+        verifyTransaction(tx, readersHolder, ergoSettings, minerPkOverride)
       } {
         _.fold(
           e => BadRequest(s"Malformed transaction: ${e.getMessage}"),
@@ -192,9 +195,20 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     }
   }
 
-  def checkTransactionR: Route = (path("check") & post & entity(as[ErgoTransaction])) { tx =>
-    validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
-  }
+  def checkTransactionR: Route =
+    (path("check") & post & parameter("minerPk".as[String].?) & entity(as[ErgoTransaction])) { (minerPkHex, tx) =>
+      minerPkHex.map(parseMinerPk) match {
+        case Some(Failure(e)) =>
+          BadRequest(s"Invalid minerPk hex: ${e.getMessage}")
+        case Some(Success(pk)) =>
+          validateTransactionAndProcess(tx, Some(pk))(validTx => ApiResponse(validTx.transaction.id))
+        case None =>
+          validateTransactionAndProcess(tx, None)(validTx => ApiResponse(validTx.transaction.id))
+      }
+    }
+
+  private def parseMinerPk(hex: String): Try[EcPointType] =
+    Algos.decode(hex).map(groupElemFromBytes)
 
   /**
     * Check transaction given as hex-encoded bytes

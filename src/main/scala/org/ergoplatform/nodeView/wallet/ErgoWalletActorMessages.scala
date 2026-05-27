@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
+import sigma.crypto.EcPointType
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.wallet.Constants.ScanId
@@ -94,17 +95,21 @@ object ErgoWalletActorMessages {
   /**
    * A request to sign a transaction
    *
-   * @param utx          - unsigned transaction
-   * @param secrets      - additional secrets given to the prover
-   * @param hints        - hints used for transaction signing (commitments and partial proofs)
-   * @param boxesToSpend - boxes the transaction is spending
-   * @param dataBoxes    - read-only inputs of the transaction
+   * @param utx             - unsigned transaction
+   * @param secrets         - additional secrets given to the prover
+   * @param hints           - hints used for transaction signing (commitments and partial proofs)
+   * @param boxesToSpend    - boxes the transaction is spending
+   * @param dataBoxes       - read-only inputs of the transaction
+   * @param minerPkOverride - optional forged miner pk for the upcoming preHeader; when
+   *                          present, the prover signs against `stateContext.upcoming(pk, ...)`
+   *                          instead of the live node's `stateContext`
    */
   case class SignTransaction(utx: UnsignedErgoTransaction,
                              secrets: Seq[ExternalSecret],
                              hints: TransactionHintsBag,
                              boxesToSpend: Option[Seq[ErgoBox]],
-                             dataBoxes: Option[Seq[ErgoBox]])
+                             dataBoxes: Option[Seq[ErgoBox]],
+                             minerPkOverride: Option[EcPointType] = None)
 
   /**
    *

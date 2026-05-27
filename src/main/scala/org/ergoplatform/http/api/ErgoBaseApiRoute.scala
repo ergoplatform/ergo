@@ -7,7 +7,9 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransacti
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor
 import org.ergoplatform.settings.{Algos, ErgoSettings}
+import sigma.crypto.EcPointType
 import scorex.core.api.http.ApiRoute
 import scorex.util.{bytesToId, ModifierId}
 import akka.pattern.ask
@@ -116,7 +118,8 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
   protected def verifyTransaction(
     tx: ErgoTransaction,
     readersHolder: ActorRef,
-    ergoSettings: ErgoSettings
+    ergoSettings: ErgoSettings,
+    minerPkOverride: Option[EcPointType] = None
   ): Future[Try[UnconfirmedTransaction]] = {
     val now: Long = System.currentTimeMillis()
     val bytes     = Some(tx.bytes)
@@ -125,7 +128,10 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
       .map {
         case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
-          val validationContext = utxo.stateContext.simplifiedUpcoming()
+          val validationContext = minerPkOverride match {
+            case Some(pk) => ErgoWalletActor.upcomingWithMinerPk(utxo.stateContext, pk)
+            case None     => utxo.stateContext.simplifiedUpcoming()
+          }
           utxo.withMempool(mp)
             .validateWithCost(tx, validationContext, maxTxCost, None)
             .map(cost => new UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))

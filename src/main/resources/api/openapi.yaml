@@ -636,6 +636,16 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/DhtSecret'
+        minerPk:
+          description: |-
+            Optional forged miner public key for the upcoming preHeader, hex-encoded
+            (secp256k1 group element). When set, the prover signs against an upcoming
+            state context that uses this pk instead of the placeholder one in
+            `simplifiedUpcoming`. Useful for scripts that depend on
+            `CONTEXT.preHeader.minerPk`. Such transactions only validate inside the
+            forged context and will not be accepted by the real network.
+          type: string
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
     AddressHolder:
       description: Holds encoded ErgoAddress
@@ -3250,6 +3260,18 @@ paths:
       operationId: checkTransaction
       tags:
         - transactions
+      parameters:
+        - in: query
+          name: minerPk
+          required: false
+          schema:
+            type: string
+          description: |-
+            Optional hex-encoded miner public key (secp256k1 group element). When supplied,
+            the transaction is validated against an upcoming state context that uses this pk
+            in the preHeader instead of the placeholder one in `simplifiedUpcoming`. Useful
+            for verifying transactions whose scripts depend on `CONTEXT.preHeader.minerPk`.
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
       requestBody:
         required: true
         content:

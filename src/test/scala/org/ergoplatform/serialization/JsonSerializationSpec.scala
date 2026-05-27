@@ -20,6 +20,7 @@ class JsonSerializationSpec extends ErgoCorePropertyTest
   with EitherValues {
   import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeGenerators._
@@ -112,6 +113,15 @@ class JsonSerializationSpec extends ErgoCorePropertyTest
       val json = request.asJson
       val parsedRequest = json.as[TransactionSigningRequest].toOption.get
       parsedRequest shouldBe request
+    }
+  }
+
+  property("transactionSigningRequest with minerPk override roundtrip") {
+    forAll(transactionSigningRequestGen(includeInputs = false), genECPoint) { (req, pk) =>
+      val withOverride = req.copy(minerPk = Some(pk))
+      val parsed = withOverride.asJson.as[TransactionSigningRequest].toOption.get
+      parsed.minerPk shouldBe Some(pk)
+      parsed.unsignedTx shouldBe withOverride.unsignedTx
     }
   }
 

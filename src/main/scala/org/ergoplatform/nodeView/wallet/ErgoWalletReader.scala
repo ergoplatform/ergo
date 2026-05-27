@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
+import sigma.crypto.EcPointType
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey}
@@ -121,8 +122,9 @@ trait ErgoWalletReader extends NodeViewComponent {
                       secrets: Seq[ExternalSecret],
                       hints: TransactionHintsBag,
                       boxesToSpend: Option[Seq[ErgoBox]],
-                      dataBoxes: Option[Seq[ErgoBox]]): Future[Try[ErgoTransaction]] =
-    (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes)).mapTo[Try[ErgoTransaction]]
+                      dataBoxes: Option[Seq[ErgoBox]],
+                      minerPkOverride: Option[EcPointType] = None): Future[Try[ErgoTransaction]] =
+    (walletActor ? SignTransaction(tx, secrets, hints, boxesToSpend, dataBoxes, minerPkOverride)).mapTo[Try[ErgoTransaction]]
 
   def extractHints(tx: ErgoTransaction,
                    real: Seq[SigmaBoolean],

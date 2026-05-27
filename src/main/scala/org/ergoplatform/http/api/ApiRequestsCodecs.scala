@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, GenerateCommit
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import sigma.AnyValue
+import sigma.crypto.EcPointType
 import sigma.data.SigmaBoolean
 
 /**
@@ -67,8 +68,9 @@ trait ApiRequestsCodecs extends ApiCodecs {
       ),
       "hints" -> tsr.hints.asJson,
       "inputsRaw" -> tsr.inputs.asJson,
-      "dataInputsRaw" -> tsr.dataInputs.asJson
-    )
+      "dataInputsRaw" -> tsr.dataInputs.asJson,
+      "minerPk" -> tsr.minerPk.asJson
+    ).dropNullValues
   }
 
   implicit val transactionSigningRequestDecoder: Decoder[TransactionSigningRequest] = { cursor =>
@@ -79,8 +81,9 @@ trait ApiRequestsCodecs extends ApiCodecs {
       hints <- cursor.downField("hints").as[Option[TransactionHintsBag]]
       inputs <- cursor.downField("inputsRaw").as[Option[Seq[String]]]
       dataInputs <- cursor.downField("dataInputsRaw").as[Option[Seq[String]]]
+      minerPk <- cursor.downField("minerPk").as[Option[EcPointType]]
       secrets = (dlogs.getOrElse(Seq.empty) ++ dhts.getOrElse(Seq.empty)).map(ExternalSecret.apply)
-    } yield TransactionSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs)
+    } yield TransactionSigningRequest(tx, hints.getOrElse(TransactionHintsBag.empty), secrets, inputs, dataInputs, minerPk)
   }
 
   implicit val generateCommitmentsRequestEncoder: Encoder[GenerateCommitmentsRequest] = { gcr =>

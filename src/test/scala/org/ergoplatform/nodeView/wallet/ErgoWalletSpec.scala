@@ -19,14 +19,16 @@ import scorex.util.ModifierId
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.ErgoTree
+import sigma.crypto.EcPointType
 import sigma.data.{CAND, CTHRESHOLD}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
+import org.ergoplatform.mining.groupElemToBytes
 import org.ergoplatform.settings.Constants.TrueTree
 
 import scala.concurrent.duration._
 
-class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
+class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with ErgoCompilerHelpers with Eventually {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
@@ -1123,6 +1125,59 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
         val txSigned = await(wallet.signTransaction(utx, Seq(es1), hints, Some(Seq(in)), None)).get
         txSigned.statelessValidity().isSuccess shouldBe true
+      }
+    }
+  }
+
+  property("forged minerPk activates a context-dependent script for signing") {
+    withFixture { implicit w =>
+      val forgedSecret = DLogProverInput.random()
+      val forgedPk: EcPointType = forgedSecret.publicImage.value
+      val forgedPkHex = Base16.encode(groupElemToBytes(forgedPk))
+
+      // Script only validates when CONTEXT.preHeader.minerPk equals the forged pk.
+      val script: ErgoTree = compileSourceV5(
+        s"""{ CONTEXT.preHeader.minerPk == decodePoint(fromBase16("$forgedPkHex")) }""",
+        treeVersion = 0
+      )
+
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+      eventually {
+        val confirmedBalance = getConfirmedBalances.walletBalance
+
+        // Fund a box guarded by the script (leave room for fee + change).
+        val req = PaymentRequest(Pay2SAddress(script), confirmedBalance - MinBoxValue, Array.empty, Map.empty)
+        val fundingTx = await(wallet.generateTransaction(Seq(req))).get
+        val scriptBox = fundingTx.outputs.head
+
+        val out = new ErgoBoxCandidate(scriptBox.value, TrueTree, creationHeight = 0)
+        val utx = new UnsignedErgoTransaction(
+          IndexedSeq(new UnsignedInput(scriptBox.id)),
+          IndexedSeq.empty,
+          IndexedSeq(out)
+        )
+
+        // Without override: prover sees the live state context's minerPk (genesis header /
+        // PreHeader.fake), not forgedPk; the script reduces to false and signing fails.
+        val noOverride = await(wallet.signTransaction(
+          utx, Seq.empty, TransactionHintsBag.empty, Some(Seq(scriptBox)), None, None
+        ))
+        withClue(s"noOverride result was unexpectedly successful: $noOverride") {
+          noOverride.isFailure shouldBe true
+        }
+
+        // With override: prover sees forgedPk in preHeader, the script reduces to true,
+        // signing succeeds.
+        val withOverride = await(wallet.signTransaction(
+          utx, Seq.empty, TransactionHintsBag.empty, Some(Seq(scriptBox)), None, Some(forgedPk)
+        ))
+        withClue(s"withOverride result was unexpectedly a failure: $withOverride") {
+          withOverride.isSuccess shouldBe true
+        }
+        withOverride.get.id shouldBe utx.id
       }
     }
   }

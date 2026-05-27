@@ -126,6 +126,22 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       }
   }
 
+  it should "check transaction with a forged minerPk query param" in {
+    import org.ergoplatform.utils.generators.ErgoCoreGenerators.genECPoint
+    import org.ergoplatform.mining.groupElemToBytes
+    val forgedPkHex = Base16.encode(groupElemToBytes(genECPoint.sample.get))
+    Post(prefix + s"/check?minerPk=$forgedPkHex", tx.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[String] shouldEqual tx.id
+    }
+  }
+
+  it should "reject /check with malformed minerPk" in {
+    Post(prefix + "/check?minerPk=not-hex", tx.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "get unconfirmed txs from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK

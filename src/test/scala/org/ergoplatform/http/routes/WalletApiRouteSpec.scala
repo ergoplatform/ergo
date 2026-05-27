@@ -19,7 +19,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.util.{Random, Try}
 import scala.concurrent.duration._
-import akka.http.scaladsl.server.MissingQueryParamRejection
+import akka.http.scaladsl.server.{MalformedRequestContentRejection, MissingQueryParamRejection}
 import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
 
@@ -112,6 +112,25 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
+    }
+  }
+
+  it should "sign a transaction with a forged minerPk" in {
+    import org.ergoplatform.utils.generators.ErgoCoreGenerators.genECPoint
+    val baseTsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(includeInputs = true).sample.get
+    val forgedPk = genECPoint.sample.get
+    val tsr = baseTsr.copy(minerPk = Some(forgedPk))
+    Post(prefix + "/transaction/sign", tsr.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
+    }
+  }
+
+  it should "reject /transaction/sign with malformed minerPk" in {
+    val baseTsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(includeInputs = true).sample.get
+    val badJson = baseTsr.asJson.deepMerge(Json.obj("minerPk" -> "not-hex".asJson))
+    Post(prefix + "/transaction/sign", badJson) ~> route ~> check {
+      rejection shouldBe a[MalformedRequestContentRejection]
     }
   }
 

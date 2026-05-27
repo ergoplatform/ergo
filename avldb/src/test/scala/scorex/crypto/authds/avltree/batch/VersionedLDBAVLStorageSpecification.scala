@@ -19,7 +19,7 @@ import scorex.utils.{Random => RandomBytes}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 class VersionedLDBAVLStorageSpecification
   extends AnyPropSpec
@@ -368,6 +368,78 @@ class VersionedLDBAVLStorageSpecification
       val chunkBytes = store.get(sid).get
       SubtreeSerializer.parseBytesTry(chunkBytes).get.id.sameElements(sid) shouldBe true
     }
+  }
+
+  property("iterating snapshot subtrees follows manifest order and supports resume") {
+    val manifestDepth: Byte = 6
+    val manifestSerializer = new ManifestSerializer(manifestDepth)
+    val prover = createPersistentProver()
+    blockchainWorkflowTest(prover)
+
+    val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
+    val dumpStore = LDBFactory.createKvDb(getRandomTempDir.getAbsolutePath)
+
+    val rootNodeLabel = storage.dumpSnapshot(dumpStore, manifestDepth, prover.digest.dropRight(1)).get
+    val manifest = manifestSerializer.parseBytesTry(dumpStore.get(rootNodeLabel).get).get
+
+    val iteratedIds = scala.collection.mutable.ArrayBuffer.empty[Digest32]
+    val nextIndex = storage.iterateSubtrees(0, manifestDepth) { case (_, subtree) =>
+      iteratedIds += subtree.id
+      Success(())
+    }.get
+
+    nextIndex shouldBe manifest.subtreesIds.size
+    iteratedIds.toSeq.map(Base16.encode) shouldBe manifest.subtreesIds.map(Base16.encode)
+    storage.countSubtrees(manifestDepth).get shouldBe manifest.subtreesIds.size
+
+    val resumeFrom = manifest.subtreesIds.size / 2
+    val resumedIds = scala.collection.mutable.ArrayBuffer.empty[Digest32]
+    val resumedNextIndex = storage.iterateSubtrees(resumeFrom, manifestDepth) { case (_, subtree) =>
+      resumedIds += subtree.id
+      Success(())
+    }.get
+
+    resumedNextIndex shouldBe manifest.subtreesIds.size
+    resumedIds.toSeq.map(Base16.encode) shouldBe manifest.subtreesIds.drop(resumeFrom).map(Base16.encode)
+
+    val limitedIds = scala.collection.mutable.ArrayBuffer.empty[Digest32]
+    val limitedNextIndex = storage.iterateSubtrees(resumeFrom, manifestDepth, limit = 2) { case (_, subtree) =>
+      limitedIds += subtree.id
+      Success(())
+    }.get
+
+    limitedNextIndex shouldBe resumeFrom + 2
+    limitedIds.toSeq.map(Base16.encode) shouldBe manifest.subtreesIds.slice(resumeFrom, resumeFrom + 2).map(Base16.encode)
+  }
+
+  property("iterating snapshot subtrees stops on handler failure") {
+    val manifestDepth: Byte = 6
+    val prover = createPersistentProver()
+    blockchainWorkflowTest(prover)
+
+    val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
+    val visited = scala.collection.mutable.ArrayBuffer.empty[Int]
+    val failure = new IllegalStateException("stop")
+
+    val result = storage.iterateSubtrees(0, manifestDepth) { case (index, _) =>
+      visited += index
+      if (index == 2) Failure(failure) else Success(())
+    }
+
+    result.failed.get shouldBe failure
+    visited.toSeq shouldBe Seq(0, 1, 2)
+  }
+
+  property("iterating snapshot subtrees validates arguments") {
+    val prover = createPersistentProver()
+    blockchainWorkflowTest(prover)
+
+    val storage = prover.storage.asInstanceOf[VersionedLDBAVLStorage]
+
+    storage.iterateSubtrees(-1, 6) { case (_, _) => Success(()) }.isFailure shouldBe true
+    storage.iterateSubtrees(0, 0) { case (_, _) => Success(()) }.isFailure shouldBe true
+    storage.iterateSubtrees(0, 6, 0) { case (_, _) => Success(()) }.isFailure shouldBe true
+    storage.countSubtrees(0).isFailure shouldBe true
   }
 
 }

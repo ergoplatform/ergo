@@ -50,6 +50,13 @@ object ErgoNodeViewSynchronizerMessages {
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
     /**
+     * Event emitted after UTXO state has been reconstructed from a local UTXO set snapshot.
+     */
+    case class UtxoSnapshotAppliedToState(blockHeight: Height,
+                                          blockId: ModifierId,
+                                          stateReader: UtxoStateReader) extends NodeViewHolderEvent
+
+    /**
      * Event which is published when rollback happened (on finding a better chain)
      *
      * @param branchPoint - block id which is last in the chain after rollback (before applying blocks from a fork)

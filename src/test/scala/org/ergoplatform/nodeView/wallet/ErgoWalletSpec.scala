@@ -1,12 +1,16 @@
 package org.ergoplatform.nodeView.wallet
 
+import akka.pattern.ask
+import akka.util.Timeout
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{ApplyUtxoSnapshotScanBatch, GetOrInitUtxoSnapshotScanStatus}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
+import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils._
 import org.ergoplatform.utils.fixtures.WalletFixture
@@ -25,6 +29,7 @@ import sigmastate.eval.Extensions._
 import org.ergoplatform.settings.Constants.TrueTree
 
 import scala.concurrent.duration._
+import scala.util.Success
 
 class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
@@ -34,6 +39,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
+  private implicit val timeout: Timeout = Timeout(5.seconds)
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>
@@ -91,6 +97,55 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         tx3.inputs.foreach { in =>
           tx2.inputs.exists(tx2In => tx2In.boxId sameElements in.boxId) shouldBe false
         }
+      }
+    }
+  }
+
+  property("skip on-chain block scan while UTXO snapshot scan is pending") {
+    val bootstrapSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)
+      )
+    )
+    new WalletFixture(bootstrapSettings, parameters, getCurrentView(_).vault).apply { implicit w =>
+      val address = getPublicKeys.head
+      val genesisBlock = makeGenesisBlock(address.pubkey)
+      val initialBoxes = boxesAvailable(genesisBlock, address.pubkey)
+      val initialBalance = balanceAmount(initialBoxes)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+      eventually {
+        getConfirmedBalances.walletBalance shouldBe initialBalance
+      }
+
+      val returnBalance = initialBalance / 2
+      val spendingTx = makeSpendingTx(initialBoxes, address, returnBalance)
+      val nextBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
+
+      await(wallet.walletActor ? GetOrInitUtxoSnapshotScanStatus(
+        genesisBlock.height,
+        genesisBlock.id,
+        ManifestSerializer.MainnetManifestDepth.toInt,
+        totalSubtrees = 1
+      )) shouldBe a[Success[_]]
+
+      wallet.scanPersistent(nextBlock)
+      Thread.sleep(500)
+      getConfirmedBalances.walletBalance shouldBe initialBalance
+
+      await(wallet.walletActor ? ApplyUtxoSnapshotScanBatch(
+        genesisBlock.height,
+        genesisBlock.id,
+        subtreeIndex = 0,
+        nextSubtreeIndex = 1,
+        completed = true,
+        boxes = IndexedSeq.empty
+      )) shouldBe a[Success[_]]
+
+      wallet.scanPersistent(nextBlock)
+      eventually {
+        getConfirmedBalances.walletBalance shouldBe returnBalance
       }
     }
   }

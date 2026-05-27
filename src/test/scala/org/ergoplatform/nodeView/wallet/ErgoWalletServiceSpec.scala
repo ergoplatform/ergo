@@ -244,6 +244,34 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("it should scan UTXO snapshot chunks without creating wallet transactions") {
+    forAll(modifierIdGen) { snapshotBlockId =>
+      withVersionedStore(10) { versionedStore =>
+        withStore { store =>
+          val walletService = new ErgoWalletServiceImpl(settings)
+          val wState = initialState(store, versionedStore)
+          val boxes = boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
+          val scanResults = WalletScanLogic.scanSnapshotBoxes(boxes, wState.walletVars, None)
+
+          val updatedState = walletService.scanUtxoSnapshotChunk(
+            wState,
+            boxes,
+            snapshotBlockId,
+            snapshotHeight = 100,
+            subtreeIndex = 0,
+            finalChunk = true,
+            dustLimit = None
+          ).get
+
+          updatedState.registry.walletUnspentBoxes().toList should contain theSameElementsAs scanResults.outputs
+          updatedState.registry.allWalletTxs() shouldBe empty
+          updatedState.registry.fetchDigest().height shouldBe 100
+          updatedState.outputsFilter shouldBe empty
+        }
+      }
+    }
+  }
+
   property("it should generate signed and unsigned transaction") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>

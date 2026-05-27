@@ -305,6 +305,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+            context.system.eventStream.publish(UtxoSnapshotAppliedToState(height, blockId, newState))
           case Failure(t) =>
             log.error("UTXO set snapshot application failed: ", t)
         }

@@ -18,6 +18,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActor
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet._
@@ -265,9 +266,16 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender() ! Success(tx)
 
-      case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
-        val sc = ErgoStateContext.empty(settings.chainSettings, parameters)
-        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
+      case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, minerPkOverride) =>
+        val baseSc = ErgoStateContext.empty(settings.chainSettings, parameters)
+        val (effectiveSc, effectiveParams) = minerPkOverride match {
+          case Some(pk) =>
+            val ctx = ErgoWalletActor.upcomingWithMinerPk(baseSc, pk)
+            (ctx, ctx.currentParameters)
+          case None =>
+            (baseSc, parameters)
+        }
+        sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, effectiveParams, effectiveSc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }
     }

@@ -7,7 +7,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UpcomingStateContext}
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
@@ -19,6 +19,7 @@ import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
+import sigma.crypto.EcPointType
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -371,7 +372,14 @@ class ErgoWalletActor(settings: ErgoSettings,
       val resultTry = ergoWalletService.generateCommitments(state, unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt)
       sender() ! GenerateCommitmentsResponse(resultTry)
 
-    case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
+    case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, minerPkOverride) =>
+      val (effectiveContext, effectiveParameters) = minerPkOverride match {
+        case Some(pk) =>
+          val ctx = ErgoWalletActor.upcomingWithMinerPk(state.stateContext, pk)
+          (ctx, ctx.currentParameters)
+        case None =>
+          (state.stateContext, state.parameters)
+      }
       val txTry =
         ergoWalletService.signTransaction(
           state.walletVars.proverOpt,
@@ -380,8 +388,8 @@ class ErgoWalletActor(settings: ErgoSettings,
           hints,
           boxesToSpendOpt,
           dataBoxesOpt,
-          state.parameters,
-          state.stateContext
+          effectiveParameters,
+          effectiveContext
         )(state.readBoxFromUtxoWithWalletFallback)
       sender() ! txTry
 
@@ -502,6 +510,27 @@ class ErgoWalletActor(settings: ErgoSettings,
 }
 
 object ErgoWalletActor extends ScorexLogging {
+
+  /**
+    * Build an `UpcomingStateContext` that forges `minerPk` in the preHeader while keeping
+    * the other fields aligned with what `simplifiedUpcoming` would compute from
+    * `base.lastHeaderOpt`. Used by sign / verify endpoints that accept an optional
+    * `minerPk` override.
+    */
+  def upcomingWithMinerPk(base: ErgoStateContext, minerPk: EcPointType): UpcomingStateContext = {
+    val last = base.lastHeaderOpt
+    val version = last.map(_.version).getOrElse(base.currentParameters.blockVersion)
+    val nBits = last.map(_.nBits).getOrElse(base.chainSettings.initialNBits)
+    val timestamp = last.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    base.upcoming(
+      minerPk = minerPk,
+      timestamp = timestamp,
+      nBits = nBits,
+      votes = Array.emptyByteArray,
+      proposedUpdate = ErgoValidationSettingsUpdate.empty,
+      version = version
+    )
+  }
 
   /** Start actor and register its proper closing into coordinated shutdown */
   def apply(settings: ErgoSettings,

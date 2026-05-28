@@ -235,6 +235,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     val secrets = tsr.externalSecrets
 
     val hints = tsr.hints
+    val minerPkOverride = tsr.minerPk
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {
@@ -244,12 +245,12 @@ case class WalletApiRoute(readersHolder: ActorRef,
           .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
 
         if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
+          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes), minerPkOverride)
         } else {
           Future(Failure(new Exception("Can't parse input boxes provided")))
         }
       } else {
-        r.w.signTransaction(tx, secrets, hints, None, None)
+        r.w.signTransaction(tx, secrets, hints, None, None, minerPkOverride)
       }
     }
 

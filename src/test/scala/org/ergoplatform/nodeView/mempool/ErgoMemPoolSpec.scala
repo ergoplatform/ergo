@@ -526,4 +526,111 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
   }
 
+  it should "maintain TxFamilyGraph consistent with outputs map across put/invalidate" in {
+    val feeProposition = settings.chainSettings.monetary.feeProposition
+
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    var txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
+    val family_depth = 5
+    val limitedPoolSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(mempoolCapacity = (family_depth + 1) * txs.size))
+    var pool = ErgoMemPool.empty(limitedPoolSettings)
+
+    def checkInvariant(): Unit = {
+      val p = pool.pool
+      val expectedParents = p.orderedTransactions.values.flatMap { utx =>
+        val pids = utx.transaction.inputs.flatMap(in => p.outputs.get(in.boxId)).toSet
+        if (pids.isEmpty) None else Some(utx.transaction.id -> pids)
+      }.toMap
+      val expectedChildren = expectedParents.toSeq
+        .flatMap { case (child, parents) => parents.map(_ -> child) }
+        .groupBy(_._1)
+        .map { case (parent, edges) => parent -> edges.map(_._2).toSet }
+      p.family.parents shouldBe expectedParents
+      p.family.children shouldBe expectedChildren
+    }
+
+    txs.foreach { tx =>
+      pool = pool.put(tx)
+      checkInvariant()
+    }
+
+    for (_ <- 1 to family_depth) {
+      txs = txs.map { tx =>
+        val spendingBox = tx.transaction.outputs.head
+        val sc = spendingBox.toCandidate
+        val out0 = new ErgoBoxCandidate(sc.value - 55000, sc.ergoTree, sc.creationHeight)
+        val out1 = new ErgoBoxCandidate(55000, feeProposition, sc.creationHeight)
+        val newTx = UnconfirmedTransaction(tx.transaction.copy(
+          inputs = IndexedSeq(new Input(spendingBox.id, emptyProverResult)),
+          outputCandidates = IndexedSeq(out0, out1)), None)
+        val (newPool, outcome) = pool.process(newTx, us)
+        outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+        pool = newPool
+        checkInvariant()
+        newTx
+      }
+    }
+
+    while (pool.size > 0) {
+      val victim = pool.getAll.head
+      pool = pool.invalidate(victim)
+      checkInvariant()
+    }
+
+    pool.pool.family.parents shouldBe empty
+    pool.pool.family.children shouldBe empty
+  }
+
+  it should "preserve the inputs index after replace-by-fee" in {
+    // With put-then-remove ordering, the new tx's inputs entry overwrites the loser's,
+    // and the subsequent loser-remove deletes the shared box id from `inputs`,
+    // leaving the new (winning) tx with NO inputs index entry for the shared box.
+    // Downstream double-spend detection would then miss further conflicts.
+    forAll(smallPositiveInt, smallPositiveInt) { case (n1, n2) =>
+      whenever(n1 != n2 && n1 < n2) {
+        val (us, bh) = createUtxoState(settings)
+        val genesis = validFullBlock(None, us, bh)
+        val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+        val feeProp = settings.chainSettings.monetary.feeProposition
+        val inputBox = wus.takeBoxes(100).collectFirst {
+          case box if box.ergoTree == TrueTree => box
+        }.get
+        val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
+
+        def ctx(n: Int): ContextExtension =
+          ContextExtension(Map((1: Byte) -> ByteArrayConstant(Array.fill(1 + n)(0: Byte))))
+
+        // tx2 is smaller (n1 < n2 means tx1's context is shorter, so tx2... wait,
+        // the existing test treats larger context as bigger size, so larger n => larger tx).
+        // Pick n2 > n1 so tx_small has n=n1 (smaller tx, higher fee/byte after replacement).
+        val txLargeLike = ErgoTransaction(
+          IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ctx(n2)))),
+          IndexedSeq(feeOut))
+        val txSmallLike = ErgoTransaction(
+          IndexedSeq(new Input(inputBox.id, new ProverResult(Array.emptyByteArray, ctx(n1)))),
+          IndexedSeq(feeOut))
+
+        val txLarge = UnconfirmedTransaction(ErgoTransaction(txLargeLike.inputs, txLargeLike.outputCandidates), None)
+        val txSmall = UnconfirmedTransaction(ErgoTransaction(txSmallLike.inputs, txSmallLike.outputCandidates), None)
+
+        val pool0 = ErgoMemPool.empty(settings)
+        val (poolWithLarge, oLarge) = pool0.process(txLarge, us)
+        oLarge.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+
+        val (poolWithSmall, oSmall) = poolWithLarge.process(txSmall, us)
+        oSmall.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+        poolWithSmall.size shouldBe 1
+        poolWithSmall.take(1).head.transaction.id shouldBe txSmall.transaction.id
+
+        // The crux: inputs index must point to the winner (txSmall) for the shared input box.
+        // With the buggy put-then-remove order this is `None`.
+        poolWithSmall.pool.inputs.get(inputBox.id) shouldBe Some(txSmall.transaction.id)
+      }
+    }
+  }
+
 }

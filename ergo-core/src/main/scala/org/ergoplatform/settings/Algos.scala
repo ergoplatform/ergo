@@ -16,35 +16,23 @@ object Algos extends ErgoAlgos with utils.ScorexEncoding {
   //  we can fix this ugliness.
   override implicit val encoder: ScorexEncoder = utils.ScorexEncoder.default
 
+  /**
+    * Hash of an empty byte array. Locked in as the on-chain `extensionRoot` of the
+    * mainnet genesis block, whose extension is empty; preserved at the one call site
+    * (`ExtensionCandidate.digest`) so genesis consensus is not changed.
+    */
   lazy val emptyMerkleTreeRoot: Digest32 = Algos.hash(LeafData @@ Array[Byte]())
 
   @inline def encode(id: ModifierId): String = encoder.encode(id)
 
   /**
-    * A method to build a Merkle tree over binary objects (leafs of the tree)
-    * @param elements - Merkle tree leafs (byte arrays of arbitrary size)
-    * @return a Merkle tree built over the elements
+    * Build a Merkle tree over binary objects (leaves of the tree).
     */
   def merkleTree(elements: Seq[LeafData]): MerkleTree[Digest32] = MerkleTree(elements)(hash)
 
   /**
-    * A method which is building a Merkle tree over binary objects and returns a digest
-    * (256-bits long root hash) of the tree
-    *
-    * !!! If input sequence is empty, then the function returns a special value (hash of empty byte array), which is
-    *  equal to 0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8 and different from "rootHash" property
-    *  of a Merkle tree instance (merkleTree(elements).rootHash) which is equal to another special value
-    *  0000000000000000000000000000000000000000000000000000000000000000
-    *
-    *  See https://github.com/ergoplatform/ergo/issues/1077
-    *
-    * @param elements - tree leafs
-    * @return 256-bits (32-bytes) long digest of the tree
+    * Root hash of the Merkle tree built over the given leaves.
     */
-  def merkleTreeRoot(elements: Seq[LeafData]): Digest32 =
-    if (elements.isEmpty) emptyMerkleTreeRoot else merkleTree(elements).rootHash
-
-  def merkleTreeRoot(tree: MerkleTree[Digest32]): Digest32 =
-    if (tree.length == 0) emptyMerkleTreeRoot else tree.rootHash
+  def merkleTreeRoot(elements: Seq[LeafData]): Digest32 = merkleTree(elements).rootHash
 
 }

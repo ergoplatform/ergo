@@ -21,12 +21,17 @@ import scala.collection.mutable
 class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
   lazy val merkleTree: MerkleTree[Digest32] = Extension.merkleTree(fields)
 
-  lazy val digest: Digest32 = Algos.merkleTreeRoot(merkleTree)
+  // The genesis block is the only block whose extension can be empty (non-genesis
+  // extensions are validated non-empty by ExtensionValidator). Its on-chain
+  // `extensionRoot` was historically computed as `hash(empty)`, not as the empty
+  // tree's `rootHash` — preserve that value to keep genesis consensus intact.
+  lazy val digest: Digest32 =
+    if (fields.isEmpty) Algos.emptyMerkleTreeRoot else merkleTree.rootHash
 
   lazy val interlinksMerkleTree: MerkleTree[Digest32] =
     Extension.merkleTree(fields.filter(_._1.head.equals(InterlinksVectorPrefix)))
 
-  lazy val interlinksDigest: Digest32 = Algos.merkleTreeRoot(interlinksMerkleTree)
+  lazy val interlinksDigest: Digest32 = interlinksMerkleTree.rootHash
 
   def toExtension(headerId: ModifierId): Extension = Extension(headerId, fields)
 

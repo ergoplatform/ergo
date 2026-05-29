@@ -2,6 +2,7 @@ package org.ergoplatform.modifiers.history
 
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 
@@ -45,5 +46,25 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
     val ext = ExtensionCandidate(fields)
     val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
     proof shouldBe None
+  }
+
+  // Locks the on-chain `extensionRoot` of the (empty-extension) genesis block.
+  property("digest of an empty extension equals the legacy genesis extensionRoot") {
+    ExtensionCandidate(Seq.empty).digest shouldBe Algos.emptyMerkleTreeRoot
+  }
+
+  property("digest stays at the legacy genesis value when two empty extensions are combined") {
+    (ExtensionCandidate(Seq.empty) ++ ExtensionCandidate(Seq.empty)).digest shouldBe Algos.emptyMerkleTreeRoot
+  }
+
+  // A non-genesis extension always contains interlink fields (added by popow), but the
+  // interlinksMerkleTree is still computed by filtering for the InterlinksVectorPrefix.
+  // If no field has that prefix, the filtered tree is empty — and after #1077 its
+  // root hash is the MerkleTree library's empty value, not Algos.emptyMerkleTreeRoot.
+  property("interlinksDigest of an extension without interlink fields is the empty MerkleTree root") {
+    val nonInterlinkField: KV = (Array[Byte](0x01, 0x02), Array[Byte](0x03))
+    val ext = ExtensionCandidate(Seq(nonInterlinkField))
+    ext.interlinksDigest should not equal Algos.emptyMerkleTreeRoot
+    ext.interlinksDigest shouldBe ext.interlinksMerkleTree.rootHash
   }
 }

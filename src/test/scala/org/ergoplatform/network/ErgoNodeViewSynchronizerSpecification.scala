@@ -888,8 +888,10 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       gotRequest shouldBe true
 
       // The header should now be tracked as Received in deliveryTracker
-      deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) shouldBe
-        scorex.core.network.ModifiersStatus.Received
+      eventually {
+        deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) shouldBe
+          scorex.core.network.ModifiersStatus.Received
+      }
 
       // Sending the same sync message again should NOT trigger another download.
       // The synchronizer may send a sync response back, which is expected.

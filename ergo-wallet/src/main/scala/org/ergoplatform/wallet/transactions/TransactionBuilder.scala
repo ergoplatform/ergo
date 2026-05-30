@@ -2,16 +2,18 @@ package org.ergoplatform.wallet.transactions
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
+import org.ergoplatform.sdk.BlockchainParameters
 import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector, ErgoBoxAssetExtractor}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
+import sigma.ast.ErgoTree
 import sigma.eval.Extensions.EvalIterableOps
 import sigmastate.utils.Extensions._
 import sigma.Coll
 import sigma.Extensions.{ArrayOps, CollBytesOps}
-import sigma.data.SigmaConstants.{MaxBoxSizeWithoutRefs, MaxPropositionBytes}
+import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -178,10 +180,19 @@ object TransactionBuilder {
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
   }
 
-  // Default value per byte used by the dust check. The wallet has no access to the network
-  // `minValuePerByte` parameter, so we use the protocol default (30 * 12), the same assumption
-  // BoxSelector.MinBoxValue (and the private BoxSelector.MinValuePerByteDefault) already makes.
-  private val MinValuePerByteDefault = 360
+  // Block version at which the monotonic-height rule (txMonotonicHeight) activates. Mirrors
+  // Header.HardeningVersion in the node, which lives in ergo-core and is not reachable from here.
+  private val HardeningBlockVersion: Byte = 2
+
+  // Block version assumed when no BlockchainParameters are supplied. Past the hardening version, so
+  // monotonic-height is enforced by default.
+  private val DefaultBlockVersion: Byte = 3
+
+  // Fixed-size, zero-filled stand-in for the (yet unknown) transaction id. Attaching it to an output
+  // candidate yields the same serialized length the node measures on the final box - including the
+  // 34-byte tx-id+index reference accounted for by BoxUtils.minimalErgoAmount and the box-size rule.
+  // The id value does not affect the length.
+  private val mockTxId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   // Per-output checks from ErgoTransaction.validateStateful that depend only on a single output and the
   // current height. Used both as an early fail-fast on user outputs and inside validateStatefulChecks.
@@ -200,12 +211,18 @@ object TransactionBuilder {
     *
     * Not implemented here, as they require full node state: `txBoxesToSpend`/`txDataBoxes` (in the wallet
     * inputs are the boxes and data inputs are not resolved), `txScriptValidation` (the tx is unsigned, so
-    * there are no proofs and no interpreter), `txReemission` (needs chain settings) and the block-cost
-    * rule (needs the cost model).
+    * there are no proofs and no interpreter), the EIP-27 `txReemission` rule (needs chain settings - note
+    * the pay-to-reemission *output* is still added by buildUnsignedTx) and the block-cost rule (needs the
+    * cost model).
+    *
+    * @param minValuePerByte - storage-rent price used by the dust rule (network parameter or default)
+    * @param blockVersion    - protocol block version, gating the monotonic-height rule
     */
   private def validateStatefulChecks(inputs: IndexedSeq[ErgoBox],
                                      outputs: IndexedSeq[ErgoBoxCandidate],
-                                     currentHeight: Int): Unit = {
+                                     currentHeight: Int,
+                                     minValuePerByte: Int,
+                                     blockVersion: Byte): Unit = {
     // txAssetsInOneBox: <= 255 tokens per box and per-token sums must not overflow. The per-box token
     // count is already capped at construction (ErgoBoxCandidate stores it as an unsigned byte), so this
     // mainly guards against a per-token sum overflowing across outputs. Checked first, as the node does.
@@ -214,29 +231,40 @@ object TransactionBuilder {
 
     validateStatefulOutputs(outputs, currentHeight)
 
-    // txMonotonicHeight: enforced unconditionally (mainnet is past the v3 hardening that activated it).
-    val maxInputCreationHeight = inputs.map(_.creationHeight).max
+    // txMonotonicHeight: activated past the hardening block version (mirrors the node). Before it, an
+    // output only needs a non-negative creation height, which validateStatefulOutputs already checks.
+    val maxInputCreationHeight = if (blockVersion <= HardeningBlockVersion) 0 else inputs.map(_.creationHeight).max
     require(outputs.forall(_.creationHeight >= maxInputCreationHeight),
       s"output creationHeight must be >= max input creationHeight=$maxInputCreationHeight (txMonotonicHeight)")
 
-    // txDust: output value must cover its storage cost. Candidates lack the 34-byte tx reference, so we
-    // measure `bytesWithNoRef` against the default per-byte price (see MinValuePerByteDefault).
-    require(outputs.forall(out => out.value >= out.bytesWithNoRef.length.toLong * MinValuePerByteDefault),
-      s"output value is below the dust threshold of $MinValuePerByteDefault nanoErg per byte (txDust)")
+    // Measure each output's full serialized size the way the node does, by attaching a fixed-size mock
+    // tx reference (candidates have none yet). Reused by both the dust and box-size rules.
+    val outputBoxSizes = outputs.zipWithIndex.map { case (out, idx) =>
+      out -> out.toBox(mockTxId, idx.toShort).bytes.length
+    }
 
-    // txBoxSize: candidates lack the tx reference, so compare against MaxBoxSizeWithoutRefs, not MaxBoxSize.
-    require(outputs.forall(_.bytesWithNoRef.length <= MaxBoxSizeWithoutRefs.value),
-      s"output box size must be <= ${MaxBoxSizeWithoutRefs.value} bytes (txBoxSize)")
+    // txDust: output value must cover its storage cost (full box size * minValuePerByte).
+    require(outputBoxSizes.forall { case (out, size) => out.value >= size.toLong * minValuePerByte },
+      s"output value is below the dust threshold of $minValuePerByte nanoErg per byte (txDust)")
 
-    // txBoxPropositionSize
+    // txBoxSize
+    require(outputBoxSizes.forall { case (_, size) => size <= MaxBoxSize.value },
+      s"output box size must be <= ${MaxBoxSize.value} bytes (txBoxSize)")
+
+    // txBoxPropositionSize. Not independently reachable through buildUnsignedTx: a proposition larger
+    // than MaxPropositionBytes also makes the whole box exceed MaxBoxSize, so txBoxSize fires first.
+    // Kept as a faithful guard mirroring the node's rule set.
     require(outputs.forall(_.propositionBytes.length <= MaxPropositionBytes.value),
       s"output proposition size must be <= ${MaxPropositionBytes.value} bytes (txBoxPropositionSize)")
 
-    // txInputsSum: input value sum must not overflow.
+    // txInputsSum: input value sum must not overflow. Defensive: the `changeAmt >= 0` check in
+    // buildUnsignedTx already rejects inputs that overflow before we get here.
     val inputSumTry = Try(inputs.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
     require(inputSumTry.isSuccess, s"sum of input values should not exceed ${Long.MaxValue} (txInputsSum)")
 
-    // txErgPreservation: no ERGs are created or destroyed.
+    // txErgPreservation: no ERGs are created or destroyed. buildUnsignedTx balances inputs and outputs
+    // by construction, so this guards against a misbehaving box selector (e.g. wrong change or a dropped
+    // pay-to-reemission output).
     val outputSumTry = Try(outputs.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
     require(inputSumTry.toOption == outputSumTry.toOption,
       s"ERG not preserved: inputs sum ${inputSumTry.toOption}, outputs sum ${outputSumTry.toOption} (txErgPreservation)")
@@ -265,6 +293,15 @@ object TransactionBuilder {
     * @param changeAddress    - address where to send change from the input boxes
     * @param minChangeValue   - minimum change value to send, otherwise add to miner's fee
     * @param minerRewardDelay - reward delay to encode in miner's fee box
+    * @param burnTokens       - tokens to burn (excluded from change outputs)
+    * @param boxSelector      - box selector to compute change boxes
+    * @param parameters       - optional network parameters; when given, the dust rule uses the network
+    *                           `minValuePerByte` and the monotonic-height rule follows its block version.
+    *                           When absent, the protocol default per-byte price and an enforced
+    *                           monotonic-height rule are assumed.
+    * @param payToReemissionScript - EIP-27 pay-to-reemission proposition. Required only when the box
+    *                           selector produces a pay-to-reemission output; the wallet cannot derive
+    *                           this contract itself (see ReemissionData) so it must be supplied.
     * @return unsigned transaction
     */
   def buildUnsignedTx(
@@ -277,7 +314,9 @@ object TransactionBuilder {
     minChangeValue: Long,
     minerRewardDelay: Int,
     burnTokens: TokensMap = Map.empty,
-    boxSelector: BoxSelector = new DefaultBoxSelector(None)
+    boxSelector: BoxSelector = new DefaultBoxSelector(None),
+    parameters: Option[BlockchainParameters] = None,
+    payToReemissionScript: Option[ErgoTree] = None
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)
@@ -285,6 +324,9 @@ object TransactionBuilder {
     // fail fast on user outputs before doing box selection; the full set of stateful checks is run on
     // the assembled transaction (incl. fee and change boxes) right before it is returned.
     validateStatefulOutputs(outputCandidates, currentHeight)
+
+    val minValuePerByte = parameters.map(_.minValuePerByte).getOrElse(BoxSelector.MinValuePerByteDefault)
+    val blockVersion    = parameters.map(_.blockVersion).getOrElse(DefaultBlockVersion)
 
     val feeAmount = createFeeOutput.getOrElse(0L)
     require(createFeeOutput.fold(true)(_ > 0), s"expected fee amount > 0, got $feeAmount")
@@ -317,7 +359,18 @@ object TransactionBuilder {
     val changeBoxes = selection.changeBoxes
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 
-    val changeGoesToFee = changeAmt < minChangeValue && !changeBoxesHaveTokens
+    // EIP-27: if the selector carved out a pay-to-reemission output, send the reemitted ERGs to the
+    // (externally provided) reemission contract instead of dropping the output. The wallet cannot derive
+    // the contract itself (ReemissionData lacks it), so the script must be supplied by the caller.
+    val reemissionOutOpt = selection.payToReemissionBox.map { eip27Assets =>
+      val p2r = payToReemissionScript.getOrElse(throw new IllegalArgumentException(
+        "box selector produced an EIP-27 pay-to-reemission output but no payToReemissionScript was provided"))
+      new ErgoBoxCandidate(eip27Assets.value, p2r, currentHeight)
+    }
+
+    // small change is folded into the miner's fee, but never when a reemission output is present: the
+    // change bookkeeping below excludes the reemitted amount, so folding it would break ERG preservation.
+    val changeGoesToFee = changeAmt < minChangeValue && !changeBoxesHaveTokens && reemissionOutOpt.isEmpty
 
     require(!changeGoesToFee || (changeAmt == 0 || createFeeOutput.isDefined),
       s"""When change=$changeAmt < minChangeValue=$minChangeValue it is added to miner's fee,
@@ -343,9 +396,9 @@ object TransactionBuilder {
       Seq()
     }
 
-    val finalOutputCandidates = outputCandidates ++ feeOutOpt ++ addedChangeOut
+    val finalOutputCandidates = outputCandidates ++ feeOutOpt ++ reemissionOutOpt ++ addedChangeOut
 
-    validateStatefulChecks(inputs, finalOutputCandidates.toIndexedSeq, currentHeight)
+    validateStatefulChecks(inputs, finalOutputCandidates.toIndexedSeq, currentHeight, minValuePerByte, blockVersion)
 
     new UnsignedErgoLikeTransaction(
       inputs.map(b => new UnsignedInput(b.id)),

@@ -67,8 +67,9 @@ trait BoxSelector extends ScorexLogging {
 
 object BoxSelector {
 
-  // from https://github.com/ergoplatform/ergo/blob/2ce78a0380977b8ca354518edca93a5269ac9f53/src/main/scala/org/ergoplatform/settings/Parameters.scala#L258-L258
-  private val MinValuePerByteDefault = 30 * 12
+  // Protocol default for the `minValuePerByte` storage-rent parameter, used by MinBoxValue below and as
+  // the fallback in TransactionBuilder's dust check when no network parameters are supplied.
+  val MinValuePerByteDefault = 30 * 12
   val MinBoxValue: Long = (MaxBoxSize.value / 2L) * MinValuePerByteDefault
 
   /**

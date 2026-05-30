@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, Cancellable, DeathPactException, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
@@ -511,16 +511,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // when the header has already been applied to history.
       val headerStatus = deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq(history))
       if (headerStatus == ModifiersStatus.Unknown) {
-        // Header not yet tracked — transition through Requested to Received
-        // (we already have the full object from the sync message, so no download needed).
+        // Header not yet tracked — set as Received immediately since we already
+        // have the full object from the sync message (no download needed).
         // This allows the delivery tracker to properly manage the modifier lifecycle:
-        // Unknown -> Requested -> Received -> Held (on success) or
-        // Unknown -> Requested -> Received -> Unknown (on recoverable failure).
+        // Unknown -> Received -> Held (on success) or
+        // Unknown -> Received -> Unknown (on recoverable failure).
         log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
-        deliveryTracker.setRequested(Header.modifierTypeId, continuationHeader.id, peer, checksDone = 0) { _ =>
-          Cancellable.alreadyCancelled
-        }
-        deliveryTracker.setReceived(continuationHeader.id, Header.modifierTypeId, peer)
+        deliveryTracker.setReceivedDirectly(continuationHeader.id, Header.modifierTypeId, peer)
         viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
         val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
         log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")

@@ -25,7 +25,10 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
     .withFallback(nodeSeedConfigs.head)
     .withFallback(localOnlyConfig)
 
-  val node: Node = docker.startDevNetNode(offlineGeneratingPeer).get
+  // `lazy` so the container is only started when a test actually touches `node`.
+  // The single test below is currently `ignore`d (the openapi-checker image is gone),
+  // so without `lazy` we would start and tear down a node for nothing.
+  lazy val node: Node = docker.startDevNetNode(offlineGeneratingPeer).get
 
   def renderTemplate(template: String, varMapping: Map[String, String]): String =
     varMapping

@@ -11,7 +11,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.async.Async
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, blocking}
+import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite with Eventually {
@@ -48,7 +48,6 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       .map { case (cfg, vol) => docker.startDevNetNode(cfg, configEnrich, Some(vol)) }
       .sequence
     implicit val patienceConfig: PatienceConfig = PatienceConfig((nodeConfigs.size * 2).seconds, 3.second)
-    blocking(Thread.sleep(nodeConfigs.size * 2000))
     eventually {
       Await.result(Future.traverse(nodes.get)(_.waitForStartup), 180.seconds)
     }

@@ -174,10 +174,26 @@ inConfig(Linux)(
 Defaults.itSettings
 configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
-  parallelExecution := false,
+  // Run integration suites in parallel. Each suite is forked into its own JVM (testGrouping
+  // below) and the number running at once is bounded by the global Tags.ForkedTestGroup limit,
+  // so we get parallelism without exhausting host RAM (a suite can launch ~4 node containers).
+  parallelExecution := true,
+  testGrouping := {
+    val opts = forkOptions.value
+    definedTests.value.map { t =>
+      Tests.Group(name = t.name, tests = Seq(t), runPolicy = Tests.SubProcess(opts))
+    }
+  },
   test := (test dependsOn docker).value,
   scalacOptions ++= Seq("-Xasync")
 ))
+
+// Cap how many forked test JVMs run concurrently. `+=` can only *reduce* concurrency, never
+// raise it, so this is safe against RAM blowup: worst case the integration suites stay
+// sequential. Raise the limit once parallel runs prove stable on the host (see CLAUDE.md notes
+// on fork/tip flakiness). Unit tests run in a single forked group by default, so they are
+// unaffected by this limit.
+Global / concurrentRestrictions += Tags.limit(Tags.ForkedTestGroup, 2)
 
 docker / dockerfile := {
   val configDevNet = (IntegrationTest / resourceDirectory).value / "devnetTemplate.conf"
@@ -185,7 +201,7 @@ docker / dockerfile := {
   val configMainNet = (IntegrationTest / resourceDirectory).value / "mainnetTemplate.conf"
 
   new Dockerfile {
-    from("openjdk:11-jre-slim")
+    from("eclipse-temurin:11-jre-jammy")
     label("ergo-integration-tests", "ergo-integration-tests")
     add(assembly.value, "/opt/ergo/ergo.jar")
     add(Seq(configDevNet), "/opt/ergo")

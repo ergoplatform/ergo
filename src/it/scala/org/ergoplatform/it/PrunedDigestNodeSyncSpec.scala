@@ -23,6 +23,9 @@ class PrunedDigestNodeSyncSpec extends AnyFlatSpec with IntegrationSuite {
   dir.mkdirs()
 
   val minerConfig: Config = nodeSeedConfigs.head
+    // NB: left at the original slow interval on purpose — this spec's pruning assertion
+    // (a low block must already be pruned right after sync) depends on the slow mining cadence;
+    // faster mining makes the one-shot check race ahead of asynchronous pruning.
     .withFallback(internalMinerPollingIntervalConfig(10000))
     .withFallback(specialDataDirConfig(remoteVolume))
     .withFallback(localOnlyConfig)

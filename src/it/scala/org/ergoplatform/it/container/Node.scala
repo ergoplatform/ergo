@@ -24,9 +24,12 @@ class Node(val settings: ErgoSettings, val nodeInfo: NodeInfo, override val clie
   def containerId: String = nodeInfo.containerId
   override val chainId: Char = 'I'
   override val networkNodeName: String = s"it-test-client-to-${nodeInfo.networkIpAddress}"
-  override val restAddress: String = nodeInfo.apiIpAddress
+  // Reach the node via the host-mapped port on localhost. Container IPs from the custom Docker
+  // network aren't routable from the host on Docker Desktop (apiIpAddress comes back empty), so
+  // targeting them makes every API poll hang. Mirror what networkAddress/networkPort already do.
+  override val restAddress: String = "localhost"
   override val networkAddress: String = "localhost"
-  override val nodeRestPort: Int = nodeInfo.containerApiPort
+  override val nodeRestPort: Int = nodeInfo.hostRestApiPort
   override val networkPort: Int = nodeInfo.hostNetworkPort
   override val blockDelay: FiniteDuration = settings.chainSettings.blockInterval
 

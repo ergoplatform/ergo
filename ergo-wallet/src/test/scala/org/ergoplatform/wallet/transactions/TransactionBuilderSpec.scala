@@ -73,6 +73,24 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     res
   }
 
+  // direct call variant allowing custom inputs/outputs and height (to exercise the stateful checks)
+  def buildTx(inputs: IndexedSeq[ErgoBox],
+              outputs: IndexedSeq[ErgoBoxCandidate],
+              height: Int = currentHeight,
+              fee: Option[Long] = Some(minBoxValue)): Try[UnsignedErgoLikeTransaction] = {
+    val changeAddress = P2PKAddress(rootSecret.privateInput.publicImage)
+    buildUnsignedTx(
+      inputs = inputs,
+      dataInputs = IndexedSeq(),
+      outputCandidates = outputs,
+      currentHeight = height,
+      createFeeOutput = fee,
+      changeAddress = changeAddress,
+      minChangeValue = minChangeValue,
+      minerRewardDelay = minerRewardDelay
+    )
+  }
+
   property("token minting") {
     val inputBox = box(minBoxValue * 2)
     val tokenId  = inputBox.id.toTokenId
@@ -125,6 +143,58 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     assertExceptionThrown(
       res.getOrThrow,
       t => t.getMessage.contains("createFeeOutput should be defined"))
+  }
+
+  property("rejects output with creation height in the future (txFuture)") {
+    val inputBox = testBox(minBoxValue * 2, TrueTree, 5)
+    val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, 15)
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), height = 5)
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txFuture"))
+  }
+
+  property("rejects output with negative creation height (txNegHeight)") {
+    val inputBox = testBox(minBoxValue * 2, TrueTree, 0)
+    val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, -1)
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), height = 0)
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txNegHeight"))
+  }
+
+  property("rejects output below max input creation height (txMonotonicHeight)") {
+    val inputBox = testBox(minBoxValue * 2, TrueTree, 100)
+    val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, 50)
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), height = 100)
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txMonotonicHeight"))
+  }
+
+  property("accepts output at max input creation height (txMonotonicHeight)") {
+    val inputBox = testBox(minBoxValue * 2, TrueTree, 100)
+    val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, 100)
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), height = 100)
+
+    res shouldBe a[Success[_]]
+  }
+
+  property("rejects non-positive token amount in output (txPositiveAssets)") {
+    val inputBox = testBox(minBoxValue * 2, TrueTree, currentHeight, Seq(tid1.toTokenId -> 100L))
+    val outBox   = boxCandidate(minBoxValue, Seq(tid1.toTokenId -> 0L))
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox))
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txPositiveAssets"))
+  }
+
+  // Note: txAssetsInOneBox's per-box token-count limit (<= 255) is enforced by ErgoBoxCandidate
+  // construction itself (the count is an unsigned byte), so a violating output cannot be built to test
+  // here; the check in buildUnsignedTx remains as a faithful guard against cross-output sum overflow.
+
+  property("rejects dust output below the min value per byte (txDust)") {
+    val inputBox = box(1L)
+    val outBox   = boxCandidate(1L)
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), fee = None)
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txDust"))
   }
 
 }

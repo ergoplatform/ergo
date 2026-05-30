@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.transactions
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
-import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
+import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector, ErgoBoxAssetExtractor}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, bytesToId}
@@ -11,6 +11,7 @@ import sigma.eval.Extensions.EvalIterableOps
 import sigmastate.utils.Extensions._
 import sigma.Coll
 import sigma.Extensions.{ArrayOps, CollBytesOps}
+import sigma.data.SigmaConstants.{MaxBoxSizeWithoutRefs, MaxPropositionBytes}
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -177,6 +178,81 @@ object TransactionBuilder {
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
   }
 
+  // Default value per byte used by the dust check. The wallet has no access to the network
+  // `minValuePerByte` parameter, so we use the protocol default (30 * 12), the same assumption
+  // BoxSelector.MinBoxValue (and the private BoxSelector.MinValuePerByteDefault) already makes.
+  private val MinValuePerByteDefault = 360
+
+  // Per-output checks from ErgoTransaction.validateStateful that depend only on a single output and the
+  // current height. Used both as an early fail-fast on user outputs and inside validateStatefulChecks.
+  private def validateStatefulOutputs(outputs: Seq[ErgoBoxCandidate], currentHeight: Int): Unit = {
+    require(outputs.forall(_.additionalTokens.forall(_._2 > 0)),
+      "all token amounts in outputs must be positive (txPositiveAssets)")
+    require(outputs.forall(_.creationHeight <= currentHeight),
+      s"output creationHeight must be <= currentHeight=$currentHeight (txFuture)")
+    require(outputs.forall(_.creationHeight >= 0),
+      "output creationHeight must be >= 0 (txNegHeight)")
+  }
+
+  /** Checks from `ErgoTransaction.validateStateful` that are feasible without an `ErgoStateContext`,
+    * network `Parameters` or a script interpreter. Run on the final transaction (inputs and outputs
+    * including miner's fee and change boxes), so it mirrors what a node validates.
+    *
+    * Not implemented here, as they require full node state: `txBoxesToSpend`/`txDataBoxes` (in the wallet
+    * inputs are the boxes and data inputs are not resolved), `txScriptValidation` (the tx is unsigned, so
+    * there are no proofs and no interpreter), `txReemission` (needs chain settings) and the block-cost
+    * rule (needs the cost model).
+    */
+  private def validateStatefulChecks(inputs: IndexedSeq[ErgoBox],
+                                     outputs: IndexedSeq[ErgoBoxCandidate],
+                                     currentHeight: Int): Unit = {
+    // txAssetsInOneBox: <= 255 tokens per box and per-token sums must not overflow. The per-box token
+    // count is already capped at construction (ErgoBoxCandidate stores it as an unsigned byte), so this
+    // mainly guards against a per-token sum overflowing across outputs. Checked first, as the node does.
+    require(ErgoBoxAssetExtractor.extractAssets(outputs).isSuccess,
+      s"each output must have <= ${ErgoBoxAssetExtractor.MaxAssetsPerBox} tokens and per-token sums must not overflow (txAssetsInOneBox)")
+
+    validateStatefulOutputs(outputs, currentHeight)
+
+    // txMonotonicHeight: enforced unconditionally (mainnet is past the v3 hardening that activated it).
+    val maxInputCreationHeight = inputs.map(_.creationHeight).max
+    require(outputs.forall(_.creationHeight >= maxInputCreationHeight),
+      s"output creationHeight must be >= max input creationHeight=$maxInputCreationHeight (txMonotonicHeight)")
+
+    // txDust: output value must cover its storage cost. Candidates lack the 34-byte tx reference, so we
+    // measure `bytesWithNoRef` against the default per-byte price (see MinValuePerByteDefault).
+    require(outputs.forall(out => out.value >= out.bytesWithNoRef.length.toLong * MinValuePerByteDefault),
+      s"output value is below the dust threshold of $MinValuePerByteDefault nanoErg per byte (txDust)")
+
+    // txBoxSize: candidates lack the tx reference, so compare against MaxBoxSizeWithoutRefs, not MaxBoxSize.
+    require(outputs.forall(_.bytesWithNoRef.length <= MaxBoxSizeWithoutRefs.value),
+      s"output box size must be <= ${MaxBoxSizeWithoutRefs.value} bytes (txBoxSize)")
+
+    // txBoxPropositionSize
+    require(outputs.forall(_.propositionBytes.length <= MaxPropositionBytes.value),
+      s"output proposition size must be <= ${MaxPropositionBytes.value} bytes (txBoxPropositionSize)")
+
+    // txInputsSum: input value sum must not overflow.
+    val inputSumTry = Try(inputs.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
+    require(inputSumTry.isSuccess, s"sum of input values should not exceed ${Long.MaxValue} (txInputsSum)")
+
+    // txErgPreservation: no ERGs are created or destroyed.
+    val outputSumTry = Try(outputs.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
+    require(inputSumTry.toOption == outputSumTry.toOption,
+      s"ERG not preserved: inputs sum ${inputSumTry.toOption}, outputs sum ${outputSumTry.toOption} (txErgPreservation)")
+
+    // txAssetsPreservation: each output token amount must not exceed the input amount, except for the
+    // single token minted by this tx (keyed by the first input's box id).
+    val firstInputBoxId = bytesToId(inputs.head.id)
+    val inTokens = collectOutputTokens(inputs)
+    val outTokens = collectOutputTokens(outputs)
+    require(
+      outTokens.forall { case (tokenId, outAmount) =>
+        inTokens.getOrElse(tokenId, 0L) >= outAmount || (tokenId == firstInputBoxId && outAmount > 0)
+      },
+      "output token amount exceeds input amount and is not the single minted token (txAssetsPreservation)")
+  }
+
   /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change
     * Runs required checks ensuring that resulted transaction will be successfully validated by a node.
     *
@@ -206,7 +282,9 @@ object TransactionBuilder {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)
 
-    // TODO: implement all appropriate checks from ErgoTransaction.validateStatefull
+    // fail fast on user outputs before doing box selection; the full set of stateful checks is run on
+    // the assembled transaction (incl. fee and change boxes) right before it is returned.
+    validateStatefulOutputs(outputCandidates, currentHeight)
 
     val feeAmount = createFeeOutput.getOrElse(0L)
     require(createFeeOutput.fold(true)(_ > 0), s"expected fee amount > 0, got $feeAmount")
@@ -266,6 +344,8 @@ object TransactionBuilder {
     }
 
     val finalOutputCandidates = outputCandidates ++ feeOutOpt ++ addedChangeOut
+
+    validateStatefulChecks(inputs, finalOutputCandidates.toIndexedSeq, currentHeight)
 
     new UnsignedErgoLikeTransaction(
       inputs.map(b => new UnsignedInput(b.id)),

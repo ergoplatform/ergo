@@ -16,11 +16,12 @@ import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
 import org.ergoplatform.local.ErgoStatsCollectorRef
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedHistory
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, Rollback}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.util.ModifierId
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -73,6 +74,36 @@ class InfoApiRoutesSpec extends AnyFlatSpec
   "difficulty" should "be encoded with non-exponential form " in {
     val res = difficultyEncoder(requiredDifficulty)
     res.toString shouldEqual requiredDifficulty.toString
+  }
+
+  it should "expose a recent rollback via /info/rollbacks" in {
+    val branchPoint =
+      ModifierId @@ "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    statsCollector ! Rollback(branchPoint, Some(706158), 2, 3, System.currentTimeMillis())
+    Get("/info/rollbacks") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val arr = responseAs[Json].asArray.get
+      arr should not be empty
+      val first = arr.head.hcursor
+      first.downField("branchPointId").as[String] shouldEqual Right(branchPoint: String)
+      first.downField("branchPointHeight").as[Int] shouldEqual Right(706158)
+      first.downField("depth").as[Int] shouldEqual Right(2)
+      first.downField("appliedBlocks").as[Int] shouldEqual Right(3)
+    }
+  }
+
+  it should "cap recent rollbacks at 20 and order them newest first" in {
+    (1 to 22).foreach { i =>
+      val id = ModifierId @@ "%064d".format(i)
+      statsCollector ! Rollback(id, Some(i), i, i, System.currentTimeMillis())
+    }
+    Get("/info/rollbacks") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val arr = responseAs[Json].asArray.get
+      arr.size shouldBe 20
+      arr.head.hcursor.downField("branchPointHeight").as[Int] shouldEqual Right(22)
+      arr.last.hcursor.downField("branchPointHeight").as[Int] shouldEqual Right(3)
+    }
   }
 
   private def initDifficulty(difficulty: Difficulty): Future[Option[Difficulty]] = {

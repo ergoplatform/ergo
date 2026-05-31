@@ -494,7 +494,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       } else // applied block has already been indexed, skipping duplicate
         log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
 
-    case Rollback(branchPoint: ModifierId) =>
+    case Rollback(branchPoint, _, _, _, _) =>
       if (state.rollbackInProgress) {
         log.warn(s"Rollback already in progress")
         stash()

@@ -5,7 +5,7 @@ import io.circe.Encoder
 import io.circe.syntax._
 import org.ergoplatform.Version
 import org.ergoplatform.http.api.ApiCodecs
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, GetRecentRollbacks, NodeInfo, RollbackInfo}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
@@ -41,6 +41,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
+    context.system.eventStream.subscribe(self, classOf[Rollback])
     context.system.scheduler.scheduleAtFixedRate(10.seconds, 20.seconds, networkController, GetConnectedPeers)(ec, self)
     context.system.scheduler.scheduleAtFixedRate(45.seconds, 30.seconds, networkController, GetPeersStatus)(ec, self)
   }
@@ -69,14 +70,20 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     settings.scorexSettings.restApi.publicUrl,
     settings.nodeSettings.extraIndex)
 
+  // most recent chain rollbacks observed by the node, newest first, kept in memory only
+  private val MaxRecentRollbacks = 20
+  private var recentRollbacks: Seq[RollbackInfo] = Seq.empty
+
   override def receive: Receive =
     onConnectedPeers orElse
       onPeersStatus orElse
       getInfo orElse
+      getRollbacks orElse
       onMempoolChanged orElse
       onStateChanged orElse
       onHistoryChanged orElse
       onSemanticallySuccessfulModification orElse
+      onRollback orElse
       init orElse {
         case a: Any => log.warn(s"Stats collector got strange input: $a")
       }
@@ -97,6 +104,10 @@ class ErgoStatsCollector(readersHolder: ActorRef,
 
   private def getInfo: Receive = {
     case GetNodeInfo => sender() ! nodeInfo
+  }
+
+  private def getRollbacks: Receive = {
+    case GetRecentRollbacks => sender() ! recentRollbacks
   }
 
   private def onMempoolChanged: Receive = {
@@ -148,11 +159,50 @@ class ErgoStatsCollector(readersHolder: ActorRef,
         stateVersion = Some(header.encodedId))
   }
 
+  private def onRollback: Receive = {
+    case Rollback(branchPoint, branchPointHeight, depth, appliedBlocks, timestamp) =>
+      val record =
+        RollbackInfo(branchPoint, branchPointHeight, depth, appliedBlocks, timestamp)
+      recentRollbacks = (record +: recentRollbacks).take(MaxRecentRollbacks)
+      log.info(s"Recorded rollback to $branchPoint " +
+        s"(height ${branchPointHeight.getOrElse("?")}, depth $depth)")
+  }
+
 }
 
 object ErgoStatsCollector {
 
   case object GetNodeInfo
+
+  case object GetRecentRollbacks
+
+  /**
+    * Information about a single chain rollback performed by the node when switching to a better chain.
+    *
+    * @param branchPointId - header id of the block which is last in the chain after the rollback
+    *                        (the common branch point before applying the new chain suffix)
+    * @param branchPointHeight - height of the branch point block, if known
+    * @param depth - number of full blocks rolled back
+    * @param appliedBlocks - length of the new chain suffix applied after rollback
+    *                        (intended applies captured at rollback time)
+    * @param timestamp - when the rollback happened (in Java time, basically, UNIX time * 1000)
+    */
+  case class RollbackInfo(branchPointId: String,
+                          branchPointHeight: Option[Int],
+                          depth: Int,
+                          appliedBlocks: Int,
+                          timestamp: Long)
+
+  object RollbackInfo {
+    implicit val jsonEncoder: Encoder[RollbackInfo] = (ri: RollbackInfo) =>
+      Map(
+        "branchPointId" -> ri.branchPointId.asJson,
+        "branchPointHeight" -> ri.branchPointHeight.asJson,
+        "depth" -> ri.depth.asJson,
+        "appliedBlocks" -> ri.appliedBlocks.asJson,
+        "timestamp" -> ri.timestamp.asJson
+      ).asJson
+  }
 
   /**
     * Data container for /info API request output

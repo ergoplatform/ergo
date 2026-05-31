@@ -6,7 +6,7 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.Json
-import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, NodeInfo}
+import org.ergoplatform.local.ErgoStatsCollector.{GetNodeInfo, GetRecentRollbacks, NodeInfo, RollbackInfo}
 import org.ergoplatform.settings.RESTApiSettings
 import scorex.core.api.http.ApiResponse
 
@@ -28,6 +28,9 @@ case class InfoApiRoute(statsCollector: ActorRef,
         "lastMemPoolUpdateTime" -> nodeInfo.lastMemPoolUpdateTime.asJson
       ))
     })
+    } ~
+    (path("info" / "rollbacks") & get) {
+      ApiResponse((statsCollector ? GetRecentRollbacks).mapTo[Seq[RollbackInfo]])
     } ~
     (path(".well-known" / "ai-plugin.json") & get) {
       getFromResource(".well-known/ai-plugin.json", ContentTypes.`application/json`)

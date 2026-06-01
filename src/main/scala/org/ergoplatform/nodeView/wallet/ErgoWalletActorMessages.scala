@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
-import org.ergoplatform.sdk.wallet.secrets.DerivationPath
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
@@ -165,6 +165,14 @@ object ErgoWalletActorMessages {
    * @param path
    */
   final case class DeriveKey(path: String)
+
+  /**
+   * Add an externally provided primitive (DLog) secret to the running prover. The secret is held in
+   * memory only and is lost when the wallet is locked or the node restarts.
+   *
+   * @param secret - the DLog secret to add
+   */
+  final case class AddSecret(secret: DlogSecretKey)
 
   /**
    * Get boxes related to P2PK payments

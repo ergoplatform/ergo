@@ -46,6 +46,11 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   val utxoRoute: Route = WalletApiRoute(utxoReadersRef, nodeViewRef, settings).route
 
+  private val customSecretsDisabledSettings =
+    settings.copy(walletSettings = settings.walletSettings.copy(allowCustomSecrets = false))
+  val customSecretsDisabledRoute: Route =
+    WalletApiRoute(digestReadersRef, nodeViewRef, customSecretsDisabledSettings).route
+
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
   implicit val requestsHolderEncoder: RequestsHolderEncoder = new RequestsHolderEncoder(ergoSettings)
@@ -200,6 +205,34 @@ class WalletApiRouteSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("derivationPath").as[String] shouldEqual Right(WalletActorStub.path.encoded)
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(WalletActorStub.address.toString)
+    }
+  }
+
+  it should "add a custom secret" in {
+    val secretHex = "433080ff80d0d52d7f8bfffff47f00807f44f680000949b800007f7f7ff1017f"
+    Post(prefix + "/secret", Json.obj("secret" -> secretHex.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(WalletActorStub.address.toString)
+    }
+  }
+
+  it should "reject adding a custom secret when allowCustomSecrets is disabled" in {
+    val secretHex = "433080ff80d0d52d7f8bfffff47f00807f44f680000949b800007f7f7ff1017f"
+    Post(prefix + "/secret", Json.obj("secret" -> secretHex.asJson)) ~> customSecretsDisabledRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String].toOption.getOrElse("") should include("disabled")
+    }
+  }
+
+  it should "not add a custom secret with a missing secret field" in {
+    Post(prefix + "/secret", Json.obj("notSecret" -> "deadbeef".asJson)) ~> route ~> check {
+      handled shouldBe false
+    }
+  }
+
+  it should "not add a custom secret with a malformed secret value" in {
+    Post(prefix + "/secret", Json.obj("secret" -> "not-a-hex-secret".asJson)) ~> route ~> check {
+      handled shouldBe false
     }
   }
 

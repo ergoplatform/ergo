@@ -215,6 +215,8 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
       case DeriveKey(_) => sender() ! Success(WalletActorStub.address)
 
+      case AddSecret(_) => sender() ! Success(WalletActorStub.address)
+
       case DeriveNextKey => sender() !
         DeriveNextKeyResult(Success((WalletActorStub.path, WalletActorStub.address, WalletActorStub.secretKey)))
 

@@ -564,6 +564,15 @@ components:
       type: string
       example: '433080ff80d0d52d7f8bfffff47f00807f44f680000949b800007f7f7ff1017f'
 
+    AddSecretRequest:
+      description: A request to add a custom DLog secret to the wallet
+      type: object
+      required:
+        - secret
+      properties:
+        secret:
+          $ref: '#/components/schemas/DlogSecret'
+
     DhtSecret:
       description: Hex-encoded big-endian 256-bits secret exponent "w" along with generators "g", "h", and group
         elements "u", "v", such as g^w = u, h^w = v
@@ -5084,6 +5093,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/secret:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Add a custom DLog secret to the wallet so it can sign for the corresponding address
+      description: |
+        Adds an externally provided DLog secret (a big-endian 256-bit secret exponent) to the wallet so that
+        subsequent signing operations (e.g. /wallet/transaction/sign) can sign for the corresponding address
+        without re-supplying the secret. The wallet must be unlocked. The secret is kept in memory only and is
+        lost when the wallet is locked or the node restarts. The address is not tracked for balances.
+        This endpoint is disabled unless ergo.wallet.allowCustomSecrets is set to true in the node config.
+      operationId: walletAddSecret
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddSecretRequest'
+      responses:
+        '200':
+          description: Address corresponding to the added secret
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeriveKeyResult'
         default:
           description: Error
           content:

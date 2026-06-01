@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStora
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.sdk.wallet.secrets.DerivationPath
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
@@ -178,6 +178,15 @@ trait ErgoWalletService {
     * @return Try of the derived key and new wallet state
     */
   def deriveNextKey(state: ErgoWalletState, usePreEip3Derivation: Boolean): Try[(DeriveNextKeyResult, ErgoWalletState)]
+
+  /**
+    * Add an externally provided primitive (DLog) secret to the in-memory prover so the wallet can sign for it.
+    * The secret is not persisted and is lost when the wallet is locked or the node restarts.
+    * @param state current wallet state
+    * @param secret the DLog secret to add
+    * @return Try of the pay-to-public-key address of the secret and new wallet state
+    */
+  def addSecret(state: ErgoWalletState, secret: DlogSecretKey): Try[(P2PKAddress, ErgoWalletState)]
 
   /**
     * Get unconfirmed transactions from mempool that are associated with given scan id
@@ -582,6 +591,17 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         Failure(new Exception("Unable to derive key, wallet is locked"))
       case None =>
         Failure(new Exception("Unable to derive key, wallet is not initialized"))
+    }
+
+  override def addSecret(state: ErgoWalletState, secret: DlogSecretKey): Try[(P2PKAddress, ErgoWalletState)] =
+    state.walletVars.proverOpt match {
+      case Some(_) =>
+        state.walletVars.withSecret(secret).map { newWalletVars =>
+          val address = P2PKAddress(secret.privateInput.publicImage)(ergoSettings.addressEncoder)
+          address -> state.copy(walletVars = newWalletVars)
+        }
+      case None =>
+        Failure(new Exception("Unable to add secret, wallet is locked"))
     }
 
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =

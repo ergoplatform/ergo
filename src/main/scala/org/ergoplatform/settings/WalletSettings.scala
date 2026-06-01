@@ -17,6 +17,7 @@ case class WalletSettings(secretStorage: SecretStorageSettings,
                           // Some(Seq(x)) burns all except x, Some(Seq.empty) burns all, None ignores that feature
                           tokensWhitelist: Option[Seq[String]] = None,
                           checkEIP27: Boolean = false,
+                          allowCustomSecrets: Boolean = false,
                           profile: String = WalletProfile.User.label) {
 
   val walletProfile: WalletProfile = WalletProfile.fromLabel(profile)

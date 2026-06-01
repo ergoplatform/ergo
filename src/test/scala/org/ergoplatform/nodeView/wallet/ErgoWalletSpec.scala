@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
-import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
+import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, PrimitiveSecretKey}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils._
 import org.ergoplatform.utils.fixtures.WalletFixture
@@ -1122,6 +1122,37 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         val hints = hintsExtracted.addHintsForInput(0, cmts1.allHintsForInput(0))
 
         val txSigned = await(wallet.signTransaction(utx, Seq(es1), hints, Some(Seq(in)), None)).get
+        txSigned.statelessValidity().isSuccess shouldBe true
+      }
+    }
+  }
+
+  property("add custom secret, then sign for it without re-supplying the secret") {
+    withFixture { implicit w =>
+      val secret = DLogProverInput.random()
+
+      val pubKey = getPublicKeys.head.pubkey
+      val genesisBlock = makeGenesisBlock(pubKey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+      eventually {
+        val confirmedBalance = getConfirmedBalances.walletBalance
+
+        val assetToSpend = assetsByTokenId(boxesAvailable(genesisBlock, pubKey)).toArray
+        assetToSpend should not be empty
+
+        // add the custom secret; the returned address is where we send the wallet balance
+        val customAddress = await(wallet.addSecret(DlogSecretKey(secret))).get
+        customAddress.pubkey shouldBe secret.publicImage
+
+        val req = PaymentRequest(customAddress, confirmedBalance, assetToSpend, Map.empty)
+        val tx = await(wallet.generateTransaction(Seq(req))).get
+        val in = tx.outputs.head
+
+        val utx = new UnsignedErgoTransaction(IndexedSeq(new UnsignedInput(in.id)), IndexedSeq.empty, IndexedSeq(in.toCandidate))
+
+        // sign with NO external secrets: only succeeds because the wallet now holds the added secret
+        val txSigned = await(wallet.signTransaction(utx, Seq.empty, TransactionHintsBag.empty, Some(Seq(in)), None)).get
         txSigned.statelessValidity().isSuccess shouldBe true
       }
     }

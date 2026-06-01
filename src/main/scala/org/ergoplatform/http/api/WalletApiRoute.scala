@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.sdk.wallet.secrets.DlogSecretKey
 
 case class WalletApiRoute(readersHolder: ActorRef,
                           nodeViewActorRef: ActorRef,
@@ -67,7 +68,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
         checkSeedR ~
         rescanWalletR ~
         extractHintsR ~
-        getPrivateKeyR
+        getPrivateKeyR ~
+        addSecretR
     }
   }
 
@@ -78,6 +80,11 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   private val derivationPath: Directive1[String] = entity(as[Json]).flatMap { p =>
     p.hcursor.downField("derivationPath").as[String]
+      .fold(_ => reject, s => provide(s))
+  }
+
+  private val dlogSecret: Directive1[DlogSecretKey] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("secret").as[DlogSecretKey]
       .fold(_ => reject, s => provide(s))
   }
 
@@ -496,6 +503,17 @@ case class WalletApiRoute(readersHolder: ActorRef,
           }
         case None => NotExists("Address not found in wallet database.")
       }
+    }
+  }
+
+  def addSecretR: Route = (path("secret") & post & dlogSecret) { secret =>
+    if (ergoSettings.walletSettings.allowCustomSecrets) {
+      withWalletOp(_.addSecret(secret)) {
+        case Success(address) => ApiResponse(Json.obj("address" -> address.toString.asJson))
+        case Failure(e) => BadRequest(e.getMessage)
+      }
+    } else {
+      BadRequest("Adding custom secrets is disabled. Set ergo.wallet.allowCustomSecrets = true to enable.")
     }
   }
 

@@ -49,7 +49,7 @@ class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
     val minerNode: Node = docker.startDevNetNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
     val result = Async.async {
-      Async.await(minerNode.waitForHeight(approxTargetHeight, 20.second))
+      Async.await(minerNode.waitForHeight(approxTargetHeight, 1.second))
 //      docker.stopNode(minerNode, secondsToWait = 0)
       val digestNode = docker.startDevNetNode(digestConfig).get
       Async.await(digestNode.waitForHeight(approxTargetHeight))

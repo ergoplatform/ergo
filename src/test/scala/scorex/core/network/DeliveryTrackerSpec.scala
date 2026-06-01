@@ -12,6 +12,18 @@ class DeliveryTrackerSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
+  property("tracker should accept modifiers directly as received via setReceivedDirectly") {
+    forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
+      val tracker = DeliveryTracker.empty(settings)
+      val mid: ModifierId = ModifierId @@ "foo"
+      val mTypeId: NetworkObjectTypeId.Value = NetworkObjectTypeId.fromByte(104)
+      tracker.status(mid, mTypeId, Seq.empty) shouldBe ModifiersStatus.Unknown
+      tracker.setReceivedDirectly(mid, mTypeId, peer)
+      tracker.status(mid, mTypeId, Seq.empty) shouldBe ModifiersStatus.Received
+      tracker.getSource(mid, mTypeId) shouldBe Some(peer)
+    }
+  }
+
   property("tracker should accept requested modifiers, turn them into received and clear them") {
     forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
       val tracker = DeliveryTracker.empty(settings)

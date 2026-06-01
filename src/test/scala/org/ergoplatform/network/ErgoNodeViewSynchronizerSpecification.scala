@@ -875,23 +875,19 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Wait for block section requests to confirm the header was accepted
       // (the synchronizer sends block section requests after sending header to VH)
-      var gotRequest = false
-      ncProbe.fishForMessage(3.seconds) { case m =>
+      val requestMsg = ncProbe.fishForMessage(3.seconds) { case m =>
         m match {
           case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
-            gotRequest = true
             true
           case _ =>
             false
         }
-      }
-      gotRequest shouldBe true
+      }.asInstanceOf[SendToNetwork]
 
-      // The header should now be tracked as Received in deliveryTracker
-      eventually {
-        deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) shouldBe
-          scorex.core.network.ModifiersStatus.Received
-      }
+      // Verify the request is for block sections of our continuation header
+      val invData = requestMsg.message.data.get.asInstanceOf[InvData]
+      val expectedIds = continuationHeader.sectionIdsWithNoProof.map(_._2)
+      invData.ids.exists(expectedIds.contains) shouldBe true
 
       // Sending the same sync message again should NOT trigger another download.
       // The synchronizer may send a sync response back, which is expected.

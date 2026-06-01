@@ -4,6 +4,7 @@ import org.ergoplatform.validation.RuleStatusSerializer
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
+import spire.syntax.all.cfor
 
 case class ErgoValidationSettingsUpdate(rulesToDisable: Seq[Short],
                                         statusUpdates: Seq[(Short, sigma.validation.RuleStatus)]) {
@@ -41,20 +42,23 @@ object ErgoValidationSettingsUpdateSerializer extends ErgoSerializer[ErgoValidat
   override def parse(r: Reader): ErgoValidationSettingsUpdate = {
     val sigmaReader = new SigmaByteReader(r, new ConstantStore(), resolvePlaceholdersToConstants = false)
     val disabledRulesNum = r.getUInt().toInt
-    val disabledRules = (0 until disabledRulesNum).map { _ =>
-      r.getUShort().toShort
+    val disabledRules = new Array[Short](disabledRulesNum)
+    cfor(0)(_ < disabledRulesNum, _ + 1) { i =>
+      disabledRules(i) = r.getUShort().toShort
     }
-    disabledRules.foreach { rd =>
+    cfor(0)(_ < disabledRulesNum, _ + 1) { i =>
+      val rd = disabledRules(i)
       require(ValidationRules.rulesSpec.get(rd).forall(_.mayBeDisabled),
         s"Trying to deactivate rule $rd, that may not be disabled")
     }
     val statusUpdatesNum = r.getUInt().toInt
-    val parsed = (0 until statusUpdatesNum).map { _ =>
+    val parsed = new Array[(Short, sigma.validation.RuleStatus)](statusUpdatesNum)
+    cfor(0)(_ < statusUpdatesNum, _ + 1) { i =>
       val ruleId = (r.getUShort() + FirstRule).toShort
       val status = RuleStatusSerializer.parse(sigmaReader)
-      ruleId -> status
+      parsed(i) = ruleId -> status
     }
-    ErgoValidationSettingsUpdate(disabledRules, parsed)
+    ErgoValidationSettingsUpdate(disabledRules.toIndexedSeq, parsed.toIndexedSeq)
   }
 
 }

@@ -14,6 +14,7 @@ val deps212 = Seq(
 
 libraryDependencies ++= Seq(
   "org.scodec" %% "scodec-bits" % "1.1.34",
+  "org.typelevel" %% "spire" % (if (scalaVersion.value == scala213) "0.17.0-M1" else "0.16.2"),
   "org.scalatest" %% "scalatest" % "3.1.1" % "test",
   "org.scalacheck" %% "scalacheck" % "1.14.3" % "test",
   "org.scalatestplus" %% "scalatestplus-scalacheck" % "3.1.0.0-RC2" % Test,

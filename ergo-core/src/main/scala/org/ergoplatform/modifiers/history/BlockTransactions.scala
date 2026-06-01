@@ -19,6 +19,7 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 import sigma.VersionContext
+import spire.syntax.all.cfor
 
 import scala.annotation.nowarn
 import scala.collection.mutable
@@ -184,8 +185,9 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     val txs: IndexedSeq[ErgoTransaction] = {
       lazy val version = Header.scriptAndTreeFromBlockVersions(blockVersion)
 
-      (1 to txCount).map { _ =>
-        if (blockVersion >= Header.Interpreter60Version) {
+      val txsArray = new Array[ErgoTransaction](txCount)
+      cfor(0)(_ < txCount, _ + 1) { i =>
+        txsArray(i) = if (blockVersion >= Header.Interpreter60Version) {
           if (headerId == "3f5a4acbdfd76a97f2fdf387559c2a67b4ea5f9e9bcf66ef079cde766c6e9398") {
             // todo: public testnet bug with v7 tree included in v4 block, remove after testnet relaunch
             VersionContext.withVersions(1, 1) {
@@ -200,6 +202,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
           ErgoTransactionSerializer.parse(r)
         }
       }
+      txsArray.toIndexedSeq
     }
     BlockTransactions(headerId, blockVersion, txs, Some(r.position - startPos))
   }

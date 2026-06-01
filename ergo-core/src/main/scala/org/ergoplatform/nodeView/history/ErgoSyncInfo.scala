@@ -7,6 +7,7 @@ import org.ergoplatform.network.message.SyncInfoMessageSpec
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import spire.syntax.all.cfor
 
 /**
   * Information on sync status to be sent to peer over the wire. It should provide an answer to the question how
@@ -88,20 +89,24 @@ object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLo
 
         require(headersCount <= MaxHeadersAllowed) // check to avoid spam
 
-        val headers = (1 to headersCount).map { _ =>
+        val headers = new Array[Header](headersCount)
+        cfor(0)(_ < headersCount, _ + 1) { i =>
           val headerBytesCount = r.getUShort()
           require(headerBytesCount < MaxHeaderSize) // check to avoid spam
           val headerBytes = r.getBytes(headerBytesCount)
-          HeaderSerializer.parseBytes(headerBytes)
+          headers(i) = HeaderSerializer.parseBytes(headerBytes)
         }
-        ErgoSyncInfoV2(headers)
+        ErgoSyncInfoV2(headers.toIndexedSeq)
       } else {
         throw new Exception(s"Wrong SyncInfo version: $r")
       }
     } else { // parse v1 sync message
       require(length <= ErgoSyncInfo.MaxBlockIds + 1, "Too many block ids in sync info")
-      val ids = (1 to length).map(_ => bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize)))
-      ErgoSyncInfoV1(ids)
+      val ids = new Array[ModifierId](length)
+      cfor(0)(_ < length, _ + 1) { i =>
+        ids(i) = bytesToId(r.getBytes(ErgoNodeViewModifier.ModifierIdSize))
+      }
+      ErgoSyncInfoV1(ids.toIndexedSeq)
     }
   }
 

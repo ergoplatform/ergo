@@ -7,6 +7,7 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.eval.Extensions.ArrayByteOps
+import spire.syntax.all.cfor
 
 import scala.collection.mutable
 
@@ -48,7 +49,7 @@ object WalletDigestSerializer extends ErgoSerializer[WalletDigest] {
     val walletAssetBalancesSize = r.getUInt().toIntExact
 
     val walletAssetBalances = mutable.LinkedHashMap.empty[EncodedTokenId, Long]
-    (0 until walletAssetBalancesSize).foreach { _ =>
+    cfor(0)(_ < walletAssetBalancesSize, _ + 1) { _ =>
       val kv = encodedTokenId(r.getBytes(Constants.ModifierIdSize).toTokenId) -> r.getULong()
       walletAssetBalances += kv
     }

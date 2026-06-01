@@ -8,6 +8,7 @@ import scorex.util.serialization.{Reader, Writer}
 import sigma.ast.{EvaluatedValue, SType}
 import sigma.serialization.ValueSerializer
 import sigmastate.eval.Extensions.ArrayByteOps
+import spire.syntax.all.cfor
 
 
 object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
@@ -49,7 +50,7 @@ object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
     def parseArgs(r: Reader): Array[ScanningPredicate] = {
       val argsCount = r.getInt()
       val args = new Array[ScanningPredicate](argsCount)
-      (0 until argsCount).foreach(idx => args(idx) = parse(r))
+      cfor(0)(_ < argsCount, _ + 1) { idx => args(idx) = parse(r) }
       args
     }
 

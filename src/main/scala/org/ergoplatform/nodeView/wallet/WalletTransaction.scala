@@ -8,6 +8,9 @@ import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions._
 import sigma.VersionContext
+import spire.syntax.all.cfor
+
+import scala.collection.mutable
 
 /**
   * Transaction stored in the wallet.
@@ -54,7 +57,9 @@ object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
     val scanIds = if (scansCount == 0) {
       Seq(Constants.PaymentsScanId)
     } else {
-      (0 until scansCount).map(_ => ScanId @@ r.getShort())
+      val ids = new mutable.ArrayBuffer[ScanId](scansCount)
+      cfor(0)(_ < scansCount, _ + 1) { _ => ids += (ScanId @@ r.getShort()) }
+      ids.toIndexedSeq
     }
 
     val txBytesLen = r.getUInt().toIntExact

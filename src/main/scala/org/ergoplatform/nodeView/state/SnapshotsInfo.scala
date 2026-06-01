@@ -6,6 +6,7 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
+import spire.syntax.all.cfor
 
 /**
   * Container for UTXO set snapshots the node holds
@@ -47,12 +48,13 @@ object SnapshotsInfoSerializer extends ErgoSerializer[SnapshotsInfo] {
 
   override def parse(r: Reader): SnapshotsInfo = {
     val manifestsCount = r.getUInt().toInt // we read from trusted source, no need for extra checks
-    val manifests = (1 to manifestsCount).map { _ =>
+    val manifests = new Array[(Height, ManifestId)](manifestsCount)
+    cfor(0)(_ < manifestsCount, _ + 1) { i =>
       val h = r.getUInt().toInt
       val manifestId = Digest32 @@ r.getBytes(Constants.HashLength)
-      h -> manifestId
-    }.toMap
-    new SnapshotsInfo(manifests)
+      manifests(i) = h -> manifestId
+    }
+    new SnapshotsInfo(manifests.toMap)
   }
 
 }

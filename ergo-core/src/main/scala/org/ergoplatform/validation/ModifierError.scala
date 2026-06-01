@@ -50,9 +50,7 @@ class RecoverableModifierError(val message: String, val modifierId: ModifierId, 
   */
 @SuppressWarnings(Array("org.wartremover.warts.Null"))
 class ParentHeaderNotFoundError(val parentId: ModifierId, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value)
-    extends RecoverableModifierError(s"Parent header with id $parentId is not defined", modifierId, modifierTypeId, None) {
-  def parentHeaderId: ModifierId = parentId
-}
+    extends RecoverableModifierError(s"Parent header with id $parentId is not defined", modifierId, modifierTypeId, None)
 
 /** Composite error class that can hold more than one modifier error inside. This was not made a `ModifierError` instance
   * intentionally to prevent nesting `MultipleErrors` to `MultipleErrors`

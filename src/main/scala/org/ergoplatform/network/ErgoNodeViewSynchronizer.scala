@@ -1486,7 +1486,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       e match {
         case phError: ParentHeaderNotFoundError =>
           // For missing parent header, request the parent header from peers if not already known
-          val parentId = phError.parentHeaderId
+          val parentId = phError.parentId
           if (deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
             val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
             if (olderPeers.nonEmpty) {

@@ -11,7 +11,7 @@ import org.scalatest.matchers.should.Matchers
 
 import scala.async.Async
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, blocking}
+import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite with Eventually {

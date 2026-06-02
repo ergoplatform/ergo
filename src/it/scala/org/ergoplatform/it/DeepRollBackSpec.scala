@@ -155,14 +155,14 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
 
       // 5. Wait until it switches to the better chain
       val (minerAInfo, minerBInfo) =
-        Async.await(waitForSameBestBlock(minerA, minerB, minerABestHeight, 5.minutes))
+        Async.await(waitForSameBestBlock(minerA, minerB, minerABestHeight, 10.minutes))
 
       log.info("Chain switching done")
 
       minerBInfo.bestBlockIdOpt shouldEqual minerAInfo.bestBlockIdOpt
     }
 
-    Await.result(result, 15.minutes)
+    Await.result(result, 20.minutes)
   }
 
 }

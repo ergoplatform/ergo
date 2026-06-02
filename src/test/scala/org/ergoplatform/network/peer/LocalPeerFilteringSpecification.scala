@@ -13,13 +13,13 @@ class LocalPeerFilteringSpecification extends ErgoCorePropertyTest {
   private val loopbackAddress = new InetSocketAddress("127.0.0.1", 9004)
 
   property("local addresses are correctly classified") {
-    NetworkUtils.checkLocalOnly(remoteAddress, localOnly = false) shouldBe false
+    NetworkUtils.checkLocalOnly(remoteAddress, allowLocal = false) shouldBe false
 
-    NetworkUtils.checkLocalOnly(siteLocalAddress, localOnly = false) shouldBe true
-    NetworkUtils.checkLocalOnly(linkLocalAddress, localOnly = false) shouldBe true
-    NetworkUtils.checkLocalOnly(loopbackAddress, localOnly = false) shouldBe true
+    NetworkUtils.checkLocalOnly(siteLocalAddress, allowLocal = false) shouldBe true
+    NetworkUtils.checkLocalOnly(linkLocalAddress, allowLocal = false) shouldBe true
+    NetworkUtils.checkLocalOnly(loopbackAddress, allowLocal = false) shouldBe true
 
-    NetworkUtils.checkLocalOnly(siteLocalAddress, localOnly = true) shouldBe false
+    NetworkUtils.checkLocalOnly(siteLocalAddress, allowLocal = true) shouldBe false
   }
 
 }

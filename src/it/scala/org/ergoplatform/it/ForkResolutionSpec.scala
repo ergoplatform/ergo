@@ -34,7 +34,7 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     .withFallback(blockIntervalConfig(500))
 
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(4)
-    .map(_.withFallback(localOnlyConfig).withFallback(miningTimingConfig))
+    .map(_.withFallback(allowLocalConfig).withFallback(miningTimingConfig))
 
   val minerConfig: Config = nodeConfigs.head
   val onlineSyncNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)

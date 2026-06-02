@@ -24,18 +24,18 @@ class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(internalMinerPollingIntervalConfig(1000))
     .withFallback(specialDataDirConfig(remoteVolume))
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val digestConfig: Config = digestStatePeerConfig
     .withFallback(blockIntervalConfig(600))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   // Testing scenario:
   // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};

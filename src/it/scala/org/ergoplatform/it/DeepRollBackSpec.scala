@@ -29,21 +29,21 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
     .withFallback(shortInternalMinerPollingInterval)
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val minerBConfig: Config = specialDataDirConfig(remoteVolumeB)
     .withFallback(shortInternalMinerPollingInterval)
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.last)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val minerAConfigNonGen: Config = minerAConfig
     .withFallback(nonGeneratingPeerConfig)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val minerBConfigNonGen: Config = minerBConfig
     .withFallback(nonGeneratingPeerConfig)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   private def waitForSameBestBlock(
     nodeA: Node,

@@ -334,7 +334,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          if (NetworkUtils.checkLocalOnly(remote, networkSettings.allowLocal)) {
+          if (NetworkUtils.isLocal(remote, networkSettings.allowLocal)) {
             log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.allowLocal is false)")
             peerManagerRef ! RemovePeer(remote)
           } else {

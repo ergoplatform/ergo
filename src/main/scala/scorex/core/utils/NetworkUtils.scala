@@ -28,7 +28,7 @@ object NetworkUtils {
     * Check if a given address is a local address (site-local, link-local, or loopback).
     * When allowLocal is true, all addresses are allowed.
     */
-  def checkLocalOnly(address: InetSocketAddress, allowLocal: Boolean): Boolean = {
+  def isLocal(address: InetSocketAddress, allowLocal: Boolean): Boolean = {
     if (!allowLocal) {
       val addr = address.getAddress
       addr.isSiteLocalAddress || addr.isLinkLocalAddress || addr.isLoopbackAddress

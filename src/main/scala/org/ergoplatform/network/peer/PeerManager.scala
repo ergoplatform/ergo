@@ -100,7 +100,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
   }
 
   private def isLocal(address: InetSocketAddress): Boolean =
-    NetworkUtils.checkLocalOnly(address, settings.scorexSettings.network.allowLocal)
+    NetworkUtils.isLocal(address, settings.scorexSettings.network.allowLocal)
 
 }
 

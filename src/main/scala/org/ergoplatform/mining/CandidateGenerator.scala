@@ -36,6 +36,7 @@ import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -589,13 +590,19 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
+      val transactionsToTry = mutable.ArrayBuilder.make[ErgoTransaction]
+      transactionsToTry.sizeHint(emissionTxs.size + prioritizedTransactions.size + poolTxs.size)
+      emissionTxs.foreach(transactionsToTry += _)
+      prioritizedTransactions.foreach(transactionsToTry += _)
+      poolTxs.foreach(utx => transactionsToTry += utx.transaction)
+
       val (txs, toEliminate) = collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+        transactionsToTry.result().toVector
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
@@ -859,24 +866,24 @@ object CandidateGenerator extends ScorexLogging {
 
     @tailrec
     def loop(
-              mempoolTxs: Iterable[ErgoTransaction],
-              acc: Seq[CostedTransaction],
+              mempoolTxs: Iterator[ErgoTransaction],
+              acc: Vector[CostedTransaction],
               lastFeeTx: Option[CostedTransaction],
-              invalidTxs: Seq[ModifierId]
+              invalidTxs: Vector[ModifierId]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      val currentCosted = acc ++ lastFeeTx
+      val currentCosted = lastFeeTx.fold(acc)(acc :+ _)
       def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
 
-      mempoolTxs.headOption match {
-        case Some(tx) =>
+      if (mempoolTxs.hasNext) {
+        val tx = mempoolTxs.next()
           if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+            loop(mempoolTxs, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
@@ -887,7 +894,7 @@ object CandidateGenerator extends ScorexLogging {
             ) match {
               case Success(costConsumed) =>
                 val newTxs = acc :+ (tx -> costConsumed)
-                val newBoxes = newTxs.flatMap(_._1.outputs)
+                val newBoxes = newTxs.iterator.flatMap(_._1.outputs).toVector
 
                 collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
                   case Some(feeTx) =>
@@ -898,7 +905,7 @@ object CandidateGenerator extends ScorexLogging {
                       case Success(cost) =>
                         val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
+                          loop(mempoolTxs, newTxs, Some(feeTx -> cost), invalidTxs)
                         } else {
                           log.debug(s"Finishing block assembly on limits overflow, " +
                                     s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
@@ -915,22 +922,22 @@ object CandidateGenerator extends ScorexLogging {
                     log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
                     val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
                     if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
+                      loop(mempoolTxs, blockTxs.toVector, lastFeeTx, invalidTxs)
                     } else {
                       current -> invalidTxs
                     }
                 }
               case Failure(e) =>
                 log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+                loop(mempoolTxs, acc, lastFeeTx, invalidTxs :+ tx.id)
             }
           }
-        case None => // mempool is empty
-          current -> invalidTxs
+      } else { // mempool is empty
+        current -> invalidTxs
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(transactions.iterator, Vector.empty, None, Vector.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

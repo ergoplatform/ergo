@@ -77,14 +77,14 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     result.result()
   }
 
-  override def getAll: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAll: Seq[UnconfirmedTransaction] = pool.orderedTransactions.valuesIterator.toVector
 
   override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = ids.flatMap(pool.get)
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  override def getAllPrioritized: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAllPrioritized: Seq[UnconfirmedTransaction] = pool.orderedTransactions.valuesIterator.toVector
 
   /**
     * Method to put a transaction into the memory pool. Validation of the transactions against

@@ -45,7 +45,7 @@ class WalletSpec
 
   private val nodeConfig: Config = nonGeneratingPeerConfig
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   private val node: Node =
     docker.startDevNetNode(nodeConfig, sequentialTopologyConfig).get

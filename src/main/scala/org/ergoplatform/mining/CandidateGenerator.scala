@@ -589,13 +589,21 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
+      val transactionsToCollect = {
+        val builder = Vector.newBuilder[ErgoTransaction]
+        builder ++= emissionTxs
+        builder ++= prioritizedTransactions
+        builder ++= poolTxs.iterator.map(_.transaction)
+        builder.result()
+      }
+
       val (txs, toEliminate) = collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+        transactionsToCollect
       )
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
@@ -860,13 +868,13 @@ object CandidateGenerator extends ScorexLogging {
     @tailrec
     def loop(
               mempoolTxs: Iterable[ErgoTransaction],
-              acc: Seq[CostedTransaction],
+              acc: Vector[CostedTransaction],
               lastFeeTx: Option[CostedTransaction],
-              invalidTxs: Seq[ModifierId]
+              invalidTxs: Vector[ModifierId]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      val currentCosted = acc ++ lastFeeTx
-      def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
+      val currentCosted = lastFeeTx.fold(acc)(acc :+ _)
+      def current: Vector[ErgoTransaction] = currentCosted.map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
 
@@ -913,7 +921,7 @@ object CandidateGenerator extends ScorexLogging {
                     }
                   case None =>
                     log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
+                    val blockTxs: Vector[CostedTransaction] = lastFeeTx.fold(newTxs)(newTxs :+ _)
                     if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
                       loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
                     } else {
@@ -930,7 +938,7 @@ object CandidateGenerator extends ScorexLogging {
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(transactions, Vector.empty, None, Vector.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

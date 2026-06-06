@@ -62,6 +62,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
   it should "include node version in generated block extension" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
+    // ErgoNodeViewRef initializes local state, so keep this test isolated from the default data directory.
     val ergoSettings: ErgoSettings = defaultSettings.copy(
       directory = Files.createTempDirectory("ergo-node-version").toFile.getAbsolutePath
     )

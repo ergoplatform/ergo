@@ -591,9 +591,10 @@ object CandidateGenerator extends ScorexLogging {
 
       val transactionsToCollect = {
         val builder = Vector.newBuilder[ErgoTransaction]
-        builder ++= emissionTxs
-        builder ++= prioritizedTransactions
-        builder ++= poolTxs.iterator.map(_.transaction)
+        builder.sizeHint(emissionTxs.size + prioritizedTransactions.size + poolTxs.size)
+        emissionTxs.foreach(tx => builder += tx)
+        prioritizedTransactions.foreach(tx => builder += tx)
+        poolTxs.foreach(tx => builder += tx.transaction)
         builder.result()
       }
 

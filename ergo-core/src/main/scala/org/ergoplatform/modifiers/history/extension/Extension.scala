@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.extension
 
+import java.nio.charset.StandardCharsets
+
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import com.google.common.primitives.Bytes
@@ -70,6 +72,19 @@ object Extension extends ApiCodecs {
     * against the genesis block are to be written into a single key space defined by the value below.
     */
   val ValidationRulesPrefix: Byte = 0x02
+
+  /**
+    * Node software version string written by a miner into locally produced blocks.
+    *
+    * This field is informational and not consensus-critical; it lets indexers collect network version statistics
+    * from block extensions without changing parameter, interlink, or validation-rule parsing.
+    */
+  val MinerVersionPrefix: Byte = 0x03
+
+  val MinerVersionKey: Array[Byte] = Array(MinerVersionPrefix, 0: Byte)
+
+  def minerVersionField(version: String): (Array[Byte], Array[Byte]) =
+    MinerVersionKey.clone() -> version.getBytes(StandardCharsets.UTF_8)
 
   /**
     * Id a type of network object encoding extension

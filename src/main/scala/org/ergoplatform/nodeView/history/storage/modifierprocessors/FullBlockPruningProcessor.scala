@@ -8,7 +8,7 @@ import org.ergoplatform.settings.ErgoSettings
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
+trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions { self: BasicReaders =>
 
   protected def settings: ErgoSettings
 
@@ -34,10 +34,17 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
     */
   def minimalFullBlockHeight: Int = readMinimalFullBlockHeight()
 
-  /** Check if headers chain is synchronized with the network and modifier is not too old
+  /** Check if headers chain is synchronized with the network and modifier is not too old.
+    *
+    * A block within the pruning window (`height >= minimalFullBlockHeight`) is downloadable as usual.
+    * Additionally, a block that is a direct successor of our best full block (`height > bestFullBlock`)
+    * is downloadable even when it sits below `minimalFullBlockHeight`: after a long shutdown the network
+    * tip - and thus `minimalFullBlockHeight` - can jump far ahead of our local best full block, and these
+    * intermediate blocks are exactly the ones the node must apply to advance its state and catch up.
     */
   def shouldDownloadBlockAtHeight(height: Int): Boolean = {
-    isHeadersChainSynced && height >= minimalFullBlockHeight
+    isHeadersChainSynced &&
+      (height >= minimalFullBlockHeight || bestFullBlockOpt.exists(height > _.height))
   }
 
   /** Update minimal full block height and header chain synced flag

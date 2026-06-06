@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -23,7 +23,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, 
 import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, Version}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -538,6 +538,8 @@ object CandidateGenerator extends ScorexLogging {
       // Obtain NiPoPoW interlinks vector to pack it into the extension section
       val updInterlinks       = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
       val interlinksExtension = popowAlgos.interlinksToExtension(updInterlinks)
+      val minerVersionExtension = ExtensionCandidate(Seq(Extension.minerVersionField(Version.VersionString)))
+      val baseExtension = interlinksExtension ++ minerVersionExtension
       val votingSettings      = ergoSettings.chainSettings.voting
       val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
         .map { header =>
@@ -556,7 +558,7 @@ object CandidateGenerator extends ScorexLogging {
             )
             val newValidationSettings = stateContext.validationSettings.updated(activatedUpdate)
             (
-              newParams.toExtensionCandidate ++ interlinksExtension ++ newValidationSettings.toExtensionCandidate,
+              newParams.toExtensionCandidate ++ baseExtension ++ newValidationSettings.toExtensionCandidate,
               newParams.suggestVotes(ergoSettings.votingTargets.targets, voteForSoftFork),
               newParams.blockVersion
             )
@@ -567,14 +569,14 @@ object CandidateGenerator extends ScorexLogging {
               voteForSoftFork
             )
             (
-              interlinksExtension,
+              baseExtension,
               votes,
               currentParams.blockVersion
             )
           }
         }
         .getOrElse(
-          (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
+          (baseExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
       val upcomingContext = state.stateContext.upcoming(

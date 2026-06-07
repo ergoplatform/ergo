@@ -21,4 +21,17 @@ trait MinimalFullBlockHeightFunctions {
     */
   def writeMinimalFullBlockHeight(height: Height): Unit
 
+  /**
+    * @return height (exclusive) up to which full block data has already been pruned. Used to drive
+    * backlog-aware pruning: pruning may be deferred (e.g. to keep blocks the wallet has not scanned
+    * yet) and resumed later from this marker. Defaults to the current minimal full block height for
+    * nodes upgraded from a version that pruned everything below that height.
+    */
+  def readPrunedHeight(): Height
+
+  /**
+    * Update the pruned-up-to height marker, see `readPrunedHeight`
+    */
+  def writePrunedHeight(height: Height): Unit
+
 }

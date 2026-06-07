@@ -106,10 +106,20 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          val lastKept = updateBestFullBlock(fullBlock.header)
-          val bestHeight: Int = newBestBlockHeader.height
-          val diff = bestHeight - prevBest.header.height
-          pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
+          // Marker of what we have pruned so far; read before the floor is advanced below. For
+          // nodes upgraded from the previous sliding-window logic it defaults to the old floor.
+          val prunedFrom = readPrunedHeight()
+          val lastKept = updateBestFullBlock(fullBlock.header) // new minimal full block height
+          // Do not prune block data the wallet has not scanned yet, so it can always catch up.
+          // `None` means the wallet imposes no constraint (mining-only / not-yet-initialized).
+          val pruneUntil = walletScannedHeight match {
+            case Some(walletHeight) => Math.min(lastKept, walletHeight + 1)
+            case None               => lastKept
+          }
+          if (pruneUntil > prunedFrom) {
+            pruneBlockDataAt((prunedFrom until pruneUntil).filter(_ >= 0))
+            writePrunedHeight(pruneUntil)
+          }
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
       }

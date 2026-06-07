@@ -34,6 +34,11 @@ class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
     override def writeMinimalFullBlockHeight(height: Int): Unit = {
       minimalFullBlockHeightVar = height
     }
+    var prunedHeightVar = GenesisHeight
+    override def readPrunedHeight() = prunedHeightVar
+    override def writePrunedHeight(height: Int): Unit = {
+      prunedHeightVar = height
+    }
   }
 
   var history = generateHistory(

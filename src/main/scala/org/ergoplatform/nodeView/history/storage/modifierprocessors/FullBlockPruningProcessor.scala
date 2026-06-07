@@ -19,6 +19,19 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
 
   @volatile private[history] var isHeadersChainSyncedVar: Boolean = false
 
+  // Height up to which the wallet has reported scanning, if known. Used to avoid pruning full
+  // block data the wallet has not processed yet. `None` means no constraint (e.g. mining-only or
+  // not-yet-initialized wallet), in which case pruning behaves as before.
+  @volatile private var walletScannedHeightOpt: Option[Int] = None
+
+  /** Report the height up to which the wallet has scanned the chain. */
+  def updateWalletScannedHeight(height: Int): Unit = {
+    if (height > GenesisHeight) walletScannedHeightOpt = Some(height)
+  }
+
+  /** Wallet's last scanned height if known, used to bound full block pruning. */
+  def walletScannedHeight: Option[Int] = walletScannedHeightOpt
+
   private def extensionWithParametersHeight(height: Int): Int = {
     require(height >= VotingEpochLength)
     height - (height % VotingEpochLength)

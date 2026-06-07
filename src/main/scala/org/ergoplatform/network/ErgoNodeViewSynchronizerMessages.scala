@@ -50,6 +50,15 @@ object ErgoNodeViewSynchronizerMessages {
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
 
     /**
+     * Event published by the wallet after it has scanned (or skipped) a block, reporting the
+     * height up to which it has processed the chain. Used by the node view holder to keep the
+     * history from pruning block data the wallet has not scanned yet.
+     *
+     * @param height - height of the last block the wallet has scanned
+     */
+    case class WalletScannedHeight(height: Int) extends NodeViewHolderEvent
+
+    /**
      * Event which is published when rollback happened (on finding a better chain)
      *
      * @param branchPoint - block id which is last in the chain after rollback (before applying blocks from a fork)

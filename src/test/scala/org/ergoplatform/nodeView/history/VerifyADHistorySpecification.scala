@@ -380,6 +380,37 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     }
   }
 
+  property("does not prune full blocks the wallet has not scanned, then sweeps the backlog") {
+    val blocksToPrune = 20
+    val walletHeight = 10 // wallet has scanned the chain only up to this height
+
+    // constrain pruning to the wallet height before applying the chain
+    val (emptyHist, _) = genHistory()
+    emptyHist.updateWalletScannedHeight(walletHeight)
+    val chain = genChain(BlocksToKeep + blocksToPrune + 1, emptyHist)
+    var history = applyChain(emptyHist, chain)
+
+    // blocks above the wallet height (but below the normal keep window) are kept, not pruned
+    chain.slice(walletHeight, blocksToPrune).foreach { b =>
+      history.modifierById(b.header.transactionsId).isDefined shouldBe true
+      history.modifierById(b.header.ADProofsId).isDefined shouldBe true
+    }
+    // blocks the wallet has already scanned (above genesis) are pruned as usual
+    chain.slice(1, walletHeight).foreach { b =>
+      history.modifierById(b.header.transactionsId) shouldBe None
+      history.modifierById(b.header.ADProofsId) shouldBe None
+    }
+
+    // once the wallet reports catching up, the deferred backlog gets pruned
+    history.updateWalletScannedHeight(chain.last.header.height)
+    val extra = genChain(1, history.bestFullBlockOpt.value).tail
+    history = applyChain(history, extra)
+    chain.slice(walletHeight, blocksToPrune).foreach { b =>
+      history.modifierById(b.header.transactionsId) shouldBe None
+      history.modifierById(b.header.ADProofsId) shouldBe None
+    }
+  }
+
   property("process fork from genesis") {
     var (history, c) = genHistory(1)
     val genesis = c.head

@@ -334,8 +334,8 @@ class NetworkController(ergoSettings: ErgoSettings,
     getPeerAddress(peer) match {
       case Some(remote) =>
         if (connectionForPeerAddress(remote).isEmpty && !unconfirmedConnections.contains(remote)) {
-          if (NetworkUtils.checkLocalOnly(remote, networkSettings.localOnly)) {
-            log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.localOnly is false)")
+          if (NetworkUtils.isLocal(remote, networkSettings.allowLocal)) {
+            log.warn(s"Prevented attempt to connect to local peer $remote. (scorex.network.allowLocal is false)")
             peerManagerRef ! RemovePeer(remote)
           } else {
             unconfirmedConnections += remote
@@ -527,7 +527,7 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   private def validateDeclaredAddress(): Unit = {
-    if (!networkSettings.localOnly) {
+    if (!networkSettings.allowLocal) {
       networkSettings.declaredAddress.foreach { mySocketAddress =>
         Try {
           val uri = new URI("http://" + mySocketAddress)

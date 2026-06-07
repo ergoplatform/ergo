@@ -23,9 +23,9 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
 
   val offlineGeneratingPeer: Config = offlineGeneratingPeerConfig
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
-  val node: Node = docker.startDevNetNode(offlineGeneratingPeer).get
+  lazy val node: Node = docker.startDevNetNode(offlineGeneratingPeer).get
 
   def renderTemplate(template: String, varMapping: Map[String, String]): String =
     varMapping

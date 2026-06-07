@@ -1,6 +1,7 @@
 package org.ergoplatform.network.peer
 
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import scorex.core.utils.NetworkUtils
 
 import java.net.InetSocketAddress
 
@@ -12,14 +13,13 @@ class LocalPeerFilteringSpecification extends ErgoCorePropertyTest {
   private val loopbackAddress = new InetSocketAddress("127.0.0.1", 9004)
 
   property("local addresses are correctly classified") {
-    // Verify that the addresses we test with are indeed classified correctly
-    remoteAddress.getAddress.isSiteLocalAddress shouldBe false
-    remoteAddress.getAddress.isLinkLocalAddress shouldBe false
-    remoteAddress.getAddress.isLoopbackAddress shouldBe false
+    NetworkUtils.isLocal(remoteAddress, allowLocal = false) shouldBe false
 
-    siteLocalAddress.getAddress.isSiteLocalAddress shouldBe true
-    linkLocalAddress.getAddress.isLinkLocalAddress shouldBe true
-    loopbackAddress.getAddress.isLoopbackAddress shouldBe true
+    NetworkUtils.isLocal(siteLocalAddress, allowLocal = false) shouldBe true
+    NetworkUtils.isLocal(linkLocalAddress, allowLocal = false) shouldBe true
+    NetworkUtils.isLocal(loopbackAddress, allowLocal = false) shouldBe true
+
+    NetworkUtils.isLocal(siteLocalAddress, allowLocal = true) shouldBe false
   }
 
 }

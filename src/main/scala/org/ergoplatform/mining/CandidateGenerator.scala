@@ -223,10 +223,8 @@ class CandidateGenerator(
             completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
           }
         log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme
-          .validate(newBlock.header)
-          .map(_ => newBlock) match {
-          case Success(newBlock) =>
+        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
+          case Success(_) =>
             sendToNodeView(newBlock)
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
             StatusReply.success(())

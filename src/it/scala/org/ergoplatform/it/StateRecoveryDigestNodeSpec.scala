@@ -24,16 +24,16 @@ class StateRecoveryDigestNodeSpec extends AnyFlatSpec with IntegrationSuite {
   dir.mkdirs()
 
   val minerConfig: Config = nodeSeedConfigs.head
-    .withFallback(internalMinerPollingIntervalConfig(10000))
+    .withFallback(shortInternalMinerPollingInterval)
     .withFallback(specialDataDirConfig(remoteVolume))
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val followerConfig: Config = digestStatePeerConfig
     .withFallback(blockIntervalConfig(10000))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
     .withFallback(specialDataDirConfig(remoteVolume))
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   //  Testing scenario:
   // 1. Start up one node and let it mine {approxMinerTargetHeight} blocks;

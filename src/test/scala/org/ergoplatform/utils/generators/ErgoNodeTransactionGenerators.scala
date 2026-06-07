@@ -190,9 +190,10 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
       } while (assetsMap.nonEmpty && availableTokenSlots > 0)
     }
 
+    val creationHeight = boxesToSpend.map(_.creationHeight).max
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => t._1.data.toTokenId -> t._2)
-      testBox(amt, outputsProposition, 0, normalizedTokens)
+      testBox(amt, outputsProposition, creationHeight, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val dataInputs = dataBoxes.map(b => DataInput(b.id))

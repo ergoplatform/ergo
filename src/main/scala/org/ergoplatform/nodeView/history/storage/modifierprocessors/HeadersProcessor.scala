@@ -47,6 +47,12 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     ByteArrayWrapper(Base16.decode("4987eb6a8fecbed88a6f733f456cdf4e334b944f4436be4cab50cacb442e15e6").get)
   }
 
+  /**
+    * Key for database record storing the height up to which full block data has been pruned
+    */
+  protected val PrunedHeightKey: ByteArrayWrapper =
+    ByteArrayWrapper(Algos.hash("pruned_height".getBytes(CharsetName)))
+
 
   protected val historyStorage: HistoryStorage
 
@@ -79,6 +85,16 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
 
   override def readMinimalFullBlockHeight(): Height = {
     historyStorage.getIndex(MinFullBlockHeightKey).map(Ints.fromByteArray).getOrElse(GenesisHeight)
+  }
+
+  override def writePrunedHeight(height: Height): Unit = {
+    historyStorage.insert(
+      indexesToInsert = Array(PrunedHeightKey -> Ints.toByteArray(height)),
+      objectsToInsert = BlockSection.emptyArray)
+  }
+
+  override def readPrunedHeight(): Height = {
+    historyStorage.getIndex(PrunedHeightKey).map(Ints.fromByteArray).getOrElse(readMinimalFullBlockHeight())
   }
 
   def bestHeaderIdOpt: Option[ModifierId] = historyStorage.getIndex(BestHeaderKey).map(bytesToId)

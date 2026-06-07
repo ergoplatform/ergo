@@ -4,7 +4,7 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState, WalletScannedHeight}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -31,6 +31,14 @@ class ErgoWalletActor(settings: ErgoSettings,
   extends Actor with Stash with ScorexLogging with ScorexEncoding {
 
   private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
+
+  /** Report the height up to which the wallet has scanned, so the node view holder can keep
+    * history from pruning blocks the wallet has not processed yet. Height 0 (fresh or
+    * uninitialized wallet) is not reported, leaving pruning unconstrained in that case. */
+  private def reportScannedHeight(state: ErgoWalletState): Unit = {
+    val h = state.getWalletHeight
+    if (h > 0) context.system.eventStream.publish(WalletScannedHeight(h))
+  }
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
@@ -77,6 +85,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       // Try to read wallet from json file or test mnemonic provided in a config file
       val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
       context.become(loadedWallet(newState))
+      reportScannedHeight(newState) // report persisted height early (e.g. after a restart)
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
@@ -271,6 +280,7 @@ class ErgoWalletActor(settings: ErgoSettings,
               state // We may do not have a block, e.g. it is not downloaded yet. This is okay, just skip it.
         }
         context.become(loadedWallet(newState))
+        reportScannedHeight(newState)
         if (blockHeight < newState.fullHeight) {
           self ! ScanInThePast(blockHeight + 1, rescan)
         } else if (rescan) {
@@ -295,6 +305,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                 updatedState
             }
           context.become(loadedWallet(newState))
+          reportScannedHeight(newState)
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
           self ! ScanInThePast(nextBlockHeight, false)

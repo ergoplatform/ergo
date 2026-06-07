@@ -87,6 +87,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Escalate
     }
 
+  override def preStart(): Unit = {
+    // Track the wallet's scanned height so history pruning does not delete full block data the
+    // wallet has not processed yet, which would otherwise leave the wallet stuck.
+    context.system.eventStream.subscribe(self, classOf[WalletScannedHeight])
+  }
+
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
@@ -689,6 +695,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sender() ! healthCheckReply
   }
 
+  private def handleWalletScannedHeight: Receive = {
+    case WalletScannedHeight(height) =>
+      history().updateWalletScannedHeight(height)
+  }
+
   override def receive: Receive =
     processRemoteModifiers orElse
       processLocallyGeneratedModifiers orElse
@@ -696,7 +707,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       getCurrentInfo orElse
       getNodeViewChanges orElse
       processStateSnapshot orElse
-      handleHealthCheck orElse {
+      handleHealthCheck orElse
+      handleWalletScannedHeight orElse {
         case a: Any => log.error("Strange input: " + a)
       }
 

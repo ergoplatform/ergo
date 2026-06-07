@@ -28,12 +28,6 @@ case class InfoApiRoute(statsCollector: ActorRef,
         "lastMemPoolUpdateTime" -> nodeInfo.lastMemPoolUpdateTime.asJson
       ))
     })
-    } ~
-    (path(".well-known" / "ai-plugin.json") & get) {
-      getFromResource(".well-known/ai-plugin.json", ContentTypes.`application/json`)
-    } ~
-    (path("openapi.yaml") & get) {
-      getFromResource("api/openapi-ai.yaml", ContentTypes.`text/plain(UTF-8)`)
     }
   }
 

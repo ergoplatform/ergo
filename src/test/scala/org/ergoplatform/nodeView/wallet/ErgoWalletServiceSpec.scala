@@ -91,6 +91,26 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("skipBlockUpdate advances wallet height without scanning, recovering a stuck wallet") {
+    withVersionedStore(10) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl(settings)
+
+        // wallet has scanned the chain up to height 100
+        val blockId1 = modifierIdGen.sample.get
+        walletState.registry.updateOnBlock(ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), blockId1, 100).get
+        walletState.getWalletHeight shouldBe 100
+
+        // the next block is unavailable (pruned) - skipping it advances the wallet height
+        // so the scan loop does not get stuck on it
+        val blockId2 = modifierIdGen.sample.get
+        val updated = walletService.skipBlockUpdate(walletState, blockId2, 101).get
+        updated.getWalletHeight shouldBe 101
+      }
+    }
+  }
+
   property("it should prepare unsigned transaction") {
     val inputBoxes = {
       Seq(

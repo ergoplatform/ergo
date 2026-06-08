@@ -78,7 +78,9 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
 
   def modifierById(id: ModifierId): Option[BlockSection] =
     lookupModifier(id) orElse objectsStore.get(idToBytes(id)).flatMap { bytes =>
-      HistoryModifierSerializer.parseBytesTry(bytes) match {
+      // objects in this store were validated before insertion, so headers can be parsed lazily,
+      // deferring PoW solution EC point decompression that is not needed for chain traversal
+      HistoryModifierSerializer.parseBytesTryLazy(bytes) match {
         case Success(pm) =>
           log.trace(s"Cache miss for existing modifier $id")
           cacheModifier(pm)

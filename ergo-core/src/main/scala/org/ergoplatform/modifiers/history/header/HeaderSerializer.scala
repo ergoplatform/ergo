@@ -80,4 +80,15 @@ object HeaderSerializer extends ErgoSerializer[Header] {
     headerWithoutPow.toHeader(powSolution, Some(r.consumed))
   }
 
+  /**
+    * Parse a header from trusted, already-validated bytes (the storage read path), deferring EC point
+    * decompression of the PoW solution. Must NOT be used for untrusted (network) input - use [[parse]],
+    * which decodes the solution eagerly and thereby validates it.
+    */
+  private[history] def parseLazy(r: Reader): Header = {
+    val headerWithoutPow = parseWithoutPow(r)
+    val powSolution = AutolykosSolutionSerializer.parseLazy(r, headerWithoutPow.version)
+    headerWithoutPow.toHeader(powSolution, Some(r.consumed))
+  }
+
 }

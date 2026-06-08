@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.difficulty.DifficultySerializer
+import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
@@ -114,6 +115,50 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
     Base16.encode(header.powSolution.n) shouldBe "0000000000003105"
 
     pow.validate(header) shouldBe 'success
+  }
+
+  property("malformed v2 miner pk: default parse rejects, lazy storage parse defers until pk is read") {
+    forAll(invalidHeaderGen) { inHeader =>
+      val h = inHeader.copy(version = Header.HardeningVersion) // Autolykos v2
+      val s = h.powSolution
+      // 33 bytes that do not decode to a curve point. v2 PoW ignores pk, so such a header could carry
+      // valid PoW and must still be rejected by the (validating) default parser, not silently accepted.
+      val badPk = Array.fill[Byte](PublicKeyLength)(0x05.toByte)
+      val tampered = h.copy(powSolution = AutolykosSolution.fromBytes(badPk, s.wBytes, s.n, s.d))
+      val modifierBytes = HistoryModifierSerializer.toBytes(tampered)
+
+      // default (untrusted/network) deserialization decodes the key eagerly and rejects it
+      HistoryModifierSerializer.parseBytesTry(modifierBytes).isSuccess shouldBe false
+
+      // the trusted storage path (used by HistoryStorage.modifierById) defers the decode: it
+      // deserializes successfully, and the bad key only surfaces when the miner pk is accessed
+      val recovered = HistoryModifierSerializer.parseBytesTryLazy(modifierBytes)
+      recovered.isSuccess shouldBe true
+      assertThrows[Exception](recovered.get.asInstanceOf[Header].powSolution.pk)
+    }
+  }
+
+  property("eager parse canonicalizes a non-canonical PoW solution encoding") {
+    forAll(invalidHeaderGen) { inHeader =>
+      val h = inHeader.copy(version = Header.HardeningVersion) // Autolykos v2
+      val s = h.powSolution
+      // GroupElementSerializer decodes any 33 bytes starting with 0 as the infinity point, whose
+      // canonical encoding is 33 zero bytes - so this is a non-canonical encoding of a valid point.
+      val nonCanonicalPk = Array(0.toByte) ++ Array.fill(PublicKeyLength - 1)(0xff.toByte)
+      val canonicalPk = groupElemToBytes(groupElemFromBytes(nonCanonicalPk))
+      Base16.encode(canonicalPk) shouldNot equal(Base16.encode(nonCanonicalPk)) // input is non-canonical
+
+      val nonCanon = h.copy(powSolution = AutolykosSolution.fromBytes(nonCanonicalPk, s.wBytes, s.n, s.d))
+      val canon = h.copy(powSolution = AutolykosSolution.fromBytes(canonicalPk, s.wBytes, s.n, s.d))
+
+      // the raw serialized forms differ, but the eager (untrusted) parser normalizes both, so they
+      // yield the same canonical header bytes and id - keeping serializedId consistent across nodes
+      Base16.encode(nonCanon.bytes) shouldNot equal(Base16.encode(canon.bytes))
+      val parsedNonCanon = HeaderSerializer.parseBytes(nonCanon.bytes)
+      val parsedCanon = HeaderSerializer.parseBytes(canon.bytes)
+      parsedNonCanon.id shouldBe parsedCanon.id
+      Base16.encode(parsedNonCanon.bytes) shouldBe Base16.encode(parsedCanon.bytes)
+    }
   }
 
   // testing an invalid header got from a mining pool

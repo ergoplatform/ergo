@@ -907,17 +907,17 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     try {
       log.info(s"Applying ${transactions.size} input block transactions for $sbId")
-      val transactionIds = transactions.map(_.id)
-      inputBlockTransactions.put(sbId, transactionIds)
-
-      // put transactions into cache shared among all the input blocks,
-      // to avoid data duplication in input block related functions
-      transactions.foreach { tx =>
-        transactionsCache.put(tx.id, tx)
-      }
-
       inputBlockRecords.get(sbId) match {
         case Some(ib) =>
+          val transactionIds = transactions.map(_.id)
+          inputBlockTransactions.put(sbId, transactionIds)
+
+          // put transactions into cache shared among all the input blocks,
+          // to avoid data duplication in input block related functions
+          transactions.foreach { tx =>
+            transactionsCache.put(tx.id, tx)
+          }
+
           val orderingId = extractOrderingId(ib)
           if (!bestBlocks._1.map(_.id).contains(orderingId)) {
             log.debug(s"Skipping input block transactions for $sbId: ordering block $orderingId is not best")

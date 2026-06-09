@@ -13,7 +13,7 @@ import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.validTransactionsFromBoxHolder
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, LeafData}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{bytesToId, idToBytes}
@@ -67,6 +67,13 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
       Digest32 @@ Array.fill(32)(0.toByte),
       Digest32 @@ Array.fill(32)(0.toByte),
       BatchMerkleProof(Seq.empty, Seq.empty)(Algos.hash))
+  }
+
+  private def provedFieldsForTransactions(transactions: Seq[ErgoTransaction]): InputBlockFields = {
+    val digest = Algos.merkleTreeRoot(transactions.map(tx => LeafData @@ tx.serializedId))
+    val prevDigest = Digest32 @@ Array.fill(32)(0.toByte)
+    val extCandidate = InputBlockFields.toExtensionFields(None, digest, prevDigest)
+    new InputBlockFields(None, digest, prevDigest, extCandidate.proofForInputBlockData.get)
   }
 
   property("apply first input block after ordering block") {
@@ -393,6 +400,25 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq()
     h.applyInputBlockTransactions(ib.id, Seq(tx), us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq()
+  }
+
+  property("reject input block transactions that do not match the announced digest") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib = InputBlockAnnouncement(1, c2(0).header, provedFieldsForTransactions(Seq.empty), None)
+    h.applyInputBlock(ib) shouldBe None
+
+    h.applyInputBlockTransactions(ib.id, tx1, us) shouldBe (Seq.empty -> Seq.empty)
+    h.getInputBlockTransactionIds(ib.id) shouldBe None
+    h.getInputBlockTransactions(ib.id) shouldBe None
   }
 
   property("apply input block with parent ordering block not available") {

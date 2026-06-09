@@ -31,7 +31,9 @@ object InputBlockTransactionsRequestMessageSpec
 
   override def parse(r: Reader): InputBlockTransactionsRequest = {
     val inputBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val cnt          = r.getUInt().toIntExact
+    val cntLong      = r.getUInt()
+    InputBlockMessageLimits.requireArraySize(cntLong, "Input-block transaction request IDs")
+    val cnt          = cntLong.toIntExact
     val txIds        = (1 to cnt).map(_ => r.getBytes(ErgoTransaction.WeakIdLength))
     InputBlockTransactionsRequest(inputBlockId, txIds)
   }

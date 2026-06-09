@@ -426,10 +426,10 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
         val indexes = genIndexes(seed, N)
         toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
       }
-      if (d <= b) {
+      if (d < b) {
         log.debug(s"Ordering block solution found at $i")
         OrderingSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
-      } else if (d <= b * subblocksPerBlock) {
+      } else if (d < b * subblocksPerBlock) {
         log.debug(s"Input block solution found at $i")
         InputSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
       } else {

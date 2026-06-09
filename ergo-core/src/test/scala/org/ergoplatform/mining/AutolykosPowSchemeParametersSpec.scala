@@ -81,16 +81,16 @@ class AutolykosPowSchemeParametersSpec extends ErgoCorePropertyTest {
     val result = powScheme.checkNonces(2, h, msg, sk, x, b, N, 0, 1000000, customParams)
     result match {
       case InputSolutionFound(as) =>
-        // Verify d is in correct range for input block: b < d <= b * subsPerBlock
-        as.d shouldBe >(b)
-        as.d shouldBe <=(b * subsPerBlock)
+        // Verify d is in correct range for input block: b <= d < b * subsPerBlock
+        as.d shouldBe >=(b)
+        as.d shouldBe <(b * subsPerBlock)
         
         // Note: We can't easily test checkInputBlockPoW with a created header because
         // the hit calculation depends on header fields that differ from the checkNonces message
 
       case OrderingSolutionFound(as) =>
-        // Verify d is in correct range for ordering block: d <= b
-        as.d shouldBe <=(b)
+        // Verify d is in correct range for ordering block: d < b
+        as.d shouldBe <(b)
 
       case _ =>
         // If no solution found, verify target calculation
@@ -164,16 +164,16 @@ class AutolykosPowSchemeParametersSpec extends ErgoCorePropertyTest {
     val result = powScheme.checkNonces(2, h, msg, sk, x, b, N, 0, 1000000, params)
     result match {
       case InputSolutionFound(as) =>
-        // Input block solution: b < d <= b * subBlocksPerBlock
-        as.d shouldBe >(b)
-        as.d shouldBe <=(b * subsPerBlock)
+        // Input block solution: b <= d < b * subBlocksPerBlock
+        as.d shouldBe >=(b)
+        as.d shouldBe <(b * subsPerBlock)
 
         val header = createTestHeader(nBits = nBits, powSolution = as)
         powScheme.checkInputBlockPoW(header, params) shouldBe true
 
       case OrderingSolutionFound(as) =>
-        // Ordering block solution: d <= b
-        as.d shouldBe <=(b)
+        // Ordering block solution: d < b
+        as.d shouldBe <(b)
 
         val header = createTestHeader(nBits = nBits, powSolution = as)
         // Ordering solutions are also valid input blocks
@@ -245,11 +245,11 @@ class AutolykosPowSchemeParametersSpec extends ErgoCorePropertyTest {
     result match {
       case InputSolutionFound(as) =>
         // Verify d is in correct range for input block
-        as.d shouldBe >(b)
-        as.d shouldBe <=(orderingTarget * minSubsPerBlock)
+        as.d shouldBe >=(b)
+        as.d shouldBe <(orderingTarget * minSubsPerBlock)
       case OrderingSolutionFound(as) =>
         // Verify d is in correct range for ordering block
-        as.d shouldBe <=(b)
+        as.d shouldBe <(b)
       case _ =>
         // No solution found in nonce range
     }

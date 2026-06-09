@@ -638,6 +638,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Both candidates should be generated successfully
     candidate1 should not be null
     candidate2 should not be null
+    candidate1.externalVersion.pk shouldBe defaultMinerSecret.publicImage
+    candidate2.externalVersion.pk shouldBe customPk
 
     system.terminate()
   }

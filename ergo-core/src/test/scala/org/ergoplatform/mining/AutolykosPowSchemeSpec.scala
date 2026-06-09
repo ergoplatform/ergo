@@ -50,6 +50,41 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
     }
   }
 
+  property("checkNonces should use strict target inequality") {
+    val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
+    val params = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+      .withNumOfSubblocksPerBlock(1)
+    val h = Array.fill(4)(1.toByte)
+    val msg = Array.fill(32)(2.toByte)
+    val sk = randomSecret()
+    val x = randomSecret()
+    val maxTarget = BigInt(1) << 256
+
+    def accepted(target: BigInt): Boolean = {
+      pow.checkNonces(2, h, msg, sk, x, target, pow.NBase, 0, 1, params) match {
+        case OrderingSolutionFound(_) => true
+        case _ => false
+      }
+    }
+
+    def firstAccepted(lo: BigInt, hi: BigInt): BigInt = {
+      if (lo == hi) {
+        lo
+      } else {
+        val mid = (lo + hi) / 2
+        if (accepted(mid)) firstAccepted(lo, mid) else firstAccepted(mid + 1, hi)
+      }
+    }
+
+    val target = firstAccepted(0, maxTarget)
+    pow.checkNonces(2, h, msg, sk, x, target, pow.NBase, 0, 1, params) match {
+      case OrderingSolutionFound(as) =>
+        as.d shouldBe <(target)
+      case other =>
+        fail(s"Expected ordering solution at the first accepted target, got $other")
+    }
+  }
+
   property("calcN test vectors") {
     // mainnet parameters
     val k = 32

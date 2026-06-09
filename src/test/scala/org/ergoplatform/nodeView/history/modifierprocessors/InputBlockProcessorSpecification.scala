@@ -321,6 +321,38 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq(ib4.id, ib3.id, ib1.id)
   }
 
+  property("processing a shared input block root updates all waiting forks without losing progress") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1) shouldBe None
+
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2a = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2a) shouldBe None
+
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib2b = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib1.id)), None)
+    h.applyInputBlock(ib2b) shouldBe None
+
+    h.inputBlocksTree().get.forks.length shouldBe 2
+    h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(-1, -1)
+
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us) shouldBe (Seq(ib1.id) -> Seq.empty)
+
+    val forks = h.inputBlocksTree().get.forks
+    forks.length shouldBe 2
+    forks.map(_.processedIndex) shouldBe Seq(0, 0)
+    forks.foreach(_.tip shouldBe Some(ib1.id))
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+  }
+
   property("apply first input block after ordering block with valid transactions") {
 
     val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)

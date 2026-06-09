@@ -595,15 +595,13 @@ trait InputBlocksProcessor extends ScorexLogging {
         if (r._2.nonEmpty) {
           // Update the tree with the processed chain
           var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
-          val updForks = updTree.forks
-
           // Register completion for any other forks that were waiting for this block
-          (0 until updForks.length).foreach { idx =>
-            val f = updForks(idx)
+          (0 until updTree.forks.length).foreach { idx =>
+            val f = updTree.forks(idx)
             if (f.firstToComplete().contains(ib.id)) {
               f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
@@ -624,15 +622,13 @@ trait InputBlocksProcessor extends ScorexLogging {
         if (r._2.nonEmpty) {
           // Update the tree with the processed chain
           var updTree  = new InputBlocksTree(forks.updated(bestIndex, r._1))
-          val updForks = updTree.forks
-
           // Register completion for any other forks that were waiting for this block
-          (0 until updForks.length).foreach { idx =>
-            val f = updForks(idx)
+          (0 until updTree.forks.length).foreach { idx =>
+            val f = updTree.forks(idx)
             if (f.firstToComplete().contains(ib.id)) {
               f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }

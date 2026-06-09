@@ -663,7 +663,7 @@ object CandidateGenerator extends ScorexLogging {
       // digest (Merkle tree root) first class transactions since ordering block till last input-block
       val previousInputBlocksTransactionsDigest = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
 
-      val inputBlockExtCandidate = InputBlockFields.toExtensionFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, inputBlockTransactionsDigestValue)
+      val inputBlockExtCandidate = InputBlockFields.toExtensionFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsDigest)
 
       val extensionCandidate = preExtensionCandidate ++ inputBlockExtCandidate
 

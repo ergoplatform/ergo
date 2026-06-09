@@ -4,29 +4,36 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
+import com.google.common.io.Files.createTempDir
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
-import org.ergoplatform.nodeView.state.{StateType, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.NetworkType.DevNet60
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
+import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
 import org.scalatest.matchers.should.Matchers
+import scorex.util.bytesToId
 import scorex.util.encode.Base16
+import sigma.Colls
 import sigma.data.ProveDlog
+import sigma.data.TrivialProp.TrueProp
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
@@ -1161,6 +1168,80 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     system.terminate()
+  }
+
+  it should "bind input block transaction digests to the matching extension fields" in {
+    val box = new ErgoBox(
+      value = 1000000000L,
+      ergoTree = ErgoTree.fromProposition(TrueProp),
+      creationHeight = 0,
+      additionalTokens = Colls.emptyColl,
+      additionalRegisters = Map.empty,
+      transactionId = bytesToId(Algos.hash("candidate-digest-binding")),
+      index = 0
+    )
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(box)), None, createTempDir, settings, parameters)
+    val h = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep = -1,
+      epochLength = 10000,
+      useLastEpochs = 3,
+      initialDiffOpt = None,
+      None
+    )
+    val chain = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, chain)
+
+    val outputCandidate = new ErgoBoxCandidate(
+      box.value,
+      box.ergoTree,
+      us.stateContext.currentHeight,
+      box.additionalTokens,
+      box.additionalRegisters
+    )
+    val tx = new ErgoTransaction(
+      IndexedSeq(new Input(box.id, emptyProverResult)),
+      IndexedSeq.empty,
+      IndexedSeq(outputCandidate)
+    )
+
+    val nextChain = genChain(2, h, stateOpt = Some(us)).tail
+    val inputBlock = InputBlockAnnouncement(1, nextChain.head.header, InputBlockFields.empty, None)
+    h.applyInputBlock(inputBlock) shouldBe None
+    h.applyInputBlockTransactions(inputBlock.id, Seq(tx), us) shouldBe (Seq(inputBlock.id) -> Seq.empty)
+    h.getBestOrderingCollectedInputBlocksTransactions() should contain(tx)
+
+    val candidateTry = CandidateGenerator.createCandidate(
+      defaultMinerPk,
+      h,
+      settings.votingTargets.desiredUpdate,
+      us,
+      Seq.empty,
+      None,
+      Seq.empty,
+      settings
+    )
+
+    candidateTry match {
+      case scala.util.Success((candidate: CandidateGenerator.Candidate, _)) =>
+        val candidateBlock = candidate.candidateBlock
+        val extensionFields = candidateBlock.extension.fields
+
+        def extensionValue(key: Array[Byte]): Seq[Byte] =
+          extensionFields.find(_._1.sameElements(key)).map(_._2.toSeq).get
+
+        extensionValue(Extension.InputBlockTransactionsDigestKey) shouldBe
+          candidateBlock.inputBlockFields.transactionsDigest.toSeq
+        extensionValue(Extension.PreviousInputBlockTransactionsDigestKey) shouldBe
+          candidateBlock.inputBlockFields.prevTransactionsDigest.toSeq
+        candidateBlock.inputBlockFields.prevTransactionsDigest.toSeq should not be (
+          candidateBlock.inputBlockFields.transactionsDigest.toSeq
+        )
+      case scala.util.Failure(e) =>
+        fail("Expected candidate generation to succeed", e)
+    }
   }
 
 }

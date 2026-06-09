@@ -1382,6 +1382,25 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlockTransactions(ib1.id, tx1.map(_.weakId)) shouldBe Some(tx1)
   }
 
+  property("transactions for unknown input block are not cached") {
+    val bh = BoxHolder(Seq(eb1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val tx1 = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+    applyChain(h, c1)
+
+    val unknownInputBlockId = bytesToId(Algos.hash("unknown-input-block"))
+
+    h.applyInputBlockTransactions(unknownInputBlockId, tx1, us) shouldBe (Seq.empty -> Seq.empty)
+    h.getInputBlockTransactionIds(unknownInputBlockId) shouldBe None
+    h.getInputBlockTransactions(unknownInputBlockId) shouldBe None
+    h.getInputBlockTransactions(unknownInputBlockId, tx1.map(_.weakId)) shouldBe None
+    h.getInputBlockTransactionWeakIds(unknownInputBlockId) shouldBe None
+  }
+
   property("input block with transactions exceeding block cost limit should be rejected") {
     val bh = BoxHolder(Seq(eb1, eb2))
     val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)

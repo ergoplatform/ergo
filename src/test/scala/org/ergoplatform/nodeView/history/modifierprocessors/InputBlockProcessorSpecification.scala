@@ -1374,6 +1374,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     // Test transaction retrieval
     h.getInputBlockTransactions(ib1.id) shouldBe Some(tx1)
+    h.getCollectedInputBlocksTransactions(h.bestFullBlockOpt.get.id) shouldBe Some(tx1)
+    h.getCollectedInputBlocksTransactions(bytesToId(Algos.hash("other-ordering-block"))) shouldBe None
 
     // Test weak ID retrieval
     h.getInputBlockTransactionWeakIds(ib1.id) shouldBe Some(tx1.map(_.weakId))

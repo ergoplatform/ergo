@@ -629,6 +629,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Verify candidate was generated successfully
     candidate should not be null
     candidate.candidateBlock should not be null
+    candidate.externalVersion.pk shouldBe customPk
     
     system.terminate()
   }
@@ -660,6 +661,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Candidate should be generated successfully with default minerPk
     candidate should not be null
     candidate.candidateBlock should not be null
+    candidate.externalVersion.pk shouldBe defaultMinerSecret.publicImage
 
     system.terminate()
   }
@@ -707,6 +709,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Both candidates should be generated successfully
     candidate1 should not be null
     candidate2 should not be null
+    candidate1.externalVersion.pk shouldBe defaultMinerSecret.publicImage
+    candidate2.externalVersion.pk shouldBe customPk
+    candidate1.externalVersion.pk should not be candidate2.externalVersion.pk
 
     system.terminate()
   }

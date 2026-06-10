@@ -28,9 +28,14 @@ object NipopowProverWithDbAlgs {
 
       val k = params.k
       val m = params.m
+      val requiredChainHeight = BigInt(k) + BigInt(m)
 
-      require(params.k >= 1, s"$k < 1")
-      require(histReader.headersHeight >= k + m, s"Can not prove chain of size < ${k + m}")
+      require(k >= 1, s"$k < 1")
+      require(m >= 1, s"$m < 1")
+      require(
+        BigInt(histReader.headersHeight) >= requiredChainHeight,
+        s"Can not prove chain of size < $requiredChainHeight"
+      )
 
       def linksWithIndexes(header: PoPowHeader): Seq[(ModifierId, Int)] = header.interlinks.tail.reverse.zipWithIndex
 

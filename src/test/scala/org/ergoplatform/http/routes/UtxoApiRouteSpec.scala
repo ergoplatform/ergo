@@ -26,6 +26,10 @@ class UtxoApiRouteSpec
 
   val route: Route =
     UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
+  val sealedRoute: Route = Route.seal(route)
+  val protectedRoute: Route = Route.seal(
+    UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi.copy(apiKeyHash = Some("invalid-key-hash"))).route
+  )
 
   it should "get utxo box with /byId" in {
     val box   = utxoState.takeBoxes(1).head
@@ -67,6 +71,21 @@ class UtxoApiRouteSpec
     val boxId = Base16.encode(Blake2b256(utxoState.takeBoxes(1).head.id))
     Get(prefix + s"/byId/$boxId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
+    }
+  }
+
+  it should "reject invalid box id instead of failing the route" in {
+    Get(prefix + s"/byId/not-hex") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/byIdBinary/not-hex") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/withPool/byId/not-hex") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Post(prefix + "/withPool/byIds", Seq("not-hex").asJson) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 
@@ -120,6 +139,13 @@ class UtxoApiRouteSpec
     val boxes = utxoState.takeBoxes(10).map(box => Base16.encode(box.id))
     Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "require API key for binary proof generation when configured" in {
+    val boxes = utxoState.takeBoxes(1).map(box => Base16.encode(box.id))
+    Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> protectedRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
     }
   }
 }

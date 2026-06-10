@@ -302,4 +302,25 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject invalid fee estimation parameters" in {
+    Get(prefix + s"/poolHistogram?bins=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/poolHistogram?maxtime=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/getFee?waitTime=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/getFee?txSize=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/waitTime?txSize=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/waitTime?fee=-1") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
 }

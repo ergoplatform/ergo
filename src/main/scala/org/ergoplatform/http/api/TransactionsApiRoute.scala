@@ -213,21 +213,45 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   }
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
+  private val MaxFeeHistogramBins = 1000
+  private val MaxFeeEstimationWaitTime = 1440
 
   def getFeeHistogramR: Route = (path("poolHistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
-    ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+    if (bins <= 0 || bins > MaxFeeHistogramBins) {
+      BadRequest(s"bins should be between 1 and $MaxFeeHistogramBins")
+    } else if (maxtime <= 0) {
+      BadRequest("maxtime should be positive")
+    } else {
+      ApiResponse(
+        getMemPool.map { p =>
+          getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson
+        }
+      )
+    }
   }
 
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)
 
   def getRecommendedFeeR: Route = (path("getFee") & get & feeRequestParameters) { (waitTime, txSize) =>
-    ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime,txSize).asJson))
+    if (waitTime <= 0 || waitTime > MaxFeeEstimationWaitTime) {
+      BadRequest(s"waitTime should be between 1 and $MaxFeeEstimationWaitTime")
+    } else if (txSize <= 0) {
+      BadRequest("txSize should be positive")
+    } else {
+      ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime, txSize).asJson))
+    }
   }
 
   val waitTimeRequestParameters: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
 
   def getExpectedWaitTimeR: Route = (path("waitTime") & get & waitTimeRequestParameters) { (fee, txSize) =>
-    ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee,txSize).asJson))
+    if (fee < 0) {
+      BadRequest("fee should be non-negative")
+    } else if (txSize <= 0) {
+      BadRequest("txSize should be positive")
+    } else {
+      ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee, txSize).asJson))
+    }
   }
 
   /** Unconfirmed Txs */

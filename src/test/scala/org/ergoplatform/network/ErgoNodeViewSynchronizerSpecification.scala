@@ -16,7 +16,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.ModifiersStatus.{Received, Unknown}
+import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
@@ -221,6 +221,37 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             msg.data.get.asInstanceOf[InvData].ids.head == chain.head.id
           case _ => false
         }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: Message: InvSpec - header next to the best one is requested via RequestModifier") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+
+      // header immediately following the best header the node has
+      // (history applied to the synchronizer contains the first 1000 headers of `chain`)
+      val nextHeader = chain.take(1001).last
+      deliveryTracker.status(nextHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+
+      // a peer announces the header via an Inv message
+      val invData = InvData(Header.modifierTypeId, Seq(nextHeader.id))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+
+      // the synchronizer should reply to the peer with a RequestModifier message asking for the header
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId && data.ids == Seq(nextHeader.id)
+          case _ => false
+        }
+      }
+
+      // and the header should be tracked as Requested
+      eventually {
+        deliveryTracker.status(nextHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Requested
       }
     }
   }

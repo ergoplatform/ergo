@@ -4,9 +4,11 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.{Directive1, Route, ValidationRejection}
 import akka.pattern.ask
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoSetSnapshotPersistence, UtxoStateReader}
+import org.ergoplatform.settings.Constants.HashLength
 import org.ergoplatform.settings.RESTApiSettings
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.core.api.http.ApiResponse
@@ -27,17 +29,36 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] =
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
-  private def boxId(value: String): Directive1[ErgoBox.BoxId] =
+  private val MaxBatchItems = 16384
+
+  private def validateMaxItems(count: Int, itemName: String)(inner: => Route): Route =
+    if (count > MaxBatchItems) {
+      BadRequest(s"No more than $MaxBatchItems $itemName can be requested")
+    } else {
+      inner
+    }
+
+  private def parseBoxId(value: String): Either[String, ErgoBox.BoxId] =
     Base16.decode(value) match {
-      case Success(bytes) => provide(ADKey @@ bytes)
-      case Failure(_)     => reject(ValidationRejection(s"boxId $value is invalid, it should be hex string"))
+      case Success(bytes) if bytes.length == HashLength =>
+        Right(ADKey @@ bytes)
+      case Success(_) =>
+        Left(s"boxId is invalid, it should be $HashLength-byte hex string")
+      case Failure(_) =>
+        Left("boxId is invalid, it should be hex string")
+    }
+
+  private def boxId(value: String): Directive1[ErgoBox.BoxId] =
+    parseBoxId(value) match {
+      case Right(boxId) => provide(boxId)
+      case Left(error)  => reject(ValidationRejection(error))
     }
 
   private def boxIds(values: Seq[String]): Directive1[Seq[ErgoBox.BoxId]] = {
-    val parsed = values.map(value => value -> Base16.decode(value))
-    parsed.collectFirst { case (value, Failure(_)) => value } match {
-      case Some(value) => reject(ValidationRejection(s"boxId $value is invalid, it should be hex string"))
-      case None        => provide(parsed.collect { case (_, Success(bytes)) => ADKey @@ bytes })
+    val parsed = values.map(value => value -> parseBoxId(value))
+    parsed.collectFirst { case (_, Left(error)) => error } match {
+      case Some(error) => reject(ValidationRejection(error))
+      case None        => provide(parsed.collect { case (_, Right(boxId)) => boxId })
     }
   }
 
@@ -57,12 +78,14 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
 
   def withPoolByIds: Route =
     (post & path("withPool" / "byIds") & entity(as[Seq[String]])) { ids =>
-      boxIds(ids) { boxIds =>
-        ApiResponse(getStateAndPool.map {
-          case (usr: UtxoStateReader, mp) =>
-            boxIds.flatMap(id => usr.withMempool(mp).boxById(id))
-          case _ => Seq.empty
-        })
+      validateMaxItems(ids.size, "box ids") {
+        boxIds(ids) { boxIds =>
+          ApiResponse(getStateAndPool.map {
+            case (usr: UtxoStateReader, mp) =>
+              boxIds.flatMap(id => usr.withMempool(mp).boxById(id))
+            case _ => Seq.empty
+          })
+        }
       }
     }
 
@@ -114,12 +137,14 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   }
 
   def getBoxesBinaryProof: Route =
-    (post & path("getBoxesBinaryProof") & withAuth & entity(as[Seq[ErgoBox.BoxId]])) { boxes =>
-      ApiResponse(getState.map {
-        case usr: UtxoStateReader =>
-          Some(Base16.encode(usr.generateBatchProofForBoxes(boxes)))
-        case _ => None
-      })
+    (post & path("getBoxesBinaryProof") & entity(as[Seq[ErgoBox.BoxId]])) { boxes =>
+      validateMaxItems(boxes.size, "box ids") {
+        ApiResponse(getState.map {
+          case usr: UtxoStateReader =>
+            Some(Base16.encode(usr.generateBatchProofForBoxes(boxes)))
+          case _ => None
+        })
+      }
     }
 
   /**

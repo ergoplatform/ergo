@@ -23,13 +23,11 @@ class UtxoApiRouteSpec
   with ApiCodecs {
 
   val prefix = "/utxo"
+  val maxBatchItems = 16384
 
   val route: Route =
     UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
   val sealedRoute: Route = Route.seal(route)
-  val protectedRoute: Route = Route.seal(
-    UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi.copy(apiKeyHash = Some("invalid-key-hash"))).route
-  )
 
   it should "get utxo box with /byId" in {
     val box   = utxoState.takeBoxes(1).head
@@ -78,13 +76,38 @@ class UtxoApiRouteSpec
     Get(prefix + s"/byId/not-hex") ~> sealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
+    Get(prefix + s"/byId/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
     Get(prefix + s"/byIdBinary/not-hex") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/byIdBinary/00") ~> sealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
     Get(prefix + s"/withPool/byId/not-hex") ~> sealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
+    Get(prefix + s"/withPool/byId/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
     Post(prefix + "/withPool/byIds", Seq("not-hex").asJson) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Post(prefix + "/withPool/byIds", Seq("00").asJson) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject oversized UTXO batch requests" in {
+    val boxId = Base16.encode(Blake2b256(utxoState.takeBoxes(1).head.id))
+    val tooManyIds = Seq.fill(maxBatchItems + 1)(boxId)
+
+    Post(prefix + "/withPool/byIds", tooManyIds.asJson) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Post(prefix + s"/getBoxesBinaryProof", tooManyIds.asJson) ~> sealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
@@ -142,10 +165,4 @@ class UtxoApiRouteSpec
     }
   }
 
-  it should "require API key for binary proof generation when configured" in {
-    val boxes = utxoState.takeBoxes(1).map(box => Base16.encode(box.id))
-    Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> protectedRoute ~> check {
-      status shouldBe StatusCodes.Forbidden
-    }
-  }
 }

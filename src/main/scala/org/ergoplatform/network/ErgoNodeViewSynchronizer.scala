@@ -1,5 +1,7 @@
 package org.ergoplatform.network
 
+import java.nio.ByteBuffer
+
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
@@ -36,13 +38,14 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSeriali
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import scorex.util.serialization.VLQByteBufferReader
 import sigma.VersionContext
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import scala.util.{Failure, Random, Success}
+import scala.util.{Failure, Random, Success, Try}
 
 /**
   * Contains most top-level logic for p2p networking, communicates with lower-level p2p code and other parts of the
@@ -763,6 +766,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def parseBytesExact[M](serializer: ErgoSerializer[M], bytes: Array[Byte]): Try[M] = Try {
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val result = serializer.parse(reader)
+    require(reader.remaining == 0, "Unexpected trailing modifier bytes")
+    result
+  }
+
   /**
     * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
     * to mempool for processing
@@ -775,7 +785,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
     } else {
       // actual tree version is properly set in ErgoTreeSerializer inside
-      val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
+      val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion) {
+        parseBytesExact(ErgoTransactionSerializer, bytes)
+      }
       parseResult match {
         case Success(tx) if id == tx.id =>
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
@@ -799,7 +811,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                                 serializer: ErgoSerializer[M],
                                                 remote: ConnectedPeer): Iterable[M] = {
     modifiers.flatMap { case (id, bytes) =>
-      serializer.parseBytesTry(bytes) match {
+      parseBytesExact(serializer, bytes) match {
         case Success(mod) if id == mod.id =>
           Some(mod)
         case _ =>

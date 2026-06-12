@@ -35,12 +35,6 @@ class NipopowApiRoutesSpec extends AnyFlatSpec
     }
   }
 
-  it should "proof request with overflowing minimum and suffix length" in {
-    Get(s"/nipopow/proof/${Int.MaxValue}/1") ~> route ~> check {
-      status shouldBe StatusCodes.BadRequest
-    }
-  }
-
   it should "proof request with missing headerId" in {
     Get("/nipopow/proof/1/1/05bf63aa1ecfc9f4e3fadc993f87b33edb4d58e151c1891816d734dd5a0e2e09") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest

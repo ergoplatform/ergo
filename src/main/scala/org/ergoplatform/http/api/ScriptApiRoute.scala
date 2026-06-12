@@ -71,7 +71,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
   // todo: unite p2sAddress and p2shAddress, https://github.com/ergoplatform/ergo/issues/2213
-  private def p2sAddressR: Route = (path("p2sAddress") & post & entity(as[CompileRequest])) { compileRequest =>
+  private def p2sAddressR: Route = (path("p2sAddress") & post & withAuth & entity(as[CompileRequest])) { compileRequest =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
         val scriptVersion = Header.scriptFromBlockVersion(bv)
@@ -87,7 +87,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
   }
 
 
-  private def p2shAddressR: Route = (path("p2shAddress") & post & entity(as[CompileRequest])) { compileRequest =>
+  private def p2shAddressR: Route = (path("p2shAddress") & post & withAuth & entity(as[CompileRequest])) { compileRequest =>
     withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
         val scriptVersion = Header.scriptFromBlockVersion(bv)
@@ -104,7 +104,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 
   private def executeWithContextR: Route =
-    (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
+    (path("executeWithContext") & post & withAuth & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env, req.treeVersion.getOrElse(0)).fold(
         e => BadRequest(e.getMessage),
         tree => {

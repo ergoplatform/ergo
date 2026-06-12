@@ -228,6 +228,15 @@ case class WalletApiRoute(readersHolder: ActorRef,
     }
   }
 
+  private def parseExternalBoxes(rawBoxes: Seq[String]): Try[Seq[ErgoBox]] =
+    rawBoxes.foldLeft(Try(Seq.empty[ErgoBox])) { case (acc, rawBox) =>
+      for {
+        boxes <- acc
+        bytes <- Base16.decode(rawBox)
+        box <- ErgoBoxSerializer.parseBytesTry(bytes)
+      } yield boxes :+ box
+    }
+
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
@@ -238,15 +247,19 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
       if (tsr.inputs.isDefined) {
-        val boxesToSpend = tsr.inputs.get
-          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
-        val dataBoxes = tsr.dataInputs.getOrElse(Seq.empty)
-          .flatMap(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry).toOption)
+        val decodedBoxes = for {
+          boxesToSpend <- parseExternalBoxes(tsr.inputs.get)
+          dataBoxes <- parseExternalBoxes(tsr.dataInputs.getOrElse(Seq.empty))
+        } yield boxesToSpend -> dataBoxes
 
-        if (boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size) {
-          r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
-        } else {
-          Future(Failure(new Exception("Can't parse input boxes provided")))
+        decodedBoxes match {
+          case Success((boxesToSpend, dataBoxes))
+              if boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size =>
+            r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
+          case Success(_) =>
+            Future(Failure(new Exception("Input boxes provided do not match transaction inputs")))
+          case Failure(e) =>
+            Future(Failure(new Exception("Can't parse input boxes provided", e)))
         }
       } else {
         r.w.signTransaction(tx, secrets, hints, None, None)

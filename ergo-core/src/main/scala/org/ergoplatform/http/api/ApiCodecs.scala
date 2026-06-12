@@ -73,7 +73,8 @@ trait ApiCodecs extends JsonCodecs {
     for {
       str <- cursor.as[String]
       bytes <- fromTry(Algos.decode(str))
-    } yield groupElemFromBytes(bytes)
+      point <- fromTry(Try(groupElemFromBytes(bytes)))
+    } yield point
   }
 
   implicit val ecPointEncoder: Encoder[EcPointType] = Encoder.instance({ point: EcPointType =>

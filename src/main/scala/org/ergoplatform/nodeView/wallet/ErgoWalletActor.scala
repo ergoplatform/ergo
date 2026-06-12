@@ -4,7 +4,8 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState, DeclinedTransaction, FailedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -64,6 +65,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       case Success(state) =>
         context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool])
+        // transactions rejected by the mempool are releasing inputs possibly reserved
+        // for them during generation
+        context.system.eventStream.subscribe(self, classOf[FailedTransaction])
+        context.system.eventStream.subscribe(self, classOf[DeclinedTransaction])
         self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)
@@ -226,8 +231,11 @@ class ErgoWalletActor(settings: ErgoSettings,
       val dustLimit = settings.walletSettings.dustLimit
       val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
       val inputs = WalletScanLogic.extractInputBoxes(tx)
-      val newState = state.copy(offChainRegistry =
-        state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
+      val newState = state.copy(
+        offChainRegistry =
+          state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans),
+        // inputs possibly reserved for the transaction are tracked by the registry now
+        reservedInputs = state.reservedInputs - tx.id
       )
       context.become(loadedWallet(newState))
 
@@ -273,7 +281,17 @@ class ErgoWalletActor(settings: ErgoSettings,
                 log.error(errorMsg, ex)
                 state.copy(error = Some(errorMsg))
               case Success(updatedState) =>
-                updatedState
+                // recent input reservations are kept, so send requests being verified and
+                // broadcast outside of the wallet stay protected across block boundaries;
+                // only reservations old enough to be provably leaked are dropped, e.g. left
+                // by a send request which died between generation and broadcast (reservations
+                // of transactions which got to the mempool are already removed by ScanOffChain)
+                val prunedReservations = updatedState.reservedInputs.filter {
+                  case (_, reservation) =>
+                    updatedState.getWalletHeight - reservation.height <=
+                      ErgoWalletActor.ReservedInputsTtlBlocks
+                }
+                updatedState.copy(reservedInputs = prunedReservations)
             }
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
@@ -363,9 +381,34 @@ class ErgoWalletActor(settings: ErgoSettings,
       val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
       sender() ! status
 
-    case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
+    case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign, reserveInputs) =>
       val txTry = ergoWalletService.generateTransaction(state, boxSelector, requests, inputsRaw, dataInputsRaw, sign)
+      txTry match {
+        case Success(tx: ErgoTransaction) if reserveInputs =>
+          // reserve inputs, so transactions generated before this one is accepted to the
+          // mempool (and scanned via ScanOffChain) can not double-spend them
+          log.info(s"Reserving inputs of generated transaction ${tx.id}")
+          val reservation =
+            ErgoWalletState.ReservedInputs(state.getWalletHeight, WalletScanLogic.extractInputBoxes(tx))
+          context.become(
+            loadedWallet(state.copy(reservedInputs = state.reservedInputs + (tx.id -> reservation)))
+          )
+        case _ =>
+      }
       sender() ! txTry
+
+    case ReleaseReservedInputs(txId) =>
+      if (state.reservedInputs.contains(txId)) {
+        log.info(s"Releasing reserved inputs of transaction $txId")
+        context.become(loadedWallet(state.copy(reservedInputs = state.reservedInputs - txId)))
+      }
+
+    // transaction rejected by the mempool, releasing inputs possibly reserved for it
+    case FailedTransaction(utx, _) =>
+      self ! ReleaseReservedInputs(utx.id)
+
+    case DeclinedTransaction(utx) =>
+      self ! ReleaseReservedInputs(utx.id)
 
     case GenerateCommitmentsFor(unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt) =>
       val resultTry = ergoWalletService.generateCommitments(state, unsignedTx, externalSecretsOpt, externalInputsOpt, externalDataInputsOpt)
@@ -502,6 +545,14 @@ class ErgoWalletActor(settings: ErgoSettings,
 }
 
 object ErgoWalletActor extends ScorexLogging {
+
+  /**
+    * For how many blocks input reservations of generated transactions are kept.
+    * Reservations are normally removed when the transaction gets to the mempool or is
+    * rejected, so only leaked ones (e.g. left by a send request which died between
+    * generation and broadcast) live that long
+    */
+  val ReservedInputsTtlBlocks: Int = 2
 
   /** Start actor and register its proper closing into coordinated shutdown */
   def apply(settings: ErgoSettings,

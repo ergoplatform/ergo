@@ -159,11 +159,27 @@ case class WalletApiRoute(readersHolder: ActorRef,
                                             inputsRaw: Seq[String],
                                             dataInputsRaw: Seq[String],
                                             verifyFn: ErgoTransaction => Future[Try[UnconfirmedTransaction]],
-                                            processFn: UnconfirmedTransaction => Route): Route = {
-    withWalletOp(_.generateTransaction(requests, inputsRaw, dataInputsRaw).flatMap(txTry => txTry match {
-      case Success(tx) => verifyFn(tx)
-      case Failure(e) => Future(Failure[UnconfirmedTransaction](e))
-    })) {
+                                            processFn: UnconfirmedTransaction => Route,
+                                            send: Boolean): Route = {
+    withWalletOp { w =>
+      val generationF =
+        if (send) {
+          w.generateTransactionForSend(requests, inputsRaw, dataInputsRaw)
+        } else {
+          w.generateTransaction(requests, inputsRaw, dataInputsRaw)
+        }
+      generationF.flatMap {
+        case Success(tx) =>
+          verifyFn(tx).map {
+            case f@Failure(_) if send =>
+              // transaction is not going to be broadcast, releasing inputs reserved for it
+              w.releaseReservedInputs(tx.id)
+              f
+            case other => other
+          }
+        case Failure(e) => Future(Failure[UnconfirmedTransaction](e))
+      }
+    } {
       case Failure(e) => BadRequest(s"Bad request $requests. ${Option(e.getMessage).getOrElse(e.toString)}")
       case Success(tx) => processFn(tx)
     }
@@ -177,7 +193,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
       inputsRaw,
       dataInputsRaw,
       tx => Future(Success(UnconfirmedTransaction(tx, source = None))),
-      utx => ApiResponse(utx.transaction)
+      utx => ApiResponse(utx.transaction),
+      send = false
     )
   }
 
@@ -195,7 +212,8 @@ case class WalletApiRoute(readersHolder: ActorRef,
                               dataInputsRaw: Seq[String]): Route = {
     generateTransactionAndProcess(requests, inputsRaw, dataInputsRaw,
       tx => verifyTransaction(tx, readersHolder, ergoSettings),
-      validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx)
+      validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx),
+      send = true
     )
   }
 

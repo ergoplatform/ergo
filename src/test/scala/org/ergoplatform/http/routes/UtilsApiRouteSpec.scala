@@ -29,6 +29,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val route: Route = ErgoUtilsApiRoute(settings).route
+  val sealedRoute: Route = Route.seal(route)
   val p2pkaddress = P2PKAddress(defaultMinerPk)(settings.addressEncoder)
   val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
   val p2saddress = Pay2SAddress(feeProp)(settings.addressEncoder)
@@ -40,6 +41,16 @@ class UtilsApiRouteSpec extends AnyFlatSpec
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2saddress.toString())
+    }
+  }
+
+  it should "reject invalid ErgoTree data when deriving addresses" in {
+    Get(s"$prefix/ergoTreeToAddress/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Post(s"$prefix/ergoTreeToAddress", "\"00\"") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

@@ -12,7 +12,8 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
-import cats.syntax.either._
+import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.hash.Digest32
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
 
 class JsonSerializationCoreSpec extends ErgoCorePropertyTest
@@ -59,6 +60,23 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       val parsedSecret = json.as[DhtSecretKey].toOption.get
       parsedSecret shouldBe wrappedSecret
     }
+  }
+
+  property("fixed-size byte JSON decoders should reject non-canonical lengths") {
+    val short = "00".asJson
+
+    short.as[ADKey].isLeft shouldBe true
+    short.as[ADDigest].isLeft shouldBe true
+    short.as[Digest32].isLeft shouldBe true
+  }
+
+  property("fixed-size byte JSON decoders should accept canonical lengths") {
+    val digest = ("00" * 32).asJson
+    val stateDigest = ("00" * 33).asJson
+
+    digest.as[ADKey].isRight shouldBe true
+    stateDigest.as[ADDigest].isRight shouldBe true
+    digest.as[Digest32].isRight shouldBe true
   }
 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {

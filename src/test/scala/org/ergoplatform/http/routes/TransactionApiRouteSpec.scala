@@ -126,6 +126,18 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       }
   }
 
+  it should "reject transaction bytes with trailing data" in {
+    val txBytes = Base16.encode(tx.bytes)
+
+    Post(prefix + "/checkBytes", txBytes + "00") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Post(prefix + "/bytes", txBytes + "00") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "get unconfirmed txs from mempool" in {
     Get(prefix + "/unconfirmed") ~> route ~> check {
       status shouldBe StatusCodes.OK

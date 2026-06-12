@@ -14,7 +14,7 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
 
   val maxMessageSize: Int = 2048576
 
-  private val maxMsgSizeWithReserve = maxMessageSize * 4 // due to big ADProofs
+  private val maxMsgSizeWithReserve = MessageConstants.MaxPayloadLength // due to big ADProofs
 
   override val messageCode: MessageCode = 33: Byte
   override val messageName: String = "Modifier"

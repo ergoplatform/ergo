@@ -2,11 +2,13 @@ package org.ergoplatform.serialization
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, Json}
+import org.ergoplatform.Pay2SAddress
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
+import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.settings.ErgoSettingsReader
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalatest.{EitherValues, Inspectors}
@@ -88,6 +90,31 @@ class JsonSerializationSpec extends ErgoCorePropertyTest
           restoredValue shouldEqual requestValue
       }
     }
+  }
+
+  property("wallet request token ids should reject non-canonical lengths") {
+    val ergoSettings = ErgoSettingsReader.read()
+    implicit val paymentRequestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
+    implicit val burnTokensRequestDecoder: Decoder[BurnTokensRequest] = new BurnTokensRequestDecoder()
+
+    val shortTokenId = "00"
+    val invalidAssets = Json.arr(Json.obj("tokenId" -> shortTokenId.asJson, "amount" -> 1L.asJson))
+    val address = Pay2SAddress(FalseTree)(ergoSettings.addressEncoder).toString
+
+    Json.obj(
+      "targetBalance" -> 1L.asJson,
+      "targetAssets" -> Json.obj(shortTokenId -> 1L.asJson)
+    ).as[BoxesRequest].isLeft shouldBe true
+
+    Json.obj(
+      "address" -> address.asJson,
+      "value" -> 1L.asJson,
+      "assets" -> invalidAssets
+    ).as[PaymentRequest].isLeft shouldBe true
+
+    Json.obj(
+      "assetsToBurn" -> invalidAssets
+    ).as[BurnTokensRequest].isLeft shouldBe true
   }
 
   property("AssetIssueRequest should be serialized to json") {

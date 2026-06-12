@@ -114,6 +114,14 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "reject too many block header ids" in {
+    val absentHeaderId = "0000000000000000000000000000000000000000000000000000000000000000"
+
+    Post(prefix + "/headerIds", Seq.fill(16385)(absentHeaderId).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "get header by header id" in {
     Get(prefix + "/" + headerIdString + "/header") ~> route ~> check {
       status shouldBe StatusCodes.OK

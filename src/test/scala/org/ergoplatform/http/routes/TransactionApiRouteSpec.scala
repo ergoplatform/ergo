@@ -240,6 +240,23 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject box and token ids with invalid byte length" in {
+    val shortId = "00"
+    val sealedRoute = Route.seal(route)
+
+    Get(prefix + s"/unconfirmed/inputs/byBoxId/$shortId") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(prefix + s"/unconfirmed/outputs/byBoxId/$shortId") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(prefix + s"/unconfirmed/outputs/byTokenId/$shortId") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "return unconfirmed outputs by exact same registers" in {
     val searchedRegs =
       Map(

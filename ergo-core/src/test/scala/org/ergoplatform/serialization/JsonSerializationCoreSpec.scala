@@ -1,5 +1,6 @@
 package org.ergoplatform.serialization
 
+import cats.syntax.either._
 import io.circe.syntax._
 import io.circe.ACursor
 import org.ergoplatform.ErgoBox

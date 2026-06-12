@@ -1,5 +1,6 @@
 package org.ergoplatform.http.api
 
+import cats.syntax.either._
 import io.circe._
 import io.circe.syntax._
 import org.bouncycastle.util.BigIntegers

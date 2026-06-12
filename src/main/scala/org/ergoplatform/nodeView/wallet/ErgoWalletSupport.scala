@@ -280,74 +280,80 @@ trait ErgoWalletSupport extends ScorexLogging {
                                             boxSelector: BoxSelector,
                                             requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
-                                            dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
-    require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
+                                            dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = {
+    val decodedBoxes = for {
+      userInputs <- ErgoWalletServiceUtils.stringsToBoxes(inputsRaw)
+      dataInputs <- ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw)
+    } yield (userInputs, dataInputs.toIndexedSeq)
 
-    val userInputs = ErgoWalletServiceUtils.stringsToBoxes(inputsRaw)
+    decodedBoxes.flatMap { case (userInputs, dataInputs) =>
+      Try {
+        require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
 
-    val inputBoxes = if (userInputs.nonEmpty) {
-      // make TrackedBox sequence out of boxes provided
-      val boxesToFakeTracked =
-        userInputs.map { box => // declare fake inclusion height in order to confirm the box is onchain
-          TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsScanId))
+        val inputBoxes = if (userInputs.nonEmpty) {
+          // make TrackedBox sequence out of boxes provided
+          val boxesToFakeTracked =
+            userInputs.map { box => // declare fake inclusion height in order to confirm the box is onchain
+              TrackedBox(box.transactionId, box.index, Some(1), None, None, box, Set(PaymentsScanId))
+            }
+          //inputs are provided externally, no need for filtering
+          boxesToFakeTracked
+        } else {
+          state.walletVars.proverOpt match {
+            case Some(_) =>
+              //inputs are to be filtered by the wallet filter, which is removing boxes spent offchain
+              state.getBoxesToSpend.filter(box => state.walletFilter(box))
+            case None =>
+              throw new Exception(s"Cannot generateUnsignedTransaction($requests, $inputsRaw): wallet is locked")
+          }
         }
-      //inputs are provided externally, no need for filtering
-      boxesToFakeTracked
-    } else {
-      state.walletVars.proverOpt match {
-        case Some(_) =>
-          //inputs are to be filtered by the wallet filter, which is removing boxes spent offchain
-          state.getBoxesToSpend.filter(box => state.walletFilter(box))
-        case None =>
-          throw new Exception(s"Cannot generateUnsignedTransaction($requests, $inputsRaw): wallet is locked")
-      }
+
+        require(inputBoxes.nonEmpty, "There must be at least one input box")
+
+        //filter burnTokens requests
+        val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
+        val burnTokensRequestMap = TransactionBuilder.collTokensToMap(
+          requestsWithBurnTokens
+            .toArray
+            .map(_.asInstanceOf[BurnTokensRequest])
+            .flatMap(_.assetsToBurn)
+            .toColl
+        )
+        //filter out tokens on whitelist from wallet and merge the rest with burnTokens from requests
+        val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes.toArray, burnTokensRequestMap)
+
+        //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
+        requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
+          .flatMap { outputs =>
+            require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, state.parameters)), "Minimal ERG value not met")
+            require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
+
+            val assetIssueBox = outputs
+              .zip(requests)
+              .filter(_._2.isInstanceOf[AssetIssueRequest])
+              .map(_._1)
+              .headOption
+
+            val targetBalance = outputs.map(_.value).sum
+            val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
+
+            //add burnTokens to target assets so that they are excluded from the change outputs
+            //thus total outputs assets will be reduced which is interpreted as _token burning_
+            val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensMap)
+
+            val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
+            selectionOpt.map { selectionResult =>
+              val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
+              prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+            } match {
+              case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
+              case Left(e) => Failure(
+                new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
+              )
+            }
+          }
+      }.flatten
     }
-
-    require(inputBoxes.nonEmpty, "There must be at least one input box")
-
-    //filter burnTokens requests
-    val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
-    val burnTokensRequestMap = TransactionBuilder.collTokensToMap(
-      requestsWithBurnTokens
-        .toArray
-        .map(_.asInstanceOf[BurnTokensRequest])
-        .flatMap(_.assetsToBurn)
-        .toColl
-    )
-    //filter out tokens on whitelist from wallet and merge the rest with burnTokens from requests
-    val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes.toArray, burnTokensRequestMap)
-
-    //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
-    requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
-      .flatMap { outputs =>
-        require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, state.parameters)), "Minimal ERG value not met")
-        require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
-
-        val assetIssueBox = outputs
-          .zip(requests)
-          .filter(_._2.isInstanceOf[AssetIssueRequest])
-          .map(_._1)
-          .headOption
-
-        val targetBalance = outputs.map(_.value).sum
-        val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
-
-        //add burnTokens to target assets so that they are excluded from the change outputs
-        //thus total outputs assets will be reduced which is interpreted as _token burning_
-        val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensMap)
-
-        val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
-        val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
-        selectionOpt.map { selectionResult =>
-          val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
-        } match {
-          case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
-          case Left(e) => Failure(
-            new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
-          )
-        }
-      }
-  }.flatten
+  }
 
 }

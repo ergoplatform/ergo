@@ -16,8 +16,14 @@ object ErgoWalletServiceUtils {
   case class DeriveNextKeyResult(result: Try[(DerivationPath, P2PKAddress, ExtendedSecretKey)])
 
   // A helper which is deserializing Base16-encoded boxes to ErgoBox instances
-  def stringsToBoxes(strings: Seq[String]): Seq[ErgoBox] =
-    strings.map(in => Base16.decode(in).flatMap(ErgoBoxSerializer.parseBytesTry)).map(_.get)
+  def stringsToBoxes(strings: Seq[String]): Try[Seq[ErgoBox]] =
+    strings.foldLeft(Try(Seq.empty[ErgoBox])) { case (acc, encodedBox) =>
+      for {
+        boxes <- acc
+        boxBytes <- Base16.decode(encodedBox)
+        box <- ErgoBoxSerializer.parseBytesTry(boxBytes)
+      } yield boxes :+ box
+    }
 
 }
 

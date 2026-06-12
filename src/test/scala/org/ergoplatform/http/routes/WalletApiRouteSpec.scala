@@ -115,6 +115,19 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject invalid external box bytes in commitments request" in {
+    val tx = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get.unsignedTx
+    val request = Json.obj(
+      "tx" -> tx.asJson,
+      "secrets" -> Json.obj(),
+      "inputsRaw" -> Seq("zz").asJson
+    )
+
+    Post(prefix + "/generateCommitments", request) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "generate & send payment transaction" in {
     Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK

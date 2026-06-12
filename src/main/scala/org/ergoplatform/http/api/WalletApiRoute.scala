@@ -190,6 +190,19 @@ case class WalletApiRoute(readersHolder: ActorRef,
     }
   }
 
+  private def decodeExternalBoxes(inputsRawOpt: Option[Seq[String]],
+                                  dataInputsRawOpt: Option[Seq[String]]): Try[(Option[Seq[ErgoBox]], Option[Seq[ErgoBox]])] = {
+    def decodeOpt(rawOpt: Option[Seq[String]]): Try[Option[Seq[ErgoBox]]] =
+      rawOpt.fold[Try[Option[Seq[ErgoBox]]]](Success(None)) { raw =>
+        ErgoWalletServiceUtils.stringsToBoxes(raw).map(Some(_))
+      }
+
+    for {
+      inputs <- decodeOpt(inputsRawOpt)
+      dataInputs <- decodeOpt(dataInputsRawOpt)
+    } yield inputs -> dataInputs
+  }
+
   private def sendTransaction(requests: Seq[TransactionGenerationRequest],
                               inputsRaw: Seq[String],
                               dataInputsRaw: Seq[String]): Route = {
@@ -219,12 +232,15 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
-    val extInputsOpt = gcr.inputs.map(ErgoWalletServiceUtils.stringsToBoxes)
-    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
 
-    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
-      case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(thb) => ApiResponse(thb)
+    decodeExternalBoxes(gcr.inputs, gcr.dataInputs) match {
+      case Failure(e) =>
+        BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success((extInputsOpt, extDataInputsOpt)) =>
+        withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
+          case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+          case Success(thb) => ApiResponse(thb)
+        }
     }
   }
 
@@ -478,11 +494,13 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
-    withWallet { w =>
-      val extInputsOpt = her.inputs.map(ErgoWalletServiceUtils.stringsToBoxes)
-      val extDataInputsOpt = her.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
-
-      w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+    decodeExternalBoxes(her.inputs, her.dataInputs) match {
+      case Failure(e) =>
+        BadRequest(s"Bad request. ${Option(e.getMessage).getOrElse(e.toString)}")
+      case Success((extInputsOpt, extDataInputsOpt)) =>
+        withWallet { w =>
+          w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+        }
     }
   }
 

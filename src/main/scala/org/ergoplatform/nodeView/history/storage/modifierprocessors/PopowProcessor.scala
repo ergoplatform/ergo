@@ -107,8 +107,9 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     * @return PoPow proof if success, Failure instance otherwise
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
-    val proofParams = PoPowParams(m, k, continuous = true)
-    NipopowProverWithDbAlgs.prove(historyReader, headerIdOpt = headerIdOpt, chainSettings)(proofParams)
+    Try(PoPowParams(m, k, continuous = true)).flatMap { proofParams =>
+      NipopowProverWithDbAlgs.prove(historyReader, headerIdOpt = headerIdOpt, chainSettings)(proofParams)
+    }
   }
 
   /**

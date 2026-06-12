@@ -129,9 +129,9 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
   def prove(chain: Seq[PoPowHeader])(params: PoPowParams): Try[NipopowProof] = Try {
     val k = params.k
     val m = params.m
+    val minChainLength = params.minChainLength
 
-    require(params.k >= 1, s"$k < 1")
-    require(chain.lengthCompare(k + m) >= 0, s"Can not prove chain of size < ${k + m}")
+    require(chain.lengthCompare(minChainLength) >= 0, s"Can not prove chain of size < $minChainLength")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
 
     @scala.annotation.tailrec

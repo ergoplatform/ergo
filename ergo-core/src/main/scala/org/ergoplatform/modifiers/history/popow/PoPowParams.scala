@@ -12,5 +12,11 @@ package org.ergoplatform.modifiers.history.popow
   *                     to the block header)
   *
   */
-case class PoPowParams(m: Int, k: Int, continuous: Boolean)
+case class PoPowParams(m: Int, k: Int, continuous: Boolean) {
+  require(m >= 1, s"$m < 1")
+  require(k >= 1, s"$k < 1")
+  require(m <= Int.MaxValue - k, s"$m + $k exceeds Int.MaxValue")
+
+  val minChainLength: Int = m + k
+}
 

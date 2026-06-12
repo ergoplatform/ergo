@@ -17,6 +17,14 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
 
   private def toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
 
+  property("PoPowParams rejects invalid minimum chain lengths") {
+    an[IllegalArgumentException] should be thrownBy PoPowParams(0, 1, continuous = false)
+    an[IllegalArgumentException] should be thrownBy PoPowParams(1, 0, continuous = false)
+    an[IllegalArgumentException] should be thrownBy PoPowParams(Int.MaxValue, 1, continuous = false)
+
+    PoPowParams(1, 1, continuous = false).minChainLength shouldBe 2
+  }
+
   property("updateInterlinks") {
     val chain = genChain(ChainLength)
     val genesis = chain.head

@@ -84,6 +84,12 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "reject chain slices above the maximum header count" in {
+    Get(prefix + "/chainSlice?fromHeight=0&toHeight=16385") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {
       status shouldBe StatusCodes.OK
@@ -111,6 +117,14 @@ class BlocksApiRouteSpec
         )
 
       responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+    }
+  }
+
+  it should "reject too many header ids" in {
+    val headerIdsString = Seq.fill(16385)(Algos.encode(headerIdBytes))
+
+    Post(prefix + "/headerIds", headerIdsString.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

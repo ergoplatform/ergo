@@ -6,9 +6,14 @@ import scorex.core.network.{ConnectedPeer, MaliciousBehaviorException}
 import scorex.crypto.hash.Blake2b256
 import scala.util.Try
 
+object MessageSerializer {
+  val MaxPayloadLength: Int = ModifiersSpec.maxMessageSize * 4
+}
+
 class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
   import MessageConstants.{ChecksumLength, HeaderLength, MagicLength}
+  import MessageSerializer.MaxPayloadLength
 
   import scala.language.existentials
 
@@ -49,7 +54,14 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
         throw MaliciousBehaviorException("Data length is negative!")
       }
 
-      if (length != 0 && byteString.length < length + HeaderLength + ChecksumLength) {
+      if (length > MaxPayloadLength) {
+        throw MaliciousBehaviorException(s"Data length $length exceeds max payload length $MaxPayloadLength")
+      }
+
+      val messageLength =
+        HeaderLength.toLong + (if (length == 0) 0L else ChecksumLength.toLong + length.toLong)
+
+      if (byteString.length.toLong < messageLength) {
         None
       } else {
         //peer is from another network

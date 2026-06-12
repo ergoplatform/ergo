@@ -2,6 +2,7 @@ package org.ergoplatform.network
 
 import java.nio.ByteBuffer
 
+import akka.util.ByteString
 import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -72,6 +73,16 @@ class InvSpecification extends ErgoCorePropertyTest {
 
     // validating checksum
     checkSum shouldBe hash.Blake2b256(Array(modifierTypeId, headersCount.toByte) ++ headerId).take(4)
+  }
+
+  property("inv parser rejects oversized declared payload length") {
+    val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte)
+    val ms = new MessageSerializer(Seq(InvSpec), magic)
+
+    val oversizedLength = 16 * 1024 * 1024
+    val msgHeader = ByteString(magic ++ Array(InvSpec.messageCode) ++ Ints.toByteArray(oversizedLength))
+
+    ms.deserialize(msgHeader, None).isFailure shouldBe true
   }
 
 }

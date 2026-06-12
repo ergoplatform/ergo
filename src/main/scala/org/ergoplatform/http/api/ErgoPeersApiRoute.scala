@@ -17,6 +17,7 @@ import org.ergoplatform.settings.RESTApiSettings
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext
+import scala.util.{Failure, Success, Try}
 
 class ErgoPeersApiRoute(peerManager: ActorRef,
                         networkController: ActorRef,
@@ -81,16 +82,27 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
     ApiResponse(result)
   }
 
-  private val addressAndPortRegexp = "([\\w\\.]+):(\\d{1,5})".r
+  private val addressAndPortRegexp = "^([\\w\\.]+):(\\d{1,5})$".r
+
+  private def parsePeerAddress(value: String): Try[InetSocketAddress] = value match {
+    case addressAndPortRegexp(hostName, portString) =>
+      Try(portString.toInt).flatMap { port =>
+        if (port > 65535) {
+          Failure(new IllegalArgumentException("port is out of range"))
+        } else {
+          Try(new InetSocketAddress(InetAddress.getByName(hostName), port))
+        }
+      }
+    case _ =>
+      Failure(new IllegalArgumentException("invalid peer address"))
+  }
 
   def connect: Route = (path("connect") & post & withAuth & entity(as[Json])) { json =>
-    val maybeAddress = json.asString.flatMap(addressAndPortRegexp.findFirstMatchIn)
-    maybeAddress match {
+    json.asString.map(parsePeerAddress) match {
       case None => ApiError.BadRequest
-      case Some(addressAndPort) =>
-        val host = InetAddress.getByName(addressAndPort.group(1))
-        val port = addressAndPort.group(2).toInt
-        networkController ! ConnectTo(PeerInfo.fromAddress(new InetSocketAddress(host, port)))
+      case Some(Failure(_)) => ApiError.BadRequest
+      case Some(Success(address)) =>
+        networkController ! ConnectTo(PeerInfo.fromAddress(address))
         ApiResponse.OK
     }
   }

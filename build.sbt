@@ -190,9 +190,8 @@ inConfig(IntegrationTest)(Seq(
 
 // Cap how many forked test JVMs run concurrently. `+=` can only *reduce* concurrency, never
 // raise it, so this is safe against RAM blowup: worst case the integration suites stay
-// sequential. Raise the limit once parallel runs prove stable on the host (see CLAUDE.md notes
-// on fork/tip flakiness). Unit tests run in a single forked group by default, so they are
-// unaffected by this limit.
+// sequential. Raise the limit once parallel runs prove stable on the host. Unit tests run in
+// a single forked group by default, so they are unaffected by this limit.
 Global / concurrentRestrictions += Tags.limit(Tags.ForkedTestGroup, 2)
 
 docker / dockerfile := {

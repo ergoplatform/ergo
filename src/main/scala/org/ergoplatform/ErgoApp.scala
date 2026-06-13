@@ -4,6 +4,7 @@ import akka.Done
 import akka.actor.{ActorRef, ActorSystem, CoordinatedShutdown}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.ServerBinding
+import akka.http.scaladsl.HttpsConnectionContext
 import org.ergoplatform.http._
 import org.ergoplatform.http.api._
 import org.ergoplatform.local._
@@ -13,7 +14,13 @@ import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker}
 import org.ergoplatform.nodeView.history.ErgoSyncInfoMessageSpec
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader, NetworkType, ScorexSettings}
+import org.ergoplatform.settings.{
+  Args,
+  ErgoSettings,
+  ErgoSettingsReader,
+  NetworkType,
+  ScorexSettings
+}
 import scorex.core.api.http._
 import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.ShutdownNetwork
@@ -46,6 +53,14 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   implicit private def scorexSettings: ScorexSettings = ergoSettings.scorexSettings
 
+  // Build the REST API TLS context eagerly so a misconfigured keystore aborts
+  // startup cleanly here, before the actor system is bootstrapped.
+  private val apiHttpsContext: Option[HttpsConnectionContext] =
+    scorexSettings.restApi.https match {
+      case Some(https) if https.enabled => Some(ApiHttpsContext.fromSettings(https))
+      case _                            => None
+    }
+
   implicit private val actorSystem: ActorSystem = ActorSystem(
     scorexSettings.network.agentName
   )
@@ -61,7 +76,10 @@ class ErgoApp(args: Args) extends ScorexLogging {
   private val externalSocketAddress: Option[InetSocketAddress] = {
     scorexSettings.network.declaredAddress orElse {
       upnpGateway.map(u =>
-        new InetSocketAddress(u.externalAddress, scorexSettings.network.bindAddress.getPort)
+        new InetSocketAddress(
+          u.externalAddress,
+          scorexSettings.network.bindAddress.getPort
+        )
       )
     }
   }
@@ -130,15 +148,15 @@ class ErgoApp(args: Args) extends ScorexLogging {
         ModifiersSpec.messageCode           -> ergoNodeViewSynchronizerRef,
         ErgoSyncInfoMessageSpec.messageCode -> ergoNodeViewSynchronizerRef,
         // utxo set snapshot exchange related messages
-        GetSnapshotsInfoSpec.messageCode    -> ergoNodeViewSynchronizerRef,
-        SnapshotsInfoSpec.messageCode       -> ergoNodeViewSynchronizerRef,
-        GetManifestSpec.messageCode         -> ergoNodeViewSynchronizerRef,
-        ManifestSpec.messageCode            -> ergoNodeViewSynchronizerRef,
-        GetUtxoSnapshotChunkSpec.messageCode-> ergoNodeViewSynchronizerRef,
-        UtxoSnapshotChunkSpec.messageCode   -> ergoNodeViewSynchronizerRef,
+        GetSnapshotsInfoSpec.messageCode     -> ergoNodeViewSynchronizerRef,
+        SnapshotsInfoSpec.messageCode        -> ergoNodeViewSynchronizerRef,
+        GetManifestSpec.messageCode          -> ergoNodeViewSynchronizerRef,
+        ManifestSpec.messageCode             -> ergoNodeViewSynchronizerRef,
+        GetUtxoSnapshotChunkSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        UtxoSnapshotChunkSpec.messageCode    -> ergoNodeViewSynchronizerRef,
         // nipopows exchange related messages
-        GetNipopowProofSpec.messageCode     -> ergoNodeViewSynchronizerRef,
-        NipopowProofSpec.messageCode        -> ergoNodeViewSynchronizerRef
+        GetNipopowProofSpec.messageCode -> ergoNodeViewSynchronizerRef,
+        NipopowProofSpec.messageCode    -> ergoNodeViewSynchronizerRef
       )
       // Launching PeerSynchronizer actor which is then registering itself at network controller
       if (ergoSettings.scorexSettings.network.peerDiscovery) {
@@ -181,26 +199,26 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
   private val apiRoutes: Seq[ApiRoute] = Seq(
-    EmissionApiRoute(ergoSettings),
-    ErgoUtilsApiRoute(ergoSettings),
-    BlockchainApiRoute(readersHolderRef, ergoSettings, indexerOpt),
-    ErgoPeersApiRoute(
-      peerManagerRef,
-      networkControllerRef,
-      syncTracker,
-      deliveryTracker,
-      scorexSettings.restApi
-    ),
-    InfoApiRoute(statsCollectorRef, scorexSettings.restApi),
-    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
-    TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
-    UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
-    ScriptApiRoute(readersHolderRef, ergoSettings),
-    ScanApiRoute(readersHolderRef, ergoSettings),
-    NodeApiRoute(ergoSettings)
-  ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
+      EmissionApiRoute(ergoSettings),
+      ErgoUtilsApiRoute(ergoSettings),
+      BlockchainApiRoute(readersHolderRef, ergoSettings, indexerOpt),
+      ErgoPeersApiRoute(
+        peerManagerRef,
+        networkControllerRef,
+        syncTracker,
+        deliveryTracker,
+        scorexSettings.restApi
+      ),
+      InfoApiRoute(statsCollectorRef, scorexSettings.restApi),
+      BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+      NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+      TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+      WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
+      UtxoApiRoute(readersHolderRef, scorexSettings.restApi),
+      ScriptApiRoute(readersHolderRef, ergoSettings),
+      ScanApiRoute(readersHolderRef, ergoSettings),
+      NodeApiRoute(ergoSettings)
+    ) ++ minerRefOpt.map(minerRef => MiningApiRoute(minerRef, ergoSettings)).toSeq
 
   private val swaggerRoute = SwaggerRoute(scorexSettings.restApi, swaggerConfig)
   private val panelRoute   = NodePanelRoute()
@@ -253,10 +271,19 @@ class ErgoApp(args: Args) extends ScorexLogging {
     }
 
     val bindAddress = scorexSettings.restApi.bindAddress
-
-    Http()
+    val builder = Http()
       .newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort)
-      .bindFlow(httpService.compositeRoute)
+
+    val configuredBuilder = apiHttpsContext match {
+      case Some(httpsContext) =>
+        log.info(s"Serving REST API over HTTPS at ${bindAddress.toString}")
+        builder.enableHttps(httpsContext)
+      case None =>
+        log.info(s"Serving REST API over HTTP at ${bindAddress.toString}")
+        builder
+    }
+
+    configuredBuilder.bindFlow(httpService.compositeRoute)
   }
 }
 
@@ -289,8 +316,6 @@ object ErgoApp extends ScorexLogging {
 
   /** Intentional user invoked remote shutdown */
   case object RemoteShutdown extends CoordinatedShutdown.Reason
-
-
 
   /** hard application exit in case actor system is not started yet*/
   def forceStopApplication(code: Int = 1): Nothing = sys.exit(code)

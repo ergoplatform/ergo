@@ -12,12 +12,21 @@ import scala.concurrent.duration._
 
 case class LoggingSettings(level: String)
 
+case class ApiHttpsSettings(
+  enabled: Boolean,
+  keyStorePath: Option[String],
+  keyStorePassword: Option[String],
+  keyStoreType: Option[String],
+  allowInsecurePublicUrl: Option[Boolean]
+)
+
 case class RESTApiSettings(
   bindAddress: InetSocketAddress,
   apiKeyHash: Option[String],
   corsAllowedOrigin: Option[String],
   timeout: FiniteDuration,
-  publicUrl: Option[URL]
+  publicUrl: Option[URL],
+  https: Option[ApiHttpsSettings] = None
 )
 
 case class NetworkSettings(

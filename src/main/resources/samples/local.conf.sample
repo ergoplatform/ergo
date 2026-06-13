@@ -45,5 +45,22 @@ scorex {
 
     # Hex-encoded Blake2b256 hash of an API key. Should be 64-chars long Base16 string.
     # apiKeyHash = "1111"
+
+    # Serve the REST API over HTTPS/TLS to protect the API key in transit.
+    # See docs/https-api.md for keystore creation and Let's Encrypt conversion.
+    # Generate a self-signed keystore for local use (the SAN is required by modern
+    # clients; list every hostname/IP clients will connect to):
+    #   keytool -genkeypair -alias ergo-api -keyalg RSA -keysize 2048 -validity 365 \
+    #     -storetype PKCS12 -keystore ergo-api.p12 -storepass changeit \
+    #     -dname "CN=localhost" -ext "SAN=dns:localhost,ip:127.0.0.1"
+    # https {
+    #   enabled = true
+    #   keyStorePath = "/path/to/ergo-api.p12"
+    #   keyStorePassword = ${?ERGO_API_KEYSTORE_PASSWORD}
+    #   keyStoreType = "PKCS12"
+    # }
+
+    # When https is enabled, advertise the matching https:// endpoint:
+    # publicUrl = "https://example.com:9053"
   }
 }

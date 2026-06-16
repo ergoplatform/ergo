@@ -743,10 +743,23 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     poolAfter.contains(tx1.transaction.id) shouldBe false
     poolAfter.contains(tx2.transaction.id) shouldBe false
 
-    // (Loser case skipped: after TX3 replaces TX1+TX2 via acceptIfNoDoubleSpend,
-    //  pool.inputs loses the spent box entries due to put-before-remove ordering
-    //  in acceptIfNoDoubleSpend, so a subsequent lower-fee double-spender is not
-    //  detected. This is a known production bug.)
+    // After TX3 replaces TX1+TX2, a lower-fee double-spender should be detected and rejected
+    val tx4FeeOut = new ErgoBoxCandidate(boxA.value - 200000L, feeProp, creationHeight = 0)
+    val tx4ChangeOut = new ErgoBoxCandidate(boxB.value + 200000L, trueTree, creationHeight = 0)
+    val tx4 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(
+        new Input(boxA.id, emptyProverResult),
+        new Input(boxB.id, emptyProverResult)
+      ),
+      IndexedSeq(tx4FeeOut, tx4ChangeOut)
+    ), None)
+
+    tx4.transaction.statelessValidity().isSuccess shouldBe true
+
+    val (poolFinal, outcome4) = poolAfter.process(tx4, wus)
+    outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+    poolFinal.size shouldBe 1
+    poolFinal.contains(tx3.transaction.id) shouldBe true
   }
 
   it should "not produce duplicate ids when stale registry entry prevents proper removal" in {

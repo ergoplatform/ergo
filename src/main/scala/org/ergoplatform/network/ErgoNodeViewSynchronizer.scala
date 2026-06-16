@@ -87,6 +87,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
 
+  // After this many failed delivery checks, fallback to Equal/Older peers instead of the same peer
+  private val FallbackToEqualPeerThreshold = 5
+
   // It could be the case that adversarial peers are sending sync messages to the node to cause
   // resource exhaustion. To prevent it, we do not provide an answer for sync message, if previous one was sent
   // no more than `PerPeerSyncLockTime` milliseconds ago.
@@ -1283,7 +1286,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
               }
               val newPeer = if (newPeerCandidates.isEmpty) {
-                if (checksDone > 5) {
+                if (checksDone > FallbackToEqualPeerThreshold) {
                   // after many failed attempts, try Equal peers instead of the same peer
                   val equalPeers = syncTracker.peersByStatus.getOrElse(Equal, Seq.empty)
                   val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)

@@ -169,8 +169,9 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
   property("incoming connection should be denied when at limit") {
     withFixture { f =>
       implicit val system = f.system
-      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
-      val incomingLimit = Math.max(30 / 2, 30 - NetworkController.OutgoingConnections)
+      val maxConnections = 30
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = maxConnections)
+      val incomingLimit = Math.max(maxConnections / 2, maxConnections - NetworkController.OutgoingConnections)
 
       val remoteAddresses = (1 to incomingLimit).map { i =>
         new InetSocketAddress(s"192.168.1.$i", 9000 + i)
@@ -235,7 +236,21 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
   property("outgoing connection scheduler should respect maxConnections") {
     withFixture { f =>
-      f.createController(maxConnections = 5)
+      val maxConnections = 5
+      val (controller, peerManagerProbe, tcpManagerProbe) = f.createController(maxConnections = maxConnections)
+
+      // Fill up to incomingLimit with incoming connections
+      val incomingLimit = Math.max(maxConnections / 2, maxConnections - NetworkController.OutgoingConnections)
+      val incomingAddresses = (1 to incomingLimit).map { i =>
+        new InetSocketAddress(s"10.0.0.$i", 8000 + i)
+      }
+      incomingAddresses.foreach { addr =>
+        f.establishIncomingConnection(controller, peerManagerProbe, addr)
+      }
+
+      // Now the scheduler should not attempt new outgoing connections since we are at maxConnections
+      // We verify by checking that tcpManagerProbe does not receive unexpected messages
+      tcpManagerProbe.expectNoMessage(500.millis)
       succeed
     }
   }

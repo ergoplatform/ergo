@@ -11,7 +11,7 @@ class NipopowVerifierSpec extends AnyPropSpec with Matchers {
   import org.ergoplatform.utils.generators.ChainGenerator._
 
 
-  private val poPowParams = PoPowParams(30, 30, continuous = false)
+  private val poPowParams = PoPowParams(30, 30, continuous = false).get
   val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
 
   property("processes new proofs") {

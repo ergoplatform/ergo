@@ -1,6 +1,6 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRef, ActorRefFactory}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
@@ -12,6 +12,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.NewBlockMined
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
@@ -21,7 +22,7 @@ import scorex.util.ModifierId
 import scala.concurrent.Future
 
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                         (implicit val context: ActorSystem) extends ErgoBaseApiRoute with ApiCodecs {
 
   // Limit for requests returning headers, to avoid too heavy requests
   private val MaxHeaders = 16384
@@ -125,12 +126,20 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
-      log.info("Received a new valid block through the API: " + block)
+      log.info(s"Received a new valid block through API: ${block.id}")
 
       viewHolderRef ! LocallyGeneratedModifier(block.header)
       block.blockSections.foreach {
         viewHolderRef ! LocallyGeneratedModifier(_)
       }
+
+      // Immediately announce newly mined block to network BEFORE local application.
+      // This reduces propagation latency by avoiding the wait for NodeViewHolder
+      // to fully validate and apply the block. LocalBlockApplied arrives later
+      // and skips broadcast since the block was already announced.
+      // TODO: Consider switching to direct actor message for lower latency
+      //       instead of event bus publish.
+      context.eventStream.publish(NewBlockMined(block.header))
 
       ApiResponse.OK
     } else {

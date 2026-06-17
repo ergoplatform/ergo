@@ -188,12 +188,16 @@ inConfig(IntegrationTest)(Seq(
   scalacOptions ++= Seq("-Xasync")
 ))
 
-// Cap how many forked test JVMs run concurrently. `+=` can only *reduce* concurrency, never
-// raise it, so this is safe against RAM blowup: worst case the integration suites stay
-// sequential. Raise the limit once parallel runs prove stable on the host (see CLAUDE.md notes
-// on fork/tip flakiness). Unit tests run in a single forked group by default, so they are
-// unaffected by this limit.
-Global / concurrentRestrictions += Tags.limit(Tags.ForkedTestGroup, 2)
+// Cap how many forked test JVMs run concurrently.  sbt's default
+// concurrentRestrictions already contains Tags.limit(Tags.ForkedTestGroup, 1);
+// simply += adds a second, looser rule and the strictest wins, so the
+// 2-way parallelism would be a no-op.  We replace the default rule by
+// keeping the other defaults and setting ForkedTestGroup to 2.
+Global / concurrentRestrictions := Seq(
+  Tags.limitAll(8),
+  Tags.limit(Tags.ForkedTestGroup, 2),
+  Tags.limit(Tags.Test, 1)
+)
 
 docker / dockerfile := {
   val configDevNet = (IntegrationTest / resourceDirectory).value / "devnetTemplate.conf"

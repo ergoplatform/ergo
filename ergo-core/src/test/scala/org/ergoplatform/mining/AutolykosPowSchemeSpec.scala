@@ -35,7 +35,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
         require(HeaderSerializer.bytesWithoutPow(h).last == 0)
         val msg2 = Blake2b256(HeaderSerializer.bytesWithoutPow(h).dropRight(1))
 
-        val invalidHeader2 = Iterator.iterate(0L)(_ + 1000L).take(10)
+        val invalidHeader2 = Iterator.iterate(0L)(_ + 1000L).take(50)
           .flatMap { startNonce =>
             pow.checkNonces(ver, hbs, msg2, sk, x, b, N, startNonce, startNonce + 1000)
               .map(s => h.copy(powSolution = s))
@@ -43,6 +43,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
           .find(pow.validate(_).isFailure)
 
         invalidHeader2 shouldBe defined
+        pow.validate(invalidHeader2.get) shouldBe 'failure
       }
     }
   }

@@ -48,7 +48,6 @@ class RecoverableModifierError(val message: String, val modifierId: ModifierId, 
 /** Special case of recoverable error when parent header is not found in history.
   * This allows the node to specifically request the missing parent header from peers.
   */
-@SuppressWarnings(Array("org.wartremover.warts.Null"))
 class ParentHeaderNotFoundError(val parentId: ModifierId, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value)
     extends RecoverableModifierError(s"Parent header with id $parentId is not defined", modifierId, modifierTypeId, None)
 

@@ -301,7 +301,15 @@ object CandidateGenerator extends ScorexLogging {
       s"CandidateGenerator-${Random.alphanumeric.take(5).mkString}"
     )
 
-  /** checks that current candidate block is cached with given `txs` */
+  /**
+   * Checks that current candidate block is cached with given `txs` and `minerPk`.
+   *
+   * Note: candidate cache is a single slot keyed by `minerPk`. If multiple miner public keys
+   * are used concurrently (e.g. node’s own miner and external `/mining/candidateWithTxsAndPk`
+   * callers), each different `minerPk` will evict the previous cached candidate and trigger
+   * full candidate generation (mempool packing + state proofs). This endpoint assumes a single
+   * active miner public key at a time for optimal performance.
+   */
   def cachedFor(
     candidateOpt: Option[Candidate],
     txs: Seq[ErgoTransaction],

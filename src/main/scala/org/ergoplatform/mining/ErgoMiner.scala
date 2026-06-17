@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props, Stash}
 import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
-import org.ergoplatform.nodeView.state.DigestState
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
@@ -127,7 +127,7 @@ class ErgoMiner(
     case StartMining
         if minerState.secretKeyOpt.isDefined || ergoSettings.nodeSettings.useExternalMiner =>
       // Check if blockchain is synced before starting mining
-      viewHolderRef ! GetDataFromCurrentView[DigestState, Unit] { v =>
+      viewHolderRef ! GetDataFromCurrentView[ErgoState[_], Unit] { v =>
         val headersHeight = v.history.headersHeight
         val fullBlockHeight = v.history.fullBlockHeight
         if (isBlockchainNearlySynced(headersHeight, fullBlockHeight)) {

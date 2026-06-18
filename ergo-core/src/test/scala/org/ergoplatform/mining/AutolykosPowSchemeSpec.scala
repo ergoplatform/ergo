@@ -43,7 +43,6 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
           .find(pow.validate(_).isFailure)
 
         invalidHeader2 shouldBe defined
-        pow.validate(invalidHeader2.get) shouldBe 'failure
       }
     }
   }

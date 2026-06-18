@@ -190,6 +190,9 @@ class ErgoMiner(
     case ReadMinerPk => // used in /mining/rewardAddress API method
       sender() ! StatusReply.success(minerState.publicKey)
 
+    // asked in "starting" state, could arrive after another signal which cause switching to started state
+    case _: Readers =>
+
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")
 

@@ -2720,6 +2720,8 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
     post:
+      security:
+        - ApiKeyAuth: [api_key]
       summary: Send a mined block
       operationId: sendMinedBlock
       tags:

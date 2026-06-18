@@ -194,9 +194,9 @@ inConfig(IntegrationTest)(Seq(
 // 2-way parallelism would be a no-op.  We replace the default rule by
 // keeping the other defaults and setting ForkedTestGroup to 2.
 Global / concurrentRestrictions := Seq(
-  Tags.limitAll(8),
+  Tags.limitAll(math.max(1, java.lang.Runtime.getRuntime.availableProcessors())),
   Tags.limit(Tags.ForkedTestGroup, 2),
-  Tags.limit(Tags.Test, 1)
+  Tags.exclusiveGroup(Tags.Clean)
 )
 
 docker / dockerfile := {

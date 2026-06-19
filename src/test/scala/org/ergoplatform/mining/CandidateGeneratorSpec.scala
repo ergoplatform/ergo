@@ -28,7 +28,10 @@ import sigma.data.ProveDlog
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
+import java.util.concurrent.atomic.AtomicInteger
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -55,6 +58,25 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   }
 
   private val defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
+
+  private class CountingFakePowScheme(k: Int, n: Int) extends DefaultFakePowScheme(k, n) {
+    val validateCalls = new AtomicInteger(0)
+    private val validateCallsByHeaderId = TrieMap.empty[String, AtomicInteger]
+    private val rejectedHeaderIds = TrieMap.empty[String, Unit]
+
+    def callsFor(header: Header): Int =
+      validateCallsByHeaderId.get(header.id).fold(0)(_.get)
+
+    def reject(header: Header): Unit =
+      rejectedHeaderIds.put(header.id, ())
+
+    override def validate(header: Header): Try[Unit] = {
+      validateCalls.incrementAndGet()
+      validateCallsByHeaderId.getOrElseUpdate(header.id, new AtomicInteger(0)).incrementAndGet()
+      if (rejectedHeaderIds.contains(header.id)) Failure(new Exception("Rejected by test PoW scheme"))
+      else super.validate(header)
+    }
+  }
 
   it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
     ActorSystem()
@@ -167,6 +189,104 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         true
     }
 
+    system.terminate()
+  }
+
+  it should "validate current candidate solution only once" in new TestKit(
+    ActorSystem()
+  ) {
+    val testProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+
+    val countingPowScheme = new CountingFakePowScheme(
+      defaultSettings.chainSettings.powScheme.k,
+      defaultSettings.chainSettings.powScheme.n
+    )
+    val settingsWithCountingPow = defaultSettings.copy(
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = countingPowScheme)
+    )
+
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settingsWithCountingPow)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        settingsWithCountingPow
+      )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+
+    val block = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        settingsWithCountingPow.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+    }
+
+    countingPowScheme.validateCalls.set(0)
+    candidateGenerator.tell(block.header.powSolution, testProbe.ref)
+    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
+
+    countingPowScheme.validateCalls.get() shouldBe 1
+    system.terminate()
+  }
+
+  it should "validate previous candidate solution only once after regeneration" in new TestKit(
+    ActorSystem()
+  ) {
+    val testProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+
+    val countingPowScheme = new CountingFakePowScheme(
+      defaultSettings.chainSettings.powScheme.k,
+      defaultSettings.chainSettings.powScheme.n
+    )
+    val settingsWithCountingPow = defaultSettings.copy(
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = countingPowScheme)
+    )
+
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settingsWithCountingPow)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        settingsWithCountingPow
+      )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+
+    val previousBlock = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        settingsWithCountingPow.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+    }
+
+    expectNoMessage(10.millis)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+
+    val currentCandidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) => candidate
+    }
+    val currentBlockWithPreviousSolution =
+      CandidateGenerator.completeBlock(currentCandidate.candidateBlock, previousBlock.header.powSolution)
+    currentBlockWithPreviousSolution.header.id shouldNot be(previousBlock.header.id)
+    countingPowScheme.reject(currentBlockWithPreviousSolution.header)
+
+    val currentHeaderCallsBefore = countingPowScheme.callsFor(currentBlockWithPreviousSolution.header)
+    val previousHeaderCallsBefore = countingPowScheme.callsFor(previousBlock.header)
+
+    candidateGenerator.tell(previousBlock.header.powSolution, testProbe.ref)
+    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
+
+    countingPowScheme.callsFor(currentBlockWithPreviousSolution.header) - currentHeaderCallsBefore shouldBe 1
+    countingPowScheme.callsFor(previousBlock.header) - previousHeaderCallsBefore shouldBe 1
     system.terminate()
   }
 

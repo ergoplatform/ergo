@@ -10,6 +10,7 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Pa
 import org.ergoplatform.utils.{ErgoTestHelpers, RandomWrapper}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
 import sigma.ast.ByteArrayConstant
 import sigma.interpreter.{ContextExtension, ProverResult}
@@ -23,6 +24,13 @@ class ErgoMemPoolSpec extends AnyFlatSpec
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
+  private def feeTx(inputSeed: Byte, fee: Long): ErgoTransaction = {
+    ErgoTransaction(
+      IndexedSeq(new Input(ADKey @@ Array.fill(32)(inputSeed), emptyProverResult)),
+      IndexedSeq(new ErgoBoxCandidate(fee, feeProp, creationHeight = 0))
+    )
+  }
 
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState(settings)
@@ -415,6 +423,31 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     }
     pool.size shouldBe 0
     pool.stats.takenTxns shouldBe (family_depth + 1) * txs.size
+  }
+
+  it should "not recommend fee below node minimal fee" in {
+    val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
+    val minimalFee = feeSettings.nodeSettings.minimalFeeAmount
+    val now = System.currentTimeMillis()
+    val lowFeeHistogram = FeeHistogramBin(nTxns = 1, totalFee = minimalFee / 2) ::
+      List.fill(MemPoolStatistics.nHistogramBins - 1)(FeeHistogramBin(0, 0))
+    val stats = MemPoolStatistics(now, takenTxns = 1, snapTime = now, histogram = lowFeeHistogram)
+    val pool = new ErgoMemPool(OrderedTxPool.empty(feeSettings), stats, SortingOption.FeePerByte)(feeSettings)
+
+    pool.getRecommendedFee(expectedWaitTimeMinutes = 0, txSize = 1024) shouldBe minimalFee
+  }
+
+  it should "not let idle uptime dominate expected wait time" in {
+    val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
+    val minimalFee = feeSettings.nodeSettings.minimalFeeAmount
+    val poolWithHigherFeeTx = ErgoMemPool.empty(feeSettings)
+      .put(UnconfirmedTransaction(feeTx(inputSeed = 1, fee = minimalFee * 100), None))
+    val now = System.currentTimeMillis()
+    val staleMeasurementStart = now - 365L * 24 * 60 * 60 * 1000
+    val staleStats = MemPoolStatistics(staleMeasurementStart, takenTxns = 1, snapTime = now)
+    val pool = new ErgoMemPool(poolWithHigherFeeTx.pool, staleStats, SortingOption.FeePerByte)(feeSettings)
+
+    pool.getExpectedWaitTime(txFee = minimalFee, txSize = 1024) should be <= MemPoolStatistics.measurementIntervalMsec.toLong
   }
 
   it should "put not adding transaction twice" in {

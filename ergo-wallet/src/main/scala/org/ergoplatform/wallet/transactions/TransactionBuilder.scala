@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.transactions
 
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
-import org.ergoplatform.sdk.wallet.{AssetUtils, Constants, TokensMap}
+import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
 import org.ergoplatform.wallet.boxes.{BoxSelector, DefaultBoxSelector}
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
@@ -74,7 +74,12 @@ object TransactionBuilder {
         )
         paymentBoxes ++ Vector(feeBox, changeBox)
       }
-    val unsignedInputs = unsignedInputsFromIds(inputIds)
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }.toIndexedSeq
 
     new UnsignedErgoLikeTransaction(
       unsignedInputs,
@@ -123,7 +128,13 @@ object TransactionBuilder {
       Array.empty[(ErgoBox.TokenId, Long)].toColl,
       Map.empty
     )
-    val unsignedInputs = unsignedInputsFromIds(inputIds)
+    val unsignedInputs = inputIds
+      .flatMap { id =>
+        Base16.decode(id)
+          .map(x => new UnsignedInput(ADKey @@ x))
+          .toOption
+      }
+      .toIndexedSeq
 
     val dataInputs = IndexedSeq.empty
     val outputs = if (changeAmt == 0) {
@@ -150,15 +161,6 @@ object TransactionBuilder {
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toArray.map {t => t._1.toTokenId -> t._2}.toColl
-
-  private def unsignedInputsFromIds(inputIds: Array[String]): IndexedSeq[UnsignedInput] =
-    inputIds.map { id =>
-      val bytes = Base16.decode(id)
-        .getOrElse(throw new IllegalArgumentException("Input id should be valid hex"))
-      require(bytes.length == Constants.ModifierIdLength,
-        s"Input id should be ${Constants.ModifierIdLength} bytes")
-      new UnsignedInput(ADKey @@ bytes)
-    }.toIndexedSeq
 
   private def validateStatelessChecks(inputs: IndexedSeq[ErgoBox], dataInputs: IndexedSeq[DataInput],
     outputCandidates: Seq[ErgoBoxCandidate]): Unit = {

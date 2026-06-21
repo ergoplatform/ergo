@@ -167,6 +167,8 @@ jobs:
            key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
        - name: Runs it node tests
+         env:
+           DOCKER_BUILDKIT: "0"
          run: |
            cd it
            mkdir tmp

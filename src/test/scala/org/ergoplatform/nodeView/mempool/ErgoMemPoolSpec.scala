@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -524,6 +524,53 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       outputCandidates = IndexedSeq(o3)), None)
     val (_, outcome2) = pool.process(tx3, wus)
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
+  }
+
+
+  it should "boost parent weight when child references it via dataInputs (Issue #1156)" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val trueTree = TrueTree
+
+    val boxes = wus.takeBoxes(100).filter(_.ergoTree == trueTree).take(2).toIndexedSeq
+    require(boxes.size >= 2, "Need at least 2 spendable boxes for this test")
+    val parentInputBox = boxes(0)
+    val childInputBox = boxes(1)
+
+    val parentOutValue = parentInputBox.value / 3
+    val parentFeeValue = parentInputBox.value - parentOutValue * 2
+    val parentOutput1 = new ErgoBoxCandidate(parentOutValue, trueTree, creationHeight = 0)
+    val parentOutput2 = new ErgoBoxCandidate(parentOutValue, trueTree, creationHeight = 0)
+    val parentFee = new ErgoBoxCandidate(parentFeeValue, feeProp, creationHeight = 0)
+    val txParent = ErgoTransaction(
+      IndexedSeq(new Input(parentInputBox.id, ProverResult.empty)),
+      IndexedSeq.empty,
+      IndexedSeq(parentOutput1, parentOutput2, parentFee)
+    )
+
+    var pool = ErgoMemPool.empty(settings)
+    pool = pool.put(UnconfirmedTransaction(txParent, None))
+    val parentWeightBefore = pool.pool.transactionsRegistry(txParent.id).weight
+
+    val childFeeValue = childInputBox.value
+    val childFee = new ErgoBoxCandidate(childFeeValue, feeProp, creationHeight = 0)
+    val txChild = ErgoTransaction(
+      IndexedSeq(new Input(childInputBox.id, ProverResult.empty)),
+      IndexedSeq(DataInput(txParent.outputs(0).id), DataInput(txParent.outputs(1).id)),
+      IndexedSeq(childFee)
+    )
+
+    pool = pool.put(UnconfirmedTransaction(txChild, None))
+    val childWeight = pool.pool.transactionsRegistry(txChild.id).weight
+    val parentWeightAfter = pool.pool.transactionsRegistry(txParent.id).weight
+
+    parentWeightAfter shouldBe parentWeightBefore + childWeight
+
+    pool = pool.removeTxAndDoubleSpends(txChild)
+    pool.pool.transactionsRegistry(txParent.id).weight shouldBe parentWeightBefore
   }
 
 }

@@ -193,7 +193,10 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       this
     } else {
 
-      val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
+      val uniqueTxIds: Set[WeightedTxId] =
+        (tx.inputs.map(_.boxId) ++ tx.dataInputs.map(_.boxId))
+          .flatMap(this.outputs.get)
+          .toSet
       val parentTxs = uniqueTxIds.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
 
       parentTxs.foldLeft(this) { case (pool, (wtx, ut)) =>

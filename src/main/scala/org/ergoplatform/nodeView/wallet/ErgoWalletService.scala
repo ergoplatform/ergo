@@ -27,7 +27,6 @@ import sigma.Extensions.CollBytesOps
 import sigma.data.SigmaBoolean
 
 import java.io.FileNotFoundException
-import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -403,7 +402,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       val confirmed = state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
       if (considerUnconfirmed) {
         // We filter out spent boxes in the same way as wallet does when assembling a transaction
-        (confirmed ++ state.offChainRegistry.offChainBoxes).filter(state.walletFilter)
+        (confirmed ++ state.offChainBoxes).filter(state.walletFilter)
       } else {
         confirmed
       }
@@ -411,7 +410,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       val confirmed = state.registry.walletConfirmedBoxes()
       if (considerUnconfirmed) {
         // Just adding boxes created off-chain
-        confirmed ++ state.offChainRegistry.offChainBoxes
+        confirmed ++ state.offChainBoxes
       } else {
         confirmed
       }
@@ -420,16 +419,19 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   }
 
   override def getScanUnspentBoxes(state: ErgoWalletState, scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int): Seq[WalletBox] = {
-    val unconfirmed: Seq[TrackedBox] =
-      if (considerUnconfirmed) {
-        state.offChainRegistry.offChainBoxes.filter(_.scans.contains(scanId))
-      } else {
-        ArraySeq.empty[TrackedBox]
-      }
-
     val currentHeight = state.fullHeight
-    val unspentBoxes: Seq[TrackedBox] = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
-    (unspentBoxes ++ unconfirmed).map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
+    val confirmed: Seq[TrackedBox] = state.registry.unspentBoxesByInclusionHeight(scanId, minHeight, maxHeight)
+    val boxes =
+      if (considerUnconfirmed) {
+        // a box spent in the mempool is hidden unless this specific scan opts to keep spent boxes
+        // (removeOffchain = false); both confirmed and off-chain boxes for the scan are considered
+        val visible = (tb: TrackedBox) =>
+          state.keepsSpentOffChain(scanId) || !state.mempoolSpentIds.contains(tb.boxId)
+        (confirmed ++ state.rawOffChainBoxes.filter(_.scans.contains(scanId))).filter(visible)
+      } else {
+        confirmed
+      }
+    boxes.map(tb => WalletBox(tb, currentHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
   }
 
   override def getScanSpentBoxes(state: ErgoWalletState, scanId: ScanId): Seq[WalletBox] = {
@@ -587,13 +589,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState] =
       WalletScanLogic.scanBlockTransactions(
         state.registry,
-        state.offChainRegistry,
         state.walletVars,
         block,
         state.outputsFilter,
         dustLimit,
-        ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
-        state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
+        ergoSettings.walletSettings.walletProfile).map { case (reg, updatedOutputsFilter) =>
+        state.copy(registry = reg, outputsFilter = Some(updatedOutputsFilter))
       }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {

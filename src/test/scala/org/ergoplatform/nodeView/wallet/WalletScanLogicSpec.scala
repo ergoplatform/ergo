@@ -4,7 +4,7 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
+import org.ergoplatform.nodeView.wallet.persistence.WalletRegistry
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
@@ -125,26 +125,19 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
     withVersionedStore(10) { store =>
       val walletVars = walletVarsGen.sample.get
       val emptyReg = new WalletRegistry(store)(settings.walletSettings)
-      val emptyOff = OffChainRegistry.empty
       val blockId = modIdGen.sample.get
 
       val height0 = 5
       //simplest case - we're scanning an empty block
-      val (r0, o0, f0) =
-        scanBlockTransactions(emptyReg, emptyOff, walletVars, height0, blockId,
+      val (r0, f0) =
+        scanBlockTransactions(emptyReg, walletVars, height0, blockId,
                               Seq.empty, None, None, WalletProfile.User).get
       val r0digest = r0.fetchDigest()
       r0digest.walletBalance shouldBe 0
       r0digest.walletAssetBalances.size shouldBe 0
       r0digest.height shouldBe height0
 
-      val o0digest = o0.digest
-      o0digest.walletBalance shouldBe 0
-      o0digest.walletAssetBalances.size shouldBe 0
-      o0digest.height shouldBe height0
-
       var registry = r0
-      var off = o0
 
       forAll(trackedTransactionGen) { trackedTransaction =>
         //applying one transaction creating boxes
@@ -153,31 +146,24 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
         val height1 = 5
 
         val regDigestBefore = registry.fetchDigest().walletBalance
-        val offDigestBefore = off.digest.walletBalance
 
-        val (r1, o1, f1) =
-          scanBlockTransactions(registry, off, walletVars, height1, blockId,
+        val (r1, f1) =
+          scanBlockTransactions(registry, walletVars, height1, blockId,
                                 txs, Some(f0), None, WalletProfile.User).get
         val r1digest = r1.fetchDigest()
         r1digest.walletBalance shouldBe (regDigestBefore + trackedTransaction.paymentValues.sum)
         r1digest.walletAssetBalances.size shouldBe 0
         r1digest.height shouldBe height1
 
-        val o1digest = o1.digest
-        o1digest.walletBalance shouldBe (offDigestBefore + trackedTransaction.paymentValues.sum)
-        o1digest.walletAssetBalances.size shouldBe 0
-        o1digest.height shouldBe height1
-
         registry = r1
-        off = o1
 
         //applying a transaction spending outputs of previous transaction and creating new one with the same outputs
         val tx = trackedTransaction.tx
         val inputs = tx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
         val spendingTx = ErgoTransaction(inputs, IndexedSeq.empty, tx.outputCandidates)
 
-        val (r2, o2, f2) =
-          scanBlockTransactions(registry, off, walletVars, height1 + 1, blockId,
+        val (r2, f2) =
+          scanBlockTransactions(registry, walletVars, height1 + 1, blockId,
                                 Seq(spendingTx), Some(f1), None, WalletProfile.User).get
 
         val r2digest = r2.fetchDigest()
@@ -185,21 +171,15 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
         r2digest.walletAssetBalances.size shouldBe 0
         r2digest.height shouldBe height1 + 1
 
-        val o2digest = o2.digest
-        o2digest.walletBalance shouldBe (offDigestBefore + trackedTransaction.paymentValues.sum)
-        o2digest.walletAssetBalances.size shouldBe 0
-        o2digest.height shouldBe height1 + 1
-
         registry = r2
-        off = o2
 
         //applying a transaction spending outputs of the previous transaction
         val inputs2 = spendingTx.outputs.map(_.id).map(id => Input(id, emptyProverResult))
         val outputs2 = IndexedSeq(new ErgoBoxCandidate(spendingTx.outputs.map(_.value).sum, FalseTree, height1))
         val spendingTx2 = new ErgoTransaction(inputs2, IndexedSeq.empty, outputs2)
 
-        val (r3, o3, f3) =
-          scanBlockTransactions(registry, off, walletVars, height1 + 2, blockId,
+        val (r3, f3) =
+          scanBlockTransactions(registry, walletVars, height1 + 2, blockId,
                                 Seq(spendingTx2), Some(f2), None, WalletProfile.User).get
 
         val r3digest = r3.fetchDigest()
@@ -207,19 +187,13 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
         r3digest.walletAssetBalances.size shouldBe 0
         r3digest.height shouldBe height1 + 2
 
-        val o3digest = o3.digest
-        o3digest.walletBalance shouldBe offDigestBefore
-        o3digest.walletAssetBalances.size shouldBe 0
-        o3digest.height shouldBe height1 + 2
-
         registry = r3
-        off = o3
 
         //applying all the three previous transactions
         val threeTxs = Seq(creatingTx, spendingTx, spendingTx2)
 
-        val (r4, o4, _) =
-          scanBlockTransactions(registry, off, walletVars, height1 + 3, blockId,
+        val (r4, _) =
+          scanBlockTransactions(registry, walletVars, height1 + 3, blockId,
                                 threeTxs, Some(f3), None, WalletProfile.User).get
 
         val r4digest = r4.fetchDigest()
@@ -228,13 +202,7 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
         r4digest.height shouldBe height1 + 3
         r4.walletUnspentBoxes() shouldBe Seq.empty
 
-        val o4digest = o4.digest
-        o4digest.walletBalance shouldBe offDigestBefore
-        o4digest.walletAssetBalances.size shouldBe 0
-        o4digest.height shouldBe height1 + 3
-
         registry = r4
-        off = o4
       }
     }
   }

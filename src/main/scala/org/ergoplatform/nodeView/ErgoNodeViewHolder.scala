@@ -255,8 +255,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     processingOutcome match {
       case acc: ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
-        val newVault = vault().scanOffchain(tx)
-        updateNodeView(updatedVault = Some(newVault), updatedMempool = Some(newPool))
+        // The wallet derives off-chain state from the mempool on demand, reacting to the published
+        // ChangedMempool event, so there is no need to scan the transaction into the wallet here.
+        updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(SuccessfulTransaction(acc.tx))
       case i: ProcessingOutcome.Invalidated =>
         val e = i.e

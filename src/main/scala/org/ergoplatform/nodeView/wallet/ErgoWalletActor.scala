@@ -122,7 +122,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val walletDigest = if (chainStatus.onChain) {
         state.registry.fetchDigest()
       } else {
-        state.offChainRegistry.digest
+        state.offChainDigest
       }
       val res = if (settings.walletSettings.checkEIP27) {
         // If re-emission token in the wallet, subtract it from ERG balance
@@ -221,16 +221,6 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     /* SCAN COMMANDS */
-    //scan mempool transaction
-    case ScanOffChain(tx) =>
-      val dustLimit = settings.walletSettings.dustLimit
-      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
-      val inputs = WalletScanLogic.extractInputBoxes(tx)
-      val newState = state.copy(offChainRegistry =
-        state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
-      )
-      context.become(loadedWallet(newState))
-
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)

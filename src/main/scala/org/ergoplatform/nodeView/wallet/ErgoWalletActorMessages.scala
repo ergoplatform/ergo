@@ -38,13 +38,6 @@ object ErgoWalletActorMessages {
   // Publicly available signals for the wallet actor
 
   /**
-   * Command to scan offchain transaction
-   *
-   * @param tx - offchain transaction
-   */
-  final case class ScanOffChain(tx: ErgoTransaction)
-
-  /**
    * Command to scan a block
    *
    * @param block - block to scan

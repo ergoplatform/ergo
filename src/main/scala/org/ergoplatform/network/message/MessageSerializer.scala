@@ -8,7 +8,7 @@ import scala.util.Try
 
 class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
-  import MessageConstants.{ChecksumLength, HeaderLength, MagicLength}
+  import MessageConstants.{ChecksumLength, HeaderLength, MagicLength, MaxPayloadLength}
 
   import scala.language.existentials
 
@@ -49,7 +49,13 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
         throw MaliciousBehaviorException("Data length is negative!")
       }
 
-      if (length != 0 && byteString.length < length + HeaderLength + ChecksumLength) {
+      if (length > MaxPayloadLength) {
+        throw MaliciousBehaviorException(s"Data length $length exceeds limit $MaxPayloadLength")
+      }
+
+      val messageLength = HeaderLength.toLong + (if (length > 0) ChecksumLength.toLong + length.toLong else 0L)
+
+      if (length != 0 && byteString.length.toLong < messageLength) {
         None
       } else {
         //peer is from another network

@@ -11,4 +11,7 @@ object MessageConstants {
   val ChecksumLength: Int = 4
 
   val HeaderLength: Int = MagicLength + 5
+
+  // Largest currently accepted payload, allowing the modifier-message ADProof reserve.
+  val MaxPayloadLength: Int = 2048576 * 4
 }

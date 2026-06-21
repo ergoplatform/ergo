@@ -150,14 +150,20 @@ object WalletGenerators {
     }
   }
 
+  private val userScanIdGen: Gen[ScanId] =
+    Gen.chooseNum[Short]((PaymentsScanId + 1).toShort, Short.MaxValue)
+      .map(id => ScanId @@ id)
+
   def appStatusesGen: Gen[Set[ScanId]] = {
-    if(scala.util.Random.nextBoolean()) {
-      // simulate complex usage scenario
-      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ScanId @@ id }.toSet)
-    } else {
+    val userScansGen = Gen.nonEmptyListOf(userScanIdGen).map(_.toSet)
+    Gen.oneOf(
       // simulate simple payment
-      Set(PaymentsScanId)
-    }
+      Gen.const(Set(PaymentsScanId)),
+      // simulate user scans
+      userScansGen,
+      // simulate payment plus user scans
+      userScansGen.map(_ + PaymentsScanId)
+    )
   }
 
   def trackedBoxGen: Gen[TrackedBox] = for {

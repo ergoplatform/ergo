@@ -73,11 +73,13 @@ class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
     // header should contain correct digest
     history.applicableTry(withUpdatedHeaderId(section, section.id)) shouldBe 'failure
 
-    // should not be able to apply when blocks at this height are already pruned
+    // a section below minimalFullBlockHeight that is still a successor of the best full block stays
+    // applicable: a pruning node must download these to advance its state and catch up after a long
+    // shutdown (rejection of genuinely too-old, non-successor sections is covered in PrunedHistoryCatchUpSpec)
     history.applicableTry(section) shouldBe 'success
     history.writeMinimalFullBlockHeight(history.bestHeaderOpt.get.height + 1)
     history.isHeadersChainSyncedVar = true
-    history.applicableTry(section) shouldBe 'failure
+    history.applicableTry(section) shouldBe 'success
     history.writeMinimalFullBlockHeight(GenesisHeight)
 
     // should not be able to apply if corresponding header is marked as invalid

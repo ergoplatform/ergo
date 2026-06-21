@@ -206,17 +206,16 @@ class CandidateGenerator(
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
-          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
+        val currentBlock = completeBlock(state.cachedCandidate.get.candidateBlock, solution)
+        val (newBlock, validation) = ergoSettings.chainSettings.powScheme.validate(currentBlock.header) match {
+          case success @ Success(_) => currentBlock -> success
+          case Failure(_) =>
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
-          }
+            val previousBlock = completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
+            previousBlock -> ergoSettings.chainSettings.powScheme.validate(previousBlock.header)
+        }
         log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme
-          .validate(newBlock.header)
-          .map(_ => newBlock) match {
+        validation.map(_ => newBlock) match {
           case Success(newBlock) =>
             sendToNodeView(newBlock)
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))

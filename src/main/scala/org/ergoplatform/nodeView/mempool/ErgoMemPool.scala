@@ -117,11 +117,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
 
     val poolWithoutTx = removeTx(this, tx)
-    val doubleSpentTransactionIds = tx.inputs.flatMap(i =>
+    val doubleSpentTransactionIds: Set[ModifierId] = tx.inputs.flatMap(i =>
       poolWithoutTx.pool.inputs.get(i.boxId)
     ).toSet
     val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { txId =>
-      poolWithoutTx.pool.orderedTransactions.get(txId)
+      poolWithoutTx.pool.transactionsRegistry.get(txId).flatMap(poolWithoutTx.pool.orderedTransactions.get)
     }
     doubleSpentTransactions.foldLeft(poolWithoutTx) { case (pool, tx) =>
       removeTx(pool, tx.transaction)
@@ -192,22 +192,28 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                                     validationStartTime: Long): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTransaction.transaction
 
-    val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
+    val doubleSpendingTxIds: Set[ModifierId] = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
     }.toSet
 
     val feeF = feeFactor(unconfirmedTransaction)
 
-    if (doubleSpendingWtxs.nonEmpty) {
+    if (doubleSpendingTxIds.nonEmpty) {
       val ownWtx = weighted(tx, feeF)
+      val doubleSpendingWtxs: Set[WeightedTxId] =
+        doubleSpendingTxIds.flatMap(id => pool.transactionsRegistry.get(id))
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
-        val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        val p = pool.put(unconfirmedTransaction, feeF).remove(doubleSpendingTxs)
+        val doubleSpendingTxs = doubleSpendingWtxs.flatMap(wtx => pool.orderedTransactions.get(wtx)).toSeq
+        // Remove the losers FIRST so the shared `inputs`/`outputs` map entries are gone before the
+        // winning tx writes its own. With put-then-remove, the loser's `tx.inputs.map(_.boxId)` would
+        // delete the winner's just-written entry for the shared box, leaving the winner orphaned
+        // in the index and breaking subsequent double-spend detection.
+        val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
         val updPool = new ErgoMemPool(p, stats, sortingOption)
         updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
       } else {
-        this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id), validationStartTime)
+        this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingTxIds, validationStartTime)
       }
     } else {
       val poolSizeLimit = nodeSettings.mempoolCapacity

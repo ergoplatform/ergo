@@ -1167,9 +1167,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return Some(sequence of transactions from the best input block chain) if the ordering block exists, None otherwise
     */
   def getCollectedInputBlocksTransactions(id: ModifierId): Option[Seq[ErgoTransaction]] = {
-    bestOrderingBlock()
-      .map(_.id)
-      .flatMap(inputBlockTrees.get)
+    inputBlockTrees
+      .get(id)
       .map(_.bestChainTransactions)
   }
 

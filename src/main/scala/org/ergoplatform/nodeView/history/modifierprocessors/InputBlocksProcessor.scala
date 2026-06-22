@@ -590,7 +590,7 @@ trait InputBlocksProcessor extends ScorexLogging {
             log.warn(s"Transaction $tid not found in cache during fork switch (expired or evicted)")
           }
         }
-        val r    = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
+        val r = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
 
         if (r._2.nonEmpty) {
           // Update the tree with the processed chain
@@ -601,7 +601,8 @@ trait InputBlocksProcessor extends ScorexLogging {
           (0 until updForks.length).foreach { idx =>
             val f = updForks(idx)
             if (f.firstToComplete().contains(ib.id)) {
-              f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
+              // todo: pass real cost of input block instead of costDelta = 0
+              f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
                   updTree = new InputBlocksTree(forks.updated(idx, ibc))
                 case Failure(e) =>
@@ -630,7 +631,8 @@ trait InputBlocksProcessor extends ScorexLogging {
           (0 until updForks.length).foreach { idx =>
             val f = updForks(idx)
             if (f.firstToComplete().contains(ib.id)) {
-              f.registerCompletion(ib.id, costDelta = 0) match { // todo: real cost
+              // todo: pass real cost of input block instead of costDelta = 0
+              f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
                   updTree = new InputBlocksTree(forks.updated(idx, ibc))
                 case Failure(e) =>
@@ -668,7 +670,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * input block id -> input block transaction ids index
     */
   // todo: transactions can be put here without input block received, ie PoW and difficulty checked
-  // todo: thus they wont be cleared on pruning and the data structure can be DoSed. Fix by putting such transactions
+  // todo: and they wont be cleared on pruning and the so structure can be DoSed. Fix by putting such transactions
   // todo: into a special queue
   private val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
 
@@ -1033,7 +1035,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   def getInputBlockTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     inputBlockTransactions.get(sbId).map { ids =>
-      val result = mutable.ArrayBuffer[ErgoTransaction]()
+      val result = new mutable.ArrayBuffer[ErgoTransaction](ids.length)
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
         if (tx != null) {
@@ -1082,7 +1084,7 @@ trait InputBlocksProcessor extends ScorexLogging {
                                 toFilter: Seq[ErgoTransaction.WeakId]): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     inputBlockTransactions.get(sbId).map { ids =>
-      val result = mutable.ArrayBuffer[ErgoTransaction]()
+      val result = new mutable.ArrayBuffer[ErgoTransaction](ids.length)
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
         if (tx != null) {
@@ -1107,9 +1109,9 @@ trait InputBlocksProcessor extends ScorexLogging {
     * @return Some(sequence of weak transaction IDs) if the input block exists, None otherwise
     */
   def getInputBlockTransactionWeakIds(sbId: ModifierId): Option[Seq[ErgoTransaction.WeakId]] = {
-    // todo: cache input block transactions to avoid recalculating it on every p2p request
+    // todo: cache input block weak ids to avoid recalculating it on every p2p request
     inputBlockTransactions.get(sbId).map { ids =>
-      val result = mutable.ArrayBuffer[ErgoTransaction.WeakId]()
+      val result = new mutable.ArrayBuffer[ErgoTransaction.WeakId](ids.length)
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
         if (tx != null) {

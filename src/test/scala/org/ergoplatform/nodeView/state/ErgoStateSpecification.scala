@@ -365,4 +365,15 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
     applyRes shouldBe 'success
   }
 
+  property("UtxoState.applyInputBlock should reject distinct transactions sharing an input") {
+    forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, _) =>
+      val us = createUtxoState(bh, parameters)
+      val validBlock = validFullBlock(None, us, bh)
+      val tx = validBlock.transactions.head
+      val doubleSpendTxs = Seq(tx, tx.copy())
+
+      us.applyInputBlock(doubleSpendTxs, Seq.empty, validBlock.header).isFailure shouldBe true
+    }
+  }
+
 }

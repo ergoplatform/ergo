@@ -2934,6 +2934,113 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.bestInputBlocksChain() shouldBe Seq(ib1.id)
   }
 
+  property("InputBlocksChain.registerCompletion should reject an unexpected block id") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(ib1.id)), None)
+
+    h.applyInputBlock(ib1) shouldBe None
+    h.applyInputBlock(ib2) shouldBe None
+
+    val chain = h.inputBlocksTree().get.forks.head
+    chain.processedIndex shouldBe -1
+    chain.registerCompletion(ib2.id, 0L).isFailure shouldBe true
+  }
+
+  property("prune should remove input-block records behind the best chain") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
+
+    h.getInputBlock(ib1.id) shouldBe Some(ib1)
+
+    val c3 = genChain(4, h, stateOpt = Some(us)).tail
+    applyChain(h, c3)
+
+    invokePrune(h)
+
+    h.getInputBlock(ib1.id) shouldBe None
+  }
+
+  property("prune should drop old input-block records and clean the disconnected waitlist") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val parentIb = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val childIb = InputBlockAnnouncement(1, c3(0).header, parentOnly(idToBytes(parentIb.id)), None)
+
+    h.applyInputBlock(childIb) shouldBe Some(parentIb.id)
+    h.disconnectedWaitlist shouldBe Set(childIb)
+
+    val c4 = genChain(4, h, stateOpt = Some(us)).tail
+    applyChain(h, c4)
+
+    invokePrune(h)
+
+    h.getInputBlock(parentIb.id) shouldBe None
+    h.getInputBlock(childIb.id) shouldBe None
+    h.disconnectedWaitlist shouldBe empty
+  }
+
+  property("processInputBlockTransactions should switch to a longer competing fork") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib1 = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(ib1)
+    h.applyInputBlockTransactions(ib1.id, Seq.empty, us)
+
+    val c3 = genChain(2, h, stateOpt = Some(us)).tail
+    val c4 = genChain(2, h, stateOpt = Some(us)).tail
+
+    val ib2 = InputBlockAnnouncement(1, c3(0).header, InputBlockFields.empty, None)
+    val ib3 = InputBlockAnnouncement(1, c4(0).header, parentOnly(idToBytes(ib2.id)), None)
+
+    h.applyInputBlock(ib2)
+    h.applyInputBlock(ib3)
+
+    h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
+    h.bestInputBlocksChain() shouldBe Seq(ib1.id)
+
+    val result = h.applyInputBlockTransactions(ib3.id, Seq.empty, us)
+    result._1 shouldBe Seq(ib2.id, ib3.id)
+    result._2 shouldBe Seq.empty
+
+    h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
+  }
+
+  private def invokePrune(h: InputBlocksProcessor): Unit = {
+    import scala.reflect.runtime.{universe => ru}
+    val mirror = ru.runtimeMirror(h.getClass.getClassLoader)
+    val im = mirror.reflect(h)
+    val pruneMethod = ru.typeOf[InputBlocksProcessor].decl(ru.TermName("prune")).asMethod
+    im.reflectMethod(pruneMethod)()
+  }
+
   // todo : tests for digest state
 
 }

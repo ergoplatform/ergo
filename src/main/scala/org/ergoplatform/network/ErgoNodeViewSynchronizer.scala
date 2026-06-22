@@ -2191,7 +2191,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case NewBestInputBlock(Some(id), local) =>
       historyReader.getInputBlock(id) match {
         case Some(preIbi) =>
-          if(local) {
+          if (local) {
             log.debug(s"Sending locally generated input block $id out")
 
             // we propagate input block with transactions immediately if it has no more than 3 transactions
@@ -2220,8 +2220,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           log.error(s"NewBestInputBlock arrived for unknown input block $id")
       }
 
+
+    // this signal is sent on ordering block application, nothing p2p layer should do
     case NewBestInputBlock(None, _) =>
-      // this signal is sent on ordering block application, nothing p2p layer should do
   }
 
   /** handlers of messages coming from peers */

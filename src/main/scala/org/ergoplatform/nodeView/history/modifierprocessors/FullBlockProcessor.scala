@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history._
@@ -76,7 +76,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(Seq(), toApply, fullBlock, None)
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes).map { _ =>
-        ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
+        ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Map.empty)
       }
   }
 
@@ -111,7 +111,7 @@ trait FullBlockProcessor extends HeadersProcessor {
           val diff = bestHeight - prevBest.header.height
           pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
         }
-        ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
+        ProgressInfo(branchPoint, toRemove, toApply, Map.empty)
       }
   }
 
@@ -136,7 +136,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       //Orphaned block or full chain is not initialized yet
       logStatus(Seq(), Seq(), params.fullBlock, None)
       historyStorage.insert(Array.empty[(ByteArrayWrapper, Array[Byte])], Array(params.newModRow)).map { _ =>
-        ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+        ProgressInfo.empty
       }
   }
 

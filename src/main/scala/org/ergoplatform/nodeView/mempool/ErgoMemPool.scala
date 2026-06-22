@@ -9,6 +9,7 @@ import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurat
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction.WeakId
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import sigma.VersionContext
 import spire.syntax.all.cfor
@@ -47,6 +48,22 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = {
     pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
+  }
+
+  override def transactionByWeakId(wId: WeakId): Option[ErgoTransaction] = {
+    // todo: this impl is bound to very specific way to hash weakId, at least document both places correspondingly
+    val kt = pool.transactionsRegistry.keysIterator
+    val half = ErgoTransaction.WeakIdLength / 2
+    val s = bytesToId(wId.take(half))
+    val tb = wId.takeRight(half)
+
+    kt.find { id =>
+      if (id.startsWith(s)) {
+        pool.get(id).exists(_.transaction.witnessSerializedId.take(ErgoTransaction.WeakIdLength).sameElements(tb))
+      } else {
+        false
+      }
+    }.flatMap(pool.get).map(_.transaction)
   }
 
   override def contains(modifierId: ModifierId): Boolean = {
@@ -248,7 +265,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
           state match {
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
-              val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
+              val utxoWithPool = utxo.withTransactions(getAll)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
 
                 // added in 6.0 to check now versioned serializers
@@ -264,7 +281,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 }
 
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
-                utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
+                // todo : save softFields tolerance status
+                utxoWithPool.validateWithCost(tx, validationContext, costLimit, None, softFieldsAllowed = true) match {
                   case Success(cost) =>
                     acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
                   case Failure(ex) =>

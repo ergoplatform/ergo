@@ -431,6 +431,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         bs2.walletBalance shouldBe (balance1 + balance2)
         bs2.walletAssetBalances shouldBe assetAmount(box1 ++ box2)
       }
+      eventually {
+        await(w.wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true)).size shouldBe 2
+      }
     }
   }
 

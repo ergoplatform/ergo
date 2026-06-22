@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.state
 
-import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.{DataInput, ErgoBoxCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
@@ -227,6 +227,153 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
 
     val execRes2 = ErgoState.execTransactions(txs2, sc, settings.nodeSettings)(id => Try(boxes2(ByteArrayWrapper(id))))
     execRes2.isInstanceOf[Valid[_]] shouldBe true
+  }
+
+  property("Full blocks accept sequential transactions in order") {
+    // Full blocks (with checkUtxoSetTransformations=true) require transactions
+    // to be topologically ordered. A transaction can only spend outputs from
+    // transactions that appear BEFORE it in the block.
+
+    // Use a simple TrueProp box as starting point (not emission box which has complex script)
+    val startBox = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+
+    // Create a valid chain: tx1 spends startBox, tx2 spends tx1's output
+    val tx1 = validTransactionFromBoxes(IndexedSeq(startBox), outputsProposition = TrueTree)
+    val tx2 = validTransactionFromBoxes(tx1.outputs, outputsProposition = TrueTree)
+
+    // In-order: tx1 creates output, tx2 spends it
+    val orderedTxs = IndexedSeq(tx1, tx2)
+
+    // Validation should succeed
+    val boxes = (IndexedSeq(startBox) ++ orderedTxs.flatMap(_.outputs))
+      .map(o => ByteArrayWrapper(o.id) -> o).toMap
+    val stateContext = emptyStateContext
+    ErgoState.execTransactions(orderedTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe 'valid
+
+    // State changes should succeed
+    ErgoState.stateChanges(orderedTxs) shouldBe 'success
+  }
+
+  property("Full blocks REJECT out-of-order sequential transactions") {
+    // Unlike input blocks, full blocks apply AVL+ tree operations.
+    // If tx2 spends an output from tx1 but tx2 comes BEFORE tx1 in the block,
+    // validation passes (createdOutputs has all outputs), but applying the
+    // operations to the AVL+ tree fails because tx2 tries to remove a box
+    // that hasn't been inserted yet.
+
+    // Use a simple TrueProp box as starting point
+    val startBox = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+
+    // Create transactions: tx1 spends startBox, tx2 spends tx1's output
+    val tx1 = validTransactionFromBoxes(IndexedSeq(startBox), outputsProposition = TrueTree)
+    val tx2 = validTransactionFromBoxes(tx1.outputs, outputsProposition = TrueTree)
+
+    // Out-of-order: tx2 tries to spend tx1's output, but tx2 comes first
+    val outOfOrderTxs = IndexedSeq(tx2, tx1)
+
+    // Validation still passes when all boxes are provided (simulating input block behavior
+    // where createdOutputs is pre-populated)
+    val boxes = (IndexedSeq(startBox) ++ outOfOrderTxs.flatMap(_.outputs))
+      .map(o => ByteArrayWrapper(o.id) -> o).toMap
+    val stateContext = emptyStateContext
+    val execRes = ErgoState.execTransactions(outOfOrderTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id))))
+    execRes shouldBe 'valid
+
+    // But applying to UtxoState with checkUtxoSetTransformations fails
+    // because tx2 tries to remove tx1's output before it's inserted into the AVL+ tree
+    val bh = BoxHolder(IndexedSeq(startBox))
+    val us = createUtxoState(bh, parameters)
+    val applyRes = us.applyTransactions(outOfOrderTxs, bytesToId(Array.fill(32)(0.toByte)), us.rootDigest, stateContext, checkUtxoSetTransformations = true)
+    applyRes shouldBe 'failure
+  }
+
+  property("Full blocks accept data-inputs referencing outputs from the same block") {
+    // Data-inputs are read-only references and do not modify the AVL+ tree.
+    // They can reference outputs created by other transactions in the same block.
+
+    val startBox1 = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+    val startBox2 = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(1.toByte)), 0)
+
+    // tx1: spends startBox1 -> creates output1
+    val tx1 = validTransactionFromBoxes(IndexedSeq(startBox1), outputsProposition = TrueTree)
+    val output1Id = tx1.outputs.head.id
+
+    // tx2: spends startBox2, uses output1 as data-input -> creates output2
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(org.ergoplatform.Input(startBox2.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq(DataInput(output1Id)),
+      IndexedSeq(new ErgoBoxCandidate(900000000L, TrueTree, 0), new ErgoBoxCandidate(100000000L, TrueTree, 0))
+    )
+
+    val txs = IndexedSeq(tx1, tx2)
+
+    // Validation should succeed
+    val boxes = (IndexedSeq(startBox1, startBox2) ++ txs.flatMap(_.outputs))
+      .map(o => ByteArrayWrapper(o.id) -> o).toMap
+    val stateContext = emptyStateContext
+    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe 'valid
+
+    // State changes should succeed (data-inputs don't affect AVL+ operations)
+    ErgoState.stateChanges(txs) shouldBe 'success
+
+    // Applying to UtxoState should succeed (without checking digest since
+    // we don't know the expected digest for these manual transactions)
+    val bh = BoxHolder(IndexedSeq(startBox1, startBox2))
+    val us = createUtxoState(bh, parameters)
+    val applyRes = us.applyTransactions(txs, bytesToId(Array.fill(32)(0.toByte)), us.rootDigest, stateContext, checkUtxoSetTransformations = false)
+    applyRes shouldBe 'success
+  }
+
+  property("Full blocks accept out-of-order data-inputs within the same block") {
+    // Data-inputs are read-only and do not affect state transformations.
+    // Even in full blocks, a transaction can use a data-input that references
+    // an output created by a transaction that appears LATER in the block,
+    // because createdOutputs is pre-populated and data-inputs don't modify the AVL+ tree.
+
+    val startBox1 = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(0.toByte)), 0)
+    val startBox2 = new ErgoBoxCandidate(1000000000L, TrueTree, 0).toBox(bytesToId(Array.fill(32)(1.toByte)), 0)
+
+    // tx1: spends startBox1 -> creates output1
+    val tx1 = validTransactionFromBoxes(IndexedSeq(startBox1), outputsProposition = TrueTree)
+    val output1Id = tx1.outputs.head.id
+
+    // tx2: spends startBox2, uses output1 as data-input -> creates output2
+    val tx2 = new ErgoTransaction(
+      IndexedSeq(org.ergoplatform.Input(startBox2.id, sigma.interpreter.ProverResult.empty)),
+      IndexedSeq(DataInput(output1Id)),
+      IndexedSeq(new ErgoBoxCandidate(900000000L, TrueTree, 0), new ErgoBoxCandidate(100000000L, TrueTree, 0))
+    )
+
+    // Out-of-order: tx2 (which data-inputs tx1's output) comes BEFORE tx1
+    val outOfOrderTxs = IndexedSeq(tx2, tx1)
+
+    // Validation still passes because createdOutputs is pre-populated
+    val boxes = (IndexedSeq(startBox1, startBox2) ++ outOfOrderTxs.flatMap(_.outputs))
+      .map(o => ByteArrayWrapper(o.id) -> o).toMap
+    val stateContext = emptyStateContext
+    val execRes = ErgoState.execTransactions(outOfOrderTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id))))
+    execRes shouldBe 'valid
+
+    // State changes should succeed because data-inputs don't affect toRemove/toInsert
+    ErgoState.stateChanges(outOfOrderTxs) shouldBe 'success
+
+    // Applying to UtxoState should succeed because data-inputs don't modify AVL+ tree
+    // (without checking digest since we don't know the expected digest)
+    val bh = BoxHolder(IndexedSeq(startBox1, startBox2))
+    val us = createUtxoState(bh, parameters)
+    val applyRes = us.applyTransactions(outOfOrderTxs, bytesToId(Array.fill(32)(0.toByte)), us.rootDigest, stateContext, checkUtxoSetTransformations = false)
+    applyRes shouldBe 'success
+  }
+
+  property("UtxoState.applyInputBlock should reject distinct transactions sharing an input") {
+    forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, _) =>
+      val us = createUtxoState(bh, parameters)
+      val validBlock = validFullBlock(None, us, bh)
+      val tx = validBlock.transactions.head
+      val doubleSpendTxs = Seq(tx, tx.copy())
+
+      us.applyInputBlock(doubleSpendTxs, Seq.empty, validBlock.header).isFailure shouldBe true
+    }
   }
 
 }

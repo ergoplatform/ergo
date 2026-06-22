@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, OutputsHolder}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -47,7 +47,8 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
   def validateWithCost(tx: ErgoTransaction,
                        context: ErgoStateContext,
                        costLimit: Int,
-                       interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
+                       interpreterOpt: Option[ErgoInterpreter],
+                       softFieldsAllowed: Boolean): Try[Int] = {
     val parameters = context.currentParameters.withBlockCost(costLimit)
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
@@ -57,14 +58,16 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
         boxesToSpend,
         tx.dataInputs.flatMap(i => boxById(i.boxId)),
         context,
-        accumulatedCost = 0L)(verifier) match {
+        accumulatedCost = 0L,
+        softFieldsAllowed)(verifier) match {
         case Success(txCost) if txCost > costLimit =>
           Failure(TooHighCostError(tx, Some(txCost)))
         case Success(txCost) =>
           Success(txCost)
         case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
           Failure(TooHighCostError(tx, None))
-        case f: Failure[_] => f
+        case f: Failure[_] =>
+          f
       }
     }
   }
@@ -142,7 +145,7 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * @param txs - transactions to generate proofs
     * @return proof for specified transactions and new state digest
     */
-  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = synchronized {
+  def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = persistentProver.synchronized {
     val rootHash = persistentProver.digest
     log.trace(s"Going to create proof for ${txs.length} transactions at root ${Algos.encode(rootHash)}")
     if (txs.isEmpty) {
@@ -158,24 +161,10 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
   }
 
   /**
-    * Producing a copy of the state which takes into account outputs of given transactions.
-    * Useful when checking mempool transactions.
-    */
-  def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, ergoSettings) {
-      lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
-
-      override def boxById(id: ADKey): Option[ErgoBox] = {
-        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
-      }
-    }
-  }
-
-  /**
    * Producing a copy of the state which takes into account outputs of given transactions.
    * Useful when checking mempool transactions.
    */
-  def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
+  def withTransactions(transactions: Seq[OutputsHolder]): UtxoState = {
     new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
@@ -189,6 +178,6 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * Producing a copy of the state which takes into account pool of unconfirmed transactions.
     * Useful when checking mempool transactions.
     */
-  def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
 
 }

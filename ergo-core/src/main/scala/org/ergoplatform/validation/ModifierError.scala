@@ -1,7 +1,10 @@
 package org.ergoplatform.validation
 
 import org.ergoplatform.modifiers.NetworkObjectTypeId
+import org.ergoplatform.modifiers.NetworkObjectTypeId.Value
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import scorex.util.ModifierId
+import sigma.exceptions.SoftFieldAccessException
 
 import scala.util.control.NoStackTrace
 
@@ -53,4 +56,18 @@ class RecoverableModifierError(val message: String, val modifierId: ModifierId, 
 case class MultipleErrors(errors: Seq[ModifierError])
      extends Exception(errors.mkString(" | "), errors.headOption.map(_.toThrowable).orNull) {
   def isFatal: Boolean = errors.exists(_.isFatal)
+}
+
+
+class SoftFieldsAccessError(cause: SoftFieldAccessException, txId: ModifierId)
+  extends Exception(cause.message, cause) with ModifierError with NoStackTrace {
+
+  def isFatal: Boolean = false
+  def toThrowable: Throwable = this
+
+  override def message: String = cause.message
+
+  override def modifierId: ModifierId = txId
+
+  override def modifierTypeId: Value = ErgoTransaction.modifierTypeId
 }

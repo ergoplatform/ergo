@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.message.MessageSpecV1
+import org.ergoplatform.network.message.MessageSpecInitial
 import scorex.util.serialization.{Reader, Writer}
 
 /**
@@ -9,7 +9,7 @@ import scorex.util.serialization.{Reader, Writer}
  * to the receiving node at the beginning of a connection. Until both peers
  * have exchanged `Handshake` messages, no other messages will be accepted.
  */
-object HandshakeSerializer extends MessageSpecV1[Handshake] {
+object HandshakeSerializer extends MessageSpecInitial[Handshake] {
   override val messageCode: MessageCode = 75: Byte
   override val messageName: String = "Handshake"
 

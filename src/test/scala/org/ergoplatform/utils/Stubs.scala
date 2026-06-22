@@ -5,7 +5,8 @@ import akka.pattern.StatusReply
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.mining.{CandidateGenerator, ErgoMiner, WorkMessage}
+import org.ergoplatform.OrderingSolutionFound
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -112,12 +113,13 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   class MinerStub extends Actor {
     def receive: Receive = {
-      case CandidateGenerator.GenerateCandidate(_, reply, _) =>
+      case CandidateGenerator.GenerateCandidate(_, reply, _, _) =>
         if (reply) {
-          val candidate = Candidate(null, externalWorkMessage, Seq.empty) // API does not use CandidateBlock
+          val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+          val candidate = Candidate(null, externalWorkMessage, Seq.empty, defaultParams) // API does not use CandidateBlock
           sender() ! StatusReply.success(candidate)
         }
-      case _: AutolykosSolution => sender() ! StatusReply.success(())
+      case _: OrderingSolutionFound => sender() ! StatusReply.success(())
       case ErgoMiner.ReadMinerPk => sender() ! StatusReply.success(pk)
     }
   }
@@ -396,8 +398,9 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
   def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
-    powScheme.prove(
+    extractHeaderFromProveResult(powScheme.prove(
       history.bestHeaderOpt,
       Header.InitialVersion,
       settings.chainSettings.initialNBits,
@@ -407,8 +410,11 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       Math.max(System.currentTimeMillis(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
-      defaultMinerSecretNumber
-    ).value
+      defaultMinerSecretNumber,
+      Long.MinValue,
+      Long.MaxValue,
+      defaultParams
+    ))
   }
 
 }

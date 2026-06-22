@@ -1,6 +1,7 @@
 package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.modifiers.mempool.ErgoTransaction.WeakId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.{ErgoMemPoolReader, OrderedTxPool}
 import scorex.util.ModifierId
@@ -32,6 +33,7 @@ trait MempoolTestHelpers {
 
     override def getExpectedWaitTime(txFee: Long, txSize: Int): Long = 0
 
+    override def transactionByWeakId(wId: WeakId): Option[ErgoTransaction] = ???
   }
 
 }

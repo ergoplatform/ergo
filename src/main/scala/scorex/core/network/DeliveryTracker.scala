@@ -104,10 +104,11 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
     else if (invalidModifierCache.mightContain(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
+    else if (!NetworkObjectTypeId.isTypeKnown(modifierTypeId)) UnknownStatus
     else Unknown
 
   // Write ERR message about incorrect transition into the log, so devs will find it eventually
-  def checkStatusTransition(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
+  private def checkStatusTransition(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
     if (!isCorrectTransition(oldStatus, expectedStatues)) {
       log.error(s"Illegal status transition: $oldStatus -> $expectedStatues")
     }
@@ -134,15 +135,6 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     */
   def getRequestedInfo(typeId: NetworkObjectTypeId.Value, id: ModifierId): Option[RequestedInfo] = {
     requested.get(typeId).flatMap(_.get(id))
-  }
-
-  /** Get peer we're communicating with in regards with modifier `id` **/
-  def getSource(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Option[ConnectedPeer] = {
-    status(id, modifierTypeId, Seq.empty) match {
-      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).map(_.peer)
-      case Received => received.get(modifierTypeId).flatMap(_.get(id))
-      case _ => None
-    }
   }
 
   /**

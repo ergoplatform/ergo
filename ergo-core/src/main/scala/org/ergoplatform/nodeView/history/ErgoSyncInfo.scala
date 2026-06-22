@@ -50,12 +50,12 @@ object ErgoSyncInfo {
 
 object ErgoSyncInfoSerializer extends ErgoSerializer[ErgoSyncInfo] with ScorexLogging {
 
-  val v2HeaderMode: Byte = -1 // used to mark sync v2 messages
+  private val v2HeaderMode: Byte = -1 // used to mark sync v2 messages
 
-  val MaxHeadersAllowed = 50 // in sync v2 message, no more than 50 headers allowed
+  private val MaxHeadersAllowed = 50 // in sync v2 message, no more than 50 headers allowed
 
-  val MaxHeaderSize = 1000 // currently header is about 200+ bytes, but new fields can be added via a SF,
-                           // anyway we set hard max header size limit
+  private val MaxHeaderSize = 1000 // currently header is about 200+ bytes, but new fields can be added via a SF,
+                                   // anyway we set hard max header size limit
 
   override def serialize(obj: ErgoSyncInfo, w: Writer): Unit = {
     obj match {

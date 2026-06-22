@@ -3,12 +3,14 @@ package org.ergoplatform.network
 import akka.actor.ActorRef
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.nodeView.state.StateType.Utxo
 import scorex.core.network.{ConnectedPeer, ConnectionId}
 
 class PeerFilteringRuleSpecification extends ErgoCorePropertyTest {
   private def peerWithVersion(version: Version): ConnectedPeer = {
+    val pf = new ModePeerFeature(Utxo, true, None, -1)
     val ref = ActorRef.noSender
-    val peerSpec = PeerSpec("", version, "", None, Seq.empty)
+    val peerSpec = PeerSpec("", version, "", None, Seq(pf))
     val peerInfo = PeerInfo(peerSpec, lastHandshake = 0L, None, 0L)
     ConnectedPeer(ConnectionId(null, null, null), ref, Some(peerInfo))
   }

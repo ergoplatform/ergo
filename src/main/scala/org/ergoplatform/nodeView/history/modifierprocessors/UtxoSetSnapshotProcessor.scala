@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoLikeContext.Height

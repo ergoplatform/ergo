@@ -5,6 +5,7 @@ import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
@@ -205,11 +206,12 @@ trait ErgoWalletService {
   def removeScan(state: ErgoWalletState, scanId: ScanId): Try[ErgoWalletState]
 
   /**
-    * Update UtxoState with mempool
+    * Update UtxoState with mempool and input blocks
     * @param state current wallet state
+    * @param historyReader history reader to fetch input block transactions
     * @return new wallet state
     */
-  def updateUtxoState(state: ErgoWalletState): ErgoWalletState
+  def updateUtxoState(state: ErgoWalletState, historyReader: ErgoHistoryReader): ErgoWalletState
 
   /**
     * Process the block transactions and update database and in-memory structures for offchain data accordingly
@@ -596,12 +598,20 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
 
-  override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
+  override def updateUtxoState(state: ErgoWalletState, historyReader: ErgoHistoryReader): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {
       case (Some(mr), Some(sr)) =>
         sr match {
           case u: UtxoStateReader =>
-            state.copy(utxoStateReaderOpt = Some(u.withMempool(mr)))
+            val finalUtxo = if (state.inputBlockIds.nonEmpty) {
+              val allInputBlockTxs = state.inputBlockIds.flatMap { id =>
+                historyReader.getInputBlockTransactions(id).getOrElse(Seq.empty)
+              }
+              u.withTransactions(allInputBlockTxs ++ mr.getAll)
+            } else {
+              u.withTransactions(mr.getAll)
+            }
+            state.copy(utxoStateReaderOpt = Some(finalUtxo))
           case _ =>
             state
         }

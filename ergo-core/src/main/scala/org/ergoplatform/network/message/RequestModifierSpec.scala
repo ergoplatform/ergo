@@ -15,7 +15,7 @@ import scorex.util.serialization.{Reader, Writer}
   * data from a node which previously advertised it had that data by sending an `Inv` message.
   *
   */
-object RequestModifierSpec extends MessageSpecV1[InvData] {
+object RequestModifierSpec extends MessageSpecInitial[InvData] {
   override val messageCode: MessageCode = 22: Byte
   override val messageName: String      = "RequestModifier"
 

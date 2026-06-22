@@ -53,9 +53,9 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     keys.zipWithIndex.map { case (pk, i) => s"myPubKey_$i" -> pk }.toMap
   }
 
-  private def compileSource(source: String, env: Map[String, Any], treeVersion: Byte = 0): Try[ErgoTree] = {
+  private def compileSource(source: String, env: Map[String, Any], treeVersion: Byte): Try[ErgoTree] = {
     val compiler = new SigmaCompiler(ergoSettings.chainSettings.addressPrefix)
-    val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion.toByte)
+    val ergoTreeHeader = ErgoTree.defaultHeaderWithVersion(treeVersion)
     Try(compiler.compile(env, source)(new CompiletimeIRContext)).flatMap {
       case CompilerResult(_, _, _, script: Value[SSigmaProp.type@unchecked]) if script.tpe == SSigmaProp =>
         Success(ErgoTree.fromProposition(ergoTreeHeader, script))
@@ -77,7 +77,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         val scriptVersion = Header.scriptFromBlockVersion(bv)
         val treeVersion = compileRequest.treeVersion
         VersionContext.withVersions(scriptVersion, treeVersion) {
-          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SAddress.apply).fold(
+          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(Pay2SAddress.apply).fold(
             e => BadRequest(e.getMessage),
             address => ApiResponse(addressResponse(address))
           )
@@ -93,7 +93,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         val scriptVersion = Header.scriptFromBlockVersion(bv)
         val treeVersion = compileRequest.treeVersion
         VersionContext.withVersions(scriptVersion, treeVersion) {
-          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey))).map(Pay2SHAddress.apply).fold(
+          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(Pay2SHAddress.apply).fold(
             e => BadRequest(e.getMessage),
             address => ApiResponse(addressResponse(address))
           )

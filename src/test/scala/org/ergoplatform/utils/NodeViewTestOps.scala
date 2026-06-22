@@ -13,7 +13,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.utils.ErgoNodeTestConstants.defaultTimeout
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.validFullBlock
 import org.ergoplatform.validation.MalformedModifierError
@@ -44,13 +44,13 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
 
   def applyHeader(header: Header)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
-    nodeViewHolderRef ! LocallyGeneratedModifier(header)
+    nodeViewHolderRef ! LocallyGeneratedBlockSection(header)
     expectModificationOutcome(header)
   }
 
   def applyBlock(fullBlock: ErgoFullBlock, excludeExt: Boolean = false)(implicit ctx: Ctx): Try[Unit] = {
     subscribeModificationOutcome()
-    nodeViewHolderRef ! LocallyGeneratedModifier(fullBlock.header)
+    nodeViewHolderRef ! LocallyGeneratedBlockSection(fullBlock.header)
     expectModificationOutcome(fullBlock.header).flatMap(_ => applyPayload(fullBlock, excludeExt))
   }
 
@@ -65,7 +65,7 @@ trait NodeViewBaseOps extends ErgoTestHelpers {
     }
     sections.foldLeft(Success(()): Try[Unit]) { (lastResult, section) =>
       lastResult.flatMap { _ =>
-        nodeViewHolderRef ! LocallyGeneratedModifier(section)
+        nodeViewHolderRef ! LocallyGeneratedBlockSection(section)
         section match {
           case Extension(_, Seq(), _) => Success(()) // doesn't send back any outcome
           case _ => expectModificationOutcome(section) // normal flow

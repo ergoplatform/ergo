@@ -79,7 +79,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     var poolCost = ErgoMemPool.empty(sortByCostSettings)
     poolCost = poolCost.process(UnconfirmedTransaction(tx, None), wus)._1
     val validationContext = wus.stateContext.simplifiedUpcoming()
-    val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None).get
+    val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None, true).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
   }
 
@@ -375,7 +375,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.getAllPrioritized.map(_.transaction.id) shouldBe ids
 
     val conformingTxs = pool.take(3).toSeq
-    val stateWithTxs = wus.withUnconfirmedTransactions(conformingTxs)
+    val stateWithTxs = wus.withTransactions(conformingTxs)
 
     conformingTxs.map(_.transaction).flatMap(_.inputs).map(_.boxId).forall(bIb => stateWithTxs.boxById(bIb)
       .isDefined) shouldBe true

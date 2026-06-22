@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
@@ -41,7 +41,12 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       getBlockTransactionsByHeaderIdR ~
       getProofForTxR ~
       getFullBlockByHeaderIdR ~
-      getModifierByIdR
+      getModifierByIdR ~
+      // input block related API
+      getBestInputBlockR ~
+      getBestInputBlocksChainR ~
+      getInputBlockTransactionsR ~
+      getInputBlockTransactionIdsR
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
@@ -127,9 +132,9 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
       log.info("Received a new valid block through the API: " + block)
 
-      viewHolderRef ! LocallyGeneratedModifier(block.header)
+      viewHolderRef ! LocallyGeneratedBlockSection(block.header)
       block.blockSections.foreach {
-        viewHolderRef ! LocallyGeneratedModifier(_)
+        viewHolderRef ! LocallyGeneratedBlockSection(_)
       }
 
       ApiResponse.OK
@@ -182,6 +187,63 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
 
   def getFullBlockByHeaderIdsR: Route = (post & path("headerIds") & modifierIds) { ids =>
     ApiResponse(getFullBlockByHeaderIds(ids))
+  }
+
+  /**
+    * Input/Ordering blocks related API methods
+    */
+
+  /**
+    * @return ids of best ordering and input blocks
+    */
+  private def getBestInputBlockR = {
+    (pathPrefix("bestInputBlock") & get) {
+      ApiResponse(getHistory.map{ h =>
+        val bh = h.bestHeaderOpt.map(_.id)
+        val bi = h.bestInputBlock().map(_.id)
+        Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlock" -> bi.getOrElse("").asJson)
+      })
+    }
+  }
+
+
+  /**
+    * @return ids of best input-blocks chain, along with ordering block id
+    */
+  private def getBestInputBlocksChainR = {
+    (pathPrefix("bestInputChain") & get) {
+      ApiResponse(getHistory.map{ h =>
+        val bh = h.bestHeaderOpt.map(_.id)
+        val bi = h.bestInputBlocksChain()
+        Json.obj("bestOrdering" -> bh.getOrElse("").asJson, "bestInputBlocks" -> bi.asJson)
+      })
+    }
+  }
+
+  /**
+    * @return transactions of input block with given id
+    */
+  private def getInputBlockTransactionsR = {
+    (modifierId & pathPrefix("inputBlockTransactions") & get) { id =>
+      ApiResponse {
+        getHistory.map { history =>
+          history.getInputBlockTransactions(id)
+        }
+      }
+    }
+  }
+
+  /**
+    * @return transaction ids of input block with given id
+    */
+  private def getInputBlockTransactionIdsR = {
+    (modifierId & pathPrefix("inputBlockTransactionIds") & get) { id =>
+      ApiResponse {
+        getHistory.map { history =>
+          history.getInputBlockTransactionIds(id)
+        }
+      }
+    }
   }
 
 }

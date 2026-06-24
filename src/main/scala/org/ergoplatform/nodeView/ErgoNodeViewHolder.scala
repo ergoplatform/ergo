@@ -19,7 +19,6 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.RecoverableModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
@@ -28,7 +27,6 @@ import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -40,7 +38,7 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor with ScorexLogging with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -131,14 +129,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
   private def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
-    //TODO: actually, pi.toDownload contains only 1 modifierid per type,
-    //TODO: see the only case where toDownload is not empty during ProgressInfo construction
-    //TODO: so the code below can be optimized
-    val toDownload = mutable.Map[NetworkObjectTypeId.Value, Seq[ModifierId]]()
-    pi.toDownload.foreach { case (tid, mid) =>
-      toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
-    }
-    context.system.eventStream.publish(DownloadRequest(toDownload.toMap))
+    val toDownload = pi.toDownload.mapValues(mid => Seq(mid))
+    context.system.eventStream.publish(DownloadRequest(toDownload))
   }
 
 
@@ -240,7 +232,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               }
             case Failure(e) =>
               log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
-              history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
+              history.reportModifierIsInvalid(modToApply).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
               }
@@ -572,7 +564,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info("State and history are both empty on startup")
         Success(stateIn)
       case (stateId, Some(block), _) if stateId == block.id =>
-        log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
+        log.info(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")

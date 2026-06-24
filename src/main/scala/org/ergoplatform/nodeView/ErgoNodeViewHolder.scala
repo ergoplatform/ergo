@@ -232,7 +232,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
           val chainTipOpt = history.estimatedTip()
-          // todo: make cleaner ADProofs dump instead of pmodModify , see https://github.com/ergoplatform/ergo/issues/2413 
+          // todo: make cleaner ADProofs dump instead of pmodModify , see https://github.com/ergoplatform/ergo/issues/2413
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>

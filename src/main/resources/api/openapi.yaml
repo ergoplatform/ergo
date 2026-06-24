@@ -2474,6 +2474,24 @@ components:
         $ref: '#/components/schemas/IndexedErgoTransaction'
 
 
+    MiningRequest:
+      description: Request to generate a block candidate with transactions and custom miner public key
+      type: object
+      required:
+        - txs
+        - pk
+      properties:
+        txs:
+          description: Transactions to include in the block candidate
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransaction'
+        pk:
+          description: Hexadecimal representation of public key to use as minerPk
+          type: string
+          format: base16
+          example: '020000000000000000000000000000000000000000000000000000000000000001'
+
     FeeHistogramBin:
       description: Fee histogram bin
       type: object
@@ -2702,6 +2720,8 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
     post:
+      security:
+        - ApiKeyAuth: [api_key]
       summary: Send a mined block
       operationId: sendMinedBlock
       tags:
@@ -5146,6 +5166,34 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Transactions'
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkMessage'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/candidateWithTxsAndPk:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Request block candidate with mandatory transactions and custom miner public key
+      operationId: miningRequestBlockCandidateWithMandatoryTransactionsAndPk
+      tags:
+        - mining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MiningRequest'
       responses:
         '200':
           description: External candidate

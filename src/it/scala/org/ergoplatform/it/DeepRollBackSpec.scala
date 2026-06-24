@@ -1,12 +1,14 @@
 package org.ergoplatform.it
 
 import java.io.File
+import java.util.concurrent.TimeoutException
 import com.typesafe.config.Config
+import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.scalatest.freespec.AnyFreeSpec
 import scala.async.Async
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, blocking}
 import scala.concurrent.duration._
 
 class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
@@ -27,21 +29,58 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
     .withFallback(shortInternalMinerPollingInterval)
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val minerBConfig: Config = specialDataDirConfig(remoteVolumeB)
     .withFallback(shortInternalMinerPollingInterval)
     .withFallback(keepVersionsConfig(keepVersions))
     .withFallback(nodeSeedConfigs.last)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val minerAConfigNonGen: Config = minerAConfig
     .withFallback(nonGeneratingPeerConfig)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val minerBConfigNonGen: Config = minerBConfig
     .withFallback(nonGeneratingPeerConfig)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
+
+  private def waitForSameBestBlock(
+    nodeA: Node,
+    nodeB: Node,
+    minHeight: Int,
+    timeout: FiniteDuration
+  ): Future[(NodeInfo, NodeInfo)] = {
+    def sameBestBlock(infoA: NodeInfo, infoB: NodeInfo): Boolean = {
+      val sameHeight =
+        infoA.bestBlockHeightOpt.nonEmpty &&
+          infoA.bestBlockHeightOpt == infoB.bestBlockHeightOpt
+      val sameBlock =
+        infoA.bestBlockIdOpt.nonEmpty && infoA.bestBlockIdOpt == infoB.bestBlockIdOpt
+      val highEnough = infoA.bestBlockHeightOpt.exists(_ >= minHeight)
+      sameHeight && sameBlock && highEnough
+    }
+
+    def retryAfterDelay(deadline: Deadline): Future[(NodeInfo, NodeInfo)] =
+      Future {
+        blocking(Thread.sleep(1000))
+      }.flatMap(_ => loop(deadline))
+
+    def loop(deadline: Deadline): Future[(NodeInfo, NodeInfo)] =
+      nodeA.info.zip(nodeB.info).flatMap { case (infoA, infoB) =>
+        if (sameBestBlock(infoA, infoB)) {
+          Future.successful((infoA, infoB))
+        } else if (deadline.isOverdue()) {
+          Future.failed(new TimeoutException(
+            s"Nodes did not converge to the same best full block at height >= $minHeight"
+          ))
+        } else {
+          retryAfterDelay(deadline)
+        }
+      }
+
+    loop(timeout.fromNow)
+  }
 
   "Deep rollback handling" in {
 
@@ -83,7 +122,7 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
 
       // 2. Let nodeB mine `chainLength` blocks in isolation
-      Async.await(minerBIsolated.waitForHeight(chainLength))
+      Async.await(minerBIsolated.waitForHeight(chainLength, 100.millis))
 
       log.info("Mining phase done")
 
@@ -115,17 +154,15 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       isMiningBOpt map (_ shouldBe false)
 
       // 5. Wait until it switches to the better chain
-      Async.await(minerB.waitForHeight(minerABestHeight))
+      val (minerAInfo, minerBInfo) =
+        Async.await(waitForSameBestBlock(minerA, minerB, minerABestHeight, 10.minutes))
 
       log.info("Chain switching done")
 
-      val minerABestBlock = Async.await(minerA.headerIdsByHeight(minerABestHeight)).head
-      val minerBBestBlock = Async.await(minerB.headerIdsByHeight(minerABestHeight)).head
-
-      minerBBestBlock shouldEqual minerABestBlock
+      minerBInfo.bestBlockIdOpt shouldEqual minerAInfo.bestBlockIdOpt
     }
 
-    Await.result(result, 15.minutes)
+    Await.result(result, 20.minutes)
   }
 
 }

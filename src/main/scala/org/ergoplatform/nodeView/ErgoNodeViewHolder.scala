@@ -184,7 +184,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected final def updateState(history: ErgoHistory,
                                   state: State,
                                   progressInfo: ProgressInfo[BlockSection],
-                                  suffixApplied: IndexedSeq[BlockSection]): (ErgoHistory, Try[State], Seq[BlockSection]) = {
+                                  suffixApplied: IndexedSeq[BlockSection],
+                                  local: Boolean = false): (ErgoHistory, Try[State], Seq[BlockSection]) = {
     requestDownloads(progressInfo)
 
     val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[BlockSection]) = if (progressInfo.chainSwitchingNeeded) {
@@ -197,13 +198,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     stateToApplyTry match {
       case Success(stateToApply) =>
-        applyState(history, stateToApply, suffixTrimmed, progressInfo) match {
+        applyState(history, stateToApply, suffixTrimmed, progressInfo, local) match {
           case Success(stateUpdateInfo) =>
             stateUpdateInfo.failedMod match {
               case Some(_) =>
                 @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
                 val alternativeProgressInfo = stateUpdateInfo.alternativeProgressInfo.get
-                updateState(stateUpdateInfo.history, stateUpdateInfo.state, alternativeProgressInfo, stateUpdateInfo.suffix)
+                updateState(stateUpdateInfo.history, stateUpdateInfo.state, alternativeProgressInfo, stateUpdateInfo.suffix, local)
               case None =>
                 (stateUpdateInfo.history, Success(stateUpdateInfo.state), stateUpdateInfo.suffix)
             }
@@ -221,7 +222,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
                          suffixTrimmed: IndexedSeq[BlockSection],
-                         progressInfo: ProgressInfo[BlockSection]): Try[UpdateInformation] = {
+                         progressInfo: ProgressInfo[BlockSection],
+                         local: Boolean): Try[UpdateInformation] = {
     val updateInfoSample = UpdateInformation(history, stateToApply, None, None, suffixTrimmed)
     progressInfo.toApply.foldLeft[Try[UpdateInformation]](Success(updateInfoSample)) {
       case (f@Failure(ex), _) =>
@@ -230,11 +232,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
           val chainTipOpt = history.estimatedTip()
+          // todo: make cleaner ADProofs dump instead of pmodModify , see https://github.com/ergoplatform/ergo/issues/2413
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
-                  context.system.eventStream.publish(FullBlockApplied(modToApply.asInstanceOf[ErgoFullBlock].header))
+                  val header = modToApply.asInstanceOf[ErgoFullBlock].header
+                  val event = if (local) {
+                    LocalBlockApplied(header)
+                  } else {
+                    RemoteBlockApplied(header)
+                  }
+                  context.system.eventStream.publish(event)
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
@@ -476,7 +485,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
             if (progressInfo.toApply.nonEmpty) {
               val (newHistory, newStateTry, blocksApplied) =
-                updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
+                updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty, local)
 
               newStateTry match {
                 case Success(newMinState) =>

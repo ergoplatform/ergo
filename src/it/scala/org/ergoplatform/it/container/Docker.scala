@@ -3,15 +3,17 @@ package org.ergoplatform.it.container
 import java.io.{File, FileOutputStream}
 import java.net.InetAddress
 import java.nio.file.{Files, Path, Paths}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.{Properties, UUID}
 import cats.implicits._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.javaprop.JavaPropsMapper
 import com.github.dockerjava.api.DockerClient
+import com.github.dockerjava.api.async.ResultCallback
 import com.github.dockerjava.api.command.{CreateContainerCmd, WaitContainerResultCallback}
 import com.github.dockerjava.api.exception.NotFoundException
-import com.github.dockerjava.api.model.{Bind, ContainerNetwork, ExposedPort, HostConfig, Network, PortBinding, Ports, Volume}
+import com.github.dockerjava.api.model.{Bind, ContainerNetwork, ExposedPort, Frame, HostConfig, Network, PortBinding, Ports, Volume}
 import com.github.dockerjava.api.model.Network.Ipam
 import com.google.common.primitives.Ints
 import com.github.dockerjava.core.{DefaultDockerClientConfig, DockerClientImpl}
@@ -21,7 +23,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
-import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60, MainNet, TestNet}
+import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60, MainNet, TestNet, Tests}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NetworkType}
 import scorex.util.ScorexLogging
 
@@ -145,7 +147,7 @@ class Docker(
     val networkPort        = initialSettings.scorexSettings.network.bindAddress.getPort
 
     val nodeConfig: Config =
-      enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig, ip, networkPort)
+      enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig)
     val settings: ErgoSettings = buildErgoSettings(networkType, nodeConfig)
     val containerBuilder: CreateContainerCmd =
       buildPeerContainerCmd(networkType, nodeConfig, settings, ip, specialVolumeOpt)
@@ -219,9 +221,7 @@ class Docker(
   private def enrichNodeConfig(
     networkType: NetworkType,
     nodeConfig: Config,
-    extraConfig: ExtraConfig,
-    ip: String,
-    port: Int
+    extraConfig: ExtraConfig
   ) = {
     val publicPeerConfig = nodeConfig //.withFallback(declaredAddressConfig(ip, port))
     val withPeerConfig = nodeRepository.headOption.fold(publicPeerConfig) { node =>
@@ -296,6 +296,7 @@ class Docker(
     val networkTypeCmdOption = networkType match {
       case MainNet => "--mainnet"
       case TestNet => "--testnet"
+      case Tests => "--testnet"
       case DevNet  => ""
       case DevNet60  => ""
     }
@@ -393,13 +394,55 @@ class Docker(
     stopNode(node.containerId, secondsToWait)
 
   def stopNode(containerId: String, secondsToWait: Int = 5): Unit = {
+    nodeRepository.find(_.containerId == containerId).foreach(_.close())
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.stopContainerCmd(containerId).withTimeout(secondsToWait).exec()
   }
 
   def forceStopNode(containerId: String): Unit = {
+    nodeRepository.find(_.containerId == containerId).foreach(_.close())
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.removeContainerCmd(containerId).withForce(true).exec()
+  }
+
+  def removeFromMountedVolume(
+    localVolume: String,
+    remoteVolume: String,
+    relativePath: String
+  ): Unit = {
+    require(relativePath.nonEmpty, "Relative path to remove must be non-empty")
+    require(
+      !relativePath.startsWith("/"),
+      s"Relative path must not be absolute: $relativePath"
+    )
+    require(
+      !relativePath.split("/").contains(".."),
+      s"Relative path must not escape the volume: $relativePath"
+    )
+
+    val targetPath = s"$remoteVolume/$relativePath"
+    val hostConfig =
+      new HostConfig().withBinds(new Bind(localVolume, new Volume(remoteVolume)))
+    val cleanupContainerId = client
+      .createContainerCmd(ErgoImageLatest)
+      .withHostConfig(hostConfig)
+      .withEntrypoint("rm", "-rf", targetPath)
+      .exec()
+      .getId
+
+    val waitCallback = waitContainer(cleanupContainerId)
+    try {
+      client.startContainerCmd(cleanupContainerId).exec()
+      val exitCode = waitCallback.awaitStatusCode()
+      if (exitCode != 0) {
+        throw new IllegalStateException(
+          s"Volume cleanup failed for $targetPath with exit code $exitCode"
+        )
+      }
+    } finally {
+      waitCallback.close()
+      client.removeContainerCmd(cleanupContainerId).withForce(true).exec()
+    }
   }
 
   override def close(): Unit = {
@@ -435,41 +478,37 @@ class Docker(
     val logDir: Path = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
 
-    val fileName: String = s"$tag-$containerId"
+    val fileName: String = if (tag.isEmpty) containerId else s"$tag-$containerId"
     val logFile: File    = logDir.resolve(s"$fileName.log").toFile
-    log.info(s"Writing logs of $tag-$containerId to ${logFile.getAbsolutePath}")
+    log.info(s"Writing logs of $fileName to ${logFile.getAbsolutePath}")
 
-    val fileStream: FileOutputStream = new FileOutputStream(logFile, false)
-    client
-      .logContainerCmd(containerId)
-      .withTimestamps(true)
-      .withFollowStream(true)
-      .withStdOut(true)
-      .withStdErr(true)
-      .start()
-      .onStart(fileStream)
+    val fileStream = new FileOutputStream(logFile, false)
+    val callback = new ResultCallback.Adapter[Frame] {
+      override def onNext(frame: Frame): Unit = {
+        fileStream.write(frame.getPayload)
+      }
+    }
+    try {
+      val completed = client
+        .logContainerCmd(containerId)
+        .withTimestamps(true)
+        .withStdOut(true)
+        .withStdErr(true)
+        .exec(callback)
+        .awaitCompletion(10, TimeUnit.SECONDS)
+      if (!completed) {
+        log.warn(s"Timed out while writing logs for $fileName")
+      }
+    } finally {
+      callback.close()
+      fileStream.close()
+    }
   }
 
   private def saveNodeLogs(): Unit = {
-    val logDir = Paths.get(System.getProperty("user.dir"), "target", "logs")
-    Files.createDirectories(logDir)
     nodeRepository.foreach { node =>
       import node.nodeInfo.containerId
-
-      val fileName = if (tag.isEmpty) containerId else s"$tag-$containerId"
-      val logFile  = logDir.resolve(s"$fileName.log").toFile
-      log.info(s"Writing logs of $containerId to ${logFile.getAbsolutePath}")
-
-      val fileStream = new FileOutputStream(logFile, false)
-      client
-        .logContainerCmd(containerId)
-        .withTimestamps(true)
-        .withFollowStream(true)
-        .withStdOut(true)
-        .withStdErr(true)
-        .start()
-        .onStart(fileStream)
-
+      saveLogs(containerId, tag)
     }
   }
 

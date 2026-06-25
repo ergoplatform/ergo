@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Props}
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
 import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
@@ -328,7 +328,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     lock.lock()
     created.await()
     val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
-    indexer ! FullBlockApplied(newBestHeaderOpt.get) // will be ignored
+    indexer ! RemoteBlockApplied(newBestHeaderOpt.get) // will be ignored
     indexer ! CreateDB(HEIGHT + 1)
     lock.lock()
     created.await()

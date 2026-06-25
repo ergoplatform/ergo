@@ -105,7 +105,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     */
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id) match {
-      case Some(wtx) =>
+      case Some(wtx) if orderedTransactions.contains(wtx) =>
         new OrderedTxPool(
           orderedTransactions - wtx,
           transactionsRegistry - tx.id,
@@ -113,7 +113,20 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
         ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
-      case None => this
+      case Some(_) =>
+        if (orderedTransactions.valuesIterator.exists(_.id == tx.id)) {
+          new OrderedTxPool(
+            orderedTransactions.filter(_._2.id != tx.id),
+            transactionsRegistry - tx.id,
+            invalidatedTxIds,
+            outputs -- tx.outputs.map(_.id),
+            inputs -- tx.inputs.map(_.boxId)
+          )
+        } else {
+          this
+        }
+      case None =>
+        this
     }
   }
 
@@ -125,7 +138,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
   def invalidate(unconfirmedTx: UnconfirmedTransaction): OrderedTxPool = {
     val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
-      case Some(wtx) =>
+      case Some(wtx) if orderedTransactions.contains(wtx) =>
         new OrderedTxPool(
           orderedTransactions - wtx,
           transactionsRegistry - tx.id,
@@ -133,7 +146,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
         ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
-      case None =>
+      case Some(_) =>
         if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
           new OrderedTxPool(
             orderedTransactions.filter(_._2.id != tx.id),
@@ -145,6 +158,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
         } else {
           new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
         }
+      case None =>
+        new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
     }
   }
 

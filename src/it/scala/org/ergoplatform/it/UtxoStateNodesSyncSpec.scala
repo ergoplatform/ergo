@@ -22,7 +22,7 @@ class UtxoStateNodesSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val nodeConfigs: List[Config] =
     (minerConfig +: nonGeneratingConfig +: onlineGeneratingConfigs)
-      .map(_.withFallback(localOnlyConfig))
+      .map(_.withFallback(allowLocalConfig))
 
   val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs).get
 

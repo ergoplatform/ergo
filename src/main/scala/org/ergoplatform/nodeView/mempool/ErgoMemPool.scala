@@ -203,7 +203,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
-        val p = pool.put(unconfirmedTransaction, feeF).remove(doubleSpendingTxs)
+        val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
         val updPool = new ErgoMemPool(p, stats, sortingOption)
         updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
       } else {

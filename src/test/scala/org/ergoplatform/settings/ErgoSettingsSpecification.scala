@@ -1,5 +1,6 @@
 package org.ergoplatform.settings
 
+import com.typesafe.config.ConfigFactory
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -172,6 +173,119 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
       ).map(new URL(_))
 
     validUrls.forall(url => !ErgoSettingsReader.invalidRestApiUrl(url)) shouldBe true
+  }
+
+  property("localOnly config key should fallback to allowLocal") {
+    val baseConfig = ConfigFactory.parseString(
+      """
+        |scorex {
+        |  dataDir = "/tmp/scorex"
+        |  logDir = "/tmp/scorex/log"
+        |  logging {
+        |    level = "INFO"
+        |  }
+        |  network {
+        |    nodeName = "test-node"
+        |    bindAddress = "0.0.0.0:9020"
+        |    appVersion = "6.0.3"
+        |    agentName = "test"
+        |    magicBytes = [2, 2, 2, 2]
+        |    maxConnections = 30
+        |    connectionTimeout = 1s
+        |    declaredAddress = "127.0.0.1:9020"
+        |    handshakeTimeout = 30s
+        |    deliveryTimeout = 10s
+        |    maxDeliveryChecks = 100
+        |    desiredInvObjects = 400
+        |    syncInterval = 5s
+        |    syncStatusRefresh = 60s
+        |    syncIntervalStable = 30s
+        |    syncStatusRefreshStable = 90s
+        |    inactiveConnectionDeadline = 10m
+        |    syncTimeout = 10s
+        |    controllerTimeout = 5s
+        |    maxModifiersCacheSize = 1024
+        |    getPeersInterval = 2m
+        |    maxPeerSpecObjects = 64
+        |    temporalBanDuration = 60m
+        |    penaltySafeInterval = 2m
+        |    penaltyScoreThreshold = 500
+        |    peerEvictionInterval = 1h
+        |    peerDiscovery = true
+        |    knownPeers = []
+        |    bannedPeers = []
+        |    upnpEnabled = false
+        |    localOnly = true
+        |  }
+        |  restApi {
+        |    bindAddress = "0.0.0.0:9052"
+        |    apiKeyHash = null
+        |    corsAllowedOrigin = "*"
+        |    timeout = 5s
+        |  }
+        |}
+      """.stripMargin
+    )
+
+    val scorexSettings = ScorexSettings.fromConfig(baseConfig)
+    scorexSettings.network.allowLocal shouldBe true
+  }
+
+  property("allowLocal should take precedence over localOnly") {
+    val baseConfig = ConfigFactory.parseString(
+      """
+        |scorex {
+        |  dataDir = "/tmp/scorex"
+        |  logDir = "/tmp/scorex/log"
+        |  logging {
+        |    level = "INFO"
+        |  }
+        |  network {
+        |    nodeName = "test-node"
+        |    bindAddress = "0.0.0.0:9020"
+        |    appVersion = "6.0.3"
+        |    agentName = "test"
+        |    magicBytes = [2, 2, 2, 2]
+        |    maxConnections = 30
+        |    connectionTimeout = 1s
+        |    declaredAddress = "127.0.0.1:9020"
+        |    handshakeTimeout = 30s
+        |    deliveryTimeout = 10s
+        |    maxDeliveryChecks = 100
+        |    desiredInvObjects = 400
+        |    syncInterval = 5s
+        |    syncStatusRefresh = 60s
+        |    syncIntervalStable = 30s
+        |    syncStatusRefreshStable = 90s
+        |    inactiveConnectionDeadline = 10m
+        |    syncTimeout = 10s
+        |    controllerTimeout = 5s
+        |    maxModifiersCacheSize = 1024
+        |    getPeersInterval = 2m
+        |    maxPeerSpecObjects = 64
+        |    temporalBanDuration = 60m
+        |    penaltySafeInterval = 2m
+        |    penaltyScoreThreshold = 500
+        |    peerEvictionInterval = 1h
+        |    peerDiscovery = true
+        |    knownPeers = []
+        |    bannedPeers = []
+        |    upnpEnabled = false
+        |    localOnly = true
+        |    allowLocal = false
+        |  }
+        |  restApi {
+        |    bindAddress = "0.0.0.0:9052"
+        |    apiKeyHash = null
+        |    corsAllowedOrigin = "*"
+        |    timeout = 5s
+        |  }
+        |}
+      """.stripMargin
+    )
+
+    val scorexSettings = ScorexSettings.fromConfig(baseConfig)
+    scorexSettings.network.allowLocal shouldBe false
   }
 
 }

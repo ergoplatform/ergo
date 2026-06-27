@@ -14,6 +14,7 @@ import org.ergoplatform.settings.ErgoSettings.{configPath, scorexConfigPath}
 
 import java.net.{InetAddress, URL}
 import scala.util.Try
+import scala.collection.JavaConverters._
 
 /**
   * Functions to read configs (ErgoSettings instances)
@@ -38,6 +39,16 @@ object ErgoSettingsReader extends ScorexLogging
     val cacheSettings = config.as[CacheSettings](s"$configPath.cache")
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
     val votingTargets = VotingTargets.fromConfig(config)
+
+    // VERBOSE CONFIG LOGGING: Log final parsed chain settings
+    log.info("=== FINAL PARSED CHAIN SETTINGS ===")
+    log.info(s"networkType = $networkType")
+    log.info(s"chainSettings.initialDifficultyHex = ${chainSettings.initialDifficultyHex}")
+    log.info(s"chainSettings.epochLength = ${chainSettings.epochLength}")
+    log.info(s"chainSettings.voting.version2ActivationHeight = ${chainSettings.voting.version2ActivationHeight}")
+    log.info(s"chainSettings.voting.version2ActivationDifficultyHex = ${chainSettings.voting.version2ActivationDifficultyHex}")
+    log.info(s"chainSettings.voting.votingLength = ${chainSettings.voting.votingLength}")
+    log.info("=== END FINAL PARSED CHAIN SETTINGS ===")
 
     overrideLogLevel(scorexSettings.logging.level)
 
@@ -70,6 +81,52 @@ object ErgoSettingsReader extends ScorexLogging
 
     val keystorePath = "ergo.wallet.secretStorage.secretDir"
 
+    // VERBOSE CONFIG LOGGING: Log each config layer for ergo.chain
+    log.info("=== CONFIG MERGING DIAGNOSTICS ===")
+    log.info(s"User config file: ${configFile.getAbsolutePath}")
+    log.info(s"Network config file: ${fallbackConfig.map(_.getAbsolutePath).getOrElse("NONE")}")
+    
+    // Log user config ergo.chain content
+    if (cfg.hasPath("ergo.chain")) {
+      log.info(s"USER CONFIG ergo.chain keys: ${cfg.getConfig("ergo.chain").root().keySet().asScala.mkString(", ")}")
+      if (cfg.hasPath("ergo.chain.voting")) {
+        log.info(s"USER CONFIG ergo.chain.voting keys: ${cfg.getConfig("ergo.chain.voting").root().keySet().asScala.mkString(", ")}")
+      } else {
+        log.info("USER CONFIG: ergo.chain.voting NOT PRESENT")
+      }
+    } else {
+      log.info("USER CONFIG: ergo.chain NOT PRESENT")
+    }
+    
+    // Log network config ergo.chain content
+    if (firstFallBack.hasPath("ergo.chain")) {
+      log.info(s"NETWORK CONFIG ergo.chain keys: ${firstFallBack.getConfig("ergo.chain").root().keySet().asScala.mkString(", ")}")
+      if (firstFallBack.hasPath("ergo.chain.voting")) {
+        log.info(s"NETWORK CONFIG ergo.chain.voting keys: ${firstFallBack.getConfig("ergo.chain.voting").root().keySet().asScala.mkString(", ")}")
+        log.info(s"NETWORK CONFIG version2ActivationHeight = ${firstFallBack.getString("ergo.chain.voting.version2ActivationHeight")}")
+        log.info(s"NETWORK CONFIG version2ActivationDifficultyHex = ${firstFallBack.getString("ergo.chain.voting.version2ActivationDifficultyHex")}")
+      } else {
+        log.info("NETWORK CONFIG: ergo.chain.voting NOT PRESENT")
+      }
+    } else {
+      log.info("NETWORK CONFIG: ergo.chain NOT PRESENT")
+    }
+    
+    // Log application.conf ergo.chain content
+    val appConfig = ConfigFactory.defaultApplication()
+    if (appConfig.hasPath("ergo.chain")) {
+      log.info(s"APPLICATION.CONF ergo.chain keys: ${appConfig.getConfig("ergo.chain").root().keySet().asScala.mkString(", ")}")
+      if (appConfig.hasPath("ergo.chain.voting")) {
+        log.info(s"APPLICATION.CONF ergo.chain.voting keys: ${appConfig.getConfig("ergo.chain.voting").root().keySet().asScala.mkString(", ")}")
+        log.info(s"APPLICATION.CONF version2ActivationHeight = ${appConfig.getString("ergo.chain.voting.version2ActivationHeight")}")
+        log.info(s"APPLICATION.CONF version2ActivationDifficultyHex = ${appConfig.getString("ergo.chain.voting.version2ActivationDifficultyHex")}")
+      } else {
+        log.info("APPLICATION.CONF: ergo.chain.voting NOT PRESENT")
+      }
+    } else {
+      log.info("APPLICATION.CONF: ergo.chain NOT PRESENT")
+    }
+
     // Check that user-provided Ergo directory exists and has write access (if provided at all)
     val userDirOpt = Try(cfg.getString("ergo.directory")).toOption
     userDirOpt.foreach { ergoDirName =>
@@ -89,6 +146,28 @@ object ErgoSettingsReader extends ScorexLogging
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
+
+    // VERBOSE CONFIG LOGGING: Log merged result
+    log.info("=== MERGED CONFIG RESULT ===")
+    if (fullConfig.hasPath("ergo.chain")) {
+      log.info(s"MERGED ergo.chain keys: ${fullConfig.getConfig("ergo.chain").root().keySet().asScala.mkString(", ")}")
+      if (fullConfig.hasPath("ergo.chain.voting")) {
+        log.info(s"MERGED ergo.chain.voting keys: ${fullConfig.getConfig("ergo.chain.voting").root().keySet().asScala.mkString(", ")}")
+        log.info(s"MERGED version2ActivationHeight = ${fullConfig.getString("ergo.chain.voting.version2ActivationHeight")}")
+        log.info(s"MERGED version2ActivationDifficultyHex = ${fullConfig.getString("ergo.chain.voting.version2ActivationDifficultyHex")}")
+        
+        // Show origin of each value
+        val heightValue = fullConfig.getValue("ergo.chain.voting.version2ActivationHeight")
+        val diffValue = fullConfig.getValue("ergo.chain.voting.version2ActivationDifficultyHex")
+        log.info(s"MERGED version2ActivationHeight origin: ${heightValue.origin().description()}")
+        log.info(s"MERGED version2ActivationDifficultyHex origin: ${diffValue.origin().description()}")
+      } else {
+        log.info("MERGED: ergo.chain.voting NOT PRESENT")
+      }
+    } else {
+      log.info("MERGED: ergo.chain NOT PRESENT")
+    }
+    log.info("=== END CONFIG MERGING DIAGNOSTICS ===")
 
     // If user provided only ergo.directory but not ergo.wallet.secretStorage.secretDir in his config,
     // set ergo.wallet.secretStorage.secretDir like in reference.conf (so ergo.directory + "/wallet/keystore")
@@ -110,6 +189,14 @@ object ErgoSettingsReader extends ScorexLogging
         val classLoader = ClassLoader.getSystemClassLoader
         val destDir = System.getProperty("java.io.tmpdir") + "/"
 
+        // VERBOSE CONFIG LOGGING: Log network config discovery
+        log.info(s"=== NETWORK CONFIG DISCOVERY ===")
+        log.info(s"Looking for network config: $confName")
+        log.info(s"System classloader: $classLoader")
+        
+        val resourceUrl = Option(classLoader.getResource(confName))
+        log.info(s"Found resource URL: ${resourceUrl.map(_.toString).getOrElse("NOT FOUND")}")
+        
         Option(classLoader.getResourceAsStream(confName))
           .map { stream =>
             val source = Channels.newChannel(stream)
@@ -123,6 +210,13 @@ object ErgoSettingsReader extends ScorexLogging
             sys.addShutdownHook {
               new File(destDir, confName).delete
             }
+            
+            log.info(s"Network config copied to: ${fileOut.getAbsolutePath}")
+            log.info(s"Network config size: ${fileOut.length()} bytes")
+            
+            // Log first 500 chars of network config content
+            val content = scala.io.Source.fromFile(fileOut).take(500).mkString
+            log.info(s"Network config content (first 500 chars):\n$content")
 
             fileOut
           }
@@ -133,6 +227,16 @@ object ErgoSettingsReader extends ScorexLogging
       file = new File(filePathOpt)
       if file.exists
     } yield file
+
+    // VERBOSE CONFIG LOGGING: Log user config discovery
+    log.info(s"=== USER CONFIG DISCOVERY ===")
+    log.info(s"User config path: ${args.userConfigPathOpt.getOrElse("NOT PROVIDED")}")
+    log.info(s"User config file found: ${userConfigFileOpt.map(_.getAbsolutePath).getOrElse("NOT FOUND")}")
+    userConfigFileOpt.foreach { file =>
+      log.info(s"User config size: ${file.length()} bytes")
+      val content = scala.io.Source.fromFile(file).mkString
+      log.info(s"User config content:\n$content")
+    }
 
     networkConfigFileOpt.flatMap(_ => args.networkTypeOpt).fold(log.warn("Running without network config"))(
       x => log.info(s"Running in ${x.verboseName} network mode"))

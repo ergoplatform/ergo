@@ -39,11 +39,11 @@ lazy val commonSettings = Seq(
 
 publishArtifact in (Compile, packageDoc) := false
 
-val circeVersion = "0.13.0"
+val circeVersion = "0.14.15"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "6.0.2-30-59782d92-SNAPSHOT"
+val sigmaStateVersion = "6.0.4-37-368a860b-SNAPSHOT"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -316,7 +316,7 @@ lazy val ergo = (project in file("."))
       "com.github.scopt" %% "scopt" % "4.1.0",
 
       // API dependencies
-      "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
+      "de.heikoseeberger" %% "akka-http-circe" % "1.39.2",
 
       // app dependencies
       // jaxb-api is included only to avoid a runtime exception

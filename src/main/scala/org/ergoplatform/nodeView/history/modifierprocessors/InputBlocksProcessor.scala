@@ -830,6 +830,12 @@ trait InputBlocksProcessor extends ScorexLogging {
     val HeightThreshold = 2
 
     try {
+      // Skip already known input blocks
+      if (inputBlockRecords.contains(ib.id)) {
+        log.debug(s"Input block ${ib.id} already known, skipping")
+        return None
+      }
+
       lazy val orderingId = extractOrderingId(ib)
 
       // if input-block corresponds to an ordering block @ better height, reset best input block reference

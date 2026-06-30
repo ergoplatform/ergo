@@ -1749,6 +1749,44 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: processInputBlock ignores already known input block") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Setup history with a chain
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).sample.get
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None
+      )
+
+      // Pre-apply the input block to history so it is already known
+      hist.applyInputBlock(inputBlockInfo) shouldBe None
+      hist.getInputBlock(header.id) shouldBe Some(inputBlockInfo)
+
+      val synchronizer = synchronizerMockRef.underlyingActor
+
+      // Call processInputBlock on an already known block
+      synchronizer.processInputBlock(inputBlockInfo, hist, mempool, peer, Some(wrappedState))
+
+      // No network activity should occur for a known block
+      ncProbe.expectNoMessage(500.millis)
+    }
+  }
+
   property("NodeViewSynchronizer: broadcastModifierInv with peersOpt targets specific peers") {
     withFixture2 { ctx =>
       import ctx._

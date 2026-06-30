@@ -1435,6 +1435,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val subBlockHeader = inputBlockInfo.header
     val subBlockId = inputBlockInfo.id
 
+    // Skip already known input blocks
+    if (hr.getInputBlock(subBlockId).isDefined) {
+      log.debug(s"Input block $subBlockId already known, ignoring")
+      return
+    }
+
     // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       val powScheme = settings.chainSettings.powScheme

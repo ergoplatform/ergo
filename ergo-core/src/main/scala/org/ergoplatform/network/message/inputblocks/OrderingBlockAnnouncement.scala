@@ -24,7 +24,7 @@ case class OrderingBlockAnnouncement(version: Byte,
 
   def valid(powScheme: AutolykosPowScheme,
             expectedNBits: Option[Long] = None): Boolean = {
-    val extValid = ExtensionCandidate(extensionFields).digest == header.extensionRoot
+    val extValid = ExtensionCandidate(extensionFields).digest.sameElements(header.extensionRoot)
     val nBitsValid = expectedNBits.forall(header.nBits == _)
     powScheme.validate(header).isSuccess && extValid && nBitsValid
   }

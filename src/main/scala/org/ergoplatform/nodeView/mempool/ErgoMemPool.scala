@@ -57,9 +57,10 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     val s = bytesToId(wId.take(half))
     val tb = wId.takeRight(half)
 
+    // todo: recheck if half is enough for collision resistance
     kt.find { id =>
       if (id.startsWith(s)) {
-        pool.get(id).exists(_.transaction.witnessSerializedId.take(ErgoTransaction.WeakIdLength).sameElements(tb))
+        pool.get(id).exists(_.transaction.witnessSerializedId.take(half).sameElements(tb))
       } else {
         false
       }

@@ -8,6 +8,8 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockAnnouncement
+import scorex.crypto.authds.LeafData
+import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -705,6 +707,17 @@ trait InputBlocksProcessor extends ScorexLogging {
   // extracts ordering block id from input block data provided
   private def extractOrderingId(ib: InputBlockAnnouncement) = ib.header.parentId
 
+  private def inputBlockTransactionsDigest(transactions: Seq[ErgoTransaction]): Digest32 = {
+    Algos.merkleTreeRoot(transactions.map(tx => LeafData @@ tx.serializedId))
+  }
+
+  private def transactionBodiesMatchAnnouncement(ib: InputBlockAnnouncement,
+                                                 transactions: Seq[ErgoTransaction]): Boolean = {
+    val proofCarriesInputBlockFields = ib.inputBlockFields.inputBlockFieldsProof.indices.nonEmpty
+    !proofCarriesInputBlockFields ||
+      inputBlockTransactionsDigest(transactions).sameElements(ib.inputBlockFields.transactionsDigest)
+  }
+
   /**
     * Gets the current best ordering block and best input block pair.
     *
@@ -915,6 +928,13 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     try {
       log.info(s"Applying ${transactions.size} input block transactions for $sbId")
+      inputBlockRecords.get(sbId).foreach { ib =>
+        if (!transactionBodiesMatchAnnouncement(ib, transactions)) {
+          log.warn(s"Input block transactions digest does not match announcement for $sbId")
+          return Seq.empty -> Seq.empty
+        }
+      }
+
       val transactionIds = transactions.map(_.id)
       inputBlockTransactions.put(sbId, transactionIds)
 

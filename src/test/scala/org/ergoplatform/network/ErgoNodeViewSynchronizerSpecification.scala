@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.nodeView.history.{
@@ -2341,6 +2342,296 @@ class ErgoNodeViewSynchronizerSpecification
           case SendToPeers(peers) => peers.contains(targetPeer)
           case _                  => true // Broadcast is also acceptable
         }
+      } shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlock ignores input blocks in digest mode") {
+    withFixture2 { ctx =>
+      import ctx._
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      genChain(3, hist)
+
+      // Build a valid input block announcement (valid PoW and extension proof)
+      val inputBlockInfo = buildValidInputBlockAnnouncement(hist.bestFullBlockOpt)
+      inputBlockInfo.header.height shouldBe (hist.fullBlockHeight + 1)
+      inputBlockInfo.valid(
+        settings.chainSettings.powScheme,
+        parameters
+      ) shouldBe true
+
+      // Send only history and mempool to the synchronizer, no state (digest mode equivalent)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // processInputBlock should return early because usrOpt is None
+      val synchronizer = synchronizerMockRef.underlyingActor
+      synchronizer.processInputBlock(
+        inputBlockInfo,
+        hist,
+        ErgoMemPool.empty(settings),
+        peer,
+        None
+      )
+
+      // No network messages and no penalization should occur
+      Thread.sleep(200)
+      val messages = ncProbe.receiveWhile(max = 500 millis, idle = 100.millis) { case m => m }
+      messages.exists {
+        case PenalizePeer(_, _) => true
+        case _ => false
+      } shouldBe false
+      messages.exists {
+        case _: scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork => true
+        case _ => false
+      } shouldBe false
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlock ignores input block at or below full block height") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      // Use the first block's header, which has height 1 == fullBlockHeight + 1 at this point,
+      // so apply it first to advance fullBlockHeight, then re-process the same header.
+      val firstHeader = chain.head.header
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        firstHeader,
+        InputBlockFields.empty,
+        None
+      )
+
+      // Apply an ordering block to advance fullBlockHeight to at least 1
+      applyBlock(hist, chain.head)
+      synchronizerMockRef ! ChangedHistory(hist)
+      Thread.sleep(200)
+
+      hist.fullBlockHeight should be >= firstHeader.height
+
+      // Re-processing the same header (height <= fullBlockHeight) should be ignored
+      val synchronizer = synchronizerMockRef.underlyingActor
+      synchronizer.processInputBlock(
+        inputBlockInfo,
+        hist,
+        mempool,
+        peer,
+        Some(wrappedState)
+      )
+
+      // No network or penalization messages expected for already-known/behind-height input block
+      Thread.sleep(200)
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processInputBlock at fullBlockHeight + 1 with all txs in mempool processes immediately"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
+        ProcessInputBlock,
+        ProcessInputBlockTransactions
+      }
+
+      val viewHolderProbe = TestProbe("ViewHolderProbe")
+      val testSyncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val testDeliveryTracker = DeliveryTracker.empty(settings)
+      implicit val ec: ExecutionContextExecutor = ctx.system.dispatcher
+
+      val testSynchronizerRef: TestActorRef[SynchronizerMock] = TestActorRef(
+        Props(
+          new SynchronizerMock(
+            ncProbe.ref,
+            viewHolderProbe.ref,
+            ErgoSyncInfoMessageSpec,
+            settings,
+            testSyncTracker,
+            testDeliveryTracker
+          )
+        )
+      )
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+      val mempool = ErgoMemPool.empty(settings).put(UnconfirmedTransaction(tx, None))
+
+      testSynchronizerRef ! ChangedState(wrappedState)
+      testSynchronizerRef ! ChangedHistory(hist)
+      testSynchronizerRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      // Build a valid input block at height fullBlockHeight + 1, announcing tx's weakId
+      val inputBlockInfo = buildValidInputBlockAnnouncement(hist.bestFullBlockOpt)
+      inputBlockInfo.header.height shouldBe (hist.fullBlockHeight + 1)
+      val inputBlockWithTxs = inputBlockInfo.copy(weakTxIds = Some(Seq(tx.weakId)))
+
+      testSynchronizerRef.underlyingActor.processInputBlock(
+        inputBlockWithTxs,
+        hist,
+        mempool,
+        peer,
+        Some(wrappedState)
+      )
+
+      // Both ProcessInputBlock and ProcessInputBlockTransactions should be sent immediately
+      val processInputBlockMsg = viewHolderProbe.fishForMessage(2 seconds) {
+        case _: ProcessInputBlock => true
+        case _ => false
+      }
+      processInputBlockMsg
+        .asInstanceOf[ProcessInputBlock]
+        .subblock
+        .id shouldBe inputBlockWithTxs.id
+
+      val processTxsMsg = viewHolderProbe.fishForMessage(2 seconds) {
+        case _: ProcessInputBlockTransactions => true
+        case _ => false
+      }
+      val pit = processTxsMsg.asInstanceOf[ProcessInputBlockTransactions]
+      pit.std.inputBlockId shouldBe inputBlockWithTxs.id
+      pit.std.transactions should contain(tx)
+
+      // No missing-transaction request should be sent to the network
+      ncProbe.expectNoMessage(500.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: processInputBlock rejects input block with wrong nBits") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      // Seed history with a genesis block so the input block's parent is known and
+      // requiredDifficultyAfter(parent) yields the expected nBits.
+      import org.ergoplatform.utils.generators.ChainGenerator.applyBlock
+      val chain = genChain(1, hist)
+      applyBlock(hist, chain.head)
+
+      // Build a valid input block at fullBlockHeight + 1, with parent known to history
+      val validInputBlock = buildValidInputBlockAnnouncement(Some(chain.head))
+      hist.modifierById(validInputBlock.header.parentId).collect { case h: Header => h } shouldBe hist.bestHeaderOpt
+
+      // Corrupt nBits so it no longer matches the difficulty derived from the parent.
+      // The fake PoW scheme validates any header, so nBits mismatch is the actual rejection path tested here.
+      // Scale the original difficulty to guarantee a different compact encoding (a small delta
+      // can be lost in compact-bit precision).
+      val originalDifficulty = DifficultySerializer.decodeCompactBits(validInputBlock.header.nBits)
+      val wrongNBits = DifficultySerializer.encodeCompactBits(originalDifficulty * 2)
+      wrongNBits should not be validInputBlock.header.nBits
+      val modifiedHeader = validInputBlock.header.copy(nBits = wrongNBits)
+      val invalidInputBlock = validInputBlock.copy(header = modifiedHeader)
+
+      // Sanity-check: the invalid input block must fail validation against the parent's expected difficulty.
+      val parentHeader = hist.modifierById(invalidInputBlock.header.parentId).collect { case h: Header => h }.get
+      val expectedDiff = hist.requiredDifficultyAfter(parentHeader)
+      val expectedNBits = DifficultySerializer.encodeCompactBits(expectedDiff)
+      expectedNBits shouldBe validInputBlock.header.nBits
+      invalidInputBlock.valid(
+        settings.chainSettings.powScheme,
+        wrappedState.stateContext.currentParameters,
+        Some(expectedNBits)
+      ) shouldBe false
+
+      synchronizerMockRef.underlyingActor.processInputBlock(
+        invalidInputBlock,
+        hist,
+        mempool,
+        peer,
+        Some(wrappedState)
+      )
+
+      val messages = ncProbe.receiveWhile(max = 2 seconds, idle = 200.millis) {
+        case m => m
+      }
+      messages.exists {
+        case PenalizePeer(_, PenaltyType.MisbehaviorPenalty) => true
+        case _ => false
+      } shouldBe true
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processInputBlock rejects input block with invalid extension Merkle proof"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      val validInputBlock = buildValidInputBlockAnnouncement(hist.bestFullBlockOpt)
+      // Replace the Merkle proof with an empty one so it cannot validate against the header
+      val invalidInputBlock = validInputBlock.copy(
+        inputBlockFields = InputBlockFields.empty
+      )
+      invalidInputBlock.valid(
+        settings.chainSettings.powScheme,
+        wrappedState.stateContext.currentParameters
+      ) shouldBe false
+
+      synchronizerMockRef.underlyingActor.processInputBlock(
+        invalidInputBlock,
+        hist,
+        mempool,
+        peer,
+        Some(wrappedState)
+      )
+
+      val messages = ncProbe.receiveWhile(max = 2 seconds, idle = 200.millis) {
+        case m => m
+      }
+      messages.exists {
+        case PenalizePeer(_, PenaltyType.MisbehaviorPenalty) => true
+        case _ => false
       } shouldBe true
     }
   }

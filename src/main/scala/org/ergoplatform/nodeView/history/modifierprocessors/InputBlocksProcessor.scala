@@ -713,9 +713,16 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   private def transactionBodiesMatchAnnouncement(ib: InputBlockAnnouncement,
                                                  transactions: Seq[ErgoTransaction]): Boolean = {
-    val proofCarriesInputBlockFields = ib.inputBlockFields.inputBlockFieldsProof.indices.nonEmpty
-    !proofCarriesInputBlockFields ||
+    ib.inputBlockFields.inputBlockFieldsProof.indices.isEmpty ||
       inputBlockTransactionsDigest(transactions).sameElements(ib.inputBlockFields.transactionsDigest)
+  }
+
+  private def inputBlockDigestMatches(sbId: ModifierId,
+                                      transactions: Seq[ErgoTransaction]): Boolean = {
+    inputBlockRecords.get(sbId) match {
+      case Some(ib) => transactionBodiesMatchAnnouncement(ib, transactions)
+      case None => true
+    }
   }
 
   /**
@@ -928,11 +935,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     try {
       log.info(s"Applying ${transactions.size} input block transactions for $sbId")
-      inputBlockRecords.get(sbId).foreach { ib =>
-        if (!transactionBodiesMatchAnnouncement(ib, transactions)) {
-          log.warn(s"Input block transactions digest does not match announcement for $sbId")
-          return Seq.empty -> Seq.empty
-        }
+      if (!inputBlockDigestMatches(sbId, transactions)) {
+        log.warn(s"Input block transactions digest does not match announcement for $sbId")
+        return Seq.empty -> Seq.empty
       }
 
       val transactionIds = transactions.map(_.id)

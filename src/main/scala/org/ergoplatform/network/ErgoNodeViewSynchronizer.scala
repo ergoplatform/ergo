@@ -2075,7 +2075,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // Split known peers into ones supporting input/ordering blocks and ones not
         val sendFullToStatuses = knownPeers.filter { peerStatus =>
           if (peerStatus.status == Equal || peerStatus.status == Fork) {
-            peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion)
+            peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion < Version.SubblocksVersion)
           } else {
             false
           }

@@ -1923,7 +1923,7 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
-  property("NodeViewSynchronizer: FullBlockApplied sends old format to sub-block peers") {
+  property("NodeViewSynchronizer: FullBlockApplied sends old format to legacy peers") {
     withFixture2 { ctx =>
       import ctx._
       import org.ergoplatform.consensus.Equal
@@ -1945,8 +1945,64 @@ class ErgoNodeViewSynchronizerSpecification
       synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
       Thread.sleep(500)
 
-      // Create a sub-block peer (version >= SubblocksVersion); production currently sends
-      // old-format block-section invs to peers that support sub-blocks.
+      // Create a legacy peer (version < SubblocksVersion); old-format block-section invs
+      // should be sent only to peers that do not support sub-blocks.
+      val legacyPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.initial,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val legacyPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(legacyPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(legacyPeer, Equal, Some(header.height))
+
+      // Send FullBlockApplied
+      synchronizerMockRef ! FullBlockApplied(header)
+
+      // Should send inv for header and block sections to the legacy peer
+      val messages = ncProbe.receiveWhile(max = 3 seconds, idle = 300.millis) {
+        case m => m
+      }
+      val invSent = messages.exists {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == InvSpec.messageCode &&
+          stn.sendingStrategy.isInstanceOf[SendToPeers] &&
+          stn.sendingStrategy.asInstanceOf[SendToPeers].chosenPeers.contains(legacyPeer)
+        case _ => false
+      }
+      invSent shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: FullBlockApplied does not send old format to sub-block peers") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      applyChain(hist, chain)
+      val header = chain.last.header
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      // Create a sub-block peer (version >= SubblocksVersion); old-format block-section
+      // invs should NOT be sent to peers that support sub-blocks.
       val subBlockPeerSpec = PeerSpec(
         settings.scorexSettings.network.agentName,
         Version.SubblocksVersion,
@@ -1964,18 +2020,18 @@ class ErgoNodeViewSynchronizerSpecification
       // Send FullBlockApplied
       synchronizerMockRef ! FullBlockApplied(header)
 
-      // Should send inv for header to the sub-block peer
+      // Should not send any old-format invs to the sub-block peer
       val messages = ncProbe.receiveWhile(max = 3 seconds, idle = 300.millis) {
         case m => m
       }
-      val invSent = messages.exists {
+      val invSentToSubBlock = messages.exists {
         case stn: SendToNetwork =>
           stn.message.spec.messageCode == InvSpec.messageCode &&
           stn.sendingStrategy.isInstanceOf[SendToPeers] &&
           stn.sendingStrategy.asInstanceOf[SendToPeers].chosenPeers.contains(subBlockPeer)
         case _ => false
       }
-      invSent shouldBe true
+      invSentToSubBlock shouldBe false
     }
   }
 
@@ -2633,6 +2689,208 @@ class ErgoNodeViewSynchronizerSpecification
         case PenalizePeer(_, PenaltyType.MisbehaviorPenalty) => true
         case _ => false
       } shouldBe true
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: malformed InputBlockMessageSpec bytes penalize peer"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      val hist    = ErgoHistory.readOrGenerate(settings)(null)
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      val invalidBytes = Array.fill(100)(0.toByte)
+      synchronizerMockRef ! Message(InputBlockMessageSpec, Left(invalidBytes), Some(peer))
+
+      val messages = ncProbe.receiveWhile(max = 2 seconds, idle = 200.millis) {
+        case m => m
+      }
+      messages.exists {
+        case PenalizePeer(_, PenaltyType.PermanentPenalty) => true
+        case _ => false
+      } shouldBe true
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: malformed OrderingBlockAnnouncementMessageSpec bytes penalize peer"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      val hist    = ErgoHistory.readOrGenerate(settings)(null)
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      val invalidBytes = Array.fill(100)(0.toByte)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(invalidBytes),
+        Some(peer)
+      )
+
+      val messages = ncProbe.receiveWhile(max = 2 seconds, idle = 200.millis) {
+        case m => m
+      }
+      messages.exists {
+        case PenalizePeer(_, PenaltyType.PermanentPenalty) => true
+        case _ => false
+      } shouldBe true
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: modifiersReq with unknown modifier type sends no message"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.NetworkObjectTypeId
+      import scorex.util.bytesToId
+
+      val hist    = ErgoHistory.readOrGenerate(settings)(null)
+      val mempool = ErgoMemPool.empty(settings)
+
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(mempool)
+      Thread.sleep(500)
+
+      val unknownTypeId = NetworkObjectTypeId.fromByte(0.toByte)
+      val unknownInvData = InvData(
+        unknownTypeId,
+        Seq(bytesToId(Array.fill(32)(0xAB.toByte)))
+      )
+      synchronizerMockRef ! Message(
+        RequestModifierSpec,
+        Right(unknownInvData),
+        Some(peer)
+      )
+
+      ncProbe.expectNoMessage(1.second)
+      pchProbe.expectNoMessage(1.second)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processInv for unknown input block requests and re-requests on CheckDelivery"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.CheckDelivery
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val inputBlockId = bytesToId(Array.fill(32)(0xFA.toByte))
+      val invData      = InvData(InputBlockTypeId.value, Seq(inputBlockId))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+
+      val initial = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      initial.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      initial.message.data.get.asInstanceOf[InvData].typeId shouldBe InputBlockTypeId.value
+      initial.message.data.get.asInstanceOf[InvData].ids shouldBe Seq(inputBlockId)
+      initial.sendingStrategy shouldBe SendToPeer(peer)
+
+      synchronizerMockRef ! CheckDelivery(peer, InputBlockTypeId.value, inputBlockId)
+
+      val reRequest = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].typeId == InputBlockTypeId.value &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(inputBlockId)
+        case _ => false
+      }
+      reRequest.asInstanceOf[SendToNetwork].sendingStrategy shouldBe SendToPeer(peer)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: NewBestInputBlock(local=true) does not broadcast to legacy peers"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{ModePeerFeature, PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist   = ErgoHistory.readOrGenerate(settings)(null)
+      val chain  = genChain(3, hist)
+      val header = chain.head.header
+
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None
+      )
+      hist.applyInputBlock(inputBlockInfo)
+
+      val legacyPeerProbe = TestProbe("LegacyPeerHandlerProbe")
+      val legacyPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.initial,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val legacyPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        legacyPeerProbe.ref,
+        Some(PeerInfo(legacyPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(legacyPeer, Equal, Some(header.height))
+
+      val subBlockPeerProbe = TestProbe("SubBlockPeerHandlerProbe")
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        subBlockPeerProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Equal, Some(header.height))
+
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) =>
+          peers should contain(subBlockPeer)
+          peers should not contain legacyPeer
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+      legacyPeerProbe.expectNoMessage(500.millis)
     }
   }
 

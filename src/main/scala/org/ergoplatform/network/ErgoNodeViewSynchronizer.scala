@@ -2203,7 +2203,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // we propagate input block with transactions immediately if it has no more than 3 transactions
             // todo: check number of transactions on retrieval
             // todo: improve high/low bandwidth rules
-            val ibi = if (preIbi.weakTxIds.size <= 3) {
+            val ibi = if (preIbi.weakTxIds.getOrElse(Seq.empty).size <= 3) {
               preIbi
             } else {
               preIbi.copy(weakTxIds = None)

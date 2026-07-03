@@ -1003,10 +1003,201 @@ class ErgoNodeViewSynchronizerSpecification
       }
 
       // Verify the message contains an InputBlockAnnouncement with the correct header id
+      // and that weakTxIds are stripped because > 3 transactions were announced.
       val ibi = sendToNetworkMsg.message.data.get.asInstanceOf[InputBlockAnnouncement]
       ibi.id shouldBe header.id
-    // Note: The handler should strip weakTxIds when size > 3, but due to message routing
-    // in test environments, we verify the core behavior (message sent to correct peer).
+      ibi.weakTxIds shouldBe None
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: NewBestInputBlock(local=true) keeps txs when exactly 3 transactions"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist   = ErgoHistory.readOrGenerate(settings)(null)
+      val chain  = genChain(3, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val fakeWeakIds = (1 to 3).map(i => Array.fill(32)(i.toByte))
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        Some(fakeWeakIds)
+      )
+
+      hist.applyInputBlock(inputBlockInfo)
+
+      val subBlocksPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlocksPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+
+      val ibi = msg.message.data.get.asInstanceOf[InputBlockAnnouncement]
+      ibi.id shouldBe header.id
+      ibi.weakTxIds shouldBe Some(fakeWeakIds)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: NewBestInputBlock(local=true) strips txs when exactly 4 transactions"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist   = ErgoHistory.readOrGenerate(settings)(null)
+      val chain  = genChain(3, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val fakeWeakIds = (1 to 4).map(i => Array.fill(32)(i.toByte))
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        Some(fakeWeakIds)
+      )
+
+      hist.applyInputBlock(inputBlockInfo)
+
+      val subBlocksPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlocksPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+
+      val ibi = msg.message.data.get.asInstanceOf[InputBlockAnnouncement]
+      ibi.id shouldBe header.id
+      ibi.weakTxIds shouldBe None
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with no txs when weakTxIds is None"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist   = ErgoHistory.readOrGenerate(settings)(null)
+      val chain  = genChain(3, hist)
+      val header = chain.head.header
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        weakTxIds = None
+      )
+
+      hist.applyInputBlock(inputBlockInfo)
+
+      val subBlocksPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlocksPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+
+      val ibi = msg.message.data.get.asInstanceOf[InputBlockAnnouncement]
+      ibi.id shouldBe header.id
+      ibi.weakTxIds shouldBe None
     }
   }
 

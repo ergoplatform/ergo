@@ -84,6 +84,12 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "reject chain slice ranges above the maximum headers limit" in {
+    Get(prefix + "/chainSlice?fromHeight=0&toHeight=16385") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "get block by header id" in {
     Get(prefix + "/" + headerIdString) ~> route ~> check {
       status shouldBe StatusCodes.OK

@@ -36,30 +36,26 @@ if [[ $conf_version != $jar_version ]]; then
   exit 1
 fi
 
-openapi_files=("openapi.yaml" "openapi-ai.yaml")
+openapi_path="src/main/resources/api/openapi.yaml"
+version_line=$(grep 'version:' "$openapi_path")
 
-for file in "${openapi_files[@]}"; do
-  openapi_path="src/main/resources/api/$file"
-  version_line=$(grep 'version:' "$openapi_path")
+if [[ -z $version_line ]]; then
+  echo "Error: Version line not found in $openapi_path"
+  exit 1
+fi
 
-  if [[ -z $version_line ]]; then
-    echo "Error: Version line not found in $openapi_path"
-    exit 1
-  fi
+actual_version=$(echo $version_line | awk -F '"' '{print $2}')
 
-  actual_version=$(echo $version_line | awk -F '"' '{print $2}')
+if [[ -z $actual_version ]]; then
+  echo "Error: Version not found in $openapi_path"
+  exit 1
+fi
 
-  if [[ -z $actual_version ]]; then
-    echo "Error: Version not found in $openapi_path"
-    exit 1
-  fi
-
-  if [[ $actual_version != $jar_version ]]; then
-    echo "Version mismatch in $openapi_path: ($actual_version) != jar ($jar_version)."
-    echo "Removing jar $jar"
-    rm "$jar"
-    exit 1
-  fi
-done
+if [[ $actual_version != $jar_version ]]; then
+  echo "Version mismatch in $openapi_path: ($actual_version) != jar ($jar_version)."
+  echo "Removing jar $jar"
+  rm "$jar"
+  exit 1
+fi
 
 echo "do-release completed successfully"

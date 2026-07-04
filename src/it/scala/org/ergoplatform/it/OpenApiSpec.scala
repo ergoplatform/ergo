@@ -23,7 +23,7 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
 
   val offlineGeneratingPeer: Config = offlineGeneratingPeerConfig
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   // `lazy` so the container is only started when a test actually touches `node`.
   // The single test below is currently `ignore`d (the openapi-checker image is gone),

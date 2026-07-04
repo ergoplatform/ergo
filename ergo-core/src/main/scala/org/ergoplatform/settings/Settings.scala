@@ -23,7 +23,7 @@ case class RESTApiSettings(
 case class NetworkSettings(
   nodeName: String,
   addedMaxDelay: Option[FiniteDuration],
-  localOnly: Boolean,
+  allowLocal: Boolean,
   knownPeers: Seq[InetSocketAddress],
   bannedPeers: Seq[InetSocketAddress],
   bindAddress: InetSocketAddress,

@@ -66,6 +66,15 @@ class CandidateGenerator(
     log.info(
       s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
     )
+
+    // Immediately announce newly mined block to network BEFORE local application.
+    // This reduces propagation latency by avoiding the wait for NodeViewHolder
+    // to fully validate and apply the block. LocalBlockApplied arrives later
+    // and skips broadcast since the block was already announced.
+    // TODO: Consider switching to direct actor message for lower latency
+    //       instead of event bus publish.
+    context.system.eventStream.publish(NewBlockMined(newBlock.header))
+
     viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
     val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
       newBlock.blockSections
@@ -152,7 +161,7 @@ class CandidateGenerator(
         context.become(initialized(state))
       }
 
-    case gen @ GenerateCandidate(txsToInclude, reply, forced) =>
+    case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       if (!forced && cachedFor(state.cachedCandidate, txsToInclude)) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
@@ -162,7 +171,7 @@ class CandidateGenerator(
           state.hr,
           state.sr,
           state.mpr,
-          minerPk,
+          optPk.getOrElse(minerPk),
           txsToInclude,
           ergoSettings
         ) match {
@@ -214,10 +223,8 @@ class CandidateGenerator(
             completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
           }
         log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme
-          .validate(newBlock.header)
-          .map(_ => newBlock) match {
-          case Success(newBlock) =>
+        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
+          case Success(_) =>
             sendToNodeView(newBlock)
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
             StatusReply.success(())
@@ -260,7 +267,8 @@ object CandidateGenerator extends ScorexLogging {
   case class GenerateCandidate(
     txsToInclude: Seq[ErgoTransaction],
     reply: Boolean,
-    forced: Boolean
+    forced: Boolean,
+    optPk: Option[ProveDlog] = None
   )
 
   /** Local state of candidate generator to avoid mutable vars */

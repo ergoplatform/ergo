@@ -26,7 +26,7 @@ class NodeRecoverySpec
   val offlineGeneratingPeer: Config = specialDataDirConfig(remoteVolume)
     .withFallback(offlineGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val node: Node = docker.startDevNetNode(offlineGeneratingPeer, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 

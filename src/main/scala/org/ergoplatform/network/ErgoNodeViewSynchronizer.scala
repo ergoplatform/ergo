@@ -1781,13 +1781,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // Send ordering block announcement to peers supporting sub-blocks and having equal or forked status
       // Also check that peers are nearly synced (within 2 blocks)
       val peers = syncTracker.statuses.filter { s =>
-        val status = s._2.status
         val peerHeight = s._2.height
         // send ordering block announcement to peers on same height and also supporting sub-blocks
         // Don't send to peers that are far behind (> 2 blocks gap)
         SubBlocksFilter.condition(s._1) &&
-          (status == Equal || status == Fork) &&
-          (peerHeight <= hr.fullBlockHeight + 2)
+          (peerHeight <= hr.fullBlockHeight + 2) &&
+          (peerHeight >= hr.fullBlockHeight - 2)
       }.keys.toSeq
 
       if (peers.nonEmpty) {
@@ -2045,12 +2044,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val knownPeers = syncTracker.fullInfo()
       val sendOrderingTo = knownPeers.filter { peerStatus =>
         val peerHeight = peerStatus.height
-        if (peerStatus.status == Equal || peerStatus.status == Fork) {
-          peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion) &&
-            peerHeight <= historyReader.fullBlockHeight + 2
-        } else {
-          false
-        }
+        peerStatus.peer.peerInfo.exists(_.peerSpec.protocolVersion >= Version.SubblocksVersion) &&
+            peerHeight <= historyReader.fullBlockHeight + 2 &&
+            peerHeight >= historyReader.fullBlockHeight - 2
       }.map(_.peer)
       val header = efb.header
       // broadcast subblock announcement

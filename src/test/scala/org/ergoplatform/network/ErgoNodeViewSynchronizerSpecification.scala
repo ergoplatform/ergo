@@ -1769,6 +1769,336 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  property(
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement sends to peer within height window regardless of status"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Younger
+      import org.ergoplatform.modifiers.OrderingBlockAnnouncementTypeId
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      applyChain(hist, chain)
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+      val peerHeight           = localFullBlockHeight + 1
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Younger, Some(peerHeight))
+
+      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, None)
+      oba.header.height shouldBe (localFullBlockHeight + 1)
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(msgBytes),
+        Some(peer)
+      )
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InvSpec.messageCode
+      val invData = msg.message.data.get.asInstanceOf[InvData]
+      invData.typeId shouldBe OrderingBlockAnnouncementTypeId.value
+      invData.ids shouldBe Seq(oba.header.id)
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlockPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement does not send to peer far behind"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.modifiers.history.BlockTransactions
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.ConnectedPeer
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      applyChain(hist, chain)
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+      val farBehindHeight      = localFullBlockHeight - 3
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Equal, Some(farBehindHeight))
+
+      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, None)
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(msgBytes),
+        Some(peer)
+      )
+
+      // The OBA references a missing previous input block, so the synchronizer first
+      // requests the block transactions from the announcing peer.
+      val requestMsg = ncProbe.expectMsgClass(classOf[SendToNetwork])
+      requestMsg.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      val invData = requestMsg.message.data.get.asInstanceOf[InvData]
+      invData.typeId shouldBe BlockTransactions.modifierTypeId
+      invData.ids shouldBe Seq(oba.header.transactionsId)
+
+      // No OBA announcement should be sent to the peer far behind.
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement does not send to peer far ahead"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Fork
+      import org.ergoplatform.modifiers.history.BlockTransactions
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.ConnectedPeer
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      applyChain(hist, chain)
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+      val farAheadHeight       = localFullBlockHeight + 3
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Fork, Some(farAheadHeight))
+
+      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, None)
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(msgBytes),
+        Some(peer)
+      )
+
+      // The OBA references a missing previous input block, so the synchronizer first
+      // requests the block transactions from the announcing peer.
+      val requestMsg = ncProbe.expectMsgClass(classOf[SendToNetwork])
+      requestMsg.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      val invData = requestMsg.message.data.get.asInstanceOf[InvData]
+      invData.typeId shouldBe BlockTransactions.modifierTypeId
+      invData.ids shouldBe Seq(oba.header.transactionsId)
+
+      // No OBA announcement should be sent to the peer far ahead.
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement sends to peers at exactly +/- 2 blocks"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.modifiers.OrderingBlockAnnouncementTypeId
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      applyChain(hist, chain)
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+
+      val behindPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(behindPeer, Equal, Some(localFullBlockHeight - 2))
+
+      val aheadPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(aheadPeer, Equal, Some(localFullBlockHeight + 2))
+
+      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, None)
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(msgBytes),
+        Some(peer)
+      )
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InvSpec.messageCode
+      val invData = msg.message.data.get.asInstanceOf[InvData]
+      invData.typeId shouldBe OrderingBlockAnnouncementTypeId.value
+      invData.ids shouldBe Seq(oba.header.id)
+      msg.sendingStrategy match {
+        case SendToPeers(peers) =>
+          peers should contain(behindPeer)
+          peers should contain(aheadPeer)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement does not send to legacy peer even within window"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.modifiers.history.BlockTransactions
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.ConnectedPeer
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(3, hist)
+      applyChain(hist, chain)
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+
+      val legacyPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.initial,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val legacyPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(legacyPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(legacyPeer, Equal, Some(localFullBlockHeight))
+
+      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, None)
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(msgBytes),
+        Some(peer)
+      )
+
+      // The OBA references a missing previous input block, so the synchronizer first
+      // requests the block transactions from the announcing peer.
+      val requestMsg = ncProbe.expectMsgClass(classOf[SendToNetwork])
+      requestMsg.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      val invData = requestMsg.message.data.get.asInstanceOf[InvData]
+      invData.typeId shouldBe BlockTransactions.modifierTypeId
+      invData.ids shouldBe Seq(oba.header.transactionsId)
+
+      // No OBA announcement should be sent to the legacy peer.
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
   property("NodeViewSynchronizer: requestInputBlock sends correct message to peer") {
     withFixture2 { ctx =>
       import ctx._
@@ -2075,7 +2405,8 @@ class ErgoNodeViewSynchronizerSpecification
 
       val hist      = ErgoHistory.readOrGenerate(settings)(null)
       val chain     = genChain(3, hist)
-      val fullBlock = chain.head
+      applyChain(hist, chain)
+      val fullBlock = chain.last
       val header    = fullBlock.header
 
       val wrappedState = boxesHolderGen
@@ -2109,6 +2440,283 @@ class ErgoNodeViewSynchronizerSpecification
       msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
       msg.sendingStrategy match {
         case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: LocallyGeneratedOrderingBlock broadcasts to peer within height window regardless of status"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Younger
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
+
+      val hist      = ErgoHistory.readOrGenerate(settings)(null)
+      val chain     = genChain(3, hist)
+      applyChain(hist, chain)
+      val fullBlock = chain.last
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Younger, Some(localFullBlockHeight))
+
+      synchronizerMockRef ! LocallyGeneratedOrderingBlock(fullBlock, Seq.empty)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlockPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: LocallyGeneratedOrderingBlock does not broadcast to peer far behind"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
+
+      val hist      = ErgoHistory.readOrGenerate(settings)(null)
+      val chain     = genChain(3, hist)
+      applyChain(hist, chain)
+      val fullBlock = chain.last
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+      val farBehindHeight      = localFullBlockHeight - 3
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Equal, Some(farBehindHeight))
+
+      synchronizerMockRef ! LocallyGeneratedOrderingBlock(fullBlock, Seq.empty)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should not contain subBlockPeer
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: LocallyGeneratedOrderingBlock does not broadcast to peer far ahead"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Fork
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
+
+      val hist      = ErgoHistory.readOrGenerate(settings)(null)
+      val chain     = genChain(3, hist)
+      applyChain(hist, chain)
+      val fullBlock = chain.last
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+      val farAheadHeight       = localFullBlockHeight + 3
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val subBlockPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(subBlockPeer, Fork, Some(farAheadHeight))
+
+      synchronizerMockRef ! LocallyGeneratedOrderingBlock(fullBlock, Seq.empty)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should not contain subBlockPeer
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: LocallyGeneratedOrderingBlock broadcasts to peers at exactly +/- 2 blocks"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
+
+      val hist      = ErgoHistory.readOrGenerate(settings)(null)
+      val chain     = genChain(3, hist)
+      applyChain(hist, chain)
+      val fullBlock = chain.last
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+
+      val subBlockPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+
+      val behindPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(behindPeer, Equal, Some(localFullBlockHeight - 2))
+
+      val aheadPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(subBlockPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(aheadPeer, Equal, Some(localFullBlockHeight + 2))
+
+      synchronizerMockRef ! LocallyGeneratedOrderingBlock(fullBlock, Seq.empty)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) =>
+          peers should contain(behindPeer)
+          peers should contain(aheadPeer)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: LocallyGeneratedOrderingBlock does not broadcast to legacy peer even within window"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
+
+      val hist      = ErgoHistory.readOrGenerate(settings)(null)
+      val chain     = genChain(3, hist)
+      applyChain(hist, chain)
+      val fullBlock = chain.last
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val localFullBlockHeight = hist.fullBlockHeight
+
+      val legacyPeerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.initial,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val legacyPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(legacyPeerSpec, System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(legacyPeer, Equal, Some(localFullBlockHeight))
+
+      synchronizerMockRef ! LocallyGeneratedOrderingBlock(fullBlock, Seq.empty)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should not contain legacyPeer
         case other              => fail(s"Expected SendToPeers, got $other")
       }
     }

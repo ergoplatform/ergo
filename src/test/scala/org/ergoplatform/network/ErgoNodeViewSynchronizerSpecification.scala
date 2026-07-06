@@ -3706,6 +3706,71 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: delivered input block clears Requested status so CheckDelivery does not re-request"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.CheckDelivery
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+      import scorex.core.network.SendToPeer
+
+      val viewHolderProbe = TestProbe("ViewHolderProbe")
+      val testSyncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val testDeliveryTracker = DeliveryTracker.empty(settings)
+      implicit val ec: ExecutionContextExecutor = ctx.system.dispatcher
+
+      val testSynchronizerRef: TestActorRef[SynchronizerMock] = TestActorRef(
+        Props(
+          new SynchronizerMock(
+            ncProbe.ref,
+            viewHolderProbe.ref,
+            ErgoSyncInfoMessageSpec,
+            settings,
+            testSyncTracker,
+            testDeliveryTracker
+          )
+        )
+      )
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+
+      testSynchronizerRef ! ChangedState(wrappedState)
+      testSynchronizerRef ! ChangedHistory(hist)
+      testSynchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val inputBlockInfo = buildValidInputBlockAnnouncement(hist.bestFullBlockOpt)
+        .copy(weakTxIds = Some(Seq.empty))
+
+      // Request the input block via Inv
+      val invData = InvData(InputBlockTypeId.value, Seq(inputBlockInfo.id))
+      testSynchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+
+      val initial = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      initial.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      initial.sendingStrategy shouldBe SendToPeer(peer)
+
+      // Deliver the requested input block
+      val inputBlockBytes = InputBlockMessageSpec.toBytes(inputBlockInfo)
+      testSynchronizerRef ! Message(InputBlockMessageSpec, Left(inputBlockBytes), Some(peer))
+
+      // Allow processInputBlock to run and update the delivery tracker
+      Thread.sleep(200)
+
+      // Manually trigger the delivery check: it should be a no-op now
+      testSynchronizerRef ! CheckDelivery(peer, InputBlockTypeId.value, inputBlockInfo.id)
+      ncProbe.expectNoMessage(500.millis)
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: NewBestInputBlock(local=true) does not broadcast to legacy peers"
   ) {
     withFixture2 { ctx =>
@@ -3774,6 +3839,134 @@ class ErgoNodeViewSynchronizerSpecification
         case other => fail(s"Expected SendToPeers, got $other")
       }
       legacyPeerProbe.expectNoMessage(500.millis)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts only to peers within two blocks"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{ModePeerFeature, PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val chain  = genChain(3)
+      val header = chain.head.header
+
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None
+      )
+      // Apply the input block through the node view holder so that the synchronizer's
+      // history reader (updated from the NVH event stream) can find it.
+      nodeViewHolderMockRef ! ProcessInputBlock(inputBlockInfo, peer)
+      Thread.sleep(500)
+
+      def makeSubBlockPeer(height: Int): ConnectedPeer = {
+        val probe = TestProbe(s"SubBlockPeerHeight$height")
+        val spec = PeerSpec(
+          settings.scorexSettings.network.agentName,
+          Version.SubblocksVersion,
+          settings.scorexSettings.network.nodeName,
+          None,
+          Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+        )
+        val cp = ConnectedPeer(
+          connectionIdGen.sample.get,
+          probe.ref,
+          Some(PeerInfo(spec, System.currentTimeMillis()))
+        )
+        syncTracker.updateStatus(cp, Equal, Some(height))
+        cp
+      }
+
+      // With an empty history fullBlockHeight is 0, so only heights 0..2 are in window.
+      val inWindow    = Seq(0, 1, 2).map(makeSubBlockPeer)
+      val outOfWindow = Seq(3).map(makeSubBlockPeer)
+
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) =>
+          inWindow.foreach(peers should contain(_))
+          outOfWindow.foreach(peers should not contain _)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts to peers regardless of chain status within window"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.{Equal, Fork, Older, Younger}
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{ModePeerFeature, PeerSpec, Version}
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import org.ergoplatform.network.peer.PeerInfo
+
+      val chain  = genChain(3)
+      val header = chain.head.header
+
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        header,
+        InputBlockFields.empty,
+        None
+      )
+      nodeViewHolderMockRef ! ProcessInputBlock(inputBlockInfo, peer)
+      Thread.sleep(500)
+
+      def makeSubBlockPeer(status: org.ergoplatform.consensus.PeerChainStatus): ConnectedPeer = {
+        val probe = TestProbe(s"SubBlockPeer$status")
+        val spec = PeerSpec(
+          settings.scorexSettings.network.agentName,
+          Version.SubblocksVersion,
+          settings.scorexSettings.network.nodeName,
+          None,
+          Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+        )
+        val cp = ConnectedPeer(
+          connectionIdGen.sample.get,
+          probe.ref,
+          Some(PeerInfo(spec, System.currentTimeMillis()))
+        )
+        // height 1 is within +/- 2 of empty history fullBlockHeight 0
+        syncTracker.updateStatus(cp, status, Some(1))
+        cp
+      }
+
+      val equalPeer  = makeSubBlockPeer(Equal)
+      val forkPeer   = makeSubBlockPeer(Fork)
+      val olderPeer  = makeSubBlockPeer(Older)
+      val youngerPeer = makeSubBlockPeer(Younger)
+
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InputBlockMessageSpec.messageCode
+      msg.sendingStrategy match {
+        case SendToPeers(peers) =>
+          peers should contain(equalPeer)
+          peers should contain(forkPeer)
+          peers should contain(olderPeer)
+          peers should contain(youngerPeer)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
     }
   }
 

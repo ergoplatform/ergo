@@ -1355,6 +1355,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // INPUT BLOCKS RELATED LOGIC
 
   /**
+    * Mark a modifier as received only if we have previously requested it.
+    * This avoids illegal delivery-tracker transitions for broadcast modifiers.
+    */
+  private def setReceivedIfRequested(modifierId: ModifierId,
+                                     modifierTypeId: NetworkObjectTypeId.Value,
+                                     remote: ConnectedPeer): Unit = {
+    if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
+      deliveryTracker.setReceived(modifierId, modifierTypeId, remote)
+    }
+  }
+
+  /**
    * Request an input block from a peer by its ID.
    *
    * This method sends a request to the specified peer to download an input block with the given ID.
@@ -1456,6 +1468,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .map(ps => inputBlockInfo.valid(powScheme, ps, expectedNBits))
         .getOrElse(true)
       if (valid) { // check PoW / Merkle proofs before processing
+        setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
+
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block
         val weakTxIdsOpt = inputBlockInfo.weakTxIds
 
@@ -1609,6 +1623,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    def processInputBlockTransactionIds(txIds: InputBlockTransactionIdsData, mp: ErgoMemPoolReader, remote: ConnectedPeer): Unit = {
      val subBlockId = txIds.inputBlockId
      val wIds = txIds.transactionIds
+
+     setReceivedIfRequested(subBlockId, InputBlockTransactionIdsTypeId.value, remote)
 
      // todo: make it debug before release
      log.info(s"Processing input-block tx ids for ${subBlockId}")
@@ -1779,6 +1795,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
       hr.storeOrderingBlockAnnouncement(oba)
+
+      setReceivedIfRequested(oba.header.id, OrderingBlockAnnouncementTypeId.value, remote)
 
       // Send ordering block announcement to peers supporting sub-blocks and having equal or forked status
       // Also check that peers are nearly synced (within 2 blocks)
@@ -2207,12 +2225,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               preIbi.copy(weakTxIds = None)
             }
             val peers = syncTracker.statuses.filter { s =>
-              val status = s._2.status
               val peer = s._1
+              val peerHeight = s._2.height
               // send input block to peers on same height and also supporting sub-blocks and in utxo mode
               SubBlocksFilter.condition(peer) &&
                 peer.mode.exists(_.stateType == StateType.Utxo) &&
-                (status == Equal || status == Fork)
+                peerHeight <= historyReader.fullBlockHeight + 2 &&
+                peerHeight >= historyReader.fullBlockHeight - 2
             }.keys.toSeq
             val msg = Message(InputBlockMessageSpec, Right(ibi), None)
             networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))

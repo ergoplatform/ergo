@@ -76,7 +76,7 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
+  class NodeViewHolderMock(settings: ErgoSettings) extends ErgoNodeViewHolder[UtxoState](settings)
 
   class SynchronizerMock(
     networkControllerRef: ActorRef,
@@ -174,7 +174,7 @@ class ErgoNodeViewSynchronizerSpecification
 
     // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock(settings)))
 
     val synchronizerMockRef = system.actorOf(
       Props(
@@ -239,14 +239,25 @@ class ErgoNodeViewSynchronizerSpecification
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe                               = TestProbe("NetworkControllerProbe")
     val pchProbe                              = TestProbe("PeerHandlerProbe")
+
+    // Use a unique data directory per fixture to avoid LevelDB corruption from
+    // concurrent or sequential tests reusing the same on-disk history.
+    val settings: ErgoSettings = {
+      val baseSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings
+      baseSettings.copy(directory = createTempDir.getAbsolutePath)
+    }
+
     val syncTracker                           = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker      = DeliveryTracker.empty(settings)
 
     // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     import akka.testkit.TestActorRef
+
+    val nodeViewHolderMockRef: TestActorRef[NodeViewHolderMock] = TestActorRef(
+      Props(new NodeViewHolderMock(settings))
+    )
 
     val synchronizerMockRef: TestActorRef[SynchronizerMock] = TestActorRef(
       Props(
@@ -2130,6 +2141,7 @@ class ErgoNodeViewSynchronizerSpecification
       import org.ergoplatform.network.{PeerSpec, Version}
       import scorex.core.network.ConnectedPeer
       import org.ergoplatform.network.peer.PeerInfo
+      import scorex.util.bytesToId
 
       val hist  = ErgoHistory.readOrGenerate(settings)(null)
       val chain = genChain(3, hist)
@@ -2160,7 +2172,8 @@ class ErgoNodeViewSynchronizerSpecification
       )
       syncTracker.updateStatus(legacyPeer, Equal, Some(localFullBlockHeight))
 
-      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, None)
+      val missingPrevInputBlockId = bytesToId(Array.fill(32)(0xFF.toByte))
+      val oba = buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, Some(missingPrevInputBlockId))
 
       val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
       synchronizerMockRef ! Message(

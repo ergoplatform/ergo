@@ -840,6 +840,44 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: processInputBlock ignores input blocks at height < fullBlockHeight - 2"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+
+      // Setup: apply a chain of 6 blocks so local fullBlockHeight is 6
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(6, hist)
+      applyChain(hist, chain)
+
+      // Use the first block's header at height 1, which is far behind (1 < 6 - 2)
+      val farBehindHeader = chain.head.header
+
+      // Create an InputBlockAnnouncement with the far-behind header
+      val inputBlockInfo = InputBlockAnnouncement(
+        InputBlockAnnouncement.initialMessageVersion,
+        farBehindHeader,
+        InputBlockFields.empty,
+        None
+      )
+
+      // Call processInputBlock directly to bypass message routing and validation details
+      val synchronizer = synchronizerMockRef.underlyingActor
+      synchronizer.processInputBlock(
+        inputBlockInfo,
+        hist,
+        ErgoMemPool.empty(settings),
+        peer,
+        usrOpt = None   // guard runs before the digest-mode check
+      )
+
+      // Verify no messages are sent and the input block was not stored
+      ncProbe.expectNoMessage(300.millis)
+      hist.getInputBlock(farBehindHeader.id) shouldBe None
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with txs when <= 3 transactions"
   ) {
     withFixture2 { ctx =>
@@ -1687,7 +1725,7 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
-    "NodeViewSynchronizer: processOrderingBlockAnnouncement from far-behind peer is ignored"
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement far-ahead header is ignored"
   ) {
     withFixture2 { ctx =>
       import ctx._
@@ -1717,8 +1755,53 @@ class ErgoNodeViewSynchronizerSpecification
         Some(peer)
       )
 
-      // OBA is from a peer far ahead of our height (> 2 blocks), so it should be silently ignored.
+      // OBA header is far ahead of our full block height (> 2 blocks), so it should be silently ignored.
       // No inv or ordering block announcement should be sent.
+      Thread.sleep(200)
+      ncProbe.expectNoMessage()
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: processOrderingBlockAnnouncement far-behind header is ignored"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.message.inputblocks.{
+        OrderingBlockAnnouncement,
+        OrderingBlockAnnouncementMessageSpec
+      }
+
+      // Setup: apply a chain of 8 blocks so local fullBlockHeight is 8
+      val hist  = ErgoHistory.readOrGenerate(settings)(null)
+      val chain = genChain(8, hist)
+      applyChain(hist, chain)
+
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(200)
+
+      // Use a header not in local history and far behind (height 1 < 8 - 2).
+      // Empty extension fields make the OBA invalid, so if the guard is missing,
+      // the synchronizer would proceed to validation and penalize the peer.
+      val farBehindHeader = altchain.take(2).head
+
+      val oba = OrderingBlockAnnouncement(
+        OrderingBlockAnnouncement.CurrentVersion,
+        farBehindHeader,
+        Seq.empty,
+        Seq.empty,
+        Seq.empty
+      )
+
+      val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
+      synchronizerMockRef ! Message(
+        OrderingBlockAnnouncementMessageSpec,
+        Left(msgBytes),
+        Some(peer)
+      )
+
+      // OBA header is far behind our full block height (> 2 blocks), so it should be silently ignored.
       Thread.sleep(200)
       ncProbe.expectNoMessage()
     }
@@ -3633,8 +3716,7 @@ class ErgoNodeViewSynchronizerSpecification
       import scorex.core.network.{ConnectedPeer, SendToPeers}
       import org.ergoplatform.network.peer.PeerInfo
 
-      val hist   = ErgoHistory.readOrGenerate(settings)(null)
-      val chain  = genChain(3, hist)
+      val chain  = genChain(3)
       val header = chain.head.header
 
       val inputBlockInfo = InputBlockAnnouncement(
@@ -3643,7 +3725,10 @@ class ErgoNodeViewSynchronizerSpecification
         InputBlockFields.empty,
         None
       )
-      hist.applyInputBlock(inputBlockInfo)
+      // Apply the input block through the node view holder so that the synchronizer's
+      // history reader (updated from the NVH event stream) can find it.
+      nodeViewHolderMockRef ! ProcessInputBlock(inputBlockInfo, peer)
+      Thread.sleep(500)
 
       val legacyPeerProbe = TestProbe("LegacyPeerHandlerProbe")
       val legacyPeerSpec = PeerSpec(
@@ -3675,7 +3760,6 @@ class ErgoNodeViewSynchronizerSpecification
       )
       syncTracker.updateStatus(subBlockPeer, Equal, Some(header.height))
 
-      synchronizerMockRef ! ChangedHistory(hist)
       synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
       Thread.sleep(500)
 

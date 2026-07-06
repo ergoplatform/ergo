@@ -1419,7 +1419,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // Input blocks are only useful when nearly synced (within 2 blocks)
     // If we're far behind, ignore them and continue with normal header/block sync
-    if (inputBlockInfo.header.height > hr.fullBlockHeight + 2) {
+    if (inputBlockInfo.header.height > hr.fullBlockHeight + 2 ||
+        inputBlockInfo.header.height < hr.fullBlockHeight - 2) {
       //todo: change to .debug before release
       log.info(s"Ignoring input block at height ${inputBlockInfo.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
       return
@@ -1754,7 +1755,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // Ordering blocks are only useful when nearly synced (within 2 blocks)
     // If we're far behind, ignore the announcement and continue with normal header/block sync
-    if (oba.header.height > hr.fullBlockHeight + 2) {
+    if (oba.header.height > hr.fullBlockHeight + 2 ||
+        oba.header.height < hr.fullBlockHeight - 2) {
       log.debug(s"Ignoring ordering block announcement at height ${oba.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
       return
     }

@@ -1822,7 +1822,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       val prevInputBlockIdOpt = oba.extensionFields.find(_._1.sameElements(PrevInputBlockIdKey))
 
-      log.info(s"On processing ordering block ${oba.header.id}, it is last input block ${prevInputBlockIdOpt}")
+      log.info(s"On processing ordering block ${oba.header.id}, it is last input block ${prevInputBlockIdOpt.map(t => bytesToId(t._2))}")
 
       val inputBlockStored = prevInputBlockIdOpt.map { t =>
         hr.getInputBlockTransactions(bytesToId(t._2)).isDefined

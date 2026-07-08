@@ -14,6 +14,7 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
+import org.ergoplatform.http.api.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import sigma.data.ProveDlog
 import sigma.serialization.GroupElementSerializer
@@ -62,15 +63,15 @@ case class MiningApiRoute(miner: ActorRef,
   def candidateWithTxsAndPkR: Route = (path("candidateWithTxsAndPk")
     & post & entity(as[MiningRequest]) & withAuth) { txsAndPk =>
     val tryPk = Try(GroupElementSerializer.fromBytes(Hex.decode(txsAndPk.pk)))
-    val result = tryPk match {
+    tryPk match {
       case Failure(_) =>
-        Future.failed(new Exception("Could not decode hexadecimal string for given public key"))
+        BadRequest("Could not decode hexadecimal string for given public key")
       case Success(pk) =>
         val prepareCmd = CandidateGenerator.GenerateCandidate(txsAndPk.txs, reply = true,
           forced = false, Some(ProveDlog.apply(pk)))
-        miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
+        val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
+        ApiResponse(candidateF)
     }
-    ApiResponse(result)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>

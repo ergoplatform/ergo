@@ -163,7 +163,8 @@ class CandidateGenerator(
 
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude)) {
+      val effectiveMinerPk = optPk.getOrElse(minerPk)
+      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -171,7 +172,7 @@ class CandidateGenerator(
           state.hr,
           state.sr,
           state.mpr,
-          optPk.getOrElse(minerPk),
+          effectiveMinerPk,
           txsToInclude,
           ergoSettings
         ) match {
@@ -300,15 +301,25 @@ object CandidateGenerator extends ScorexLogging {
       s"CandidateGenerator-${Random.alphanumeric.take(5).mkString}"
     )
 
-  /** checks that current candidate block is cached with given `txs` */
+  /**
+   * Checks that current candidate block is cached with given `txs` and `minerPk`.
+   *
+   * Note: candidate cache is a single slot keyed by `minerPk`. If multiple miner public keys
+   * are used concurrently (e.g. node’s own miner and external `/mining/candidateWithTxsAndPk`
+   * callers), each different `minerPk` will evict the previous cached candidate and trigger
+   * full candidate generation (mempool packing + state proofs). This endpoint assumes a single
+   * active miner public key at a time for optimal performance.
+   */
   def cachedFor(
     candidateOpt: Option[Candidate],
-    txs: Seq[ErgoTransaction]
+    txs: Seq[ErgoTransaction],
+    minerPk: ProveDlog
   ): Boolean = {
     candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
-        c.txsToInclude.contains
-      ))
+      c.externalVersion.pk == minerPk &&
+        (txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
+          c.txsToInclude.contains
+        )))
     }
   }
 

@@ -997,12 +997,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! NewBlockMined(newBlock.header)
 
       // Consume all inv messages from NewBlockMined
-      val deadline1 = System.currentTimeMillis() + 2000
-      while (System.currentTimeMillis() < deadline1) {
-        ncProbe.receiveOne(100.millis) match {
-          case Some(_: SendToNetwork) => // consume
-          case _ => // ignore
-        }
+      ncProbe.receiveWhile(2.seconds) {
+        case _: SendToNetwork => // consume
+        case _ => // ignore
       }
 
       // Second: LocalBlockApplied for same header should NOT send additional invs

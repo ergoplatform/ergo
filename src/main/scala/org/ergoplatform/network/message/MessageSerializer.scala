@@ -50,6 +50,7 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
       if (length < 0) {
         throw MaliciousBehaviorException("Data length is negative!")
       }
+      // Reject messages larger than the hard network-wide cap documented in MessageConstants.MaxMessageSize
       if (length > MaxMessageSize) {
         throw MaliciousBehaviorException("Data length is above limit!")
       }

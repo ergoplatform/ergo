@@ -50,7 +50,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
     case AddOrUpdatePeer(peerInfo) =>
       // We have connected to a peer and got his peerInfo from him
-      if (!isSelf(peerInfo.peerSpec) && !peerInfo.peerSpec.address.exists(checkLocalOnly(_))) {
+      if (!isSelf(peerInfo.peerSpec) && !peerInfo.peerSpec.address.exists(isLocal(_))) {
         peerDatabase.addOrUpdateKnownPeer(peerInfo)
       }
 
@@ -64,7 +64,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
     case AddPeerIfEmpty(peerSpec) =>
       // We have received peer data from other peers. It might be modified and should not affect existing data if any
-      if (peerSpec.address.forall(a => peerDatabase.get(a).isEmpty) && !isSelf(peerSpec) && !peerSpec.address.exists(checkLocalOnly(_))) {
+      if (peerSpec.address.forall(a => peerDatabase.get(a).isEmpty) && !isSelf(peerSpec) && !peerSpec.address.exists(isLocal(_))) {
         val peerInfo: PeerInfo = PeerInfo(peerSpec, 0, None)
         log.info(s"New discovered peer: $peerInfo")
         peerDatabase.addOrUpdateKnownPeer(peerInfo)
@@ -99,8 +99,8 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
     peerSpec.declaredAddress.exists(isSelf) || peerSpec.localAddressOpt.exists(isSelf)
   }
 
-  private def checkLocalOnly(address: InetSocketAddress): Boolean =
-    NetworkUtils.checkLocalOnly(address, settings.scorexSettings.network.localOnly)
+  private def isLocal(address: InetSocketAddress): Boolean =
+    NetworkUtils.isLocal(address, settings.scorexSettings.network.allowLocal)
 
 }
 

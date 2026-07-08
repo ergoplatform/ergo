@@ -629,6 +629,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Verify candidate was generated successfully
     candidate should not be null
     candidate.candidateBlock should not be null
+    candidate.externalVersion.pk shouldBe customPk
     
     system.terminate()
   }
@@ -660,6 +661,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Candidate should be generated successfully with default minerPk
     candidate should not be null
     candidate.candidateBlock should not be null
+    candidate.externalVersion.pk shouldBe defaultMinerSecret.publicImage
 
     system.terminate()
   }
@@ -707,6 +709,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Both candidates should be generated successfully
     candidate1 should not be null
     candidate2 should not be null
+    candidate1.externalVersion.pk shouldBe defaultMinerSecret.publicImage
+    candidate2.externalVersion.pk shouldBe customPk
+    candidate1.externalVersion.pk should not be candidate2.externalVersion.pk
 
     system.terminate()
   }
@@ -859,10 +864,16 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .proveCandidate(initCandidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
       .get
     candidateGenerator.tell(initBlock.header.powSolution, testProbe.ref)
-    // Wait for block application - can receive either StatusReply or FullBlockApplied first
+    // Wait for both the direct mining ACK and the async local block application
+    var ackSeen = false
+    var appliedSeen = false
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
-      case _: FullBlockApplied => true
+      case StatusReply.Success(()) =>
+        ackSeen = true
+        ackSeen && appliedSeen
+      case FullBlockApplied(header) if header.id == initBlock.header.id =>
+        appliedSeen = true
+        ackSeen && appliedSeen
       case _ => false
     }
 
@@ -873,22 +884,11 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // Force regeneration - this should preserve candidate1 as cachedPreviousCandidate
-    // Retry on transient failures (e.g., state not fully updated yet)
-    val candidate2 = {
-      var attempts = 3
-      var result: Option[Candidate] = None
-      while (result.isEmpty && attempts > 0) {
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
-        try {
-          result = Some(testProbe.expectMsgPF(candidateGenDelay) {
-            case StatusReply.Success(c: Candidate) => c
-          })
-        } catch {
-          case _: AssertionError =>
-            attempts -= 1
-        }
+    val candidate2 = eventually(timeout(candidateGenDelay), interval(100.millis)) {
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+      testProbe.expectMsgPF(500.millis) {
+        case StatusReply.Success(c: Candidate) => c
       }
-      result.getOrElse(throw new AssertionError("Failed to get candidate after max retries"))
     }
 
     // candidate2 should be different from candidate1 (regenerated)
@@ -902,11 +902,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Submit solution - should succeed because candidate1 should be in cachedPreviousCandidate
     candidateGenerator.tell(solvedBlock.header.powSolution, testProbe.ref)
 
-    // Should successfully apply the block
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
-      case _: FullBlockApplied => true
-      case _ => false
+    // CandidateGenerator should accept the solution against cachedPreviousCandidate.
+    testProbe.expectMsgPF(blockValidationDelay) {
+      case StatusReply.Success(()) =>
     }
 
     system.terminate()

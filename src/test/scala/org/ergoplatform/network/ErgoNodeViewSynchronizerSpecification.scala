@@ -609,8 +609,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
       // Should NOT request the parent header since it's already in history
-      // Wait a short time and verify no request was sent
-      Thread.sleep(500)
       ncProbe.expectNoMessage(1.second)
 
       // The modifier should still be set to Unknown
@@ -644,7 +642,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
       // Should NOT send any network request since no older peers available
-      Thread.sleep(500)
       ncProbe.expectNoMessage(1.second)
 
       // The modifier should still be set to Unknown
@@ -672,12 +669,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // This should not crash even with empty peer candidates
       synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
 
-      // Wait a bit and verify no crash occurred (test passes if we get here)
-      Thread.sleep(500)
-
       // The modifier should still be in Requested state or transitioned appropriately
-      val status = deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty)
+      eventually {
+        val status = deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty)
         status should (be(Unknown) or be(Requested))
+      }
     }
   }
 
@@ -708,7 +704,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Simulate many delivery checks by sending multiple CheckDelivery messages
       (1 to 7).foreach { _ =>
         synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
-        Thread.sleep(100)
       }
 
       // Should eventually try the equal peer (we can verify by checking network messages)
@@ -741,7 +736,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
       (1 to maxDeliveryChecks + 2).foreach { _ =>
         synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId)
-        Thread.sleep(50)
       }
 
       // After max attempts, non-header modifier should be set to Unknown (not Invalid)
@@ -769,7 +763,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
       (1 to maxDeliveryChecks + 2).foreach { _ =>
         synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
-        Thread.sleep(50)
       }
 
       // After max attempts, header should be marked as Invalid
@@ -882,21 +875,19 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Wait for block section requests to confirm the header was accepted
       // (the synchronizer sends block section requests after sending header to VH)
-      var gotRequest = false
-      ncProbe.fishForMessage(3.seconds) { case m =>
+      val requestMsg = ncProbe.fishForMessage(3.seconds) { case m =>
         m match {
           case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
-            gotRequest = true
             true
           case _ =>
             false
         }
-      }
-      gotRequest shouldBe true
+      }.asInstanceOf[SendToNetwork]
 
-      // The header should now be tracked as Received in deliveryTracker
-      deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq.empty) shouldBe
-        scorex.core.network.ModifiersStatus.Received
+      // Verify the request is for block sections of our continuation header
+      val invData = requestMsg.message.data.get.asInstanceOf[InvData]
+      val expectedIds = continuationHeader.sectionIdsWithNoProof.map(_._2)
+      invData.ids.exists(expectedIds.contains) shouldBe true
 
       // Sending the same sync message again should NOT trigger another download.
       // The synchronizer may send a sync response back, which is expected.
@@ -929,9 +920,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       val newBlock = statefulyValidFullBlock(wus)
-
-      // Wait for synchronizer to be initialized
-      Thread.sleep(500)
 
       // Send NewBlockMined to synchronizer
       synchronizerMockRef ! NewBlockMined(newBlock.header)
@@ -978,12 +966,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! NewBlockMined(newBlock.header)
 
       // Consume all inv messages from NewBlockMined
-      val deadline1 = System.currentTimeMillis() + 2000
-      while (System.currentTimeMillis() < deadline1) {
-        ncProbe.receiveOne(100.millis) match {
-          case Some(_: SendToNetwork) => // consume
-          case _ => // ignore
-        }
+      ncProbe.receiveWhile(2.seconds) {
+        case _: SendToNetwork => // consume
+        case _ => // ignore
       }
 
       // Second: LocalBlockApplied for same header should NOT send additional invs
@@ -1046,9 +1031,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val newBlock = statefulyValidFullBlock(wus)
 
-      // Wait for synchronizer to be initialized
-      Thread.sleep(500)
-
       // Send RemoteBlockApplied to synchronizer
       synchronizerMockRef ! RemoteBlockApplied(newBlock.header)
 
@@ -1090,9 +1072,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val newBlock = statefulyValidFullBlock(wus)
 
-      // Wait for synchronizer to be initialized
-      Thread.sleep(500)
-
       // Send NewBlockMined to synchronizer
       synchronizerMockRef ! NewBlockMined(newBlock.header)
 
@@ -1133,9 +1112,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       val newBlock = statefulyValidFullBlock(wus)
-
-      // Wait for synchronizer to be initialized
-      Thread.sleep(500)
 
       // Send LocalBlockApplied - should not broadcast but should perform cleanup
       synchronizerMockRef ! LocalBlockApplied(newBlock.header)

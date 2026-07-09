@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import OrderedTxPool.weighted
+import OrderedTxPool.{feeForFactor, saturatedAverage, saturatingAdd, scaledFeePerFactor, weighted}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import sigma.VersionContext
@@ -200,7 +200,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
     if (doubleSpendingWtxs.nonEmpty) {
       val ownWtx = weighted(tx, feeF)
-      val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
+      val doubleSpendingTotalWeight = saturatedAverage(doubleSpendingWtxs.map(_.weight))
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
         val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
@@ -305,7 +305,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     tx.outputs
       .filter(_.ergoTree == settings.chainSettings.monetary.feeProposition)
       .map(_.value)
-      .sum
+      .foldLeft(0L)(saturatingAdd)
   }
 
   /**
@@ -318,7 +318,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int): Long = {
     @tailrec def loop(waitMinutes: Int): Option[Long] =
       Try(stats.histogram(waitMinutes)).toOption match {
-        case Some(bin) if bin.nTxns != 0 => Some(bin.totalFee / bin.nTxns * txSize / 1024)
+        case Some(bin) if bin.nTxns != 0 => Some(feeForFactor(bin.totalFee / bin.nTxns, txSize))
         case _ if waitMinutes < expectedWaitTimeMinutes => loop(waitMinutes + 1)
         case _ => None
       }
@@ -337,7 +337,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     */
   def getExpectedWaitTime(txFee : Long, txSize : Int): Long  = {
     // Create dummy transaction entry
-    val feePerKb = txFee * 1024 / txSize
+    val feePerKb = scaledFeePerFactor(txFee, txSize)
     val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
     val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
 

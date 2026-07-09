@@ -150,7 +150,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   def getChainSliceR: Route = (pathPrefix("chainSlice") & chainPagination) { (fromHeight, toHeight) =>
     if (toHeight < fromHeight) {
       BadRequest("toHeight < fromHeight")
-    } else if (fromHeight - toHeight > MaxHeaders) {
+    } else if (toHeight.toLong - fromHeight.toLong > MaxHeaders) {
       BadRequest(s"No more than $MaxHeaders headers can be requested")
     } else {
       ApiResponse(getChainSlice(fromHeight, toHeight))
@@ -190,7 +190,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getFullBlockByHeaderIdsR: Route = (post & path("headerIds") & modifierIds) { ids =>
-    ApiResponse(getFullBlockByHeaderIds(ids))
+    if (ids.length > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders blocks can be requested")
+    } else {
+      ApiResponse(getFullBlockByHeaderIds(ids))
+    }
   }
 
 }

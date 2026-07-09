@@ -69,7 +69,10 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
   private def handleErgoTree(value: String): Directive1[ErgoTree] = {
     Base16.decode(fromJsonOrPlain(value)) match {
       case Success(bytes) =>
-        provide(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes))
+        Try(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes)) match {
+          case Success(tree) => provide(tree)
+          case Failure(_)    => reject(ValidationRejection("Invalid ErgoTree data"))
+        }
       case _ => reject(ValidationRejection("Invalid hex data"))
     }
 

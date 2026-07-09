@@ -15,7 +15,7 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 
 import java.security.SecureRandom
-import scala.util.Failure
+import scala.util.{Failure, Try}
 import sigma.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
 class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
@@ -94,10 +94,11 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     Base16
       .decode(ergoTreeHex)
       .flatMap { etBytes =>
-        ergoAddressEncoder.fromProposition(treeSerializer.deserializeErgoTree(etBytes))
+        Try(treeSerializer.deserializeErgoTree(etBytes))
+          .flatMap(ergoAddressEncoder.fromProposition)
       }
       .fold(
-        e => BadRequest(e.getMessage),
+        _ => BadRequest("Invalid ErgoTree data"),
         address => ApiResponse(Map("address" -> address.toString.asJson).asJson)
       )
   }

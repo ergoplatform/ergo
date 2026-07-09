@@ -86,15 +86,58 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                       ): (mutable.ArrayBuilder[UnconfirmedTransaction], mutable.ArrayBuilder[ModifierId]) = {
       txs match {
         case head :: tail if costAcc < CostLimit =>
-          val validationContext = state.stateContext.simplifiedUpcoming()
-          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
-            case Success(txCost) =>
-              val updTx = head.withCost(txCost)
-              validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
-            case Failure(e) =>
+          // Simplified validation for transactions not using blockchain context
+          val shouldFullyValidate = head.isUsingBlockchainContext.getOrElse(true)
+          
+          if (!shouldFullyValidate && head.validationResult.contains(true)) {
+            // Transaction doesn't use blockchain context and was previously valid
+            // Just check that inputs still exist
+            val inputsExist = head.transaction.inputIds.forall { inputBoxId =>
+              state.boxById(inputBoxId).isDefined
+            }
+            
+            if (inputsExist) {
+              // Inputs exist, transaction is still valid
+              val updTx = head.withCost(head.lastCost.getOrElse(0))
+              validationLoop(tail, validated += updTx, invalidated, head.lastCost.getOrElse(0) + costAcc)
+            } else {
+              // Inputs don't exist, invalidate
               val txId = head.id
-              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+              log.info(s"Transaction $txId invalidated: inputs no longer exist")
+              validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc)
+            }
+          } else {
+            // Full validation needed
+            val validationContext = state.stateContext.simplifiedUpcoming()
+            state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
+              case Success(txCost) =>
+                // Check if transaction uses blockchain context
+                val usesBlockchainContext = try {
+                  head.transaction.inputs.exists { input =>
+                    state.boxById(input.boxId) match {
+                      case Some(box) =>
+                        // When sigma-state 5.0.14+ is available:
+                        // box.ergoTree.header.isUsingBlockchainContext
+                        true // TODO: Update when sigma-state 5.0.14+ is integrated
+                      case None => false
+                    }
+                  }
+                } catch {
+                  case _: Exception => true
+                }
+                
+                val updTx = if (usesBlockchainContext) {
+                  head.withBlockchainContext(usesContext = true, isValid = true, txCost)
+                } else {
+                  head.withCost(txCost)
+                }
+                
+                validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
+              case Failure(e) =>
+                val txId = head.id
+                log.info(s"Transaction $txId invalidated: ${e.getMessage}")
+                validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc)
+            }
           }
         case _ =>
           validated -> invalidated

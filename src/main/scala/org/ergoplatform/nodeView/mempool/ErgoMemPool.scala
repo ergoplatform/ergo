@@ -266,7 +266,30 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
-                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                    // Check if any input uses blockchain context
+                    // Note: This requires sigma-state 5.0.14+ with ErgoTree.header.isUsingBlockchainContext method
+                    val usesBlockchainContext = try {
+                      tx.inputs.exists { input =>
+                        utxoWithPool.boxById(input.boxId) match {
+                          case Some(box) =>
+                            // When sigma-state 5.0.14+ is available, this will work:
+                            // box.ergoTree.header.isUsingBlockchainContext
+                            // For now, conservatively assume true
+                            true // TODO: Update when sigma-state 5.0.14+ is integrated
+                          case None => false
+                        }
+                      }
+                    } catch {
+                      case _: Exception => true // Conservative default
+                    }
+                    
+                    val updatedTx = if (usesBlockchainContext) {
+                      unconfirmedTx.withBlockchainContext(usesContext = true, isValid = true, cost)
+                    } else {
+                      unconfirmedTx.withCost(cost)
+                    }
+                    
+                    acceptIfNoDoubleSpend(updatedTx, validationStartTime)
                   case Failure(ex) =>
                     this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }

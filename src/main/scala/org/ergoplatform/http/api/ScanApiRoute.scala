@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Route
 import io.circe.Encoder
 import org.ergoplatform._
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, Scan, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 
@@ -107,7 +107,12 @@ case class ScanApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
         val script = p2sAddr.script
         val scriptBytes = ByteArrayConstant(ErgoTreeSerializer.DefaultSerializer.serializeErgoTree(script))
         val trackingRule = EqualsScanningPredicate(R1, scriptBytes)
-        val request = ScanRequest(p2s, trackingRule, Some(ScanWalletInteraction.Off), Some(true))
+        val scanName = if (p2s.getBytes("UTF-8").length > Scan.MaxScanNameLength) {
+          new String(p2s.getBytes("UTF-8"), 0, Scan.MaxScanNameLength, "UTF-8")
+        } else {
+          p2s
+        }
+        val request = ScanRequest(scanName, trackingRule, Some(ScanWalletInteraction.Off), Some(true))
         withWalletOp(_.addScan(request).map(_.response)) {
           case Failure(e) => BadRequest(s"Bad request $request. ${Option(e.getMessage).getOrElse(e.toString)}")
           case Success(app) => ApiResponse(ScanIdWrapper(app.scanId))

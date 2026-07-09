@@ -35,6 +35,15 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
+  it should "reject invalid seed lengths" in {
+    Get(s"$prefix/seed/0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(s"$prefix/seed/1048576") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "derive address from ErgoTree (p2s)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2saddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {

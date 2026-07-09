@@ -14,7 +14,8 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
+import org.ergoplatform.settings.Constants.HashLength
+import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
@@ -33,26 +34,55 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   val txPaging: Directive[(Int, Int)] = parameters("offset".as[Int] ? 0, "limit".as[Int] ? 50)
+  private val MaxItems = 16384
+
+  private def validatePaging(offset: Int, limit: Int)(inner: => Route): Route =
+    if (offset < 0) {
+      BadRequest("Offset should be non-negative")
+    } else if (limit < 0) {
+      BadRequest("Limit should be non-negative")
+    } else if (limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems transactions can be requested")
+    } else {
+      inner
+    }
+
+  private def validateMaxItems(count: Int, itemName: String)(inner: => Route): Route =
+    if (count > MaxItems) {
+      BadRequest(s"No more than $MaxItems $itemName can be requested")
+    } else {
+      inner
+    }
 
   val boxId: Directive1[BoxId] = pathPrefix(Segment).flatMap(handleBoxId)
 
+  private def decodeHash(value: String, fieldName: String): Either[String, Array[Byte]] =
+    Base16.decode(value) match {
+      case Success(bytes) if bytes.length == HashLength =>
+        Right(bytes)
+      case Success(_) =>
+        Left(s"$fieldName is invalid, it should be $HashLength-byte hex string")
+      case Failure(_) =>
+        Left(s"$fieldName is invalid, it should be hex string")
+    }
+
   private def handleBoxId(value: String): Directive1[BoxId] = {
-    ADKey @@ Base16.decode(value) match {
-      case Success(boxId) =>
-        provide(boxId)
-      case _ =>
-        reject(ValidationRejection(s"boxId $value is invalid, it should be hex string"))
+    decodeHash(value, "boxId") match {
+      case Right(bytes) =>
+        provide(ADKey @@ bytes)
+      case Left(error) =>
+        reject(ValidationRejection(error))
     }
   }
 
   val tokenId: Directive1[TokenId] = pathPrefix(Segment).flatMap(handleTokenId)
 
   private def handleTokenId(value: String): Directive1[TokenId] = {
-    Algos.decode(value) match {
-      case Success(tokenId) =>
+    decodeHash(value, "tokenId") match {
+      case Right(tokenId) =>
         provide(tokenId.toTokenId)
-      case _ =>
-        reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))
+      case Left(error) =>
+        reject(ValidationRejection(error))
     }
   }
 
@@ -213,21 +243,45 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   }
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
+  private val MaxFeeHistogramBins = 1000
+  private val MaxFeeEstimationWaitTime = 1440
 
   def getFeeHistogramR: Route = (path("poolHistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
-    ApiResponse(getMemPool.map(p => getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson))
+    if (bins <= 0 || bins > MaxFeeHistogramBins) {
+      BadRequest(s"bins should be between 1 and $MaxFeeHistogramBins")
+    } else if (maxtime <= 0) {
+      BadRequest("maxtime should be positive")
+    } else {
+      ApiResponse(
+        getMemPool.map { p =>
+          getFeeHistogram(System.currentTimeMillis(), bins, maxtime, p.weightedTransactionIds(Int.MaxValue)).asJson
+        }
+      )
+    }
   }
 
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)
 
   def getRecommendedFeeR: Route = (path("getFee") & get & feeRequestParameters) { (waitTime, txSize) =>
-    ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime,txSize).asJson))
+    if (waitTime <= 0 || waitTime > MaxFeeEstimationWaitTime) {
+      BadRequest(s"waitTime should be between 1 and $MaxFeeEstimationWaitTime")
+    } else if (txSize <= 0) {
+      BadRequest("txSize should be positive")
+    } else {
+      ApiResponse(getMemPool.map(_.getRecommendedFee(waitTime, txSize).asJson))
+    }
   }
 
   val waitTimeRequestParameters: Directive[(Long, Int)] = parameters("fee".as[Long] ? 1000L, "txSize".as[Int] ? 100)
 
   def getExpectedWaitTimeR: Route = (path("waitTime") & get & waitTimeRequestParameters) { (fee, txSize) =>
-    ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee,txSize).asJson))
+    if (fee < 0) {
+      BadRequest("fee should be non-negative")
+    } else if (txSize <= 0) {
+      BadRequest("txSize should be positive")
+    } else {
+      ApiResponse(getMemPool.map(_.getExpectedWaitTime(fee, txSize).asJson))
+    }
   }
 
   /** Unconfirmed Txs */
@@ -239,7 +293,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   /** Get unconfirmed transactions at given offset and limit*/
   def getUnconfirmedTransactionsR: Route = (path("unconfirmed") & get & txPaging) { (offset, limit) =>
-    ApiResponse(getUnconfirmedTransactions(offset, limit))
+    validatePaging(offset, limit) {
+      ApiResponse(getUnconfirmedTransactions(offset, limit))
+    }
   }
 
   /** Get unconfirmed transaction by its id */
@@ -270,52 +326,60 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         case Left(ex) =>
           ApiError(StatusCodes.BadRequest, ex.getMessage())
         case Right(ids) =>
-          ApiResponse(
-            getMemPool.map { pool =>
-              pool.getAll
-                .filter(tx => ids.contains(tx.id))
-                .map(_.id)
-            }
-          )
+          validateMaxItems(ids.size, "transaction ids") {
+            val idSet = ids.toSet
+            ApiResponse(
+              getMemPool.map { pool =>
+                pool.getAll
+                  .filter(tx => idSet.contains(tx.id))
+                  .map(_.id)
+              }
+            )
+          }
       }
     }
 
   /** Collect all transactions which inputs or outputs contain given ErgoTree hex */
   def getUnconfirmedTxsByErgoTreeR: Route =
     (pathPrefix("unconfirmed" / "byErgoTree") & post & entity(as[Json]) & txPaging) { case (body, offset, limit) =>
-      body.as[String] match {
-        case Left(ex) =>
-          ApiError(StatusCodes.BadRequest, ex.getMessage())
-        case Right(ergoTree) =>
-          ApiResponse(
-            getMemPool.flatMap { pool =>
-              val allTxs = pool.getAll
-              val txsWithOutputMatch =
-                allTxs
-                  .collect { case tx if tx.transaction.outputs.exists(_.ergoTree.bytesHex == ergoTree) =>
-                    tx.transaction
-                  }.toSet
+      validatePaging(offset, limit) {
+        body.as[String] match {
+          case Left(ex) =>
+            ApiError(StatusCodes.BadRequest, ex.getMessage())
+          case Right(ergoTree) =>
+            ApiResponse(
+              getMemPool.flatMap { pool =>
+                val allTxs = pool.getAll
+                val txsWithOutputMatch =
+                  allTxs
+                    .collect { case tx if tx.transaction.outputs.exists(_.ergoTree.bytesHex == ergoTree) =>
+                      tx.transaction
+                    }.toSet
 
-              getState.flatMap {
-                case state: UtxoStateReader =>
-                  val txWithInputMatch =
-                    allTxs
-                      .collect { case tx if
-                          tx.transaction.inputs.exists(i => state.boxById(i.boxId).exists(_.ergoTree.bytesHex == ergoTree)) =>
-                        tx.transaction
-                      }
-                      val allMatchingTxs = (txsWithOutputMatch ++ txWithInputMatch).toSeq.slice(offset, offset + limit)
-                      Future.sequence(allMatchingTxs.map(getUnconfirmedTransactionWithResolvedInputs)).map(_.asJson)
-                case _ =>
-                      Future.successful(
-                        txsWithOutputMatch
-                          .slice(offset, offset + limit)
-                          .map(_.asJson)
-                          .asJson
-                      )
+                getState.flatMap {
+                  case state: UtxoStateReader =>
+                    val txWithInputMatch =
+                      allTxs
+                        .collect { case tx if
+                            tx.transaction.inputs.exists { input =>
+                              state.boxById(input.boxId).exists(_.ergoTree.bytesHex == ergoTree)
+                            } =>
+                          tx.transaction
+                        }
+                    val allMatchingTxs =
+                      (txsWithOutputMatch ++ txWithInputMatch).toSeq.slice(offset, offset + limit)
+                    Future.sequence(allMatchingTxs.map(getUnconfirmedTransactionWithResolvedInputs)).map(_.asJson)
+                  case _ =>
+                    Future.successful(
+                      txsWithOutputMatch
+                        .slice(offset, offset + limit)
+                        .map(_.asJson)
+                        .asJson
+                    )
+                }
               }
-            }
-          )
+            )
+        }
       }
   }
 
@@ -356,14 +420,16 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   /** Collect all tx outputs which contain given ErgoTree hex */
   def getUnconfirmedOutputByErgoTreeR: Route =
     (pathPrefix("unconfirmed" / "outputs" / "byErgoTree") & post & entity(as[Json]) & txPaging) { (body, offset, limit) =>
-      body.as[String] match {
-        case Left(ex) =>
-          ApiError(StatusCodes.BadRequest, ex.getMessage())
-        case Right(ergoTree) =>
-          ApiResponse(
-            getMemPool
-              .map(_.getAll.flatMap(_.transaction.outputs.filter(_.ergoTree.bytesHex == ergoTree)).slice(offset, offset + limit))
-          )
+      validatePaging(offset, limit) {
+        body.as[String] match {
+          case Left(ex) =>
+            ApiError(StatusCodes.BadRequest, ex.getMessage())
+          case Right(ergoTree) =>
+            ApiResponse(
+              getMemPool
+                .map(_.getAll.flatMap(_.transaction.outputs.filter(_.ergoTree.bytesHex == ergoTree)).slice(offset, offset + limit))
+            )
+        }
       }
     }
 
@@ -379,20 +445,22 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   /** Collect all tx outputs which contain all given Registers */
   def getUnconfirmedOutputByRegistersR: Route =
     (pathPrefix("unconfirmed" / "outputs" / "byRegisters") & post & entity(as[Json]) & txPaging) { (body, offset, limit) =>
-      body.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] match {
-        case Left(ex) =>
-          ApiError(StatusCodes.BadRequest, ex.getMessage())
-        case Right(registers) if registers.isEmpty =>
-          ApiError(StatusCodes.BadRequest, "Registers filter cannot be empty")
-        case Right(registers) =>
-          ApiResponse(
-            getMemPool.map { pool =>
-              pool
-                .getAll
-                .flatMap(_.transaction.outputs.filter(o => registers.toSet.diff(o.additionalRegisters.toSet).isEmpty))
-                .slice(offset, offset + limit)
-            }
-          )
+      validatePaging(offset, limit) {
+        body.as[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]] match {
+          case Left(ex) =>
+            ApiError(StatusCodes.BadRequest, ex.getMessage())
+          case Right(registers) if registers.isEmpty =>
+            ApiError(StatusCodes.BadRequest, "Registers filter cannot be empty")
+          case Right(registers) =>
+            ApiResponse(
+              getMemPool.map { pool =>
+                pool
+                  .getAll
+                  .flatMap(_.transaction.outputs.filter(o => registers.toSet.diff(o.additionalRegisters.toSet).isEmpty))
+                  .slice(offset, offset + limit)
+              }
+            )
+        }
       }
     }
 

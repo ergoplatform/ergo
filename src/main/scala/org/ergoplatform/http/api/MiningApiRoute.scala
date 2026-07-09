@@ -9,7 +9,7 @@ import io.circe.Json
 import org.bouncycastle.util.encoders.Hex
 import org.ergoplatform.http.api.requests.MiningRequest
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, WeakAutolykosSolution}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
@@ -75,6 +75,15 @@ case class MiningApiRoute(miner: ActorRef,
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
+    val result = if (ergoSettings.nodeSettings.useExternalMiner) {
+      miner.askWithStatus(solution).mapTo[Unit]
+    } else {
+      Future.failed(new Exception("External miner support is inactive"))
+    }
+    ApiResponse(result)
+  }
+
+  def weakSolutionR: Route = (path("weakSolution") & post & entity(as[WeakAutolykosSolution])) { solution =>
     val result = if (ergoSettings.nodeSettings.useExternalMiner) {
       miner.askWithStatus(solution).mapTo[Unit]
     } else {

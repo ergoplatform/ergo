@@ -1,7 +1,7 @@
 package org.ergoplatform.serialization
 
 import io.circe.syntax._
-import io.circe.ACursor
+import io.circe.{ACursor, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
 import org.ergoplatform.http.api.ApiCodecs
@@ -59,6 +59,18 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       val parsedSecret = json.as[DhtSecretKey].toOption.get
       parsedSecret shouldBe wrappedSecret
     }
+  }
+
+  property("invalid dht secret group element bytes should fail decoding") {
+    val json = Json.obj(
+      "secret" -> "01".asJson,
+      "g" -> "00".asJson,
+      "h" -> "00".asJson,
+      "u" -> "00".asJson,
+      "v" -> "00".asJson
+    )
+
+    json.as[DhtSecretKey].isLeft shouldBe true
   }
 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {

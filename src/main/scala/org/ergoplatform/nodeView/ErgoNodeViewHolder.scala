@@ -535,7 +535,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
 
                   if (progressInfo.chainSwitchingNeeded) {
-                    context.system.eventStream.publish(Rollback(progressInfo.branchPoint.get))
+                    val branchPoint = progressInfo.branchPoint.get
+                    context.system.eventStream.publish(
+                      Rollback(
+                        branchPoint,
+                        history().heightOf(branchPoint),
+                        progressInfo.toRemove.length,
+                        progressInfo.toApply.length,
+                        System.currentTimeMillis()
+                      )
+                    )
                   }
                 case Failure(e) =>
                   log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)

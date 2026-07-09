@@ -52,9 +52,18 @@ object ErgoNodeViewSynchronizerMessages {
     /**
      * Event which is published when rollback happened (on finding a better chain)
      *
-     * @param branchPoint - block id which is last in the chain after rollback (before applying blocks from a fork)
+     * @param branchPoint       - block id which is last in the chain after rollback (before applying blocks from a fork)
+     * @param branchPointHeight - height of the branch point block, if known
+     * @param depth             - number of full blocks rolled back
+     * @param appliedBlocks     - length of the new chain suffix applied after rollback
+     *                            (intended applies captured at rollback time)
+     * @param timestamp         - when the rollback happened (in Java time, basically, UNIX time * 1000)
      */
-    case class Rollback(branchPoint: ModifierId) extends NodeViewHolderEvent
+    case class Rollback(branchPoint: ModifierId,
+                        branchPointHeight: Option[Int],
+                        depth: Int,
+                        appliedBlocks: Int,
+                        timestamp: Long) extends NodeViewHolderEvent
 
     case object RollbackFailed extends NodeViewHolderEvent
 

@@ -166,7 +166,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(n)
 
       // perform rollback
-      indexer ! Rollback(history.bestHeaderIdAtHeight(n).get)
+      indexer ! Rollback(history.bestHeaderIdAtHeight(n).get, Some(n), 0, 0, System.currentTimeMillis())
       lock.lock()
       done.await()
       state = IndexerState.fromHistory(_history)
@@ -335,7 +335,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Index()
     lock.lock()
     done.await()
-    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT).get)
+    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT).get, Some(HEIGHT), 0, 0, System.currentTimeMillis())
     lock.lock()
     done.await()
     val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)

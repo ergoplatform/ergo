@@ -2176,8 +2176,49 @@ components:
             type: string
             description: Blacklisted node address
 
+    RollbackInfo:
+      description: Information about a single chain rollback performed by the node
+        when switching to a better chain (a reorg).
+      type: object
+      required:
+        - branchPointId
+        - depth
+        - appliedBlocks
+        - timestamp
+      properties:
+        branchPointId:
+          description: Header id of the block which is last in the chain after the
+            rollback (the common branch point before applying the new chain suffix).
+          allOf:
+            - $ref: '#/components/schemas/ModifierId'
+        branchPointHeight:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+          description: Height of the branch point block. Can be 'null' if unknown.
+          example: 706158
+        depth:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of full blocks that were rolled back.
+          example: 2
+        appliedBlocks:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Length of the new chain suffix applied after the rollback,
+            as intended at rollback time. In a rare partial-failure reorg it may
+            exceed the number of blocks actually committed.
+          example: 3
+        timestamp:
+          description: When the rollback happened.
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+
     NodeInfo:
-      description: Data container for /info API request output. 
+      description: Data container for /info API request output.
         Contains information about node's state and configuration.
         Contains data about best block, best header, state, etc.
         Best block is the block with the maximum height.
@@ -3203,6 +3244,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NodeInfo'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /info/rollbacks:
+    get:
+      summary: Get information about recent chain rollbacks (reorgs) performed by the node
+      operationId: getRecentRollbacks
+      tags:
+        - info
+      responses:
+        '200':
+          description: Most recent chain rollbacks performed by the node, newest first
+            (up to the last 20). Held in memory only, so the list is reset on node
+            restart and is empty if no rollback happened since launch.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RollbackInfo'
         default:
           description: Error
           content:

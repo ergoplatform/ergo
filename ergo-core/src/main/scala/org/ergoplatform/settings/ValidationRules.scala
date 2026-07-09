@@ -273,7 +273,7 @@ object ValidationRules {
   val hdrVotesNumber: Short = 212
   val hdrVotesDuplicates: Short = 213
   val hdrVotesContradictory: Short = 214
-  val hdrVotesUnknown: Short = 215
+  val hdrVotesUnknown: Short = 215     // switched off in 6.0
   val hdrCheckpoint: Short = 216
 
   // block sections validation
@@ -296,7 +296,7 @@ object ValidationRules {
   val exEmpty: Short = 406
   val exCheckForkVote: Short = 407
   val exParseParameters: Short = 408
-  val exMatchParameters: Short = 409
+  val exMatchParameters: Short = 409   // switched off in 6.0
   val exBlockVersion: Short = 410
   val exParseValidationSettings: Short = 411
   val exMatchValidationSettings: Short = 412

@@ -425,9 +425,15 @@ object Parameters {
         if (p1.height != p2.height) {
           throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
         }
-        if (!(p1.parametersTable.size <= p2.parametersTable.size)) { // the only difference from matchParameters
+
+        // === logic changed in 6.0
+        // RELAXED: Only require that received params has AT LEAST as many parameters
+        // this is the only difference from matchParameters
+        if (!(p1.parametersTable.size <= p2.parametersTable.size)) {
           throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
         }
+        // ===
+
         if (p1.proposedUpdate != p2.proposedUpdate) {
           throw new Exception(s"Parameters proposedUpdate differs, p1 = ${p1.proposedUpdate}, p2 = ${p2.proposedUpdate}")
         }

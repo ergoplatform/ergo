@@ -330,8 +330,9 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
                 .flatMap(_.transaction.inputs.filter(_.boxId.sameElements(boxId)))
                 .headOption
                 .flatMap { input =>
-                  state.boxById(input.boxId).map { box =>
+                  state.withMempool(pool).boxById(input.boxId).map { box =>
                     val baseInput = Json.obj(
+
                       "boxId"         -> input.boxId.asJson,
                       "spendingProof" -> input.spendingProof.asJson
                     )

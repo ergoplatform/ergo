@@ -172,6 +172,15 @@ trait ErgoWalletService {
   def getPrivateKeyFromPath(state: ErgoWalletState, path: DerivationPath): Try[DLogProverInput]
 
   /**
+    * Sign an arbitrary message with wallet's private key
+    * @param state current wallet state
+    * @param message message to sign
+    * @param addressOpt optional address to use for signing
+    * @return Try of (signature, publicKey) both Base16 encoded
+    */
+  def signMessage(state: ErgoWalletState, message: String, addressOpt: Option[P2PKAddress]): Try[(String, String)]
+
+  /**
     * Derive next key from master key
     * @param state current wallet state
     * @param usePreEip3Derivation whether to use pre-EIP3 derivation or not
@@ -570,6 +579,57 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         Failure(new Exception("Unable to derive key from path, wallet is locked"))
       case None =>
         Failure(new Exception("Unable to derive key from path, wallet is not initialized"))
+    }
+
+  override def signMessage(state: ErgoWalletState, message: String, addressOpt: Option[P2PKAddress]): Try[(String, String)] =
+    state.secretStorageOpt match {
+      case Some(secretStorage) if !secretStorage.isLocked =>
+        Try {
+          import org.ergoplatform.wallet.crypto.ErgoSignature
+          import scorex.util.encode.Base16
+          
+          val rootSecret = secretStorage.secret.get
+          
+          // Get the secret key to use for signing
+          val secret = addressOpt match {
+            case Some(address) =>
+              // Find the path for the given address
+              state.storage.readAllKeys().find(_.key.value == address.pubkey.value) match {
+                case Some(extKey) =>
+                  rootSecret.derive(extKey.path.toPrivateBranch)
+                case None =>
+                  throw new Exception(s"Address ${address.toString} not found in wallet")
+              }
+            case None =>
+              // Use first available key
+              val firstPath = state.storage.readAllKeys().headOption match {
+                case Some(extKey) => extKey.path
+                case None => throw new Exception("No keys available in wallet")
+              }
+              rootSecret.derive(firstPath.toPrivateBranch)
+          }
+          
+          // Get the prover input (secret key)
+          val proverInput = secret.privateInput
+          
+          // Sign the message using ErgoSignature
+          val messageBytes = message.getBytes("UTF-8")
+          val proveDlog = proverInput.publicImage
+          
+          // Use ErgoSignature.sign to sign the message
+          val signatureBytes = ErgoSignature.sign(messageBytes, proverInput.w)
+          
+          // Encode signature and public key as Base16
+          val signatureHex = Base16.encode(signatureBytes)
+          val publicKeyBytes = proveDlog.pkBytes
+          val publicKeyHex = Base16.encode(publicKeyBytes)
+          
+          (signatureHex, publicKeyHex)
+        }
+      case Some(_) =>
+        Failure(new Exception("Unable to sign message, wallet is locked"))
+      case None =>
+        Failure(new Exception("Unable to sign message, wallet is not initialized"))
     }
 
 

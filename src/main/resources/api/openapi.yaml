@@ -2528,15 +2528,41 @@ components:
       description: Ergo box registers
       type: object
       additionalProperties:
-        $ref: '#/components/schemas/SValue'
+        oneOf:
+          - type: string
+            format: base16
+            description: Base-16 encoded serialized Sigma-state value (simple format)
+          - $ref: '#/components/schemas/SValueDetailed'
       example:
         R4: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
+        R5:
+          serializedValue: '08cd02a73151bd3c8864d6cf9c81fa288df7940ea828dd6ccf96c8437805076c851fa0'
+          renderedValue: '02a73151bd3c8864d6cf9c81fa288df7940ea828dd6ccf96c8437805076c851fa0'
 
     SValue:
-      description: Base-16 encoded serialized Sigma-state value
-      type: string
-      format: base16
-      example: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
+      description: Base-16 encoded serialized Sigma-state value (simple format) or detailed object with serialized and rendered values
+      oneOf:
+        - type: string
+          format: base16
+          description: Base-16 encoded serialized Sigma-state value
+          example: '100204a00b08cd0336100ef59ced80ba5f89c4178ebd57b6c1dd0f3d135ee1db9f62fc634d637041ea02d192a39a8cc7a70173007301'
+        - $ref: '#/components/schemas/SValueDetailed'
+
+    SValueDetailed:
+      description: Detailed Sigma-state value with both serialized and rendered representations
+      type: object
+      required:
+        - serializedValue
+      properties:
+        serializedValue:
+          type: string
+          format: base16
+          description: Base-16 encoded serialized Sigma-state value
+          example: '08cd02a73151bd3c8864d6cf9c81fa288df7940ea828dd6ccf96c8437805076c851fa0'
+        renderedValue:
+          type: string
+          description: Human-readable rendered value of the register
+          example: '02a73151bd3c8864d6cf9c81fa288df7940ea828dd6ccf96c8437805076c851fa0'
 
     Votes:
       description: Base16-encoded votes for a soft-fork and parameters

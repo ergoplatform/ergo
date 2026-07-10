@@ -12,10 +12,18 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
-  private val poPowParams = PoPowParams(30, 30, continuous = false)
+  private val poPowParams = PoPowParams(30, 30, continuous = false).get
   private val ChainLength = 10
 
   private def toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
+
+  property("PoPowParams rejects invalid minimum chain lengths") {
+    PoPowParams(0, 1, continuous = false) shouldBe 'failure
+    PoPowParams(1, 0, continuous = false) shouldBe 'failure
+    PoPowParams(Int.MaxValue, 1, continuous = false) shouldBe 'failure
+
+    PoPowParams(1, 1, continuous = false).get.minChainLength shouldBe 2
+  }
 
   property("updateInterlinks") {
     val chain = genChain(ChainLength)
@@ -144,7 +152,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   }
 
   property("isBetterThan - a disconnected prefix chain should not win") {
-    val smallPoPowParams = PoPowParams(50, 1, continuous = false)
+    val smallPoPowParams = PoPowParams(50, 1, continuous = false).get
     val size = 100
     val chain = toPoPoWChain(genChain(size))
     val proof = nipopowAlgos.prove(chain)(smallPoPowParams).get
@@ -158,7 +166,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   }
 
   property("hasValidConnections - ensures a connected prefix chain") {
-    val smallPoPowParams = PoPowParams(5, 5, continuous = false)
+    val smallPoPowParams = PoPowParams(5, 5, continuous = false).get
     val sizes = Seq(100, 200)
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
@@ -172,7 +180,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   }
 
   property("hasValidConnections - ensures a connected suffix chain") {
-    val smallPoPowParams = PoPowParams(5, 5, continuous = false)
+    val smallPoPowParams = PoPowParams(5, 5, continuous = false).get
     val sizes = Seq(100, 200)
 
     sizes.foreach { size =>

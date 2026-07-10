@@ -130,7 +130,6 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     val k = params.k
     val m = params.m
 
-    require(params.k >= 1, s"$k < 1")
     require(chain.lengthCompare(k + m) >= 0, s"Can not prove chain of size < ${k + m}")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
 

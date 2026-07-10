@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.popow
 
+import scala.util.Try
+
 /**
   * NiPoPoW proof params from the KMZ17 paper
   *
@@ -12,5 +14,13 @@ package org.ergoplatform.modifiers.history.popow
   *                     to the block header)
   *
   */
-case class PoPowParams(m: Int, k: Int, continuous: Boolean)
+final class PoPowParams private (val m: Int, val k: Int, val continuous: Boolean, val minChainLength: Int)
+
+object PoPowParams {
+  def apply(m: Int, k: Int, continuous: Boolean): Try[PoPowParams] = Try {
+    require(m >= 1, s"$m < 1")
+    require(k >= 1, s"$k < 1")
+    new PoPowParams(m, k, continuous, Math.addExact(m, k))
+  }
+}
 

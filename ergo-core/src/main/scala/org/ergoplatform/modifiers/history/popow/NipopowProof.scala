@@ -72,7 +72,11 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   lazy val isValid: Boolean = {
-    this.hasValidConnections && this.hasValidHeights && this.hasValidProofs && this.hasValidDifficultyHeaders
+    this.hasValidConnections &&
+      this.hasValidHeights &&
+      this.hasValidProofs &&
+      this.hasValidDifficultyHeaders &&
+      this.hasValidPow
   }
 
   /**
@@ -154,6 +158,8 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     prefix.forall(_.checkInterlinksProof()) &&
       suffixHead.checkInterlinksProof()
   }
+
+  lazy val hasValidPow: Boolean = headersChain.forall(popowAlgos.hasValidPow)
 
 }
 

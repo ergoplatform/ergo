@@ -75,6 +75,8 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
       Int.MaxValue
     }
 
+  def hasValidPow(header: Header): Boolean = powScheme.validate(header).isSuccess
+
   /**
     * Computes best score of a given chain.
     * The score value depends on number of µ-superblocks in the given chain.

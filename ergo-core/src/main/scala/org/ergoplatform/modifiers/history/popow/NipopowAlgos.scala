@@ -98,6 +98,8 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     * end function
     */
   def bestArg(chain: Seq[Header])(m: Int): Int = {
+    require(m >= 1, s"$m < 1")
+
     @scala.annotation.tailrec
     def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
       if (level == 0) {

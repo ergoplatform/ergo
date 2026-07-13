@@ -72,7 +72,8 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   lazy val isValid: Boolean = {
-    this.hasValidConnections &&
+    PoPowParams(m, k, continuous).isSuccess &&
+      this.hasValidConnections &&
       this.hasValidHeights &&
       this.hasValidProofs &&
       this.hasValidDifficultyHeaders &&

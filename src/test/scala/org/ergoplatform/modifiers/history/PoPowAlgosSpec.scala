@@ -1,5 +1,8 @@
 package org.ergoplatform.modifiers.history
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
+
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.scalacheck.Gen
@@ -23,6 +26,26 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
     PoPowParams(Int.MaxValue, 1, continuous = false) shouldBe 'failure
 
     PoPowParams(1, 1, continuous = false).get.minChainLength shouldBe 2
+  }
+
+  property("bestArg rejects a non-positive security parameter without looping") {
+    val completed = new CountDownLatch(1)
+    val error = new AtomicReference[Throwable]()
+    val worker = new Thread(new Runnable {
+      override def run(): Unit =
+        try {
+          nipopowAlgos.bestArg(Seq.empty)(0)
+        } catch {
+          case t: Throwable => error.set(t)
+        } finally {
+          completed.countDown()
+        }
+    })
+    worker.setDaemon(true)
+    worker.start()
+
+    completed.await(2, TimeUnit.SECONDS) shouldBe true
+    error.get() shouldBe a[IllegalArgumentException]
   }
 
   property("updateInterlinks") {

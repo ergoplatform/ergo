@@ -1,5 +1,8 @@
 package org.ergoplatform.local
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
+
 import org.ergoplatform.modifiers.history.popow.{PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.scalatest.matchers.should.Matchers
@@ -42,5 +45,50 @@ class NipopowVerifierSpec extends AnyPropSpec with Matchers {
       verifier.process(shortProof)
       verifier.bestChain.last.id shouldBe longestProof.headersChain.last.id
     }
+  }
+
+  property("rejects proofs with invalid security parameters") {
+    val baseChain = genChain(100)
+    val params = PoPowParams(5, 5, continuous = false).get
+    val proof = nipopowAlgos.prove(toPoPoWChain(baseChain))(params).get
+
+    Seq(
+      proof.copy(m = 0),
+      proof.copy(k = 0),
+      proof.copy(m = Int.MaxValue, k = 1)
+    ).foreach { invalidProof =>
+      val proofBytes = invalidProof.serializer.toBytes(invalidProof)
+      val receivedProof = invalidProof.serializer.parseBytes(proofBytes)
+      receivedProof.isValid shouldBe false
+
+      val verifier = new NipopowVerifier(Some(baseChain.head.id))
+      verifier.process(receivedProof) shouldBe ValidationError
+      verifier.bestChain shouldBe empty
+    }
+  }
+
+  property("returns when a duplicate invalid proof is processed") {
+    val baseChain = genChain(100)
+    val params = PoPowParams(5, 5, continuous = false).get
+    val invalidProof = nipopowAlgos.prove(toPoPoWChain(baseChain))(params).get.copy(m = 0)
+    val proofBytes = invalidProof.serializer.toBytes(invalidProof)
+    val receivedProof = invalidProof.serializer.parseBytes(proofBytes)
+    val verifier = new NipopowVerifier(Some(baseChain.head.id))
+
+    val firstResult = verifier.process(receivedProof)
+    val secondResult = new AtomicReference[NipopowProofVerificationResult]()
+    val completed = new CountDownLatch(1)
+    val worker = new Thread(new Runnable {
+      override def run(): Unit =
+        try secondResult.set(verifier.process(receivedProof))
+        finally completed.countDown()
+    })
+    worker.setDaemon(true)
+    worker.start()
+
+    completed.await(2, TimeUnit.SECONDS) shouldBe true
+    firstResult shouldBe ValidationError
+    secondResult.get() shouldBe ValidationError
+    verifier.bestChain shouldBe empty
   }
 }

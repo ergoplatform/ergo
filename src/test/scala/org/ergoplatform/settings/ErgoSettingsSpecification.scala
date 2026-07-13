@@ -62,7 +62,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
       )
     )
     settings.scorexSettings.restApi shouldBe RESTApiSettings(
-      bindAddress = new InetSocketAddress("0.0.0.0", 9052),
+      bindAddress = new InetSocketAddress("127.0.0.1", 9052),
       apiKeyHash = None,
       corsAllowedOrigin = Some("*"),
       timeout = 5.seconds,

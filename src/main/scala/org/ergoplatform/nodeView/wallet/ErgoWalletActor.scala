@@ -8,6 +8,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
@@ -408,12 +409,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case UpdateChangeAddress(address) =>
-      state.storage.updateChangeAddress(address) match {
+      ergoWalletService.updateChangeAddress(state, address) match {
         case Success(_) =>
           sender() ! StatusReply.success(())
+        case Failure(t: ChangeAddressValidationException) =>
+          log.warn(t.getMessage)
+          sender() ! StatusReply.error(t)
         case Failure(t) =>
           log.error(s"Unable to update change address", t)
-          sender() ! StatusReply.error(s"Unable to update change address : ${t.getMessage}")
+          sender() ! StatusReply.error(t)
       }
 
     case RemoveScan(scanId) =>

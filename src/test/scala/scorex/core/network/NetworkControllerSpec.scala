@@ -3,6 +3,8 @@ package scorex.core.network
 import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
+import akka.util.ByteString
+import org.ergoplatform.network.{Handshake, HandshakeSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -24,6 +26,8 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
     implicit val actorSystem = system
 
     val scorexContext: ScorexContext = ScorexContext(Seq.empty, None, None)
+
+    case class EstablishedConnection(connectionProbe: TestProbe, handlerRef: ActorRef)
 
     def createController(maxConnections: Int): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
       val peerManagerProbe = TestProbe("PeerManager")
@@ -56,6 +60,33 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       peerManagerProbe: TestProbe,
       remoteAddress: InetSocketAddress
     ): InetSocketAddress = {
+      beginIncomingConnection(controller, peerManagerProbe, remoteAddress)
+      remoteAddress
+    }
+
+    def establishIncomingConnectionWithHandler(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): EstablishedConnection = {
+      val connectionProbe = beginIncomingConnection(
+        controller,
+        peerManagerProbe,
+        remoteAddress
+      )
+
+      val handlerRef = connectionProbe.expectMsgType[Tcp.Register].handler
+      connectionProbe.expectMsg(Tcp.ResumeReading)
+      connectionProbe.expectMsgType[Tcp.Write]
+
+      EstablishedConnection(connectionProbe, handlerRef)
+    }
+
+    private def beginIncomingConnection(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): TestProbe = {
       val localAddress = settings.scorexSettings.network.bindAddress
       val connectionProbe = TestProbe("Connection")
 
@@ -66,7 +97,7 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
           controller ! ConnectionConfirmed(ConnectionId(remoteAddress, localAddress, Incoming), handlerRef)
       }
 
-      remoteAddress
+      connectionProbe
     }
 
     def establishOutgoingConnection(
@@ -268,6 +299,49 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
       connectionProbe.send(controller, Tcp.Connected(remoteAddress, localAddress))
       connectionProbe.expectMsg(Tcp.Close)
+    }
+  }
+
+  property("rejected handshake should remove only the transport peer") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
+
+      val victimAddress = new InetSocketAddress("192.168.1.1", 9001)
+      val attackerAddress = new InetSocketAddress("192.168.1.2", 9002)
+      f.establishIncomingConnection(controller, peerManagerProbe, victimAddress)
+      val attackerConnection = f.establishIncomingConnectionWithHandler(
+        controller,
+        peerManagerProbe,
+        attackerAddress
+      )
+
+      val attackerHandshake = Handshake(
+        defaultPeerSpec.copy(declaredAddress = Some(victimAddress)),
+        System.currentTimeMillis()
+      )
+      attackerConnection.connectionProbe.send(
+        attackerConnection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(attackerHandshake)))
+      )
+
+      attackerConnection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManagerProbe.expectMsg(RemovePeer(attackerAddress))
+      attackerConnection.connectionProbe.expectMsg(Tcp.Abort)
+      peerManagerProbe.expectNoMessage(200.millis)
+
+      val localAddress = settings.scorexSettings.network.bindAddress
+      val duplicateVictimProbe = TestProbe("DuplicateVictim")
+      duplicateVictimProbe.send(controller, Tcp.Connected(victimAddress, localAddress))
+      duplicateVictimProbe.expectMsg(Tcp.Close)
+
+      val attackerReconnectProbe = TestProbe("AttackerReconnect")
+      attackerReconnectProbe.send(controller, Tcp.Connected(attackerAddress, localAddress))
+      peerManagerProbe.expectMsgPF(1.second) {
+        case ConfirmConnection(connectionId, connectionRef) =>
+          connectionId.remoteAddress shouldBe attackerAddress
+          connectionRef shouldBe attackerReconnectProbe.ref
+      }
     }
   }
 

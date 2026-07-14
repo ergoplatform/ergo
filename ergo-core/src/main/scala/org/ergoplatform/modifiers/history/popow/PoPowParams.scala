@@ -17,10 +17,12 @@ import scala.util.Try
 final class PoPowParams private (val m: Int, val k: Int, val continuous: Boolean, val minChainLength: Int)
 
 object PoPowParams {
+  def isValid(m: Int, k: Int): Boolean =
+    m >= 1 && k >= 1 && m.toLong + k.toLong <= Int.MaxValue
+
   def apply(m: Int, k: Int, continuous: Boolean): Try[PoPowParams] = Try {
-    require(m >= 1, s"$m < 1")
-    require(k >= 1, s"$k < 1")
-    new PoPowParams(m, k, continuous, Math.addExact(m, k))
+    require(isValid(m, k), s"Invalid NiPoPoW parameters: m=$m, k=$k")
+    new PoPowParams(m, k, continuous, m + k)
   }
 }
 

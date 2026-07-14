@@ -5,7 +5,6 @@
 APP_DIR=~/ergo
 NODE_NAME=${USER}-$(hostname)
 API_KEY=
-API_KEY_FROM_ARGUMENT=no
 DEBIAN_INSTALLATION_RECOMMENDATIONS=
 TOR=no
 CONFIG_TEMPLATE="ergo.node.mining = false\nscorex.network.nodeName = \"<NODE_NAME>\"\nscorex.restApi.apiKeyHash = \"<API_KEY_HASH>\""
@@ -17,15 +16,13 @@ NODE_PARAMS="-Xmx$(awk '/MemTotal/ { printf "%.0f", $2*0.9 }' /proc/meminfo)K"
 while :; do
     case $1 in
         -h|-\?|--help)
-            echo "Usage: $0 [--node-name=YOUR_NODE_NAME] [--app-dir=APP_DIR] [--mode=full|mining] [--tor]"
-            echo "The API key is requested using a hidden terminal prompt. The legacy --api-key option remains supported but can expose the key in process listings."
+            echo "Usage: $0 --api-key=YOUR_API_KEY [--node-name=YOUR_NODE_NAME] [--app-dir=APP_DIR] [--mode=full|mining] [--tor]"
             exit
             ;;
 
         --api-key)
             if [ "$2" ]; then
                 API_KEY=$2
-                API_KEY_FROM_ARGUMENT=yes
                 shift
             else
                 echo 'ERROR: "--api-key" requires a non-empty option argument.'
@@ -34,7 +31,6 @@ while :; do
             ;;
         --api-key=?*)
             API_KEY=${1#*=} # Delete everything up to "=" and assign the remainder.
-            API_KEY_FROM_ARGUMENT=yes
             ;;
         --api-key=)         # Handle the case of an empty --api-key=
             echo 'ERROR: "--api-key" requires a non-empty option argument.'
@@ -116,30 +112,9 @@ if [ "$(echo "${APP_DIR}" | cut -c1-1)" != "/" ]; then
   exit 1
 fi
 
-if [ "${API_KEY_FROM_ARGUMENT}" = yes ]; then
-  echo 'WARN: --api-key may expose the key in process listings; omit it to use the hidden prompt.'
-fi
-
 if [ -z "${API_KEY}" ]; then
-  printf 'API key: ' > /dev/tty
-  TTY_STATE=$(stty -g < /dev/tty) || {
-    echo 'ERROR: Unable to read terminal state for API key input.'
-    exit 1
-  }
-  trap 'stty "${TTY_STATE}" < /dev/tty; printf "\n" > /dev/tty; exit 130' HUP INT TERM
-  if ! stty -echo < /dev/tty; then
-    echo 'ERROR: Unable to disable terminal echo for API key input.'
-    exit 1
-  fi
-  IFS= read -r API_KEY < /dev/tty
-  API_KEY_READ_STATUS=$?
-  stty "${TTY_STATE}" < /dev/tty
-  trap - HUP INT TERM
-  printf '\n' > /dev/tty
-  if [ "${API_KEY_READ_STATUS}" -ne 0 ] || [ -z "${API_KEY}" ]; then
-    echo 'ERROR: API key input must be non-empty.'
-    exit 1
-  fi
+  echo 'ERROR: "--api-key" is required and requires a non-empty option argument.'
+  exit 1
 fi
 
 if [ "${MODE}" != 'full' ] && [ "${MODE}" != 'mining' ]; then
@@ -147,7 +122,7 @@ if [ "${MODE}" != 'full' ] && [ "${MODE}" != 'mining' ]; then
   exit 1
 fi
 
-echo "Ergo node with config file will be installed into '${APP_DIR}' directory and will be named as '${NODE_NAME}'."
+echo "Ergo node with config file will be installed into '${APP_DIR}' directory and will be named as '${NODE_NAME}' and has API key '${API_KEY}'."
 
 
 # Check preinstalled software
@@ -203,20 +178,16 @@ echo "Latest known Ergo release: ${LATEST_ERGO_RELEASE}, downloading it to ${APP
 curl --silent -L ${ERGO_DOWNLOAD_URL} --output ${APP_DIR}/ergo.jar
 echo "Ergo was downloaded to ${APP_DIR}/ergo.jar"
 
-# Hash the API key offline. Reading it from standard input keeps it out of
-# process arguments. b2sum supports installers running before the new helper
-# is present in the latest published Ergo JAR.
-API_KEY_HASH=$(printf '%s' "${API_KEY}" | java -cp "${APP_DIR}/ergo.jar" org.ergoplatform.tools.ApiKeyHash 2> /dev/null) || API_KEY_HASH=
-case ${API_KEY_HASH} in (*[!0-9a-f]*|'') API_KEY_HASH= ;; esac
-if [ ${#API_KEY_HASH} -ne 64 ]; then
-  API_KEY_HASH=$(printf '%s' "${API_KEY}" | b2sum -l 256 2> /dev/null | awk '{print $1}') || API_KEY_HASH=
-fi
-case ${API_KEY_HASH} in (*[!0-9a-f]*|'') API_KEY_HASH= ;; esac
-if [ ${#API_KEY_HASH} -ne 64 ]; then
-  echo 'ERROR: Failed to calculate a valid API key hash.'
-  exit 1
-fi
-echo "API key hash obtained."
+# First run of Ergo node, to create API key hash that later be added into config
+echo -n "Executing ergo node to obtain API key hash..."
+daemon --chdir=${APP_DIR} -- java -jar ${APP_DIR}/ergo.jar --mainnet
+PID=$(pgrep -f "daemon --chdir=${APP_DIR} -- java")
+while ! curl --output /dev/null --silent --head --fail http://localhost:9053; do sleep 1 && echo -n '.'; done;  # wait for node be ready with progress bar
+API_KEY_HASH=$(curl -X POST "http://localhost:9053/utils/hash/blake2b" -H  "accept: application/json" -H  "Content-Type: application/json" -d "\"${APP_KEY}\"" --silent | cut -c 2- | rev | cut -c 2- | rev)
+echo "\nAPI key hash obtained: ${API_KEY_HASH}"
+echo -n "Stopping Ergo node with PID=${PID}..."
+kill ${PID} && while kill -0 ${PID} > /dev/null 2>&1; do sleep 1 && echo -n '.'; done;  # wait for node exit with progress bar
+echo "\nStopped."
 
 # Writing config file
 echo ${CONFIG_TEMPLATE} | sed "s/<NODE_NAME>/${NODE_NAME}/g" | sed "s/<API_KEY_HASH>/${API_KEY_HASH}/g" > ${APP_DIR}/application.conf

@@ -49,13 +49,13 @@ trait NodeApi {
 
   def getWihApiKey(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] = retrying {
     _get(s"http://$restAddress:$nodeRestPort$path")
-      .setHeader("api_key", IntegrationTestApiKey)
+      .setHeader("api_key", "hello")
       .build()
   }
 
   def post(url: String, port: Int, path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(
-      _post(s"$url:$port$path").setHeader("api_key", IntegrationTestApiKey)
+      _post(s"$url:$port$path").setHeader("api_key", "hello")
     ).build())
 
   def postJson[A: Encoder](path: String, body: A): Future[Response] =
@@ -156,8 +156,6 @@ trait NodeApi {
 }
 
 object NodeApi extends ScorexLogging {
-
-  private[it] val IntegrationTestApiKey = "integration-test-api-key"
 
   case class UnexpectedStatusCodeException(request: Request, response: Response)
     extends Exception(s"Request: ${request.getUrl}\n Unexpected status code (${response.getStatusCode}): " +

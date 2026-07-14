@@ -84,7 +84,7 @@ Write-Host @"
 {SCRIPT_LOGO}
 
 "@ -ForegroundColor Red
-jre/bin/java -Xmx4G -jar {JAR_FILENAME} --mainnet -c ergo.conf
+jre/bin/java -jar -Xmx4G {JAR_FILENAME} --mainnet -c ergo.conf 
     """
     with open(f"{app_dir}/ergo-node.ps1", "w") as f:
        f.write(app_script)
@@ -106,7 +106,7 @@ cat << EOF
 
 EOF
 echo '\033[0m'
-./jre/bin/java -Xmx4G -jar {JAR_FILENAME} --mainnet -c ergo.conf
+./jre/bin/java -jar -Xmx4G {JAR_FILENAME} --mainnet -c ergo.conf
 exit
     """
     with open(f"{app_dir}/ergo-node.sh", "w") as f:
@@ -154,7 +154,7 @@ cat << EOF
 
 EOF
 echo '\033[0m'
-$SRC/jre/bin/java -Xmx4G -jar $SRC/{JAR_FILENAME} --mainnet -c $SRC/ergo.conf
+$SRC/jre/bin/java -jar -Xmx4G $SRC/{JAR_FILENAME} --mainnet -c $SRC/ergo.conf
 
 exit
     """
@@ -211,7 +211,15 @@ logging.warning(f"Starting release binaries for ergo-node")
 main_jre = get_main_jre(MAIN_JRE, JRE_SUBFOLDER)
 os.makedirs("release", exist_ok=True)
 
-shutil.copyfile("ci/ergo.conf", "ergo.conf")
+ergo_conf = """
+ergo {
+    node {
+       mining = false
+    }
+}
+"""
+with open("ergo.conf", "w") as f:
+       f.write(ergo_conf)
 
 with ThreadPool(JDKS.__len__()) as pool:
   pool.map(process_download, JDKS.items())

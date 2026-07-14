@@ -5,20 +5,18 @@ import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, Json}
-import org.bouncycastle.util.encoders.Hex
 import org.ergoplatform.http.api.requests.MiningRequest
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
+import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner, groupElemFromBytes}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
-import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
 import scorex.core.api.http.ApiResponse
 import sigma.data.ProveDlog
-import sigma.serialization.GroupElementSerializer
 
 import scala.concurrent.Future
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 case class MiningApiRoute(miner: ActorRef,
                           ergoSettings: ErgoSettings)
@@ -27,10 +25,17 @@ case class MiningApiRoute(miner: ActorRef,
   val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
 
   implicit val addressEncoder: Encoder[ErgoAddress] = ErgoAddressJsonEncoder(ergoSettings.chainSettings).encoder
+  private implicit val proveDlogDecoder: Decoder[ProveDlog] = Decoder.instance { implicit cursor =>
+    for {
+      str <- cursor.as[String]
+      bytes <- fromTry(Algos.decode(str))
+      pk <- fromTry(Try(ProveDlog(groupElemFromBytes(bytes))))
+    } yield pk
+  }
   implicit val miningRequestDecoder: Decoder[MiningRequest] = { cursor =>
     for {
       txs <- cursor.downField("txs").as[Seq[ErgoTransaction]]
-      pk <- cursor.downField("pk").as[String]
+      pk <- cursor.downField("pk").as[ProveDlog]
     } yield MiningRequest(txs, pk)
   }
   override val route: Route = pathPrefix("mining") {
@@ -65,16 +70,10 @@ case class MiningApiRoute(miner: ActorRef,
 
   def candidateWithTxsAndPkR: Route = (path("candidateWithTxsAndPk")
     & post & entity(as[MiningRequest]) & withAuth) { txsAndPk =>
-    val tryPk = Try(GroupElementSerializer.fromBytes(Hex.decode(txsAndPk.pk)))
-    val result = tryPk match {
-      case Failure(_) =>
-        Future.failed(new Exception("Could not decode hexadecimal string for given public key"))
-      case Success(pk) =>
-        val prepareCmd = CandidateGenerator.GenerateCandidate(txsAndPk.txs, reply = true,
-          forced = false, Some(ProveDlog.apply(pk)))
-        miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
-    }
-    ApiResponse(result)
+    val prepareCmd = CandidateGenerator.GenerateCandidate(txsAndPk.txs, reply = true,
+      forced = false, Some(txsAndPk.pk))
+    val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
+    ApiResponse(candidateF)
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>

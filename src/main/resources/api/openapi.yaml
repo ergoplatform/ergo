@@ -2461,6 +2461,20 @@ components:
       items:
         $ref: '#/components/schemas/ErgoTransaction'
 
+    MiningRequest:
+      description: Block candidate request with mandatory transactions and miner public key
+      type: object
+      required:
+        - txs
+        - pk
+      properties:
+        txs:
+          $ref: '#/components/schemas/Transactions'
+        pk:
+          type: string
+          description: Hex-encoded miner public key to use for block rewards
+          example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
+
     TransactionsWithInputBoxes:
       description: List of ErgoTransaction augmented with input boxes
       type: array
@@ -5127,6 +5141,34 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Transactions'
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkMessage'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/candidateWithTxsAndPk:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Request block candidate with custom miner public key
+      operationId: miningRequestBlockCandidateWithMandatoryTransactionsAndPk
+      tags:
+        - mining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MiningRequest'
       responses:
         '200':
           description: External candidate

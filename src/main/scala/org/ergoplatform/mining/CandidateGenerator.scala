@@ -154,7 +154,8 @@ class CandidateGenerator(
 
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude)) {
+      val effectiveMinerPk = optPk.getOrElse(minerPk)
+      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -162,7 +163,7 @@ class CandidateGenerator(
           state.hr,
           state.sr,
           state.mpr,
-          optPk.getOrElse(minerPk),
+          effectiveMinerPk,
           txsToInclude,
           ergoSettings
         ) match {
@@ -198,20 +199,24 @@ class CandidateGenerator(
 
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
-      // Inject node pk if it is not externally set (in Autolykos 2)
-      val solution =
+      // Inject candidate pk if it is not externally set (in Autolykos 2)
+      def solutionFor(candidate: Candidate): AutolykosSolution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          AutolykosSolution(candidate.externalVersion.pk.value, preSolution.w, preSolution.n, preSolution.d)
         } else {
           preSolution
         }
+
+      def complete(candidate: Candidate): ErgoFullBlock =
+        completeBlock(candidate.candidateBlock, solutionFor(candidate))
+
       val result: StatusReply[Unit] = {
         val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
+          .map(complete)
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
           .getOrElse {
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
+            complete(state.cachedPreviousCandidate.get)
           }
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme
@@ -229,7 +234,7 @@ class CandidateGenerator(
             )
         }
       }
-      log.info(s"Processed solution $solution with the result $result")
+      log.info(s"Processed solution $preSolution with the result $result")
       sender() ! result
 
     case _: AutolykosSolution =>
@@ -296,12 +301,14 @@ object CandidateGenerator extends ScorexLogging {
   /** checks that current candidate block is cached with given `txs` */
   def cachedFor(
     candidateOpt: Option[Candidate],
-    txs: Seq[ErgoTransaction]
+    txs: Seq[ErgoTransaction],
+    minerPk: ProveDlog
   ): Boolean = {
     candidateOpt.isDefined && candidateOpt.exists { c =>
-      txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
+      c.externalVersion.pk == minerPk &&
+      (txs.isEmpty || (txs.size == c.txsToInclude.size && txs.forall(
         c.txsToInclude.contains
-      ))
+      )))
     }
   }
 
@@ -356,9 +363,13 @@ object CandidateGenerator extends ScorexLogging {
     val miningTimes =
       timestamps.sorted
         .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
+        .collect { case IndexedSeq(prev, next) => next - prev }
         .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    if (miningTimes.nonEmpty) {
+      Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    } else {
+      1000.millis
+    }
   }
 
   /** Get average count of transactions per block */
@@ -857,6 +868,7 @@ object CandidateGenerator extends ScorexLogging {
     )
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
+    val allowIntraBlockSpending = upcomingContext.blockVersion >= Header.Interpreter60Version
 
     @tailrec
     def loop(
@@ -869,18 +881,23 @@ object CandidateGenerator extends ScorexLogging {
       val currentCosted = acc ++ lastFeeTx
       def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
 
-      val stateWithTxs = us.withTransactions(current)
+      val validationState =
+        if (allowIntraBlockSpending) {
+          us.withTransactions(current)
+        } else {
+          us
+        }
 
       mempoolTxs.headOption match {
         case Some(tx) =>
-          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
+          if (!inputsNotSpent(tx, validationState) || doublespend(current, tx)) {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             // check validity and calculate transaction cost
-            stateWithTxs.validateWithCost(
+            validationState.validateWithCost(
               tx,
               upcomingContext,
               maxBlockCost,
@@ -908,7 +925,7 @@ object CandidateGenerator extends ScorexLogging {
                       case Failure(e) =>
                         log.warn(
                           s"Fee collecting tx is invalid, not including it, " +
-                            s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                            s"details: ${e.getMessage} from ${validationState.stateContext}"
                         )
                         current -> invalidTxs
                     }

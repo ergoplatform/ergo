@@ -123,42 +123,45 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
   }
 
   property("account retried and acknowledged writes exactly") {
-    withConnectedHandler(Seq(GetPeersSpec), localPort = 9103) { fixture =>
-      val maxSizedWrite = Tcp.Write(
-        ByteString(new Array[Byte](
-          PeerConnectionHandler.MaxBufferedOutboundBytes.toInt
-        )),
-        PeerConnectionHandler.ReceivableMessages.Ack(1)
+    withConnectedHandler(
+      Seq(UtxoSnapshotChunkSpec),
+      localPort = 9103
+    ) { fixture =>
+      val chunkMessage = Message(
+        UtxoSnapshotChunkSpec,
+        Right(Array.fill[Byte](3999996)(1)),
+        None
       )
-      fixture.connection.send(fixture.handler, Tcp.CommandFailed(maxSizedWrite))
-      fixture.connection.expectMsg(Tcp.ResumeWriting)
-      fixture.connection.expectNoMessage(200.millis)
+      fixture.handler ! chunkMessage
+      val failedWrite = fixture.connection.expectMsgType[Tcp.Write]
+      failedWrite.data.length shouldEqual 4000013
+      failedWrite.ack shouldEqual PeerConnectionHandler.ReceivableMessages.Ack(1)
 
-      val replacementWrite = Tcp.Write(
-        ByteString(new Array[Byte](9)),
-        PeerConnectionHandler.ReceivableMessages.Ack(1)
-      )
-      fixture.connection.send(
-        fixture.handler,
-        Tcp.CommandFailed(replacementWrite)
-      )
+      fixture.connection.send(fixture.handler, Tcp.CommandFailed(failedWrite))
       fixture.connection.expectMsg(Tcp.ResumeWriting)
+
+      (2 to 4).foreach(_ => fixture.handler ! chunkMessage)
       fixture.connection.expectNoMessage(200.millis)
 
       fixture.connection.send(fixture.handler, Tcp.WritingResumed)
       val retriedWrite = fixture.connection.expectMsgType[Tcp.Write]
-      retriedWrite.data.length shouldEqual 9
+      retriedWrite.data shouldEqual failedWrite.data
       retriedWrite.ack shouldEqual PeerConnectionHandler.ReceivableMessages.Ack(1)
+      fixture.connection.send(fixture.handler, Tcp.CommandFailed(retriedWrite))
+      fixture.connection.expectMsg(Tcp.ResumeWriting)
+      fixture.connection.expectNoMessage(200.millis)
+
+      fixture.connection.send(fixture.handler, Tcp.WritingResumed)
+      val finalRetry = fixture.connection.expectMsgType[Tcp.Write]
+      finalRetry.data shouldEqual failedWrite.data
+      finalRetry.ack shouldEqual PeerConnectionHandler.ReceivableMessages.Ack(1)
       fixture.connection.send(
         fixture.handler,
         PeerConnectionHandler.ReceivableMessages.Ack(1)
       )
 
-      fixture.handler ! Message(GetPeersSpec, Right(()), None)
       val nextWrite = fixture.connection.expectMsgType[Tcp.Write]
-      fixture.connection.send(fixture.handler, Tcp.CommandFailed(nextWrite))
-      fixture.connection.expectMsg(Tcp.ResumeWriting)
-      fixture.connection.expectNoMessage(200.millis)
+      nextWrite.ack shouldEqual PeerConnectionHandler.ReceivableMessages.Ack(2)
     }
   }
 }

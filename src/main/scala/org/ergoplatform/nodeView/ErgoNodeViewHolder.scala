@@ -361,6 +361,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           applyFromCacheLoop(headersCache)
 
+          headersCache.findStuckHeader(history()).foreach { case (header, error) =>
+            context.system.eventStream.publish(
+              RecoverableFailedModification(header.modifierTypeId, header.id, error)
+            )
+          }
+
           val cleared = headersCache.cleanOverfull()
           val upd = BlockSectionsProcessingCacheUpdate(
             headersCache.size,

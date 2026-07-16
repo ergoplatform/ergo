@@ -258,7 +258,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def txModify(unconfirmedTx: UnconfirmedTransaction): ProcessingOutcome = {
     val tx = unconfirmedTx.transaction
-    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
+    val inputBlockTransactions = history().bestInputBlocksChain().flatMap { id =>
+      history().getInputBlockTransactions(id).getOrElse(Seq.empty)
+    }
+    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState(), inputBlockTransactions)
     processingOutcome match {
       case acc: ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")

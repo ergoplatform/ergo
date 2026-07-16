@@ -5,6 +5,7 @@ import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.{Directive1, ValidationRejection}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -77,9 +78,9 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
 
   private def getStateAndPool(
     readersHolder: ActorRef
-  ): Future[(ErgoStateReader, ErgoMemPoolReader)] = {
+  ): Future[(ErgoHistoryReader, ErgoStateReader, ErgoMemPoolReader)] = {
     (readersHolder ? GetReaders).mapTo[Readers].map { rs =>
-      (rs.s, rs.m)
+      (rs.h, rs.s, rs.m)
     }
   }
 
@@ -107,8 +108,9 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
   }
 
   /**
-    * Helper method to verify transaction against UTXO set (and unconfirmed outputs in the mempool), or check
-    * transaction syntax only if UTXO set is not available (the node is running in "digest" mode)
+    * Helper method to verify transaction against UTXO set (and outputs of unconfirmed transactions in the mempool
+    * and in input blocks of the best input-blocks chain), or check transaction syntax only if UTXO set is not
+    * available (the node is running in "digest" mode)
     *
     * Used in /transactions (POST /transactions and /transactions/check methods) and /wallet (/wallet/payment/send
     * and /wallet/transaction/send) API methods to check submitted or generated transaction
@@ -123,10 +125,13 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
 
     getStateAndPool(readersHolder)
       .map {
-        case (utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
+        case (hr: ErgoHistoryReader, utxo: UtxoStateReader, mp: ErgoMemPoolReader) =>
           val maxTxCost = ergoSettings.nodeSettings.maxTransactionCost
           val validationContext = utxo.stateContext.simplifiedUpcoming()
-          utxo.withMempool(mp)
+          val inputBlockTransactions = hr.bestInputBlocksChain().flatMap { id =>
+            hr.getInputBlockTransactions(id).getOrElse(Seq.empty)
+          }
+          utxo.withMempoolAndInputBlocks(mp, inputBlockTransactions)
             .validateWithCost(tx, validationContext, maxTxCost, None, softFieldsAllowed = true) // todo: pass sFA from API
             .map(cost => new UnconfirmedTransaction(tx, Some(cost), now, now, bytes, source = None))
         case _ =>

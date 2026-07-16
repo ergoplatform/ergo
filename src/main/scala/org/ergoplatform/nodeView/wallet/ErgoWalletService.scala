@@ -607,7 +607,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
               val allInputBlockTxs = state.inputBlockIds.flatMap { id =>
                 historyReader.getInputBlockTransactions(id).getOrElse(Seq.empty)
               }
-              u.withTransactions(allInputBlockTxs ++ mr.getAll)
+              u.withMempoolAndInputBlocks(mr, allInputBlockTxs)
             } else {
               u.withTransactions(mr.getAll)
             }

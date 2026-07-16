@@ -240,7 +240,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
-  def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
+  def process(unconfirmedTx: UnconfirmedTransaction,
+              state: ErgoState[_],
+              inputBlockTransactions: Seq[ErgoTransaction] = Seq.empty): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
 
     val invalidatedCnt = this.pool.invalidatedTxIds.approximateElementCount
@@ -265,8 +267,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
           val costLimit = nodeSettings.maxTransactionCost
           state match {
             case utxo: UtxoState =>
-              // Allow proceeded transaction to spend outputs of pooled transactions.
-              val utxoWithPool = utxo.withTransactions(getAll)
+              // Allow proceeded transaction to spend outputs of pooled transactions and of input-block transactions,
+              // while inputs spent by input-block transactions are treated as already spent
+              val utxoWithPool = utxo.withMempoolAndInputBlocks(this, inputBlockTransactions)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
 
                 // added in 6.0 to check now versioned serializers

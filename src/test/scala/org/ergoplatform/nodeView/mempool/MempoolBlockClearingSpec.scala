@@ -663,4 +663,84 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
     bestChain should contain(ib3.id)
   }
 
+  // ============================================================================
+  // Input Block Validation Overlay Tests
+  // ============================================================================
+  // These tests verify that transactions spending outputs of input-block transactions
+  // (which were removed from the mempool) can be validated, and that transactions
+  // double-spending inputs of input-block transactions are rejected.
+  // ============================================================================
+
+  it should "accept transaction spending outputs of input-block transactions" in {
+    // Setup: Single box to spend in the input-block transaction
+    val bh = BoxHolder(Seq(testBox1, testBox2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    // tx1 spends an on-chain box, tx2 spends an output of tx1
+    val tx1 = validTransactionsFromBoxes(10000, Seq(testBox1), new RandomWrapper(Some(1)))._1.head
+    val tx2 = validTransactionsFromBoxes(10000, tx1.outputs, new RandomWrapper(Some(2)))._1.head
+    tx2.inputs.map(_.boxId) should contain(tx1.outputs.head.id)
+
+    // Simulate tx1 being applied in an input block: accepted, then removed from mempool
+    var pool = ErgoMemPool.empty(settings)
+    val (poolWithTx1, outcome1) = pool.process(UnconfirmedTransaction(tx1, None), us)
+    outcome1.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool = poolWithTx1.removeWithDoubleSpends(Seq(tx1))
+    pool.contains(tx1.id) shouldBe false
+
+    // Without input-block transactions provided, tx2 can not be validated (pre-fix behavior)
+    pool.process(UnconfirmedTransaction(tx2, None), us)._2
+      .isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+
+    // With input-block transactions provided, tx2 is accepted
+    val (_, outcome2) = pool.process(UnconfirmedTransaction(tx2, None), us, Seq(tx1))
+    outcome2.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+  }
+
+  it should "decline transaction double-spending input spent by input-block transaction" in {
+    // Setup: Single box to create double-spend scenario
+    val bh = BoxHolder(Seq(testBox1))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    // Two different transactions spending the same on-chain box
+    val tx1 = validTransactionsFromBoxes(10000, Seq(testBox1), new RandomWrapper(Some(1)))._1.head
+    val tx2 = validTransactionsFromBoxes(10000, Seq(testBox1), new RandomWrapper(Some(2)))._1.head
+    tx1.inputs.map(_.boxId) should contain theSameElementsAs tx2.inputs.map(_.boxId)
+
+    val pool = ErgoMemPool.empty(settings)
+
+    // Without input-block transactions, tx2 is valid against the on-chain state
+    pool.process(UnconfirmedTransaction(tx2, None), us)._2
+      .isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+
+    // With tx1 in an input block, tx2 double-spends an input of it and is declined
+    pool.process(UnconfirmedTransaction(tx2, None), us, Seq(tx1))._2
+      .isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+  }
+
+  it should "expose input-block outputs and hide spent inputs in the validation overlay" in {
+    val bh = BoxHolder(Seq(testBox1, testBox2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val tx1 = validTransactionsFromBoxes(10000, Seq(testBox1), new RandomWrapper(Some(1)))._1.head
+
+    val pool = ErgoMemPool.empty(settings)
+    val overlay = us.withMempoolAndInputBlocks(pool, Seq(tx1))
+
+    // output of input-block transaction is visible
+    tx1.outputs.foreach { out =>
+      overlay.boxById(out.id).isDefined shouldBe true
+    }
+    // input spent by input-block transaction is hidden
+    tx1.inputs.foreach { in =>
+      overlay.boxById(in.boxId).isEmpty shouldBe true
+    }
+    // unrelated on-chain box is still visible
+    overlay.boxById(testBox2.id).isDefined shouldBe true
+
+    // without input-block transactions, overlay behaves like the plain mempool overlay
+    val plainOverlay = us.withMempoolAndInputBlocks(pool, Seq.empty)
+    plainOverlay.boxById(testBox1.id).isDefined shouldBe true
+  }
+
 }

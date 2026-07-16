@@ -14,6 +14,7 @@ import org.ergoplatform.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 
 import scala.util.{Failure, Success, Try}
 
@@ -179,5 +180,33 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * Useful when checking mempool transactions.
     */
   def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
+
+  /**
+    * Producing a copy of the state which takes into account both the mempool and
+    * input-block transactions (e.g. of the best input-blocks chain). Outputs of both are
+    * visible via [[boxById]], but only inputs spent by input-block transactions are treated
+    * as already spent, while mempool-spent inputs remain visible, to not interfere with
+    * mempool replace-by-fee logic.
+    * Useful when validating transactions which may spend outputs of input-block transactions.
+    */
+  def withMempoolAndInputBlocks(mp: ErgoMemPoolReader, inputBlockTransactions: Seq[ErgoTransaction]): UtxoState = {
+    if (inputBlockTransactions.isEmpty) {
+      withMempool(mp)
+    } else {
+      new UtxoState(persistentProver, version, store, ergoSettings) {
+        lazy val createdBoxes: Seq[ErgoBox] = (inputBlockTransactions ++ mp.getAll).flatMap(_.outputs)
+        lazy val spentBoxIds: Set[ByteArrayWrapper] =
+          inputBlockTransactions.flatMap(_.inputs.map(inp => ByteArrayWrapper(inp.boxId))).toSet
+
+        override def boxById(id: ADKey): Option[ErgoBox] = {
+          if (spentBoxIds.contains(ByteArrayWrapper(id))) {
+            None
+          } else {
+            super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
+          }
+        }
+      }
+    }
+  }
 
 }

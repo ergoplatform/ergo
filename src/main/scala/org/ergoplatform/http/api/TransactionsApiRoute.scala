@@ -11,6 +11,7 @@ import org.ergoplatform.ErgoBox.{BoxId, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
@@ -81,18 +82,28 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   private def getState: Future[ErgoStateReader] = (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
 
-  private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] = (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
+  private def getStateAndPool: Future[(ErgoHistoryReader, ErgoStateReader, ErgoMemPoolReader)] =
+    (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.h, rs.s, rs.m))
 
 
   /**
-    * Resolves transaction inputs to full boxes using both UTXO state and mempool.
+    * Resolves transaction inputs to full boxes using UTXO state, mempool and best input-block chain.
     * Returns a map from box ID to resolved ErgoBox for successful resolutions.
-  */
-  private def resolveTransactionInputs(inputs: IndexedSeq[Input], state: ErgoStateReader, pool: ErgoMemPoolReader): Map[BoxId, ErgoBox] = {
+    */
+  private def resolveTransactionInputs(
+    inputs: IndexedSeq[Input],
+    state: ErgoStateReader,
+    pool: ErgoMemPoolReader,
+    history: ErgoHistoryReader
+  ): Map[BoxId, ErgoBox] = {
     state match {
       case utxoState: UtxoStateReader =>
+        val inputBlockTransactions = history.bestInputBlocksChain().flatMap { id =>
+          history.getInputBlockTransactions(id).getOrElse(Seq.empty)
+        }
         inputs.flatMap { input =>
-          utxoState.withMempool(pool).boxById(input.boxId).map(box => input.boxId -> box)
+          utxoState.withMempoolAndInputBlocks(pool, inputBlockTransactions)
+            .boxById(input.boxId).map(box => input.boxId -> box)
         }.toMap
       case _ =>
         Map.empty
@@ -132,11 +143,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   */
   private def getUnconfirmedTransactionsWithResolvedInputs(offset: Int, limit: Int): Future[Json] =
     getStateAndPool.map {
-      case (state, pool) =>
+      case (history, state, pool) =>
         val transactions = pool.getAll.slice(offset, offset + limit)
         val enrichedTxs = transactions.map { unconfirmedTx =>
           val tx             = unconfirmedTx.transaction
-          val resolvedInputs = resolveTransactionInputs(tx.inputs, state, pool)
+          val resolvedInputs = resolveTransactionInputs(tx.inputs, state, pool, history)
           createTransactionWithResolvedInputs(tx, resolvedInputs)
         }
         enrichedTxs.asJson
@@ -144,12 +155,12 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   /**
     * Resolves inputs for a single transaction and returns it with resolved inputs.
-  */
+    */
   private def getUnconfirmedTransactionWithResolvedInputs(transaction: ErgoTransaction): Future[Json] =
     getStateAndPool.map {
-      case (state, pool) =>
-        val resolvedInputs = resolveTransactionInputs(transaction.inputs, state, pool)
-      createTransactionWithResolvedInputs(transaction, resolvedInputs)
+      case (history, state, pool) =>
+        val resolvedInputs = resolveTransactionInputs(transaction.inputs, state, pool, history)
+        createTransactionWithResolvedInputs(transaction, resolvedInputs)
     }
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getUnconfirmedTransactionsWithResolvedInputs(offset, limit)

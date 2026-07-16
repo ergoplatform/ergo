@@ -9,19 +9,32 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
+import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.RESTApiSettings
+import org.ergoplatform.subblocks.InputBlockAnnouncement
+import org.ergoplatform.utils.HistoryTestHelpers
 import org.ergoplatform.utils.Stubs
+import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.validTransactionsFromBoxes
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
+import scorex.util.bytesToId
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, SType}
 import org.ergoplatform.settings.Constants.TrueTree
 import sigma.Extensions.CollBytesOps
+import org.ergoplatform.utils.RandomWrapper
+import scorex.crypto.hash.Blake2b256
+import sigma.Colls
+import sigma.data.TrivialProp.TrueProp
+import sigma.ast.ErgoTree
 
 import java.net.InetSocketAddress
 import scala.concurrent.duration._
@@ -71,6 +84,52 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
     val readers2 = system.actorOf(Props(new UtxoReadersStub2))
     TransactionsApiRoute(readers2, nodeViewRef, settings).route
+  }
+
+  /**
+    * Route with a transaction applied as an input block (not in mempool), and chainedTx spending tx's output in mempool.
+    * Uses fresh local history and state to avoid mutating shared Stubs state.
+    * Returns the route and the chained transaction present in the mempool.
+    */
+  private def inputBlockChainedRoute: (Route, ErgoTransaction) = {
+    val testBox = new ErgoBox(
+      value = 1000000000L,
+      ergoTree = ErgoTree.fromProposition(TrueProp),
+      creationHeight = 0,
+      additionalTokens = Colls.emptyColl,
+      additionalRegisters = Map.empty,
+      transactionId = bytesToId(Blake2b256.hash("testBoxA")),
+      index = 0
+    )
+    val bh = BoxHolder(Seq(testBox))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+
+    val h = HistoryTestHelpers.generateHistory(
+      verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false,
+      blocksToKeep = -1, epochLength = 10000, useLastEpochs = 3,
+      initialDiffOpt = None, None)
+    val chain = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, chain)
+
+    val tx = validTransactionsFromBoxes(10000, Seq(testBox), new RandomWrapper(Some(1)))._1.head
+    val chainedInput = Input(tx.outputs.head.id, emptyProverResult)
+    val chainedTx = ErgoTransaction(IndexedSeq(chainedInput), IndexedSeq.empty, tx.outputCandidates)
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val inputBlock = InputBlockAnnouncement(1, c2(0).header, InputBlockFields.empty, None)
+    h.applyInputBlock(inputBlock) shouldBe None
+    val (newBest, _) = h.applyInputBlockTransactions(inputBlock.id, Seq(tx), us)
+    newBest should contain(inputBlock.id)
+
+    val mp2 = ErgoMemPool.empty(settings).put(Seq(UnconfirmedTransaction(chainedTx, None)))
+    class UtxoReadersStub2 extends Actor {
+      def receive: PartialFunction[Any, Unit] = {
+        case GetReaders => sender() ! Readers(h, us, mp2, wallet)
+        case GetDataFromHistory(f) => sender() ! f(h)
+      }
+    }
+    val readers2 = system.actorOf(Props(new UtxoReadersStub2))
+    (TransactionsApiRoute(readers2, nodeViewRef, settings).route, chainedTx)
   }
 
   it should "post transaction" in {
@@ -203,6 +262,21 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     Get(prefix + s"/unconfirmed/inputs/byBoxId/$searchedBoxEncoded") ~> chainedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("boxId").as[String] shouldEqual Right(searchedBoxEncoded)
+    }
+  }
+
+  it should "resolve input-block transaction output as unconfirmed tx input" in {
+    val (routeWithInputBlock, chainedTx) = inputBlockChainedRoute
+    val searchedBox = chainedTx.inputs.head.boxId
+    val searchedBoxEncoded = Base16.encode(searchedBox)
+    Get(prefix + "/unconfirmed") ~> routeWithInputBlock ~> check {
+      status shouldBe StatusCodes.OK
+      val txs = responseAs[Seq[Json]]
+      val chainedJson = txs.find(_.hcursor.downField("id").as[String].toOption.contains(chainedTx.id)).get
+      val inputs = chainedJson.hcursor.downField("inputs").as[Seq[Json]].toOption.get
+      inputs.size shouldBe 1
+      inputs.head.hcursor.downField("boxId").as[String].toOption.get shouldBe searchedBoxEncoded
+      inputs.head.hcursor.downField("value").as[Long].isRight shouldBe true
     }
   }
 

@@ -514,6 +514,54 @@ class InputBlockAnnouncementSpec extends ErgoCorePropertyTest {
     }
   }
 
+  property("InputBlockAnnouncement.valid() should reject fields not bound to the extension proof") {
+    forAll(invalidHeaderGen, Gen.choose(100, 120), digest32Gen, digest32Gen) {
+      (baseHeader, difficulty, transactionsDigest, prevTransactionsDigest) =>
+
+        val prevInputBlockId: Option[Array[Byte]] = Some(Array.fill(32)(0x01.toByte))
+        val extCandidate = InputBlockFields.toExtensionFields(
+          prevInputBlockId,
+          transactionsDigest,
+          prevTransactionsDigest
+        )
+        val extensionRoot = extCandidate.digest
+        val merkleProof = extCandidate.proofForInputBlockData.get
+
+        val nBits = DifficultySerializer.encodeCompactBits(difficulty)
+        val h = baseHeader.copy(nBits = nBits, version = 2, extensionRoot = extensionRoot)
+        val sk = randomSecret()
+        val x = randomSecret()
+        val msg = powScheme.msgByHeader(h)
+        val b = powScheme.getB(h.nBits)
+        val hbs = Ints.toByteArray(h.height)
+        val N = powScheme.calcN(h)
+
+        powScheme.checkNonces(2, hbs, msg, sk, x, b, N, 0, 10000, defaultParams) match {
+          case InputSolutionFound(as) =>
+            val tamperedDigest = Digest32 @@ transactionsDigest.map(b => (b ^ 0xFF).toByte)
+            val inputBlockFields = new InputBlockFields(
+              prevInputBlockId,
+              tamperedDigest,
+              prevTransactionsDigest,
+              merkleProof
+            )
+
+            val inputBlockInfo = InputBlockAnnouncement(
+              InputBlockAnnouncement.initialMessageVersion,
+              h.copy(powSolution = as),
+              inputBlockFields,
+              None
+            )
+
+            inputBlockInfo.inputBlockFields.inputBlockFieldsProof.valid(extensionRoot) shouldBe true
+            inputBlockInfo.valid(powScheme, defaultParams, Some(nBits)) shouldBe false
+
+          case _ =>
+            succeed
+        }
+    }
+  }
+
   /**
    * Tests that InputBlockAnnouncement with version 1 roundtrips correctly with empty unparsed bytes.
    */

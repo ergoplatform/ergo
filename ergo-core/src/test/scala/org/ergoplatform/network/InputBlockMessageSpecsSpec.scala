@@ -4,6 +4,7 @@ import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.{
   InputBlockMessageSpec,
+  InputBlockMessageLimits,
   InputBlockTransactionIdsData,
   InputBlockTransactionIdsMessageSpec,
   InputBlockTransactionsData,
@@ -17,6 +18,10 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, SerializationTests}
 import org.scalacheck.Gen
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Blake2b256
+import scorex.util.ModifierId
+import scorex.util.serialization.{VLQByteBufferReader, VLQByteBufferWriter}
+
+import java.nio.ByteBuffer
 
 class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with SerializationTests {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
@@ -27,6 +32,13 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
   private val inputBlockTransactionIdsMessageSpec = InputBlockTransactionIdsMessageSpec
   private val inputBlockTransactionsMessageSpec = InputBlockTransactionsMessageSpec
   private val inputBlockTransactionsRequestMessageSpec = InputBlockTransactionsRequestMessageSpec
+
+  private def bytesWithInputBlockIdAndCount(inputBlockId: ModifierId, count: Long): Array[Byte] = {
+    val writer = new VLQByteBufferWriter(new scorex.util.ByteArrayBuilder())
+    writer.putBytes(scorex.util.idToBytes(inputBlockId))
+    writer.putUInt(count)
+    writer.toBytes
+  }
 
   private def inputBlockInfoGen: Gen[InputBlockAnnouncement] = for {
     header <- defaultHeaderGen
@@ -129,6 +141,33 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
       recovered.inputBlockId shouldEqual emptyRequest.inputBlockId
       recovered.txIds shouldEqual emptyRequest.txIds
     }
+  }
+
+  property("InputBlockTransactionIdsData rejects excessive transaction id count") {
+    val inputBlockId = modifierIdGen.sample.get
+    val bytes = bytesWithInputBlockIdAndCount(inputBlockId, InputBlockMessageLimits.MaxArraySize + 1)
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+
+    val ex = the[Exception] thrownBy inputBlockTransactionIdsMessageSpec.parse(reader)
+    ex.getMessage should include ("Input-block transaction IDs count too large")
+  }
+
+  property("InputBlockTransactionsData rejects excessive transaction count") {
+    val inputBlockId = modifierIdGen.sample.get
+    val bytes = bytesWithInputBlockIdAndCount(inputBlockId, InputBlockMessageLimits.MaxArraySize + 1)
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+
+    val ex = the[Exception] thrownBy inputBlockTransactionsMessageSpec.parse(reader)
+    ex.getMessage should include ("Input-block transactions count too large")
+  }
+
+  property("InputBlockTransactionsRequest rejects excessive transaction id count") {
+    val inputBlockId = modifierIdGen.sample.get
+    val bytes = bytesWithInputBlockIdAndCount(inputBlockId, InputBlockMessageLimits.MaxArraySize + 1)
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+
+    val ex = the[Exception] thrownBy inputBlockTransactionsRequestMessageSpec.parse(reader)
+    ex.getMessage should include ("Input-block transaction request IDs count too large")
   }
 
   property("InputBlock hardcoded test vectors") {

@@ -29,7 +29,9 @@ object InputBlockTransactionsMessageSpec extends MessageSpecInputBlocks[InputBlo
 
   override def parse(r: Reader): InputBlockTransactionsData = {
     val subBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
-    val txsCount = r.getUInt().toIntExact
+    val txsCountLong = r.getUInt()
+    InputBlockMessageLimits.requireArraySize(txsCountLong, "Input-block transactions")
+    val txsCount = txsCountLong.toIntExact
 
     val txs = new Array[ErgoTransaction](txsCount)
     cfor(0)(_ < txsCount, _ + 1) { i =>

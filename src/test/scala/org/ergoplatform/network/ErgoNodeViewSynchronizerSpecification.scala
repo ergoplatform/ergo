@@ -3,7 +3,7 @@ package org.ergoplatform.network
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
@@ -18,10 +18,10 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
@@ -741,6 +741,37 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // After max attempts, non-header modifier should be set to Unknown (not Invalid)
       eventually {
         deliveryTracker.status(modifierId, nonHeaderTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should retry manifests with GetManifest") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val manifestBytes = scorex.utils.Random.randomBytes(32)
+      val manifestId = bytesToId(manifestBytes)
+      val checksBeforeTimeout = 2
+
+      synchronizerMockRef ! ChangedHistory(hhistory)
+      deliveryTracker.setRequested(
+        ManifestTypeId.value,
+        manifestId,
+        peer,
+        checksBeforeTimeout)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, ManifestTypeId.value, manifestId)
+
+      ncProbe.expectMsgType[PenalizePeer](3.seconds)
+      val retry = ncProbe.expectMsgType[SendToNetwork](3.seconds)
+      retry.message.spec shouldBe GetManifestSpec
+      retry.message.data.get.asInstanceOf[Array[Byte]].sameElements(manifestBytes) shouldBe true
+      retry.sendingStrategy shouldBe SendToPeer(peer)
+
+      eventually {
+        deliveryTracker
+          .getRequestedInfo(ManifestTypeId.value, manifestId)
+          .map(_.checks) shouldBe Some(checksBeforeTimeout + 1)
       }
     }
   }

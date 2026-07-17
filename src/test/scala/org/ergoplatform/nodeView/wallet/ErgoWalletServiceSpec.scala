@@ -243,6 +243,41 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("it should only return off-chain payment boxes for spending") {
+    forAll(trackedBoxGen, trackedBoxGen) { case (customBox, sharedBox) =>
+      withVersionedStore(2) { versionedStore =>
+        withStore { store =>
+          val customScanId = ScanId @@ (PaymentsScanId + 1).toShort
+          val customOnly = customBox.copy(
+            inclusionHeightOpt = None,
+            spendingTxIdOpt = None,
+            spendingHeightOpt = None,
+            scans = Set(customScanId)
+          )
+          val sharedWithWallet = sharedBox.copy(
+            inclusionHeightOpt = None,
+            spendingTxIdOpt = None,
+            spendingHeightOpt = None,
+            scans = Set(PaymentsScanId, customScanId)
+          )
+          val offChainRegistry = OffChainRegistry.empty.copy(
+            offChainBoxes = Seq(customOnly, sharedWithWallet)
+          )
+          val walletState = initialState(store, versionedStore).copy(
+            offChainRegistry = offChainRegistry
+          )
+          val walletService = new ErgoWalletServiceImpl(settings)
+
+          walletState.getBoxesToSpend.filter(walletState.walletFilter) shouldBe
+            Seq(sharedWithWallet)
+          walletService
+            .getWalletBoxes(walletState, unspentOnly = true, considerUnconfirmed = true)
+            .map(_.trackedBox) shouldBe Seq(sharedWithWallet)
+        }
+      }
+    }
+  }
+
   property("it should generate signed and unsigned transaction") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>

@@ -107,7 +107,8 @@ object ErgoState extends ScorexLogging {
                        currentStateContext: ErgoStateContext,
                        nodeSettings: NodeConfigurationSettings)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
-    val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
+    val verifier: ErgoInterpreter =
+      ErgoInterpreter(currentStateContext.currentParameters, currentStateContext.storageRentReemissionTokenId)
 
     def preAllocatedBuilder[T: ClassTag](sizeHint: Int): mutable.ArrayBuilder[T] = {
       val b = mutable.ArrayBuilder.make[T]()

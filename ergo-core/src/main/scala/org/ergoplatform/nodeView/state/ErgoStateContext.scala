@@ -108,6 +108,19 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     */
   def blockVersion: Header.Version = currentParameters.blockVersion
 
+  /**
+    * @return id of the EIP-27 re-emission token when re-emission rules are active
+    *         on this chain (None otherwise). Handed to `ErgoInterpreter` so the
+    *         storage-rent repairs (block version `Header.Interpreter70Version`+)
+    *         can drop the token from recreated expired boxes.
+    */
+  def storageRentReemissionTokenId: Option[sigma.Coll[Byte]] =
+    if (chainSettings.reemission.checkReemissionRules) {
+      Some(chainSettings.reemission.reemissionTokenIdBytes)
+    } else {
+      None
+    }
+
   private def votingEpochLength: Int = votingSettings.votingLength
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption

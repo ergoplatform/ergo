@@ -1,18 +1,20 @@
 package org.ergoplatform.modifiers.mempool
 
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.{Constants, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.Assertion
 import scorex.util.encode.Base16
 import sigma.Colls
-import sigma.ast.{ErgoTree, ShortConstant}
+import sigma.ast.{ByteArrayConstant, ErgoTree, ShortConstant}
+import sigma.data.Digest32Coll
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.helpers.TestingHelpers._
-import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 class ExpirationSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
@@ -37,7 +39,8 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
   def constructTest(from: ErgoBox,
                     heightDelta: Int,
                     outsConstructor: Height => IndexedSeq[ErgoBoxCandidate],
-                    expectedValidity: Boolean): Assertion = {
+                    expectedValidity: Boolean)
+                   (implicit verifier: ErgoInterpreter): Assertion = {
     // We are filtering out certain heights to avoid problems with improperly generated extension
     // at the beginning of a voting epoch
     whenever((from.creationHeight + Constants.StoragePeriod + heightDelta) % votingSettings.votingLength != 0) {
@@ -165,6 +168,109 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
     forAll(unspendableErgoBoxGen(maxValue = parameters.storageFeeFactor)) { from =>
       val out = new ErgoBoxCandidate(from.value, TrueTree, creationHeight = from.creationHeight + 1)
       constructTest(from, 0, _ => IndexedSeq(out), expectedValidity = true)
+    }
+  }
+
+  // Storage-rent repairs (block version Header.Interpreter70Version+):
+  // 64-bit storage-fee arithmetic + the EIP-27 re-emission carve-out.
+
+  private val repairedParameters: Parameters = Parameters(
+    0,
+    parameters.parametersTable.updated(Parameters.BlockVersion, Header.Interpreter70Version.toInt),
+    ErgoValidationSettingsUpdate.empty)
+
+  // A well-formed 32-byte token id standing in for the chain's re-emission
+  // token (the test application.conf leaves reemissionTokenId empty).
+  private val reemissionTokenIdBytes: sigma.Coll[Byte] =
+    Colls.fromArray(Array.fill[Byte](32)(0x2a))
+
+  private val repairedVerifier: ErgoInterpreter =
+    ErgoInterpreter(repairedParameters, Some(reemissionTokenIdBytes))
+
+  property("storage-rent repairs: fee-overflowed box uncollectable before, fully consumable after") {
+    // A box big enough that `storageFeeFactor * bytes.length` wraps Int-negative.
+    // Legacy rules then demand a recreated value ABOVE the box's own value
+    // (impossible without a subsidy); from the repairs the true 64-bit fee
+    // exceeds the box value, so the whole box is consumable.
+    val bigPayload = ByteArrayConstant(Colls.fromArray(Array.fill[Byte](1800)(0x7f.toByte)))
+    forAll(unspendableErgoBoxGen(1000000000L, 2000000000L)) { base =>
+      val from = testBox(base.value, FalseTree, base.creationHeight,
+        Seq.empty, Map(ErgoBox.R4 -> bigPayload), base.transactionId, base.index)
+      val wrappedFee = parameters.storageFeeFactor * from.bytes.length
+      val trueFee = parameters.storageFeeFactor.toLong * from.bytes.length
+      whenever(wrappedFee < 0 && trueFee >= from.value) {
+        val outs = (h: Height) => IndexedSeq(new ErgoBoxCandidate(from.value, TrueTree, h))
+        constructTest(from, 0, outs, expectedValidity = false)
+        constructTest(from, 0, outs, expectedValidity = true)(repairedVerifier)
+      }
+    }
+  }
+
+  property("storage-rent repairs: second-wrap box charged its true fee after activation") {
+    // A box so big the fee wraps PAST Int range back to a small positive
+    // number. Legacy rules accept a claim charging only the tiny wrapped fee;
+    // from the repairs the box owes its true 64-bit fee.
+    val hugePayload = ByteArrayConstant(Colls.fromArray(Array.fill[Byte](3500)(0x11.toByte)))
+    forAll(unspendableErgoBoxGen(5000000000L, 6000000000L)) { base =>
+      val from = testBox(base.value, FalseTree, base.creationHeight,
+        Seq.empty, Map(ErgoBox.R4 -> hugePayload), base.transactionId, base.index)
+      val wrappedFee = parameters.storageFeeFactor * from.bytes.length
+      val trueFee = parameters.storageFeeFactor.toLong * from.bytes.length
+      whenever(wrappedFee > 0 && trueFee > wrappedFee && from.value > trueFee) {
+        val outs = (h: Height) => {
+          val recreated = new ErgoBoxCandidate(from.value - trueFee, from.ergoTree, h,
+            from.additionalTokens, from.additionalRegisters)
+          val collector = new ErgoBoxCandidate(trueFee, TrueTree, h)
+          IndexedSeq(recreated, collector)
+        }
+        // legacy floor is `value - wrappedFee` (tiny fee), so charging the
+        // true fee under-recreates and is rejected
+        constructTest(from, 0, outs, expectedValidity = false)
+        constructTest(from, 0, outs, expectedValidity = true)(repairedVerifier)
+      }
+    }
+  }
+
+  property("storage-rent repairs: re-emission token box claimable with the token dropped") {
+    // Pre-repair rules: dropping the token violates register preservation, so
+    // the box is unclaimable (the EIP-27 deadlock). Post-repair rules: the
+    // token MUST be dropped and its nanoErg equivalent (1 per token) is
+    // charged on top of the storage fee, funding the pay-to-reemission burn.
+    val reemToken = (Digest32Coll @@ reemissionTokenIdBytes) -> 12L
+    forAll(unspendableErgoBoxGen(1000000000L, Long.MaxValue)) { base =>
+      val from = testBox(base.value, FalseTree, base.creationHeight,
+        Seq(reemToken), Map.empty, base.transactionId, base.index)
+      val fee = parameters.storageFeeFactor.toLong * from.bytes.length
+      whenever(fee > 0 && from.value > fee + 12L) {
+        val outs = (h: Height) => {
+          val recreated = new ErgoBoxCandidate(from.value - fee - 12L, from.ergoTree, h)
+          val collector = new ErgoBoxCandidate(fee + 12L, TrueTree, h)
+          IndexedSeq(recreated, collector)
+        }
+        constructTest(from, 0, outs, expectedValidity = false)
+        constructTest(from, 0, outs, expectedValidity = true)(repairedVerifier)
+      }
+    }
+  }
+
+  property("storage-rent repairs: recreated box keeping the re-emission token is rejected") {
+    // The mirror case: preserving the token satisfies the LEGACY register
+    // rule (this is exactly the half of the deadlock that verifyReemissionSpending
+    // then kills on mainnet), but the repaired rule requires it dropped.
+    val reemToken = (Digest32Coll @@ reemissionTokenIdBytes) -> 12L
+    forAll(unspendableErgoBoxGen(1000000000L, Long.MaxValue)) { base =>
+      val from = testBox(base.value, FalseTree, base.creationHeight,
+        Seq(reemToken), Map.empty, base.transactionId, base.index)
+      val fee = parameters.storageFeeFactor.toLong * from.bytes.length
+      whenever(fee > 0 && from.value > fee + 12L) {
+        val outs = (h: Height) => {
+          val recreated = new ErgoBoxCandidate(from.value - fee, from.ergoTree, h, from.additionalTokens)
+          val collector = new ErgoBoxCandidate(fee, TrueTree, h)
+          IndexedSeq(recreated, collector)
+        }
+        constructTest(from, 0, outs, expectedValidity = true)
+        constructTest(from, 0, outs, expectedValidity = false)(repairedVerifier)
+      }
     }
   }
 

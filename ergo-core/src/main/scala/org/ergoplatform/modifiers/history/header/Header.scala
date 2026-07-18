@@ -147,6 +147,14 @@ object Header extends ApiCodecs {
     */
   val Interpreter60Version: Byte = 4
 
+  /**
+    * Block version after the storage-rent repairs soft-fork:
+    * 64-bit storage-fee arithmetic and the EIP-27 re-emission carve-out
+    * on expired-box recreation. Matches
+    * `org.ergoplatform.wallet.protocol.Constants.StorageRentRepairsBlockVersion`.
+    */
+  val Interpreter70Version: Byte = 5
+
   def scriptFromBlockVersion(blockVersion: Byte): Byte = {
     (blockVersion - 1).toByte
   }

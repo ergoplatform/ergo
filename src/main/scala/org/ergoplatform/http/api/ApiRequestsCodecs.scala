@@ -88,10 +88,10 @@ trait ApiRequestsCodecs extends ApiCodecs {
       "tx" -> gcr.unsignedTx.asJson,
       "secrets" -> Json.obj(
         "dlog" -> gcr.dlogs.asJson,
-        "dht" -> gcr.dhts.asJson,
-        "inputsRaw" -> gcr.inputs.asJson,
-        "dataInputsRaw" -> gcr.dataInputs.asJson
-      )
+        "dht" -> gcr.dhts.asJson
+      ),
+      "inputsRaw" -> gcr.inputs.asJson,
+      "dataInputsRaw" -> gcr.dataInputs.asJson
     )
   }
 

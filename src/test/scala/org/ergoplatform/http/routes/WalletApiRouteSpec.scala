@@ -6,6 +6,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
+import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
@@ -122,6 +123,48 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
 
     Post(prefix + "/transaction/sign", request) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject invalid external box bytes in commitment request" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val request = GenerateCommitmentsRequest(
+      tsr.unsignedTx,
+      None,
+      Some(tsr.inputs.get :+ "zz"),
+      tsr.dataInputs
+    )
+
+    Post(prefix + "/generateCommitments", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject a valid external input box from another transaction" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val expectedInputs = tsr.inputs.get
+    val differentInput = Iterator
+      .continually(ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get.inputs.get.head)
+      .find(_ != expectedInputs.head)
+      .get
+    val request = GenerateCommitmentsRequest(
+      tsr.unsignedTx,
+      None,
+      Some(expectedInputs.updated(0, differentInput)),
+      tsr.dataInputs
+    )
+
+    Post(prefix + "/generateCommitments", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject invalid external box bytes in hint extraction request" in {
+    val tx = ErgoNodeTransactionGenerators.validErgoTransactionGen.sample.get._2
+    val request = HintExtractionRequest(tx, Seq.empty, Seq.empty, Some(Seq("zz")), None)
+
+    Post(prefix + "/extractHints", request.asJson) ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }

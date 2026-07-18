@@ -15,6 +15,7 @@ import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
+import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
@@ -219,12 +220,18 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
     val utx = gcr.unsignedTx
     val externalSecretsOpt = gcr.externalSecretsOpt
-    val extInputsOpt = gcr.inputs.map(ErgoWalletServiceUtils.stringsToBoxes)
-    val extDataInputsOpt = gcr.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
+    val externalBoxes = for {
+      inputs <- parseExternalBoxes(gcr.inputs, utx.inputs.map(_.boxId), "Input")
+      dataInputs <- parseExternalBoxes(gcr.dataInputs, utx.dataInputs.map(_.boxId), "Data input")
+    } yield inputs -> dataInputs
 
-    withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
-      case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
-      case Success(thb) => ApiResponse(thb)
+    externalBoxes match {
+      case Failure(e) => invalidExternalBoxes(e)
+      case Success((extInputsOpt, extDataInputsOpt)) =>
+        withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
+          case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+          case Success(thb) => ApiResponse(thb)
+        }
     }
   }
 
@@ -237,6 +244,20 @@ case class WalletApiRoute(readersHolder: ActorRef,
       } yield boxes :+ box
     }
 
+  private def parseExternalBoxes(rawBoxesOpt: Option[Seq[String]],
+                                 expectedIds: Seq[ErgoBox.BoxId],
+                                 kind: String): Try[Option[Seq[ErgoBox]]] = rawBoxesOpt match {
+    case None => Success(None)
+    case Some(rawBoxes) =>
+      for {
+        boxes <- parseExternalBoxes(rawBoxes)
+        _ <- ErgoProvingInterpreter.validateBoxIds(kind, expectedIds, boxes)
+      } yield Some(boxes)
+  }
+
+  private def invalidExternalBoxes(e: Throwable): Route =
+    BadRequest(s"Invalid external boxes: ${Option(e.getMessage).getOrElse(e.toString)}")
+
   def signTransactionR: Route = (path("transaction" / "sign")
     & post & entity(as[TransactionSigningRequest])) { tsr =>
 
@@ -246,23 +267,16 @@ case class WalletApiRoute(readersHolder: ActorRef,
     val hints = tsr.hints
 
     def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
-      if (tsr.inputs.isDefined) {
-        val decodedBoxes = for {
-          boxesToSpend <- parseExternalBoxes(tsr.inputs.get)
-          dataBoxes <- parseExternalBoxes(tsr.dataInputs.getOrElse(Seq.empty))
-        } yield boxesToSpend -> dataBoxes
+      val decodedBoxes = for {
+        boxesToSpendOpt <- parseExternalBoxes(tsr.inputs, tx.inputs.map(_.boxId), "Input")
+        dataBoxesOpt <- parseExternalBoxes(tsr.dataInputs, tx.dataInputs.map(_.boxId), "Data input")
+      } yield boxesToSpendOpt -> dataBoxesOpt
 
-        decodedBoxes match {
-          case Success((boxesToSpend, dataBoxes))
-              if boxesToSpend.size == tx.inputs.size && dataBoxes.size == tx.dataInputs.size =>
-            r.w.signTransaction(tx, secrets, hints, Some(boxesToSpend), Some(dataBoxes))
-          case Success(_) =>
-            Future(Failure(new Exception("Input boxes provided do not match transaction inputs")))
-          case Failure(e) =>
-            Future(Failure(new Exception("Can't parse input boxes provided", e)))
-        }
-      } else {
-        r.w.signTransaction(tx, secrets, hints, None, None)
+      decodedBoxes match {
+        case Success((boxesToSpendOpt, dataBoxesOpt)) =>
+          r.w.signTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt)
+        case Failure(e) =>
+          Future(Failure(new Exception("Invalid external boxes", e)))
       }
     }
 
@@ -491,11 +505,17 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def extractHintsR: Route = (path("extractHints") & post & entity(as[HintExtractionRequest])) { her =>
-    withWallet { w =>
-      val extInputsOpt = her.inputs.map(ErgoWalletServiceUtils.stringsToBoxes)
-      val extDataInputsOpt = her.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
+    val externalBoxes = for {
+      inputs <- parseExternalBoxes(her.inputs, her.tx.inputs.map(_.boxId), "Input")
+      dataInputs <- parseExternalBoxes(her.dataInputs, her.tx.dataInputs.map(_.boxId), "Data input")
+    } yield inputs -> dataInputs
 
-      w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+    externalBoxes match {
+      case Failure(e) => invalidExternalBoxes(e)
+      case Success((extInputsOpt, extDataInputsOpt)) =>
+        withWallet { w =>
+          w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+        }
     }
   }
 

@@ -67,19 +67,24 @@ class ErgoInterpreter(params: BlockchainParameters,
     // floor so the transaction can pay the burn obligation to the
     // pay-to-reemission contract, which `verifyReemissionSpending` enforces
     // transaction-wide.
-    val reemissionDebt: Long = if (repairsActivated) {
-      reemissionTokenId match {
-        case Some(tokenId) =>
-          box.additionalTokens.toArray.collect { case (id, amount) if id == tokenId => amount }.sum
-        case None => 0L
+    val reemissionEntry: Option[(Coll[Byte], Long)] = if (repairsActivated) {
+      reemissionTokenId.flatMap { tokenId =>
+        val debt = box.additionalTokens.toArray.iterator
+          .collect { case (id, amount) if id == tokenId => amount }
+          .foldLeft(0L)(Math.addExact)
+        if (debt > 0) Some(tokenId -> debt) else None
       }
     } else {
-      0L
+      None
     }
+    val reemissionDebt = reemissionEntry.map(_._2).getOrElse(0L)
 
-    val storageFeeNotCovered = box.value - storageFee - reemissionDebt <= 0
+    // Compare before the second subtraction so a maximal token amount cannot
+    // underflow Long and turn a fully consumable box into the recreation branch.
+    val valueAfterStorageFee = box.value - storageFee
+    val storageFeeNotCovered = valueAfterStorageFee <= reemissionDebt
     lazy val correctCreationHeight = output.creationHeight == currentHeight
-    lazy val correctOutValue = output.value >= box.value - storageFee - reemissionDebt
+    lazy val correctOutValue = output.value >= valueAfterStorageFee - reemissionDebt
 
     // all the registers except of R0 (monetary value) and R3 (creation height and reference) must be
     // preserved; once the storage-rent repairs are activated, R2 (tokens) must instead equal the
@@ -88,16 +93,17 @@ class ErgoInterpreter(params: BlockchainParameters,
       .iterator
       .forall { rId =>
         rId == ErgoBox.ValueRegId || rId == ErgoBox.ReferenceRegId || {
-          if (reemissionDebt > 0 && rId == ErgoBox.TokensRegId) {
-            val expectedTokens =
-              box.additionalTokens.toArray.filterNot { case (id, _) => id == reemissionTokenId.get }
-            val outputTokens = output.additionalTokens.toArray
-            outputTokens.length == expectedTokens.length &&
-              outputTokens.indices.forall { i =>
-                outputTokens(i)._1 == expectedTokens(i)._1 && outputTokens(i)._2 == expectedTokens(i)._2
-              }
-          } else {
-            box.get(rId) == output.get(rId)
+          reemissionEntry match {
+            case Some((tokenId, _)) if rId == ErgoBox.TokensRegId =>
+              val expectedTokens =
+                box.additionalTokens.toArray.filterNot { case (id, _) => id == tokenId }
+              val outputTokens = output.additionalTokens.toArray
+              outputTokens.length == expectedTokens.length &&
+                outputTokens.indices.forall { i =>
+                  outputTokens(i)._1 == expectedTokens(i)._1 && outputTokens(i)._2 == expectedTokens(i)._2
+                }
+            case _ =>
+              box.get(rId) == output.get(rId)
           }
         }
       }

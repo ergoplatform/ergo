@@ -253,6 +253,71 @@ class ExpirationSpecification extends ErgoCorePropertyTest {
     }
   }
 
+  property("storage-rent repairs: production wiring claims a re-emission box end-to-end") {
+    // Exercises the real context-to-interpreter thread (ErgoState.execTransactions
+    // builds its own verifier from the state context) rather than an
+    // independently-configured interpreter, and proves the headline claim:
+    // under block version 5, checkExpiredBox' and the UNCHANGED
+    // verifyReemissionSpending (checkReemissionRules = true here) cooperate in
+    // one valid claim: token dropped, its nanoErg equivalent paid to the
+    // pay-to-reemission contract, fee to the claimer.
+    import org.ergoplatform.nodeView.state.ErgoState
+    import scorex.util.ModifierId
+    import scala.util.{Failure, Success, Try}
+
+    val reemChain = settings.chainSettings.copy(
+      reemission = settings.chainSettings.reemission.copy(
+        checkReemissionRules = true,
+        emissionNftId = ModifierId @@ ("2b" * 32),
+        reemissionTokenId = ModifierId @@ ("2a" * 32),
+        reemissionNftId = ModifierId @@ ("2c" * 32)))
+    val tokenIdBytes = reemChain.reemission.reemissionTokenIdBytes
+    val payToReemission = reemChain.reemission.reemissionRules.payToReemission
+
+    // Reward-box-shaped input: 63 ERG carrying 12e9 re-emission tokens,
+    // aged past the storage period at a height above the EIP-27 activation.
+    val txId = ModifierId @@ Base16.encode(Array.fill(32)(7: Byte))
+    val tokenAmount = 12000000000L
+    val from = testBox(63000000000L, FalseTree, 1,
+      Seq((Digest32Coll @@ tokenIdBytes) -> tokenAmount), Map.empty, txId, 0)
+    val h = from.creationHeight + Constants.StoragePeriod
+    val fee = parameters.storageFeeFactor.toLong * from.bytes.length
+
+    val in = Input(from.id,
+      ProverResult(Array.emptyByteArray, ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))))
+    val recreated = new ErgoBoxCandidate(from.value - fee - tokenAmount, from.ergoTree, h)
+    val toReemission = new ErgoBoxCandidate(tokenAmount, payToReemission, h)
+    val collector = new ErgoBoxCandidate(fee, TrueTree, h)
+    val tx = ErgoTransaction(IndexedSeq(in), IndexedSeq(), IndexedSeq(recreated, toReemission, collector))
+
+    def contextWith(params: Parameters): ErgoStateContext = {
+      val fb0 = invalidErgoFullBlockGen.sample.get
+      val fakeHeader = fb0.header.copy(height = h - 1)
+      val fb = fb0.copy(fb0.header.copy(height = h, parentId = fakeHeader.id))
+      new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, params, validationSettingsNoIl,
+        VotingData.empty)(reemChain).appendFullBlock(fb).get
+    }
+
+    def boxById(id: ErgoBox.BoxId): Try[ErgoBox] =
+      if (java.util.Arrays.equals(id, from.id)) Success(from)
+      else Failure(new NoSuchElementException("unknown box"))
+
+    // helper exposes the token id exactly when re-emission rules are active
+    val v5Context = contextWith(repairedParameters)
+    v5Context.storageRentReemissionTokenId shouldBe Some(tokenIdBytes)
+    val plainContext = new ErgoStateContext(Seq.empty, None, genesisStateDigest, parameters,
+      validationSettingsNoIl, VotingData.empty)(settings.chainSettings)
+    plainContext.storageRentReemissionTokenId shouldBe None
+
+    // production wiring, repaired rules: the claim validates end-to-end
+    ErgoState.execTransactions(Seq(tx), v5Context, settings.nodeSettings)(boxById)
+      .isValid shouldBe true
+
+    // same transaction through the same wiring under legacy parameters fails
+    ErgoState.execTransactions(Seq(tx), contextWith(parameters), settings.nodeSettings)(boxById)
+      .isValid shouldBe false
+  }
+
   property("storage-rent repairs: recreated box keeping the re-emission token is rejected") {
     // The mirror case: preserving the token satisfies the LEGACY register
     // rule (this is exactly the half of the deadlock that verifyReemissionSpending

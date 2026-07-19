@@ -4,7 +4,7 @@ import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistory
 import scorex.core.{LRUCache, ModifiersCache}
-import org.ergoplatform.validation.MalformedModifierError
+import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import scorex.util.ScorexLogging
 
 import scala.util.Failure
@@ -42,6 +42,28 @@ class ErgoModifiersCache(override val maxSize: Int) extends ModifiersCache with 
         }
       }.map(_._1)
     }
+  }
+
+  /**
+    * Finds the lowest-height cached header whose applicability check currently
+    * fails with a [[RecoverableModifierError]].
+    *
+    * @return the header and its recoverable error, or `None` if no such header exists
+    */
+  def findStuckHeader(history: ErgoHistory): Option[(Header, RecoverableModifierError)] = {
+    cache.values
+      .collect { case header: Header => header }
+      .toSeq
+      .sortBy(_.height)
+      .iterator
+      .flatMap { header =>
+        history.applicableTry(header) match {
+          case Failure(error: RecoverableModifierError) => Some(header -> error)
+          case _                                        => None
+        }
+      }
+      .toStream
+      .headOption
   }
 
 }

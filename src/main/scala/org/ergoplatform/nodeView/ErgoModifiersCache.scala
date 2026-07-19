@@ -44,6 +44,12 @@ class ErgoModifiersCache(override val maxSize: Int) extends ModifiersCache with 
     }
   }
 
+  /**
+    * Finds the lowest-height cached header whose applicability check currently
+    * fails with a [[RecoverableModifierError]].
+    *
+    * @return the header and its recoverable error, or `None` if no such header exists
+    */
   def findStuckHeader(history: ErgoHistory): Option[(Header, RecoverableModifierError)] = {
     cache.values
       .collect { case header: Header => header }

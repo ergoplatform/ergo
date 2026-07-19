@@ -361,6 +361,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           applyFromCacheLoop(headersCache)
 
+          // Cached headers that fail applicability do not reach pmodModify.
+          // Report one recoverable failure so the synchronizer can mark the header
+          // as unknown and request a missing parent, if applicable.
           headersCache.findStuckHeader(history()).foreach { case (header, error) =>
             context.system.eventStream.publish(
               RecoverableFailedModification(header.modifierTypeId, header.id, error)

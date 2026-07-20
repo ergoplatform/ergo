@@ -18,6 +18,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
 
   override def receive: Receive = {
     case test.CreateDB(blockCount: Int) => createDB(blockCount)
+    case test.ExtendDB(blockCount: Int) => extendDB(blockCount)
     case test.Reset() => reset()
     case test.GenerateBetterChainTip() => GenerateBetterChainTip()
   }
@@ -65,6 +66,14 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     stateOpt = Some(ChainGenerator.generate(blockCount, dir, _history, stateOpt))
     test._history = _history
     context.become(receive.orElse(loaded(IndexerState.fromHistory(_history))))
+    test.lock.lock()
+    test.created.signal()
+    test.lock.unlock()
+  }
+
+  def extendDB(blockCount: Int): Unit = {
+    stateOpt = Some(ChainGenerator.generate(blockCount, dir, _history, stateOpt))
+    test._history = _history
     test.lock.lock()
     test.created.signal()
     test.lock.unlock()

@@ -467,6 +467,26 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     newState
   }
 
+  private def startRollback(state: IndexerState, branchPoint: ModifierId): Unit = {
+    history.heightOf(branchPoint) match {
+      case Some(branchHeight) =>
+        if (branchHeight < state.indexedHeight) {
+          context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
+          self ! RemoveAfter(branchHeight)
+        }
+      case None =>
+        log.error(s"No rollback height found for $branchPoint")
+        val newState = state.copy(rollbackTo = 0)
+        context.become(receive.orElse(loaded(newState)))
+        unstashAll()
+    }
+  }
+
+  private def waitingForRollback(state: IndexerState): Receive = {
+    case _: FullBlockApplied => stash()
+    case Rollback(branchPoint: ModifierId) => startRollback(state, branchPoint)
+  }
+
   protected def loaded(state: IndexerState): Receive = {
 
     case Index() if !state.caughtUp && !state.rollbackInProgress =>
@@ -491,26 +511,20 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       } else if (header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
         context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
         self ! Index()
-      } else // applied block has already been indexed, skipping duplicate
-        log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
+      } else { // a chain switch is applied before its rollback event is published
+        log.info(s"Waiting for rollback before indexing block ${header.id} at height ${header.height}")
+        stash()
+        context.become(receive.orElse(waitingForRollback(state)))
+      }
+
+    case _: FullBlockApplied if state.rollbackInProgress => stash()
 
     case Rollback(branchPoint: ModifierId) =>
       if (state.rollbackInProgress) {
         log.warn(s"Rollback already in progress")
         stash()
       } else {
-        history.heightOf(branchPoint) match {
-          case Some(branchHeight) =>
-            if (branchHeight < state.indexedHeight) {
-              context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
-              self ! RemoveAfter(branchHeight)
-            }
-          case None =>
-            log.error(s"No rollback height found for $branchPoint")
-            val newState = state.copy(rollbackTo = 0)
-            context.become(receive.orElse(loaded(newState)))
-            unstashAll()
-        }
+        startRollback(state, branchPoint)
       }
 
     case RemoveAfter(branchHeight: Int) if state.rollbackInProgress =>

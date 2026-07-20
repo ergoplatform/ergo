@@ -18,6 +18,7 @@ import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
 import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.reflect.ClassTag
 
 class ExtraIndexerSpecification extends ErgoCorePropertyTest {
@@ -26,6 +27,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
   val initSettings: ErgoSettings = settings
   case class CreateDB(blockCount: Int)
+  case class ExtendDB(blockCount: Int)
   case class Reset()
   case class GenerateBetterChainTip()
 
@@ -44,6 +46,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   val lock: ReentrantLock = new ReentrantLock()
   val done: Condition = lock.newCondition()
   val created: Condition = lock.newCondition()
+
+  def awaitCondition(condition: Condition): Unit = {
+    lock.lock()
+    try condition.await()
+    finally lock.unlock()
+  }
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
                                 ID_LL, // template -> (spentBoxCount,unspentBoxCount)
@@ -319,27 +327,33 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
   }
 
-  property("tokens dont disappear when rolling back with orphan block") {
+  property("indexes replacement blocks after rolling back an orphan block") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
     indexer ! GenerateBetterChainTip()
-    lock.lock()
-    created.await()
-    val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
-    indexer ! RemoteBlockApplied(newBestHeaderOpt.get) // will be ignored
-    indexer ! CreateDB(HEIGHT + 1)
-    lock.lock()
-    created.await()
-    indexer ! Index()
-    lock.lock()
-    done.await()
-    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT).get)
-    lock.lock()
-    done.await()
-    val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
-    checkTokens(indexedTokens) shouldBe 0
+    awaitCondition(created)
+    indexer ! ExtendDB(HEIGHT + 1)
+    awaitCondition(created)
+
+    val replacementHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT).get).get
+    val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
+    indexer ! RemoteBlockApplied(replacementHeader)
+    indexer ! RemoteBlockApplied(nextHeader)
+    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT - 1).get)
+    awaitCondition(done)
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+      (HEIGHT to HEIGHT + 1).foreach { height =>
+        history.bestBlockTransactionsAt(height).get.txs.foreach { tx =>
+          val indexedTx = history.typedExtraIndexById[IndexedErgoTransaction](tx.id).get
+          indexedTx.inputNums.zip(tx.inputs).foreach { case (boxNum, input) =>
+            NumericBoxIndex.getBoxByNumber(history, boxNum).map(_.id) shouldBe Some(bytesToId(input.boxId))
+          }
+        }
+      }
+    }
     indexer ! Reset()
   }
 }

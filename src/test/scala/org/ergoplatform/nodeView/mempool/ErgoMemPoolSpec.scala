@@ -832,6 +832,83 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     all.map(_.id).distinct.size shouldBe 1
   }
 
+  it should "not produce duplicate ids for a multi-diamond family put through the pool" in {
+    // A parent P, two children C1/C2 spending P, and X spending P plus both children. X's inputs are
+    // ordered children-first so updateFamily folds P last (small immutable Sets iterate in insertion
+    // order) — the case that triggers the stale-key duplicate on unfixed code. Run over two id sets.
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val trueTree = TrueTree
+    val fee = 1000000L
+
+    // Build P -> {C1, C2} -> X (a double diamond) rooted at `srcBox`, put through the pool in
+    // dependency order, and return the resulting pool.
+    def buildFamilyPool(srcBox: org.ergoplatform.ErgoBox): OrderedTxPool = {
+      // P: fee output at index 0, then three true-script outputs at indices 1, 2, 3
+      val pTx = ErgoTransaction(
+        IndexedSeq(new Input(srcBox.id, emptyProverResult)),
+        IndexedSeq(
+          new ErgoBoxCandidate(fee, feeProp, creationHeight = 0),
+          new ErgoBoxCandidate(1000000L, trueTree, creationHeight = 0),
+          new ErgoBoxCandidate(1000000L, trueTree, creationHeight = 0),
+          new ErgoBoxCandidate(1000000L, trueTree, creationHeight = 0)
+        )
+      )
+      // C1 spends P's output #1
+      val c1Tx = ErgoTransaction(
+        IndexedSeq(new Input(pTx.outputs(1).id, emptyProverResult)),
+        IndexedSeq(
+          new ErgoBoxCandidate(fee, feeProp, creationHeight = 0),
+          new ErgoBoxCandidate(500000L, trueTree, creationHeight = 0)
+        )
+      )
+      // C2 spends P's output #2
+      val c2Tx = ErgoTransaction(
+        IndexedSeq(new Input(pTx.outputs(2).id, emptyProverResult)),
+        IndexedSeq(
+          new ErgoBoxCandidate(fee, feeProp, creationHeight = 0),
+          new ErgoBoxCandidate(500000L, trueTree, creationHeight = 0)
+        )
+      )
+      // X spends outputs of C1 and C2 first, then P's output #3; children-first/parent-last input
+      // order makes the family fold reach P after its children (see comment above).
+      val xTx = ErgoTransaction(
+        IndexedSeq(
+          new Input(c1Tx.outputs(1).id, emptyProverResult),
+          new Input(c2Tx.outputs(1).id, emptyProverResult),
+          new Input(pTx.outputs(3).id, emptyProverResult)
+        ),
+        IndexedSeq(new ErgoBoxCandidate(fee, feeProp, creationHeight = 0))
+      )
+
+      Seq(pTx, c1Tx, c2Tx, xTx).foldLeft(OrderedTxPool.empty(settings)) {
+        case (p, tx) => p.put(UnconfirmedTransaction(tx, None), tx.size)
+      }
+    }
+
+    // Two distinct source boxes -> two distinct tx-id sets, exercising the same fold-order path.
+    val srcBoxes = wus.takeBoxes(200).filter(_.ergoTree == trueTree).take(2)
+    srcBoxes.size shouldBe 2
+
+    srcBoxes.foreach { srcBox =>
+      val pool = buildFamilyPool(srcBox)
+
+      val ids = pool.orderedTransactions.values.map(_.id).toSeq
+      // no duplicate id in orderedTransactions and all four txs present
+      ids.size shouldBe 4
+      ids.distinct.size shouldBe ids.size
+      // registry and ordered map never diverge: every registry key resolves to the same present tx
+      pool.transactionsRegistry.forall { case (id, w) =>
+        pool.orderedTransactions.get(w).exists(_.transaction.id == id)
+      } shouldBe true
+      // and every id is retrievable through the registry path
+      ids.foreach(id => pool.get(id) shouldBe defined)
+    }
+  }
+
   it should "detect double spend after replace-by-fee replacement" in {
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)

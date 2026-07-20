@@ -208,20 +208,28 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       this
     } else {
 
-      val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
-      val parentTxs = uniqueTxIds.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
+      val parentIds: Set[ModifierId] =
+        tx.inputs.flatMap(input => this.outputs.get(input.boxId).map(_.id)).toSet
 
-      parentTxs.foldLeft(this) { case (pool, (wtx, ut)) =>
-        val parent = ut.transaction
-        val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
-        val newPool = new OrderedTxPool(
-          pool.orderedTransactions - wtx + (newWtx -> ut),
-          pool.transactionsRegistry.updated(parent.id, newWtx),
-          invalidatedTxIds,
-          parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
-          parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
-        )
-        newPool.updateFamily(parent, weight, startTime, depth + 1)
+      parentIds.foldLeft(this) { case (pool, parentId) =>
+        // resolve the parent's current key from the registry: an earlier iteration may have re-keyed
+        // it, so removing by a stale key would leave a duplicate (equality is id-only, ordering is by weight)
+        pool.transactionsRegistry.get(parentId) match {
+          case Some(curWtx) if pool.orderedTransactions.contains(curWtx) =>
+            val ut     = pool.orderedTransactions(curWtx)
+            val parent = ut.transaction
+            val newWtx = WeightedTxId(curWtx.id, curWtx.weight + weight, curWtx.feePerFactor, curWtx.created)
+            val newPool = new OrderedTxPool(
+              pool.orderedTransactions - curWtx + (newWtx -> ut),
+              pool.transactionsRegistry.updated(parent.id, newWtx),
+              invalidatedTxIds,
+              parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
+              parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
+            )
+            newPool.updateFamily(parent, weight, startTime, depth + 1)
+          case _ =>
+            pool
+        }
       }
     }
   }

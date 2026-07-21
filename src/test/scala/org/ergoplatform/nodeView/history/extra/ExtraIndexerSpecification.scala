@@ -249,6 +249,31 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
+  property("skips a duplicate applied block without blocking later blocks") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+
+    indexer ! ExtendDB(HEIGHT + 2)
+    awaitCondition(created)
+    val firstHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
+    val secondHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 2).get).get
+    val blocks = (1 to HEIGHT + 2).map(height => history.bestBlockTransactionsAt(height).get)
+    val expectedTxCount = blocks.map(_.txs.size.toLong).sum
+    val expectedBoxCount = blocks.flatMap(_.txs).map(_.outputs.size.toLong).sum
+    indexer ! RemoteBlockApplied(firstHeader)
+    indexer ! RemoteBlockApplied(firstHeader)
+    indexer ! RemoteBlockApplied(secondHeader)
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 2
+      state.globalTxIndex shouldBe expectedTxCount
+      state.globalBoxIndex shouldBe expectedBoxCount
+    }
+    indexer ! Reset()
+  }
+
   property("transactions") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
@@ -331,6 +356,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
     awaitCondition(done)
+    val originalTipId = history.bestHeaderIdAtHeight(HEIGHT).get
     indexer ! GenerateBetterChainTip()
     awaitCondition(created)
     indexer ! ExtendDB(HEIGHT + 1)
@@ -338,8 +364,13 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
     val replacementHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT).get).get
     val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
-    indexer ! RemoteBlockApplied(replacementHeader)
+    replacementHeader.height shouldBe HEIGHT
+    nextHeader.height shouldBe HEIGHT + 1
+    nextHeader.parentId shouldBe replacementHeader.id
+    nextHeader.parentId should not equal originalTipId
+    // Deliver the successor first so parent continuity, rather than height alone, guards indexing.
     indexer ! RemoteBlockApplied(nextHeader)
+    indexer ! RemoteBlockApplied(replacementHeader)
     indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT - 1).get)
     awaitCondition(done)
 

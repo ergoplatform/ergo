@@ -376,7 +376,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     log.info(s"Buffered block $height / $chainHeight [txs: ${txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
     val maxHeight = headerOpt.map(_.height).getOrElse(chainHeight)
-    newState.copy(caughtUp = newState.indexedHeight == maxHeight)
+    newState.copy(
+      caughtUp = newState.indexedHeight == maxHeight,
+      indexedHeaderId = headerOpt.map(_.id).orElse(history.bestHeaderIdAtHeight(height))
+    )
   }
 
   /**
@@ -457,7 +460,12 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       newState = newState.incrementBoxIndex
 
       // Save changes
-      newState = newState.copy(indexedHeight = height, rollbackTo = 0, caughtUp = true)
+      newState = newState.copy(
+        indexedHeight = height,
+        rollbackTo = 0,
+        caughtUp = state.caughtUp,
+        indexedHeaderId = history.bestHeaderIdAtHeight(height)
+      )
       historyStorage.removeExtra(toRemove.toArray)
       saveProgress(newState)
     } catch {
@@ -467,33 +475,21 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     newState
   }
 
-  private def startRollback(state: IndexerState, branchPoint: ModifierId): Unit = {
-    history.heightOf(branchPoint) match {
-      case Some(branchHeight) =>
-        if (branchHeight < state.indexedHeight) {
-          context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
-          self ! RemoveAfter(branchHeight)
-        }
-      case None =>
-        log.error(s"No rollback height found for $branchPoint")
-        val newState = state.copy(rollbackTo = 0)
-        context.become(receive.orElse(loaded(newState)))
-        unstashAll()
-    }
-  }
-
-  private def waitingForRollback(state: IndexerState): Receive = {
-    case _: FullBlockApplied => stash()
-    case Rollback(branchPoint: ModifierId) => startRollback(state, branchPoint)
-  }
-
   protected def loaded(state: IndexerState): Receive = {
 
     case Index() if !state.caughtUp && !state.rollbackInProgress =>
-      val newState = index(state.incrementIndexedHeight)
-      if (modCount >= saveLimit) saveProgress(newState)
-      context.become(receive.orElse(loaded(newState)))
-      self ! Index()
+      val nextHeaderOpt = history.bestHeaderAtHeight(state.indexedHeight + 1)
+      val extendsIndexedTip = nextHeaderOpt.forall { header =>
+        state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)
+      }
+      if (extendsIndexedTip) {
+        val newState = index(state.incrementIndexedHeight)
+        if (modCount >= saveLimit) saveProgress(newState)
+        context.become(receive.orElse(loaded(newState)))
+        self ! Index()
+      } else {
+        log.info("Deferring catch-up because the next header does not extend the indexed tip")
+      }
 
     case Index() if state.caughtUp =>
       if (modCount > 0) saveProgress(state)
@@ -503,18 +499,27 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     // after the indexer caught up with the chain, stay up to date
     case FullBlockApplied(header: Header) if state.caughtUp && !state.rollbackInProgress =>
-      if (header.height == state.indexedHeight + 1) { // applied block is next in line
+      val indexedTipStillBest = state.indexedHeight == 0 ||
+        (chainHeight >= state.indexedHeight && state.indexedHeaderId.exists { indexedHeaderId =>
+          history.bestHeaderIdAtHeight(state.indexedHeight).contains(indexedHeaderId)
+        })
+      val isDirectSuccessor = header.height == state.indexedHeight + 1 &&
+        (state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)) &&
+        history.bestHeaderIdAtHeight(header.height).contains(header.id)
+
+      if (isDirectSuccessor) {
         val newState: IndexerState = index(state.incrementIndexedHeight, Some(header))
         saveProgress(newState)
         context.become(receive.orElse(loaded(newState)))
         caughtUpHook(header.height)
-      } else if (header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
+      } else if (!indexedTipStillBest) {
+        log.info(s"Deferring block ${header.id} at height ${header.height} until rollback")
+        context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
+      } else if (header.height > state.indexedHeight + 1) {
         context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
         self ! Index()
-      } else { // a chain switch is applied before its rollback event is published
-        log.info(s"Waiting for rollback before indexing block ${header.id} at height ${header.height}")
-        stash()
-        context.become(receive.orElse(waitingForRollback(state)))
+      } else {
+        log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
       }
 
     case _: FullBlockApplied if state.rollbackInProgress => stash()
@@ -524,7 +529,22 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         log.warn(s"Rollback already in progress")
         stash()
       } else {
-        startRollback(state, branchPoint)
+        history.heightOf(branchPoint) match {
+          case Some(branchHeight) =>
+            if (branchHeight < state.indexedHeight) {
+              context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
+              self ! RemoveAfter(branchHeight)
+            } else if (!state.caughtUp) {
+              blockCache.clear()
+              readingUpTo = 0
+              self ! Index()
+            }
+          case None =>
+            log.error(s"No rollback height found for $branchPoint")
+            val newState = state.copy(rollbackTo = 0)
+            context.become(receive.orElse(loaded(newState)))
+            unstashAll()
+        }
       }
 
     case RemoveAfter(branchHeight: Int) if state.rollbackInProgress =>
@@ -532,6 +552,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       readingUpTo = 0
       val newState = removeAfter(state, branchHeight)
       context.become(receive.orElse(loaded(newState)))
+      if (!newState.caughtUp && !newState.rollbackInProgress) self ! Index()
       caughtUpHook()
       log.info(s"Successfully rolled back indexes to $branchHeight")
       unstashAll()

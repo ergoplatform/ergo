@@ -93,7 +93,6 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
   def GenerateBetterChainTip(): Unit = {
     stateOpt = Some(ChainGenerator.generateBetter(_history, stateOpt.get))
     test._history = _history
-    context.become(receive.orElse(loaded(IndexerState.fromHistory(_history))))
     test.lock.lock()
     test.created.signal()
     test.lock.unlock()

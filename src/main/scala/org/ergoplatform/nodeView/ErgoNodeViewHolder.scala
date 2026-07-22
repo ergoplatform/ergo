@@ -237,11 +237,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
-                  val header = modToApply.asInstanceOf[ErgoFullBlock].header
+                  val fullBlock = modToApply.asInstanceOf[ErgoFullBlock]
+                  val txIds = fullBlock.blockTransactions.transactions.map(_.id)
                   val event = if (local) {
-                    LocalBlockApplied(header)
+                    LocalBlockApplied(fullBlock.header, txIds)
                   } else {
-                    RemoteBlockApplied(header)
+                    RemoteBlockApplied(fullBlock.header, txIds)
                   }
                   context.system.eventStream.publish(event)
                 }

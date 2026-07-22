@@ -972,7 +972,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       // Second: LocalBlockApplied for same header should NOT send additional invs
-      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
       ncProbe.expectNoMessage(1.second)
@@ -1008,7 +1008,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       // LocalBlockApplied for same block should NOT broadcast again
-      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
       ncProbe.expectNoMessage(1.second)
@@ -1032,7 +1032,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = statefulyValidFullBlock(wus)
 
       // Send RemoteBlockApplied to synchronizer
-      synchronizerMockRef ! RemoteBlockApplied(newBlock.header)
+      synchronizerMockRef ! RemoteBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Expect 4 inv messages (1 header + 3 sections)
       val invMessages = (0 until 4).map { _ =>
@@ -1114,12 +1114,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = statefulyValidFullBlock(wus)
 
       // Send LocalBlockApplied - should not broadcast but should perform cleanup
-      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
       ncProbe.expectNoMessage(500.millis)
 
       // Send RemoteBlockApplied - should broadcast (different block)
       val newBlock2 = statefulyValidFullBlock(wus)
-      synchronizerMockRef ! RemoteBlockApplied(newBlock2.header)
+      synchronizerMockRef ! RemoteBlockApplied(newBlock2.header, newBlock2.transactions.map(_.id))
 
       // Expect 4 inv messages (1 header + 3 sections)
       val invMessages = (0 until 4).map { _ =>

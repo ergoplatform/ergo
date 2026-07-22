@@ -269,12 +269,15 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
             case utxo: UtxoState =>
               // Allow proceeded transaction to spend outputs of pooled transactions.
               val utxoWithPool = utxo.withUnconfirmedTransactions(getAll)
-              if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
+              val resolvedInputs = tx.inputIds.map(utxoWithPool.boxById)
+              if (resolvedInputs.forall(_.isDefined)) {
 
-                val boxesToSpend = tx.inputs.flatMap(i => utxoWithPool.boxById(i.boxId))
-                if (preservesReemissionTokens(boxesToSpend, tx.outputCandidates, utxo.stateContext)) {
+                if (preservesReemissionTokens(resolvedInputs.flatten, tx.outputCandidates, utxo.stateContext)) {
                   val exc = new Exception(
-                    "Transaction preserves re-emission tokens, cannot be included in a block under EIP-27 rules")
+                    "Mempool policy declines a token-preserving re-emission spend on the non-emission path")
+                  // The pool is rebuilt directly, rather than via `this.invalidate`, because that
+                  // helper runs `updateStatsOnRemoval`, which resets statistics for a transaction
+                  // that was never in the pool - which is exactly the case here.
                   return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
                     new ProcessingOutcome.Declined(exc, validationStartTime))
                 }

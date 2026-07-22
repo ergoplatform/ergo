@@ -64,8 +64,8 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     settings.copy(chainSettings = settings.chainSettings.copy(reemission = rs))
   }
 
-  private def tokenOf(s: ErgoSettings): (Digest32Coll, Long) =
-    (Digest32Coll @@ s.chainSettings.reemission.reemissionTokenId.toColl) -> 5L
+  private def tokenOf(s: ErgoSettings, amount: Long = 5L): (Digest32Coll, Long) =
+    (Digest32Coll @@ s.chainSettings.reemission.reemissionTokenId.toColl) -> amount
 
   private def emissionNftOf(s: ErgoSettings): (Digest32Coll, Long) =
     (Digest32Coll @@ s.chainSettings.reemission.emissionNftId.toColl) -> 1L
@@ -125,7 +125,7 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     f.pool.process(UnconfirmedTransaction(tx, None), f.state)
 
   private val PrefilterReason =
-    "Transaction preserves re-emission tokens, cannot be included in a block under EIP-27 rules"
+    "Mempool policy declines a token-preserving re-emission spend on the non-emission path"
 
   private def declinedByPrefilter(outcome: ProcessingOutcome): Boolean = outcome match {
     case d: ProcessingOutcome.Declined => Option(d.e.getMessage).exists(_.contains(PrefilterReason))
@@ -192,6 +192,8 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     // Emission transaction: input far above the 100K ERG bar, outputs legitimately carrying
     // both the emission NFT and the re-emission token. Kept at predicate level deliberately -
     // synthesising a *valid* emission transaction end to end would test the fixture, not the filter.
+    // Note the abstention here comes from the >100K conjunct alone: the predicate has no emission
+    // NFT logic at all, so the NFT on this fixture is decorative and only makes the shape realistic.
     val emissionIn = box(200000L * CoinsInOneErgo, Constants.TrueTree, Seq(emissionNftOf(s), token), 0)
     val emissionOut = candidate(200000L * CoinsInOneErgo, Constants.TrueTree, Seq(emissionNftOf(s), token))
     pool.preservesReemissionTokens(Seq(emissionIn), Seq(emissionOut), ctx) shouldBe false
@@ -233,6 +235,37 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     val (poolAfterPlain, plainOutcome) = process(f, ordinary)
     plainOutcome shouldBe a[ProcessingOutcome.Accepted]
     poolAfterPlain.isInvalidated(ordinary.id) shouldBe false
+  }
+
+  // ------------------------------------------------------------------ (d3)
+
+  it should "(d3) accept a fully conformant owner spend end to end with checkReemissionRules = true" in {
+    // The burn obligation is denominated 1 nanoErg per re-emission token, so the token amount is
+    // also the ERG amount owed to the pay-to-re-emission contract.
+    val BurnAmount = 1000000L
+
+    val s = withReemission(ReemissionToken, checkRules = true, FixtureActivationHeight)
+    val tokenBox = box(BoxValue, Constants.TrueTree, Seq(tokenOf(s, BurnAmount)), 0)
+    val state = WrappedUtxoState(BoxHolder(Seq(tokenBox)), createTempDir, settings.launchParameters, s)
+    val pool = ErgoMemPool.empty(s)
+
+    // Token dropped from the recreated output, and exactly the owed amount paid to the configured
+    // pay-to-re-emission proposition - so both obligations of the non-emission branch are met.
+    val payToReemission = s.chainSettings.reemission.reemissionRules.payToReemission
+    val tx = txSpending(
+      Seq(tokenBox),
+      Seq(
+        candidate(BoxValue - BurnAmount, Constants.TrueTree, Seq.empty),
+        candidate(BurnAmount, payToReemission, Seq.empty)
+      )
+    )
+
+    // This is the case that actually reaches verifyReemissionSpending and passes it: with
+    // checkReemissionRules = true the txReemission rule is evaluated rather than short-circuited,
+    // so an Accepted outcome here means the EIP-27 non-emission branch was satisfied, not skipped.
+    val (updPool, outcome) = pool.process(UnconfirmedTransaction(tx, None), state)
+    outcome shouldBe a[ProcessingOutcome.Accepted]
+    updPool.isInvalidated(tx.id) shouldBe false
   }
 
   // ------------------------------------------------------------------ (e)

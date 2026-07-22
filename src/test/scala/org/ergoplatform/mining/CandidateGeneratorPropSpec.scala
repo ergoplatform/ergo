@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoTreePredef
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
@@ -195,6 +196,281 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     // miner collects correct transactions from mempool even if they have tokens
     checkCollectTxs(Int.MaxValue, Int.MaxValue, withTokens = true)
 
+  }
+
+  property("a transaction exceeding candidate size should not starve later transactions") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper(Some(0))
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(21)
+
+    inputs.size shouldBe 21
+
+    val largeTx = validTransactionFromBoxes(
+      inputs.take(20),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+    val smallTx = validTransactionFromBoxes(
+      IndexedSeq(inputs.last),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val largeFeeTx = CandidateGenerator
+      .collectFees(us.stateContext.currentHeight, Seq(largeTx), defaultMinerPk, upcomingContext)
+      .get
+    val smallFeeTx = CandidateGenerator
+      .collectFees(us.stateContext.currentHeight, Seq(smallTx), defaultMinerPk, upcomingContext)
+      .get
+    val maxSize = smallTx.size + smallFeeTx.size + 1
+
+    largeTx.size + largeFeeTx.size should be >= maxSize
+
+    val (selected, eliminated) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      maxSize,
+      us,
+      upcomingContext,
+      Seq(largeTx, smallTx)
+    )
+
+    selected.map(_.id) should contain(smallTx.id)
+    selected.map(_.id) should not contain largeTx.id
+    selected.map(_.size).sum should be < maxSize
+    eliminated shouldBe empty
+
+    val (atSizeLimit, eliminatedAtSizeLimit) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      smallTx.size + smallFeeTx.size,
+      us,
+      upcomingContext,
+      Seq(smallTx)
+    )
+    atSizeLimit shouldBe empty
+    eliminatedAtSizeLimit shouldBe empty
+  }
+
+  property("a transaction exceeding candidate cost should not starve later transactions") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper(Some(2))
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(31)
+
+    inputs.size shouldBe 31
+
+    val accepted = validTransactionFromBoxes(
+      inputs.take(20),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+    val expensive = validTransactionFromBoxes(
+      inputs.slice(20, 30),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+    val small = validTransactionFromBoxes(
+      IndexedSeq(inputs.last),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    def transactionCost(tx: ErgoTransaction): Int =
+      us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier)).get
+
+    def candidateCost(txs: Seq[ErgoTransaction]): Int = {
+      val newBoxes = txs.flatMap(_.outputs)
+      val feeTx = CandidateGenerator
+        .collectFees(us.stateContext.currentHeight, txs, defaultMinerPk, upcomingContext)
+        .get
+      val boxesToSpend = feeTx.inputs.flatMap(input =>
+        newBoxes.find(box => java.util.Arrays.equals(box.id, input.boxId))
+      )
+      val feeCost = feeTx
+        .statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier)
+        .get
+      txs.map(transactionCost).sum + feeCost
+    }
+
+    val acceptedAndSmallCost     = candidateCost(Seq(accepted, small))
+    val acceptedAndExpensiveCost = candidateCost(Seq(accepted, expensive))
+    val maxCost                  = acceptedAndSmallCost + 1
+
+    transactionCost(expensive) should be < maxCost
+    acceptedAndExpensiveCost should be >= maxCost
+
+    val (selected, eliminated) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      maxCost,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      Seq(accepted, expensive, small)
+    )
+
+    selected.map(_.id) should contain allOf (accepted.id, small.id)
+    selected.map(_.id) should not contain expensive.id
+    val newBoxes = selected.flatMap(_.outputs)
+    val selectedCost = selected.map { tx =>
+      us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier)).getOrElse {
+        val boxesToSpend = tx.inputs.map(input =>
+          newBoxes.find(box => java.util.Arrays.equals(box.id, input.boxId)).get
+        )
+        tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier).get
+      }
+    }.sum
+    selectedCost should be < maxCost
+    eliminated shouldBe empty
+
+    val (atCostLimit, eliminatedAtCostLimit) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      acceptedAndSmallCost,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      Seq(accepted, small)
+    )
+    atCostLimit.map(_.id) should contain(accepted.id)
+    atCostLimit.map(_.id) should not contain small.id
+    eliminatedAtCostLimit shouldBe empty
+  }
+
+  property("descendants of a capacity-deferred transaction should remain in the mempool") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper(Some(1))
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(22)
+
+    inputs.size shouldBe 22
+
+    val parent = validTransactionFromBoxes(
+      inputs.take(20),
+      rnd,
+      issueNew = false
+    )
+    val accepted = validTransactionFromBoxes(
+      IndexedSeq(inputs(20)),
+      rnd,
+      issueNew = false
+    )
+    val dataDependent = validTransactionFromBoxes(
+      IndexedSeq(inputs(20)),
+      rnd,
+      issueNew = false,
+      stateCtxOpt = Some(us.stateContext),
+      dataBoxes = IndexedSeq(parent.outputs.head)
+    )
+    val child = validTransactionFromBoxes(
+      IndexedSeq(dataDependent.outputs.head),
+      rnd,
+      issueNew = false,
+      stateCtxOpt = Some(us.stateContext)
+    )
+    val grandchild = validTransactionFromBoxes(
+      IndexedSeq(child.outputs.head),
+      rnd,
+      issueNew = false,
+      stateCtxOpt = Some(us.stateContext)
+    )
+    val conflicting = validTransactionFromBoxes(
+      IndexedSeq(inputs(20)),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+    val independent = validTransactionFromBoxes(
+      IndexedSeq(inputs.last),
+      rnd,
+      issueNew = false,
+      outputsProposition = feeProp
+    )
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val independentFeeTx = CandidateGenerator
+      .collectFees(
+        us.stateContext.currentHeight,
+        Seq(accepted, independent),
+        defaultMinerPk,
+        upcomingContext
+      )
+      .get
+    val maxSize = accepted.size + independent.size + independentFeeTx.size + 1
+
+    accepted.size + parent.size should be >= maxSize
+
+    val (familySelected, familyEliminated) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      Seq(parent, dataDependent, child, grandchild)
+    )
+    familySelected.map(_.id) should contain allOf (
+      parent.id,
+      dataDependent.id,
+      child.id,
+      grandchild.id
+    )
+    familyEliminated shouldBe empty
+
+    val (selected, eliminated) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      maxSize,
+      us,
+      upcomingContext,
+      Seq(accepted, parent, dataDependent, child, grandchild, conflicting, independent)
+    )
+
+    selected.map(_.id) should contain allOf (accepted.id, independent.id)
+    selected.map(_.id) should contain noneOf (
+      parent.id,
+      dataDependent.id,
+      child.id,
+      grandchild.id
+    )
+    selected.map(_.size).sum should be < maxSize
+    eliminated shouldBe Seq(conflicting.id)
   }
 
   property("should not be able to spend recent fee boxes") {

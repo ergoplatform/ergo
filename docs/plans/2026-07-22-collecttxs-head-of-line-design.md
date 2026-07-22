@@ -24,9 +24,16 @@ transaction has one of three outcomes:
   unchanged and the scan continues.
 
 When a transaction is deferred, its output IDs are recorded. A later
-transaction consuming any recorded output is also deferred, and its outputs are
-recorded transitively. This prevents descendants from being misclassified as
-invalid merely because their parent was omitted from the current candidate.
+transaction consuming or reading any recorded output through a regular or data
+input is also deferred, and its outputs are recorded transitively. This
+prevents dependents from being misclassified as invalid merely because an
+ancestor was omitted from the current candidate.
+
+Once that dependency is known, deferral takes precedence over a conflict with
+the current candidate prefix: the dependent may be valid with a different
+prefix, and the old collector never reached it after its ancestor overflowed.
+Transactions without a deferred dependency retain the existing invalid and
+double-spend handling.
 
 The implementation preserves the current strict cost and size comparisons,
 counts the fee-collection transaction exactly once, and keeps the relative order
@@ -36,13 +43,19 @@ of every accepted transaction.
 
 The primary regression uses this ordered sequence:
 
-1. a valid parent that does not fit;
-2. a valid child spending that parent's output;
-3. a smaller independent transaction that fits.
+1. an accepted transaction;
+2. a valid parent that no longer fits;
+3. a valid transaction reading that parent's output as a data input, while
+   also conflicting with the accepted prefix;
+4. two generations of spending descendants;
+5. a separate conflict without a deferred dependency;
+6. a smaller independent transaction that fits.
 
-The expected candidate contains the independent transaction and its fee
-transaction. The parent and child are omitted, neither ID is eliminated, and
-the final candidate remains below both limits.
+The expected candidate contains the accepted and independent transactions plus
+the fee transaction. The deferred family is omitted without elimination, the
+separate conflict remains eliminated, and the final candidate remains below
+both limits. Separate size and cost fixtures assert that equality with either
+limit is still rejected by the existing strict comparison.
 
 Existing tests continue to cover invalid transactions, double spends, fee
 collection, and block cost and size limits.
@@ -56,4 +69,7 @@ eliminated from the mempool.
 A dependency-package selector is intentionally deferred to a separate
 refactoring. It requires an explicit scoring policy for shared ancestors, fees,
 cost, size, conflicts, and prioritized transactions. This focused change fixes
-the liveness defect without changing those policies.
+the liveness defect without changing those policies. In particular, this pass
+propagates only from a producer already encountered and deferred; it does not
+topologically reorder data-input dependencies whose producer appears later in
+the mempool sequence.

@@ -25,6 +25,7 @@ import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
 import sigma.ast.syntax.ErgoBoxRType
@@ -881,21 +882,34 @@ object CandidateGenerator extends ScorexLogging {
               mempoolTxs: Iterable[ErgoTransaction],
               acc: Seq[CostedTransaction],
               lastFeeTx: Option[CostedTransaction],
-              invalidTxs: Seq[ModifierId]
+              invalidTxs: Seq[ModifierId],
+              deferredOutputs: Set[ByteArrayWrapper]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
       val currentCosted = acc ++ lastFeeTx
       def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
 
-      val stateWithTxs = us.withTransactions(current)
+      lazy val stateWithTxs = us.withTransactions(current)
 
       mempoolTxs.headOption match {
         case Some(tx) =>
-          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
-            //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
-            //do these checks before validating the scripts to save time
-            log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+          val dependsOnDeferredOutput = deferredOutputs.nonEmpty && (
+            tx.inputs.exists(input => deferredOutputs.contains(ByteArrayWrapper(input.boxId))) ||
+            tx.dataInputs.exists(input => deferredOutputs.contains(ByteArrayWrapper(input.boxId)))
+          )
+          lazy val deferredWithTxOutputs =
+            deferredOutputs ++ tx.outputs.iterator.map(box => ByteArrayWrapper(box.id))
+
+          if (dependsOnDeferredOutput) {
+            log.debug(s"Deferring transaction ${tx.id} with a capacity-deferred ancestor")
+            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs, deferredWithTxOutputs)
+          } else if (doublespend(current, tx)) {
+            // Do this check before validating the scripts to save time.
+            log.debug(s"Transaction ${tx.id} double-spending selected candidate inputs")
+            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id, deferredOutputs)
+          } else if (!inputsNotSpent(tx, stateWithTxs)) {
+            log.debug(s"Transaction ${tx.id} spending non-existing inputs")
+            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id, deferredOutputs)
           } else {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
@@ -917,11 +931,10 @@ object CandidateGenerator extends ScorexLogging {
                       case Success(cost) =>
                         val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
+                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs, deferredOutputs)
                         } else {
-                          log.debug(s"Finishing block assembly on limits overflow, " +
-                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
-                          current -> invalidTxs
+                          log.debug(s"Deferring transaction ${tx.id} on candidate limits overflow")
+                          loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs, deferredWithTxOutputs)
                         }
                       case Failure(e) =>
                         log.warn(
@@ -934,14 +947,15 @@ object CandidateGenerator extends ScorexLogging {
                     log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
                     val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
                     if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
+                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs, deferredOutputs)
                     } else {
-                      current -> invalidTxs
+                      log.debug(s"Deferring transaction ${tx.id} on candidate limits overflow")
+                      loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs, deferredWithTxOutputs)
                     }
                 }
               case Failure(e) =>
                 log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id, deferredOutputs)
             }
           }
         case None => // mempool is empty
@@ -949,7 +963,7 @@ object CandidateGenerator extends ScorexLogging {
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(transactions, Seq.empty, None, Seq.empty, Set.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

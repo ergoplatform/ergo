@@ -273,7 +273,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
                 val boxesToSpend = tx.inputs.flatMap(i => utxoWithPool.boxById(i.boxId))
                 if (preservesReemissionTokens(boxesToSpend, tx.outputCandidates, utxo.stateContext)) {
-                  val exc = new Exception("Transaction preserves re-emission tokens, can not be mined")
+                  val exc = new Exception(
+                    "Transaction preserves re-emission tokens, cannot be included in a block under EIP-27 rules")
                   return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
                     new ProcessingOutcome.Declined(exc, validationStartTime))
                 }

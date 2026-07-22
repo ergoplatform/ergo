@@ -124,7 +124,8 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
   private def process(f: Fixture, tx: ErgoTransaction): (ErgoMemPool, ProcessingOutcome) =
     f.pool.process(UnconfirmedTransaction(tx, None), f.state)
 
-  private val PrefilterReason = "Transaction preserves re-emission tokens"
+  private val PrefilterReason =
+    "Transaction preserves re-emission tokens, cannot be included in a block under EIP-27 rules"
 
   private def declinedByPrefilter(outcome: ProcessingOutcome): Boolean = outcome match {
     case d: ProcessingOutcome.Declined => Option(d.e.getMessage).exists(_.contains(PrefilterReason))

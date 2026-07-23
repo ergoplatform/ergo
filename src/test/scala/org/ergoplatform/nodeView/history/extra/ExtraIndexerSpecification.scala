@@ -328,7 +328,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     lock.lock()
     created.await()
     val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
-    indexer ! RemoteBlockApplied(newBestHeaderOpt.get) // will be ignored
+    indexer ! RemoteBlockApplied(newBestHeaderOpt.get, Seq.empty) // will be ignored
     indexer ! CreateDB(HEIGHT + 1)
     lock.lock()
     created.await()

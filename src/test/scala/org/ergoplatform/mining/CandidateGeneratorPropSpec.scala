@@ -356,6 +356,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     val minValue = BoxUtils.sufficientAmount(parameters)
     val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(5)
     val zeroFeeTxs = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false))
+    zeroFeeTxs should not be empty
 
     val h = validFullBlock(None, us, bh, rnd).header
     val upcomingContext = us.stateContext.upcoming(

@@ -1,11 +1,19 @@
 package org.ergoplatform.nodeView.mempool
 
+import akka.actor.{ActorSystem, Props}
+import akka.pattern.ask
+import akka.testkit.TestProbe
+import akka.util.Timeout
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.emission.EmissionRules.CoinsInOneErgo
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedMempool
+import org.ergoplatform.nodeView.UtxoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
-import org.ergoplatform.nodeView.state.BoxHolder
+import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoStateContextHelpers, ErgoTestHelpers}
@@ -18,6 +26,9 @@ import sigma.ast.ErgoTree
 import sigma.data.Digest32Coll
 import sigma.interpreter.ProverResult
 import sigmastate.utils.Extensions.ModifierIdOps
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 /**
   * Pins the invariants of the mempool policy prefilter for the invalid token-preserving
@@ -340,4 +351,102 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     inertPool.preservesReemissionTokens(Seq(underBar), Seq(outWithToken), inertCtx) shouldBe false
   }
 
+  // ------------------------------------------------------------------ (h)
+
+  /**
+    * Drives the rejection through the real ErgoNodeViewHolder actor to assert on the *installed*
+    * pool, not just on `process`'s return value - the gap invariant (b) left open. A test-only
+    * subclass (below) accepts an InjectState message that reuses the existing protected
+    * `updateNodeView`, so a synthetic token-bearing state can be installed without minting a token
+    * through a genesis box (which is not possible: the genesis boxes are respectively false-locked,
+    * miner-only, and 2-of-N founder-guarded).
+    */
+  private def isInvalidatedInInstalledPool(view: CurrentView[UtxoState], id: ModifierId): Boolean =
+    view.pool.isInvalidated(id)
+
+  it should "(h) install the invalidation into the node view so the rejected id is cached" in {
+    implicit val system: ActorSystem = ActorSystem("prefilter-installed-pool")
+    implicit val timeout: Timeout = Timeout(20.seconds)
+    try {
+      val f = fixture(checkRules = false)
+      val nvSettings = f.s.copy(directory = createTempDir.getAbsolutePath)
+      val tx = preserving(f, f.tokenBox)
+
+      val holder = system.actorOf(Props(new PrefilterTestNodeViewHolder(nvSettings)))
+      val submitProbe = TestProbe()
+      val eventProbe = TestProbe()
+
+      // Install the synthetic token-bearing state, then subscribe - so no ChangedMempool from
+      // startup or from the injection itself can be mistaken for the one under test.
+      holder ! InjectState(f.state)
+      system.eventStream.subscribe(eventProbe.ref, classOf[ChangedMempool])
+
+      submitProbe.send(holder, LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None)))
+      submitProbe.expectMsgType[ProcessingOutcome.Declined](10.seconds)
+
+      // The install publishes ChangedMempool, and the reader it carries reports the cached id.
+      val changed = eventProbe.expectMsgType[ChangedMempool](10.seconds)
+      changed.mempool match {
+        case mp: ErgoMemPool => mp.isInvalidated(tx.id) shouldBe true
+        case other => fail(s"ChangedMempool carried an unexpected reader: $other")
+      }
+
+      // And the pool the node actually holds - queried fresh - reports it too.
+      val installed = Await.result(
+        (holder ? GetDataFromCurrentView[UtxoState, Boolean](v => isInvalidatedInInstalledPool(v, tx.id)))
+          .mapTo[Boolean],
+        10.seconds
+      )
+      installed shouldBe true
+    } finally {
+      Await.ready(system.terminate(), 20.seconds)
+    }
+  }
+
+  it should "(control) not install (nor emit ChangedMempool) on a declining path that returns the same pool" in {
+    implicit val system: ActorSystem = ActorSystem("prefilter-noop-control")
+    try {
+      val f = fixture(checkRules = false)
+      val nvSettings = f.s.copy(directory = createTempDir.getAbsolutePath)
+
+      // A box that is not in the installed state: this takes the pre-existing "not all utxos in
+      // place yet" Declined path, which returns `this` unchanged. The reference-inequality guard
+      // must then skip the install, so no ChangedMempool is emitted.
+      val absentBox = box(BoxValue, Constants.TrueTree, Seq.empty, 9)
+      val tx = txSpending(Seq(absentBox), Seq(candidate(BoxValue, Constants.TrueTree, Seq.empty)))
+
+      val holder = system.actorOf(Props(new PrefilterTestNodeViewHolder(nvSettings)))
+      val submitProbe = TestProbe()
+      val eventProbe = TestProbe()
+
+      holder ! InjectState(f.state)
+      system.eventStream.subscribe(eventProbe.ref, classOf[ChangedMempool])
+
+      submitProbe.send(holder, LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None)))
+      submitProbe.expectMsgType[ProcessingOutcome.Declined](10.seconds)
+
+      eventProbe.expectNoMessage(2.seconds)
+    } finally {
+      Await.ready(system.terminate(), 20.seconds)
+    }
+  }
+
+}
+
+/** Message understood only by the test subclass below. */
+private case class InjectState(state: UtxoState)
+
+/**
+  * A UtxoNodeViewHolder that additionally installs a supplied state on demand, via the same
+  * protected `updateNodeView` the production code uses. This is the whole of the test seam - no
+  * production code learns about it.
+  */
+private class PrefilterTestNodeViewHolder(settings: ErgoSettings)
+  extends UtxoNodeViewHolder(settings) {
+
+  private def injecting: Receive = {
+    case InjectState(s) => updateNodeView(updatedState = Some(s))
+  }
+
+  override def receive: Receive = injecting orElse super.receive
 }

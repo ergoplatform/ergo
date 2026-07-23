@@ -370,19 +370,28 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     try {
       val f = fixture(checkRules = false)
       val nvSettings = f.s.copy(directory = createTempDir.getAbsolutePath)
+      // Precondition: the fee gate in `process` runs before input resolution and the prefilter, so
+      // the end-to-end path only reaches the prefilter because the test config sets this to 0 (the
+      // production default is 1000000). Assert it rather than trust it.
+      withClue("actor fixture must reach the prefilter: ") {
+        nvSettings.nodeSettings.minimalFeeAmount shouldBe 0L
+      }
       val tx = preserving(f, f.tokenBox)
 
       val holder = system.actorOf(Props(new PrefilterTestNodeViewHolder(nvSettings)))
       val submitProbe = TestProbe()
       val eventProbe = TestProbe()
 
-      // Install the synthetic token-bearing state, then subscribe - so no ChangedMempool from
-      // startup or from the injection itself can be mistaken for the one under test.
-      holder ! InjectState(f.state)
+      // Both messages go through the SAME probe: Akka guarantees FIFO only per sender-receiver pair,
+      // so sending InjectState with no sender could let the transaction overtake it and hit the
+      // missing-UTXO path. InjectState is handled synchronously and, being state-only, publishes no
+      // ChangedMempool, so subscribing after it still cannot catch a stray event.
+      submitProbe.send(holder, InjectState(f.state))
       system.eventStream.subscribe(eventProbe.ref, classOf[ChangedMempool])
 
       submitProbe.send(holder, LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None)))
-      submitProbe.expectMsgType[ProcessingOutcome.Declined](10.seconds)
+      val outcome = submitProbe.expectMsgType[ProcessingOutcome.Declined](10.seconds)
+      declinedByPrefilter(outcome) shouldBe true
 
       // The install publishes ChangedMempool, and the reader it carries reports the cached id.
       val changed = eventProbe.expectMsgType[ChangedMempool](10.seconds)
@@ -408,6 +417,9 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     try {
       val f = fixture(checkRules = false)
       val nvSettings = f.s.copy(directory = createTempDir.getAbsolutePath)
+      withClue("actor fixture must reach input resolution: ") {
+        nvSettings.nodeSettings.minimalFeeAmount shouldBe 0L
+      }
 
       // A box that is not in the installed state: this takes the pre-existing "not all utxos in
       // place yet" Declined path, which returns `this` unchanged. The reference-inequality guard
@@ -419,11 +431,14 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
       val submitProbe = TestProbe()
       val eventProbe = TestProbe()
 
-      holder ! InjectState(f.state)
+      // Same probe for both, for the FIFO reason given in (h).
+      submitProbe.send(holder, InjectState(f.state))
       system.eventStream.subscribe(eventProbe.ref, classOf[ChangedMempool])
 
       submitProbe.send(holder, LocallyGeneratedTransaction(UnconfirmedTransaction(tx, None)))
-      submitProbe.expectMsgType[ProcessingOutcome.Declined](10.seconds)
+      val outcome = submitProbe.expectMsgType[ProcessingOutcome.Declined](10.seconds)
+      // Confirm it is the intended path, not the prefilter or some other decline.
+      Option(outcome.e.getMessage).exists(_.contains("not all utxos in place yet")) shouldBe true
 
       eventProbe.expectNoMessage(2.seconds)
     } finally {

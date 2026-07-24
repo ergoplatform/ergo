@@ -17,7 +17,10 @@ import scala.util.{Failure, Success, Try}
 /**
   * In-memory peer database implementation supporting temporal blacklisting.
   */
-final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
+final class PeerDatabase(
+  settings: ErgoSettings,
+  private[peer] val maxKnownPeers: Int = PeerDatabase.MaxKnownPeers
+) extends ScorexLogging {
 
   private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
 
@@ -76,14 +79,75 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
 
   def get(peer: InetSocketAddress): Option[PeerInfo] = peers.get(peer)
 
-  def addOrUpdateKnownPeer(peerInfo: PeerInfo): Unit = {
+  def addOrUpdateKnownPeer(
+    peerInfo: PeerInfo,
+    connectedPeers: Set[InetSocketAddress] = Set.empty
+  ): Unit = {
     if (!peerInfo.peerSpec.declaredAddress.exists(x => isBlacklisted(x.getAddress))) {
       peerInfo.peerSpec.address.foreach { address =>
-        log.debug(s"Updating peer info for $address")
-        peers += address -> peerInfo
-        persistentStore.insert(serialize(address), PeerInfoSerializer.toBytes(peerInfo))
+        if (peers.contains(address)) {
+          log.debug(s"Updating peer info for $address")
+          updatePeer(address, peerInfo)
+        } else if (
+          peers.size < maxKnownPeers ||
+            makeRoomForPeer(peerInfo.lastHandshake, connectedPeers)
+        ) {
+          log.debug(s"Adding peer info for $address")
+          updatePeer(address, peerInfo)
+        } else {
+          log.debug(s"Peer database is full, ignoring $address")
+        }
       }
     }
+  }
+
+  private def updatePeer(address: InetSocketAddress, peerInfo: PeerInfo): Unit = {
+    peers += address -> peerInfo
+    persistentStore.insert(serialize(address), PeerInfoSerializer.toBytes(peerInfo))
+  }
+
+  /**
+    * Evict the oldest known peer (by lastHandshake) to make room for a new peer,
+    * but never evict a currently connected peer.
+    *
+    * @param candidateHandshake - lastHandshake of the peer we want to insert
+    * @return true if room was made, false otherwise
+    */
+  private def makeRoomForPeer(
+    candidateHandshake: Long,
+    connectedPeers: Set[InetSocketAddress]
+  ): Boolean = {
+    val evictionCandidates = peers.filterNot { case (address, _) =>
+      connectedPeers.contains(address)
+    }
+    if (evictionCandidates.nonEmpty) {
+      val (oldestAddress, oldestInfo) = evictionCandidates.minBy(_._2.lastHandshake)
+      if (candidateHandshake > oldestInfo.lastHandshake) {
+        log.info(
+          s"Evicting peer $oldestAddress with lastHandshake " +
+            s"${oldestInfo.lastHandshake} to make room for a newer peer"
+        )
+        remove(oldestAddress)
+        true
+      } else {
+        false
+      }
+    } else {
+      false
+    }
+  }
+
+  /**
+    * Remove peers whose lastHandshake is older than 60 days, excluding connected peers.
+    */
+  def removeOldPeers(connectedPeers: Set[InetSocketAddress] = Set.empty): Unit = {
+    val cutoff = System.currentTimeMillis() - PeerDatabase.KnownPeerMaxAgeMs
+    val toRemove = peers.filterNot { case (address, _) =>
+      connectedPeers.contains(address)
+    }.filter { case (_, info) =>
+      info.lastHandshake < cutoff
+    }.keys
+    toRemove.foreach(remove)
   }
 
   def addToBlacklist(socketAddress: InetSocketAddress, penaltyType: PenaltyType): Unit = {
@@ -111,6 +175,11 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
   }
 
   def knownPeers: Map[InetSocketAddress, PeerInfo] = peers
+
+  /**
+    * Close the underlying persistent store.
+    */
+  def close(): Unit = persistentStore.close()
 
   def blacklistedPeers: Seq[InetAddress] =
     blacklist.map {
@@ -187,4 +256,23 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
       case PenaltyType.PermanentPenalty =>
         (360 * 10).days.toMillis
     }
+}
+
+object PeerDatabase {
+
+  /**
+    * Hardcoded cap on the total number of known peers.
+    */
+  val MaxKnownPeers: Int = 131072
+
+  /**
+    * Hardcoded maximum age (60 days) for a known peer's lastHandshake.
+    */
+  val KnownPeerMaxAgeMs: Long = 60L * 24 * 60 * 60 * 1000
+
+  /**
+    * Hardcoded interval (24 hours) between cleanup runs.
+    */
+  val KnownPeerCleanupIntervalMs: Long = 24L * 60 * 60 * 1000
+
 }

@@ -2,6 +2,10 @@ package org.ergoplatform.network.peer
 
 import java.net.{InetAddress, InetSocketAddress}
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
+  DisconnectedPeer,
+  HandshakedPeer
+}
 import org.ergoplatform.network.PeerSpec
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.app.ScorexContext
@@ -9,6 +13,7 @@ import scorex.core.network._
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
+import scala.concurrent.duration._
 import scala.util.Random
 
 /**
@@ -20,13 +25,34 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
   import PeerManager.ReceivableMessages._
 
   private val peerDatabase = new PeerDatabase(settings)
+  private var connectedPeerAddresses = Set.empty[InetSocketAddress]
+
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[HandshakedPeer])
+    context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
+    scheduleOldPeersCleanup()
+  }
+
+  override def postStop(): Unit = {
+    peerDatabase.close()
+    super.postStop()
+  }
+
+  private def scheduleOldPeersCleanup(): Unit = {
+    context.system.scheduler.scheduleWithFixedDelay(
+      FiniteDuration(PeerDatabase.KnownPeerCleanupIntervalMs, MILLISECONDS),
+      FiniteDuration(PeerDatabase.KnownPeerCleanupIntervalMs, MILLISECONDS),
+      self,
+      CleanupOldPeers
+    )(context.system.dispatcher)
+  }
 
   if (peerDatabase.isEmpty) {
     // fill database with peers from config file if empty
     log.info("No peers in database, seeding peers database with nodes from config")
     settings.scorexSettings.network.knownPeers.foreach { address =>
       if (!isSelf(address)) {
-        peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
+        peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address), connectedPeerAddresses)
       }
     }
   } else {
@@ -51,8 +77,17 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
     case AddOrUpdatePeer(peerInfo) =>
       // We have connected to a peer and got his peerInfo from him
       if (!isSelf(peerInfo.peerSpec) && !peerInfo.peerSpec.address.exists(isLocal(_))) {
-        peerDatabase.addOrUpdateKnownPeer(peerInfo)
+        peerDatabase.addOrUpdateKnownPeer(peerInfo, connectedPeerAddresses)
       }
+
+    case CleanupOldPeers =>
+      peerDatabase.removeOldPeers(connectedPeerAddresses)
+
+    case HandshakedPeer(remote) =>
+      connectedPeerAddresses += remote.connectionId.remoteAddress
+
+    case DisconnectedPeer(connectedPeer) =>
+      connectedPeerAddresses -= connectedPeer.connectionId.remoteAddress
 
     case Penalize(peer, penaltyType) =>
       log.info(s"$peer penalized, penalty: $penaltyType")
@@ -67,7 +102,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
       if (peerSpec.address.forall(a => peerDatabase.get(a).isEmpty) && !isSelf(peerSpec) && !peerSpec.address.exists(isLocal(_))) {
         val peerInfo: PeerInfo = PeerInfo(peerSpec, 0, None)
         log.info(s"New discovered peer: $peerInfo")
-        peerDatabase.addOrUpdateKnownPeer(peerInfo)
+        peerDatabase.addOrUpdateKnownPeer(peerInfo, connectedPeerAddresses)
       }
 
     case RemovePeer(address) =>
@@ -124,6 +159,8 @@ object PeerManager {
     case class AddPeerIfEmpty(data: PeerSpec)
 
     case class RemovePeer(address: InetSocketAddress)
+
+    case object CleanupOldPeers
 
     /**
       * Message to get peers from known peers map filtered by `choose` function

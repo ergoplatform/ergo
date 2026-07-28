@@ -11,11 +11,12 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
 
+import scala.util.Random
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
-  * In-memory peer database implementation supporting temporal blacklisting.
+  * In-memory peer database with .
   */
 final class PeerDatabase(
   settings: ErgoSettings,
@@ -39,6 +40,8 @@ final class PeerDatabase(
         log.error("Unable to load peers from database, loading from network only", ex)
         Map.empty[InetSocketAddress, PeerInfo]
     }
+
+  private val EvictionSampleSize = 32
 
   /**
     * penalized peer ip -> (accumulated penalty score, last penalty timestamp)
@@ -88,10 +91,8 @@ final class PeerDatabase(
         if (peers.contains(address)) {
           log.debug(s"Updating peer info for $address")
           updatePeer(address, peerInfo)
-        } else if (
-          peers.size < maxKnownPeers ||
-            makeRoomForPeer(peerInfo.lastHandshake, connectedPeers)
-        ) {
+        } else if (peers.size < maxKnownPeers ||
+                   makeRoomForPeer(peerInfo.lastHandshake, connectedPeers)) {
           log.debug(s"Adding peer info for $address")
           updatePeer(address, peerInfo)
         } else {
@@ -107,8 +108,8 @@ final class PeerDatabase(
   }
 
   /**
-    * Evict the oldest known peer (by lastHandshake) to make room for a new peer,
-    * but never evict a currently connected peer.
+    * Evict the oldest known peer (by lastHandshake) from a random sample to make room
+    * for a new peer, but never evict a currently connected peer.
     *
     * @param candidateHandshake - lastHandshake of the peer we want to insert
     * @return true if room was made, false otherwise
@@ -117,23 +118,44 @@ final class PeerDatabase(
     candidateHandshake: Long,
     connectedPeers: Set[InetSocketAddress]
   ): Boolean = {
-    val evictionCandidates = peers.filterNot { case (address, _) =>
-      connectedPeers.contains(address)
+    val oldest = randomPeerSample(EvictionSampleSize).foldLeft(
+      Option.empty[(InetSocketAddress, PeerInfo)]
+    ) { (acc, entry) =>
+      val (address, info) = entry
+      if (connectedPeers.contains(address)) {
+        acc
+      } else {
+        acc match {
+          case Some((_, oldestInfo)) if oldestInfo.lastHandshake <= info.lastHandshake =>
+            acc
+          case _ => Some(entry)
+        }
+      }
     }
-    if (evictionCandidates.nonEmpty) {
-      val (oldestAddress, oldestInfo) = evictionCandidates.minBy(_._2.lastHandshake)
-      if (candidateHandshake > oldestInfo.lastHandshake) {
+    oldest match {
+      case Some((oldestAddress, oldestInfo))
+          if candidateHandshake > oldestInfo.lastHandshake =>
         log.info(
           s"Evicting peer $oldestAddress with lastHandshake " +
-            s"${oldestInfo.lastHandshake} to make room for a newer peer"
+          s"${oldestInfo.lastHandshake} to make room for a newer peer"
         )
         remove(oldestAddress)
         true
-      } else {
+      case _ =>
         false
-      }
+    }
+  }
+
+  /**
+    * Select a uniform random sample of up to `sampleSize` peers using reservoir sampling.
+    */
+  private def randomPeerSample(sampleSize: Int): Seq[(InetSocketAddress, PeerInfo)] = {
+    if (peers.isEmpty) {
+      Seq.empty
     } else {
-      false
+      val start  = Random.nextInt(peers.size)
+      val finish = math.min(start + sampleSize, peers.size)
+      peers.slice(start, finish).toSeq
     }
   }
 
@@ -142,11 +164,11 @@ final class PeerDatabase(
     */
   def removeOldPeers(connectedPeers: Set[InetSocketAddress] = Set.empty): Unit = {
     val cutoff = System.currentTimeMillis() - PeerDatabase.KnownPeerMaxAgeMs
-    val toRemove = peers.filterNot { case (address, _) =>
-      connectedPeers.contains(address)
-    }.filter { case (_, info) =>
-      info.lastHandshake < cutoff
-    }.keys
+    val toRemove = peers.collect {
+      case (address, info)
+          if !connectedPeers.contains(address) && info.lastHandshake < cutoff =>
+        address
+    }
     toRemove.foreach(remove)
   }
 
@@ -164,7 +186,7 @@ final class PeerDatabase(
     }
   }
 
-  def removeFromBlacklist(address: InetAddress): Unit = {
+  private def removeFromBlacklist(address: InetAddress): Unit = {
     log.info(s"$address removed from blacklist")
     blacklist -= address
   }

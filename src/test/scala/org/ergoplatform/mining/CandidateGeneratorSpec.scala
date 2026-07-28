@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
@@ -9,17 +9,21 @@ import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedMempool
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied}
+
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.NetworkType.DevNet60
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState, validFullBlock, validTransactionsFromBoxHolder}
+import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genHeaderChain}
+import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
@@ -1260,6 +1264,153 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case FullBlockApplied(header) if header.id != solvedBlock.header.parentId => true
       case _ => false
     }
+
+    system.terminate()
+  }
+
+  private class FixedReadersHolder(readers: Readers) extends Actor {
+    override def receive: Receive = {
+      case GetReaders => sender() ! readers
+    }
+  }
+
+  private def walletStub(implicit system: ActorSystem): ErgoWalletReader = new ErgoWalletReader {
+    val walletActor: ActorRef = system.deadLetters
+  }
+
+  private def testSettings(directory: String): ErgoSettings = {
+    defaultSettings.copy(
+      directory = directory,
+      nodeSettings = defaultSettings.nodeSettings.copy(
+        blockCandidateGenerationInterval = 1.second
+      )
+    )
+  }
+
+  private def historyWithBestFullBlock(blocks: Seq[ErgoFullBlock]): ErgoHistory = {
+    val h0 = HistoryTestHelpers.generateHistory(
+      verifyTransactions = true,
+      stateType = StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep = 100
+    )
+    val h1 = applyChain(h0, blocks)
+    val extraHeaders = genHeaderChain(2, h1, diffBitsOpt = None, useRealTs = false)
+    extraHeaders.headers.drop(h1.headersHeight).foldLeft(h1) { case (h, header) =>
+      h.append(header).get._1
+    }
+  }
+
+  it should "exclude applied transactions from stale mempool and not eliminate them" in new TestKit(
+    ActorSystem()
+  ) {
+
+    val testDir = s"${defaultSettings.directory}-a1-stale-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, _) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val tx = txs2.head
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+
+    val history0 = HistoryTestHelpers.generateHistory(
+      verifyTransactions = true,
+      stateType = StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep = 100
+    )
+    val history2 = applyChain(history0, Seq(block1, block2))
+
+    val wallet = walletStub
+    val emptyMempool = ErgoMemPool.empty(settings)
+    val readers = Readers(history2, us2, emptyMempool, wallet)
+
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    // let the actor initialize and generate an initial candidate with the empty mempool
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), senderProbe.ref)
+    senderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(_: Candidate) => ()
+    }
+
+    candidateGenerator ! LocalBlockApplied(block2.header, Seq(tx.id))
+
+    val staleMempool = ErgoMemPool.empty(settings).put(Seq(UnconfirmedTransaction(tx, None)))
+    staleMempool.getAllPrioritized.map(_.id) should contain(tx.id)
+    candidateGenerator ! ChangedMempool(staleMempool)
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), senderProbe.ref)
+
+    val candidate = senderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    candidate.candidateBlock.transactions should not be empty
+    candidate.candidateBlock.transactions.map(_.id) should not contain tx.id
+
+    val eliminatedIds = viewHolderProbe.receiveWhile(500.millis) {
+      case e: EliminateTransactions => e
+    }.flatMap(_.ids)
+    eliminatedIds should not contain tx.id
+
+    system.terminate()
+  }
+
+  it should "discard candidate when history and state are out of sync" in new TestKit(
+    ActorSystem()
+  ) {
+
+    val testDir = s"${defaultSettings.directory}-b1-sync-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+    val history1 = historyWithBestFullBlock(Seq(block1))
+
+    val (txs2, _) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+
+    val mempool = ErgoMemPool.empty(settings)
+    val wallet = walletStub
+    val readers = Readers(history1, us2, mempool, wallet)
+
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), senderProbe.ref)
+    senderProbe.expectNoMessage(2.seconds)
+    viewHolderProbe.expectNoMessage(500.millis)
 
     system.terminate()
   }

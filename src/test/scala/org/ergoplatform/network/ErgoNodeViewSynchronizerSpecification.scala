@@ -227,6 +227,37 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: Message: InvSpec - header next to the best one is requested via RequestModifier") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+
+      // header immediately following the best header the node has
+      // (history applied to the synchronizer contains the first 1000 headers of `chain`)
+      val nextHeader = chain.take(1001).last
+      deliveryTracker.status(nextHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+
+      // a peer announces the header via an Inv message
+      val invData = InvData(Header.modifierTypeId, Seq(nextHeader.id))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+
+      // the synchronizer should reply to the peer with a RequestModifier message asking for the header
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId && data.ids == Seq(nextHeader.id)
+          case _ => false
+        }
+      }
+
+      // and the header should be tracked as Requested
+      eventually {
+        deliveryTracker.status(nextHeader.id, Header.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: receiving valid header") {
     withFixture { ctx =>
       import ctx._
@@ -972,7 +1003,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       // Second: LocalBlockApplied for same header should NOT send additional invs
-      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
       ncProbe.expectNoMessage(1.second)
@@ -1008,7 +1039,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       // LocalBlockApplied for same block should NOT broadcast again
-      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
       ncProbe.expectNoMessage(1.second)
@@ -1032,7 +1063,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = statefulyValidFullBlock(wus)
 
       // Send RemoteBlockApplied to synchronizer
-      synchronizerMockRef ! RemoteBlockApplied(newBlock.header)
+      synchronizerMockRef ! RemoteBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Expect 4 inv messages (1 header + 3 sections)
       val invMessages = (0 until 4).map { _ =>
@@ -1114,12 +1145,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = statefulyValidFullBlock(wus)
 
       // Send LocalBlockApplied - should not broadcast but should perform cleanup
-      synchronizerMockRef ! LocalBlockApplied(newBlock.header)
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
       ncProbe.expectNoMessage(500.millis)
 
       // Send RemoteBlockApplied - should broadcast (different block)
       val newBlock2 = statefulyValidFullBlock(wus)
-      synchronizerMockRef ! RemoteBlockApplied(newBlock2.header)
+      synchronizerMockRef ! RemoteBlockApplied(newBlock2.header, newBlock2.transactions.map(_.id))
 
       // Expect 4 inv messages (1 header + 3 sections)
       val invMessages = (0 until 4).map { _ =>

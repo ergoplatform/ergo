@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "6.0.3"
+  version: "6.0.4"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1258,12 +1258,12 @@ components:
       description: commitment to secret along with secret (!) randomness
       allOf:     # Combines the Commitment and the inline model
         - $ref: '#/components/schemas/Commitment'
-          type: object
+        - type: object
           required:
             - secret
           properties:
-          secret:
-            type: string
+            secret:
+              type: string
 
     SecretProven:
       type: object
@@ -5132,8 +5132,6 @@ paths:
 
   /mining/candidate:
     get:
-      security:
-        - ApiKeyAuth: [api_key]
       summary: Request block candidate
       operationId: miningRequestBlockCandidate
       tags:
@@ -5210,8 +5208,6 @@ paths:
 
   /mining/rewardAddress:
     get:
-      security:
-        - ApiKeyAuth: [api_key]
       summary: Read miner reward address
       operationId: miningReadMinerRewardAddress
       tags:
@@ -5232,8 +5228,6 @@ paths:
 
   /mining/rewardPublicKey:
     get:
-      security:
-        - ApiKeyAuth: [api_key]
       summary: Read public key associated with miner rewards
       operationId: miningReadMinerRewardPubkey
       tags:
@@ -5254,8 +5248,6 @@ paths:
 
   /mining/solution:
     post:
-      security:
-        - ApiKeyAuth: [api_key]
       summary: Submit solution for current candidate
       operationId: miningSubmitSolution
       tags:
@@ -5540,8 +5532,6 @@ paths:
 
   /script/p2sAddress:
     post:
-      security:
-        - ApiKeyAuth: [api_key]
       summary: Create P2SAddress from Sigma source
       operationId: scriptP2SAddress
       tags:
@@ -5574,8 +5564,6 @@ paths:
 
   /script/p2shAddress:
     post:
-      security:
-        - ApiKeyAuth: [api_key]
       summary: Create P2SHAddress from Sigma source
       operationId: scriptP2SHAddress
       tags:

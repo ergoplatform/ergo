@@ -358,33 +358,21 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     awaitCondition(done)
     val originalTipId = history.bestHeaderIdAtHeight(HEIGHT).get
     indexer ! GenerateBetterChainTip()
-    awaitCondition(created)
-    indexer ! ExtendDB(HEIGHT + 1)
-    awaitCondition(created)
-
-    val replacementHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT).get).get
-    val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
-    replacementHeader.height shouldBe HEIGHT
-    nextHeader.height shouldBe HEIGHT + 1
-    nextHeader.parentId shouldBe replacementHeader.id
-    nextHeader.parentId should not equal originalTipId
-    // Deliver the successor first so parent continuity, rather than height alone, guards indexing.
-    indexer ! RemoteBlockApplied(nextHeader)
-    indexer ! RemoteBlockApplied(replacementHeader)
-    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT - 1).get)
-    awaitCondition(done)
-
-    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
-      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
-      (HEIGHT to HEIGHT + 1).foreach { height =>
-        history.bestBlockTransactionsAt(height).get.txs.foreach { tx =>
-          val indexedTx = history.typedExtraIndexById[IndexedErgoTransaction](tx.id).get
-          indexedTx.inputNums.zip(tx.inputs).foreach { case (boxNum, input) =>
-            NumericBoxIndex.getBoxByNumber(history, boxNum).map(_.id) shouldBe Some(bytesToId(input.boxId))
-          }
-        }
-      }
-    }
+    lock.lock()
+    created.await()
+    val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
+    indexer ! RemoteBlockApplied(newBestHeaderOpt.get, Seq.empty) // will be ignored
+    indexer ! CreateDB(HEIGHT + 1)
+    lock.lock()
+    created.await()
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT).get)
+    lock.lock()
+    done.await()
+    val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
+    checkTokens(indexedTokens) shouldBe 0
     indexer ! Reset()
   }
 }

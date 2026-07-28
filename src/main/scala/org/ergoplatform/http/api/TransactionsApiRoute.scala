@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
@@ -37,11 +37,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   val boxId: Directive1[BoxId] = pathPrefix(Segment).flatMap(handleBoxId)
 
   private def handleBoxId(value: String): Directive1[BoxId] = {
-    ADKey @@ Base16.decode(value) match {
-      case Success(boxId) =>
-        provide(boxId)
+    Base16.decode(value) match {
+      case Success(boxId) if boxId.length == Constants.ModifierIdSize =>
+        provide(ADKey @@ boxId)
       case _ =>
-        reject(ValidationRejection(s"boxId $value is invalid, it should be hex string"))
+        reject(ValidationRejection(s"boxId $value is invalid, it should be 64 chars long hex string"))
     }
   }
 
@@ -49,7 +49,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   private def handleTokenId(value: String): Directive1[TokenId] = {
     Algos.decode(value) match {
-      case Success(tokenId) =>
+      case Success(tokenId) if tokenId.length == Constants.ModifierIdSize =>
         provide(tokenId.toTokenId)
       case _ =>
         reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))

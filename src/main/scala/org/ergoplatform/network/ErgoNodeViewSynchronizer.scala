@@ -1429,7 +1429,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     // Locally mined block applied - skip broadcast (already done via NewBlockMined)
-    case LocalBlockApplied(header) =>
+    case LocalBlockApplied(header, _) =>
       log.debug(
         s"Local block applied at height ${header.height}, " +
         s"header id: ${header.encodedId}, skipping broadcast"
@@ -1440,7 +1440,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       processFirstTxProcessingCacheRecord() // resume cache processing
 
     // Peer-received block applied - broadcast to our peers
-    case RemoteBlockApplied(header) =>
+    case RemoteBlockApplied(header, _) =>
       if (header.isNew(2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
         header.sectionIds.foreach { case (mtId, id) =>

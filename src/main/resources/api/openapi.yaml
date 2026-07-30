@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "6.0.2"
+  version: "6.0.3"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -1869,10 +1869,10 @@ components:
       properties:
         pass:
           type: string
-          description: Password to encrypt wallet file with
+          description: Spending password used to encrypt the wallet secret storage on disk. Required on every /wallet/unlock afterwards. Not recoverable — losing it means restoring from the mnemonic.
         mnemonicPass:
           type: string
-          description: Optional pass to password-protect mnemonic seed
+          description: "Optional BIP-39 passphrase (a.k.a. 25th word) that is mixed into the seed derivation. Distinct from `pass`: it is NOT stored by the node and MUST be supplied again on restore. Empty/omitted means no passphrase."
 
     InitWalletResult:
       type: object
@@ -1892,16 +1892,16 @@ components:
       properties:
         pass:
           type: string
-          description: Password to encrypt wallet file with
+          description: Spending password used to encrypt the wallet secret storage on disk. Required on every /wallet/unlock afterwards. Not recoverable — losing it means restoring from the mnemonic.
         mnemonic:
           type: string
-          description: Mnemonic seed
+          description: BIP-39 mnemonic seed phrase (space-separated words) the wallet will be restored from.
         mnemonicPass:
           type: string
-          description: Optional pass to password-protect mnemonic seed
+          description: Optional BIP-39 passphrase (a.k.a. 25th word) mixed into the seed derivation. Distinct from `pass` and not stored by the node. Must match the value used when the mnemonic was originally generated, otherwise a different wallet will be restored silently.
         usePre1627KeyDerivation:
           type: boolean
-          description: use incorrect(previous) BIP32 key derivation (see https://github.com/ergoplatform/ergo/issues/1627 for details). It's recommended to set to 'true' if the original wallet was created by ergo node before v4.0.105.
+          description: Use the legacy (pre-EIP-3) BIP-32 key derivation that was the default before node v4.0.105. Set `true` only when restoring a wallet originally created on an older node; new wallets should use `false`. See https://github.com/ergoplatform/ergo/issues/1627 for details.
 
     CheckWallet:
       type: object
@@ -1931,7 +1931,7 @@ components:
       properties:
         derivationPath:
           type: string
-          description: Derivation path for a new secret to derive
+          description: BIP-32 derivation path of the secret to derive, relative to the wallet root. Apostrophe denotes hardened indices. Example below uses a short path; a typical EIP-3 path looks like `m/44'/429'/0'/0/3`.
           example: 'm/1/2'
 
     DeriveKeyResult:
@@ -1950,7 +1950,7 @@ components:
       properties:
         derivationPath:
           type: string
-          description: Derivation path of the resulted secret
+          description: BIP-32 derivation path that was picked for the newly derived key.
           example: 'm/1/2'
         address:
           $ref: '#/components/schemas/ErgoAddress'
@@ -2474,6 +2474,24 @@ components:
         $ref: '#/components/schemas/IndexedErgoTransaction'
 
 
+    MiningRequest:
+      description: Request to generate a block candidate with transactions and custom miner public key
+      type: object
+      required:
+        - txs
+        - pk
+      properties:
+        txs:
+          description: Transactions to include in the block candidate
+          type: array
+          items:
+            $ref: '#/components/schemas/ErgoTransaction'
+        pk:
+          description: Hexadecimal representation of public key to use as minerPk
+          type: string
+          format: base16
+          example: '020000000000000000000000000000000000000000000000000000000000000001'
+
     FeeHistogramBin:
       description: Fee histogram bin
       type: object
@@ -2702,6 +2720,8 @@ paths:
                 $ref: '#/components/schemas/ApiError'
 
     post:
+      security:
+        - ApiKeyAuth: [api_key]
       summary: Send a mined block
       operationId: sendMinedBlock
       tags:
@@ -4188,6 +4208,11 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Initialize new wallet with randomly generated seed
+      description: |
+        Initializes a brand new wallet by generating a fresh BIP-39 mnemonic seed phrase on the server.
+        The seed is encrypted on disk with `pass` and the returned mnemonic is the ONLY copy — the caller
+        must back it up, the node will not show it again. Fails if a wallet file already exists;
+        use `/wallet/restore` to overwrite from a known mnemonic instead.
       operationId: walletInit
       tags:
         - wallet
@@ -4216,6 +4241,11 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Create new wallet from existing mnemonic seed
+      description: |
+        Creates a wallet from a mnemonic the caller already has (e.g. one previously returned by
+        `/wallet/init`, or generated elsewhere). The mnemonic is converted to a BIP-32 seed
+        (optionally salted with `mnemonicPass`) and the resulting secret is encrypted on disk
+        with `pass`. Note the `usePre1627KeyDerivation` flag — see its field description.
       operationId: walletRestore
       tags:
         - wallet
@@ -4393,6 +4423,11 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Derive new key according to a provided path
+      description: |
+        Derives a new secret key at the BIP-32 path supplied by the caller and returns its P2PK address.
+        The wallet must be unlocked. The path is relative to the wallet's root and uses standard
+        BIP-32 notation (e.g. `m/44'/429'/0'/0/1`, with apostrophe denoting hardened indices).
+        The derived key is stored by the wallet so subsequent calls to `/wallet/addresses` will include it.
       operationId: walletDeriveKey
       tags:
         - wallet
@@ -4421,6 +4456,10 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Derive next key
+      description: |
+        Derives the next sequential key after the highest-index key already known to the wallet,
+        following EIP-3 (`m/44'/429'/0'/0/N`, where `N` is the next unused account-chain index).
+        Convenience wrapper over `/wallet/deriveKey` that picks the path for you. Wallet must be unlocked.
       operationId: walletDeriveNextKey
       tags:
         - wallet
@@ -5127,6 +5166,34 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Transactions'
+      responses:
+        '200':
+          description: External candidate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkMessage'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /mining/candidateWithTxsAndPk:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Request block candidate with mandatory transactions and custom miner public key
+      operationId: miningRequestBlockCandidateWithMandatoryTransactionsAndPk
+      tags:
+        - mining
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MiningRequest'
       responses:
         '200':
           description: External candidate

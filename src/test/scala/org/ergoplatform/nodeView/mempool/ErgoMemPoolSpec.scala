@@ -12,8 +12,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base16
 import sigma.ast.ByteArrayConstant
+import sigma.Colls
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigma.serialization.{ErgoTreeSerializer, SerializerException}
+import sigmastate.eval.Extensions._
+
+import scala.collection.immutable.TreeMap
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 
 class ErgoMemPoolSpec extends AnyFlatSpec
   with ErgoTestHelpers
@@ -239,6 +244,70 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
       pool = newPool
     }
+  }
+
+  // Regression test for https://github.com/ergoplatform/ergo/issues/1448
+  it should "accept chained unconfirmed transactions with minted tokens (issue #1448)" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    // Pick a spendable box from the UTXO state (anyoneCanSpend / TrueTree)
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+
+    // TX1: Mint a new token. Per Ergo rules, the token ID must equal the first input's boxId.
+    val mintedTokenId = inputBox.id
+    val mintedTokenAmount = 1000L
+    val tx1ValueOut = inputBox.value - 100000L // leave room for fee
+    val tx1FeeOut = new ErgoBoxCandidate(100000L, feeProp, creationHeight = 0)
+    val tx1TokenOut = new ErgoBoxCandidate(
+      tx1ValueOut,
+      TrueTree,
+      creationHeight = 0,
+      additionalTokens = Colls.fromItems((mintedTokenId.toTokenId, mintedTokenAmount))
+    )
+    val tx1 = ErgoTransaction(
+      IndexedSeq(new Input(inputBox.id, emptyProverResult)),
+      IndexedSeq(tx1TokenOut, tx1FeeOut)
+    )
+
+    // Verify TX1 is stateless-valid (correct asset minting)
+    tx1.statelessValidity().isSuccess shouldBe true
+
+    // Process TX1 through the mempool — should be accepted
+    val pool0 = ErgoMemPool.empty(settings)
+    val (pool1, tx1Outcome) = pool0.process(UnconfirmedTransaction(tx1, None), wus)
+    tx1Outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool1.modifierById(tx1.id) shouldBe defined
+
+    // TX2: Spend the token-carrying output of TX1 (which is still unconfirmed).
+    // This is the exact scenario from issue #1448: the token was minted in TX1 and
+    // TX2 tries to transfer it while TX1 is only in the mempool.
+    // Before the fix, verifyAssets() would return inAmount = -1 because the
+    // augmented UTXO view did not correctly surface tokens from unconfirmed outputs.
+    val tx1Output = tx1.outputs.head // the box carrying the minted token
+    val tx2ValueOut = tx1Output.value - 100000L
+    val tx2FeeOut = new ErgoBoxCandidate(100000L, feeProp, creationHeight = 0)
+    val tx2TokenOut = new ErgoBoxCandidate(
+      tx2ValueOut,
+      TrueTree,
+      creationHeight = 0,
+      additionalTokens = Colls.fromItems((mintedTokenId.toTokenId, mintedTokenAmount))
+    )
+    val tx2 = ErgoTransaction(
+      IndexedSeq(new Input(tx1Output.id, emptyProverResult)),
+      IndexedSeq(tx2TokenOut, tx2FeeOut)
+    )
+
+    tx2.statelessValidity().isSuccess shouldBe true
+
+    // Process TX2 through the mempool — historically failed with:
+    // "For every token, its amount in outputs should not exceed its amount in inputs. Amount in = -1, out = 1000"
+    val (pool2, tx2Outcome) = pool1.process(UnconfirmedTransaction(tx2, None), wus)
+    tx2Outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool2.modifierById(tx2.id) shouldBe defined
   }
 
   it should "consider families for replacement policy" in {
@@ -526,6 +595,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
   }
 
+<<<<<<< HEAD
 
   it should "return minimal fee from getRecommendedFee when no statistics is collected" in {
     val pool = ErgoMemPool.empty(settings)
@@ -582,6 +652,314 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // at most 2 * measurementIntervalMsec per pool position (with takenTxns = 1)
     val waitTimeMs = pool.getExpectedWaitTime(0, 1024)
     waitTimeMs should be <= 2L * MemPoolStatistics.measurementIntervalMsec * posInPool
+=======
+  it should "return random transactions" in {
+    val txs = (1 to 10).map(_ => invalidErgoTransactionGen.sample.get)
+      .map(tx => UnconfirmedTransaction(tx, None))
+    var pool = ErgoMemPool.empty(settings)
+    txs.foreach { tx =>
+      pool = pool.put(tx)
+    }
+    pool.size shouldBe 10
+
+    // Request fewer transactions than present
+    val random3 = pool.random(3)
+    random3.size shouldBe 3
+    random3.foreach { tx =>
+      pool.contains(tx.transaction.id) shouldBe true
+    }
+
+    // Request more than present — should return all
+    val random20 = pool.random(20)
+    random20.size shouldBe 10
+    random20.map(_.transaction.id).toSet shouldBe txs.map(_.transaction.id).toSet
+  }
+
+  it should "track invalidated transactions" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
+    var pool = ErgoMemPool.empty(settings)
+    txs.foreach { tx =>
+      pool = pool.put(tx)
+    }
+
+    val tx = txs.head
+    pool.isInvalidated(tx.transaction.id) shouldBe false
+    pool = pool.invalidate(tx)
+    pool.isInvalidated(tx.transaction.id) shouldBe true
+    pool.contains(tx.transaction.id) shouldBe false
+
+    pool.isInvalidated(scorex.util.ModifierId @@ "nonexistent") shouldBe false
+  }
+
+  it should "reject blacklisted transactions" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+    val txs = validTransactionsFromUtxoState(wus).map(tx => UnconfirmedTransaction(tx, None))
+    val tx = txs.head
+
+    val blacklistedSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        blacklistedTransactions = Seq(tx.transaction.id)
+      )
+    )
+    val pool = ErgoMemPool.empty(blacklistedSettings)
+    val (_, outcome) = pool.process(tx, wus)
+    outcome.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
+    outcome.asInstanceOf[ProcessingOutcome.Invalidated]
+      .e.getMessage.contains("blacklisted tx") shouldBe true
+  }
+
+  it should "decline transaction with missing UTXOs" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+    val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
+
+    // Create a fake box ID that does not exist in the state or mempool
+    val fakeBoxId: org.ergoplatform.ErgoBox.BoxId =
+      scorex.crypto.authds.ADKey @@ scorex.util.Random.randomBytes(32)
+    val tx = ErgoTransaction(
+      IndexedSeq(new Input(fakeBoxId, emptyProverResult)),
+      IndexedSeq(feeOut)
+    )
+
+    val pool = ErgoMemPool.empty(settings)
+    val (_, outcome) = pool.process(UnconfirmedTransaction(tx, None), wus)
+    outcome.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
+    outcome.asInstanceOf[ProcessingOutcome.Declined]
+      .e.getMessage.contains("not all utxos in place yet") shouldBe true
+  }
+
+  it should "replace multiple double-spending transactions when new one pays more" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    // Use fee-per-byte sorting so weight comparison is deterministic and fair
+    val byteSortSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(mempoolSorting = SortingOption.FeePerByte)
+    )
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val trueTree = TrueTree
+
+    // Pick two anyone-can-spend boxes
+    val trueBoxes = wus.takeBoxes(100).filter(_.ergoTree == trueTree).take(2)
+    trueBoxes.size shouldBe 2
+    val boxA = trueBoxes.head
+    val boxB = trueBoxes(1)
+
+    // TX1 spends BoxA with low fee (small value kept, rest as fee)
+    val tx1FeeOut = new ErgoBoxCandidate(boxA.value - 100000L, feeProp, creationHeight = 0)
+    val tx1ChangeOut = new ErgoBoxCandidate(100000L, trueTree, creationHeight = 0)
+    val tx1 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(new Input(boxA.id, emptyProverResult)),
+      IndexedSeq(tx1FeeOut, tx1ChangeOut)
+    ), None)
+
+    // TX2 spends BoxB with low fee
+    val tx2FeeOut = new ErgoBoxCandidate(boxB.value - 100000L, feeProp, creationHeight = 0)
+    val tx2ChangeOut = new ErgoBoxCandidate(100000L, trueTree, creationHeight = 0)
+    val tx2 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(new Input(boxB.id, emptyProverResult)),
+      IndexedSeq(tx2FeeOut, tx2ChangeOut)
+    ), None)
+
+    // TX3 spends both BoxA and BoxB with very high fee (almost all value)
+    val tx3FeeOut = new ErgoBoxCandidate(boxA.value + boxB.value - 100000L, feeProp, creationHeight = 0)
+    val tx3ChangeOut = new ErgoBoxCandidate(100000L, trueTree, creationHeight = 0)
+    val tx3 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(
+        new Input(boxA.id, emptyProverResult),
+        new Input(boxB.id, emptyProverResult)
+      ),
+      IndexedSeq(tx3FeeOut, tx3ChangeOut)
+    ), None)
+
+    tx3.transaction.statelessValidity().isSuccess shouldBe true
+
+    var pool = ErgoMemPool.empty(byteSortSettings)
+    val (pool1, outcome1) = pool.process(tx1, wus)
+    outcome1.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    val (pool2, outcome2) = pool1.process(tx2, wus)
+    outcome2.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool = pool2
+    pool.size shouldBe 2
+
+    // TX3 pays more fee per byte than TX1 and TX2 on average, so it should replace them
+    val (poolAfter, outcome) = pool.process(tx3, wus)
+    outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    poolAfter.size shouldBe 1
+    poolAfter.contains(tx3.transaction.id) shouldBe true
+    poolAfter.contains(tx1.transaction.id) shouldBe false
+    poolAfter.contains(tx2.transaction.id) shouldBe false
+
+    // After TX3 replaces TX1+TX2, a lower-fee double-spender should be detected and rejected
+    val tx4FeeOut = new ErgoBoxCandidate(boxA.value - 200000L, feeProp, creationHeight = 0)
+    val tx4ChangeOut = new ErgoBoxCandidate(boxB.value + 200000L, trueTree, creationHeight = 0)
+    val tx4 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(
+        new Input(boxA.id, emptyProverResult),
+        new Input(boxB.id, emptyProverResult)
+      ),
+      IndexedSeq(tx4FeeOut, tx4ChangeOut)
+    ), None)
+
+    tx4.transaction.statelessValidity().isSuccess shouldBe true
+
+    val (poolFinal, outcome4) = poolAfter.process(tx4, wus)
+    outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+    poolFinal.size shouldBe 1
+    poolFinal.contains(tx3.transaction.id) shouldBe true
+  }
+
+  it should "not produce duplicate ids when stale registry entry prevents proper removal" in {
+    // TreeMap requires an Ordering for WeightedTxId keys
+    implicit val wtxOrdering: Ordering[WeightedTxId] = Ordering.by(wtx => (-wtx.weight, wtx.id))
+
+    val tx = invalidErgoTransactionGen.sample.get
+    val now = System.currentTimeMillis()
+    val utx = UnconfirmedTransaction(tx, None)
+
+    // Create two WeightedTxIds for the same transaction with different weights.
+    // WeightedTxId.equals uses only 'id', but Ordering[WeightedTxId] compares (-weight, id).
+    // Therefore TreeMap treats them as distinct keys, allowing the same transaction
+    // to exist under multiple keys.
+    val wtxStale = WeightedTxId(tx.id, 100, 100, now)
+    val wtxActual = WeightedTxId(tx.id, 200, 200, now)
+
+    // Verify the structural vulnerability
+    wtxStale shouldBe wtxActual
+    wtxOrdering.compare(wtxStale, wtxActual) should not be 0
+
+    // Simulate an out-of-sync state: registry points to wtxStale,
+    // but orderedTransactions stores the tx under wtxActual.
+    // This can happen after updateFamily or other weight changes
+    // fail to keep the two collections in sync.
+    val emptyPool = OrderedTxPool.empty(settings)
+    val brokenPool = new OrderedTxPool(
+      TreeMap(wtxActual -> utx),
+      TreeMap(tx.id -> wtxStale),
+      emptyPool.invalidatedTxIds,
+      emptyPool.outputs,
+      emptyPool.inputs
+    )(settings)
+
+    // pool.get traverses registry -> wtxStale -> orderedTransactions,
+    // but wtxStale is not a key in orderedTransactions, so get returns None.
+    brokenPool.get(tx.id) shouldBe None
+
+    // Yet the transaction IS present under wtxActual
+    brokenPool.orderedTransactions.valuesIterator.toSeq.map(_.id) should contain(tx.id)
+
+    val mempool = new ErgoMemPool(
+      brokenPool,
+      MemPoolStatistics(now, 0, now, 0),
+      SortingOption.FeePerByte
+    )(settings)
+
+    // invalidate() first tries pool.get (returns None), then falls back to
+    // scanning orderedTransactions.valuesIterator. It finds the tx and calls
+    // OrderedTxPool.invalidate(utx). Inside that method,
+    // transactionsRegistry.get(tx.id) returns Some(wtxStale).
+    // With the fix, the stale entry is detected (wtxStale not in orderedTransactions)
+    // and the fallback path filters orderedTransactions by transaction id.
+    val afterInvalidate = mempool.invalidate(tx.id)
+
+    // Transaction is properly removed from orderedTransactions despite stale registry
+    afterInvalidate.pool.orderedTransactions.valuesIterator.toSeq.map(_.id) should not contain(tx.id)
+    afterInvalidate.pool.transactionsRegistry.contains(tx.id) shouldBe false
+
+    // Now put the same transaction again. With no registry entry, put()
+    // creates a NEW WeightedTxId based on the actual feeFactor.
+    val afterPut = afterInvalidate.put(utx)
+
+    // Only ONE entry for the transaction ID exists
+    afterPut.pool.orderedTransactions.valuesIterator.toSeq.count(_.id == tx.id) shouldBe 1
+
+    // getAll (used by /transactions/unconfirmed/transactionIds) returns no duplicates
+    val all = afterPut.getAll
+    all.count(_.id == tx.id) shouldBe 1
+    all.map(_.id).distinct.size shouldBe 1
+  }
+
+  it should "detect double spend after replace-by-fee replacement" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val trueTree = TrueTree
+
+    // Pick two anyone-can-spend boxes
+    val trueBoxes = wus.takeBoxes(100).filter(_.ergoTree == trueTree).take(2)
+    trueBoxes.size shouldBe 2
+    val boxA = trueBoxes.head
+    val boxB = trueBoxes(1)
+
+    // TX1 spends BoxA with moderate fee
+    val tx1FeeOut = new ErgoBoxCandidate(boxA.value - 200000L, feeProp, creationHeight = 0)
+    val tx1ChangeOut = new ErgoBoxCandidate(200000L, trueTree, creationHeight = 0)
+    val tx1 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(new Input(boxA.id, emptyProverResult)),
+      IndexedSeq(tx1FeeOut, tx1ChangeOut)
+    ), None)
+
+    // TX2 spends BoxB with moderate fee
+    val tx2FeeOut = new ErgoBoxCandidate(boxB.value - 200000L, feeProp, creationHeight = 0)
+    val tx2ChangeOut = new ErgoBoxCandidate(200000L, trueTree, creationHeight = 0)
+    val tx2 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(new Input(boxB.id, emptyProverResult)),
+      IndexedSeq(tx2FeeOut, tx2ChangeOut)
+    ), None)
+
+    // TX3 spends both BoxA and BoxB with very high fee, replacing TX1 and TX2
+    val tx3FeeOut = new ErgoBoxCandidate(boxA.value + boxB.value - 200000L, feeProp, creationHeight = 0)
+    val tx3ChangeOut = new ErgoBoxCandidate(200000L, trueTree, creationHeight = 0)
+    val tx3 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(
+        new Input(boxA.id, emptyProverResult),
+        new Input(boxB.id, emptyProverResult)
+      ),
+      IndexedSeq(tx3FeeOut, tx3ChangeOut)
+    ), None)
+
+    // TX4 spends both BoxA and BoxB with tiny fee — should lose to TX3
+    val tx4FeeOut = new ErgoBoxCandidate(200000L, feeProp, creationHeight = 0)
+    val tx4ChangeOut = new ErgoBoxCandidate(boxA.value + boxB.value - 200000L, trueTree, creationHeight = 0)
+    val tx4 = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(
+        new Input(boxA.id, emptyProverResult),
+        new Input(boxB.id, emptyProverResult)
+      ),
+      IndexedSeq(tx4FeeOut, tx4ChangeOut)
+    ), None)
+
+    var pool = ErgoMemPool.empty(settings)
+    val (pool1, outcome1) = pool.process(tx1, wus)
+    outcome1.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    val (pool2, outcome2) = pool1.process(tx2, wus)
+    outcome2.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    pool = pool2
+    pool.size shouldBe 2
+
+    // TX3 replaces TX1 and TX2
+    val (poolAfter, outcome3) = pool.process(tx3, wus)
+    outcome3.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    poolAfter.size shouldBe 1
+    poolAfter.contains(tx3.transaction.id) shouldBe true
+
+    // After replacement, TX4 (lower fee) should be rejected as double-spending loser
+    val (_, outcome4) = poolAfter.process(tx4, wus)
+    outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+>>>>>>> origin/master
   }
 
 }

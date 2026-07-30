@@ -23,7 +23,7 @@ case class RESTApiSettings(
 case class NetworkSettings(
   nodeName: String,
   addedMaxDelay: Option[FiniteDuration],
-  localOnly: Boolean,
+  allowLocal: Boolean,
   knownPeers: Seq[InetSocketAddress],
   bannedPeers: Seq[InetSocketAddress],
   bindAddress: InetSocketAddress,
@@ -109,9 +109,31 @@ object ScorexSettings extends ScorexLogging with SettingsReaders {
     fromConfig(readConfigFromPath(userConfigPath, configPath))
   }
 
+  private def withLocalOnlyFallback(config: Config): Config = {
+    val allowLocalPath = s"$configPath.network.allowLocal"
+    val localOnlyPath = s"$configPath.network.localOnly"
+
+    if (config.hasPath(localOnlyPath) && !config.hasPath(allowLocalPath)) {
+      log.warn(
+        s"Deprecated config key '$localOnlyPath' detected. " +
+          s"Please migrate to '$allowLocalPath'. " +
+          s"Falling back to '$allowLocalPath = ${config.getBoolean(localOnlyPath)}'."
+      )
+      ConfigFactory
+        .parseString(s"$allowLocalPath = ${config.getBoolean(localOnlyPath)}")
+        .withFallback(config)
+        .resolve()
+    } else {
+      config
+    }
+  }
+
   def fromConfig(config: Config): ScorexSettings = {
-    config
+    val effectiveConfig = withLocalOnlyFallback(config)
+
+    effectiveConfig
       .as[ScorexSettings](configPath)
       .ensuring(_.network.magicBytes.length == MagicLength)
   }
+
 }

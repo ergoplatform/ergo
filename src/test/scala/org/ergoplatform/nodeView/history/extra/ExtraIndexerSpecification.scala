@@ -261,9 +261,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val blocks = (1 to HEIGHT + 2).map(height => history.bestBlockTransactionsAt(height).get)
     val expectedTxCount = blocks.map(_.txs.size.toLong).sum
     val expectedBoxCount = blocks.flatMap(_.txs).map(_.outputs.size.toLong).sum
-    indexer ! RemoteBlockApplied(firstHeader)
-    indexer ! RemoteBlockApplied(firstHeader)
-    indexer ! RemoteBlockApplied(secondHeader)
+    indexer ! RemoteBlockApplied(firstHeader, history.getFullBlock(firstHeader).get.transactions.map(_.id))
+    indexer ! RemoteBlockApplied(firstHeader, history.getFullBlock(firstHeader).get.transactions.map(_.id))
+    indexer ! RemoteBlockApplied(secondHeader, history.getFullBlock(secondHeader).get.transactions.map(_.id))
 
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       val state = IndexerState.fromHistory(_history)
@@ -356,7 +356,6 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
     awaitCondition(done)
-    val originalTipId = history.bestHeaderIdAtHeight(HEIGHT).get
     indexer ! GenerateBetterChainTip()
     lock.lock()
     created.await()

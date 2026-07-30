@@ -1258,12 +1258,12 @@ components:
       description: commitment to secret along with secret (!) randomness
       allOf:     # Combines the Commitment and the inline model
         - $ref: '#/components/schemas/Commitment'
-          type: object
+        - type: object
           required:
             - secret
           properties:
-          secret:
-            type: string
+            secret:
+              type: string
 
     SecretProven:
       type: object

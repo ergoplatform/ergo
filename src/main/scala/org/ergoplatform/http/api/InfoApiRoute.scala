@@ -1,7 +1,6 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.model.ContentTypes
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._

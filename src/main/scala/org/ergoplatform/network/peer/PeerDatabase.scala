@@ -94,7 +94,7 @@ final class PeerDatabase(
    * from the store to keep the DB trimmed).
    */
   private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
-    val (oversizedKeysRev, validPeersRev) =
+    val (oversizedKeys, validPeers) =
       persistentStore.getAll.toVector.foldLeft(
         (List.empty[Array[Byte]], List.empty[LoadedPeer])
       ) { case ((badKeys, goodPeers), (addr, peer)) =>
@@ -118,11 +118,7 @@ final class PeerDatabase(
         }
       }
 
-    val oversizedKeys = oversizedKeysRev.reverse
-    val validPeers    = validPeersRev.reverse
-
-    val sorted       = validPeers.sortBy(_.lastHandshake)(Ordering[Long].reverse)
-    val (kept, drop) = sorted.splitAt(maxKnownPeers)
+    val (kept, drop) = validPeers.splitAt(maxKnownPeers)
     val keysToRemove = oversizedKeys ++ drop.map(_.keyBytes)
 
     flushKeysToRemove(keysToRemove.toArray)

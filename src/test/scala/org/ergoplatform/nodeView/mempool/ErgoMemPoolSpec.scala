@@ -595,7 +595,6 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
   }
 
-<<<<<<< HEAD
 
   it should "return minimal fee from getRecommendedFee when no statistics is collected" in {
     val pool = ErgoMemPool.empty(settings)
@@ -652,7 +651,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // at most 2 * measurementIntervalMsec per pool position (with takenTxns = 1)
     val waitTimeMs = pool.getExpectedWaitTime(0, 1024)
     waitTimeMs should be <= 2L * MemPoolStatistics.measurementIntervalMsec * posInPool
-=======
+  }
   it should "return random transactions" in {
     val txs = (1 to 10).map(_ => invalidErgoTransactionGen.sample.get)
       .map(tx => UnconfirmedTransaction(tx, None))
@@ -959,7 +958,6 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // After replacement, TX4 (lower fee) should be rejected as double-spending loser
     val (_, outcome4) = poolAfter.process(tx4, wus)
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
->>>>>>> origin/master
   }
 
 }

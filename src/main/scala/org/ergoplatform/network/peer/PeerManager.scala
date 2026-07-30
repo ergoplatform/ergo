@@ -1,6 +1,7 @@
 package org.ergoplatform.network.peer
 
 import java.net.{InetAddress, InetSocketAddress}
+import java.util.concurrent.ThreadLocalRandom
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
   DisconnectedPeer,
@@ -178,28 +179,45 @@ object PeerManager {
       */
     case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] with ScorexLogging {
 
-      val limit: Long = 3 * 60 * 60 * 1000 // 3h
+      val limit: Long = 3.hours.toMillis // 3h
+
+      private val ScanBudgetMultiplier = 8
+      private val MinScanBudget = 256
 
       override def choose(knownPeers: Map[InetSocketAddress, PeerInfo],
                           blacklistedPeers: Seq[InetAddress],
                           sc: ScorexContext): Seq[PeerInfo] = {
-        val nonBlacklisted = knownPeers.values.toSeq
-          .filter { p =>
-            (p.connectionType.isDefined || p.lastHandshake > 0) &&
-              !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
-          }
-
-        val recentlySeenNonBlacklisted = nonBlacklisted.filter { p =>
-          (System.currentTimeMillis() - p.lastStoredActivityTime < limit)
-        }
-
-        if (recentlySeenNonBlacklisted.nonEmpty) {
-          val res = Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
-          log.debug(s"Sending ${res.length} active peers: " + res)
-          res
+        if (howMany <= 0 || knownPeers.isEmpty) {
+          Seq.empty
         } else {
-          val res = Random.shuffle(nonBlacklisted).take(howMany)
-          log.debug(s"Sending ${res.length} known peers: " + res)
+          val scanBudget = math.max(howMany * ScanBudgetMultiplier, MinScanBudget)
+          val size = knownPeers.size
+          val window = math.min(scanBudget, size)
+          val start =
+            if (window == size) {
+              0
+            } else {
+              ThreadLocalRandom.current().nextInt(size - window + 1)
+            }
+
+          val now = System.currentTimeMillis()
+          val cutoff = now - limit
+
+          def isBlacklisted(p: PeerInfo): Boolean =
+            blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
+
+          val candidates = knownPeers.valuesIterator
+            .drop(start)
+            .take(window)
+            .toSeq
+            .filter { p =>
+              (p.connectionType.isDefined || p.lastHandshake > 0) && !isBlacklisted(p)
+            }
+
+          val recentCandidates = candidates.filter(_.lastStoredActivityTime > cutoff)
+          val chosen = if (recentCandidates.nonEmpty) recentCandidates else candidates
+          val res = Random.shuffle(chosen).take(howMany)
+          log.debug(s"Sending ${res.length} peers (scanned $window of $size, window $start-${start + window})")
           res
         }
       }

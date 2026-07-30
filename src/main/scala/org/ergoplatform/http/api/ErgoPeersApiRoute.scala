@@ -29,6 +29,8 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
 
   override implicit lazy val timeout: Timeout = Timeout(1.minute)
 
+  private val DefaultPeersPageSize = 50
+
   override lazy val route: Route = pathPrefix("peers") {
     allPeers ~ connectedPeers ~ blacklistedPeers ~ connect ~ peersStatus ~ syncInfo ~ trackInfo
   }
@@ -41,13 +43,22 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
     ApiResponse(deliveryTracker.fullInfo)
   }
 
-  def allPeers: Route = (path("all") & get) {
-    val result = askActor[Map[InetSocketAddress, PeerInfo]](peerManager, GetAllPeers).map {
-      _.map { case (address, peerInfo) =>
-        PeerInfoResponse.fromAddressAndInfo(address, peerInfo)
+  def allPeers: Route = (path("all") & get & parameters("limit".as[Int].optional, "offset".as[Int].optional)) {
+    (limitOpt, offsetOpt) =>
+      val limit  = limitOpt.getOrElse(DefaultPeersPageSize)
+      val offset = offsetOpt.getOrElse(0)
+      validate(offset >= 0 && limit > 0,
+               "limit and offset must be non-negative and limit must be positive") {
+        val result = askActor[Map[InetSocketAddress, PeerInfo]](peerManager, GetAllPeers).map { peers =>
+          peers.toSeq
+            .sortBy(_._1.toString)
+            .slice(offset, offset + limit)
+            .map { case (address, peerInfo) =>
+              PeerInfoResponse.fromAddressAndInfo(address, peerInfo)
+            }
+        }
+        ApiResponse(result)
       }
-    }
-    ApiResponse(result)
   }
 
   def connectedPeers: Route = (path("connected") & get) {

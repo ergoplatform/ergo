@@ -153,4 +153,29 @@ class PeerDatabaseSpec extends ErgoCorePropertyTest with DBSpec {
     }
   }
 
+  property("PeerDatabase should load only newest peers when persisted set exceeds cap") {
+    val dir = createTempDir
+    val dbSettings = testSettings(dir)
+    val addresses = (1 to 5).map(i => new InetSocketAddress(s"8.8.8.$i", 9000 + i))
+    try {
+      val db1 = new PeerDatabase(dbSettings, maxKnownPeers = 5)
+      addresses.zip(Seq(10L, 20L, 30L, 40L, 50L)).foreach { case (addr, ts) =>
+        db1.addOrUpdateKnownPeer(peerInfo(addr, ts))
+      }
+      db1.knownPeers should have size 5
+      db1.close()
+
+      val db2 = new PeerDatabase(dbSettings, maxKnownPeers = 3)
+      db2.knownPeers should have size 3
+      db2.knownPeers.keys should contain(addresses(2))
+      db2.knownPeers.keys should contain(addresses(3))
+      db2.knownPeers.keys should contain(addresses(4))
+      db2.knownPeers.keys should not contain addresses(0)
+      db2.knownPeers.keys should not contain addresses(1)
+      db2.close()
+    } finally {
+      deleteRecursive(dir)
+    }
+  }
+
 }

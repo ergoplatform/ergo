@@ -7,16 +7,16 @@ import java.io.{
   ObjectOutputStream
 }
 import java.net.{InetAddress, InetSocketAddress}
+import java.util.concurrent.ThreadLocalRandom
 import org.ergoplatform.settings.ErgoSettings
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
 
-import scala.util.Random
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
-  * In-memory peer database with .
+  * In-memory peer database with temporal blacklisting and peer count cap.
   */
 final class PeerDatabase(
   settings: ErgoSettings,
@@ -24,6 +24,26 @@ final class PeerDatabase(
 ) extends ScorexLogging {
 
   private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
+
+  /**
+    * Serialized peer info size must stay below this bound. The value is twice
+    * the maximum handshake size (8KB) to leave a comfortable margin while still
+    * preventing a single malformed/crafted entry from consuming a lot of memory.
+    */
+  private val MaxSerializedPeerInfoSize = 16384
+
+  /**
+    * Serialized peer address (InetSocketAddress Java serialization) size bound.
+    * Legitimate hostnames can be up to 253 characters, so leave plenty of headroom.
+    */
+  private val MaxSerializedPeerAddressSize = 1024
+
+  private case class LoadedPeer(
+    lastHandshake: Long,
+    address: InetSocketAddress,
+    peerInfo: PeerInfo,
+    keyBytes: Array[Byte]
+  )
 
   /**
     * banned peer ip -> ban expiration timestamp
@@ -40,8 +60,6 @@ final class PeerDatabase(
         log.error("Unable to load peers from database, loading from network only", ex)
         Map.empty[InetSocketAddress, PeerInfo]
     }
-
-  private val EvictionSampleSize = 32
 
   /**
     * penalized peer ip -> (accumulated penalty score, last penalty timestamp)
@@ -68,16 +86,57 @@ final class PeerDatabase(
   }
 
   /*
-   * Load peers from persistent storage
+   * Load peers from persistent storage.
+   *
+   * Enforces the in-memory cap and per-entry size limits at load time so a
+   * pre-existing or malformed DB cannot OOM the node on startup. Oversized or
+   * excess entries are dropped from the loaded set (and excess keys are removed
+   * from the store to keep the DB trimmed).
    */
   private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
-    var peers = Map.empty[InetSocketAddress, PeerInfo]
-    for ((addr, peer) <- persistentStore.getAll) {
-      val address  = deserialize(addr).asInstanceOf[InetSocketAddress]
-      val peerInfo = PeerInfoSerializer.parseBytes(peer)
-      peers += address -> peerInfo
+    val (oversizedKeysRev, validPeersRev) =
+      persistentStore.getAll.toVector.foldLeft(
+        (List.empty[Array[Byte]], List.empty[LoadedPeer])
+      ) { case ((badKeys, goodPeers), (addr, peer)) =>
+        if (addr.length > MaxSerializedPeerAddressSize || peer.length > MaxSerializedPeerInfoSize) {
+          log.warn(
+            s"Dropping oversized peer entry from database: key=${addr.length} bytes, " +
+            s"value=${peer.length} bytes"
+          )
+          (addr :: badKeys, goodPeers)
+        } else {
+          val addressTry  = Try(deserialize(addr).asInstanceOf[InetSocketAddress])
+          val peerInfoTry = PeerInfoSerializer.parseBytesTry(peer)
+          (addressTry, peerInfoTry) match {
+            case (Success(address), Success(peerInfo)) =>
+              val loaded = LoadedPeer(peerInfo.lastHandshake, address, peerInfo, addr)
+              (badKeys, loaded :: goodPeers)
+            case _ =>
+              log.warn(s"Unable to deserialize peer entry from database, skipping it")
+              (badKeys, goodPeers)
+          }
+        }
+      }
+
+    val oversizedKeys = oversizedKeysRev.reverse
+    val validPeers    = validPeersRev.reverse
+
+    val sorted       = validPeers.sortBy(_.lastHandshake)(Ordering[Long].reverse)
+    val (kept, drop) = sorted.splitAt(maxKnownPeers)
+    val keysToRemove = oversizedKeys ++ drop.map(_.keyBytes)
+
+    flushKeysToRemove(keysToRemove.toArray)
+    kept.map(p => p.address -> p.peerInfo).toMap
+  }
+
+  private def flushKeysToRemove(keys: Array[Array[Byte]]): Unit = {
+    if (keys.nonEmpty) {
+      persistentStore.remove(keys) match {
+        case Success(_) => // ok
+        case Failure(ex) =>
+          log.warn("Unable to remove dropped peer entries from persistent store", ex)
+      }
     }
-    peers
   }
 
   def get(peer: InetSocketAddress): Option[PeerInfo] = peers.get(peer)
@@ -118,20 +177,12 @@ final class PeerDatabase(
     candidateHandshake: Long,
     connectedPeers: Set[InetSocketAddress]
   ): Boolean = {
-    val oldest = randomPeerSample(EvictionSampleSize).foldLeft(
-      Option.empty[(InetSocketAddress, PeerInfo)]
-    ) { (acc, entry) =>
-      val (address, info) = entry
-      if (connectedPeers.contains(address)) {
-        acc
-      } else {
-        acc match {
-          case Some((_, oldestInfo)) if oldestInfo.lastHandshake <= info.lastHandshake =>
-            acc
-          case _ => Some(entry)
-        }
-      }
-    }
+    val EvictionSampleSize = 16
+    val oldest = randomPeerSample(EvictionSampleSize)
+      .filterNot { case (address, _) => connectedPeers.contains(address) }
+      .sortBy(_._2.lastHandshake)
+      .headOption
+
     oldest match {
       case Some((oldestAddress, oldestInfo))
           if candidateHandshake > oldestInfo.lastHandshake =>
@@ -147,15 +198,17 @@ final class PeerDatabase(
   }
 
   /**
-    * Select a uniform random sample of up to `sampleSize` peers using reservoir sampling.
+    * Select a small random slice of known peers to consider for eviction.
+    * The slice is contiguous in the map's iteration order and bounded by
+    * `sampleSize`, so the cost stays low even when the peer set is large.
     */
   private def randomPeerSample(sampleSize: Int): Seq[(InetSocketAddress, PeerInfo)] = {
     if (peers.isEmpty) {
       Seq.empty
     } else {
-      val start  = Random.nextInt(peers.size)
-      val finish = math.min(start + sampleSize, peers.size)
-      peers.slice(start, finish).toSeq
+      val sample = math.min(sampleSize, peers.size)
+      val start  = ThreadLocalRandom.current().nextInt(peers.size - sample + 1)
+      peers.slice(start, start + sample).toSeq
     }
   }
 
@@ -285,16 +338,16 @@ object PeerDatabase {
   /**
     * Hardcoded cap on the total number of known peers.
     */
-  val MaxKnownPeers: Int = 131072
+  val MaxKnownPeers: Int = 32768
 
   /**
     * Hardcoded maximum age (60 days) for a known peer's lastHandshake.
     */
-  val KnownPeerMaxAgeMs: Long = 60L * 24 * 60 * 60 * 1000
+  val KnownPeerMaxAgeMs: Long = 60.days.toMillis
 
   /**
     * Hardcoded interval (24 hours) between cleanup runs.
     */
-  val KnownPeerCleanupIntervalMs: Long = 24L * 60 * 60 * 1000
+  val KnownPeerCleanupIntervalMs: Long = 24.hours.toMillis
 
 }

@@ -24,7 +24,7 @@ object ErgoNodeGenerators {
   } yield {
     val chain = genHeaderChain(m * mulM + k, diffBitsOpt = None, useRealTs = false)
     val popowChain = popowHeaderChain(chain)
-    val params = PoPowParams(m, k, continuous = false)
+    val params = PoPowParams(m, k, continuous = false).get
     nipopowAlgos.prove(popowChain)(params).get
   }
 }

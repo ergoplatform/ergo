@@ -1585,6 +1585,7 @@ components:
       required:
         - header
         - interlinks
+        - interlinksProof
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
@@ -1593,6 +1594,46 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModifierId'
+        interlinksProof:
+          $ref: '#/components/schemas/BatchMerkleProof'
+
+    BatchMerkleProof:
+      type: object
+      description: Batch Merkle proof that the interlink vector corresponds to its header
+      required:
+        - indices
+        - proofs
+      properties:
+        indices:
+          description: Proven leaves, each with its index in the tree
+          type: array
+          items:
+            type: object
+            required:
+              - index
+              - digest
+            properties:
+              index:
+                description: Index of the leaf
+                type: integer
+              digest:
+                description: Base16-encoded hash of the leaf
+                type: string
+        proofs:
+          description: Hashes on the paths to the root, each with the side it is on
+          type: array
+          items:
+            type: object
+            required:
+              - digest
+              - side
+            properties:
+              digest:
+                description: Base16-encoded hash
+                type: string
+              side:
+                description: Side of the hash, 0 for left and 1 for right
+                type: integer
 
     NipopowProof:
       type: object

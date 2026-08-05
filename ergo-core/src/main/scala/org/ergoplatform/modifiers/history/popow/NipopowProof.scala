@@ -51,7 +51,9 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     */
   def isBetterThan(that: NipopowProof): Boolean = {
     try {
-      if (this.isValid && that.isValid) {
+      if (this.m != that.m || this.k != that.k) {
+        false
+      } else if (this.isValid && that.isValid) {
         popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
           .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
           .exists({ case (thisDivergingChain, thatDivergingChain) =>
@@ -72,12 +74,20 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   lazy val isValid: Boolean = {
-    PoPowParams.isValid(m, k) &&
+    this.hasValidParams &&
       this.hasValidConnections &&
       this.hasValidHeights &&
       this.hasValidProofs &&
       this.hasValidDifficultyHeaders &&
       this.hasValidPow
+  }
+
+  /**
+    * Checks proof parameters and the exact suffix cardinality before any
+    * parameter-dependent scoring or validation work.
+    */
+  lazy val hasValidParams: Boolean = {
+    PoPowParams.areValid(m, k) && suffixTail.lengthCompare(k - 1) == 0
   }
 
   /**
@@ -195,6 +205,7 @@ object NipopowProof {
 class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[NipopowProof] {
 
   override def serialize(obj: NipopowProof, w: Writer): Unit = {
+    require(obj.hasValidParams, "Invalid NiPoPoW proof parameters or suffix length")
     w.putUInt(obj.m.toLong)
     w.putUInt(obj.k.toLong)
     w.putUInt(obj.prefix.size.toLong)
@@ -218,6 +229,7 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
   override def parse(r: Reader): NipopowProof = {
     val m = r.getUInt().toIntExact
     val k = r.getUInt().toIntExact
+    PoPowParams.requireValid(m, k)
     val prefixSize = r.getUInt().toIntExact
     val prefix = (0 until prefixSize).map { _ =>
       val size = r.getUInt().toIntExact
@@ -226,6 +238,8 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
     val suffixHeadSize = r.getUInt().toIntExact
     val suffixHead = PoPowHeaderSerializer.parseBytes(r.getBytes(suffixHeadSize))
     val suffixSize = r.getUInt().toIntExact
+    require(suffixSize == k - 1,
+      s"NiPoPoW suffix length ${suffixSize + 1} does not match k parameter $k")
     val suffixTail = (0 until suffixSize).map { _ =>
       val size = r.getUInt().toIntExact
       HeaderSerializer.parseBytes(r.getBytes(size))

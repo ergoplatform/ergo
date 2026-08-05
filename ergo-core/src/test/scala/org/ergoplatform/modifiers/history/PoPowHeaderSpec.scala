@@ -4,11 +4,16 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.popow.PoPowHeader
 import org.ergoplatform.modifiers.history.popow.PoPowHeader.checkInterlinksProof
+import org.ergoplatform.modifiers.history.popow.PoPowHeaderSerializer
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.generators.ErgoCoreGenerators.defaultHeaderGen
 import org.scalacheck.Gen
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId}
+import scorex.util.encode.Base16
+
+import java.security.MessageDigest
+import scala.io.Source
 
 class PoPowHeaderSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
@@ -148,6 +153,30 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
       PoPowHeader(header.copy(height = 2, extensionRoot = extension.digest), unpacked, proof)
         .checkInterlinksProof() shouldBe false
     }
+  }
+
+  property("the cross-runtime full-root fixture round-trips and rejects mutations") {
+    val fixtureSource = Source.fromResource("nipopow-full-root-mixed-popow-header.json")
+    val fixtureText = try fixtureSource.mkString finally fixtureSource.close()
+    val fixture = io.circe.parser.parse(fixtureText).toOption.get.hcursor
+    val bytes = Base16.decode(fixture.get[String]("bytes_hex").toOption.get).get
+
+    bytes.length shouldBe fixture.get[Int]("length").toOption.get
+    Base16.encode(MessageDigest.getInstance("SHA-256").digest(bytes)) shouldBe
+      fixture.get[String]("sha256").toOption.get
+
+    val parsed = PoPowHeaderSerializer.parseBytes(bytes)
+    PoPowHeaderSerializer.toBytes(parsed) shouldBe bytes
+    Base16.encode(parsed.header.extensionRoot) shouldBe fixture.get[String]("extension_root").toOption.get
+    parsed.checkInterlinksProof() shouldBe true
+
+    val wrongRootBytes = parsed.header.extensionRoot.clone()
+    wrongRootBytes(0) = (wrongRootBytes(0) ^ 1).toByte
+    parsed.copy(header = parsed.header.copy(extensionRoot = Digest32 @@ wrongRootBytes))
+      .checkInterlinksProof() shouldBe false
+
+    parsed.copy(interlinks = parsed.interlinks.updated(1, deterministicId(3)))
+      .checkInterlinksProof() shouldBe false
   }
 
   property("empty interlinks proof is accepted for genesis") {

@@ -42,7 +42,16 @@ case class PoPowHeader(header: Header,
 
   def height: Int = header.height
 
-  def checkInterlinksProof(): Boolean = PoPowHeader.checkInterlinksProof(interlinks, interlinksProof)
+  def checkInterlinksProof(): Boolean = {
+    val proofIsEmpty = interlinksProof.indices.isEmpty && interlinksProof.proofs.isEmpty
+    if (header.isGenesis) {
+      interlinks.isEmpty && proofIsEmpty
+    } else if (!PoPowHeader.hasCanonicalInterlinkRuns(interlinks)) {
+      false
+    } else {
+      PoPowHeader.checkInterlinksProof(interlinks, interlinksProof)
+    }
+  }
 }
 
 object PoPowHeader {
@@ -50,6 +59,36 @@ object PoPowHeader {
   import io.circe.syntax._
 
   implicit val hf: HF = Algos.hash
+
+  private[popow] def hasCanonicalInterlinkRuns(interlinks: Seq[ModifierId]): Boolean = {
+    interlinks.headOption.exists { first =>
+      var current = first
+      var runLength = 1
+      var closedRuns = Set.empty[ModifierId]
+
+      interlinks.iterator.zipWithIndex.drop(1).forall { case (interlink, position) =>
+        if (interlink == current) {
+          if (runLength == 255) {
+            false
+          } else {
+            runLength += 1
+            true
+          }
+        } else if (position > 255) {
+          false
+        } else {
+          closedRuns += current
+          if (closedRuns.contains(interlink)) {
+            false
+          } else {
+            current = interlink
+            runLength = 1
+            true
+          }
+        }
+      }
+    }
+  }
 
   /**
     * Validates interlinks merkle root against provided proof

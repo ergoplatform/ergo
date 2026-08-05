@@ -20,6 +20,7 @@ import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
+import java.nio.ByteBuffer
 import scala.util.Try
 
 /**
@@ -187,8 +188,42 @@ object PoPowHeader {
 object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
   import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 
+  // Generous wire sanity limits shared with the sigma-rust NiPoPoW parser.
+  private[ergoplatform] final val MaxHeaderFrameBytes = 10000
+  private[ergoplatform] final val MaxInterlinks = 10000
+  private[ergoplatform] final val MaxMerkleProofFrameBytes = 1000000
+  private[ergoplatform] final val MaxSerializedBytes =
+    MaxHeaderFrameBytes + MaxInterlinks * ModifierIdLength + MaxMerkleProofFrameBytes + 64
+
+  private val MerkleProofCountBytes = 8
+  private val MerkleIndexBytes = 36
+  private val MerkleProofNodeBytes = 33
+
   implicit val hf: HF = Algos.hash
   val merkleProofSerializer = new BatchMerkleProofSerializer[Digest32, HF]
+
+  private def requireWithinLimit(value: Int, limit: Int, what: String): Unit =
+    require(value <= limit, s"$what $value exceeds sanity limit $limit")
+
+  private def validateMerkleProofFrame(bytes: Array[Byte]): Unit = {
+    require(bytes.length >= MerkleProofCountBytes,
+      s"Merkle proof counts require at least $MerkleProofCountBytes bytes")
+    // BatchMerkleProofSerializer stores both counts as fixed-width big-endian ints.
+    val counts = ByteBuffer.wrap(bytes)
+    val indexCount = counts.getInt
+    val proofCount = counts.getInt
+    require(indexCount >= 0 && proofCount >= 0,
+      "Merkle proof counts must be non-negative")
+
+    val indexBytes = Math.multiplyExact(indexCount.toLong, MerkleIndexBytes.toLong)
+    val proofBytes = Math.multiplyExact(proofCount.toLong, MerkleProofNodeBytes.toLong)
+    val requiredBytes = Math.addExact(
+      MerkleProofCountBytes.toLong,
+      Math.addExact(indexBytes, proofBytes)
+    )
+    require(requiredBytes == bytes.length.toLong,
+      s"Merkle proof counts require $requiredBytes bytes, frame has ${bytes.length}")
+  }
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {
     val headerBytes = obj.header.bytes
@@ -203,11 +238,16 @@ object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
 
   override def parse(r: Reader): PoPowHeader = {
     val headerSize = r.getUInt().toIntExact
+    requireWithinLimit(headerSize, MaxHeaderFrameBytes, "header frame size")
     val header = HeaderSerializer.parseBytes(r.getBytes(headerSize))
     val linksQty = r.getUInt().toIntExact
+    requireWithinLimit(linksQty, MaxInterlinks, "interlink count")
     val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(ModifierIdLength)))
     val interlinksProofSize = r.getUInt().toIntExact
-    val interlinksProof = merkleProofSerializer.deserialize(r.getBytes(interlinksProofSize)).get
+    requireWithinLimit(interlinksProofSize, MaxMerkleProofFrameBytes, "Merkle proof frame size")
+    val proofBytes = r.getBytes(interlinksProofSize)
+    validateMerkleProofFrame(proofBytes)
+    val interlinksProof = merkleProofSerializer.deserialize(proofBytes).get
     PoPowHeader(header, interlinks, interlinksProof)
   }
 

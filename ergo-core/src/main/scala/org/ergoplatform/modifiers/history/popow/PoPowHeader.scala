@@ -7,13 +7,13 @@ import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
 import org.ergoplatform.core.BytesSerializable
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.extension.Extension.merkleTree
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.crypto.authds.Side
-import scorex.crypto.authds.merkle.BatchMerkleProof
+import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.merkle.{BatchMerkleProof, Leaf}
 import scorex.crypto.authds.merkle.serialization.BatchMerkleProofSerializer
 import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
@@ -49,7 +49,7 @@ case class PoPowHeader(header: Header,
     } else if (!PoPowHeader.hasCanonicalInterlinkRuns(interlinks)) {
       false
     } else {
-      PoPowHeader.checkInterlinksProof(interlinks, interlinksProof)
+      PoPowHeader.checkInterlinksProof(interlinks, interlinksProof, header.extensionRoot)
     }
   }
 }
@@ -91,16 +91,22 @@ object PoPowHeader {
   }
 
   /**
-    * Validates interlinks merkle root against provided proof
+    * Validates the exact packed interlink leaves against the full extension root
     */
-  def checkInterlinksProof(interlinks: Seq[ModifierId], proof: BatchMerkleProof[Digest32]): Boolean = {
-    if (interlinks.isEmpty && proof.indices.isEmpty && proof.proofs.isEmpty) {
-      true
-    } else {
-      val fields = NipopowAlgos.packInterlinks(interlinks)
-      val tree = merkleTree(fields)
-      proof.valid(tree.rootHash)
-    }
+  def checkInterlinksProof(interlinks: Seq[ModifierId],
+                           proof: BatchMerkleProof[Digest32],
+                           extensionRoot: Digest32): Boolean = {
+    val expectedLeafHashes = NipopowAlgos.packInterlinks(interlinks)
+      .map(Extension.kvToLeaf)
+      .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
+    val provenLeafHashes = proof.indices.map(_._2)
+
+    interlinks.nonEmpty &&
+      expectedLeafHashes.size == provenLeafHashes.size &&
+      expectedLeafHashes.zip(provenLeafHashes).forall { case (expected, proven) =>
+        expected sameElements proven
+      } &&
+      proof.valid(extensionRoot)
   }
 
   /**

@@ -132,6 +132,13 @@ class SerializationTests extends ErgoCorePropertyTest with org.ergoplatform.util
     nipopowSerializer.parseBytesTry(mutated) shouldBe 'failure
   }
 
+  property("PoPowProof parser rejects an invalid continuous mode byte") {
+    val bytes = nipopowSerializer.toBytes(smallValidProof())
+    bytes(bytes.length - 1) = 2
+
+    assertProofParseFailureContains(bytes, "continuous mode")
+  }
+
   property("PoPowProof outer element frames preserve authoritative slicing") {
     Seq(PrefixFrame, SuffixHeadFrame, SuffixTailFrame).foreach { site =>
       withClue(s"site=$site canonical") {

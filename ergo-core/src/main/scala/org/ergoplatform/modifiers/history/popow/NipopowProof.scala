@@ -263,7 +263,10 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
       readFrame(r, PoPowHeaderSerializer.MaxHeaderFrameBytes, "suffix-tail frame")(
         HeaderSerializer.parseBytes)
     }
-    val continuous = if (r.getByte() == 1) true else false
+    val continuousByte = r.getByte()
+    require(continuousByte == 0 || continuousByte == 1,
+      s"invalid NiPoPoW continuous mode byte ${continuousByte & 0xff}")
+    val continuous = continuousByte == 1
     NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
   }
 

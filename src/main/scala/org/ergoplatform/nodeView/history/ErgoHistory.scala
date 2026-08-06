@@ -68,38 +68,6 @@ trait ErgoHistory
   }
 
   /**
-    * Return the current cached P2P NiPoPoW proof, generating and persisting it on a cache miss.
-    * Proof bytes are returned only after the V2 cache write succeeds.
-    */
-  def cachedOrGeneratePopowProofBytes(): Try[Array[Byte]] = {
-    cachedOrGeneratePopowProofBytes(popowProofBytes())
-  }
-
-  private[history] def cachedOrGeneratePopowProofBytes(
-    generateProofBytes: => Try[Array[Byte]]
-  ): Try[Array[Byte]] = {
-    cachedOrGeneratePopowProofBytes(
-      generateProofBytes,
-      proofBytes => historyStorage.insert(
-        Array(NipopowProofV2Key -> proofBytes),
-        BlockSection.emptyArray
-      )
-    )
-  }
-
-  private[history] def cachedOrGeneratePopowProofBytes(
-    generateProofBytes: => Try[Array[Byte]],
-    persistProofBytes: Array[Byte] => Try[Unit]
-  ): Try[Array[Byte]] = synchronized {
-    Try(readPopowProofBytesFromDb()).flatMap {
-      case Some(proofBytes) => Success(proofBytes)
-      case None => Try(generateProofBytes).flatten.flatMap { proofBytes =>
-        persistProofBytes(proofBytes).map(_ => proofBytes)
-      }
-    }
-  }
-
-  /**
     * Append ErgoPersistentModifier to History if valid
     */
   def append(modifier: BlockSection): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {

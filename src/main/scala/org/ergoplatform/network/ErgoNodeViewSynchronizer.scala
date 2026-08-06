@@ -1061,12 +1061,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def sendNipopowProof(data: NipopowProofData, hr: ErgoHistory, peer: ConnectedPeer): Unit = {
     if (data.m == hr.P2PNipopowProofM && data.k == hr.P2PNipopowProofK && data.headerIdBytesOpt.isEmpty) {
-      hr.cachedOrGeneratePopowProofBytes() match {
-        case Success(proofBytes) =>
+      hr.readPopowProofBytesFromDb() match {
+        case Some(proofBytes) =>
           val msg = Message(NipopowProofSpec, Right(proofBytes), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
-        case Failure(e) =>
-          log.warn("Failed to generate or persist Nipopow proof", e)
+        case None =>
+          log.warn("No cached Nipopow proof available")
       }
     } else {
       // for now, we are serving proofs for concrete params only

@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers.history.popow
 
 import cats.syntax.either._
-import sigmastate.utils.Helpers._
 import cats.Traverse
 import cats.implicits.{catsStdInstancesForEither, catsStdInstancesForList}
 import io.circe.{Decoder, Encoder, Json}
@@ -97,17 +96,26 @@ object PoPowHeader {
   def checkInterlinksProof(interlinks: Seq[ModifierId],
                            proof: BatchMerkleProof[Digest32],
                            extensionRoot: Digest32): Boolean = {
-    val expectedLeafHashes = NipopowAlgos.packInterlinks(interlinks)
-      .map(Extension.kvToLeaf)
-      .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
-    val provenLeafHashes = proof.indices.map(_._2)
+    if (!PoPowHeaderSerializer.hasValidMerkleProofStructure(
+      proof.indices.map(_._1),
+      proof.proofs.size
+    )) {
+      false
+    } else {
+      Try {
+        val expectedLeafHashes = NipopowAlgos.packInterlinks(interlinks)
+          .map(Extension.kvToLeaf)
+          .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
+        val provenLeafHashes = proof.indices.map(_._2)
 
-    interlinks.nonEmpty &&
-      expectedLeafHashes.size == provenLeafHashes.size &&
-      expectedLeafHashes.zip(provenLeafHashes).forall { case (expected, proven) =>
-        expected sameElements proven
-      } &&
-      proof.valid(extensionRoot)
+        interlinks.nonEmpty &&
+          expectedLeafHashes.size == provenLeafHashes.size &&
+          expectedLeafHashes.zip(provenLeafHashes).forall { case (expected, proven) =>
+            expected sameElements proven
+          } &&
+          proof.valid(extensionRoot)
+      }.getOrElse(false)
+    }
   }
 
   /**
@@ -198,12 +206,46 @@ object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
   private val MerkleProofCountBytes = 8
   private val MerkleIndexBytes = 36
   private val MerkleProofNodeBytes = 33
+  private[ergoplatform] final val MaxMerkleProofDepth =
+    Extension.FieldKeySize * java.lang.Byte.SIZE
+  private val MaxMerkleLeafIndex = (1 << MaxMerkleProofDepth) - 1
 
   implicit val hf: HF = Algos.hash
   val merkleProofSerializer = new BatchMerkleProofSerializer[Digest32, HF]
 
   private def requireWithinLimit(value: Int, limit: Int, what: String): Unit =
     require(value <= limit, s"$what $value exceeds sanity limit $limit")
+
+  private[ergoplatform] def hasValidMerkleProofStructure(indices: Seq[Int],
+                                                          proofCount: Int): Boolean = {
+    if (indices.isEmpty) {
+      proofCount == 0
+    } else if (proofCount < 0 ||
+      indices.exists(index => index < 0 || index > MaxMerkleLeafIndex) ||
+      indices.distinct.size != indices.size) {
+      false
+    } else {
+      var current = indices.sorted.toVector
+      var remainingProofs = proofCount
+      var depth = 0
+      var valid = true
+
+      while (valid && !(current.size == 1 && current.head == 0 && remainingProofs == 0) &&
+        depth < MaxMerkleProofDepth) {
+        val currentIndices = current.toSet
+        val missingSiblings = current.count(index => !currentIndices.contains(index ^ 1))
+        if (missingSiblings > remainingProofs) {
+          valid = false
+        } else {
+          remainingProofs -= missingSiblings
+          current = current.map(_ / 2).distinct
+          depth += 1
+        }
+      }
+
+      valid && current.size == 1 && current.head == 0 && remainingProofs == 0
+    }
+  }
 
   private def validateMerkleProofFrame(bytes: Array[Byte]): Unit = {
     require(bytes.length >= MerkleProofCountBytes,
@@ -223,6 +265,16 @@ object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
     )
     require(requiredBytes == bytes.length.toLong,
       s"Merkle proof counts require $requiredBytes bytes, frame has ${bytes.length}")
+
+    val indices = Vector.newBuilder[Int]
+    var index = 0
+    while (index < indexCount) {
+      indices += counts.getInt
+      counts.position(counts.position() + MerkleIndexBytes - Integer.BYTES)
+      index += 1
+    }
+    require(hasValidMerkleProofStructure(indices.result(), proofCount),
+      "Merkle proof structure exceeds the extension key space")
   }
 
   override def serialize(obj: PoPowHeader, w: Writer): Unit = {

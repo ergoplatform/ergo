@@ -9,6 +9,7 @@ import org.ergoplatform.modifiers.history.popow.PoPowHeaderSerializer
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.generators.ErgoCoreGenerators.defaultHeaderGen
 import org.scalacheck.Gen
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.VLQByteBufferWriter
 import scorex.util.{ByteArrayBuilder, ModifierId, bytesToId, idToBytes}
@@ -81,6 +82,20 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
   }
 
   private def intBytes(value: Int): Array[Byte] = ByteBuffer.allocate(4).putInt(value).array()
+
+  private def merkleProofFrame(indices: Seq[Int], proofCount: Int): Array[Byte] = {
+    val serializedIndices: Array[Byte] = indices.iterator
+      .flatMap(index => (intBytes(index) ++ Array.fill[Byte](32)(1)).iterator)
+      .toArray
+
+    intBytes(indices.size) ++
+      intBytes(proofCount) ++
+      serializedIndices ++
+      Array.fill[Byte](proofCount * 33)(0)
+  }
+
+  private def singletonProofFrame(depth: Int): Array[Byte] =
+    merkleProofFrame(Seq(0), depth)
 
   private def mixedExtension(interlinks: Seq[ModifierId]): ExtensionCandidate = {
     nipopowAlgos.interlinksToExtension(interlinks) ++ ExtensionCandidate(Seq(
@@ -297,6 +312,39 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
     assertParseFailureContains(minimalPoPowHeader(proofFrame), "Merkle proof counts")
   }
 
+  property("PoPowHeader rejects a singleton proof deeper than the extension key space") {
+    val impossibleDepth = java.lang.Byte.SIZE * 2 + 1
+
+    assertParseFailureContains(
+      minimalPoPowHeader(singletonProofFrame(impossibleDepth)),
+      "Merkle proof structure"
+    )
+  }
+
+  property("PoPowHeader accepts a singleton proof at the extension key-space depth") {
+    val maximumDepth = java.lang.Byte.SIZE * 2
+
+    PoPowHeaderSerializer.parseBytes(
+      minimalPoPowHeader(singletonProofFrame(maximumDepth))
+    ).interlinksProof.proofs.size shouldBe maximumDepth
+  }
+
+  property("PoPowHeader rejects a Merkle index outside the extension key space") {
+    val firstInvalidIndex = 1 << PoPowHeaderSerializer.MaxMerkleProofDepth
+
+    assertParseFailureContains(
+      minimalPoPowHeader(merkleProofFrame(Seq(firstInvalidIndex), 0)),
+      "Merkle proof structure"
+    )
+  }
+
+  property("PoPowHeader rejects duplicate Merkle indices") {
+    assertParseFailureContains(
+      minimalPoPowHeader(merkleProofFrame(Seq(0, 0), 0)),
+      "Merkle proof structure"
+    )
+  }
+
   property("PoPowHeader rejects extreme Merkle counts with checked arithmetic") {
     val proofFrame = intBytes(Int.MaxValue) ++ intBytes(Int.MaxValue)
 
@@ -321,6 +369,31 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
       PoPowHeader(header.copy(height = 2, extensionRoot = extension.digest), Seq.empty, proof)
         .checkInterlinksProof() shouldBe false
     }
+  }
+
+  property("Merkle library validation exceptions reject the interlinks proof") {
+    val interlinks = Seq(deterministicId(1), deterministicId(2))
+    val extension = mixedExtension(interlinks)
+    val proof = NipopowAlgos.proofForInterlinkVector(extension).get
+    proof.proofs should not be empty
+    val malformedProof = BatchMerkleProof[Digest32](
+      proof.indices,
+      (null.asInstanceOf[Digest32] -> proof.proofs.head._2) +: proof.proofs.tail
+    )(org.ergoplatform.settings.Algos.hash)
+
+    checkInterlinksProof(interlinks, malformedProof, extension.digest) shouldBe false
+  }
+
+  property("missing Merkle proof nodes reject the interlinks proof") {
+    val interlinks = Seq(deterministicId(1), deterministicId(2))
+    val extension = mixedExtension(interlinks)
+    val proof = NipopowAlgos.proofForInterlinkVector(extension).get
+    val incompleteProof = BatchMerkleProof[Digest32](
+      proof.indices,
+      Seq.empty
+    )(org.ergoplatform.settings.Algos.hash)
+
+    checkInterlinksProof(interlinks, incompleteProof, extension.digest) shouldBe false
   }
 
   property("a canonical run of 255 identical interlinks is accepted") {

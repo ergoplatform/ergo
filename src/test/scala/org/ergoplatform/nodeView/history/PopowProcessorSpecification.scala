@@ -10,7 +10,6 @@ import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.ModifierId
 
 import java.nio.charset.StandardCharsets
-import scala.util.{Failure, Success}
 
 class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
   import org.ergoplatform.utils.HistoryTestHelpers._
@@ -64,19 +63,11 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     }
   }
 
-  property("V2 NiPoPoW cache miss generates and persists proof bytes") {
+  property("V2 NiPoPoW cache miss remains empty until a scheduled snapshot") {
     val history = genHistory(None, popowBootstrap = false)
-    val generatedBytes = Array[Byte](1, 3, 3, 7)
-    var generationCount = 0
     try {
-      val result = history.cachedOrGeneratePopowProofBytes {
-        generationCount += 1
-        Success(generatedBytes)
-      }
-
-      result.get.toSeq shouldBe generatedBytes.toSeq
-      generationCount shouldBe 1
-      history.readPopowProofBytesFromDb().get.toSeq shouldBe generatedBytes.toSeq
+      history.readPopowProofBytesFromDb() shouldBe None
+      history.readPopowProofBytesFromDb() shouldBe None
     } finally {
       history.closeStorage()
     }
@@ -86,52 +77,31 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     val history = genHistory(None, popowBootstrap = false)
     val cachedBytes = Array[Byte](2, 4, 6, 8)
     try {
-      history.cachedOrGeneratePopowProofBytes(Success(cachedBytes)).get
+      history.historyStorage.insert(
+        Array(history.NipopowProofV2Key -> cachedBytes),
+        BlockSection.emptyArray
+      ).get
 
-      val result = history.cachedOrGeneratePopowProofBytes(
-        Failure(new IllegalStateException("cache hit must not regenerate"))
-      )
-
-      result.get.toSeq shouldBe cachedBytes.toSeq
+      history.readPopowProofBytesFromDb().get.toSeq shouldBe cachedBytes.toSeq
+      history.readPopowProofBytesFromDb().get.toSeq shouldBe cachedBytes.toSeq
     } finally {
       history.closeStorage()
     }
   }
 
-  property("NiPoPoW cache generation failure never falls back to legacy bytes") {
+  property("V2 NiPoPoW cache miss never falls back to legacy bytes") {
     val history = genHistory(None, popowBootstrap = false)
-    val generationFailure = new IllegalStateException("proof generation failed")
     try {
       history.historyStorage.insert(
         Array(history.LegacyNipopowSnapshotKey -> legacySentinel),
         BlockSection.emptyArray
       ).get
 
-      val result = history.cachedOrGeneratePopowProofBytes(Failure(generationFailure))
-
-      result.failed.get shouldBe generationFailure
       history.readPopowProofBytesFromDb() shouldBe None
       history.historyStorage
         .getIndex(history.LegacyNipopowSnapshotKey)
         .get
         .toSeq shouldBe legacySentinel.toSeq
-    } finally {
-      history.closeStorage()
-    }
-  }
-
-  property("NiPoPoW cache persistence failure exposes no proof bytes") {
-    val history = genHistory(None, popowBootstrap = false)
-    val generatedBytes = Array[Byte](9, 7, 5, 3)
-    val persistenceFailure = new IllegalStateException("proof persistence failed")
-    try {
-      val result = history.cachedOrGeneratePopowProofBytes(
-        Success(generatedBytes),
-        _ => Failure(persistenceFailure)
-      )
-
-      result.failed.get shouldBe persistenceFailure
-      history.readPopowProofBytesFromDb() shouldBe None
     } finally {
       history.closeStorage()
     }
@@ -147,7 +117,10 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     val cachedBytes = Array[Byte](10, 20, 30, 40)
     val firstHistory = ErgoHistory.readOrGenerate(historySettings)(null)
     try {
-      firstHistory.cachedOrGeneratePopowProofBytes(Success(cachedBytes)).get
+      firstHistory.historyStorage.insert(
+        Array(firstHistory.NipopowProofV2Key -> cachedBytes),
+        BlockSection.emptyArray
+      ).get
     } finally {
       firstHistory.closeStorage()
     }
@@ -155,9 +128,7 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     val reopenedHistory = ErgoHistory.readOrGenerate(historySettings)(null)
     try {
       reopenedHistory.readPopowProofBytesFromDb().get.toSeq shouldBe cachedBytes.toSeq
-      reopenedHistory.cachedOrGeneratePopowProofBytes(
-        Failure(new IllegalStateException("restart cache hit must not regenerate"))
-      ).get.toSeq shouldBe cachedBytes.toSeq
+      reopenedHistory.readPopowProofBytesFromDb().get.toSeq shouldBe cachedBytes.toSeq
     } finally {
       reopenedHistory.closeStorage()
     }

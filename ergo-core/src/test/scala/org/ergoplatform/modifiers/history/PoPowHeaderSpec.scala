@@ -1,5 +1,6 @@
 package org.ergoplatform.modifiers.history
 
+import io.circe.{Decoder, HCursor}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.history.popow.PoPowHeader
@@ -27,11 +28,20 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
   private val MaxInterlinks = PoPowHeaderSerializer.MaxInterlinks
   private val MaxMerkleProofFrameBytes = PoPowHeaderSerializer.MaxMerkleProofFrameBytes
 
+  private def resourceCursor(resource: String): HCursor = {
+    val stream = Option(getClass.getClassLoader.getResourceAsStream(resource))
+      .getOrElse(throw new IllegalArgumentException(s"Missing resource: $resource"))
+    val source = Source.fromInputStream(stream, "UTF-8")
+    val text = try source.mkString finally source.close()
+    io.circe.parser.parse(text).fold(error => throw error, value => value.hcursor)
+  }
+
+  private def fixtureValue[A: Decoder](fixture: HCursor, field: String): A =
+    fixture.get[A](field).fold(error => throw error, value => value)
+
   private lazy val framedHeader: PoPowHeader = {
-    val source = Source.fromResource("nipopow-full-root-mixed-popow-header.json")
-    val fixtureText = try source.mkString finally source.close()
-    val fixture = io.circe.parser.parse(fixtureText).toOption.get.hcursor
-    val bytes = Base16.decode(fixture.get[String]("bytes_hex").toOption.get).get
+    val fixture = resourceCursor("nipopow-full-root-mixed-popow-header.json")
+    val bytes = Base16.decode(fixtureValue[String](fixture, "bytes_hex")).get
     PoPowHeaderSerializer.parseBytes(bytes)
   }
 
@@ -207,18 +217,17 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
   }
 
   property("the cross-runtime full-root fixture round-trips and rejects mutations") {
-    val fixtureSource = Source.fromResource("nipopow-full-root-mixed-popow-header.json")
-    val fixtureText = try fixtureSource.mkString finally fixtureSource.close()
-    val fixture = io.circe.parser.parse(fixtureText).toOption.get.hcursor
-    val bytes = Base16.decode(fixture.get[String]("bytes_hex").toOption.get).get
+    val fixture = resourceCursor("nipopow-full-root-mixed-popow-header.json")
+    val bytes = Base16.decode(fixtureValue[String](fixture, "bytes_hex")).get
 
-    bytes.length shouldBe fixture.get[Int]("length").toOption.get
+    bytes.length shouldBe fixtureValue[Int](fixture, "length")
     Base16.encode(MessageDigest.getInstance("SHA-256").digest(bytes)) shouldBe
-      fixture.get[String]("sha256").toOption.get
+      fixtureValue[String](fixture, "sha256")
 
     val parsed = PoPowHeaderSerializer.parseBytes(bytes)
     PoPowHeaderSerializer.toBytes(parsed) shouldBe bytes
-    Base16.encode(parsed.header.extensionRoot) shouldBe fixture.get[String]("extension_root").toOption.get
+    Base16.encode(parsed.header.extensionRoot) shouldBe
+      fixtureValue[String](fixture, "extension_root")
     parsed.checkInterlinksProof() shouldBe true
 
     val wrongRootBytes = parsed.header.extensionRoot.clone()

@@ -29,7 +29,9 @@ class NipopowProofInteropSpec extends ErgoCorePropertyTest {
   private val serializer = new NipopowProofSerializer(nipopowAlgos)
 
   private def resourceCursor(resource: String): HCursor = {
-    val source = Source.fromResource(resource)
+    val stream = Option(getClass.getClassLoader.getResourceAsStream(resource))
+      .getOrElse(throw new IllegalArgumentException(s"Missing resource: $resource"))
+    val source = Source.fromInputStream(stream, "UTF-8")
     val text = try source.mkString finally source.close()
     io.circe.parser.parse(text).fold(error => throw error, _.hcursor)
   }

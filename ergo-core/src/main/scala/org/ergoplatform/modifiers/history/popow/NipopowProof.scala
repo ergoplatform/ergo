@@ -208,13 +208,13 @@ object NipopowProofSerializer {
   private def requireWithinLimit(value: Int, limit: Int, what: String): Unit =
     require(value <= limit, s"$what $value exceeds sanity limit $limit")
 
-  private def readFrame[T](r: Reader,
-                           limit: Int,
-                           what: String)
-                          (parse: Array[Byte] => T): T = {
-    val size = r.getUInt().toIntExact
-    requireWithinLimit(size, limit, s"$what size")
-    parse(r.getBytes(size))
+  private def readLengthPrefixed[T](r: Reader,
+                                    limit: Int,
+                                    what: String)
+                                   (parse: Array[Byte] => T): T = {
+    val declaredLength = r.getUInt().toIntExact
+    requireWithinLimit(declaredLength, limit, s"$what length")
+    parse(r.getBytes(declaredLength))
   }
 }
 
@@ -250,17 +250,17 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
     val prefixSize = r.getUInt().toIntExact
     requireWithinLimit(prefixSize, MaxProofElements, "prefix count")
     val prefix = (0 until prefixSize).map { _ =>
-      readFrame(r, PoPowHeaderSerializer.MaxSerializedBytes, "prefix element frame")(
+      readLengthPrefixed(r, PoPowHeaderSerializer.MaxSerializedBytes, "prefix element")(
         PoPowHeaderSerializer.parseBytes)
     }
-    val suffixHead = readFrame(r, PoPowHeaderSerializer.MaxSerializedBytes, "suffix-head frame")(
+    val suffixHead = readLengthPrefixed(r, PoPowHeaderSerializer.MaxSerializedBytes, "suffix head")(
       PoPowHeaderSerializer.parseBytes)
     val suffixSize = r.getUInt().toIntExact
     requireWithinLimit(suffixSize, MaxProofElements, "suffix count")
     require(suffixSize == k - 1,
       s"NiPoPoW suffix length ${suffixSize + 1} does not match k parameter $k")
     val suffixTail = (0 until suffixSize).map { _ =>
-      readFrame(r, PoPowHeaderSerializer.MaxHeaderFrameBytes, "suffix-tail frame")(
+      readLengthPrefixed(r, PoPowHeaderSerializer.MaxHeaderBytes, "suffix tail")(
         HeaderSerializer.parseBytes)
     }
     val continuousByte = r.getByte()

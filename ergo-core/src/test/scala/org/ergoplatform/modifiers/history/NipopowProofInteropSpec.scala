@@ -130,14 +130,14 @@ class NipopowProofInteropSpec extends ErgoCorePropertyTest {
     val (prefixCount, afterPrefixCount) = readFixtureVlq(bytes, offset)
     offset = afterPrefixCount
     (0L until prefixCount).foreach { _ =>
-      val (frameLength, afterFrameLength) = readFixtureVlq(bytes, offset)
-      offset = afterFrameLength
-      require(frameLength <= bytes.length - offset, "prefix frame exceeds fixture bytes")
-      offset += frameLength.toInt
+      val (payloadLength, afterPayloadLength) = readFixtureVlq(bytes, offset)
+      offset = afterPayloadLength
+      require(payloadLength <= bytes.length - offset, "prefix payload exceeds fixture bytes")
+      offset += payloadLength.toInt
     }
     val (suffixHeadLength, suffixHeadStart) = readFixtureVlq(bytes, offset)
     require(suffixHeadLength <= bytes.length - suffixHeadStart,
-      "suffix-head frame exceeds fixture bytes")
+      "suffix-head payload exceeds fixture bytes")
     ByteRange(suffixHeadStart, suffixHeadStart + suffixHeadLength.toInt)
   }
 
@@ -219,7 +219,7 @@ class NipopowProofInteropSpec extends ErgoCorePropertyTest {
     parseFixtureEnvelope(mutated, rustCoreLength, terminalMode).isFailure shouldBe true
   }
 
-  property("the complete fixture rejects a nested header-frame mutation") {
+  property("the complete fixture rejects a nested header-length mutation") {
     val mutated = fixtureBytes.clone()
     val nestedSizeOffset = suffixHeadRange(mutated).start
     readFixtureVlq(mutated, nestedSizeOffset)._1 shouldBe 218L

@@ -25,9 +25,9 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
 
   private def deterministicId(value: Byte): ModifierId = bytesToId(Array.fill(32)(value))
 
-  private val MaxHeaderFrameBytes = PoPowHeaderSerializer.MaxHeaderFrameBytes
+  private val MaxHeaderBytes = PoPowHeaderSerializer.MaxHeaderBytes
   private val MaxInterlinks = PoPowHeaderSerializer.MaxInterlinks
-  private val MaxMerkleProofFrameBytes = PoPowHeaderSerializer.MaxMerkleProofFrameBytes
+  private val MaxMerkleProofBytes = PoPowHeaderSerializer.MaxMerkleProofBytes
 
   private def resourceCursor(resource: String): HCursor = {
     val stream = Option(getClass.getClassLoader.getResourceAsStream(resource))
@@ -40,22 +40,22 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
   private def fixtureValue[A: Decoder](fixture: HCursor, field: String): A =
     fixture.get[A](field).fold(error => throw error, value => value)
 
-  private lazy val framedHeader: PoPowHeader = {
+  private lazy val sampleHeader: PoPowHeader = {
     val fixture = resourceCursor("nipopow-full-root-mixed-popow-header.json")
     val bytes = Base16.decode(fixtureValue[String](fixture, "bytes_hex")).get
     PoPowHeaderSerializer.parseBytes(bytes)
   }
 
-  private def serializeWithNestedFrames(value: PoPowHeader,
-                                        headerFrame: Array[Byte],
-                                        proofFrame: Array[Byte]): Array[Byte] = {
+  private def serializeWithNestedPayloads(value: PoPowHeader,
+                                          headerPayload: Array[Byte],
+                                          proofPayload: Array[Byte]): Array[Byte] = {
     writerBytes { writer =>
-      writer.putUInt(headerFrame.length.toLong)
-      writer.putBytes(headerFrame)
+      writer.putUInt(headerPayload.length.toLong)
+      writer.putBytes(headerPayload)
       writer.putUInt(value.interlinks.length.toLong)
       value.interlinks.foreach(id => writer.putBytes(idToBytes(id)))
-      writer.putUInt(proofFrame.length.toLong)
-      writer.putBytes(proofFrame)
+      writer.putUInt(proofPayload.length.toLong)
+      writer.putBytes(proofPayload)
     }
   }
 
@@ -65,14 +65,14 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
     writer.result().toBytes
   }
 
-  private def minimalPoPowHeader(proofFrame: Array[Byte]): Array[Byte] = {
-    val headerFrame = framedHeader.header.bytes
+  private def minimalPoPowHeader(proofPayload: Array[Byte]): Array[Byte] = {
+    val headerPayload = sampleHeader.header.bytes
     writerBytes { writer =>
-      writer.putUInt(headerFrame.length.toLong)
-      writer.putBytes(headerFrame)
+      writer.putUInt(headerPayload.length.toLong)
+      writer.putBytes(headerPayload)
       writer.putUInt(0)
-      writer.putUInt(proofFrame.length.toLong)
-      writer.putBytes(proofFrame)
+      writer.putUInt(proofPayload.length.toLong)
+      writer.putBytes(proofPayload)
     }
   }
 
@@ -83,7 +83,7 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
 
   private def intBytes(value: Int): Array[Byte] = ByteBuffer.allocate(4).putInt(value).array()
 
-  private def merkleProofFrame(indices: Seq[Int], proofCount: Int): Array[Byte] = {
+  private def merkleProofPayload(indices: Seq[Int], proofCount: Int): Array[Byte] = {
     val serializedIndices: Array[Byte] = indices.iterator
       .flatMap(index => (intBytes(index) ++ Array.fill[Byte](32)(1)).iterator)
       .toArray
@@ -94,8 +94,8 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
       Array.fill[Byte](proofCount * 33)(0)
   }
 
-  private def singletonProofFrame(depth: Int): Array[Byte] =
-    merkleProofFrame(Seq(0), depth)
+  private def singletonProofPayload(depth: Int): Array[Byte] =
+    merkleProofPayload(Seq(0), depth)
 
   private def mixedExtension(interlinks: Seq[ModifierId]): ExtensionCandidate = {
     nipopowAlgos.interlinksToExtension(interlinks) ++ ExtensionCandidate(Seq(
@@ -254,69 +254,69 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
       .checkInterlinksProof() shouldBe false
   }
 
-  property("a nested header frame accepts trailing padding") {
-    val headerFrame = framedHeader.header.bytes :+ 0x7f.toByte
-    val proofFrame = PoPowHeaderSerializer.merkleProofSerializer.serialize(framedHeader.interlinksProof)
-    val bytes = serializeWithNestedFrames(framedHeader, headerFrame, proofFrame)
+  property("a nested header payload accepts trailing padding") {
+    val headerPayload = sampleHeader.header.bytes :+ 0x7f.toByte
+    val proofPayload = PoPowHeaderSerializer.merkleProofSerializer.serialize(sampleHeader.interlinksProof)
+    val bytes = serializeWithNestedPayloads(sampleHeader, headerPayload, proofPayload)
 
-    PoPowHeaderSerializer.parseBytes(bytes) shouldBe framedHeader
+    PoPowHeaderSerializer.parseBytes(bytes) shouldBe sampleHeader
   }
 
-  property("a nested Merkle proof frame rejects trailing padding") {
-    val headerFrame = framedHeader.header.bytes
-    val proofFrame =
-      PoPowHeaderSerializer.merkleProofSerializer.serialize(framedHeader.interlinksProof) :+ 0x7f.toByte
-    val bytes = serializeWithNestedFrames(framedHeader, headerFrame, proofFrame)
+  property("a nested Merkle proof payload rejects trailing padding") {
+    val headerPayload = sampleHeader.header.bytes
+    val proofPayload =
+      PoPowHeaderSerializer.merkleProofSerializer.serialize(sampleHeader.interlinksProof) :+ 0x7f.toByte
+    val bytes = serializeWithNestedPayloads(sampleHeader, headerPayload, proofPayload)
 
     assertParseFailureContains(bytes, "Merkle proof counts")
   }
 
-  property("PoPowHeader rejects an oversized nested header before reading its frame") {
-    val bytes = writerBytes(_.putUInt(MaxHeaderFrameBytes + 1L))
+  property("PoPowHeader rejects an oversized nested header before reading its payload") {
+    val bytes = writerBytes(_.putUInt(MaxHeaderBytes + 1L))
 
-    assertParseFailureContains(bytes, "header frame size")
+    assertParseFailureContains(bytes, "header length")
   }
 
   property("PoPowHeader rejects an oversized interlink count before reading ids") {
-    val headerFrame = framedHeader.header.bytes
+    val headerPayload = sampleHeader.header.bytes
     val bytes = writerBytes { writer =>
-      writer.putUInt(headerFrame.length.toLong)
-      writer.putBytes(headerFrame)
+      writer.putUInt(headerPayload.length.toLong)
+      writer.putBytes(headerPayload)
       writer.putUInt(MaxInterlinks + 1L)
     }
 
     assertParseFailureContains(bytes, "interlink count")
   }
 
-  property("PoPowHeader rejects an oversized Merkle proof before reading its frame") {
-    val headerFrame = framedHeader.header.bytes
+  property("PoPowHeader rejects an oversized Merkle proof before reading its payload") {
+    val headerPayload = sampleHeader.header.bytes
     val bytes = writerBytes { writer =>
-      writer.putUInt(headerFrame.length.toLong)
-      writer.putBytes(headerFrame)
+      writer.putUInt(headerPayload.length.toLong)
+      writer.putBytes(headerPayload)
       writer.putUInt(0)
-      writer.putUInt(MaxMerkleProofFrameBytes + 1L)
+      writer.putUInt(MaxMerkleProofBytes + 1L)
     }
 
-    assertParseFailureContains(bytes, "Merkle proof frame size")
+    assertParseFailureContains(bytes, "Merkle proof length")
   }
 
-  property("PoPowHeader rejects an index count that cannot fit its proof frame") {
-    val proofFrame = intBytes(1) ++ intBytes(0)
+  property("PoPowHeader rejects an index count that cannot fit its proof payload") {
+    val proofPayload = intBytes(1) ++ intBytes(0)
 
-    assertParseFailureContains(minimalPoPowHeader(proofFrame), "Merkle proof counts")
+    assertParseFailureContains(minimalPoPowHeader(proofPayload), "Merkle proof counts")
   }
 
-  property("PoPowHeader rejects a proof-node count that cannot fit its proof frame") {
-    val proofFrame = intBytes(0) ++ intBytes(1)
+  property("PoPowHeader rejects a proof-node count that cannot fit its proof payload") {
+    val proofPayload = intBytes(0) ++ intBytes(1)
 
-    assertParseFailureContains(minimalPoPowHeader(proofFrame), "Merkle proof counts")
+    assertParseFailureContains(minimalPoPowHeader(proofPayload), "Merkle proof counts")
   }
 
   property("PoPowHeader rejects a singleton proof deeper than the extension key space") {
     val impossibleDepth = java.lang.Byte.SIZE * 2 + 1
 
     assertParseFailureContains(
-      minimalPoPowHeader(singletonProofFrame(impossibleDepth)),
+      minimalPoPowHeader(singletonProofPayload(impossibleDepth)),
       "Merkle proof structure"
     )
   }
@@ -325,7 +325,7 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
     val maximumDepth = java.lang.Byte.SIZE * 2
 
     PoPowHeaderSerializer.parseBytes(
-      minimalPoPowHeader(singletonProofFrame(maximumDepth))
+      minimalPoPowHeader(singletonProofPayload(maximumDepth))
     ).interlinksProof.proofs.size shouldBe maximumDepth
   }
 
@@ -333,22 +333,22 @@ class PoPowHeaderSpec extends ErgoCorePropertyTest {
     val firstInvalidIndex = 1 << PoPowHeaderSerializer.MaxMerkleProofDepth
 
     assertParseFailureContains(
-      minimalPoPowHeader(merkleProofFrame(Seq(firstInvalidIndex), 0)),
+      minimalPoPowHeader(merkleProofPayload(Seq(firstInvalidIndex), 0)),
       "Merkle proof structure"
     )
   }
 
   property("PoPowHeader rejects duplicate Merkle indices") {
     assertParseFailureContains(
-      minimalPoPowHeader(merkleProofFrame(Seq(0, 0), 0)),
+      minimalPoPowHeader(merkleProofPayload(Seq(0, 0), 0)),
       "Merkle proof structure"
     )
   }
 
   property("PoPowHeader rejects extreme Merkle counts with checked arithmetic") {
-    val proofFrame = intBytes(Int.MaxValue) ++ intBytes(Int.MaxValue)
+    val proofPayload = intBytes(Int.MaxValue) ++ intBytes(Int.MaxValue)
 
-    assertParseFailureContains(minimalPoPowHeader(proofFrame), "Merkle proof counts")
+    assertParseFailureContains(minimalPoPowHeader(proofPayload), "Merkle proof counts")
   }
 
   property("empty interlinks proof is accepted for genesis") {

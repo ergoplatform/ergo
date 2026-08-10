@@ -14,21 +14,21 @@ class SerializationTests extends ErgoCorePropertyTest with org.ergoplatform.util
 
   private val nipopowSerializer = new NipopowProofSerializer(nipopowAlgos)
 
-  private sealed trait FrameSite
-  private case object PrefixFrame extends FrameSite
-  private case object SuffixHeadFrame extends FrameSite
-  private case object SuffixTailFrame extends FrameSite
+  private sealed trait LengthPrefixedSite
+  private case object PrefixElement extends LengthPrefixedSite
+  private case object SuffixHeadElement extends LengthPrefixedSite
+  private case object SuffixTailElement extends LengthPrefixedSite
 
   private val MaxProofElements = PoPowParams.MaxProofElements
-  private val MaxHeaderFrameBytes = PoPowHeaderSerializer.MaxHeaderFrameBytes
-  private val MaxPoPowHeaderFrameBytes = PoPowHeaderSerializer.MaxSerializedBytes
+  private val MaxHeaderBytes = PoPowHeaderSerializer.MaxHeaderBytes
+  private val MaxPoPowHeaderBytes = PoPowHeaderSerializer.MaxSerializedBytes
 
   private def smallValidProof(): NipopowProof = validNiPoPowProofGen(1, 1).sample.get
 
-  private lazy val framedProof: NipopowProof = {
+  private lazy val sampleProof: NipopowProof = {
     val proof = validNiPoPowProofGen(1, 2).sample.get
-    require(proof.prefix.nonEmpty, "framing fixture needs a prefix element")
-    require(proof.suffixTail.nonEmpty, "framing fixture needs a suffix-tail element")
+    require(proof.prefix.nonEmpty, "length-prefix fixture needs a prefix element")
+    require(proof.suffixTail.nonEmpty, "length-prefix fixture needs a suffix-tail element")
     proof
   }
 
@@ -46,11 +46,11 @@ class SerializationTests extends ErgoCorePropertyTest with org.ergoplatform.util
     writer.toBytes
   }
 
-  private def putFrame(writer: VLQByteStringWriter,
-                       bytes: Array[Byte],
-                       mutate: Boolean,
-                       declaredDelta: Int,
-                       fillerLength: Int): Unit = {
+  private def putLengthPrefixed(writer: VLQByteStringWriter,
+                                bytes: Array[Byte],
+                                mutate: Boolean,
+                                declaredDelta: Int,
+                                fillerLength: Int): Unit = {
     val declaredSize = bytes.length + (if (mutate) declaredDelta else 0)
     require(declaredSize >= 0)
     writer.putUInt(declaredSize.toLong)
@@ -60,20 +60,23 @@ class SerializationTests extends ErgoCorePropertyTest with org.ergoplatform.util
     }
   }
 
-  private def serializeWithFrameMutation(proof: NipopowProof,
-                                         site: FrameSite,
-                                         declaredDelta: Int,
-                                         fillerLength: Int): Array[Byte] = writerBytes { writer =>
+  private def serializeWithDeclaredLengthMutation(proof: NipopowProof,
+                                                   site: LengthPrefixedSite,
+                                                   declaredDelta: Int,
+                                                   fillerLength: Int): Array[Byte] = writerBytes { writer =>
     writer.putUInt(proof.m.toLong)
     writer.putUInt(proof.k.toLong)
     writer.putUInt(proof.prefix.length.toLong)
     proof.prefix.zipWithIndex.foreach { case (header, index) =>
-      putFrame(writer, header.bytes, site == PrefixFrame && index == 0, declaredDelta, fillerLength)
+      putLengthPrefixed(
+        writer, header.bytes, site == PrefixElement && index == 0, declaredDelta, fillerLength)
     }
-    putFrame(writer, proof.suffixHead.bytes, site == SuffixHeadFrame, declaredDelta, fillerLength)
+    putLengthPrefixed(
+      writer, proof.suffixHead.bytes, site == SuffixHeadElement, declaredDelta, fillerLength)
     writer.putUInt(proof.suffixTail.length.toLong)
     proof.suffixTail.zipWithIndex.foreach { case (header, index) =>
-      putFrame(writer, header.bytes, site == SuffixTailFrame && index == 0, declaredDelta, fillerLength)
+      putLengthPrefixed(
+        writer, header.bytes, site == SuffixTailElement && index == 0, declaredDelta, fillerLength)
     }
     writer.put(if (proof.continuous) 1 else 0)
   }
@@ -139,19 +142,23 @@ class SerializationTests extends ErgoCorePropertyTest with org.ergoplatform.util
     assertProofParseFailureContains(bytes, "continuous mode")
   }
 
-  property("PoPowProof outer element frames preserve authoritative slicing") {
-    Seq(PrefixFrame, SuffixHeadFrame, SuffixTailFrame).foreach { site =>
+  property("PoPowProof declared element lengths define outer slicing") {
+    Seq(PrefixElement, SuffixHeadElement, SuffixTailElement).foreach { site =>
       withClue(s"site=$site canonical") {
-        nipopowSerializer.parseBytes(serializeWithFrameMutation(framedProof, site, 0, 0)) shouldBe framedProof
+        nipopowSerializer.parseBytes(
+          serializeWithDeclaredLengthMutation(sampleProof, site, 0, 0)) shouldBe sampleProof
       }
       withClue(s"site=$site under-declared") {
-        nipopowSerializer.parseBytesTry(serializeWithFrameMutation(framedProof, site, -1, 0)) shouldBe 'failure
+        nipopowSerializer.parseBytesTry(
+          serializeWithDeclaredLengthMutation(sampleProof, site, -1, 0)) shouldBe 'failure
       }
       withClue(s"site=$site over-declared without filler") {
-        nipopowSerializer.parseBytesTry(serializeWithFrameMutation(framedProof, site, 1, 0)) shouldBe 'failure
+        nipopowSerializer.parseBytesTry(
+          serializeWithDeclaredLengthMutation(sampleProof, site, 1, 0)) shouldBe 'failure
       }
       withClue(s"site=$site over-declared with matching filler") {
-        nipopowSerializer.parseBytes(serializeWithFrameMutation(framedProof, site, 1, 1)) shouldBe framedProof
+        nipopowSerializer.parseBytes(
+          serializeWithDeclaredLengthMutation(sampleProof, site, 1, 1)) shouldBe sampleProof
       }
     }
   }
@@ -172,39 +179,39 @@ class SerializationTests extends ErgoCorePropertyTest with org.ergoplatform.util
       writer.putUInt(proof.m.toLong)
       writer.putUInt(proof.k.toLong)
       writer.putUInt(proof.prefix.length.toLong)
-      proof.prefix.foreach(header => putFrame(writer, header.bytes, false, 0, 0))
-      putFrame(writer, proof.suffixHead.bytes, false, 0, 0)
+      proof.prefix.foreach(header => putLengthPrefixed(writer, header.bytes, false, 0, 0))
+      putLengthPrefixed(writer, proof.suffixHead.bytes, false, 0, 0)
       writer.putUInt(MaxProofElements + 1L)
     }
 
     assertProofParseFailureContains(bytes, "suffix count")
   }
 
-  property("PoPowProof rejects oversized outer frames before reading them") {
+  property("PoPowProof rejects oversized length-prefixed elements before reading payloads") {
     val prefixBytes = writerBytes { writer =>
       writer.putUInt(1)
       writer.putUInt(1)
       writer.putUInt(1)
-      writer.putUInt(MaxPoPowHeaderFrameBytes + 1L)
+      writer.putUInt(MaxPoPowHeaderBytes + 1L)
     }
     val suffixHeadBytes = writerBytes { writer =>
       writer.putUInt(1)
       writer.putUInt(1)
       writer.putUInt(0)
-      writer.putUInt(MaxPoPowHeaderFrameBytes + 1L)
+      writer.putUInt(MaxPoPowHeaderBytes + 1L)
     }
     val suffixTailBytes = writerBytes { writer =>
       writer.putUInt(1)
       writer.putUInt(2)
       writer.putUInt(0)
-      putFrame(writer, framedProof.suffixHead.bytes, false, 0, 0)
+      putLengthPrefixed(writer, sampleProof.suffixHead.bytes, false, 0, 0)
       writer.putUInt(1)
-      writer.putUInt(MaxHeaderFrameBytes + 1L)
+      writer.putUInt(MaxHeaderBytes + 1L)
     }
 
-    assertProofParseFailureContains(prefixBytes, "prefix element frame size")
-    assertProofParseFailureContains(suffixHeadBytes, "suffix-head frame size")
-    assertProofParseFailureContains(suffixTailBytes, "suffix-tail frame size")
+    assertProofParseFailureContains(prefixBytes, "prefix element length")
+    assertProofParseFailureContains(suffixHeadBytes, "suffix head length")
+    assertProofParseFailureContains(suffixTailBytes, "suffix tail length")
   }
 
 }

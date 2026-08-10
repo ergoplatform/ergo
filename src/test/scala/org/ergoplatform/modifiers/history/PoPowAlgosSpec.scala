@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -29,7 +30,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
     PoPowParams(1, 0, continuous = false) shouldBe 'failure
     PoPowParams(Int.MaxValue, 1, continuous = false) shouldBe 'failure
 
-    PoPowParams.isValid(Int.MaxValue - 1, 1) shouldBe true
+    PoPowParams.isValid(PoPowParams.MaxProofElements, PoPowParams.MaxProofElements) shouldBe true
     PoPowParams(1, 1, continuous = false).get.minChainLength shouldBe 2
   }
 
@@ -52,6 +53,20 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
 
     completed.await(2, TimeUnit.SECONDS) shouldBe true
     error.get() shouldBe a[IllegalArgumentException]
+  }
+
+  private def validProof(m: Int = 1, k: Int = 1): NipopowProof = {
+    val chain = toPoPoWChain(genChain(m + k + 4))
+    nipopowAlgos.prove(chain)(PoPowParams(m, k, continuous = false).get).get
+  }
+
+  private class CountingNipopowAlgos extends NipopowAlgos(nipopowAlgos.chainSettings) {
+    var bestArgCalls: Int = 0
+
+    override def bestArg(chain: Seq[Header])(m: Int): Int = {
+      bestArgCalls += 1
+      super.bestArg(chain)(m)
+    }
   }
 
   property("updateInterlinks") {
@@ -227,6 +242,89 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
     val prefix = toPoPoWChain(genChain(1))
     val suffix = toPoPoWChain(genChain(1))
     NipopowProof(nipopowAlgos, 0, 0, prefix, suffix.head, suffix.tail.map(_.header), continuous = false).hasValidConnections shouldBe false
+  }
+
+  property("PoPowParams rejects invalid m") {
+    Seq(-1, 0, 20001).foreach { invalidM =>
+      withClue(s"m=$invalidM") {
+        PoPowParams(invalidM, 1, continuous = false).isFailure shouldBe true
+      }
+    }
+  }
+
+  property("PoPowParams rejects invalid k") {
+    Seq(-1, 0, 20001).foreach { invalidK =>
+      withClue(s"k=$invalidK") {
+        PoPowParams(1, invalidK, continuous = false).isFailure shouldBe true
+      }
+    }
+  }
+
+  property("PoPowParams accepts the sanity-bound endpoints") {
+    PoPowParams(1, 1, continuous = false).isSuccess shouldBe true
+    PoPowParams(20000, 20000, continuous = false).isSuccess shouldBe true
+  }
+
+  property("NipopowProof rejects invalid m") {
+    val proof = validProof()
+    proof.isValid shouldBe true
+    Seq(-1, 0, 20001).foreach { invalidM =>
+      withClue(s"m=$invalidM") {
+        proof.copy(m = invalidM).isValid shouldBe false
+      }
+    }
+  }
+
+  property("NipopowProof rejects invalid k") {
+    val proof = validProof()
+    proof.isValid shouldBe true
+    Seq(-1, 0, 20001).foreach { invalidK =>
+      withClue(s"k=$invalidK") {
+        proof.copy(k = invalidK).isValid shouldBe false
+      }
+    }
+  }
+
+  property("NipopowProof rejects a suffix length different from k") {
+    val proof = validProof()
+    proof.isValid shouldBe true
+    proof.copy(k = 2).isValid shouldBe false
+  }
+
+  property("NipopowProof exposes parameter and suffix validity") {
+    val proof = validProof()
+    proof.hasValidParams shouldBe true
+    proof.copy(m = 0).hasValidParams shouldBe false
+    proof.copy(k = 2).hasValidParams shouldBe false
+  }
+
+  property("isBetterThan rejects unequal m before scoring") {
+    val chain = toPoPoWChain(genChain(12))
+    val left = nipopowAlgos.prove(chain)(PoPowParams(1, 2, continuous = false).get).get
+    val right = nipopowAlgos.prove(chain)(PoPowParams(2, 2, continuous = false).get).get
+    left.isValid shouldBe true
+    right.isValid shouldBe true
+    val counting = new CountingNipopowAlgos
+
+    left.copy(popowAlgos = counting).isBetterThan(right.copy(popowAlgos = counting)) shouldBe false
+    counting.bestArgCalls shouldBe 0
+  }
+
+  property("isBetterThan rejects unequal k before scoring") {
+    val chain = toPoPoWChain(genChain(12))
+    val left = nipopowAlgos.prove(chain)(PoPowParams(1, 2, continuous = false).get).get
+    val right = nipopowAlgos.prove(chain)(PoPowParams(1, 3, continuous = false).get).get
+    left.isValid shouldBe true
+    right.isValid shouldBe true
+    val counting = new CountingNipopowAlgos
+
+    left.copy(popowAlgos = counting).isBetterThan(right.copy(popowAlgos = counting)) shouldBe false
+    counting.bestArgCalls shouldBe 0
+  }
+
+  property("maxLevelOf rejects a zero decoded target") {
+    val nonGenesis = genChain(2).last.header.copy(nBits = 0)
+    an[IllegalArgumentException] should be thrownBy nipopowAlgos.maxLevelOf(nonGenesis)
   }
 
 }

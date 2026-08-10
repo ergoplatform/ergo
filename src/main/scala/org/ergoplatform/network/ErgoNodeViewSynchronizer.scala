@@ -1066,7 +1066,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val msg = Message(NipopowProofSpec, Right(proofBytes), None)
           networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
         case None =>
-          log.warn("No Nipopow Proof available")
+          log.warn("No cached Nipopow proof available")
       }
     } else {
       // for now, we are serving proofs for concrete params only

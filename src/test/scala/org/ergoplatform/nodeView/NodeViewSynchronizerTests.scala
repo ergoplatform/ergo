@@ -144,32 +144,84 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: GetNipopowProof") {
+  property("NodeViewSynchronizer: GetNipopowProof serves and reuses the V2 cache") {
     withFixture { ctx =>
       import ctx._
 
-      // Generate history chain
       val emptyHistory = historyGen.sample.get
-      val prefix = blockStream(None).take(settings.chainSettings.makeSnapshotEvery)
-      val fullHistory = applyChain(emptyHistory, prefix)
+      val chain = blockStream(None).take(settings.chainSettings.makeSnapshotEvery)
+      val history = applyChain(emptyHistory, chain)
+      val cachedBytes = history.readPopowProofBytesFromDb().get
 
       // Broadcast updated history
-      node ! ChangedHistory(fullHistory)
+      node ! ChangedHistory(history)
 
       // Build and send GetNipopowProofSpec request
       val spec = GetNipopowProofSpec
-      val msgBytes = spec.toBytes(NipopowProofData(m = emptyHistory.P2PNipopowProofM, k = emptyHistory.P2PNipopowProofK, headerId = None))
+      val msgBytes = spec.toBytes(NipopowProofData(
+        m = history.P2PNipopowProofM,
+        k = history.P2PNipopowProofK,
+        headerId = None
+      ))
       node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
 
-      // Listen for NipopowProofSpec response
-      ncProbe.fishForMessage(5 seconds) {
+      // Listen for the cached NipopowProofSpec response
+      val firstResponse = ncProbe.fishForMessage(5 seconds) {
         case stn: SendToNetwork =>
           stn.message.spec match {
             case _: NipopowProofSpec.type => true
             case _ => false
           }
         case _: Any => false
+      }.asInstanceOf[SendToNetwork]
+      val firstBytes = firstResponse.message.data.get.asInstanceOf[Array[Byte]]
+      firstBytes.toSeq shouldBe cachedBytes.toSeq
+
+      // A second request must reuse the persisted bytes exactly.
+      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
+      val secondResponse = ncProbe.fishForMessage(5 seconds) {
+        case stn: SendToNetwork => stn.message.spec.isInstanceOf[NipopowProofSpec.type]
+        case _: Any => false
+      }.asInstanceOf[SendToNetwork]
+      secondResponse.message.data.get.asInstanceOf[Array[Byte]].toSeq shouldBe firstBytes.toSeq
+      history.readPopowProofBytesFromDb().get.toSeq shouldBe cachedBytes.toSeq
+    }
+  }
+
+  property("NodeViewSynchronizer: GetNipopowProof sends nothing when the V2 cache is missing") {
+    withFixture { ctx =>
+      import ctx._
+
+      val emptyHistory = org.ergoplatform.utils.HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val history = applyChain(
+        emptyHistory,
+        blockStream(None).take(settings.chainSettings.makeSnapshotEvery / 2)
+      )
+      history.readPopowProofBytesFromDb() shouldBe None
+      node ! ChangedHistory(history)
+      ncProbe.receiveWhile(max = 1.second, idle = 200.millis) { case message => message }
+
+      val spec = GetNipopowProofSpec
+      val msgBytes = spec.toBytes(NipopowProofData(
+        m = history.P2PNipopowProofM,
+        k = history.P2PNipopowProofK,
+        headerId = None
+      ))
+      node ! Message[NipopowProofData](spec, Left(msgBytes), Option(peer))
+
+      val responses = ncProbe.receiveWhile(max = 2.seconds, idle = 500.millis) {
+        case message => message
       }
+      responses.exists {
+        case stn: SendToNetwork => stn.message.spec.isInstanceOf[NipopowProofSpec.type]
+        case _ => false
+      } shouldBe false
+      history.readPopowProofBytesFromDb() shouldBe None
     }
   }
 

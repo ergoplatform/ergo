@@ -30,8 +30,3 @@
 - Follow existing test patterns in similar files
 - Type annotations for public methods
 - Prefer immutable data structures and functional patterns
-
-## Development Restrictions
-- **Code Changes**: Only modify code in `src/test/` folders
-- **Production Code**: Do not touch production code in `src/main/` directories
-- **Test Focus**: All development work should be test-related only

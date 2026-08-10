@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
+import scorex.util.bytesToId
 
 class ExtensionCandidateTest extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.CoreObjectGenerators.modifierIdGen
@@ -38,6 +39,22 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
         proof.get.valid(ext.interlinksDigest) shouldBe true
       }
     }
+  }
+
+  property("batchProofFor should bind interlinks to the complete mixed extension root") {
+    val interlinks = Seq(
+      bytesToId(Array.fill(32)(1.toByte)),
+      bytesToId(Array.fill(32)(2.toByte))
+    )
+    val interlinkFields = NipopowAlgos.packInterlinks(interlinks)
+    val nonInterlinkField = Array[Byte](2, 0) -> Array[Byte](1)
+    val ext = ExtensionCandidate(interlinkFields :+ nonInterlinkField)
+
+    val proof = ext.batchProofFor(interlinkFields.map(_._1.clone).toArray: _*)
+
+    proof shouldBe defined
+    proof.get.valid(ext.digest) shouldBe true
+    proof.get.valid(ext.interlinksDigest) shouldBe false
   }
 
   property("batchProofFor should return None for a empty fields") {

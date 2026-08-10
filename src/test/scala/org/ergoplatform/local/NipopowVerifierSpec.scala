@@ -57,12 +57,12 @@ class NipopowVerifierSpec extends AnyPropSpec with Matchers {
       proof.copy(k = 0),
       proof.copy(m = Int.MaxValue, k = 1)
     ).foreach { invalidProof =>
-      val proofBytes = invalidProof.serializer.toBytes(invalidProof)
-      val receivedProof = invalidProof.serializer.parseBytes(proofBytes)
-      receivedProof.isValid shouldBe false
+      invalidProof.isValid shouldBe false
+      an[IllegalArgumentException] should be thrownBy
+        invalidProof.serializer.toBytes(invalidProof)
 
       val verifier = new NipopowVerifier(Some(baseChain.head.id))
-      verifier.process(receivedProof) shouldBe ValidationError
+      verifier.process(invalidProof) shouldBe ValidationError
       verifier.bestChain shouldBe empty
     }
   }
@@ -71,16 +71,17 @@ class NipopowVerifierSpec extends AnyPropSpec with Matchers {
     val baseChain = genChain(100)
     val params = PoPowParams(5, 5, continuous = false).get
     val invalidProof = nipopowAlgos.prove(toPoPoWChain(baseChain))(params).get.copy(m = 0)
-    val proofBytes = invalidProof.serializer.toBytes(invalidProof)
-    val receivedProof = invalidProof.serializer.parseBytes(proofBytes)
+    invalidProof.isValid shouldBe false
+    an[IllegalArgumentException] should be thrownBy
+      invalidProof.serializer.toBytes(invalidProof)
     val verifier = new NipopowVerifier(Some(baseChain.head.id))
 
-    val firstResult = verifier.process(receivedProof)
+    val firstResult = verifier.process(invalidProof)
     val secondResult = new AtomicReference[NipopowProofVerificationResult]()
     val completed = new CountDownLatch(1)
     val worker = new Thread(new Runnable {
       override def run(): Unit =
-        try secondResult.set(verifier.process(receivedProof))
+        try secondResult.set(verifier.process(invalidProof))
         finally completed.countDown()
     })
     worker.setDaemon(true)

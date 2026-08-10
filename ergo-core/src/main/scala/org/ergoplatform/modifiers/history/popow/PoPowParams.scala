@@ -17,11 +17,32 @@ import scala.util.Try
 final class PoPowParams private (val m: Int, val k: Int, val continuous: Boolean, val minChainLength: Int)
 
 object PoPowParams {
+  final val MaxProofElements: Int = 20000
+
+  def isValidM(m: Int): Boolean = m >= 1 && m <= MaxProofElements
+
+  def isValidK(k: Int): Boolean = k >= 1 && k <= MaxProofElements
+
   def isValid(m: Int, k: Int): Boolean =
-    m >= 1 && k >= 1 && m.toLong + k.toLong <= Int.MaxValue
+    isValidM(m) && isValidK(k) && m.toLong + k.toLong <= Int.MaxValue
+
+  def areValid(m: Int, k: Int): Boolean = isValid(m, k)
+
+  def requireValidM(m: Int): Unit =
+    require(isValidM(m), s"m parameter $m must be in 1..=$MaxProofElements")
+
+  def requireValidK(k: Int): Unit =
+    require(isValidK(k), s"k parameter $k must be in 1..=$MaxProofElements")
+
+  def requireValid(m: Int, k: Int): Unit = {
+    requireValidM(m)
+    requireValidK(k)
+    require(m.toLong + k.toLong <= Int.MaxValue,
+      s"NiPoPoW parameter sum exceeds Int range: m=$m, k=$k")
+  }
 
   def apply(m: Int, k: Int, continuous: Boolean): Try[PoPowParams] = Try {
-    require(isValid(m, k), s"Invalid NiPoPoW parameters: m=$m, k=$k")
+    requireValid(m, k)
     new PoPowParams(m, k, continuous, m + k)
   }
 }

@@ -51,7 +51,9 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     */
   def isBetterThan(that: NipopowProof): Boolean = {
     try {
-      if (this.isValid && that.isValid) {
+      if (this.m != that.m || this.k != that.k) {
+        false
+      } else if (this.isValid && that.isValid) {
         popowAlgos.lowestCommonAncestor(headersChain, that.headersChain)
           .map(h => headersChain.filter(_.height > h.height) -> that.headersChain.filter(_.height > h.height))
           .exists({ case (thisDivergingChain, thatDivergingChain) =>
@@ -72,12 +74,20 @@ case class NipopowProof(popowAlgos: NipopowAlgos,
     * @return true if the proof is valid
     */
   lazy val isValid: Boolean = {
-    PoPowParams.isValid(m, k) &&
+    this.hasValidParams &&
       this.hasValidConnections &&
       this.hasValidHeights &&
       this.hasValidProofs &&
       this.hasValidDifficultyHeaders &&
       this.hasValidPow
+  }
+
+  /**
+    * Checks proof parameters and the exact suffix cardinality before any
+    * parameter-dependent scoring or validation work.
+    */
+  lazy val hasValidParams: Boolean = {
+    PoPowParams.areValid(m, k) && suffixTail.lengthCompare(k - 1) == 0
   }
 
   /**
@@ -192,9 +202,27 @@ object NipopowProof {
 
 }
 
+object NipopowProofSerializer {
+  private val MaxProofElements = PoPowParams.MaxProofElements
+
+  private def requireWithinLimit(value: Int, limit: Int, what: String): Unit =
+    require(value <= limit, s"$what $value exceeds sanity limit $limit")
+
+  private def readLengthPrefixed[T](r: Reader,
+                                    limit: Int,
+                                    what: String)
+                                   (parse: Array[Byte] => T): T = {
+    val declaredLength = r.getUInt().toIntExact
+    requireWithinLimit(declaredLength, limit, s"$what length")
+    parse(r.getBytes(declaredLength))
+  }
+}
+
 class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[NipopowProof] {
+  import NipopowProofSerializer._
 
   override def serialize(obj: NipopowProof, w: Writer): Unit = {
+    require(obj.hasValidParams, "Invalid NiPoPoW proof parameters or suffix length")
     w.putUInt(obj.m.toLong)
     w.putUInt(obj.k.toLong)
     w.putUInt(obj.prefix.size.toLong)
@@ -218,19 +246,27 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
   override def parse(r: Reader): NipopowProof = {
     val m = r.getUInt().toIntExact
     val k = r.getUInt().toIntExact
+    PoPowParams.requireValid(m, k)
     val prefixSize = r.getUInt().toIntExact
+    requireWithinLimit(prefixSize, MaxProofElements, "prefix count")
     val prefix = (0 until prefixSize).map { _ =>
-      val size = r.getUInt().toIntExact
-      PoPowHeaderSerializer.parseBytes(r.getBytes(size))
+      readLengthPrefixed(r, PoPowHeaderSerializer.MaxSerializedBytes, "prefix element")(
+        PoPowHeaderSerializer.parseBytes)
     }
-    val suffixHeadSize = r.getUInt().toIntExact
-    val suffixHead = PoPowHeaderSerializer.parseBytes(r.getBytes(suffixHeadSize))
+    val suffixHead = readLengthPrefixed(r, PoPowHeaderSerializer.MaxSerializedBytes, "suffix head")(
+      PoPowHeaderSerializer.parseBytes)
     val suffixSize = r.getUInt().toIntExact
+    requireWithinLimit(suffixSize, MaxProofElements, "suffix count")
+    require(suffixSize == k - 1,
+      s"NiPoPoW suffix length ${suffixSize + 1} does not match k parameter $k")
     val suffixTail = (0 until suffixSize).map { _ =>
-      val size = r.getUInt().toIntExact
-      HeaderSerializer.parseBytes(r.getBytes(size))
+      readLengthPrefixed(r, PoPowHeaderSerializer.MaxHeaderBytes, "suffix tail")(
+        HeaderSerializer.parseBytes)
     }
-    val continuous = if (r.getByte() == 1) true else false
+    val continuousByte = r.getByte()
+    require(continuousByte == 0 || continuousByte == 1,
+      s"invalid NiPoPoW continuous mode byte ${continuousByte & 0xff}")
+    val continuous = continuousByte == 1
     NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
   }
 

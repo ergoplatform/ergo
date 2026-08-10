@@ -166,6 +166,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       bh.take(1000)._1.foreach { box =>
         us.boxById(box.id) shouldBe Some(box)
       }
+      us.closeStorage()
     }
   }
 
@@ -244,6 +245,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       ADProofs.proofDigest(proof1) shouldBe ADProofs.proofDigest(proof2)
       digest1 shouldBe digest2
+      us.closeStorage()
     }
   }
 
@@ -271,6 +273,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val correctTransactions = IndexedSeq(txWithDataInputs)
       val digest = us.proofsForTransactions(correctTransactions).get._2
       us.applyTransactions(correctTransactions, emptyModifierId, digest, emptyStateContext).get
+      us.closeStorage()
     }
   }
 
@@ -328,6 +331,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       // proof of non-existence
       val d2 = us.proofsForTransactions(txsNext).get._2
       us.applyTransactions(txsNext, emptyModifierId, d2, emptyStateContext) shouldBe 'success
+      us.closeStorage()
     }
   }
 
@@ -348,6 +352,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val block = wBlock.copy(header = wBlock.header.copy(height = 1))
       val newSC = us.stateContext.appendFullBlock(block).get
       us.applyTransactions(txs, emptyModifierId, digest, newSC).get
+      us.closeStorage()
     }
   }
 
@@ -373,6 +378,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val fb = new ErgoFullBlock(header, bt, genExtension(header, us.stateContext), None)
       val newSC = us.stateContext.appendFullBlock(fb).get
       us.applyTransactions(txs, emptyModifierId, digest, newSC).get
+      us.closeStorage()
     }
   }
 
@@ -413,6 +419,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       // Fails on generating state root digest for the block
       us.proofsForTransactions(txs).isSuccess shouldBe false
+      us.closeStorage()
     }
   }
 
@@ -427,6 +434,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       us.proofsForTransactions(txsFromHolder).isSuccess shouldBe true
       val d3 = us.rootDigest
       d1.sameElements(d3) shouldBe true
+      us.closeStorage()
     }
   }
 
@@ -446,6 +454,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       val us = createUtxoState(bh, parameters)
       us.proofsForTransactions(txs).isSuccess shouldBe false
+      us.closeStorage()
     }
   }
 
@@ -456,6 +465,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       val block = validFullBlock(parentOpt = None, us, bh)
       us.applyModifier(block, None)(_ => ()).get
+      us.closeStorage()
     }
   }
 

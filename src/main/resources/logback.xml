@@ -30,6 +30,10 @@
         </encoder>
     </appender>
 
+    <!-- Uncomment to log every HTTP query served by the node: method, URI, status and duration.
+         Request and response bodies are not logged. -->
+    <!-- <logger name="org.ergoplatform.http.ErgoHttpService" level="DEBUG"/> -->
+
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
         <appender-ref ref="FILE"/>

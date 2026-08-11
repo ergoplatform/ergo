@@ -716,18 +716,32 @@ object CandidateGenerator extends ScorexLogging {
     ).headOption
   }
 
+  /**
+    * Maximum number of fee boxes a single fee-collecting transaction is allowed to spend.
+    *
+    * A block may contain far more fee-paying transactions than that, and putting every fee box into
+    * one reward transaction can push that transaction past the block limits, which makes the whole
+    * candidate invalid. Fee boxes are therefore collected in chunks of at most this size.
+    */
+  val MaxFeeBoxesPerTransaction: Int = 100
+
+  /**
+    * Transactions collecting fees from `txs`. Normally there is at most one, but a block carrying
+    * more than `MaxFeeBoxesPerTransaction` fee boxes produces several.
+    */
   def collectFees(
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
     stateContext: ErgoStateContext
-  ): Option[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, stateContext, Colls.emptyColl).headOption
+  ): Seq[ErgoTransaction] = {
+    collectRewards(None, currentHeight, txs, minerPk, stateContext, Colls.emptyColl)
   }
 
   /**
-    * Generate from 0 to 2 transaction that collecting rewards from fee boxes in block transactions `txs` and
-    * emission box `emissionBoxOpt`
+    * Generate transactions collecting rewards from fee boxes in block transactions `txs` and from the
+    * emission box `emissionBoxOpt`: at most one emission transaction, followed by one fee-collecting
+    * transaction per chunk of at most `MaxFeeBoxesPerTransaction` fee boxes.
     */
   def collectRewards(
     emissionBoxOpt: Option[ErgoBox],
@@ -823,19 +837,22 @@ object CandidateGenerator extends ScorexLogging {
     val feeBoxes: Seq[ErgoBox] = ErgoState
       .newBoxes(txs)
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
-    val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
-      val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets =
-        feeBoxes.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
-      val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
-      val minerBox =
-        new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
-      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
-    } else {
-      None
-    }
+    // Fee boxes are spent in chunks: a single transaction taking all of them as inputs may be too
+    // big or too costly to be valid when a block carries many fee-paying transactions.
+    val feeTxs: Seq[ErgoTransaction] = feeBoxes
+      .grouped(MaxFeeBoxesPerTransaction)
+      .map { chunk =>
+        val feeAmount = chunk.map(_.value).sum
+        val feeAssets =
+          chunk.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
+        val chunkInputs = chunk.map(b => new Input(b.id, ProverResult.empty))
+        val minerBox =
+          new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
+        ErgoTransaction(chunkInputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox))
+      }
+      .toSeq
 
-    Seq(emissionTxOpt, feeTxOpt).flatten
+    emissionTxOpt.toSeq ++ feeTxs
   }
 
   /**
@@ -880,11 +897,11 @@ object CandidateGenerator extends ScorexLogging {
     def loop(
               mempoolTxs: Iterable[ErgoTransaction],
               acc: Seq[CostedTransaction],
-              lastFeeTx: Option[CostedTransaction],
+              lastFeeTxs: Seq[CostedTransaction],
               invalidTxs: Seq[ModifierId]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
-      val currentCosted = acc ++ lastFeeTx
+      val currentCosted = acc ++ lastFeeTxs
       def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
 
       val stateWithTxs = us.withTransactions(current)
@@ -895,7 +912,7 @@ object CandidateGenerator extends ScorexLogging {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+            loop(mempoolTxs.tail, acc, lastFeeTxs, invalidTxs :+ tx.id)
           } else {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
@@ -908,40 +925,49 @@ object CandidateGenerator extends ScorexLogging {
                 val newTxs = acc :+ (tx -> costConsumed)
                 val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
-                  case Some(feeTx) =>
-                    val boxesToSpend = feeTx.inputs.flatMap(i =>
-                      newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
-                    )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
-                      case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
-                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
-                        } else {
-                          log.debug(s"Finishing block assembly on limits overflow, " +
-                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
-                          current -> invalidTxs
-                        }
-                      case Failure(e) =>
-                        log.warn(
-                          s"Fee collecting tx is invalid, not including it, " +
-                            s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                val feeTxs = collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext)
+                if (feeTxs.nonEmpty) {
+                  // every fee-collecting transaction has to be valid on its own, so a single bad
+                  // one aborts the step exactly as it did when there was only ever one of them
+                  val costedFeeTxs = feeTxs.foldLeft(Try(Seq.empty[CostedTransaction])) {
+                    case (accTry, feeTx) =>
+                      accTry.flatMap { validSoFar =>
+                        val boxesToSpend = feeTx.inputs.flatMap(i =>
+                          newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
                         )
+                        feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier)
+                          .map(cost => validSoFar :+ (feeTx -> cost))
+                      }
+                  }
+                  costedFeeTxs match {
+                    case Success(validFeeTxs) =>
+                      val blockTxs: Seq[CostedTransaction] = validFeeTxs ++ newTxs
+                      if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                        loop(mempoolTxs.tail, newTxs, validFeeTxs, invalidTxs)
+                      } else {
+                        log.debug(s"Finishing block assembly on limits overflow, " +
+                                  s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
                         current -> invalidTxs
-                    }
-                  case None =>
-                    log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
-                    } else {
+                      }
+                    case Failure(e) =>
+                      log.warn(
+                        s"Fee collecting tx is invalid, not including it, " +
+                          s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                      )
                       current -> invalidTxs
-                    }
+                  }
+                } else {
+                  log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                  val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTxs
+                  if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                    loop(mempoolTxs.tail, blockTxs, lastFeeTxs, invalidTxs)
+                  } else {
+                    current -> invalidTxs
+                  }
                 }
               case Failure(e) =>
                 log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+                loop(mempoolTxs.tail, acc, lastFeeTxs, invalidTxs :+ tx.id)
             }
           }
         case None => // mempool is empty
@@ -949,7 +975,7 @@ object CandidateGenerator extends ScorexLogging {
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = loop(transactions, Seq.empty, Seq.empty, Seq.empty)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

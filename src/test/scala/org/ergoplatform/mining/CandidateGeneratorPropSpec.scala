@@ -264,7 +264,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         defaultMinerPk,
         emptyStateContext
       )
-      txs.length shouldBe 2
+      // one emission transaction, then one fee-collecting transaction per chunk of fee boxes
+      txs.length should be >= 2
 
       val emissionTx = txs.head
       emissionTx.outputs.length shouldBe 2
@@ -273,13 +274,54 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         defaultMinerPk
       )
 
-      val feeTx = txs.last
-      feeTx.outputs.length shouldBe 1
-      feeTx.outputs.head.value shouldBe blockTxs.flatMap(_.outputs).map(_.value).sum
-      feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(
-        defaultMinerPk
-      )
+      val feeTxs = txs.tail
+      feeTxs.foreach { feeTx =>
+        feeTx.outputs.length shouldBe 1
+        feeTx.inputs.length should be <= CandidateGenerator.MaxFeeBoxesPerTransaction
+        feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(
+          defaultMinerPk
+        )
+      }
+      // whatever the split, the miner is paid the same total
+      feeTxs.flatMap(_.outputs).map(_.value).sum shouldBe blockTxs
+        .flatMap(_.outputs)
+        .map(_.value)
+        .sum
     }
+  }
+
+  property("fee boxes are collected in chunks of at most MaxFeeBoxesPerTransaction") {
+    val height = EmptyHistoryHeight
+    val chunkSize = CandidateGenerator.MaxFeeBoxesPerTransaction
+
+    // gather fee-paying transactions until there are more fee boxes than fit in one chunk
+    val gen = validErgoTransactionGenTemplate(minAssets = 0, propositionGen = feeProp)
+    var blockTxs = gen.sample.toSeq.map(_._2)
+    while (blockTxs.flatMap(_.outputs).size <= chunkSize * 2) {
+      gen.sample.foreach(s => blockTxs = blockTxs :+ s._2)
+    }
+    val feeBoxes = blockTxs.flatMap(_.outputs)
+    feeBoxes.size should be > chunkSize
+
+    val txs = CandidateGenerator.collectRewards(
+      None,
+      height,
+      blockTxs,
+      defaultMinerPk,
+      emptyStateContext
+    )
+
+    // no emission box was passed in, so these are all fee-collecting transactions
+    txs.length shouldBe math.ceil(feeBoxes.size.toDouble / chunkSize).toInt
+    txs.foreach(_.inputs.length should be <= chunkSize)
+
+    // every fee box is spent exactly once across the chunks, and nothing is spent twice
+    val spent = txs.flatMap(_.inputs.map(_.boxId.toSeq))
+    spent.distinct.size shouldBe spent.size
+    spent.toSet shouldBe feeBoxes.map(_.id.toSeq).toSet
+
+    // and the miner still receives the whole amount
+    txs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
   }
 
   property("stale emission tx is invalidated when its box was spent by concurrently applied block") {

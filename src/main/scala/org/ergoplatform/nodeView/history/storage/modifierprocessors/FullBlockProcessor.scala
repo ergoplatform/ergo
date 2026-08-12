@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -24,9 +25,8 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
-  def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .map(ByteArrayWrapper.apply)
-    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
+  def isInBestFullChain(id: ModifierId): Boolean =
+    FullBlockProcessor.isInBestFullChain(historyStorage, id)
 
   /**
     * Id of header that contains transactions and proofs
@@ -287,5 +287,13 @@ object FullBlockProcessor {
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("main_chain".getBytes(CharsetName) ++ idToBytes(id)))
+
+  private[history] def isInBestFullChain(
+    historyStorage: HistoryStorage,
+    id: ModifierId
+  ): Boolean =
+    historyStorage.getIndex(chainStatusKey(id))
+      .map(ByteArrayWrapper.apply)
+      .contains(ByteArrayWrapper(BestChainMarker))
 
 }

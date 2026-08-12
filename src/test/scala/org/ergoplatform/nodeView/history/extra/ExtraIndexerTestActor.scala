@@ -170,12 +170,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
   }
 
   private def cacheBlockTransactions(height: Int, transactions: BlockTransactions): Unit = {
-    val cacheAccessor = getClass.getMethods
-      .find(_.getName.endsWith("$$blockCache"))
-      .getOrElse(throw new IllegalStateException("ExtraIndexer block cache accessor not found"))
-    val cache = cacheAccessor.invoke(this)
-      .asInstanceOf[scala.collection.concurrent.Map[Int, BlockTransactions]]
-    cache.put(height, transactions)
+    putBlockTransactionsInCache(height, transactions)
     test.lock.lock()
     test.created.signal()
     test.lock.unlock()

@@ -108,7 +108,9 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       log.info(
         s"Block ${block.id} with ${block.transactions.size} transactions at height ${block.header.height} generated")
 
-      loop(state.applyModifier(block, None)(_ => ()).get, outToPassNext, Some(block.header), acc :+ block.id)(history)
+      val newState = state.applyModifier(block, None)(_ => ()).get
+      history.reportModifierIsValid(block).get
+      loop(newState, outToPassNext, Some(block.header), acc :+ block.id)(history)
     } else {
       acc
     }

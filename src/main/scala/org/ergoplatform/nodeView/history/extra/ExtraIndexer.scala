@@ -17,7 +17,6 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import scorex.db.ByteArrayWrapper
 import sigma.ast.ErgoTree
 import sigma.Extensions._
 import sigma.interpreter.ProverResult
@@ -75,9 +74,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
     _history.headerIdsAtHeight(height)
       .find { id =>
-        historyStorage.getIndex(FullBlockProcessor.chainStatusKey(id))
-          .map(ByteArrayWrapper.apply)
-          .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker)) &&
+        FullBlockProcessor.isInBestFullChain(historyStorage, id) &&
           _history.isSemanticallyValid(id) == ModifierSemanticValidity.Valid
       }
       .flatMap(id => _history.typedModifierById[Header](id))
@@ -145,6 +142,13 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * Holds upcoming blocks to be indexed, and when empty, it is filled back from multiple threads
     */
   private val blockCache: concurrent.Map[Int, BlockTransactions] = new ConcurrentHashMap[Int, BlockTransactions]().asScala
+
+  private[extra] final def putBlockTransactionsInCache(
+    height: Int,
+    transactions: BlockTransactions
+  ): Unit =
+    blockCache.put(height, transactions)
+
   private var readingUpTo: Int = 0
 
   /**
@@ -168,7 +172,9 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           blockNums.zip(blockNums.tail).map { range => // ranges of 250 blocks for each thread to read
             Future {
               (range._1 until range._2).foreach { blockNum =>
-                fullChainHeaderAtHeight(blockNum).flatMap(blockTransactionsForHeader).map(blockCache.put(blockNum, _))
+                fullChainHeaderAtHeight(blockNum)
+                  .flatMap(blockTransactionsForHeader)
+                  .map(putBlockTransactionsInCache(blockNum, _))
               }
             }
           }
@@ -176,7 +182,9 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           val blockNums = height + 1 to readingUpTo
           Future {
             blockNums.foreach { blockNum =>
-              fullChainHeaderAtHeight(blockNum).flatMap(blockTransactionsForHeader).map(blockCache.put(blockNum, _))
+              fullChainHeaderAtHeight(blockNum)
+                .flatMap(blockTransactionsForHeader)
+                .map(putBlockTransactionsInCache(blockNum, _))
             }
           }
         }

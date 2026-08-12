@@ -2,7 +2,9 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
-import scorex.util.ModifierId
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.modifiers.history.header.Header
+import scorex.util.{ModifierId, bytesToId}
 
 /**
  * An immutable state for extra indexer
@@ -40,13 +42,19 @@ object IndexerState {
     val globalTxIndex = getIndex(GlobalTxIndexKey, history).getLong
     val globalBoxIndex = getIndex(GlobalBoxIndexKey, history).getLong
     val rollbackTo = getIndex(RollbackToKey, history).getInt
+    val indexedHeaderId = history.historyStorage
+      .modifierBytesById(bytesToId(IndexedHeaderIdKey))
+      .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+      .map(bytesToId)
+      .filter(id => history.typedModifierById[Header](id).exists(_.height == indexedHeight))
     IndexerState(
       indexedHeight,
       globalTxIndex,
       globalBoxIndex,
       rollbackTo,
-      caughtUp = indexedHeight == history.fullBlockHeight,
-      indexedHeaderId = history.bestHeaderIdAtHeight(indexedHeight)
+      caughtUp = indexedHeight == history.fullBlockHeight &&
+        (indexedHeight == 0 || indexedHeaderId.isDefined),
+      indexedHeaderId = indexedHeaderId
     )
   }
 

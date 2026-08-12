@@ -1,7 +1,8 @@
 package org.ergoplatform.nodeView.history.extra
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash, Timers}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoApp, GlobalConstants, Pay2SAddress}
+import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -13,8 +14,10 @@ import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.db.ByteArrayWrapper
 import sigma.ast.ErgoTree
 import sigma.Extensions._
 import sigma.interpreter.ProverResult
@@ -27,19 +30,26 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable
 import scala.collection.concurrent
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 /**
   * Base trait for extra indexer actor and its test.
   */
-trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
+trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
+
+  private case class RetryIndex(generation: Long)
+  private case object RetryIndexTimerKey
+  private case class RollbackToHeader(header: Header, resume: Boolean)
+  private var retryGeneration: Long = 0L
 
   private implicit val ec: ExecutionContextExecutor = context.dispatcher
 
   /**
     * Max buffer size (determined by config)
     */
-  protected val saveLimit: Int
+  protected def saveLimit: Int
 
   /**
     * Number of transaction/box numeric indexes object segments contain
@@ -62,16 +72,60 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
+  protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
+    _history.headerIdsAtHeight(height)
+      .find { id =>
+        historyStorage.getIndex(FullBlockProcessor.chainStatusKey(id))
+          .map(ByteArrayWrapper.apply)
+          .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker)) &&
+          _history.isSemanticallyValid(id) == ModifierSemanticValidity.Valid
+      }
+      .flatMap(id => _history.typedModifierById[Header](id))
+  }
+
+  protected def blockTransactionsForHeader(header: Header): Option[BlockTransactions] = {
+    history.typedModifierById[BlockTransactions](header.transactionsId).filter(_.headerId == header.id)
+  }
+
+  protected def retryDelay: FiniteDuration = 1.second
+
+  private def scheduleRetry(): Unit = {
+    if (!timers.isTimerActive(RetryIndexTimerKey)) {
+      retryGeneration += 1
+      timers.startSingleTimer(RetryIndexTimerKey, RetryIndex(retryGeneration), retryDelay)
+    }
+  }
+
+  private def cancelRetry(): Unit = {
+    retryGeneration += 1
+    timers.cancel(RetryIndexTimerKey)
+  }
+
+  protected def resetTransientState(): Unit = {
+    cancelRetry()
+    blockCache.clear()
+    readingUpTo = 0
+  }
+
   /**
    * Used in tests to indicate the indexer has caught up to the chain
    */
   protected def caughtUpHook(height: Int = 0): Unit = {}
 
+  protected def continueCatchUpAfterIndex(state: IndexerState): Boolean = true
+
+  protected def requestShutdown(): Unit = {
+    ErgoApp.shutdownSystem()(context.system)
+  }
+
+  protected def removeRollbackIndexes(ids: Array[ModifierId]): Try[Unit] =
+    historyStorage.removeExtraTry(ids)
+
   /**
    * Used in tests to get block for rollback, maybe orphan
    */
   protected def getLastTxForHeight(height: Int): ErgoTransaction = {
-    history.bestBlockTransactionsAt(height).get.txs.last
+    fullChainHeaderAtHeight(height).flatMap(blockTransactionsForHeader).get.txs.last
   }
 
   // fast access buffers
@@ -100,8 +154,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * @param height - blockheight to get transations from
     * @return transactions at height
     */
-  private def getBlockTransactionsAt(height: Int): Option[BlockTransactions] = {
-    blockCache.remove(height).orElse(history.bestBlockTransactionsAt(height)).map { txs =>
+  private def getBlockTransactionsAt(height: Int, header: Header): Option[BlockTransactions] = {
+    val cached = blockCache.remove(height)
+    val txsOpt = cached.filter(_.headerId == header.id).orElse(blockTransactionsForHeader(header))
+
+    txsOpt.map { txs =>
       if (height % 1000 == 0) blockCache.keySet.filter(_ < height).map(blockCache.remove)
       if (readingUpTo - height < 300 && chainHeight - height > 1000) {
         readingUpTo = math.min(height + 1001, chainHeight)
@@ -111,7 +168,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           blockNums.zip(blockNums.tail).map { range => // ranges of 250 blocks for each thread to read
             Future {
               (range._1 until range._2).foreach { blockNum =>
-                history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
+                fullChainHeaderAtHeight(blockNum).flatMap(blockTransactionsForHeader).map(blockCache.put(blockNum, _))
               }
             }
           }
@@ -119,7 +176,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val blockNums = height + 1 to readingUpTo
           Future {
             blockNums.foreach { blockNum =>
-              history.bestBlockTransactionsAt(blockNum).map(blockCache.put(blockNum, _))
+              fullChainHeaderAtHeight(blockNum).flatMap(blockTransactionsForHeader).map(blockCache.put(blockNum, _))
             }
           }
         }
@@ -240,41 +297,41 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   /**
     * Write buffered indexes to database and clear buffers.
     */
-  private def saveProgress(state: IndexerState): Unit = {
-
+  private def saveProgress(state: IndexerState): Try[Unit] = Try {
     val start: Long = System.currentTimeMillis
 
-    // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
-
     templates.values.foreach { template =>
       template.buffer.values.foreach(seg => segments.put(seg.id, seg))
       template.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
-
-    // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       token.buffer.values.foreach(seg => segments.put(seg.id, seg))
       token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
 
-    // insert modifiers and progress info to db
-    historyStorage.insertExtra(
+    val indexedHeaderEntry = state.indexedHeaderId.map { id =>
+      IndexedHeaderIdKey -> fastIdToBytes(id)
+    }.toArray
+    val objects = (general.iterator ++ boxes.valuesIterator ++ trees.valuesIterator ++
+      templates.valuesIterator ++ tokens.valuesIterator ++ segments.valuesIterator).toArray
+    historyStorage.insertExtraTry(
       Array(
         (IndexedHeightKey, ByteBuffer.allocate(4).putInt(state.indexedHeight).array),
         (GlobalTxIndexKey, ByteBuffer.allocate(8).putLong(state.globalTxIndex).array),
         (GlobalBoxIndexKey, ByteBuffer.allocate(8).putLong(state.globalBoxIndex).array),
         (RollbackToKey, ByteBuffer.allocate(4).putInt(state.rollbackTo).array)
-      ),
-      (((((general ++= boxes.values) ++= trees.values) ++= templates.values) ++= tokens.values) ++= segments.values).toArray
-    )
+      ) ++ indexedHeaderEntry,
+      objects
+    ).recoverWith { case error =>
+      historyStorage.invalidateExtraCache(objects.iterator.map(_.id).toSeq)
+      Failure(error)
+    }.get
 
     log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
-
-    // clear buffers for next batch
     general.clear()
     boxes.clear()
     trees.clear()
@@ -287,17 +344,18 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * Process a batch of BlockTransactions into memory and occasionally write them to database.
     *
     * @param state     - current indexer state
-    * @param headerOpt - header to index block transactions of (used after caught up with chain)
+    * @param header       - exact full-chain header to index
+    * @param targetHeight - full-chain height captured for this catch-up pass
     */
-  protected def index(state: IndexerState, headerOpt: Option[Header] = None): IndexerState = {
-    val btOpt = headerOpt.flatMap { header =>
-      history.typedModifierById[BlockTransactions](header.transactionsId)
-    }.orElse(getBlockTransactionsAt(state.indexedHeight))
-    val height = headerOpt.map(_.height).getOrElse(state.indexedHeight)
+  protected def index(state: IndexerState,
+                      header: Header,
+                      targetHeight: Int): Option[IndexerState] = {
+    val height = header.height
+    val btOpt = getBlockTransactionsAt(height, header)
 
     if (btOpt.isEmpty) {
       log.error(s"Could not read block $height / $chainHeight from database, waiting for new block until retrying")
-      return state.decrementIndexedHeight.copy(caughtUp = true)
+      return None
     }
 
     val txs: Seq[ErgoTransaction] = btOpt.get.txs
@@ -375,11 +433,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     log.info(s"Buffered block $height / $chainHeight [txs: ${txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
-    val maxHeight = headerOpt.map(_.height).getOrElse(chainHeight)
-    newState.copy(
-      caughtUp = newState.indexedHeight == maxHeight,
-      indexedHeaderId = headerOpt.map(_.id).orElse(history.bestHeaderIdAtHeight(height))
-    )
+    Some(newState.copy(
+      caughtUp = newState.indexedHeight == targetHeight,
+      indexedHeaderId = Some(header.id)
+    ))
   }
 
   /**
@@ -388,15 +445,15 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * @param state  - current state of indexer
     * @param height - forking height (height of last common block)
     */
-  private def removeAfter(state: IndexerState, height: Int): IndexerState = {
+  private def removeAfter(state: IndexerState, targetHeader: Header): Try[IndexerState] = Try {
 
     var newState: IndexerState = state
+    val height = targetHeader.height
 
-    saveProgress(newState)
+    saveProgress(newState).get
     log.info(s"Rolling back indexes from ${state.indexedHeight} to $height")
 
-    try {
-      val lastTxToKeep: ErgoTransaction = getLastTxForHeight(height)
+      val lastTxToKeep: ErgoTransaction = blockTransactionsForHeader(targetHeader).get.txs.last
       val txTarget: Long = history.typedExtraIndexById[IndexedErgoTransaction](lastTxToKeep.id).get.globalIndex
       val boxTarget: Long = history.typedExtraIndexById[IndexedErgoBox](bytesToId(lastTxToKeep.outputs.last.id)).get.globalIndex
       val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
@@ -417,12 +474,12 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
           template.findAndModBox(iEb.globalIndex, history)
 
-          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address, template) ++ address.buffer.values ++ template.buffer.values)
+          historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](iEb, address, template) ++ address.buffer.values ++ template.buffer.values).get
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
             history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
               token.findAndModBox(iEb.globalIndex, history)
-              historyStorage.insertExtra(Array.empty, Array[ExtraIndex](token) ++ token.buffer.values)
+              historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](token) ++ token.buffer.values).get
             }
           }
         }
@@ -460,61 +517,137 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       newState = newState.incrementBoxIndex
 
       // Save changes
-      newState = newState.copy(
+      val completedState = newState.copy(
         indexedHeight = height,
         rollbackTo = 0,
-        caughtUp = state.caughtUp,
-        indexedHeaderId = history.bestHeaderIdAtHeight(height)
+        caughtUp = height == chainHeight && fullChainHeaderAtHeight(height).exists(_.id == targetHeader.id),
+        indexedHeaderId = Some(targetHeader.id)
       )
-      historyStorage.removeExtra(toRemove.toArray)
-      saveProgress(newState)
-    } catch {
-      case t: Throwable => log.error(s"removeAfter during rollback failed due to: ${t.getMessage}", t)
-    }
+      removeRollbackIndexes(toRemove.toArray).get
+      saveProgress(completedState).get
+      completedState
+  }
 
-    newState
+  private def indexedTipIsOnBestFullChain(state: IndexerState): Boolean = {
+    state.indexedHeight == 0 ||
+      (chainHeight >= state.indexedHeight &&
+        state.indexedHeaderId == fullChainHeaderAtHeight(state.indexedHeight).map(_.id))
+  }
+
+  private def reconcileIndexedTip(state: IndexerState): Boolean = {
+    val rollbackHeaderOpt = for {
+      indexedHeaderId <- state.indexedHeaderId
+      indexedHeader <- history.typedModifierById[Header](indexedHeaderId)
+      bestFullBlock <- history.bestFullBlockOpt
+      branchPointId <- history.chainToHeader(Some(indexedHeader), bestFullBlock.header)._1
+      branchHeader <- history.typedModifierById[Header](branchPointId)
+      if branchHeader.height < state.indexedHeight
+    } yield branchHeader
+
+    rollbackHeaderOpt.exists { branchHeader =>
+      beginRollback(state, branchHeader)
+      true
+    }
+  }
+
+  private def validatedRollbackHeader(state: IndexerState, branchPoint: ModifierId): Option[Header] = {
+    history.typedModifierById[Header](branchPoint).filter { header =>
+      header.height < state.indexedHeight &&
+        fullChainHeaderAtHeight(header.height).exists(_.id == header.id)
+    }
+  }
+
+  protected def beginRollback(state: IndexerState, targetHeader: Header, resume: Boolean = true): Unit = {
+    resetTransientState()
+    context.become(receive.orElse(loaded(state.copy(caughtUp = false, rollbackTo = targetHeader.height))))
+    self ! RollbackToHeader(targetHeader, resume)
+  }
+
+  private def persistBuffered(state: IndexerState): Boolean = {
+    saveProgress(state) match {
+      case Success(_) => true
+      case Failure(error) =>
+        log.error(s"Failed to persist extra indexes at height ${state.indexedHeight}; retrying", error)
+        scheduleRetry()
+        false
+    }
   }
 
   protected def loaded(state: IndexerState): Receive = {
 
     case Index() if !state.caughtUp && !state.rollbackInProgress =>
-      val nextHeaderOpt = history.bestHeaderAtHeight(state.indexedHeight + 1)
-      val extendsIndexedTip = nextHeaderOpt.forall { header =>
-        state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)
-      }
-      if (extendsIndexedTip) {
-        val newState = index(state.incrementIndexedHeight)
-        if (modCount >= saveLimit) saveProgress(newState)
-        context.become(receive.orElse(loaded(newState)))
-        self ! Index()
-      } else {
-        log.info("Deferring catch-up because the next header does not extend the indexed tip")
+      cancelRetry()
+      if (modCount < saveLimit || persistBuffered(state)) {
+        if (state.indexedHeight == chainHeight && indexedTipIsOnBestFullChain(state)) {
+          val newState = state.copy(caughtUp = true)
+          context.become(receive.orElse(loaded(newState)))
+          self ! Index()
+        } else {
+          val nextHeaderOpt = fullChainHeaderAtHeight(state.indexedHeight + 1)
+          val extendsIndexedTip = nextHeaderOpt.forall { header =>
+            state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)
+          }
+          if (extendsIndexedTip && nextHeaderOpt.isDefined) {
+            index(state.incrementIndexedHeight, nextHeaderOpt.get, chainHeight) match {
+              case Some(newState) =>
+                context.become(receive.orElse(loaded(newState)))
+                if (continueCatchUpAfterIndex(newState)) self ! Index()
+              case None =>
+                scheduleRetry()
+            }
+          } else if (!reconcileIndexedTip(state)) {
+            log.info("Deferring catch-up because the next full-chain header does not extend the indexed tip")
+            scheduleRetry()
+          }
+        }
       }
 
-    case Index() if state.caughtUp =>
-      if (modCount > 0) saveProgress(state)
-      blockCache.clear()
-      caughtUpHook()
-      log.info("Indexer caught up with chain")
+    case Index() if state.caughtUp && !state.rollbackInProgress && !indexedTipIsOnBestFullChain(state) =>
+      if (!reconcileIndexedTip(state)) {
+        val newState = state.copy(caughtUp = false)
+        context.become(receive.orElse(loaded(newState)))
+        scheduleRetry()
+      }
+
+    case Index() if state.caughtUp && !state.rollbackInProgress =>
+      cancelRetry()
+      if (modCount == 0 || persistBuffered(state)) {
+        blockCache.clear()
+        caughtUpHook()
+        log.info("Indexer caught up with chain")
+      }
+
+    case Index() if state.rollbackInProgress =>
 
     // after the indexer caught up with the chain, stay up to date
     case FullBlockApplied(header: Header) if state.caughtUp && !state.rollbackInProgress =>
-      val indexedTipStillBest = state.indexedHeight == 0 ||
-        (chainHeight >= state.indexedHeight && state.indexedHeaderId.exists { indexedHeaderId =>
-          history.bestHeaderIdAtHeight(state.indexedHeight).contains(indexedHeaderId)
-        })
+      val indexedTipStillBest = indexedTipIsOnBestFullChain(state)
       val isDirectSuccessor = header.height == state.indexedHeight + 1 &&
         (state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)) &&
-        history.bestHeaderIdAtHeight(header.height).contains(header.id)
+        fullChainHeaderAtHeight(header.height).exists(_.id == header.id)
 
       if (isDirectSuccessor) {
-        val newState: IndexerState = index(state.incrementIndexedHeight, Some(header))
-        saveProgress(newState)
-        context.become(receive.orElse(loaded(newState)))
-        caughtUpHook(header.height)
+        cancelRetry()
+        val targetHeight = chainHeight
+        index(state.incrementIndexedHeight, header, targetHeight) match {
+          case Some(newState) =>
+            context.become(receive.orElse(loaded(newState)))
+            if (newState.caughtUp) {
+              if (persistBuffered(newState)) caughtUpHook(header.height)
+            } else {
+              self ! Index()
+            }
+          case None =>
+            val newState = state.copy(caughtUp = false)
+            context.become(receive.orElse(loaded(newState)))
+            scheduleRetry()
+        }
       } else if (!indexedTipStillBest) {
-        log.info(s"Deferring block ${header.id} at height ${header.height} until rollback")
-        context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
+        log.info(s"Reconciling indexed tip before applying block ${header.id} at height ${header.height}")
+        if (!reconcileIndexedTip(state)) {
+          context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
+          scheduleRetry()
+        }
       } else if (header.height > state.indexedHeight + 1) {
         context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
         self ! Index()
@@ -522,40 +655,56 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
       }
 
+    case _: FullBlockApplied if !state.rollbackInProgress =>
+      scheduleRetry()
+
     case _: FullBlockApplied if state.rollbackInProgress => stash()
 
     case Rollback(branchPoint: ModifierId) =>
+      cancelRetry()
       if (state.rollbackInProgress) {
         log.warn(s"Rollback already in progress")
         stash()
+      } else if (indexedTipIsOnBestFullChain(state)) {
+        log.info(s"Ignoring rollback to $branchPoint because the indexed tip is already on the best full chain")
+        if (!state.caughtUp) self ! Index()
       } else {
-        history.heightOf(branchPoint) match {
-          case Some(branchHeight) =>
-            if (branchHeight < state.indexedHeight) {
-              context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
-              self ! RemoveAfter(branchHeight)
-            } else if (!state.caughtUp) {
-              blockCache.clear()
-              readingUpTo = 0
-              self ! Index()
-            }
-          case None =>
-            log.error(s"No rollback height found for $branchPoint")
-            val newState = state.copy(rollbackTo = 0)
+        validatedRollbackHeader(state, branchPoint) match {
+          case Some(header) => beginRollback(state, header)
+          case None if !reconcileIndexedTip(state) =>
+            log.info(s"Deferring rollback to $branchPoint until the indexed tip can be reconciled with the best full chain")
+            val newState = state.copy(caughtUp = false, rollbackTo = 0)
             context.become(receive.orElse(loaded(newState)))
-            unstashAll()
+            scheduleRetry()
+          case None =>
         }
       }
 
-    case RemoveAfter(branchHeight: Int) if state.rollbackInProgress =>
+    case RollbackToHeader(targetHeader, resume)
+      if state.rollbackInProgress && state.rollbackTo == targetHeader.height =>
       blockCache.clear()
       readingUpTo = 0
-      val newState = removeAfter(state, branchHeight)
-      context.become(receive.orElse(loaded(newState)))
-      if (!newState.caughtUp && !newState.rollbackInProgress) self ! Index()
-      caughtUpHook()
-      log.info(s"Successfully rolled back indexes to $branchHeight")
-      unstashAll()
+      removeAfter(state, targetHeader) match {
+        case Success(newState) =>
+          context.become(receive.orElse(loaded(newState)))
+          if (resume && !newState.caughtUp) self ! Index()
+          caughtUpHook()
+          log.info(s"Successfully rolled back indexes to ${targetHeader.height}")
+          unstashAll()
+        case Failure(error) =>
+          log.error(s"Failed to roll back extra indexes to ${targetHeader.height}; shutting down so startup can rebuild", error)
+          requestShutdown()
+      }
+
+    case RollbackToHeader(_, _) =>
+
+    case RetryIndex(generation) if generation == retryGeneration && !state.rollbackInProgress =>
+      self ! Index()
+
+    case RetryIndex(_) =>
+
+    case RemoveAfter(branchHeight) =>
+      log.warn(s"Ignoring unsupported direct extra-index rollback request to height $branchHeight")
 
     case GetSegmentThreshold =>
       sender ! segmentThreshold
@@ -678,13 +827,14 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 6
+  val NewestVersion: Int = 7
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
   val GlobalTxIndexKey: Array[Byte] = Algos.hash("txns height")
   val GlobalBoxIndexKey: Array[Byte] = Algos.hash("boxes height")
   val RollbackToKey: Array[Byte] = Algos.hash("rollback to")
+  val IndexedHeaderIdKey: Array[Byte] = Algos.hash("indexed header id")
   val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
 
   def getIndex(key: Array[Byte], history: HistoryStorage): ByteBuffer =

@@ -90,9 +90,10 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
       Failure(new IllegalStateException("injected final rollback removal failure"))
     } else super.removeRollbackIndexes(ids)
 
-  override protected def requestShutdown(): Unit = {
-    rollbackFailureProbeOpt.foreach(_ ! "shutdown-requested")
+  override protected def stopIndexer(): Unit = {
+    rollbackFailureProbeOpt.foreach(_ ! "indexer-stop-requested")
     rollbackFailureProbeOpt = None
+    super.stopIndexer()
   }
 
   override protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {

@@ -893,23 +893,28 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("requests shutdown when final removal fails after partial rollback writes") {
-    indexer ! CreateDB(HEIGHT)
-    indexer ! Index()
+  property("requests only extra indexer stop when final removal fails after partial rollback writes") {
+    val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+    val lifecycleProbe = TestProbe()(system)
+    lifecycleProbe.watch(failingIndexer)
+
+    failingIndexer ! CreateDB(HEIGHT)
+    failingIndexer ! Index()
     awaitCondition(done)
     val spentInputId = bytesToId(fullChainTransactionsAt(HEIGHT).txs.flatMap(_.inputs).head.boxId)
     history.typedExtraIndexById[IndexedErgoBox](spentInputId).exists(_.isSpent) shouldBe true
 
     val probe = TestProbe()(system)
-    indexer ! FailNextRollbackRemoval(probe.ref)
+    failingIndexer ! FailNextRollbackRemoval(probe.ref)
     awaitCondition(created)
-    indexer ! ForceRollback(HEIGHT - 1)
+    failingIndexer ! ForceRollback(HEIGHT - 1)
 
-    probe.expectMsg("shutdown-requested")
+    probe.expectMsg("indexer-stop-requested")
+    lifecycleProbe.expectTerminated(failingIndexer)
+    system.whenTerminated.isCompleted shouldBe false
     ExtraIndexer.getIndex(ExtraIndexer.RollbackToKey, _history).getInt shouldBe HEIGHT - 1
     _history.historyStorage.invalidateExtraCache(Seq(spentInputId))
     history.typedExtraIndexById[IndexedErgoBox](spentInputId).exists(_.isSpent) shouldBe false
-    indexer ! Reset()
   }
 
   property("recovers a reloaded checkpoint without waiting for block or rollback events") {

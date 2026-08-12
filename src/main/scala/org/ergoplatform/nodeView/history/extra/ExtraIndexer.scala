@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash, Timers}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoApp, GlobalConstants, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
 import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
@@ -111,9 +111,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
   protected def continueCatchUpAfterIndex(state: IndexerState): Boolean = true
 
-  protected def requestShutdown(): Unit = {
-    ErgoApp.shutdownSystem()(context.system)
-  }
+  protected def stopIndexer(): Unit = context.stop(self)
 
   protected def removeRollbackIndexes(ids: Array[ModifierId]): Try[Unit] =
     historyStorage.removeExtraTry(ids)
@@ -700,8 +698,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           log.info(s"Successfully rolled back indexes to ${targetHeader.height}")
           unstashAll()
         case Failure(error) =>
-          log.error(s"Failed to roll back extra indexes to ${targetHeader.height}; shutting down so startup can rebuild", error)
-          requestShutdown()
+          log.error(s"Failed to roll back extra indexes to ${targetHeader.height}; stopping extra indexer until node restart", error)
+          stopIndexer()
       }
 
     case RollbackToHeader(_, _) =>

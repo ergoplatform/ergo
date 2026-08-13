@@ -145,7 +145,20 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "refuse to sign a message for an address which is not a P2PK one" in {
-    val body = Json.obj("message" -> "hi".asJson, "address" -> Pay2SAddress(FalseTree)(settings.addressEncoder).toString.asJson)
+    val notP2Pk = Pay2SAddress(FalseTree)(settings.addressEncoder)
+    val body = Json.obj("message" -> "hi".asJson, "address" -> notP2Pk.toString.asJson)
+    Post(prefix + "/signMessage", body) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "refuse to sign a request which carries no message" in {
+    val address = P2PKAddress(defaultProver.hdPubKeys.head.key)(settings.addressEncoder)
+    val body = Json.obj("address" -> address.toString.asJson)
+    // the exact rejection, so that this does not pass on any other malformed request
+    Post(prefix + "/signMessage", body) ~> route ~> check {
+      rejections should contain(ValidationRejection("A message to sign is required", None))
+    }
     Post(prefix + "/signMessage", body) ~> Route.seal(route) ~> check {
       status shouldBe StatusCodes.BadRequest
     }

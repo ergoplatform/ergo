@@ -156,11 +156,14 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   }
 
   private val signer = defaultProver
-  private val signerAddress = P2PKAddress(signer.hdPubKeys.head.key)(settings.addressEncoder)
+  private val signerAddress =
+    P2PKAddress(signer.hdPubKeys.head.key)(settings.addressEncoder)
 
   private def signedRequest(message: String): Json = {
-    val signedMessage = MessageSigning.wrap(message.getBytes("UTF-8"), MessageSigning.freshSalt())
-    val proof = signer.signMessage(signer.hdPubKeys.head.key, signedMessage, HintsBag.empty).get
+    val signedMessage =
+      MessageSigning.wrap(message.getBytes("UTF-8"), MessageSigning.freshSalt())
+    val key = signer.hdPubKeys.head.key
+    val proof = signer.signMessage(key, signedMessage, HintsBag.empty).get
     Json.obj(
       "address" -> Json.fromString(signerAddress.toString),
       "signedMessage" -> Json.fromString(Base16.encode(signedMessage)),
@@ -169,18 +172,20 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   }
 
   it should "verify a signed message" in {
-    Post(s"$prefix/verifyMessage", signedRequest("I am the owner of this address")) ~> route ~> check {
+    val message = "I am the owner of this address"
+    Post(s"$prefix/verifyMessage", signedRequest(message)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       val c = responseAs[Json].hcursor
       c.downField("isValid").as[Boolean] shouldEqual Right(true)
-      // the caller is told what the signature actually attests to, not just that it is well formed
-      c.downField("message").as[String] shouldEqual Right("I am the owner of this address")
+      // the caller is told what the signature attests to, not just that it is well formed
+      c.downField("message").as[String] shouldEqual Right(message)
     }
   }
 
   it should "not verify a signed message for another address" in {
     val other = P2PKAddress(signer.hdPubKeys.last.key)(settings.addressEncoder)
-    val request = signedRequest("hi").deepMerge(Json.obj("address" -> Json.fromString(other.toString)))
+    val request = signedRequest("hi")
+      .deepMerge(Json.obj("address" -> Json.fromString(other.toString)))
     Post(s"$prefix/verifyMessage", request) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("isValid").as[Boolean] shouldEqual Right(false)
@@ -188,7 +193,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   }
 
   it should "not verify a message which was not wrapped for signing" in {
-    // a proof over bare bytes could be an input proof of a transaction, so it is not accepted here
+    // a proof over bare bytes could be a transaction input proof, so it is not accepted
     val bare = "I am the owner of this address".getBytes("UTF-8")
     val proof = signer.signMessage(signer.hdPubKeys.head.key, bare, HintsBag.empty).get
     val request = Json.obj(
@@ -205,8 +210,21 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   }
 
   it should "reject a verification request which does not parse" in {
-    Post(s"$prefix/verifyMessage", Json.obj("address" -> Json.fromString(signerAddress.toString))) ~> Route.seal(route) ~> check {
+    val request = Json.obj("address" -> Json.fromString(signerAddress.toString))
+    Post(s"$prefix/verifyMessage", request) ~> Route.seal(route) ~> check {
       status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "refuse to verify a message against an address which is not a P2PK one" in {
+    // only a P2PK address carries a public key to check a signature against
+    val request = signedRequest("hi")
+      .deepMerge(Json.obj("address" -> Json.fromString(p2saddress.toString)))
+    Post(s"$prefix/verifyMessage", request) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
+      // the request parses, the address is simply of the wrong kind - pin that branch
+      val detail = responseAs[Json].hcursor.downField("detail").as[String]
+      detail.toOption.get should include("not a P2PK address")
     }
   }
 

@@ -628,11 +628,11 @@ components:
             Base16-encoded byte string actually signed, that is the message with the prefix and the salt
             prepended. Pass it verbatim to /utils/verifyMessage.
           type: string
-          example: '4572676f207369676e6564206d6573736167653a0a'
+          example: '4572676f207369676e6564206d6573736167653a0aaa19c25574c54441165d52b75b6d6bb909bcad472e508ef2cc192410562a64804920616d20746865206f776e6572206f6620746869732061646472657373'
         proof:
-          description: Base16-encoded signature
+          description: Base16-encoded signature, 56 bytes for a single key
           type: string
-          example: 'cd07f00d80cd0c9a0d16f9dbba1b4ff5d0e0aa5cb2b1e0ff1e6c0b3f9e4a1a4c'
+          example: '32ee9acb56bcf5520eaa98a3f0ee6bc7493839889482ff402fb057970a5e0f7552a40997d6811f31d885b5573f3af3b6c5a233adc6c48828'
 
     MessageVerificationRequest:
       description: A request to check a message signature
@@ -648,9 +648,11 @@ components:
         signedMessage:
           description: Base16-encoded byte string which was signed, as returned by /wallet/signMessage
           type: string
+          example: '4572676f207369676e6564206d6573736167653a0aaa19c25574c54441165d52b75b6d6bb909bcad472e508ef2cc192410562a64804920616d20746865206f776e6572206f6620746869732061646472657373'
         proof:
-          description: Base16-encoded signature
+          description: Base16-encoded signature, 56 bytes for a single key
           type: string
+          example: '32ee9acb56bcf5520eaa98a3f0ee6bc7493839889482ff402fb057970a5e0f7552a40997d6811f31d885b5573f3af3b6c5a233adc6c48828'
 
     MessageVerificationResult:
       type: object
@@ -663,7 +665,10 @@ components:
         message:
           description:
             The message the signed byte string carries, or null when the byte string is not wrapped for
-            message signing at all
+            message signing at all. It is the UTF-8 decoding of the signed payload, so a payload which
+            is not UTF-8 text - which a signer following this convention does not produce, but an
+            external one might - comes back lossily decoded. Check `signedMessage` itself if the exact
+            bytes matter.
           type: string
           nullable: true
           example: 'I am the owner of this address'

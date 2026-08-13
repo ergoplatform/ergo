@@ -12,8 +12,10 @@ import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, Paym
 import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
 import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddress, Pay2SAddress}
+import org.ergoplatform.{ErgoAddress, P2PKAddress, Pay2SAddress}
+import org.ergoplatform.wallet.crypto.MessageSigning
 import org.ergoplatform.wallet.{Constants => WalletConstants}
+import scorex.util.encode.Base16
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -33,6 +35,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
   with ApiExtraCodecs {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants.defaultProver
 
   implicit val timeout: RouteTestTimeout = RouteTestTimeout(145.seconds)
 
@@ -112,6 +115,39 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
+    }
+  }
+
+  it should "sign a message" in {
+    val message = "I am the owner of this address"
+    Post(prefix + "/signMessage", Json.obj("message" -> message.asJson)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      val address = c.downField("address").as[String].toOption.get
+      val signedMessage = Base16.decode(c.downField("signedMessage").as[String].toOption.get).get
+      val proof = Base16.decode(c.downField("proof").as[String].toOption.get).get
+
+      // the caller is told what was actually signed, and it carries the message asked for
+      new String(MessageSigning.unwrap(signedMessage).get, "UTF-8") shouldBe message
+
+      val p2pk = settings.addressEncoder.fromString(address).get.asInstanceOf[P2PKAddress]
+      MessageSigning.verify(p2pk.pubkey, signedMessage, proof) shouldBe true
+    }
+  }
+
+  it should "sign a message for a given wallet address" in {
+    val address = P2PKAddress(defaultProver.hdPubKeys.last.key)(settings.addressEncoder)
+    val body = Json.obj("message" -> "hi".asJson, "address" -> address.toString.asJson)
+    Post(prefix + "/signMessage", body) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldBe Right(address.toString)
+    }
+  }
+
+  it should "refuse to sign a message for an address which is not a P2PK one" in {
+    val body = Json.obj("message" -> "hi".asJson, "address" -> Pay2SAddress(FalseTree)(settings.addressEncoder).toString.asJson)
+    Post(prefix + "/signMessage", body) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

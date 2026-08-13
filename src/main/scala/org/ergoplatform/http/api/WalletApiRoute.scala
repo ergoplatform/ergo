@@ -64,6 +64,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
         deriveNextKeyR ~
         updateChangeAddressR ~
         signTransactionR ~
+        signMessageR ~
         checkSeedR ~
         rescanWalletR ~
         extractHintsR ~
@@ -483,6 +484,42 @@ case class WalletApiRoute(readersHolder: ActorRef,
       val extDataInputsOpt = her.dataInputs.map(ErgoWalletServiceUtils.stringsToBoxes)
 
       w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt).map(_.transactionHintsBag)
+    }
+  }
+
+  /**
+    * Message to be signed, plus optionally the address to sign it for. The address has to belong to
+    * the wallet; without it the wallet's first address is used.
+    */
+  private val messageSigningRequest: Directive1[(String, Option[P2PKAddress])] = entity(as[Json]).flatMap { p =>
+    p.hcursor.downField("message").as[String] match {
+      case Left(_) => reject(ValidationRejection("A message to sign is required"))
+      case Right(message) =>
+        p.hcursor.downField("address").as[Option[String]] match {
+          case Right(None) =>
+            provide(message -> Option.empty[P2PKAddress])
+          case Right(Some(addressStr)) =>
+            addressEncoder.fromString(addressStr) match {
+              case Success(p2pk: P2PKAddress) => provide(message -> Some(p2pk))
+              case Success(other) => reject(ValidationRejection(s"Not a P2PK address: $other"))
+              case Failure(t) => reject(ValidationRejection(s"Can not parse the address: ${t.getMessage}"))
+            }
+          case Left(t) => reject(ValidationRejection(s"Can not read the address: ${t.getMessage}"))
+        }
+    }
+  }
+
+  def signMessageR: Route = (path("signMessage") & post & messageSigningRequest) { case (message, addressOpt) =>
+    withWalletOp(_.signMessage(message.getBytes(org.ergoplatform.settings.Constants.StringEncoding), addressOpt)) {
+      case Success(signed) =>
+        ApiResponse(
+          Json.obj(
+            "address" -> addressJsonEncoder(signed.address),
+            "signedMessage" -> Base16.encode(signed.signedMessage).asJson,
+            "proof" -> Base16.encode(signed.proof).asJson
+          )
+        )
+      case Failure(t) => BadRequest(s"Can not sign the message: ${t.getMessage}")
     }
   }
 

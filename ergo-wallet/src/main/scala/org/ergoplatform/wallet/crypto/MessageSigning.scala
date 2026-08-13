@@ -7,26 +7,27 @@ import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 
 /**
-  * How a message is wrapped before being signed with a wallet secret, and how such a signature is
-  * checked afterwards. Signer and verifier have to agree on this, so it lives here rather than in
-  * the node's API layer.
+  * How a message is wrapped before being signed with a wallet secret, and how such a
+  * signature is checked afterwards. Signer and verifier have to agree on this, so it lives
+  * here rather than in the node's API layer.
   *
-  * A sigma proof over an arbitrary message is the very same object as the proof which spends a box:
-  * both are a Fiat-Shamir transcript over some byte string. If a wallet signed the bytes it is given
-  * verbatim, whoever asked for the signature could hand it the `messageToSign` of a transaction
-  * spending the wallet's own boxes, and get back a proof which makes that transaction valid. The
-  * bytes given are therefore never the bytes signed:
+  * A sigma proof over an arbitrary message is the very same object as the proof which spends
+  * a box: both are a Fiat-Shamir transcript over some byte string. If a wallet signed the
+  * bytes it is given verbatim, whoever asked for the signature could hand it the
+  * `messageToSign` of a transaction spending the wallet's own boxes, and get back a proof
+  * which makes that transaction valid. The bytes given are therefore never the bytes signed:
   *
   *   signed = [[MessageSigning.Prefix]] ++ salt ++ message
   *
-  * with a fresh random `salt` per signature. The prefix says what the transcript is for, and the
-  * salt makes the signed string unpredictable to whoever supplied the message, so it cannot be
-  * steered onto a chosen byte string such as a transaction. `EIP-0028` (ErgoAuth) prescribes the
-  * same thing for wallet applications: the wallet adds its own bytes and reports back what it
-  * actually signed.
+  * with a fresh random `salt` per signature. The prefix says what the transcript is for, and
+  * the salt makes the signed string unpredictable to whoever supplied the message, so it
+  * cannot be steered onto a chosen byte string such as a transaction. `EIP-0028` (ErgoAuth)
+  * prescribes the same thing for wallet applications: the wallet adds its own bytes and
+  * reports back what it actually signed.
   *
-  * [[MessageSigning.verify]] enforces the wrapping as well. Accepting an unwrapped message would
-  * give the separation away, since a transaction input proof would then pass as a message signature.
+  * [[MessageSigning.verify]] enforces the wrapping as well. Accepting an unwrapped message
+  * would give the separation away, since a transaction input proof would then pass as a
+  * message signature.
   */
 object MessageSigning {
 
@@ -45,9 +46,19 @@ object MessageSigning {
     salt
   }
 
-  /** The byte string actually signed when `message` is signed with `salt` */
+  /**
+    * The byte string actually signed when `message` is signed with `salt`.
+    *
+    * The salt is a precondition rather than something to recover from: callers are expected
+    * to get it from [[freshSalt]], and a salt of the wrong length would silently change what
+    * [[unwrap]] reads back.
+    *
+    * @throws IllegalArgumentException if `salt` is not [[SaltLength]] bytes long
+    */
+  @throws[IllegalArgumentException]
   def wrap(message: Array[Byte], salt: Array[Byte]): Array[Byte] = {
-    require(salt.length == SaltLength, s"Salt must be $SaltLength bytes long, got ${salt.length}")
+    require(salt.length == SaltLength,
+      s"Salt must be $SaltLength bytes long, got ${salt.length}")
     Prefix ++ salt ++ message
   }
 
@@ -69,9 +80,12 @@ object MessageSigning {
   /**
     * Whether `proof` is a signature of `signedMessage` under `sigmaBoolean`.
     *
-    * Unwrapped byte strings are rejected without looking at the proof, see the note on this object.
+    * Unwrapped byte strings are rejected without looking at the proof, see the note on this
+    * object.
     */
-  def verify(sigmaBoolean: SigmaBoolean, signedMessage: Array[Byte], proof: Array[Byte]): Boolean = {
+  def verify(sigmaBoolean: SigmaBoolean,
+             signedMessage: Array[Byte],
+             proof: Array[Byte]): Boolean = {
     unwrap(signedMessage).isDefined &&
       new SigmaPropVerifier().verifySignature(sigmaBoolean, signedMessage, proof)(null)
   }

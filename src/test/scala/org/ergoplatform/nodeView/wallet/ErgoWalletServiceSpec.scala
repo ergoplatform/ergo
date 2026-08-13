@@ -497,7 +497,8 @@ class ErgoWalletServiceSpec
 
         // the wallet signed the wrapped string, so the proof says nothing about the transaction
         new SigmaPropVerifier()
-          .verifySignature(pubKey, bytesTheTransactionIsSignedOver, signed.proof)(null) shouldBe false
+          .verifySignature(pubKey, bytesTheTransactionIsSignedOver, signed.proof)(null)
+          .shouldBe(false)
 
         // and the other way round: a proof over raw transaction bytes is not a message signature,
         // because verification insists on the wrapping

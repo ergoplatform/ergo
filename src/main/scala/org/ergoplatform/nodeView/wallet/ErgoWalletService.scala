@@ -694,7 +694,8 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
             Failure(new Exception(s"The wallet has no secret for $what"))
         }
       case None =>
-        Failure(new Exception("Wallet is locked"))
+        // no prover means either a locked wallet or one which was never initialized
+        Failure(new Exception("Wallet is locked or not initialized"))
     }
   }
 

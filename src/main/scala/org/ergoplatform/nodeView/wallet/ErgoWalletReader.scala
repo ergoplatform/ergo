@@ -6,7 +6,7 @@ import akka.util.Timeout
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
-import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.{DeriveNextKeyResult, SignedMessage}
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
@@ -96,6 +96,16 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def transactionById(id: ModifierId): Future[Option[AugWalletTransaction]] =
     (walletActor ? GetTransaction(id)).mapTo[Option[AugWalletTransaction]]
+
+  /**
+    * Sign an arbitrary message with a wallet secret, so that the holder of the corresponding address
+    * can be proven without moving any funds.
+    *
+    * @param message    - message to sign
+    * @param addressOpt - address to sign for; the wallet's first address if not given
+    */
+  def signMessage(message: Array[Byte], addressOpt: Option[P2PKAddress]): Future[Try[SignedMessage]] =
+    (walletActor ? SignMessage(message, addressOpt)).mapTo[Try[SignedMessage]]
 
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,

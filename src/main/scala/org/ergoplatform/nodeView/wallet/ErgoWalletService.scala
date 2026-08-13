@@ -6,7 +6,7 @@ import org.ergoplatform._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.{DeriveNextKeyResult, SignedMessage}
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
 import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
@@ -16,6 +16,7 @@ import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
+import org.ergoplatform.wallet.crypto.MessageSigning
 import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
@@ -23,6 +24,7 @@ import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.ModifierId
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigmastate.interpreter.HintsBag
 import sigma.Extensions.CollBytesOps
 import sigma.data.SigmaBoolean
 
@@ -219,6 +221,21 @@ trait ErgoWalletService {
     * @param dustLimit - Boxes with value smaller than dustLimit are disregarded in wallet scan logic
     */
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
+
+  /**
+    * Sign an arbitrary message with a wallet secret, so that the holder of the corresponding address
+    * can be proven without moving any funds.
+    *
+    * The message is not signed as given: see [[org.ergoplatform.wallet.crypto.MessageSigning]] for
+    * what is signed instead and why.
+    *
+    * @param state      - current wallet state, has to be unlocked
+    * @param message    - message to sign
+    * @param addressOpt - address to sign for; the wallet's first address if not given
+    */
+  def signMessage(state: ErgoWalletState,
+                  message: Array[Byte],
+                  addressOpt: Option[P2PKAddress]): Try[SignedMessage]
 
   /**
     * Sign a transaction
@@ -653,6 +670,32 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         Nil
       }
     walletTxs ++ unconfirmedTxs
+  }
+
+  override def signMessage(state: ErgoWalletState,
+                           message: Array[Byte],
+                           addressOpt: Option[P2PKAddress]): Try[SignedMessage] = {
+    state.walletVars.proverOpt match {
+      case Some(prover) =>
+        val pubKeyOpt = addressOpt match {
+          case Some(address) =>
+            prover.hdPubKeys.find(_.key.value == address.pubkey.value).map(_.key)
+          case None =>
+            prover.hdPubKeys.headOption.map(_.key)
+        }
+        pubKeyOpt match {
+          case Some(pubKey) =>
+            val signedMessage = MessageSigning.wrap(message, MessageSigning.freshSalt())
+            prover.signMessage(pubKey, signedMessage, HintsBag.empty).map { proof =>
+              SignedMessage(P2PKAddress(pubKey)(ergoSettings.addressEncoder), signedMessage, proof)
+            }
+          case None =>
+            val what = addressOpt.map(a => s"address $a").getOrElse("any address")
+            Failure(new Exception(s"The wallet has no secret for $what"))
+        }
+      case None =>
+        Failure(new Exception("Wallet is locked"))
+    }
   }
 
   override def signTransaction(proverOpt: Option[ErgoProvingInterpreter],

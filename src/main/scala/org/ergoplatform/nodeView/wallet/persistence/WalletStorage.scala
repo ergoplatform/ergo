@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.P2PKAddress
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
@@ -9,7 +10,7 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.{LDBFactory, LDBKVStore}
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.serialization.SigmaSerializer
 
 import java.io.File
@@ -24,6 +25,7 @@ import scala.util.{Failure, Success, Try}
   * * changed addresses
   * * ErgoStateContext (not version-agnostic, but state changes including rollbacks it is updated externally)
   * * external scans
+  * * wallet-related transactions which are not on the blockchain yet
   */
 final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends ScorexLogging {
 
@@ -195,6 +197,76 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   }
 
   /**
+    * Heights at which wallet-related unconfirmed transactions stored in the database were first seen,
+    * by transaction identifier. Kept in memory so that applying a block does not need a database
+    * lookup per transaction of the block, and so that pruning does not need to read the whole bucket.
+    */
+  private var cachedUnconfirmedTxHeights: Option[Map[ModifierId, Int]] = None
+
+  /**
+    * @return heights at which stored unconfirmed transactions were first seen, by transaction id
+    */
+  def unconfirmedTransactionHeights: Map[ModifierId, Int] = cachedUnconfirmedTxHeights.getOrElse {
+    val heights = readUnconfirmedTransactions().map { case (tx, height) => tx.id -> height }.toMap
+    cachedUnconfirmedTxHeights = Some(heights)
+    heights
+  }
+
+  /**
+    * Store a wallet-related transaction which is not on the blockchain yet, so that it survives
+    * a node restart.
+    *
+    * A transaction already stored is left alone rather than re-dated: it is re-scanned every time it
+    * is put back into the memory pool, and refreshing its height there would push its expiry back on
+    * every restart, so a transaction which never confirms would be kept forever.
+    *
+    * @param tx           - unconfirmed transaction the wallet is interested in
+    * @param seenAtHeight - blockchain height at the moment the transaction was first seen
+    */
+  def addUnconfirmedTransaction(tx: ErgoTransaction, seenAtHeight: Int): Try[Unit] = {
+    if (unconfirmedTransactionHeights.contains(tx.id)) {
+      Success(())
+    } else {
+      store.insert(unconfirmedTxKey(tx.id), Ints.toByteArray(seenAtHeight) ++ tx.bytes).map { _ =>
+        cachedUnconfirmedTxHeights = Some(unconfirmedTransactionHeights.updated(tx.id, seenAtHeight))
+      }
+    }
+  }
+
+  /**
+    * Forget stored unconfirmed transactions, e.g. once they got on the blockchain. Identifiers of
+    * transactions which are not stored are ignored.
+    */
+  def removeUnconfirmedTransactions(ids: Seq[ModifierId]): Try[Unit] = {
+    val known = unconfirmedTransactionHeights
+    val toRemove = ids.filter(known.contains)
+    if (toRemove.isEmpty) {
+      Success(())
+    } else {
+      store.remove(toRemove.map(unconfirmedTxKey).toArray).map { _ =>
+        cachedUnconfirmedTxHeights = Some(known -- toRemove)
+      }
+    }
+  }
+
+  /**
+    * Read unconfirmed transactions stored, along with the height each of them was seen at.
+    * Records which can not be parsed are skipped, a corrupted record must not prevent the wallet
+    * from starting.
+    */
+  def readUnconfirmedTransactions(): Seq[(ErgoTransaction, Int)] = {
+    store.getRange(FirstUnconfirmedTxId, LastUnconfirmedTxId).flatMap { case (_, v) =>
+      ErgoTransactionSerializer.parseBytesTry(v.drop(java.lang.Integer.BYTES)) match {
+        case Success(tx) =>
+          Some(tx -> Ints.fromByteArray(v.take(java.lang.Integer.BYTES)))
+        case Failure(t) =>
+          log.error("Corrupted data when reading an unconfirmed transaction: ", t)
+          None
+      }
+    }
+  }
+
+  /**
     * Close wallet storage database
     */
   def close(): Unit = {
@@ -220,8 +292,15 @@ object WalletStorage {
     */
   val PublicKeyPrefixByte: Byte = 2: Byte
 
+  /**
+    * Secondary prefix byte for the bucket of wallet-related transactions which are not on the
+    * blockchain yet
+    */
+  val UnconfirmedTxPrefixByte: Byte = 3: Byte
+
   val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
+  val UnconfirmedTxPrefixArray: Array[Byte] = Array(RangedKeyPrefix, UnconfirmedTxPrefixByte)
 
   // scans key space to iterate over all of them
   val SmallestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(0)
@@ -235,6 +314,20 @@ object WalletStorage {
   // public keys space to iterate over all of them
   val FirstPublicKeyId: Array[Byte] = PublicKeyPrefixArray ++ Array.fill(33)(0: Byte)
   val LastPublicKeyId: Array[Byte] = PublicKeyPrefixArray ++ Array.fill(33)(-1: Byte)
+
+  def unconfirmedTxKey(txId: ModifierId): Array[Byte] = UnconfirmedTxPrefixArray ++ idToBytes(txId)
+
+  // unconfirmed transactions space to iterate over all of them
+  val FirstUnconfirmedTxId: Array[Byte] = UnconfirmedTxPrefixArray ++ Array.fill(32)(0: Byte)
+  val LastUnconfirmedTxId: Array[Byte] = UnconfirmedTxPrefixArray ++ Array.fill(32)(-1: Byte)
+
+  /**
+    * For how many blocks a wallet-related unconfirmed transaction is kept in the database before
+    * being given up on. A transaction which did not get on the blockchain within this many blocks
+    * is most likely never going to, and re-submitting it forever would only keep the wallet from
+    * spending its inputs. Deliberately conservative (about two days at the target block rate).
+    */
+  val UnconfirmedTxLifetimeInBlocks: Int = 1440
 
   def noPrefixKey(keyString: String): Array[Byte] = Blake2b256.hash(keyString)
 

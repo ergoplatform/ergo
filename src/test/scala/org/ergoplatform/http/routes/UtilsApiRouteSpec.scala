@@ -12,8 +12,10 @@ import org.ergoplatform.http.api.ErgoUtilsApiRoute
 import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.ergoplatform.wallet.crypto.MessageSigning
 import scorex.util.encode.Base16
 import sigma.serialization.ErgoTreeSerializer
+import sigmastate.interpreter.HintsBag
 
 import scala.concurrent.duration._
 
@@ -150,6 +152,61 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("address").as[String] shouldEqual Right(invalidAddress)
       c.downField("isValid").as[Boolean] shouldEqual Right(false)
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
+    }
+  }
+
+  private val signer = defaultProver
+  private val signerAddress = P2PKAddress(signer.hdPubKeys.head.key)(settings.addressEncoder)
+
+  private def signedRequest(message: String): Json = {
+    val signedMessage = MessageSigning.wrap(message.getBytes("UTF-8"), MessageSigning.freshSalt())
+    val proof = signer.signMessage(signer.hdPubKeys.head.key, signedMessage, HintsBag.empty).get
+    Json.obj(
+      "address" -> Json.fromString(signerAddress.toString),
+      "signedMessage" -> Json.fromString(Base16.encode(signedMessage)),
+      "proof" -> Json.fromString(Base16.encode(proof))
+    )
+  }
+
+  it should "verify a signed message" in {
+    Post(s"$prefix/verifyMessage", signedRequest("I am the owner of this address")) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("isValid").as[Boolean] shouldEqual Right(true)
+      // the caller is told what the signature actually attests to, not just that it is well formed
+      c.downField("message").as[String] shouldEqual Right("I am the owner of this address")
+    }
+  }
+
+  it should "not verify a signed message for another address" in {
+    val other = P2PKAddress(signer.hdPubKeys.last.key)(settings.addressEncoder)
+    val request = signedRequest("hi").deepMerge(Json.obj("address" -> Json.fromString(other.toString)))
+    Post(s"$prefix/verifyMessage", request) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("isValid").as[Boolean] shouldEqual Right(false)
+    }
+  }
+
+  it should "not verify a message which was not wrapped for signing" in {
+    // a proof over bare bytes could be an input proof of a transaction, so it is not accepted here
+    val bare = "I am the owner of this address".getBytes("UTF-8")
+    val proof = signer.signMessage(signer.hdPubKeys.head.key, bare, HintsBag.empty).get
+    val request = Json.obj(
+      "address" -> Json.fromString(signerAddress.toString),
+      "signedMessage" -> Json.fromString(Base16.encode(bare)),
+      "proof" -> Json.fromString(Base16.encode(proof))
+    )
+    Post(s"$prefix/verifyMessage", request) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("isValid").as[Boolean] shouldEqual Right(false)
+      c.downField("message").as[Option[String]] shouldEqual Right(None)
+    }
+  }
+
+  it should "reject a verification request which does not parse" in {
+    Post(s"$prefix/verifyMessage", Json.obj("address" -> Json.fromString(signerAddress.toString))) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

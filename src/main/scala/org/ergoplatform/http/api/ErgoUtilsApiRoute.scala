@@ -136,18 +136,25 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   }
 
   /**
-    * Check a signature produced by `/wallet/signMessage`, or by any other signer following the same
-    * convention. Needs no wallet and no blockchain state, only the address the message claims to
-    * come from.
+    * Check a signature produced by `/wallet/signMessage`, or by any other signer following
+    * the same convention. Needs no wallet and no blockchain state, only the address the
+    * message claims to come from.
     */
   def verifyMessageR: Route = (post & path("verifyMessage") & entity(as[Json])) { json =>
+    def field(name: String): Either[String, String] =
+      json.hcursor.downField(name).as[String].left.map(e => s"$name: ${e.getMessage}")
+
+    def base16(name: String, hex: String): Either[String, Array[Byte]] =
+      Base16.decode(hex).toEither.left.map(e => s"$name: ${e.getMessage}")
+
     val parsed = for {
-      addressStr <- json.hcursor.downField("address").as[String].left.map(e => s"address: ${e.getMessage}")
-      signedHex <- json.hcursor.downField("signedMessage").as[String].left.map(e => s"signedMessage: ${e.getMessage}")
-      proofHex <- json.hcursor.downField("proof").as[String].left.map(e => s"proof: ${e.getMessage}")
-      address <- ergoAddressEncoder.fromString(addressStr).toEither.left.map(e => s"address: ${e.getMessage}")
-      signedMessage <- Base16.decode(signedHex).toEither.left.map(e => s"signedMessage: ${e.getMessage}")
-      proof <- Base16.decode(proofHex).toEither.left.map(e => s"proof: ${e.getMessage}")
+      addressStr <- field("address")
+      signedHex <- field("signedMessage")
+      proofHex <- field("proof")
+      address <- ergoAddressEncoder.fromString(addressStr)
+                   .toEither.left.map(e => s"address: ${e.getMessage}")
+      signedMessage <- base16("signedMessage", signedHex)
+      proof <- base16("proof", proofHex)
       p2pk <- address match {
         case p2pk: P2PKAddress => Right(p2pk)
         case other => Left(s"address: not a P2PK address, $other")
@@ -158,6 +165,8 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
       e => BadRequest(e),
       { case (p2pk, signedMessage, proof) =>
         val isValid = MessageSigning.verify(p2pk.pubkey, signedMessage, proof)
+        // reported as text, which is what this convention signs; a payload which is
+        // not UTF-8 text comes back lossily decoded
         val message = MessageSigning.unwrap(signedMessage)
           .map(bytes => new String(bytes, Constants.StringEncoding).asJson)
           .getOrElse(Json.Null)

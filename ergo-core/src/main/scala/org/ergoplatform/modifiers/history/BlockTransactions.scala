@@ -12,8 +12,8 @@ import org.ergoplatform.nodeView.mempool.TransactionMembershipProof
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.modifiers.history.header.Header.Version
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.crypto.authds.LeafData
-import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
+import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.merkle.{InternalNode, Leaf, MerkleProof, MerkleTree, Node}
 import scorex.crypto.hash.Digest32
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -74,7 +74,18 @@ case class BlockTransactions(headerId: ModifierId,
     * @return Some(proof) or None (if transaction with given id is not in the block)
     */
   def proofFor(txId: Array[Byte]): Option[MerkleProof[Digest32]] =
-    merkleTree.proofByElement(Leaf[Digest32](LeafData @@ txId)(Algos.hash))
+    txIds.indexWhere(_.sameElements(txId)) match {
+      case -1 => None
+      case index =>
+        val leafCount = if (blockVersion == Header.InitialVersion) {
+          txIds.size.toLong
+        } else {
+          txIds.size.toLong + witnessIds.size.toLong
+        }
+        BlockTransactions
+          .proofByIndex(merkleTree, index, leafCount)
+          .filter(_.leafData.sameElements(txId))
+    }
 
   def proofFor(txId: ModifierId): Option[MerkleProof[Digest32]] = proofFor(scorex.util.idToBytes(txId))
 
@@ -99,6 +110,43 @@ case class BlockTransactions(headerId: ModifierId,
 object BlockTransactions extends ApiCodecs {
 
   val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactionsTypeId.value
+
+  private def proofByIndex(tree: MerkleTree[Digest32],
+                           index: Int,
+                           leafCount: Long): Option[MerkleProof[Digest32]] = {
+    def paddedLength(length: Long, target: Long): Long =
+      if (length >= target) length else paddedLength(length * 2, target)
+
+    def loop(node: Node[Digest32],
+             leafIndex: Long,
+             subtreeLength: Long,
+             levels: List[(Digest32, Side)]): Option[MerkleProof[Digest32]] = node match {
+      case internal: InternalNode[Digest32] =>
+        val halfLength = subtreeLength / 2
+        if (leafIndex < halfLength) {
+          loop(
+            internal.left,
+            leafIndex,
+            halfLength,
+            (internal.right.hash, MerkleProof.LeftSide) :: levels
+          )
+        } else {
+          loop(
+            internal.right,
+            leafIndex - halfLength,
+            halfLength,
+            (internal.left.hash, MerkleProof.RightSide) :: levels
+          )
+        }
+      case leaf: Leaf[Digest32] if leafIndex == 0 && subtreeLength == 1 =>
+        Some(MerkleProof[Digest32](leaf.data, levels)(leaf.hf))
+      case _ =>
+        None
+    }
+
+    if (index < 0 || index.toLong >= leafCount) None
+    else loop(tree.topNode, index.toLong, paddedLength(2L, leafCount), Nil)
+  }
 
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
   def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {

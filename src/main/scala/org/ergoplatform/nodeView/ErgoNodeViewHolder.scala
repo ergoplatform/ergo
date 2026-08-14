@@ -575,6 +575,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       )
   }
 
+  private def isPreparedUtxoSnapshotState(state: State, history: ErgoHistory): Boolean = {
+    val snapshotHeight = history.minimalFullBlockHeight - 1
+    settings.nodeSettings.utxoSettings.utxoBootstrap &&
+      history.isUtxoSnapshotApplied &&
+      history.bestHeaderAtHeight(snapshotHeight).exists { header =>
+        ErgoNodeViewHolder.matchesPreparedUtxoSnapshotHeader(
+          state.version,
+          state.rootDigest,
+          header)
+      }
+  }
+
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (ErgoState.genesisStateVersion, None, _) =>
@@ -582,6 +594,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Success(stateIn)
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
+        Success(stateIn)
+      case (_, None, _: UtxoState) if isPreparedUtxoSnapshotState(stateIn, history) =>
+        log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
         Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
@@ -713,6 +728,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
+
+  private[nodeView] def matchesPreparedUtxoSnapshotHeader(
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      header: Header): Boolean =
+    stateVersion == idToVersion(header.id) &&
+      java.util.Arrays.equals(stateRoot, header.stateRoot)
 
   object ReceivableMessages {
     // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck

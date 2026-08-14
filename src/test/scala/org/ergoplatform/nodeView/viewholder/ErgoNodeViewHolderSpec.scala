@@ -573,6 +573,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
       fixture.deleteRecursive(stateDir)
+      stateDir.mkdirs() shouldBe true
       val persistedGenesis = ErgoState
         .generateGenesisUtxoState(stateDir, settings, Some(parameters))
         ._1

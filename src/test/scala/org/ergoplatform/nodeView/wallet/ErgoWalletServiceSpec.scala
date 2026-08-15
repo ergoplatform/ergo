@@ -6,7 +6,7 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletDigest, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.SecretString
@@ -31,8 +31,13 @@ import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
 
+import java.io.{File, IOException}
+import java.nio.file.{Files, LinkOption, Path}
+import java.util.UUID
+import scala.collection.JavaConverters._
 import scala.collection.compat.immutable.ArraySeq
-import scala.util.Random
+import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Random, Try}
 
 class ErgoWalletServiceSpec
   extends ErgoCorePropertyTest
@@ -57,11 +62,19 @@ class ErgoWalletServiceSpec
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
-  private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore, mempool: Option[ErgoMemPoolReader] = None) = {
+  private def initialState(store: LDBKVStore,
+                           versionedStore: LDBVersionedStore,
+                           mempool: Option[ErgoMemPoolReader] = None): ErgoWalletState = {
+    initialState(store, new WalletRegistry(versionedStore)(settings.walletSettings), mempool)
+  }
+
+  private def initialState(store: LDBKVStore,
+                           registry: WalletRegistry,
+                           mempool: Option[ErgoMemPoolReader]): ErgoWalletState = {
     ErgoWalletState(
       new WalletStorage(store, settings),
       secretStorageOpt = Option.empty,
-      new WalletRegistry(versionedStore)(settings.walletSettings),
+      registry,
       OffChainRegistry.empty,
       outputsFilter = Option.empty,
       WalletVars(Some(defaultProver), Seq.empty, None),
@@ -72,6 +85,750 @@ class ErgoWalletServiceSpec
       maxInputsToUse = 1000,
       rescanInProgress = false
     )
+  }
+
+  private def isolatedSettings(): ErgoSettings = {
+    val directory = createTempDir.getAbsolutePath
+    settings.copy(
+      directory = directory,
+      walletSettings = settings.walletSettings.copy(
+        secretStorage = settings.walletSettings.secretStorage.copy(
+          secretDir = s"$directory/wallet/keystore"
+        )
+      )
+    )
+  }
+
+  private def retiredRegistryFolders(settings: ErgoSettings): Seq[Path] = {
+    val registryPath = WalletRegistry.registryFolder(settings).toPath
+    val parent = registryPath.getParent
+    val prefix = s"${registryPath.getFileName}.retired-"
+    if (parent == null || Files.notExists(parent)) {
+      Seq.empty
+    } else {
+      val stream = Files.list(parent)
+      try stream.iterator().asScala.filter { path =>
+        val name = path.getFileName.toString
+        name.startsWith(prefix) && {
+          val suffix = name.substring(prefix.length)
+          Try(UUID.fromString(suffix)).toOption.exists { uuid =>
+            uuid.toString == suffix && uuid.version() == 4 && uuid.variant() == 2
+          } && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+        }
+      }.toList
+      finally stream.close()
+    }
+  }
+
+  private def openTestRegistry(
+    settings: ErgoSettings,
+    closeFailure: Option[Throwable],
+    onClose: () => Unit,
+    fetchFailure: () => Option[Throwable] = () => None,
+    onFetch: () => Unit = () => ()
+  ): WalletRegistry = {
+    val registryFolder = WalletRegistry.registryFolder(settings)
+    registryFolder.mkdirs()
+    val versionedStore = new LDBVersionedStore(
+      registryFolder,
+      settings.nodeSettings.keepVersions
+    )
+    if (!versionedStore.versionIdExists(WalletRegistry.PreGenesisStateVersion)) {
+      versionedStore
+        .update(WalletRegistry.PreGenesisStateVersion, Seq.empty, Seq.empty)
+        .get
+    }
+    new WalletRegistry(versionedStore)(settings.walletSettings) {
+      override def fetchDigest(): WalletDigest = {
+        onFetch()
+        fetchFailure() match {
+          case Some(error) => throw error
+          case None => super.fetchDigest()
+        }
+      }
+
+      override def close(): Unit = {
+        onClose()
+        super.close()
+        closeFailure.foreach(throw _)
+      }
+    }
+  }
+
+  property("recovery-specific registry reset should defer after close failure when canonical fallback is readable") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val closeFailure = new IOException("injected registry close failure")
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = Some(closeFailure),
+        onClose = () => inputCloseCount += 1
+      )
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 7
+      ).get
+      val originalDigest = registry.fetchDigest()
+      originalDigest should not be WalletDigest.empty
+      val walletState = initialState(store, registry, None)
+      var moveCount = 0
+      var openCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = {
+          moveCount += 1
+          super.moveRegistryToTombstone(registryFolder)
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          super.openRegistry(settings)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetDeferred(recoveredState, cause) =>
+          try {
+            (cause eq closeFailure) shouldBe true
+            (recoveredState.registry eq registry) shouldBe false
+            recoveredState.registry.fetchDigest() shouldBe originalDigest
+          } finally recoveredState.registry.close()
+        case other =>
+          fail(s"Expected deferred registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      moveCount shouldBe 0
+      openCount shouldBe 1
+    }
+  }
+
+  property("recovery-specific registry reset should retain close and fallback-open failures") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val closeFailure = new IOException("injected registry close failure")
+      val openFailure = new IOException("injected canonical fallback open failure")
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = Some(closeFailure),
+        onClose = () => inputCloseCount += 1
+      )
+      val walletState = initialState(store, registry, None)
+      var moveCount = 0
+      var openCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = {
+          moveCount += 1
+          super.moveRegistryToTombstone(registryFolder)
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          Failure(openFailure)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetUnavailable(cause) =>
+          (cause eq closeFailure) shouldBe true
+          cause.getSuppressed.exists(_ eq openFailure) shouldBe true
+        case other =>
+          fail(s"Expected unavailable registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      moveCount shouldBe 0
+      openCount shouldBe 1
+    }
+  }
+
+  property("recovery-specific registry reset should defer after move failure without cleanup") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val moveFailure = new IOException("injected registry quarantine move failure")
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => inputCloseCount += 1
+      )
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 8
+      ).get
+      val originalDigest = registry.fetchDigest()
+      val walletState = initialState(store, registry, None)
+      var moveCount = 0
+      var openCount = 0
+      var cleanupCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = {
+          moveCount += 1
+          Failure(moveFailure)
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          super.openRegistry(settings)
+        }
+
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          cleanupCount += 1
+          super.deleteRegistryTombstone(path)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetDeferred(recoveredState, cause) =>
+          try {
+            (cause eq moveFailure) shouldBe true
+            (recoveredState.registry eq registry) shouldBe false
+            recoveredState.registry.fetchDigest() shouldBe originalDigest
+          } finally recoveredState.registry.close()
+        case other =>
+          fail(s"Expected deferred registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      moveCount shouldBe 1
+      openCount shouldBe 1
+      cleanupCount shouldBe 0
+    }
+  }
+
+  property("recovery-specific registry reset should retain move and fallback-open failures") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val moveFailure = new IOException("injected registry quarantine move failure")
+      val openFailure = new IOException("injected canonical fallback open failure")
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => inputCloseCount += 1
+      )
+      val walletState = initialState(store, registry, None)
+      var moveCount = 0
+      var openCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = {
+          moveCount += 1
+          Failure(moveFailure)
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          Failure(openFailure)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetUnavailable(cause) =>
+          (cause eq moveFailure) shouldBe true
+          cause.getSuppressed.exists(_ eq openFailure) shouldBe true
+        case other =>
+          fail(s"Expected unavailable registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      moveCount shouldBe 1
+      openCount shouldBe 1
+    }
+  }
+
+  property("recovery-specific registry reset should recover a fresh registry after the first open fails") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val firstOpenFailure = new IOException("injected first fresh registry open failure")
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => inputCloseCount += 1
+      )
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 9
+      ).get
+      val walletState = initialState(store, registry, None)
+      val events = ArrayBuffer.empty[String]
+      var openCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          events += s"open-$openCount"
+          if (openCount == 1) Failure(firstOpenFailure)
+          else Try(openTestRegistry(
+            settings,
+            closeFailure = None,
+            onClose = () => (),
+            onFetch = () => events += "validate"
+          ))
+        }
+
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          events += "cleanup"
+          super.deleteRegistryTombstone(path)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetReady(recoveredState, recoveredFrom) =>
+          try {
+            recoveredFrom.exists(_ eq firstOpenFailure) shouldBe true
+            (recoveredState.registry eq registry) shouldBe false
+            recoveredState.registry.fetchDigest() shouldBe WalletDigest.empty
+            (recoveredState.storage eq walletState.storage) shouldBe true
+          } finally recoveredState.registry.close()
+        case other =>
+          fail(s"Expected ready registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      openCount shouldBe 2
+      events.take(4) shouldBe Seq("open-1", "open-2", "validate", "cleanup")
+      retiredRegistryFolders(isolatedSettings) shouldBe empty
+    }
+  }
+
+  property("recovery-specific registry reset should retain the tombstone when both fresh opens fail") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val firstOpenFailure = new IOException("injected first fresh registry open failure")
+      val fallbackOpenFailure = new IOException("injected fallback registry open failure")
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => ()
+      )
+      val walletState = initialState(store, registry, None)
+      var tombstone: Option[Path] = None
+      var openCount = 0
+      var cleanupCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = super.moveRegistryToTombstone(registryFolder).map { moved =>
+          tombstone = moved
+          moved
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          if (openCount == 1) Failure(firstOpenFailure) else Failure(fallbackOpenFailure)
+        }
+
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          cleanupCount += 1
+          super.deleteRegistryTombstone(path)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetUnavailable(cause) =>
+          (cause eq firstOpenFailure) shouldBe true
+          cause.getSuppressed.exists(_ eq fallbackOpenFailure) shouldBe true
+        case other =>
+          fail(s"Expected unavailable registry reset, got $other")
+      }
+
+      openCount shouldBe 2
+      cleanupCount shouldBe 0
+      tombstone.isDefined shouldBe true
+      Files.exists(tombstone.get) shouldBe true
+    }
+  }
+
+  property("recovery-specific registry reset should defer with a non-empty fallback after rejecting an unreadable candidate") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val validationFailure = new IOException("injected first candidate digest failure")
+      val inputRegistry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => ()
+      )
+      val walletState = initialState(store, inputRegistry, None)
+      var firstCandidateCloseCount = 0
+      var firstCandidate: Option[WalletRegistry] = None
+      var failValidation = false
+      var openCount = 0
+      var tombstone: Option[Path] = None
+      var cleanupCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = super.moveRegistryToTombstone(registryFolder).map { moved =>
+          tombstone = moved
+          moved
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          if (openCount == 1) Try {
+            val candidate = openTestRegistry(
+              settings,
+              closeFailure = None,
+              onClose = () => firstCandidateCloseCount += 1,
+              fetchFailure = () => if (failValidation) Some(validationFailure) else None
+            )
+            candidate.updateOnBlock(
+              ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+              modifierIdGen.sample.get,
+              blockHeight = 10
+            ).get
+            firstCandidate = Some(candidate)
+            failValidation = true
+            candidate
+          } else super.openRegistry(settings)
+        }
+
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          cleanupCount += 1
+          super.deleteRegistryTombstone(path)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetDeferred(recoveredState, cause) =>
+          try {
+            (cause eq validationFailure) shouldBe true
+            (recoveredState.registry eq inputRegistry) shouldBe false
+            (recoveredState.registry eq firstCandidate.get) shouldBe false
+            recoveredState.registry.fetchDigest() should not be WalletDigest.empty
+          } finally recoveredState.registry.close()
+        case other =>
+          fail(s"Expected deferred registry reset, got $other")
+      }
+
+      openCount shouldBe 2
+      firstCandidateCloseCount shouldBe 1
+      cleanupCount shouldBe 0
+      tombstone.isDefined shouldBe true
+      Files.exists(tombstone.get) shouldBe true
+    }
+  }
+
+  property("recovery-specific registry reset should return a fresh ready registry and clean up after validation") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => inputCloseCount += 1
+      )
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 11
+      ).get
+      val walletState = initialState(store, registry, None)
+      val events = ArrayBuffer.empty[String]
+      var openCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = {
+          events += "move"
+          super.moveRegistryToTombstone(registryFolder)
+        }
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          events += "open"
+          Try(openTestRegistry(
+            settings,
+            closeFailure = None,
+            onClose = () => (),
+            onFetch = () => events += "validate"
+          ))
+        }
+
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          events += "cleanup"
+          super.deleteRegistryTombstone(path)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetReady(recoveredState, recoveredFrom) =>
+          try {
+            recoveredFrom shouldBe None
+            (recoveredState.registry eq registry) shouldBe false
+            recoveredState.registry.fetchDigest() shouldBe WalletDigest.empty
+            (recoveredState.storage eq walletState.storage) shouldBe true
+          } finally recoveredState.registry.close()
+        case other =>
+          fail(s"Expected ready registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      openCount shouldBe 1
+      events.take(4) shouldBe Seq("move", "open", "validate", "cleanup")
+      retiredRegistryFolders(isolatedSettings) shouldBe empty
+    }
+  }
+
+  property("recovery-specific registry reset should reject and close an unreadable fallback candidate") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val moveFailure = new IOException("injected registry quarantine move failure")
+      val digestFailure = new IOException("injected fallback digest failure")
+      val candidateCloseFailure = new IOException("injected fallback close failure")
+      var inputCloseCount = 0
+      val registry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => inputCloseCount += 1
+      )
+      val walletState = initialState(store, registry, None)
+      var openCount = 0
+      var candidateCloseCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = Failure(moveFailure)
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          openCount += 1
+          Try(openTestRegistry(
+            settings,
+            closeFailure = Some(candidateCloseFailure),
+            onClose = () => candidateCloseCount += 1,
+            fetchFailure = () => Some(digestFailure)
+          ))
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetUnavailable(cause) =>
+          (cause eq moveFailure) shouldBe true
+          cause.getSuppressed.exists(_ eq digestFailure) shouldBe true
+          cause.getSuppressed.exists(_ eq candidateCloseFailure) shouldBe true
+        case other =>
+          fail(s"Expected unavailable registry reset, got $other")
+      }
+
+      inputCloseCount shouldBe 1
+      openCount shouldBe 1
+      candidateCloseCount shouldBe 1
+    }
+  }
+
+  property("recreateRegistry should fail before opening a replacement when quarantine move fails") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val registry = WalletRegistry(isolatedSettings).get
+      val walletState = initialState(store, registry, None)
+      val moveFailure = new IOException("injected registry quarantine move failure")
+      var replacementOpenAttempts = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = Failure(moveFailure)
+
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = {
+          replacementOpenAttempts += 1
+          WalletRegistry(settings)
+        }
+      }
+
+      val result = walletService.recreateRegistry(walletState, isolatedSettings)
+
+      result.failed.get shouldBe moveFailure
+      replacementOpenAttempts shouldBe 0
+      Files.exists(WalletRegistry.registryFolder(isolatedSettings).toPath) shouldBe true
+    }
+  }
+
+  property("recreateRegistry should remove its tombstone after opening the replacement") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val registry = WalletRegistry(isolatedSettings).get
+      val walletState = initialState(store, registry, None)
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 1
+      ).get
+      var tombstone: Option[Path] = None
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def moveRegistryToTombstone(
+          registryFolder: File
+        ): Try[Option[Path]] = {
+          super.moveRegistryToTombstone(registryFolder).map { moved =>
+            tombstone = moved
+            moved
+          }
+        }
+      }
+
+      val recreated = walletService.recreateRegistry(walletState, isolatedSettings).get
+
+      try {
+        recreated.registry.fetchDigest() shouldBe WalletDigest.empty
+        tombstone.isDefined shouldBe true
+        Files.notExists(tombstone.get) shouldBe true
+        retiredRegistryFolders(isolatedSettings) shouldBe empty
+      } finally recreated.registry.close()
+    }
+  }
+
+  property("recreateRegistry should preserve operator backups while removing UUID tombstones") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val registry = WalletRegistry(isolatedSettings).get
+      val walletState = initialState(store, registry, None)
+      val registryPath = WalletRegistry.registryFolder(isolatedSettings).toPath
+      val operatorBackup = registryPath.resolveSibling("registry.retired-backup")
+      val uuidTombstone = registryPath.resolveSibling(s"registry.retired-${UUID.randomUUID()}")
+      Files.createDirectory(operatorBackup)
+      Files.createDirectory(uuidTombstone)
+
+      val recreated = new ErgoWalletServiceImpl(isolatedSettings)
+        .recreateRegistry(walletState, isolatedSettings)
+        .get
+
+      try {
+        Files.exists(operatorBackup) shouldBe true
+        Files.notExists(uuidTombstone) shouldBe true
+      } finally {
+        recreated.registry.close()
+        Files.deleteIfExists(operatorBackup)
+        Files.deleteIfExists(uuidTombstone)
+      }
+    }
+  }
+
+  property("recreateRegistry should retry a transiently failed tombstone cleanup on the next reset") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val registry = WalletRegistry(isolatedSettings).get
+      val walletState = initialState(store, registry, None)
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 1
+      ).get
+      var orphan: Option[Path] = None
+      val failingCleanupService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          orphan = Some(path)
+          Failure(new IOException("injected transient tombstone cleanup failure"))
+        }
+      }
+
+      val firstReset = failingCleanupService.recreateRegistry(walletState, isolatedSettings).get
+      var activeState = firstReset
+
+      try {
+        firstReset.registry.fetchDigest() shouldBe WalletDigest.empty
+        orphan.isDefined shouldBe true
+        Files.exists(orphan.get) shouldBe true
+
+        activeState = new ErgoWalletServiceImpl(isolatedSettings)
+          .recreateRegistry(firstReset, isolatedSettings)
+          .get
+
+        activeState.registry.fetchDigest() shouldBe WalletDigest.empty
+        Files.notExists(orphan.get) shouldBe true
+        retiredRegistryFolders(isolatedSettings) shouldBe empty
+      } finally activeState.registry.close()
+    }
+  }
+
+  property("recreateRegistry should retain the tombstone when replacement opening fails and clean it on retry") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val registry = WalletRegistry(isolatedSettings).get
+      val walletState = initialState(store, registry, None)
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 1
+      ).get
+      val openFailure = new IOException("injected replacement open failure")
+      val failingOpenService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def openRegistry(
+          settings: ErgoSettings
+        ): Try[WalletRegistry] = Failure(openFailure)
+      }
+
+      val failedReset = failingOpenService.recreateRegistry(walletState, isolatedSettings)
+
+      failedReset.failed.get shouldBe openFailure
+      Files.notExists(WalletRegistry.registryFolder(isolatedSettings).toPath) shouldBe true
+      retiredRegistryFolders(isolatedSettings).size shouldBe 1
+
+      val recovered = new ErgoWalletServiceImpl(isolatedSettings)
+        .recreateRegistry(walletState, isolatedSettings)
+        .get
+
+      try {
+        recovered.registry.fetchDigest() shouldBe WalletDigest.empty
+        retiredRegistryFolders(isolatedSettings) shouldBe empty
+      } finally recovered.registry.close()
+    }
+  }
+
+  property("recreateRegistry should open a fresh registry without moving when the canonical folder is absent") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val isolatedSettings = this.isolatedSettings()
+        val walletState = initialState(store, versionedStore)
+        var observedMove: Option[Option[Path]] = None
+        val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+          override protected[wallet] def moveRegistryToTombstone(
+            registryFolder: File
+          ): Try[Option[Path]] = {
+            super.moveRegistryToTombstone(registryFolder).map { moved =>
+              observedMove = Some(moved)
+              moved
+            }
+          }
+        }
+
+        val recreated = walletService.recreateRegistry(walletState, isolatedSettings).get
+
+        try {
+          observedMove shouldBe Some(None)
+          recreated.registry.fetchDigest() shouldBe WalletDigest.empty
+          Files.exists(WalletRegistry.registryFolder(isolatedSettings).toPath) shouldBe true
+          retiredRegistryFolders(isolatedSettings) shouldBe empty
+        } finally recreated.registry.close()
+      }
+    }
+  }
+
+  property("recreateRegistry should not accumulate tombstones across two successful resets") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val registry = WalletRegistry(isolatedSettings).get
+      val walletState = initialState(store, registry, None)
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings)
+
+      val firstReset = walletService.recreateRegistry(walletState, isolatedSettings).get
+      retiredRegistryFolders(isolatedSettings) shouldBe empty
+      val secondReset = walletService.recreateRegistry(firstReset, isolatedSettings).get
+
+      try {
+        secondReset.registry.fetchDigest() shouldBe WalletDigest.empty
+        retiredRegistryFolders(isolatedSettings) shouldBe empty
+      } finally secondReset.registry.close()
+    }
   }
 
   property("restoring wallet should fail if pruning is enabled") {
@@ -426,28 +1183,41 @@ class ErgoWalletServiceSpec
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         val walletState = initialState(store, versionedStore)
-        val walletService = new ErgoWalletServiceImpl(settings)
+        val testSettings = isolatedSettings()
+        val walletService = new ErgoWalletServiceImpl(testSettings)
         val pass = Random.nextString(10)
-        val initializedState = walletService.initWallet(walletState, settings, SecretString.create(pass), Option.empty).get._2
+        val initializedState = walletService
+          .initWallet(walletState, testSettings, SecretString.create(pass), Option.empty)
+          .get
+          ._2
 
-        // Wallet unlocked after init, so we're locking it
-        val initLockedWalletState = walletService.lockWallet(initializedState)
-        initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
-        initLockedWalletState.walletVars.proverOpt shouldBe empty
+        try {
+          // Wallet unlocked after init, so we're locking it
+          val initLockedWalletState = walletService.lockWallet(initializedState)
+          initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
+          initLockedWalletState.walletVars.proverOpt shouldBe empty
 
-        val unlockedWalletState = walletService.unlockWallet(initLockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get
-        unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
-        unlockedWalletState.storage.readAllKeys().size shouldBe 1
-        unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
+          val unlockedWalletState = walletService
+            .unlockWallet(initLockedWalletState, SecretString.create(pass), usePreEip3Derivation = true)
+            .get
+          unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
+          unlockedWalletState.storage.readAllKeys().size shouldBe 1
+          unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
 
-        val lockedWalletState = walletService.lockWallet(unlockedWalletState)
-        lockedWalletState.secretStorageOpt.get.isLocked shouldBe true
-        lockedWalletState.walletVars.proverOpt shouldBe empty
+          val lockedWalletState = walletService.lockWallet(unlockedWalletState)
+          lockedWalletState.secretStorageOpt.get.isLocked shouldBe true
+          lockedWalletState.walletVars.proverOpt shouldBe empty
 
-        val finalUnlockedState = walletService.unlockWallet(lockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get
-        finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
-        finalUnlockedState.storage.readAllKeys().size shouldBe 1
-        finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+          val finalUnlockedState = walletService
+            .unlockWallet(lockedWalletState, SecretString.create(pass), usePreEip3Derivation = true)
+            .get
+          finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
+          finalUnlockedState.storage.readAllKeys().size shouldBe 1
+          finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+        } finally {
+          initializedState.registry.close()
+          initializedState.storage.close()
+        }
       }
     }
   }
@@ -459,16 +1229,25 @@ class ErgoWalletServiceSpec
         val pass = SecretString.create(Random.nextString(10))
         val mnemonic = "edge talent poet tortoise trumpet dose"
 
-        val walletService = new ErgoWalletServiceImpl(settings)
+        val testSettings = isolatedSettings()
+        val walletService = new ErgoWalletServiceImpl(testSettings)
         val ws1 = initialState(store, versionedStore)
-        val ws2 = walletService.initWallet(ws1, settings, pass, Some(SecretString.create(mnemonic))).get._2
-        ws2.secretStorageOpt.get.unlock(pass)
+        val ws2 = walletService
+          .initWallet(ws1, testSettings, pass, Some(SecretString.create(mnemonic)))
+          .get
+          ._2
 
-        val path = DerivationPath.fromEncoded("m/44/1/1/0/0").get
-        val sk = ws2.secretStorageOpt.get.secret.get
-        val pk = sk.derive(path).publicKey
+        try {
+          ws2.secretStorageOpt.get.unlock(pass)
+          val path = DerivationPath.fromEncoded("m/44/1/1/0/0").get
+          val sk = ws2.secretStorageOpt.get.secret.get
+          val pk = sk.derive(path).publicKey
 
-        walletService.getPrivateKeyFromPath(ws2, pk.path).get.w shouldBe sk.derive(path).privateInput.w
+          walletService.getPrivateKeyFromPath(ws2, pk.path).get.w shouldBe sk.derive(path).privateInput.w
+        } finally {
+          ws2.registry.close()
+          ws2.storage.close()
+        }
       }
     }
   }
@@ -492,7 +1271,9 @@ class ErgoWalletServiceSpec
           maxInputsToUse = 1000,
           rescanInProgress = false
         )
-        val s = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1))
+        val s = isolatedSettings().copy(
+          nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1)
+        )
         val walletService = new ErgoWalletServiceImpl(s)
         val ws = walletService.initWallet(
           walletState,
@@ -501,15 +1282,20 @@ class ErgoWalletServiceSpec
           None
         ).get._2
 
-        ws.secretStorageOpt.get.unlock(wpass)
-        ws.walletVars.trackedPubKeys.size shouldBe 1
-        val uws = ws
+        try {
+          ws.secretStorageOpt.get.unlock(wpass)
+          ws.walletVars.trackedPubKeys.size shouldBe 1
+          val uws = ws
 
-        val uws2 = walletService.deriveNextKey(uws, usePreEip3Derivation = true).get._2
-        uws2.walletVars.trackedPubKeys.size shouldBe 2
+          val uws2 = walletService.deriveNextKey(uws, usePreEip3Derivation = true).get._2
+          uws2.walletVars.trackedPubKeys.size shouldBe 2
 
-        val uws3 = walletService.deriveNextKey(uws2, usePreEip3Derivation = false).get._2
-        uws3.walletVars.trackedPubKeys.size shouldBe 3
+          val uws3 = walletService.deriveNextKey(uws2, usePreEip3Derivation = false).get._2
+          uws3.walletVars.trackedPubKeys.size shouldBe 3
+        } finally {
+          ws.registry.close()
+          ws.storage.close()
+        }
       }
     }
   }
@@ -533,7 +1319,9 @@ class ErgoWalletServiceSpec
           maxInputsToUse = 1000,
           rescanInProgress = false
         )
-        val s = settings.copy(nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1))
+        val s = isolatedSettings().copy(
+          nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1)
+        )
         val walletService = new ErgoWalletServiceImpl(s)
         val ws = walletService.restoreWallet(
           walletState,
@@ -544,15 +1332,20 @@ class ErgoWalletServiceSpec
           usePre1627KeyDerivation = false
         ).get
 
-        ws.secretStorageOpt.get.unlock(wpass)
-        ws.walletVars.trackedPubKeys.size shouldBe 1
-        val uws = ws
+        try {
+          ws.secretStorageOpt.get.unlock(wpass)
+          ws.walletVars.trackedPubKeys.size shouldBe 1
+          val uws = ws
 
-        val uws2 = walletService.deriveNextKey(uws, false).get._2
-        uws2.walletVars.trackedPubKeys.size shouldBe 2
+          val uws2 = walletService.deriveNextKey(uws, false).get._2
+          uws2.walletVars.trackedPubKeys.size shouldBe 2
 
-        val uws3 = walletService.deriveNextKey(uws2, false).get._2
-        uws3.walletVars.trackedPubKeys.size shouldBe 3
+          val uws3 = walletService.deriveNextKey(uws2, false).get._2
+          uws3.walletVars.trackedPubKeys.size shouldBe 3
+        } finally {
+          ws.registry.close()
+          ws.storage.close()
+        }
       }
     }
   }

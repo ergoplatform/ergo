@@ -252,7 +252,7 @@ object WalletScanLogic extends ScorexLogging {
         val paymentsTriggered = trackedBytes.exists(bs => boxScript.sameElements(bs))
 
         val otherIds = prePaymentStatuses.map(_._1).toSet
-        if (paymentsTriggered) {
+        if (paymentsTriggered || prePaymentStatuses.exists(_._2 == ScanWalletInteraction.Forced)) {
           Set(PaymentsScanId) ++ otherIds
         } else {
           otherIds

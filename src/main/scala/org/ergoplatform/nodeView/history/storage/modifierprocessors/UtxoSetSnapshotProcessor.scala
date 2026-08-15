@@ -10,13 +10,13 @@ import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings}
 import org.ergoplatform.core.VersionTag
 import scorex.core.network.ConnectedPeer
-import org.ergoplatform.serialization.SubtreeSerializer
+import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.LDBVersionedStore
+import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.{ModifierId, ScorexLogging}
-import spire.syntax.all.cfor
-
 import scala.util.{Failure, Random, Success, Try}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
@@ -25,7 +25,10 @@ import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLPro
   *
   * Stores UTXO set snapshots manifests and chunks for incomplete snapshots.
   */
-trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with ScorexLogging {
+trait UtxoSetSnapshotProcessor
+  extends MinimalFullBlockHeightFunctions
+    with UtxoSnapshotScanSourceReader
+    with ScorexLogging {
 
   import org.ergoplatform.settings.ErgoAlgos.HF
 
@@ -35,11 +38,20 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   // database to read history-related objects here and in descendants
   protected val historyStorage: HistoryStorage
 
-  private val downloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
-
   private var _manifest: Option[BatchAVLProverManifest[Digest32]] = None
 
+  private var _manifestBytes: Option[Array[Byte]] = None
+
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
+
+  protected def minimalFullBlockHeightKey: ByteArrayWrapper
+
+  protected def snapshotHeaderStateAtHeight(height: Height): Option[(ModifierId, ADDigest)]
+
+  private def required[A](value: Option[A], error: => Throwable): Try[A] = value match {
+    case Some(result) => Success(result)
+    case None => Failure(error)
+  }
 
   /**
     * @return if UTXO set snapshot was applied during this session (stored in memory only).
@@ -54,26 +66,67 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     * Writes that UTXO set snapshot applied at height `height`. Starts full blocks applications since the next block
     * after.
     */
-  def onUtxoSnapshotApplied(height: Height): Unit = {
+  def onUtxoSnapshotApplied(height: Height, blockId: ModifierId): Try[Unit] = {
     val utxoPhaseTime = {
       _cachedDownloadPlan.map(_.latestUpdateTime).getOrElse(0L) - _cachedDownloadPlan.map(_.createdTime).getOrElse(0L)
     }
-    log.info(s"UTXO set downloading and application time: ${utxoPhaseTime / 1000.0} s.")
-    // remove downloaded utxo set snapshots chunks
-    val ts0 = System.currentTimeMillis()
-    _cachedDownloadPlan.foreach { plan =>
-      val chunkIdsToRemove = downloadedChunkIdsIterator(plan.totalChunks)
-        .map(chunkId => ModifierId @@ Algos.encode(chunkId))
-        .toArray
-      historyStorage.remove(Array.empty, chunkIdsToRemove)
+    val result = for {
+      manifest <- required(_manifest, new IllegalStateException("No UTXO snapshot manifest to finalize"))
+      manifestBytes <- required(_manifestBytes,
+        new IllegalStateException("No exact UTXO snapshot manifest bytes to finalize"))
+      plan <- required(_cachedDownloadPlan,
+        new IllegalStateException("No UTXO snapshot download plan to finalize"))
+      _ <- Try(require(plan.snapshotHeight == height,
+        s"Snapshot height ${plan.snapshotHeight} does not match applied height $height"))
+      _ <- Try(require(plan.fullyDownloaded, "UTXO snapshot is not fully downloaded"))
+      _ <- Try(require(plan.expectedChunkIds.size == manifest.subtreesIds.size &&
+        plan.expectedChunkIds.zip(manifest.subtreesIds).forall { case (a, b) => a.sameElements(b) },
+        "UTXO snapshot download plan does not match manifest chunk identifiers"))
+      serializedManifest <- ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes)
+      _ <- Try(require(
+        serializedManifest.id.sameElements(manifest.id) &&
+          serializedManifest.rootHeight == manifest.rootHeight &&
+          serializedManifest.subtreesIds.size == manifest.subtreesIds.size &&
+          serializedManifest.subtreesIds.zip(manifest.subtreesIds).forall {
+            case (a, b) => a.sameElements(b)
+          },
+        "Exact UTXO snapshot manifest bytes do not match the download plan"
+      ))
+      _ <- Try {
+        plan.expectedChunkIds.indices.foreach { ordinal =>
+          val bytes = historyStorage.get(chunkIdFromIndex(ordinal)).getOrElse(
+            throw new IllegalStateException(s"Missing downloaded UTXO snapshot chunk $ordinal"))
+          val subtree = SubtreeSerializer.parseBytesTry(bytes).get
+          require(subtree.verify(plan.expectedChunkIds(ordinal)),
+            s"Downloaded UTXO snapshot chunk $ordinal does not match its manifest identifier")
+        }
+      }
+      header <- required(snapshotHeaderStateAtHeight(height),
+        new IllegalStateException(s"No header found for UTXO snapshot height $height"))
+      _ <- Try(require(header._1 == blockId,
+        s"Snapshot block $blockId does not match header ${header._1} at height $height"))
+      _ <- Try(require(header._2.sameElements(VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)),
+        s"Snapshot manifest root does not match header state root at height $height"))
+      source <- UtxoSnapshotScanSource.create(
+        height,
+        blockId,
+        ManifestSerializer.MainnetManifestDepth,
+        manifestBytes
+      )
+      _ <- historyStorage.insert(
+        indexesToInsert = Array(
+          UtxoSetSnapshotProcessor.SnapshotScanSourceKey -> UtxoSnapshotScanSourceSerializer.toBytes(source),
+          minimalFullBlockHeightKey -> Ints.toByteArray(height + 1)
+        ),
+        objectsToInsert = BlockSection.emptyArray
+      )
+    } yield {
+      _manifest = None
+      _manifestBytes = None
+      _cachedDownloadPlan = None
+      log.info(s"UTXO set downloading and application time: ${utxoPhaseTime / 1000.0} s.")
     }
-    _manifest = None
-    _cachedDownloadPlan = None
-    val ts = System.currentTimeMillis()
-    log.info(s"Imported UTXO set snapshots chunks removed in ${ts - ts0} ms")
-
-    // set height of first full block to be downloaded
-    writeMinimalFullBlockHeight(height + 1)
+    result
   }
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
@@ -83,15 +136,18 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   /**
     * Register manifest as one to be downloaded and create download plan from it
     * @param manifest - manifest corresponding to UTXO set snapshot to be downloaded
+    * @param manifestBytes - exact serialized manifest bytes accepted from the network
     * @param blockHeight - height of a block corresponding to the manifest
     * @param peersToDownload - peers to download chunks related to manifest from
     * @return download plan
     */
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
+                                 manifestBytes: Array[Byte],
                                  blockHeight: Height,
                                  peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
     val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight, peersToDownload)
     _manifest = Some(manifest)
+    _manifestBytes = Some(manifestBytes.clone())
     updateUtxoSetSnashotDownloadPlan(plan)
     plan
   }
@@ -151,28 +207,63 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   /**
     * Write serialized UTXO set snapshot chunk to the database
     */
-  def registerDownloadedChunk(chunkId: Array[Byte], chunkSerialized: Array[Byte]): Unit = {
-    utxoSetSnapshotDownloadPlan() match {
+  def registerDownloadedChunk(chunkId: Array[Byte], chunkSerialized: Array[Byte]): Try[Unit] = {
+    SubtreeSerializer.parseBytesTry(chunkSerialized).flatMap { subtree =>
+      if (!subtree.verify(Digest32 @@ chunkId)) {
+        Failure(new IllegalArgumentException(
+          s"Downloaded UTXO snapshot chunk ${Algos.encode(chunkId)} has a different root"))
+      } else utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
-        cfor(0)(_ < plan.downloadedChunkIds.size, _ + 1) { idx =>
-          if (!plan.downloadedChunkIds(idx) && plan.expectedChunkIds(idx).sameElements(chunkId)) {
-            historyStorage.insert(chunkIdFromIndex(idx), chunkSerialized)
+        plan.downloadedChunkIds.indices
+          .find(idx => !plan.downloadedChunkIds(idx) && plan.expectedChunkIds(idx).sameElements(chunkId)) match {
+          case Some(idx) => historyStorage.insert(chunkIdFromIndex(idx), chunkSerialized).map { _ =>
             val updDownloaded = plan.downloadedChunkIds.updated(idx, true)
             val updDownloading = plan.downloadingChunks - 1
             val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = updDownloaded, downloadingChunks = updDownloading)
             updateUtxoSetSnashotDownloadPlan(updPlan)
-            return
           }
+          case None => Failure(new IllegalArgumentException(
+            s"Chunk ${Algos.encode(chunkId)} is not pending in the UTXO snapshot download plan"))
         }
       case None =>
-        log.warn(s"Chunk ${Algos.encode(chunkId)} downloaded but no download plan found")
+        Failure(new IllegalStateException(
+          s"Chunk ${Algos.encode(chunkId)} downloaded but no download plan found"))
+      }
     }
   }
 
-  private def chunkIdFromIndex(index: Int): Array[Byte] = {
-    val idxBytes = Ints.toByteArray(index)
-    downloadedChunksPrefix ++ idxBytes
-  }
+  /** Whether a completed plan still authenticates the current best header and block identity. */
+  def isUtxoSetSnapshotDownloadCurrent(height: Height, blockId: ModifierId): Boolean =
+    _cachedDownloadPlan.exists { plan =>
+      plan.fullyDownloaded && plan.snapshotHeight == height &&
+        snapshotHeaderStateAtHeight(height).exists { case (currentBlockId, stateRoot) =>
+          currentBlockId == blockId && stateRoot.sameElements(
+            VersionedLDBAVLStorage.digest(
+              plan.utxoSetRootHash,
+              plan.utxoSetTreeHeight & 0xff
+            )
+          )
+        }
+    }
+
+  /** Remove a stale in-progress snapshot and all ordinal chunk rows it allocated. */
+  def invalidateUtxoSetSnapshotDownload(): Try[Unit] =
+    _cachedDownloadPlan match {
+      case Some(plan) =>
+        val ordinalChunkKeys =
+          plan.downloadedChunkIds.indices.map(chunkIdFromIndex).toArray
+        val cleanup = if (ordinalChunkKeys.isEmpty) Success(())
+        else historyStorage.removeRawObjects(ordinalChunkKeys)
+        cleanup.map { _ =>
+          _manifest = None
+          _manifestBytes = None
+          _cachedDownloadPlan = None
+        }
+      case None => Success(())
+    }
+
+  private def chunkIdFromIndex(index: Int): Array[Byte] =
+    UtxoSetSnapshotProcessor.snapshotScanChunkKey(index)
 
   private def downloadedChunkIdsIterator(totalChunks: Int): Iterator[Array[Byte]] = {
     Iterator.range(0, totalChunks).map(chunkIdFromIndex)
@@ -184,16 +275,55 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   def downloadedChunksIterator(): Iterator[BatchAVLProverSubtree[Digest32]] = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
-        downloadedChunkIdsIterator(plan.totalChunks).flatMap { chunkId =>
-          historyStorage
-            .get(chunkId)
-            .flatMap(bs => SubtreeSerializer.parseBytesTry(bs).toOption)
+        downloadedChunkIdsIterator(plan.totalChunks).map { chunkId =>
+          val bytes = historyStorage.get(chunkId).getOrElse(
+            throw new IllegalStateException(s"Missing downloaded UTXO snapshot chunk ${Algos.encode(chunkId)}"))
+          SubtreeSerializer.parseBytesTry(bytes).get
         }
       case None =>
         log.error("No download plan found in downloadedChunksIterator")
       Iterator.empty
     }
   }
+
+  /** Read and validate the persisted immutable source for the expected snapshot block. */
+  def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource] = for {
+    bytes <- required(historyStorage.getIndex(UtxoSetSnapshotProcessor.SnapshotScanSourceKey),
+      new IllegalStateException("No persisted UTXO snapshot scan source"))
+    source <- UtxoSnapshotScanSourceSerializer.parseBytesTry(bytes)
+    _ <- Try(require(source.snapshotBlockId == expectedBlockId,
+      s"Persisted snapshot block ${source.snapshotBlockId} does not match expected $expectedBlockId"))
+    header <- required(snapshotHeaderStateAtHeight(source.snapshotHeight),
+      new IllegalStateException(s"No header found for persisted snapshot height ${source.snapshotHeight}"))
+    _ <- Try(require(header._1 == expectedBlockId,
+      s"Persisted snapshot identity does not match the header at height ${source.snapshotHeight}"))
+    manifest <- new ManifestSerializer(source.manifestDepth).parseBytesTry(source.manifestBytes)
+    _ <- Try(require(header._2.sameElements(VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)),
+      s"Persisted snapshot manifest root does not match the header at height ${source.snapshotHeight}"))
+  } yield source
+
+  /** Read and verify one persisted scan part by deterministic index. */
+  def readUtxoSnapshotScanPart(source: UtxoSnapshotScanSource,
+                               index: Int): Try[BatchAVLProverSubtree[Digest32]] =
+    source.readPart(index, ordinal =>
+      required(historyStorage.get(UtxoSetSnapshotProcessor.snapshotScanChunkKey(ordinal)),
+        new IllegalStateException(s"Missing retained UTXO snapshot chunk $ordinal")))
+
+  /** Remove retained chunks, then the descriptor, safely across retries. */
+  def removeUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[Unit] =
+    historyStorage.getIndex(UtxoSetSnapshotProcessor.SnapshotScanSourceKey) match {
+      case None => Success(())
+      case Some(bytes) => for {
+        source <- UtxoSnapshotScanSourceSerializer.parseBytesTry(bytes)
+        _ <- Try(require(source.snapshotBlockId == expectedBlockId,
+          s"Persisted snapshot block ${source.snapshotBlockId} does not match expected $expectedBlockId"))
+        _ <- historyStorage.removeRawObjects(
+          Array.range(0, source.chunkCount).map(UtxoSetSnapshotProcessor.snapshotScanChunkKey))
+        _ <- historyStorage.remove(
+          Array(UtxoSetSnapshotProcessor.SnapshotScanSourceKey),
+          Array.empty[ModifierId])
+      } yield ()
+    }
 
   /**
     * Create disk-persistent authenticated AVL+ tree prover
@@ -236,4 +366,15 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     }
   }
 
+}
+
+object UtxoSetSnapshotProcessor {
+  private val DownloadedChunksPrefix = Blake2b256.hash("downloaded chunk").drop(4)
+
+  private[history] val SnapshotScanSourceKey: ByteArrayWrapper =
+    ByteArrayWrapper(Blake2b256.hash("utxo snapshot scan source"))
+
+  /** Exact object-store key for a retained ordinal snapshot chunk. */
+  def snapshotScanChunkKey(index: Int): Array[Byte] =
+    DownloadedChunksPrefix ++ Ints.toByteArray(index)
 }

@@ -175,6 +175,10 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     objectsStore.insert(objectIdToInsert, objectToInsert)
   }
 
+  /** Atomically remove raw object rows identified by their exact keys. */
+  def removeRawObjects(objectIdsToRemove: Array[Array[Byte]]): Try[Unit] =
+    objectsStore.remove(objectIdsToRemove)
+
   /**
     * Remove elements from stored indices and modifiers
     *
@@ -185,7 +189,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   def remove(indicesToRemove: Array[ByteArrayWrapper],
              idsToRemove: Array[ModifierId]): Try[Unit] = {
 
-      objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
+      objectsStore.remove(idsToRemove.map(idToBytes)).flatMap { _ =>
         cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i))}
         indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
           cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i))}

@@ -152,16 +152,22 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
                                          Try[Unit]] = None,
                                        recoveryRestart: Option[(ErgoWalletState, UtxoSnapshotScanInvalidation,
                                          UtxoSnapshotScanStatus, () => Try[Boolean]) => Try[Boolean]] = None,
-                                       snapshotDefinitionCalculation: Option[(ErgoWalletState,
-                                         () => Try[UtxoSnapshotScanDefinition]) =>
-                                         Try[UtxoSnapshotScanDefinition]] = None,
-                                       actorPreStart: Option[() => Unit] = None)
+                                        snapshotDefinitionCalculation: Option[(ErgoWalletState,
+                                          () => Try[UtxoSnapshotScanDefinition]) =>
+                                          Try[UtxoSnapshotScanDefinition]] = None,
+                                        actorPreStart: Option[() => Unit] = None,
+                                        expectedInitialized: Boolean = true)
                                      (test: (ActorRef, TestProbe, TestProbe) => T): T = {
     implicit val actorSystem: ActorSystem =
       ActorSystem(s"wallet-run-fence-${UUID.randomUUID().toString}")
     val scanner = TestProbe()
     val client = TestProbe()
-    val isolatedSettings = baseSettings.copy(directory = directory.getAbsolutePath)
+    val isolatedDirectory = directory.getAbsolutePath
+    val isolatedSettings = baseSettings.copy(
+      directory = isolatedDirectory,
+      walletSettings = baseSettings.walletSettings.copy(
+        secretStorage = baseSettings.walletSettings.secretStorage.copy(
+          secretDir = s"$isolatedDirectory/wallet/keystore")))
     val boxSelector = new ReplaceCompactCollectBoxSelector(
       isolatedSettings.walletSettings.maxInputs,
       isolatedSettings.walletSettings.optimalInputs,
@@ -308,7 +314,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       }
     }))
     client.send(actor, GetWalletStatus)
-    client.expectMsgType[WalletStatus](10.seconds).initialized shouldBe true
+    client.expectMsgType[WalletStatus](10.seconds).initialized shouldBe expectedInitialized
     try {
       test(actor, scanner, client)
     } finally {
@@ -392,7 +398,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     val stateReader: UtxoStateReader,
     val bestHeaderState: Try[Option[(ModifierId, ADDigest)]],
     val sourceIdentity: Try[UtxoSnapshotSourceIdentity],
-    val expectedError: String)
+    val expectedError: String,
+    val expectedInitialized: Boolean)
 
   private final class SnapshotRecoveryStrictPreflightCase(
     val label: String,
@@ -1550,7 +1557,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       eventBlockId: ModifierId = snapshotId,
       stateReader: UtxoStateReader = validReader,
       bestHeaderState: Try[Option[(ModifierId, ADDigest)]] = validHeader,
-      sourceIdentity: Try[UtxoSnapshotSourceIdentity] = Success(validSource)):
+      sourceIdentity: Try[UtxoSnapshotSourceIdentity] = Success(validSource),
+      expectedInitialized: Boolean = true):
       SnapshotRecoveryPreflightCase =
       new SnapshotRecoveryPreflightCase(
         label,
@@ -1560,7 +1568,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         stateReader,
         bestHeaderState,
         sourceIdentity,
-        expectedError)
+        expectedError,
+        expectedInitialized)
 
     val cases = Seq(
       preflightCase(
@@ -1572,7 +1581,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         "wallet scan variables unavailable",
         "initialized wallet scan variables",
         actorSettings = noScanSettings,
-        stateReader = snapshotRecoveryStateReader(noScanSettings, snapshotId)),
+        stateReader = snapshotRecoveryStateReader(noScanSettings, snapshotId),
+        expectedInitialized = false),
       preflightCase(
         "event height mismatch",
         "durable invalidation fence",
@@ -1680,7 +1690,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         recoveryRestart = Some((_, _, _, _) => {
           restartCalls.incrementAndGet()
           Success(false)
-        })) { (actor, scanner, client) =>
+        }),
+        expectedInitialized = testCase.expectedInitialized) { (actor, scanner, client) =>
         client.send(actor, UtxoSnapshotAppliedToState(
           testCase.eventHeight,
           testCase.eventBlockId,

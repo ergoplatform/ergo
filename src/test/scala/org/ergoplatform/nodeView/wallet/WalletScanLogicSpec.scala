@@ -298,20 +298,38 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
     }
   }
 
-  property("scan with forced flag is sharing boxes with the p2k-wallet") {
+  property("forced scan result is independent of scripts Bloom filter membership") {
     val outs = IndexedSeq(new ErgoBoxCandidate(1000, TrueTree, creationHeight = 1))
     val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outs)
 
-    val cache = WalletCache(pubkeys, s)
     val paymentPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(TrueTree.bytes))
     val paymentScanReq = ScanRequest("Payment scan", paymentPredicate, Some(ScanWalletInteraction.Forced), Some(false))
-    val walletVars = WalletVars(None, Seq(paymentScanReq.toScan(scanId).get), Some(cache))(s)
+    val paymentScan = paymentScanReq.toScan(scanId).get
+    val box = tx.outputs.head
+    val boxScript = box.propositionBytes
+    val expectedScans = Set(scanId, Constants.PaymentsScanId)
 
-    val boxes = extractWalletOutputs(tx, Some(1), walletVars, None)
+    def scansFor(cache: WalletCache): Set[ScanId] = {
+      val walletVars = WalletVars(None, Seq(paymentScan), Some(cache))(s)
+      filterWalletOutput(box, Some(1), walletVars, None).get.scans
+    }
 
-    boxes.size shouldBe 1
-    boxes.head.scans.size shouldBe 2
-    boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)
+    val bloomNegativeCache = WalletCache(pubkeys, s)
+    bloomNegativeCache.trackedBytes.exists(bs => boxScript.sameElements(bs)) shouldBe false
+    bloomNegativeCache.miningScriptsBytes.exists(bs => boxScript.sameElements(bs)) shouldBe false
+    bloomNegativeCache.scriptsFilter.mightContain(boxScript) shouldBe false
+    val bloomNegativeScans = scansFor(bloomNegativeCache)
+
+    val bloomFalsePositiveCache = WalletCache(pubkeys, s)
+    bloomFalsePositiveCache.scriptsFilter.put(boxScript) shouldBe true
+    bloomFalsePositiveCache.trackedBytes.exists(bs => boxScript.sameElements(bs)) shouldBe false
+    bloomFalsePositiveCache.miningScriptsBytes.exists(bs => boxScript.sameElements(bs)) shouldBe false
+    bloomFalsePositiveCache.scriptsFilter.mightContain(boxScript) shouldBe true
+    val bloomFalsePositiveScans = scansFor(bloomFalsePositiveCache)
+
+    bloomNegativeScans shouldBe expectedScans
+    bloomFalsePositiveScans shouldBe expectedScans
+    bloomFalsePositiveScans shouldBe bloomNegativeScans
   }
 
 }

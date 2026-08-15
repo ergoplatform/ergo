@@ -12,7 +12,7 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 /**
   * Persistent versioned authenticated AVL+ tree implementation on top of versioned LevelDB storage
@@ -151,127 +151,6 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       dumpStorage.insert(rootNodeLabel, manifestBytes)
 
       rootNodeLabel
-    }
-  }
-
-  /**
-    * Iterates current AVL+ tree subtrees using the same manifest cut as [[dumpSnapshot]].
-    *
-    * @param fromIndex      - zero-based subtree index to start from
-    * @param depth          - manifest cut depth
-    * @param handleSubtree  - callback invoked for every subtree at or after `fromIndex`
-    * @return index after the last successfully iterated subtree
-    */
-  def iterateSubtrees(fromIndex: Int, depth: Int)
-                     (handleSubtree: (Int, BatchAVLProverSubtree[DigestType]) => Try[Unit]): Try[Int] =
-    iterateSubtrees(fromIndex, depth, Int.MaxValue)(handleSubtree)
-
-  /**
-    * Iterates a bounded number of current AVL+ tree subtrees using the same manifest cut as [[dumpSnapshot]].
-    *
-    * @param fromIndex      - zero-based subtree index to start from
-    * @param depth          - manifest cut depth
-    * @param limit          - maximal number of subtrees to handle
-    * @param handleSubtree  - callback invoked for every subtree at or after `fromIndex`
-    * @return index after the last successfully iterated subtree
-    */
-  def iterateSubtrees(fromIndex: Int, depth: Int, limit: Int)
-                     (handleSubtree: (Int, BatchAVLProverSubtree[DigestType]) => Try[Unit]): Try[Int] = {
-    Try {
-      require(fromIndex >= 0, "fromIndex should be non-negative")
-      require(depth > 0, "depth should be positive")
-      require(limit > 0, "limit should be positive")
-    }.flatMap { _ =>
-      store.processSnapshot { dbReader =>
-        def readNode(nodeDbKey: Array[Byte]): ProverNodes[DigestType] = {
-          val nodeBytes = dbReader.get(nodeDbKey)
-          VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
-        }
-
-        def readSubtree(sid: DigestType): Try[BatchAVLProverSubtree[DigestType]] = Try {
-          def subtreeLoop(nodeDbKey: Array[Byte]): ProverNodes[DigestType] = {
-            readNode(nodeDbKey) match {
-              case in: ProxyInternalNode[DigestType] =>
-                val left = subtreeLoop(in.leftLabel)
-                val right = subtreeLoop(in.rightLabel)
-                in.getNew(newLeft = left, newRight = right)
-              case node =>
-                node
-            }
-          }
-
-          new BatchAVLProverSubtree[DigestType](subtreeLoop(sid))
-        }
-
-        var nextIndex = 0
-        var handled = 0
-
-        def handleSubtreeId(sid: DigestType): Try[Unit] = {
-          val currentIndex = nextIndex
-          if (currentIndex < fromIndex) {
-            nextIndex += 1
-            Success(())
-          } else if (handled >= limit) {
-            Success(())
-          } else {
-            readSubtree(sid).flatMap(handleSubtree(currentIndex, _)).map { _ =>
-              nextIndex += 1
-              handled += 1
-            }
-          }
-        }
-
-        def manifestLoop(nodeDbKey: Array[Byte], level: Int): Try[Unit] = {
-          if (handled >= limit) {
-            Success(())
-          } else readNode(nodeDbKey) match {
-            case in: ProxyInternalNode[DigestType] if level == depth =>
-              handleSubtreeId(Digest32 @@@ in.leftLabel)
-                .flatMap(_ => handleSubtreeId(Digest32 @@@ in.rightLabel))
-            case in: ProxyInternalNode[DigestType] =>
-              manifestLoop(in.leftLabel, level + 1)
-                .flatMap(_ => manifestLoop(in.rightLabel, level + 1))
-            case _ =>
-              Success(())
-          }
-        }
-
-        val rootNodeLabel = dbReader.get(topNodeHashKey)
-        manifestLoop(rootNodeLabel, level = 1).map(_ => nextIndex)
-      }.flatMap(identity)
-    }
-  }
-
-  /**
-    * Counts current AVL+ tree subtrees using the same manifest cut as [[dumpSnapshot]].
-    */
-  def countSubtrees(depth: Int): Try[Int] = {
-    Try {
-      require(depth > 0, "depth should be positive")
-    }.flatMap { _ =>
-      store.processSnapshot { dbReader =>
-        def readNode(nodeDbKey: Array[Byte]): ProverNodes[DigestType] = {
-          val nodeBytes = dbReader.get(nodeDbKey)
-          VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
-        }
-
-        var count = 0
-
-        def manifestLoop(nodeDbKey: Array[Byte], level: Int): Unit = {
-          readNode(nodeDbKey) match {
-            case _: ProxyInternalNode[DigestType] if level == depth =>
-              count += 2
-            case in: ProxyInternalNode[DigestType] =>
-              manifestLoop(in.leftLabel, level + 1)
-              manifestLoop(in.rightLabel, level + 1)
-            case _ =>
-          }
-        }
-
-        val rootNodeLabel = dbReader.get(topNodeHashKey)
-        manifestLoop(rootNodeLabel, level = 1)
-        count
-      }
     }
   }
 }

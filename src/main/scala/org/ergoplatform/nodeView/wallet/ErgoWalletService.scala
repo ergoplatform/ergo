@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedBoxId
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
-import org.ergoplatform.nodeView.wallet.persistence.{WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.SecretString
@@ -27,10 +27,31 @@ import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigma.Extensions.CollBytesOps
 import sigma.data.SigmaBoolean
 
-import java.io.FileNotFoundException
+import java.io.{File, FileNotFoundException, IOException}
+import java.nio.file.{Files, LinkOption, NoSuchFileException, Path, StandardCopyOption}
+import java.util.UUID
+import scala.collection.JavaConverters._
 import scala.collection.compat.immutable.ArraySeq
 import scala.collection.immutable.TreeSet
 import scala.util.{Failure, Success, Try}
+
+object ErgoWalletService {
+  sealed trait RegistryResetOutcome
+
+  final case class RegistryResetReady(
+    state: ErgoWalletState,
+    recoveredFrom: Option[Throwable]
+  ) extends RegistryResetOutcome
+
+  final case class RegistryResetDeferred(
+    state: ErgoWalletState,
+    cause: Throwable
+  ) extends RegistryResetOutcome
+
+  final case class RegistryResetUnavailable(
+    cause: Throwable
+  ) extends RegistryResetOutcome
+}
 
 /**
   * Operations accessible from [[ErgoWalletActor]]
@@ -98,12 +119,19 @@ trait ErgoWalletService {
   def lockWallet(state: ErgoWalletState): ErgoWalletState
 
   /**
-    * Close it, recursively delete registryFolder from filesystem if present and create new registry
+    * Close the current registry, atomically retire its canonical folder, and create a new registry.
+    * Cleanup of UUID-named registry tombstones created by this service is best effort after the
+    * replacement is open and is retried on later resets.
     * @param state current wallet state
     * @param settings settings read from config file
     * @return Try of new wallet state
     */
   def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
+
+  def recreateRegistryForUtxoSnapshotRecovery(
+    state: ErgoWalletState,
+    settings: ErgoSettings
+  ): ErgoWalletService.RegistryResetOutcome
 
   /**
     * Close it, recursively delete storageFolder from filesystem if present and create new storage
@@ -227,6 +255,25 @@ trait ErgoWalletService {
                             snapshotBlockId: ModifierId,
                             snapshotHeight: Int,
                             subtreeIndex: Int,
+                            finalChunk: Boolean,
+                            dustLimit: Option[Long]): Try[ErgoWalletState] =
+    scanUtxoSnapshotChunk(
+      state,
+      boxes,
+      snapshotBlockId,
+      snapshotHeight,
+      subtreeIndex,
+      subtreeIndex + 1,
+      finalChunk,
+      dustLimit
+    )
+
+  def scanUtxoSnapshotChunk(state: ErgoWalletState,
+                            boxes: Seq[ErgoBox],
+                            snapshotBlockId: ModifierId,
+                            snapshotHeight: Int,
+                            subtreeIndex: Int,
+                            nextSubtreeIndex: Int,
                             finalChunk: Boolean,
                             dustLimit: Option[Long]): Try[ErgoWalletState]
 
@@ -386,15 +433,188 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     state.copy(walletVars = state.walletVars.resetProver())
   }
 
+  protected[wallet] def moveRegistryToTombstone(
+    registryFolder: File
+  ): Try[Option[Path]] = {
+    val registryPath = registryFolder.toPath
+    val tombstone = registryPath.resolveSibling(
+      s"${registryPath.getFileName}.retired-${UUID.randomUUID()}"
+    )
+    Try(Files.move(registryPath, tombstone, StandardCopyOption.ATOMIC_MOVE))
+      .map(Some(_))
+      .recover { case _: NoSuchFileException => None }
+  }
+
+  protected[wallet] def deleteRegistryTombstone(tombstone: Path): Try[Unit] = Try {
+    if (!Files.notExists(tombstone)) {
+      val paths = {
+        val stream = Files.walk(tombstone)
+        try stream.iterator().asScala.toSeq.sortBy(_.getNameCount).reverse
+        finally stream.close()
+      }
+      paths.foreach(Files.delete(_))
+      if (!Files.notExists(tombstone)) {
+        throw new IOException(s"Failed to remove retired wallet registry folder $tombstone")
+      }
+    }
+  }
+
+  private def isCanonicalRegistryTombstone(path: Path, prefix: String): Boolean = {
+    val name = path.getFileName.toString
+    name.startsWith(prefix) && {
+      val suffix = name.substring(prefix.length)
+      Try(UUID.fromString(suffix)).toOption.exists { uuid =>
+        uuid.toString == suffix && uuid.version() == 4 && uuid.variant() == 2
+      } && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+    }
+  }
+
+  private def retiredRegistryFolders(registryFolder: File): Try[Seq[Path]] = Try {
+    val registryPath = registryFolder.toPath
+    val parent = registryPath.getParent
+    val prefix = s"${registryPath.getFileName}.retired-"
+    if (parent == null || Files.notExists(parent)) {
+      Seq.empty
+    } else {
+      val stream = Files.list(parent)
+      try stream.iterator().asScala.filter(isCanonicalRegistryTombstone(_, prefix)).toList
+      finally stream.close()
+    }
+  }
+
+  private def cleanupRetiredRegistryFolders(registryFolder: File): Unit = {
+    retiredRegistryFolders(registryFolder) match {
+      case Success(tombstones) =>
+        tombstones.foreach { tombstone =>
+          Try(deleteRegistryTombstone(tombstone)).flatten.failed.foreach { error =>
+            log.warn(s"Failed to remove retired wallet registry folder $tombstone", error)
+          }
+        }
+      case Failure(error) =>
+        log.warn(s"Failed to discover retired wallet registry folders next to $registryFolder", error)
+    }
+  }
+
+  protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] =
+    WalletRegistry(settings)
+
+  override def recreateRegistryForUtxoSnapshotRecovery(
+    state: ErgoWalletState,
+    settings: ErgoSettings
+  ): ErgoWalletService.RegistryResetOutcome = {
+    import ErgoWalletService._
+
+    val registryFolder = WalletRegistry.registryFolder(settings)
+
+    def suppressDistinct(primary: Throwable, secondary: Throwable): Unit = {
+      if ((secondary ne primary) && !primary.getSuppressed.exists(_ eq secondary)) {
+        primary.addSuppressed(secondary)
+      }
+    }
+
+    def closeRejectedCandidate(candidate: WalletRegistry, primary: Throwable): Unit = {
+      Try(candidate.close()).failed.foreach(suppressDistinct(primary, _))
+    }
+
+    def consumedHandleFailure(): Throwable =
+      new IllegalStateException("Canonical registry open returned the consumed input handle")
+
+    def ready(
+      candidate: WalletRegistry,
+      recoveredFrom: Option[Throwable]
+    ): RegistryResetOutcome = {
+      cleanupRetiredRegistryFolders(registryFolder)
+      RegistryResetReady(state.copy(registry = candidate), recoveredFrom)
+    }
+
+    def fallbackAfterUncertainReset(primary: Throwable): RegistryResetOutcome = {
+      openRegistry(settings) match {
+        case Failure(fallbackFailure) =>
+          suppressDistinct(primary, fallbackFailure)
+          RegistryResetUnavailable(primary)
+        case Success(candidate) if candidate eq state.registry =>
+          suppressDistinct(primary, consumedHandleFailure())
+          RegistryResetUnavailable(primary)
+        case Success(candidate) =>
+          Try(candidate.fetchDigest()) match {
+            case Success(_) =>
+              RegistryResetDeferred(state.copy(registry = candidate), primary)
+            case Failure(fallbackFailure) =>
+              suppressDistinct(primary, fallbackFailure)
+              closeRejectedCandidate(candidate, primary)
+              RegistryResetUnavailable(primary)
+          }
+      }
+    }
+
+    def fallbackAfterFreshFailure(firstFailure: Throwable): RegistryResetOutcome = {
+      openRegistry(settings) match {
+        case Failure(fallbackFailure) =>
+          suppressDistinct(firstFailure, fallbackFailure)
+          RegistryResetUnavailable(firstFailure)
+        case Success(candidate) if candidate eq state.registry =>
+          suppressDistinct(firstFailure, consumedHandleFailure())
+          RegistryResetUnavailable(firstFailure)
+        case Success(candidate) =>
+          Try(candidate.fetchDigest()) match {
+            case Success(digest) if digest == WalletDigest.empty =>
+              ready(candidate, Some(firstFailure))
+            case Success(_) =>
+              RegistryResetDeferred(state.copy(registry = candidate), firstFailure)
+            case Failure(fallbackFailure) =>
+              suppressDistinct(firstFailure, fallbackFailure)
+              closeRejectedCandidate(candidate, firstFailure)
+              RegistryResetUnavailable(firstFailure)
+          }
+      }
+    }
+
+    def openFreshRegistry(): RegistryResetOutcome = {
+      openRegistry(settings) match {
+        case Failure(firstFailure) =>
+          fallbackAfterFreshFailure(firstFailure)
+        case Success(candidate) if candidate eq state.registry =>
+          fallbackAfterFreshFailure(consumedHandleFailure())
+        case Success(candidate) =>
+          Try(candidate.fetchDigest()) match {
+            case Success(digest) if digest == WalletDigest.empty =>
+              ready(candidate, None)
+            case Success(digest) =>
+              val firstFailure = new IllegalStateException(
+                s"Fresh canonical wallet registry is not empty: $digest"
+              )
+              closeRejectedCandidate(candidate, firstFailure)
+              fallbackAfterFreshFailure(firstFailure)
+            case Failure(firstFailure) =>
+              closeRejectedCandidate(candidate, firstFailure)
+              fallbackAfterFreshFailure(firstFailure)
+          }
+      }
+    }
+
+    Try(state.registry.close()) match {
+      case Failure(closeFailure) =>
+        fallbackAfterUncertainReset(closeFailure)
+      case Success(_) =>
+        moveRegistryToTombstone(registryFolder) match {
+          case Failure(moveFailure) =>
+            fallbackAfterUncertainReset(moveFailure)
+          case Success(_) =>
+            openFreshRegistry()
+        }
+    }
+  }
+
   override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
     val registryFolder = WalletRegistry.registryFolder(settings)
     log.info(s"Removing the registry folder $registryFolder")
-    state.registry.close()
-
-    deleteRecursive(registryFolder)
-
-    WalletRegistry.apply(settings).map { reg =>
-      state.copy(registry = reg)
+    Try(state.registry.close()).flatMap { _ =>
+      moveRegistryToTombstone(registryFolder).flatMap { _ =>
+        openRegistry(settings).map { reg =>
+          cleanupRetiredRegistryFolders(registryFolder)
+          state.copy(registry = reg)
+        }
+      }
     }
   }
 
@@ -611,10 +831,18 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                                      snapshotBlockId: ModifierId,
                                      snapshotHeight: Int,
                                      subtreeIndex: Int,
+                                     nextSubtreeIndex: Int,
                                      finalChunk: Boolean,
                                      dustLimit: Option[Long]): Try[ErgoWalletState] = {
     val scanResults = WalletScanLogic.scanSnapshotBoxes(boxes, state.walletVars, dustLimit)
-    state.registry.updateOnSnapshotChunk(scanResults, snapshotBlockId, snapshotHeight, subtreeIndex, finalChunk).map { _ =>
+    state.registry.updateOnSnapshotChunk(
+      scanResults,
+      snapshotBlockId,
+      snapshotHeight,
+      subtreeIndex,
+      nextSubtreeIndex,
+      finalChunk
+    ).map { _ =>
       val walletUnspent = state.registry.walletUnspentBoxes()
       val newOnChainIds = scanResults.outputs.map(x => encodedBoxId(x.box.id)).to[TreeSet]
       val offChainHeight = if (finalChunk) snapshotHeight else state.offChainRegistry.height

@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props, Stash, Timers}
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.header.Header
@@ -29,7 +29,98 @@ import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+
+private[nodeView] final case class RetryUtxoSnapshotFinalization(generation: Long)
+
+private[nodeView] final case class PendingUtxoSnapshotFinalization(height: Int,
+                                                                  blockId: ModifierId,
+                                                                  generation: Long,
+                                                                  attempt: Int,
+                                                                  installState: () => Unit)
+
+private[nodeView] trait UtxoSnapshotFinalizationSupport {
+  this: Actor with Timers with Stash with ScorexLogging =>
+
+  private case object SnapshotFinalizationRetryTimerKey
+
+  private var snapshotFinalizationGeneration: Long = 0L
+  private var pendingSnapshotFinalization: Option[PendingUtxoSnapshotFinalization] = None
+
+  protected def snapshotFinalizationRetryDelay: FiniteDuration = 1.second
+
+  protected def maxSnapshotFinalizationRetries: Int = 3
+
+  protected def persistUtxoSnapshotFinalization(height: Int, blockId: ModifierId): Try[Unit]
+
+  protected def abortUtxoSnapshotFinalization(cause: Throwable): Unit = {
+    log.error("UTXO set snapshot finalization failed permanently; shutting down", cause)
+    ErgoApp.shutdownSystem()(context.system)
+    ()
+  }
+
+  protected final def beginUtxoSnapshotFinalization(height: Int,
+                                                     blockId: ModifierId)(installState: => Unit): Unit = {
+    require(pendingSnapshotFinalization.isEmpty, "UTXO snapshot finalization is already pending")
+    snapshotFinalizationGeneration += 1
+    val pending = PendingUtxoSnapshotFinalization(
+      height,
+      blockId,
+      snapshotFinalizationGeneration,
+      attempt = 0,
+      () => installState
+    )
+    pendingSnapshotFinalization = Some(pending)
+    attemptUtxoSnapshotFinalization(pending, enterWaiting = true)
+  }
+
+  private def attemptUtxoSnapshotFinalization(pending: PendingUtxoSnapshotFinalization,
+                                              enterWaiting: Boolean): Unit = {
+    persistUtxoSnapshotFinalization(pending.height, pending.blockId) match {
+      case Success(_) =>
+        pendingSnapshotFinalization = None
+        timers.cancel(SnapshotFinalizationRetryTimerKey)
+        Try(pending.installState()) match {
+          case Success(_) if !enterWaiting =>
+            context.unbecome()
+            unstashAll()
+          case Success(_) =>
+          case Failure(t) => abortUtxoSnapshotFinalization(t)
+        }
+      case Failure(t) if pending.attempt < maxSnapshotFinalizationRetries =>
+        val next = pending.copy(attempt = pending.attempt + 1)
+        pendingSnapshotFinalization = Some(next)
+        if (enterWaiting) {
+          context.become(waitingForUtxoSnapshotFinalization, discardOld = false)
+        }
+        log.warn(
+          s"UTXO set snapshot finalization failed; retrying ${next.attempt}/$maxSnapshotFinalizationRetries",
+          t
+        )
+        timers.startSingleTimer(
+          SnapshotFinalizationRetryTimerKey,
+          RetryUtxoSnapshotFinalization(next.generation),
+          snapshotFinalizationRetryDelay
+        )
+      case Failure(t) =>
+        pendingSnapshotFinalization = None
+        timers.cancel(SnapshotFinalizationRetryTimerKey)
+        abortUtxoSnapshotFinalization(t)
+    }
+  }
+
+  private def waitingForUtxoSnapshotFinalization: Receive = {
+    case RetryUtxoSnapshotFinalization(generation) =>
+      pendingSnapshotFinalization match {
+        case Some(pending) if pending.generation == generation =>
+          attemptUtxoSnapshotFinalization(pending, enterWaiting = false)
+        case _ =>
+          log.debug(s"Ignoring stale UTXO snapshot finalization retry generation $generation")
+      }
+    case _ => stash()
+  }
+}
 
 /**
   * Composite local view of the node
@@ -40,7 +131,13 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor
+    with Timers
+    with Stash
+    with UtxoSnapshotFinalizationSupport
+    with ScorexLogging
+    with ScorexEncoding
+    with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -79,6 +176,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected def vault(): ErgoWallet = nodeView._3
 
   protected def memoryPool(): ErgoMemPool = nodeView._4
+
+  override protected def persistUtxoSnapshotFinalization(height: Int,
+                                                          blockId: ModifierId): Try[Unit] =
+    history().onUtxoSnapshotApplied(height, blockId)
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy() {
@@ -290,16 +391,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot(height, blockId) =>
       if (!history().isUtxoSnapshotApplied) {
-        val store = minimalState().store
-        history().createPersistentProver(store, history(), height, blockId) match {
-          case Success(pp) =>
-            log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            history().onUtxoSnapshotApplied(height)
-            val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
-            updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
-            context.system.eventStream.publish(UtxoSnapshotAppliedToState(height, blockId, newState))
-          case Failure(t) =>
-            log.error("UTXO set snapshot application failed: ", t)
+        if (history().isUtxoSetSnapshotDownloadCurrent(height, blockId)) {
+          val store = minimalState().store
+          history().createPersistentProver(store, history(), height, blockId) match {
+            case Success(pp) =>
+              log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
+              beginUtxoSnapshotFinalization(height, blockId) {
+                val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
+                updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+                context.system.eventStream.publish(UtxoSnapshotAppliedToState(height, blockId, newState))
+              }
+            case Failure(t) =>
+              log.error("UTXO set snapshot application failed: ", t)
+          }
+        } else {
+          log.warn(
+            s"Ignoring stale UTXO set snapshot initialization for block $blockId at height $height")
         }
       } else {
         log.warn("InitStateFromSnapshot arrived when state already initialized")

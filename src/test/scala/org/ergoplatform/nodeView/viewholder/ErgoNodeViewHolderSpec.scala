@@ -1,8 +1,10 @@
 package org.ergoplatform.nodeView.viewholder
 
 import java.io.File
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType.Utxo
@@ -10,11 +12,13 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
+import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
@@ -542,6 +546,91 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       property(s"${t.name} - $c") {
         t.run(parameters, c)
       }
+    }
+  }
+
+  property("preserve a prepared UTXO snapshot state across restart") {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val snapshotSettings = protoSettings.copy(
+      nodeSettings = protoSettings.nodeSettings.copy(
+        utxoSettings = protoSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)
+      )
+    )
+
+    new NodeViewFixture(snapshotSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (sourceState, boxHolder) = createUtxoState(settings)
+      val snapshotBlock = validFullBlock(None, sourceState, boxHolder)
+      val sourceAtSnapshot = WrappedUtxoState(sourceState, boxHolder, settings)
+        .applyModifier(snapshotBlock)(_ => ())
+        .get
+      val nextBlock = validFullBlock(Some(snapshotBlock), sourceAtSnapshot)
+
+      sourceAtSnapshot
+        .dumpSnapshot(snapshotBlock.height, sourceAtSnapshot.rootDigest.dropRight(1))
+        .get
+      val manifestId = sourceAtSnapshot.snapshotsDb.readSnapshotsInfo
+        .availableManifests(snapshotBlock.height)
+      val manifestBytes = sourceAtSnapshot.snapshotsDb.readManifestBytes(manifestId).get
+      val manifest = ManifestSerializer.defaultSerializer.parseBytes(manifestBytes)
+      val chunks = manifest.subtreesIds.map(sourceAtSnapshot.snapshotsDb.readSubtreeBytes(_).get)
+
+      applyHeader(snapshotBlock.header).get
+      getHistory.registerManifestToDownload(manifest, manifestBytes, snapshotBlock.height, Seq.empty)
+      getHistory.getChunkIdsToDownload(manifest.subtreesIds.size).zip(chunks).foreach {
+        case (chunkId, bytes) => getHistory.registerDownloadedChunk(chunkId, bytes).get
+      }
+      getHistory.onUtxoSnapshotApplied(snapshotBlock.height, snapshotBlock.id).get
+      stopNodeViewHolder()
+
+      val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
+      fixture.deleteRecursive(stateDir)
+      stateDir.mkdirs() shouldBe true
+      val persistedGenesis = ErgoState
+        .generateGenesisUtxoState(stateDir, settings, Some(parameters))
+        ._1
+      val persistedSnapshot = persistedGenesis
+        .applyModifier(snapshotBlock, None)(_ => ())
+        .get
+      persistedSnapshot.closeStorage()
+
+      startNodeViewHolder()
+
+      getRootHash shouldBe Algos.encode(snapshotBlock.header.stateRoot)
+      applyBlock(nextBlock) shouldBe 'success
+      getRootHash shouldBe Algos.encode(nextBlock.header.stateRoot)
+
+      sourceAtSnapshot.closeStorage()
+    }
+  }
+
+  property("require the prepared UTXO snapshot state version and root to match its header") {
+    val (state, boxHolder) = createUtxoState(settings)
+
+    try {
+      val header = validFullBlock(None, state, boxHolder).header
+      val matchingVersion = idToVersion(header.id)
+      val mismatchedVersion = idToVersion(Header.GenesisParentId)
+      val mismatchedRoot = header.stateRoot.clone()
+      mismatchedRoot(0) = (mismatchedRoot(0) ^ 1).toByte
+
+      matchingVersion should not be mismatchedVersion
+      ErgoNodeViewHolder.matchesPreparedUtxoSnapshotHeader(
+        matchingVersion,
+        header.stateRoot,
+        header) shouldBe true
+      ErgoNodeViewHolder.matchesPreparedUtxoSnapshotHeader(
+        mismatchedVersion,
+        header.stateRoot,
+        header) shouldBe false
+      ErgoNodeViewHolder.matchesPreparedUtxoSnapshotHeader(
+        matchingVersion,
+        mismatchedRoot,
+        header) shouldBe false
+    } finally {
+      state.closeStorage()
     }
   }
 

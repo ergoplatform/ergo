@@ -1,8 +1,10 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
+import com.google.common.primitives.Ints
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.ErgoLikeContext.Height
+import org.ergoplatform.modifiers.ErgoNodeViewModifier.ModifierIdSize
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
 import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
@@ -15,11 +17,13 @@ import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADKey
+import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import java.io.File
+import scala.collection.immutable.SortedSet
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -40,6 +44,9 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   // Internal buffer that holds unspent boxes for fast retreival
   private[persistence] val cache: mutable.HashMap[ModifierId,TrackedBox] = mutable.HashMap[ModifierId,TrackedBox]()
 
+  // Serializes only snapshot-chunk marker checks, their transaction, and the matching cache update.
+  private val snapshotChunkUpdateLock = new AnyRef
+
   /**
     * Close wallet registry storage
     */
@@ -47,6 +54,13 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     store.close()
     cache.clear()
   }
+
+  /**
+    * Returns the persisted 32-byte registry version encoded as a ModifierId.
+    * The version may be synthetic, for example for an intermediate snapshot chunk.
+    */
+  def lastVersionId: Option[ModifierId] =
+    store.lastVersionID.filter(_.length == ModifierIdSize).map(bytesToId)
 
   /**
     * Read wallet-related box with metadata
@@ -273,44 +287,150 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
       val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))
-      val spentAmt = spentWalletBoxes.map(_.box.value).sum
-      val spentTokensAmt = spentWalletBoxes
-        .flatMap(_.box.additionalTokens.toArray)
-        .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-          acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
-        }
-      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
-        .flatMap(_.box.additionalTokens.toArray)
-        .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
-          acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
-        }
-
-      val wTokens = mutable.LinkedHashMap(wTokensSeq: _*)
-
-      val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
-        acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
-      }
-
-      val newTokensBalance = spentTokensAmt
-        .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
-          val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
-          if (decreasedAmt > 0) {
-            acc += encodedId -> decreasedAmt
-          } else {
-            acc -= encodedId
-          }
-        }
-
-      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
-      val newBalance = wBalance + receivedAmt - spentAmt
-      if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
-        Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
-      else
-        Failure(new IllegalStateException("Balance could not be negative"))
+      updateWalletDigest(WalletDigest(height, wBalance, wTokensSeq), scanResults.outputs, spentWalletBoxes, blockHeight)
     }.flatMap { bag4 =>
       bag4.transact(store, idToBytes(blockId))
     }
   }
+
+  /**
+    * Updates wallet indexes from a UTXO snapshot chunk without inventing pre-snapshot transactions.
+    */
+  def updateOnSnapshotChunk(scanResults: ScanResults,
+                            snapshotBlockId: ModifierId,
+                            snapshotHeight: Int,
+                            subtreeIndex: Int,
+                            finalChunk: Boolean): Try[Unit] =
+    updateOnSnapshotChunk(
+      scanResults,
+      snapshotBlockId,
+      snapshotHeight,
+      subtreeIndex,
+      subtreeIndex + 1,
+      finalChunk
+    )
+
+  /**
+    * Updates wallet indexes and binds the exact covered part range to the durable replay marker.
+    */
+  def updateOnSnapshotChunk(scanResults: ScanResults,
+                            snapshotBlockId: ModifierId,
+                            snapshotHeight: Int,
+                            subtreeIndex: Int,
+                            nextSubtreeIndex: Int,
+                            finalChunk: Boolean): Try[Unit] = {
+    if (subtreeIndex < 0 || nextSubtreeIndex <= subtreeIndex) {
+      Failure(new IllegalArgumentException(
+        s"Invalid UTXO snapshot part range [$subtreeIndex, $nextSubtreeIndex)"))
+    } else if (scanResults.inputsSpent.nonEmpty || scanResults.relatedTransactions.nonEmpty) {
+      Failure(new IllegalArgumentException("Snapshot chunk scan data must contain only outputs"))
+    } else {
+      val markerKey = snapshotChunkMarkerKey(snapshotBlockId, subtreeIndex)
+      val markerValue = snapshotChunkMarkerValue(
+        scanResults,
+        snapshotHeight,
+        nextSubtreeIndex,
+        finalChunk
+      )
+
+      snapshotChunkUpdateLock.synchronized {
+        store.get(markerKey) match {
+          case Some(existing) if existing.sameElements(markerValue) =>
+            Success(())
+          case Some(_) =>
+            Failure(new IllegalStateException(
+              s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId was already applied with different contents"
+            ))
+          case None =>
+            val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+            updateDigest(bag1) { digest =>
+              val nextHeight = if (finalChunk) snapshotHeight else digest.height
+              updateWalletDigest(digest, scanResults.outputs, Seq.empty, nextHeight)
+            }.flatMap { bag2 =>
+              val bag3 = bag2.copy(toInsert = bag2.toInsert :+ markerKey -> markerValue)
+              bag3.transact(store, snapshotChunkVersion(snapshotBlockId, subtreeIndex, finalChunk)).map { _ =>
+                cache ++= scanResults.outputs.map(b => b.boxId -> b)
+              }
+            }
+        }
+      }
+    }
+  }
+
+  private def updateWalletDigest(currentDigest: WalletDigest,
+                                 receivedBoxes: Seq[TrackedBox],
+                                 spentWalletBoxes: Seq[TrackedBox],
+                                 nextHeight: Int): Try[WalletDigest] = {
+    val receivedWalletBoxes = receivedBoxes.filter(_.scans.contains(PaymentsScanId))
+    val spentAmt = spentWalletBoxes.map(_.box.value).sum
+    val spentTokensAmt = tokenAmounts(spentWalletBoxes)
+    val receivedTokensAmt = tokenAmounts(receivedWalletBoxes)
+
+    val wTokens = mutable.LinkedHashMap(currentDigest.walletAssetBalances: _*)
+
+    val increasedTokenBalances = receivedTokensAmt.foldLeft(wTokens) { case (acc, (encodedId, amt)) =>
+      acc += encodedId -> (acc.getOrElse(encodedId, 0L) + amt)
+    }
+
+    val newTokensBalance = spentTokensAmt
+      .foldLeft(increasedTokenBalances) { case (acc, (encodedId, amt)) =>
+        val decreasedAmt = acc.getOrElse(encodedId, 0L) - amt
+        if (decreasedAmt > 0) {
+          acc += encodedId -> decreasedAmt
+        } else {
+          acc -= encodedId
+        }
+      }
+
+    val receivedAmt = receivedWalletBoxes.map(_.box.value).sum
+    val newBalance = currentDigest.walletBalance + receivedAmt - spentAmt
+    if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
+      Success(WalletDigest(nextHeight, newBalance, newTokensBalance.toSeq))
+    else
+      Failure(new IllegalStateException("Balance could not be negative"))
+  }
+
+  private def tokenAmounts(boxes: Seq[TrackedBox]): Map[EncodedTokenId, Long] =
+    boxes
+      .flatMap(_.box.additionalTokens.toArray)
+      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
+        val encodedId = encodedTokenId(id)
+        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amt)
+      }
+
+  private def snapshotChunkVersion(snapshotBlockId: ModifierId, subtreeIndex: Int, finalChunk: Boolean): Array[Byte] =
+    if (finalChunk) {
+      idToBytes(snapshotBlockId)
+    } else {
+      Blake2b256.hash(idToBytes(snapshotBlockId) ++ Ints.toByteArray(subtreeIndex))
+    }
+
+  private def snapshotChunkMarkerKey(snapshotBlockId: ModifierId, subtreeIndex: Int): Array[Byte] =
+    Array(SnapshotChunkMarkerPrefix) ++ idToBytes(snapshotBlockId) ++ Ints.toByteArray(subtreeIndex)
+
+  private def snapshotChunkMarkerValue(scanResults: ScanResults,
+                                       snapshotHeight: Int,
+                                       nextSubtreeIndex: Int,
+                                       finalChunk: Boolean): Array[Byte] = {
+    val seed = Array(SnapshotChunkMarkerFormatVersion) ++
+      Ints.toByteArray(snapshotHeight) ++
+      Ints.toByteArray(nextSubtreeIndex) ++
+      Array(if (finalChunk) 1.toByte else 0.toByte)
+    // Snapshot traversal is deterministic; output sequence ordering is deliberately part of the batch identity.
+    val digest = scanResults.outputs.foldLeft(Blake2b256.hash(seed)) { case (digest, box) =>
+      Blake2b256.hash(digest ++ snapshotChunkMarkerTrackedBoxBytes(box))
+    }
+    Array(SnapshotChunkMarkerFormatVersion) ++ digest
+  }
+
+  private def snapshotChunkMarkerTrackedBoxBytes(box: TrackedBox): Array[Byte] =
+    if (box.scans.size < 2) {
+      TrackedBoxSerializer.toBytes(box)
+    } else {
+      val scanOrdering = Ordering.by[ScanId, Short](_.toShort)
+      val orderedScans = SortedSet.empty[ScanId](scanOrdering) ++ box.scans
+      TrackedBoxSerializer.toBytes(box.copy(scans = orderedScans))
+    }
 
   def rollback(version: VersionTag): Try[Unit] = {
     cache.clear()
@@ -455,15 +575,29 @@ object WalletRegistry {
       val dir = registryFolder(settings)
       dir.mkdirs()
       new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
-    }.flatMap {
-      case store if !store.versionIdExists(PreGenesisStateVersion) =>
+    }.flatMap(store => initializeOpenedStore(store, settings.walletSettings))
+
+  private[persistence] def initializeOpenedStore(store: LDBVersionedStore,
+                                                  walletSettings: WalletSettings): Try[WalletRegistry] = {
+    val initialized = Try(store.versionIdExists(PreGenesisStateVersion)).flatMap {
+      case false =>
         // Create pre-genesis state checkpoint
-        store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).map { _ =>
-          new WalletRegistry(store)(settings.walletSettings)
+        store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).flatMap { _ =>
+          Try(new WalletRegistry(store)(walletSettings))
         }
-      case store =>
-        Success(new WalletRegistry(store)(settings.walletSettings))
+      case true =>
+        Try(new WalletRegistry(store)(walletSettings))
     }
+
+    initialized.recoverWith { case initializationFailure =>
+      Try(store.close()).failed.foreach { closeFailure =>
+        if (closeFailure ne initializationFailure) {
+          initializationFailure.addSuppressed(closeFailure)
+        }
+      }
+      Failure(initializationFailure)
+    }
+  }
 
   private val BoxKeyPrefix: Byte = 0x01
   private val TxKeyPrefix: Byte = 0x02
@@ -477,6 +611,12 @@ object WalletRegistry {
 
   // tx index prefix that tracks transactions by inclusion height
   private val InclusionHeightScanTxPrefix: Byte = 0x08
+
+  // Applied UTXO snapshot chunks, keyed by snapshot block id and starting subtree index.
+  private val SnapshotChunkMarkerPrefix: Byte = 0x09
+
+  // Stored as the first marker-value byte so future encodings cannot be mistaken for this format.
+  private val SnapshotChunkMarkerFormatVersion: Byte = 0x02
 
   private val FirstTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(0: Byte)
   private val LastTxSpaceKey: Array[Byte] = TxKeyPrefix +: Array.fill(32)(-1: Byte)

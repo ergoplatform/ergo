@@ -550,8 +550,7 @@ class WalletRegistrySpec
 
     val trackedBox = unspentWalletBox(trackedBoxGen.sample.get).copy(scans = initialScans)
     val initialResults = ScanResults(Seq(trackedBox), ArraySeq.empty, ArraySeq.empty)
-    val initialStore = new LDBVersionedStore(registryDir, isolatedSettings.nodeSettings.keepVersions)
-    val initialRegistry = WalletRegistry.initializeOpenedStore(initialStore, isolatedSettings.walletSettings).get
+    val initialRegistry = WalletRegistry(isolatedSettings).get
     try {
       initialRegistry.updateOnSnapshotChunk(
         initialResults,
@@ -618,8 +617,7 @@ class WalletRegistrySpec
     acceptedScans should not equal changedScans
 
     val trackedBox = unspentWalletBox(trackedBoxGen.sample.get).copy(scans = acceptedScans)
-    val initialStore = new LDBVersionedStore(registryDir, isolatedSettings.nodeSettings.keepVersions)
-    val initialRegistry = WalletRegistry.initializeOpenedStore(initialStore, isolatedSettings.walletSettings).get
+    val initialRegistry = WalletRegistry(isolatedSettings).get
     try {
       initialRegistry.updateOnSnapshotChunk(
         ScanResults(Seq(trackedBox), ArraySeq.empty, ArraySeq.empty),

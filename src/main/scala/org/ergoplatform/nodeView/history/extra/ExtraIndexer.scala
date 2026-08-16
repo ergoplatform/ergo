@@ -81,7 +81,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   protected def blockTransactionsForHeader(header: Header): Option[BlockTransactions] = {
-    history.typedModifierById[BlockTransactions](header.transactionsId).filter(_.headerId == header.id)
+    history.typedModifierById[BlockTransactions](header.transactionsId)
   }
 
   protected def retryDelay: FiniteDuration = 1.second

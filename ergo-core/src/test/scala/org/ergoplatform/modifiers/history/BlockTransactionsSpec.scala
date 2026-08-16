@@ -58,5 +58,17 @@ class BlockTransactionsSpec extends ErgoCorePropertyTest {
       }
     }
   }
+  property("Merkle proof returns the requested transaction when witness ids repeat") {
+    val txs = fixtureTransactions.take(3)
+    txs.map(_.id).distinct should have size 3
+    txs.map(_.witnessSerializedId.toSeq).distinct should have size 1
+
+    val blockTransactions = BlockTransactions(headerId, Header.HardeningVersion, txs)
+    val requestedTx = txs.head
+    val proof = blockTransactions.proofFor(requestedTx.id).get
+
+    BlockTransactions.proofValid(blockTransactions.digest, proof) shouldBe true
+    proof.leafData.sameElements(requestedTx.serializedId) shouldBe true
+  }
 
 }

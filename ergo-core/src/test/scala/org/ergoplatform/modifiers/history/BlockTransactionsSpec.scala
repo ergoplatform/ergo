@@ -71,5 +71,4 @@ class BlockTransactionsSpec extends ErgoCorePropertyTest {
     BlockTransactions.proofValid(blockTransactions.digest, proof) shouldBe true
     proof.leafData.sameElements(requestedTx.serializedId) shouldBe true
   }
-
 }

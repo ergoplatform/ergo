@@ -30,6 +30,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   case class ExtendDB(blockCount: Int)
   case class Reset()
   case class GenerateBetterChainTip()
+  case class SetCaughtUp(caughtUp: Boolean)
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
@@ -372,6 +373,31 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     done.await()
     val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
     checkTokens(indexedTokens) shouldBe 0
+    indexer ! Reset()
+  }
+
+  property("resumes catch-up from a deferred state on FullBlockApplied") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+
+    indexer ! ExtendDB(HEIGHT + 1)
+    awaitCondition(created)
+    val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
+
+    // Simulate the state after a headers-only fork briefly became the best chain
+    // and then lost: caughtUp=false, but the indexed tip is still on the main chain.
+    indexer ! SetCaughtUp(caughtUp = false)
+
+    // Without the FullBlockApplied handler for !caughtUp, this event would be
+    // dropped and the indexer would stay stalled.
+    indexer ! RemoteBlockApplied(nextHeader, history.getFullBlock(nextHeader).get.transactions.map(_.id))
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 1
+      state.caughtUp shouldBe true
+    }
     indexer ! Reset()
   }
 }

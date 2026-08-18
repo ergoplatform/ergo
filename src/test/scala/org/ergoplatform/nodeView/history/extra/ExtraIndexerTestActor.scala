@@ -23,6 +23,12 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     case test.GenerateBetterChainTip() => GenerateBetterChainTip()
   }
 
+  override protected def loaded(state: IndexerState): Receive = {
+    case test.SetCaughtUp(caughtUp: Boolean) =>
+      context.become(receive.orElse(loaded(state.copy(caughtUp = caughtUp))))
+    case x => super.loaded(state)(x)
+  }
+
   override def caughtUpHook(height: Int = 0): Unit = {
     if(height > 0 && height < chainHeight) return
     test.lock.lock()

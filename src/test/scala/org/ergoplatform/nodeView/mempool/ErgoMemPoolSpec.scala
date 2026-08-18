@@ -56,8 +56,13 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
-    val inputBox = wus.takeBoxes(1).head
-    val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
+    val feeOut = new ErgoBoxCandidate(
+      inputBox.value,
+      feeProp,
+      creationHeight = 0,
+      additionalTokens = inputBox.additionalTokens
+    )
     val tx = ErgoTransaction(
       IndexedSeq(new Input(inputBox.id, ProverResult.empty)),
       IndexedSeq(feeOut)
@@ -71,8 +76,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         mempoolSorting = SortingOption.FeePerByte,
       ))
 
-    var poolSize = ErgoMemPool.empty(sortBySizeSettings)
-    poolSize = poolSize.process(UnconfirmedTransaction(tx, None), wus)._1
+    val (poolSize, sizeOutcome) =
+      ErgoMemPool.empty(sortBySizeSettings).process(UnconfirmedTransaction(tx, None), wus)
+    sizeOutcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
     val size = tx.size
     poolSize.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, size).weight
 
@@ -81,8 +87,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
         mempoolSorting = SortingOption.FeePerCycle,
       ))
 
-    var poolCost = ErgoMemPool.empty(sortByCostSettings)
-    poolCost = poolCost.process(UnconfirmedTransaction(tx, None), wus)._1
+    val (poolCost, costOutcome) =
+      ErgoMemPool.empty(sortByCostSettings).process(UnconfirmedTransaction(tx, None), wus)
+    costOutcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
     val validationContext = wus.stateContext.simplifiedUpcoming()
     val cost = wus.validateWithCost(tx, validationContext, Int.MaxValue, None).get
     poolCost.pool.orderedTransactions.firstKey.weight shouldBe OrderedTxPool.weighted(tx, cost).weight
@@ -791,7 +798,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
       TreeMap(tx.id -> wtxStale),
       emptyPool.invalidatedTxIds,
       emptyPool.outputs,
-      emptyPool.inputs
+      emptyPool.inputs,
+      emptyPool.dataInputReaders,
+      emptyPool.family
     )(settings)
 
     // pool.get traverses registry -> wtxStale -> orderedTransactions,

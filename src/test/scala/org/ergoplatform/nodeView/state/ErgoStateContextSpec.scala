@@ -4,6 +4,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.settings.ErgoValidationSettingsUpdate
 import org.ergoplatform.settings.Parameters._
 import org.ergoplatform.utils.ErgoCorePropertyTest
 
@@ -140,6 +141,52 @@ class ErgoStateContextSpec extends ErgoCorePropertyTest {
     // positive control - the unmutated block still validates, so the failures above
     // are attributable to the mutations rather than the fixture
     sc.appendFullBlock(fb) shouldBe 'success
+  }
+
+  property("upcoming() exposes the same previous headers as full-block validation context") {
+    val chain = genChain(Constants.LastHeadersInContext + 1)
+    val parentChain = chain.init
+    val nextBlock = chain.last
+    val sc = parentChain.foldLeft[ErgoStateContext](emptyStateContext) { (acc, fb) =>
+      acc.appendFullBlock(fb).get
+    }
+
+    val upcomingContext = sc.upcoming(
+      nextBlock.header.minerPk,
+      nextBlock.header.timestamp,
+      nextBlock.header.nBits,
+      nextBlock.header.votes,
+      ErgoValidationSettingsUpdate.empty,
+      nextBlock.header.version
+    )
+
+    val validationContext = sc.appendFullBlock(nextBlock).get
+
+    upcomingContext.sigmaLastHeaders.size shouldBe Constants.LastHeadersInContext - 1
+    validationContext.sigmaLastHeaders.size shouldBe Constants.LastHeadersInContext - 1
+
+    val upcomingIds = upcomingContext.sigmaLastHeaders.toArray.map(_.id)
+    val validationIds = validationContext.sigmaLastHeaders.toArray.map(_.id)
+    upcomingIds.zip(validationIds).foreach { case (a, b) =>
+      a.toArray shouldEqual b.toArray
+    }
+  }
+
+  property("simplifiedUpcoming() exposes the same previous headers as full-block validation context") {
+    val chain = genChain(Constants.LastHeadersInContext + 1)
+    val parentChain = chain.init
+    val nextBlock = chain.last
+    val sc = parentChain.foldLeft[ErgoStateContext](emptyStateContext) { (acc, fb) =>
+      acc.appendFullBlock(fb).get
+    }
+
+    val upcomingContext = sc.simplifiedUpcoming()
+    val validationContext = sc.appendFullBlock(nextBlock).get
+
+    upcomingContext.sigmaLastHeaders.size shouldBe validationContext.sigmaLastHeaders.size
+    upcomingContext.sigmaLastHeaders.toArray.map(_.id)
+      .zip(validationContext.sigmaLastHeaders.toArray.map(_.id))
+      .foreach { case (a, b) => a.toArray shouldEqual b.toArray }
   }
 
 }

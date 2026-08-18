@@ -39,6 +39,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
   val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScanApiRoute(utxoReadersRef, ergoSettings).route
+  val sealedRoute: Route = Route.seal(route)
 
   private val predicate0 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(0: Byte, 1: Byte)))
   private val predicate1 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(1: Byte, 1: Byte)))
@@ -98,6 +99,16 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
       apps.map(_.scanName).contains(appRequest.scanName) shouldBe true
       apps.map(_.scanName).contains(appRequest2.scanName) shouldBe true
+    }
+  }
+
+  it should "reject scan ids outside Short range" in {
+    Get(prefix + "/unspentBoxes/70000") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(prefix + "/spentBoxes/70000") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

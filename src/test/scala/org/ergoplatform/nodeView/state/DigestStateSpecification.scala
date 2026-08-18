@@ -35,6 +35,8 @@ class DigestStateSpecification extends ErgoCorePropertyTest with FileUtils {
       val state = DigestState.create(None, None, dir2, settings)
       state.version shouldEqual fb.header.id
       state.rootDigest shouldEqual fb.header.stateRoot
+      state.close()
+      us.closeStorage()
     }
   }
 
@@ -70,6 +72,8 @@ class DigestStateSpecification extends ErgoCorePropertyTest with FileUtils {
 
       val ds = createDigestState(us.version, us.rootDigest)
       ds.applyModifier(block, None)(_ => ()) shouldBe 'success
+      ds.close()
+      us.closeStorage()
     }
   }
 
@@ -105,6 +109,9 @@ class DigestStateSpecification extends ErgoCorePropertyTest with FileUtils {
       ds3.stateContext.lastHeaders.size shouldEqual 0
 
       ds3.applyModifier(block, None)(_ => ()).get.rootDigest shouldBe ds2.rootDigest
+
+      ds.close()
+      us.closeStorage()
     }
   }
 
@@ -135,6 +142,9 @@ class DigestStateSpecification extends ErgoCorePropertyTest with FileUtils {
 
       val txs3 = IndexedSeq(txWithDataInputs, headTx, nextTx)
       ds.validateTransactions(txs3, digest2, proof2, emptyStateContext) shouldBe 'failure
+
+      ds.close()
+      us.closeStorage()
     }
   }
 

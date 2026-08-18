@@ -4,11 +4,14 @@ import akka.actor.ActorRef
 import akka.http.scaladsl.server.{Directive, Route, ValidationRejection}
 import akka.pattern.ask
 import io.circe.Encoder
+import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet.{ErgoWalletReader, WalletBox}
+import org.ergoplatform.wallet.Constants.ScanId
 import scorex.core.api.http.ApiResponse
 
 import scala.concurrent.Future
+import scala.util.Try
 
 trait WalletApiOperations extends ErgoBaseApiRoute {
 
@@ -73,6 +76,21 @@ trait WalletApiOperations extends ErgoBaseApiRoute {
 
   protected def withWallet[T: Encoder](op: ErgoWalletReader => Future[T]): Route = {
     withWalletOp(op)(ApiResponse.apply[T])
+  }
+
+  protected def withScanId(scanId: Int)(route: ScanId => Route): Route = {
+    if (scanId < Short.MinValue || scanId > Short.MaxValue) {
+      BadRequest(s"scanId $scanId is outside Short range")
+    } else {
+      route(ScanId @@ scanId.toShort)
+    }
+  }
+
+  protected def withScanId(scanId: String)(route: ScanId => Route): Route = {
+    Try(scanId.toShort).toOption match {
+      case Some(id) => route(ScanId @@ id)
+      case None => BadRequest(s"scanId $scanId is invalid")
+    }
   }
 
 }

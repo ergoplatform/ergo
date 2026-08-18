@@ -22,7 +22,7 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, S
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
-import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import java.io.File

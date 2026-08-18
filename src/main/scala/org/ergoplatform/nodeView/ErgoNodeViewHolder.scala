@@ -284,9 +284,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val winnerTxs = dbl.winnerTxIds
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
         context.system.eventStream.publish(DeclinedTransaction(unconfirmedTx.withCost(dbl.cost)))
-      case dcl: ProcessingOutcome.Declined => // do nothing
+      case dcl: ProcessingOutcome.Declined =>
         val e = dcl.e
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
+        // Most declining paths return the pool unchanged, and for them this is a no-op. A path
+        // that does record something about the declined transaction (such as caching its id)
+        // returns a new pool, and that pool has to be installed or the record is lost.
+        if (newPool ne memoryPool()) updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(DeclinedTransaction(unconfirmedTx.withCost(dcl.cost)))
     }
     processingOutcome

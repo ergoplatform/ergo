@@ -199,7 +199,15 @@ class CandidateGenerator(
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       val effectiveMinerPk = optPk.getOrElse(minerPk)
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
+      if (
+        !forced &&
+        cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk) &&
+        !hasCandidateExpired(
+          state.cachedCandidate,
+          state.solvedBlock,
+          candidateGenInterval
+        )
+      ) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()

@@ -3,6 +3,10 @@ package org.ergoplatform.nodeView.wallet
 import org.ergoplatform._
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
+  ChangeAddressNotOwned,
+  WalletLockedForChangeAddress
+}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
@@ -41,6 +45,38 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val wd0 = WalletDigest(1, 0, assets)
       val bs = WalletDigestSerializer.toBytes(wd0)
       WalletDigestSerializer.parseBytes(bs).walletAssetBalances shouldBe wd0.walletAssetBalances
+    }
+  }
+
+  property(
+    "change address updates enforce wallet ownership and lock state through the actor"
+  ) {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      val initialStatus = await(wallet.getWalletStatus)
+      val alternateOwnedAddress =
+        addresses.find(address => !initialStatus.changeAddress.contains(address)).get
+
+      await(wallet.updateChangeAddress(alternateOwnedAddress))
+      await(wallet.getWalletStatus).changeAddress shouldBe Some(alternateOwnedAddress)
+
+      val unownedAddress = P2PKAddress(
+        DLogProverInput.random().publicImage
+      )(settings.addressEncoder)
+      val unownedFailure = await(wallet.updateChangeAddress(unownedAddress).failed)
+      unownedFailure shouldBe a[ChangeAddressNotOwned]
+      unownedFailure.getMessage should include("not owned")
+      await(wallet.getWalletStatus).changeAddress shouldBe Some(alternateOwnedAddress)
+
+      wallet.lockWallet()
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+      eventually {
+        await(wallet.getWalletStatus).unlocked shouldBe false
+      }
+
+      val lockedFailure = await(wallet.updateChangeAddress(alternateOwnedAddress).failed)
+      lockedFailure shouldBe a[WalletLockedForChangeAddress]
+      lockedFailure.getMessage should include("locked")
     }
   }
 

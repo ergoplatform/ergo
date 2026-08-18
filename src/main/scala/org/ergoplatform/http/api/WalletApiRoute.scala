@@ -10,6 +10,7 @@ import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
@@ -464,8 +465,13 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def updateChangeAddressR: Route = (path("updateChangeAddress") & post & p2pkAddress) { p2pk =>
-    withWallet { w =>
+    withWalletOp { w =>
       w.updateChangeAddress(p2pk)
+        .map[Either[ChangeAddressValidationException, Unit]](Right(_))
+        .recover { case e: ChangeAddressValidationException => Left(e) }
+    } {
+      case Right(_) => ApiResponse(())
+      case Left(e) => BadRequest(e.getMessage)
     }
   }
 

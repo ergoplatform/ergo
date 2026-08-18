@@ -243,6 +243,64 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("it should only return off-chain payment boxes for spending") {
+    forAll(trackedBoxGen, trackedBoxGen, trackedBoxGen) { case (customBox, sharedBox, walletBox) =>
+      withVersionedStore(2) { versionedStore =>
+        withStore { store =>
+          val customScanId = ScanId @@ (PaymentsScanId + 1).toShort
+          val customOnly = customBox.copy(
+            inclusionHeightOpt = None,
+            spendingTxIdOpt = None,
+            spendingHeightOpt = None,
+            scans = Set(customScanId)
+          )
+          val sharedWithWallet = sharedBox.copy(
+            inclusionHeightOpt = None,
+            spendingTxIdOpt = None,
+            spendingHeightOpt = None,
+            scans = Set(PaymentsScanId, customScanId)
+          )
+          val walletOnly = walletBox.copy(
+            inclusionHeightOpt = None,
+            spendingTxIdOpt = None,
+            spendingHeightOpt = None,
+            scans = Set(PaymentsScanId)
+          )
+          val offChainRegistry = OffChainRegistry.empty.copy(
+            offChainBoxes = Seq(customOnly, sharedWithWallet, walletOnly)
+          )
+          val walletState = initialState(store, versionedStore).copy(
+            offChainRegistry = offChainRegistry
+          )
+          val walletService = new ErgoWalletServiceImpl(settings)
+
+          // boxes belonging to the wallet's payments scan (whether or not also shared with an
+          // external scan) must be spendable / visible as wallet boxes, boxes tracked only by
+          // an external scan must not
+          val expectedWalletBoxes = Seq(sharedWithWallet, walletOnly)
+
+          walletState.getBoxesToSpend.filter(walletState.walletFilter) shouldBe
+            expectedWalletBoxes
+          walletService
+            .getWalletBoxes(walletState, unspentOnly = true, considerUnconfirmed = true)
+            .map(_.trackedBox) shouldBe expectedWalletBoxes
+
+          // the fix must not break scan-specific visibility: the external scan should still see
+          // both the box exclusive to it and the one shared with the wallet
+          walletService
+            .getScanUnspentBoxes(
+              walletState,
+              customScanId,
+              considerUnconfirmed = true,
+              minHeight = 0,
+              maxHeight = Int.MaxValue
+            )
+            .map(_.trackedBox) shouldBe Seq(customOnly, sharedWithWallet)
+        }
+      }
+    }
+  }
+
   property("it should generate signed and unsigned transaction") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>

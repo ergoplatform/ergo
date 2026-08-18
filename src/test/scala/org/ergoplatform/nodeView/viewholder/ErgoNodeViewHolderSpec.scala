@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.viewholder
 import java.io.File
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -618,11 +619,11 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         new MalformedModifierError("tx failed", tx.id, ErgoTransaction.modifierTypeId)
       ErgoNodeViewHolder.extractFailedTxId(txError) shouldBe Some(tx.id)
 
-      // block-level error with zero-filled modifier id should be ignored
+      // block-level error with non-transaction modifier id should be ignored
       val blockError = new MalformedModifierError(
         "block failed",
         bytesToId(Array.fill(32)(0.toByte)),
-        ErgoTransaction.modifierTypeId
+        BlockTransactions.modifierTypeId
       )
       ErgoNodeViewHolder.extractFailedTxId(blockError) shouldBe None
 

@@ -88,7 +88,7 @@ case class IndexedErgoAddress(treeHash: ModifierId,
     if (txCount == 0 && boxCount == 0)
       toRemove += treeHash // all segments empty after rollback, delete parent
     else
-      history.historyStorage.insertExtraTry(Array.empty, Array(this)).get // save the changes made to this address
+      history.historyStorage.insertExtra(Array.empty, Array(this)) // save the changes made to this address
 
     toRemove.toArray
   }

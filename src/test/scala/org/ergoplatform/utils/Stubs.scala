@@ -19,7 +19,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, So
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, StateType}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
-import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.{DeriveNextKeyResult, SignedMessage}
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.scanning.Scan
@@ -31,6 +31,7 @@ import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{augWalletTransactionForScanGen, augWalletTransactionGen, boxesHolderGen}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
+import org.ergoplatform.wallet.crypto.MessageSigning
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.TestFileUtils
@@ -44,6 +45,7 @@ import scorex.db.ByteArrayWrapper
 import scorex.util.Random
 import sigma.data.ProveDlog
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigmastate.interpreter.HintsBag
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -194,6 +196,17 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       case GetWalletStatus => sender() ! WalletStatus(true, true, None, ErgoHistoryUtils.GenesisHeight, error = None)
 
       case _: CheckSeed => sender() ! true
+
+      case SignMessage(message, addressOpt) =>
+        val pubKeyOpt = addressOpt match {
+          case Some(address) => prover.hdPubKeys.find(_.key.value == address.pubkey.value).map(_.key)
+          case None => prover.hdPubKeys.headOption.map(_.key)
+        }
+        sender() ! pubKeyOpt.fold[Try[SignedMessage]](Failure(new Exception("No such key in the wallet"))) { pubKey =>
+          val signedMessage = MessageSigning.wrap(message, MessageSigning.freshSalt())
+          prover.signMessage(pubKey, signedMessage, HintsBag.empty)
+            .map(proof => SignedMessage(P2PKAddress(pubKey), signedMessage, proof))
+        }
 
       case GetWalletBoxes(unspentOnly, _) =>
         val boxes = if (unspentOnly) {

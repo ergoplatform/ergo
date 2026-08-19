@@ -6,7 +6,8 @@ import akka.http.scaladsl.server.Route
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.ApiError.BadRequest
-import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, RESTApiSettings}
+import org.ergoplatform.wallet.crypto.MessageSigning
 import org.ergoplatform.{ErgoAddressEncoder, P2PKAddress}
 import scorex.core.api.http.{ApiResponse, ApiRoute}
 import org.ergoplatform.utils.ScorexEncoding
@@ -40,7 +41,8 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     validateAddressPostR ~
     validateAddressGetR ~
     ergoTreeToAddressPostR ~
-    ergoTreeToAddressGetR
+    ergoTreeToAddressGetR ~
+    verifyMessageR
   }
 
   private def seed(length: Int): String = {
@@ -131,6 +133,46 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
       case Right(addressStr) => validateAddressResponse(addressStr)
       case Left(ex)          => ApiError(StatusCodes.BadRequest, ex.getMessage())
     }
+  }
+
+  /**
+    * Check a signature produced by `/wallet/signMessage`, or by any other signer following
+    * the same convention. Needs no wallet and no blockchain state, only the address the
+    * message claims to come from.
+    */
+  def verifyMessageR: Route = (post & path("verifyMessage") & entity(as[Json])) { json =>
+    def field(name: String): Either[String, String] =
+      json.hcursor.downField(name).as[String].left.map(e => s"$name: ${e.getMessage}")
+
+    def base16(name: String, hex: String): Either[String, Array[Byte]] =
+      Base16.decode(hex).toEither.left.map(e => s"$name: ${e.getMessage}")
+
+    val parsed = for {
+      addressStr <- field("address")
+      signedHex <- field("signedMessage")
+      proofHex <- field("proof")
+      address <- ergoAddressEncoder.fromString(addressStr)
+                   .toEither.left.map(e => s"address: ${e.getMessage}")
+      signedMessage <- base16("signedMessage", signedHex)
+      proof <- base16("proof", proofHex)
+      p2pk <- address match {
+        case p2pk: P2PKAddress => Right(p2pk)
+        case other => Left(s"address: not a P2PK address, $other")
+      }
+    } yield (p2pk, signedMessage, proof)
+
+    parsed.fold(
+      e => BadRequest(e),
+      { case (p2pk, signedMessage, proof) =>
+        val isValid = MessageSigning.verify(p2pk.pubkey, signedMessage, proof)
+        // reported as text, which is what this convention signs; a payload which is
+        // not UTF-8 text comes back lossily decoded
+        val message = MessageSigning.unwrap(signedMessage)
+          .map(bytes => new String(bytes, Constants.StringEncoding).asJson)
+          .getOrElse(Json.Null)
+        ApiResponse(Json.obj("isValid" -> isValid.asJson, "message" -> message))
+      }
+    )
   }
 }
 

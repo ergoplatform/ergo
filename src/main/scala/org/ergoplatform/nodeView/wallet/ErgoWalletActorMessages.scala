@@ -52,6 +52,15 @@ object ErgoWalletActorMessages {
   final case class ScanOnChain(block: ErgoFullBlock)
 
   /**
+   * Sign an arbitrary message with a wallet secret, so that the holder of the corresponding address
+   * can be proven without moving any funds
+   *
+   * @param message    - message to sign
+   * @param addressOpt - address to sign for; the wallet's first address if not given
+   */
+  final case class SignMessage(message: Array[Byte], addressOpt: Option[P2PKAddress])
+
+  /**
    * Rollback to previous version of the wallet, by throwing away effects of blocks after the version
    *
    * @param version

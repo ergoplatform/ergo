@@ -19,7 +19,7 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, MempoolTestHelpers, WalletT
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
 import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
-import org.ergoplatform.wallet.crypto.ErgoSignature
+import org.ergoplatform.wallet.crypto.{ErgoSignature, MessageSigning}
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.scalacheck.Gen
@@ -28,6 +28,7 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.helpers.TestingHelpers.testBox
 
 import scala.collection.compat.immutable.ArraySeq
@@ -429,6 +430,97 @@ class ErgoWalletServiceSpec
 
         val uws3 = walletService.deriveNextKey(uws2, false).get._2
         uws3.walletVars.trackedPubKeys.size shouldBe 3
+      }
+    }
+  }
+
+
+  private val messageToSign = "I am the owner of this address".getBytes("UTF-8")
+
+  property("a signed message verifies for the address it was signed with, and for nothing else") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val wState = initialState(store, versionedStore)
+        val pubKey = defaultProver.hdPubKeys.head.key
+
+        val signed = walletService.signMessage(wState, messageToSign, None).get
+
+        signed.address shouldBe P2PKAddress(pubKey)(settings.addressEncoder)
+        // the message is never signed as given, it is wrapped first
+        signed.signedMessage shouldNot equal(messageToSign)
+        MessageSigning.unwrap(signed.signedMessage).get shouldBe messageToSign
+        MessageSigning.verify(pubKey, signed.signedMessage, signed.proof) shouldBe true
+
+        // signing the same message twice gives two different byte strings, both valid
+        val signedAgain = walletService.signMessage(wState, messageToSign, None).get
+        signedAgain.signedMessage shouldNot equal(signed.signedMessage)
+        MessageSigning.verify(pubKey, signedAgain.signedMessage, signedAgain.proof) shouldBe true
+
+        // another key does not verify it
+        val otherKey = defaultProver.hdPubKeys.last.key
+        otherKey shouldNot equal(pubKey)
+        MessageSigning.verify(otherKey, signed.signedMessage, signed.proof) shouldBe false
+
+        // neither does a message which is not the one signed
+        val tampered = signed.signedMessage.dropRight(1) :+ (signed.signedMessage.last + 1).toByte
+        MessageSigning.verify(pubKey, tampered, signed.proof) shouldBe false
+
+        // nor a proof which is not the one produced
+        MessageSigning.verify(pubKey, signed.signedMessage, signedAgain.proof) shouldBe false
+      }
+    }
+  }
+
+  property("a message signature can not be turned into a transaction proof") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val wState = initialState(store, versionedStore)
+        val pubKey = defaultProver.hdPubKeys.head.key
+
+        // the attack this guards against: hand the wallet the bytes a transaction spending the
+        // owner's boxes is signed over, dressed up as a message. A sigma proof over those bytes is
+        // exactly the input proof which would make that transaction valid.
+        val encodedBoxes =
+          boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
+            .map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+        val boxSelector = new ReplaceCompactCollectBoxSelector(
+          settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
+        val paymentRequest = PaymentRequest(pks.head, 50000, Array.empty, Map.empty)
+        val victimTx = walletService.generateTransaction(
+          wState, boxSelector, Seq(paymentRequest), encodedBoxes, Seq.empty, sign = true)
+          .get.asInstanceOf[ErgoTransaction]
+        val bytesTheTransactionIsSignedOver = victimTx.messageToSign
+
+        val signed = walletService.signMessage(wState, bytesTheTransactionIsSignedOver, None).get
+
+        // the wallet signed the wrapped string, so the proof says nothing about the transaction
+        new SigmaPropVerifier()
+          .verifySignature(pubKey, bytesTheTransactionIsSignedOver, signed.proof)(null)
+          .shouldBe(false)
+
+        // and the other way round: a proof over raw transaction bytes is not a message signature,
+        // because verification insists on the wrapping
+        MessageSigning.unwrap(bytesTheTransactionIsSignedOver) shouldBe None
+        MessageSigning.verify(pubKey, bytesTheTransactionIsSignedOver,
+          victimTx.inputs.head.spendingProof.proof) shouldBe false
+      }
+    }
+  }
+
+  property("signing a message needs an unlocked wallet holding the address asked for") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val wState = initialState(store, versionedStore)
+
+        val foreignAddress = P2PKAddress(
+          DLogProverInput(BigInt(41).bigInteger).publicImage)(settings.addressEncoder)
+        walletService.signMessage(wState, messageToSign, Some(foreignAddress)) shouldBe 'failure
+
+        val locked = wState.copy(walletVars = wState.walletVars.resetProver())
+        walletService.signMessage(locked, messageToSign, None) shouldBe 'failure
       }
     }
   }

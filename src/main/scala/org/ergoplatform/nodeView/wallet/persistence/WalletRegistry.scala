@@ -160,6 +160,29 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   def walletUnspentBoxes(limit: Int = Int.MaxValue): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
 
   /**
+    * Unspent boxes belong to the wallet (payments scan) within an inclusion height range.
+    *
+    * Unlike [[walletUnspentBoxes]], this reads from the inclusion-height index, so only the
+    * requested height window is fetched from the database and no limit-based truncation is applied.
+    *
+    * @param heightFrom - min inclusion height of boxes
+    * @param heightTo   - max inclusion height of boxes, -1 for unbounded
+    * @return sequence of (P2PK-payment)-related unspent boxes within the range
+    */
+  def walletUnspentBoxesByInclusionHeight(heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+    unspentBoxesByInclusionHeight(Constants.PaymentsScanId, heightFrom, heightTo)
+
+  /**
+    * Boxes belong to the wallet (payments scan) within an inclusion height range, both spent and unspent.
+    *
+    * @param heightFrom - min inclusion height of boxes
+    * @param heightTo   - max inclusion height of boxes, -1 for unbounded
+    * @return sequence of (P2PK-payment)-related boxes within the range
+    */
+  def walletBoxesByInclusionHeight(heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+    boxesByInclusionHeight(Constants.PaymentsScanId, heightFrom, heightTo)
+
+  /**
     * Spent boxes belong to the wallet (payments scan)
     */
   def walletSpentBoxes(): Seq[TrackedBox] = spentBoxes(Constants.PaymentsScanId)

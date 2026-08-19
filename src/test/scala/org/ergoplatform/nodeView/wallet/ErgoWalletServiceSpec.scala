@@ -56,6 +56,9 @@ class ErgoWalletServiceSpec
 
   override def afterAll(): Unit = try super.afterAll() finally x.stop()
 
+  // box ids are Array[Byte], which compares by reference, so encode them before putting them into sets
+  private def idOf(tb: TrackedBox): String = Base16.encode(tb.box.id)
+
   private def initialState(store: LDBKVStore, versionedStore: LDBVersionedStore, mempool: Option[ErgoMemPoolReader] = None) = {
     ErgoWalletState(
       new WalletStorage(store, settings),
@@ -238,6 +241,65 @@ class ErgoWalletServiceSpec
           val actualWalletBoxes = walletService.getWalletBoxes(wState, unspentOnly = false, considerUnconfirmed = false).toList
           val expectedWalletBoxes = allBoxes.map(x => WalletBox(x, wState.fullHeight)).sortBy(_.trackedBox.inclusionHeightOpt)
           actualWalletBoxes should contain theSameElementsAs expectedWalletBoxes
+        }
+      }
+    }
+  }
+
+  property("it should read wallet boxes within an inclusion height range only") {
+    // `copy` does not change box.id, so distinct boxes are needed to tell the two windows apart
+    val distinctBoxesGen = Gen.listOfN(6, trackedBoxGen)
+      .map(_.groupBy(tb => Base16.encode(tb.box.id)).values.map(_.head).toList)
+      .suchThat(_.size >= 3)
+
+    forAll(distinctBoxesGen, modifierIdGen) { case (boxes, txId) =>
+      withVersionedStore(10) { versionedStore =>
+        withStore { store =>
+          val wState = initialState(store, versionedStore)
+          val blockId = modifierIdGen.sample.get
+
+          // two disjoint height windows, so that a range query can be told apart from a full scan
+          val (lowSource, highSource) = boxes.splitAt(boxes.size / 2)
+          val low = lowSource.zipWithIndex.map { case (bx, i) =>
+            bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId),
+              inclusionHeightOpt = Some(10 + i))
+          }
+          val high = highSource.tail.zipWithIndex.map { case (bx, i) =>
+            bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(PaymentsScanId),
+              inclusionHeightOpt = Some(1000 + i))
+          }
+          // a spent box inside the low window, to check it is excluded when unspentOnly is set
+          val spentLow = highSource.head.copy(spendingHeightOpt = Some(10000), spendingTxIdOpt = Some(txId),
+            scans = Set(PaymentsScanId), inclusionHeightOpt = Some(11))
+          val allBoxes = (low ++ high) :+ spentLow
+          wState.registry.updateOnBlock(ScanResults(allBoxes, ArraySeq.empty, ArraySeq.empty), blockId, 2000).get
+
+          val walletService = new ErgoWalletServiceImpl(settings)
+
+          def unspentIn(minHeight: Int, maxHeight: Int) =
+            walletService.getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false, minHeight, maxHeight)
+              .map(bx => idOf(bx.trackedBox)).toSet
+
+          val lowIds = low.map(idOf).toSet
+          val highIds = high.map(idOf).toSet
+
+          // the low window must not leak boxes from the high window and vice versa
+          unspentIn(0, 999) shouldBe lowIds
+          unspentIn(1000, 2000) shouldBe highIds
+          // spent boxes stay excluded when unspentOnly is set, even inside the window
+          unspentIn(0, 999) should not contain idOf(spentLow)
+          // an empty window yields nothing
+          unspentIn(500, 600) shouldBe empty
+
+          // -1 as upper bound keeps the pre-existing "unbounded" behaviour
+          val unbounded = walletService
+            .getWalletBoxes(wState, unspentOnly = true, considerUnconfirmed = false)
+            .map(bx => idOf(bx.trackedBox)).toSet
+          unspentIn(0, -1) shouldBe unbounded
+
+          // both spent and unspent within the window when unspentOnly is not set
+          walletService.getWalletBoxes(wState, unspentOnly = false, considerUnconfirmed = false, 0, 999)
+            .map(bx => idOf(bx.trackedBox)).toSet shouldBe (lowIds + idOf(spentLow))
         }
       }
     }

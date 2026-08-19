@@ -174,8 +174,8 @@ class ErgoWalletActor(settings: ErgoSettings,
      * Read wallet boxes, unspent only (if corresponding flag is set), or all (both spent and unspent).
      * If considerUnconfirmed flag is set, mempool contents is considered as well.
      */
-    case GetWalletBoxes(unspent, considerUnconfirmed) =>
-      val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed)
+    case GetWalletBoxes(unspent, considerUnconfirmed, minHeight, maxHeight) =>
+      val boxes = ergoWalletService.getWalletBoxes(state, unspent, considerUnconfirmed, minHeight, maxHeight)
       sender() ! boxes
 
     case GetScanUnspentBoxes(scanId, considerUnconfirmed, minHeight, maxHeight) =>

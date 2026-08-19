@@ -953,7 +953,8 @@ object CandidateGenerator extends ScorexLogging {
       s"Assembling a block candidate for block #$nextHeight from ${transactions.length} transactions available"
     )
 
-    val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
+    val verifier: ErgoInterpreter =
+      ErgoInterpreter(upcomingContext.currentParameters, upcomingContext.storageRentReemissionTokenId)
 
     @tailrec
     def loop(

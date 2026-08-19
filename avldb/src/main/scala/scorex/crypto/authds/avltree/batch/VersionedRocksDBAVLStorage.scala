@@ -2,13 +2,13 @@ package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
+import scorex.crypto.authds.avltree.batch.VersionedRocksDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
 import scorex.crypto.hash
 import scorex.crypto.hash.Digest32
-import scorex.db.{LDBKVStore, LDBVersionedStore}
+import scorex.db.{RocksDBKVStore, RocksDBVersionedStore}
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
@@ -19,13 +19,13 @@ import scala.util.{Failure, Try}
   *
   * @param store - level db storage to save the tree in
   */
-class VersionedLDBAVLStorage(store: LDBVersionedStore)
+class VersionedRocksDBAVLStorage(store: RocksDBVersionedStore)
   extends VersionedAVLStorage[DigestType] with ScorexLogging {
 
-  import VersionedLDBAVLStorage.nodeLabel
+  import VersionedRocksDBAVLStorage.nodeLabel
 
   private def restorePrunedRootNode(): Try[(ProverNodes[DigestType], Int)] = Try {
-    val rootNode = VersionedLDBAVLStorage.fetch(ADKey @@ store.get(topNodeHashKey).get)(store)
+    val rootNode = VersionedRocksDBAVLStorage.fetch(ADKey @@ store.get(topNodeHashKey).get)(store)
     val rootHeight = Ints.fromByteArray(store.get(topNodeHeightKey).get)
 
     rootNode -> rootHeight
@@ -73,7 +73,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
                                      isTop: Boolean): Array[(Array[Byte], Array[Byte])] = {
     // Should always serialize top node. It may not be new if it is the creation of the tree
     if (node.isNew || isTop) {
-      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), VersionedLDBAVLStorage.noStoreSerializer.toBytes(node))
+      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), VersionedRocksDBAVLStorage.noStoreSerializer.toBytes(node))
       node match {
         case n: InternalProverNode[DigestType] =>
           val leftSubtree = serializedVisitedNodes(n.left, isTop = false)
@@ -98,13 +98,13 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     * @param expectedRootHash - expected UTXO set authenticating tree root hash
     * @return - hash of root node of tree, or failure if an error (e.g. in database) happened
     */
-  def dumpSnapshot(dumpStorage: LDBKVStore, manifestDepth: Byte, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
+  def dumpSnapshot(dumpStorage: RocksDBKVStore, manifestDepth: Byte, expectedRootHash: Array[Byte]): Try[Array[Byte]] = {
     store.processSnapshot { dbReader =>
 
       def subtreeLoop(label: DigestType, builder: mutable.ArrayBuilder[Byte]): Unit = {
         val nodeBytes = dbReader.get(label)
         builder ++= nodeBytes
-        val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
+        val node = VersionedRocksDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
         node match {
           case in: ProxyInternalNode[DigestType] =>
             subtreeLoop(Digest32 @@@ in.leftLabel, builder)
@@ -123,7 +123,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       def manifestLoop(nodeDbKey: Array[Byte], level: Int, manifestBuilder: mutable.ArrayBuilder[Byte]): Unit = {
         val nodeBytes = dbReader.get(nodeDbKey)
         manifestBuilder ++= nodeBytes
-        val node = VersionedLDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
+        val node = VersionedRocksDBAVLStorage.noStoreSerializer.parseBytes(nodeBytes)
         node match {
           case in: ProxyInternalNode[DigestType] if level == manifestDepth =>
             dumpSubtree(Digest32 @@@ in.leftLabel)
@@ -156,7 +156,7 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
 }
 
 
-object VersionedLDBAVLStorage {
+object VersionedRocksDBAVLStorage {
 
   private[batch] val topNodeHashKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(123: Byte)
   private[batch] val topNodeHeightKey: Array[Byte] = Array.fill(StateTreeParameters.labelSize)(124: Byte)
@@ -179,7 +179,7 @@ object VersionedLDBAVLStorage {
     * @return node read from the database (or throws exception if there is no such node), in case of internal node it
     *         returns pruned internal node, so a node where left and right children not stored, only their hashes
     */
-  def fetch(dbKey: ADKey)(store: LDBVersionedStore): ProverNodes[DigestType] = {
+  def fetch(dbKey: ADKey)(store: RocksDBVersionedStore): ProverNodes[DigestType] = {
     val bytes = store(dbKey)
     val node = new ProverNodeSerializer(store).parseBytes(bytes)
     node.isNew = false
@@ -202,7 +202,7 @@ object VersionedLDBAVLStorage {
   def recreate(manifest: BatchAVLProverManifest[DigestType],
                chunks: Iterator[BatchAVLProverSubtree[DigestType]],
                additionalData: Iterator[(Array[Byte], Array[Byte])],
-               store: LDBVersionedStore): Try[VersionedLDBAVLStorage] = {
+               store: RocksDBVersionedStore): Try[VersionedRocksDBAVLStorage] = {
     //todo: the function below copy-pasted from BatchAVLProver, eliminate boilerplate?
 
     def idCollector(node: ProverNodes[DigestType]): Iterator[(Array[Byte], Array[Byte])] = {
@@ -219,12 +219,12 @@ object VersionedLDBAVLStorage {
 
     val rootNode = manifest.root
     val rootNodeHeight = manifest.rootHeight
-    val digestWrapper = VersionedLDBAVLStorage.digest(rootNode.label, rootNodeHeight)
+    val digestWrapper = VersionedRocksDBAVLStorage.digest(rootNode.label, rootNodeHeight)
     val indices = Iterator(topNodeHashKey -> nodeLabel(rootNode), topNodeHeightKey -> Ints.toByteArray(rootNodeHeight))
     val nodesIterator = idCollector(manifest.root) ++
       chunks.flatMap(subtree => idCollector(subtree.subtreeTop))
     store.update(digestWrapper, toRemove = Nil, toUpdate = indices ++ nodesIterator ++ additionalData).map { _ =>
-      new VersionedLDBAVLStorage(store)
+      new VersionedRocksDBAVLStorage(store)
     }
   }
 

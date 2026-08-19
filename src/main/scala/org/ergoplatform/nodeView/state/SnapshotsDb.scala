@@ -4,12 +4,13 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.serialization.ManifestSerializer
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
+import scorex.crypto.authds.avltree.batch.VersionedRocksDBAVLStorage
 import scorex.crypto.hash.Digest32
-import scorex.db.{LDBFactory, LDBKVStore}
+import scorex.db.{RocksDBFactory, RocksDBKVStore}
 import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 
+import java.io.File
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
@@ -17,7 +18,7 @@ import scala.util.{Failure, Success, Try}
 /**
   * Interface for a (non-versioned) database storing UTXO set snapshots and metadata about them
   */
-class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
+class SnapshotsDb(store: RocksDBKVStore) extends ScorexLogging {
 
   private val snapshotInfoKey: Array[Byte] = Array.fill(32)(0: Byte)
 
@@ -105,7 +106,7 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
     * @return - id of the snapshot (root hash of its authenticating AVL+ tree),
     *         or error happened during read-write process
     */
-  def writeSnapshot(pullFrom: VersionedLDBAVLStorage,
+  def writeSnapshot(pullFrom: VersionedRocksDBAVLStorage,
                     height: Height,
                     expectedRootHash: Array[Byte],
                     manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth): Try[Array[Byte]] = {
@@ -141,7 +142,7 @@ object SnapshotsDb {
   // internal method to open or init snapshots database in given folder
   // private[nodeView] to use it in tests also
   private[nodeView] def create(dir: String): SnapshotsDb = {
-    val store = LDBFactory.createKvDb(dir)
+    val store = new RocksDBKVStore(RocksDBFactory.open(new File(dir)))
     new SnapshotsDb(store)
   }
 

@@ -4,7 +4,7 @@ import com.google.common.primitives.Longs
 import scorex.crypto.authds.avltree.batch._
 import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.hash.{Blake2b256, Digest32}
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import scorex.utils.Random
 
 object Helper {
@@ -34,11 +34,11 @@ object Helper {
   }
 
   def persistentProverWithVersionedStore(initialKeepVersions: Int,
-                                         baseOperationsCount: Int = 0): (Prover, LDBVersionedStore, VersionedLDBAVLStorage) = {
+                                         baseOperationsCount: Int = 0): (Prover, RocksDBVersionedStore, VersionedRocksDBAVLStorage) = {
     val dir = java.nio.file.Files.createTempDirectory("bench_testing_" + scala.util.Random.alphanumeric.take(15)).toFile
     dir.deleteOnExit()
-    val store = new LDBVersionedStore(dir, initialKeepVersions = initialKeepVersions)
-    val storage = new VersionedLDBAVLStorage(store)
+    val store = new RocksDBVersionedStore(dir, initialKeepVersions = initialKeepVersions)
+    val storage = new VersionedRocksDBAVLStorage(store)
     require(storage.isEmpty)
     val prover = new BatchAVLProver[Digest32, HF](kl, Some(vl))
 

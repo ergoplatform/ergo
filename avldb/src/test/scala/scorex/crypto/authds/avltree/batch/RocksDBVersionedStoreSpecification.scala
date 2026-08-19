@@ -6,11 +6,11 @@ import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.hash.Blake2b256
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 
 import scala.collection.mutable.ArrayBuffer
 
-class LDBVersionedStoreSpecification extends AnyPropSpec
+class RocksDBVersionedStoreSpecification extends AnyPropSpec
   with ScalaCheckPropertyChecks
   with Matchers
   with TestHelper {
@@ -18,7 +18,7 @@ class LDBVersionedStoreSpecification extends AnyPropSpec
   override protected val KL = 32
   override protected val VL = 8
 
-  val storeTest: LDBVersionedStore => Unit = { store =>
+  val storeTest: RocksDBVersionedStore => Unit = { store =>
     var version = store.lastVersionID
     val keys: ArrayBuffer[(Array[Byte], Array[Byte])] = ArrayBuffer()
     forAll { b: Array[Byte] =>
@@ -37,6 +37,6 @@ class LDBVersionedStoreSpecification extends AnyPropSpec
     }
   }
 
-  property("LDBVersionedStore") { storeTest(createVersionedStore()) }
+  property("RocksDBVersionedStore") { storeTest(createVersionedStore()) }
 
 }

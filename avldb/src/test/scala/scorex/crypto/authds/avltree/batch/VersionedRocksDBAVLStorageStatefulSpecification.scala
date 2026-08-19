@@ -12,18 +12,18 @@ import scorex.utils.{Random => RandomBytes}
 
 import scala.util.{Random, Success, Failure, Try}
 
-class VersionedLDBAVLStorageStatefulSpecification extends AnyPropSpec {
+class VersionedRocksDBAVLStorageStatefulSpecification extends AnyPropSpec {
   val params = Parameters.default
     .withMinSize(10)
     .withMaxSize(50)
     .withMinSuccessfulTests(15)
 
-  property("LDBAVLStorage: rollback in stateful environment") {
-    WithLDB.property().check(params)
+  property("RocksDBAVLStorage: rollback in stateful environment") {
+    WithRocksDB.property().check(params)
   }
 }
 
-object WithLDB extends VersionedLDBAVLStorageStatefulCommands with TestHelper {
+object WithRocksDB extends VersionedRocksDBAVLStorageStatefulCommands with TestHelper {
 
   override protected val KL = 32
   override protected val VL = 8
@@ -33,7 +33,7 @@ object WithLDB extends VersionedLDBAVLStorageStatefulCommands with TestHelper {
   }
 }
 
-trait VersionedLDBAVLStorageStatefulCommands extends Commands { this: TestHelper =>
+trait VersionedRocksDBAVLStorageStatefulCommands extends Commands { this: TestHelper =>
 
   override type State = Operations
   override type Sut = PersistentBatchAVLProver[Digest32, HF]

@@ -49,7 +49,7 @@ class VerifyNonADHistorySpecification extends ErgoCorePropertyTest {
   property("full chain status updating") {
 
     def isInBestChain(b: ErgoFullBlock, h: ErgoHistory): Boolean = {
-      FullBlockProcessor.isInBestFullChain(h.historyStorage, b.id)
+      h.asInstanceOf[FullBlockProcessor].isInBestFullChain(b.id)
     }
 
     var history = genHistory()

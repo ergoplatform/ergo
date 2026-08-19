@@ -27,7 +27,7 @@ case class IndexedContractTemplate(templateHash: ModifierId,
     if (boxCount == 0)
       toRemove += templateHash
     else
-      history.historyStorage.insertExtraTry(Array.empty, Array(this)).get
+      history.historyStorage.insertExtra(Array.empty, Array(this))
 
     toRemove.toArray
   }

@@ -95,6 +95,36 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     }
   }
 
+  property("keep an off-chain transaction so it can be put back into the memory pool after a restart") {
+    withFixture { implicit w =>
+      val addresses = getPublicKeys
+      addresses.length should be > 0
+      val genesisBlock = makeGenesisBlock(addresses.head.pubkey, randomNewAsset)
+      applyBlock(genesisBlock) shouldBe 'success //scan by wallet happens during apply
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 300.millis)
+
+      await(wallet.unconfirmedTransactionsToRestore) shouldBe empty
+
+      val tx = eventually {
+        val snap = getConfirmedBalances
+        val req = Seq(PaymentRequest(addresses.head, snap.walletBalance / 2, Array.empty, Map.empty))
+        await(wallet.generateTransaction(req)).get
+      }
+      wallet.scanOffchain(tx)
+
+      // the memory pool is not persisted, so the wallet keeps its own unconfirmed transactions
+      eventually {
+        await(wallet.unconfirmedTransactionsToRestore).map(_.id) shouldBe Seq(tx.id)
+      }
+
+      // and stops keeping them once they are on the blockchain
+      applyBlock(makeNextBlock(getUtxoState, Seq(tx))) shouldBe 'success
+      eventually {
+        await(wallet.unconfirmedTransactionsToRestore) shouldBe empty
+      }
+    }
+  }
+
   property("Generate asset issuing transaction") {
     withFixture { implicit w =>
       val address = getPublicKeys.head

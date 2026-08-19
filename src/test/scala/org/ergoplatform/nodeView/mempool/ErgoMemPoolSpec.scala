@@ -595,6 +595,63 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome2.isInstanceOf[ProcessingOutcome.Invalidated] shouldBe true
   }
 
+
+  it should "return minimal fee from getRecommendedFee when no statistics is collected" in {
+    val pool = ErgoMemPool.empty(settings)
+    pool.getRecommendedFee(5, 1024) shouldBe settings.nodeSettings.minimalFeeAmount
+  }
+
+  it should "base getRecommendedFee on the fee histogram when statistics is available" in {
+    val now = System.currentTimeMillis()
+    // 4 transactions paying on average 2000000 nanoErg/Kb were taken within 2..3 minutes
+    val histogram = MemPoolStatistics.defaultPoolHistogram.updated(2, FeeHistogramBin(4, 8000000))
+    val stats = MemPoolStatistics(startMeasurement = now - 100000, takenTxns = 4,
+      snapTime = now - 100000, snapTakenTxns = 0, histogram = histogram)
+    val empty = ErgoMemPool.empty(settings)
+    val pool = new ErgoMemPool(empty.pool, stats, empty.sortingOption)
+
+    // for a 1Kb transaction the recommended fee is the average fee per Kb of the first non-empty bin
+    pool.getRecommendedFee(5, 1024) shouldBe 2000000
+  }
+
+  it should "make getExpectedWaitTime consistent with getRecommendedFee" in {
+    val now = System.currentTimeMillis()
+    val histogram = MemPoolStatistics.defaultPoolHistogram.updated(2, FeeHistogramBin(4, 8000000))
+    val stats = MemPoolStatistics(startMeasurement = now - 100000, takenTxns = 4,
+      snapTime = now - 100000, snapTakenTxns = 0, histogram = histogram)
+    val empty = ErgoMemPool.empty(settings)
+    val pool = new ErgoMemPool(empty.pool, stats, empty.sortingOption)
+
+    val txSize = 1024
+    val expectedWaitTimeMinutes = 5
+    val recommendedFee = pool.getRecommendedFee(expectedWaitTimeMinutes, txSize)
+    val waitTimeMs = pool.getExpectedWaitTime(recommendedFee, txSize)
+
+    // a transaction paying the recommended fee is expected to be taken
+    // within the wait time the fee was recommended for
+    waitTimeMs shouldBe 2 * 60 * 1000
+    waitTimeMs should be <= expectedWaitTimeMinutes.toLong * 60 * 1000
+  }
+
+  it should "return bounded getExpectedWaitTime when no transactions are taken from the pool for a long time" in {
+    // no histogram data and a long period of inactivity (e.g. transactions stuck in the pool)
+    val longAgo = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000
+    val stats = MemPoolStatistics(startMeasurement = longAgo, takenTxns = 1,
+      snapTime = longAgo, snapTakenTxns = 0)
+    val empty = ErgoMemPool.empty(settings)
+    var pool = new ErgoMemPool(empty.pool, stats, empty.sortingOption)
+
+    // fill the pool with some transactions, all with a priority higher than the queried one
+    (1 to 5).foreach { _ =>
+      pool = pool.put(UnconfirmedTransaction(invalidErgoTransactionGen.sample.get, None))
+    }
+    val posInPool = pool.size
+
+    // the estimate is bounded by the statistics measurement window:
+    // at most 2 * measurementIntervalMsec per pool position (with takenTxns = 1)
+    val waitTimeMs = pool.getExpectedWaitTime(0, 1024)
+    waitTimeMs should be <= 2L * MemPoolStatistics.measurementIntervalMsec * posInPool
+  }
   it should "return random transactions" in {
     val txs = (1 to 10).map(_ => invalidErgoTransactionGen.sample.get)
       .map(tx => UnconfirmedTransaction(tx, None))

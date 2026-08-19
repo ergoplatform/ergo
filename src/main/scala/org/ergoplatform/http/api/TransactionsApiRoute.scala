@@ -18,12 +18,14 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, RESTApiSetting
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
+import scorex.util.serialization.VLQByteBufferReader
 import sigma.VersionContext
 import sigma.ast.{EvaluatedValue, SType}
 import sigmastate.eval.Extensions.ArrayByteOps
 
+import java.nio.ByteBuffer
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 case class TransactionsApiRoute(readersHolder: ActorRef,
                                 nodeViewActorRef: ActorRef,
@@ -170,6 +172,17 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     }
   }
 
+  private def parseTransactionBytes(txBytesStr: String): Try[ErgoTransaction] =
+    Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap { txBytes =>
+      Try {
+        val reader = new VLQByteBufferReader(ByteBuffer.wrap(txBytes))
+        val tx = ErgoTransactionSerializer.parse(reader)
+        if (reader.remaining != 0) {
+          throw new IllegalArgumentException("Transaction bytes contain trailing data")
+        }
+        tx
+      }
+    }
 
   def sendTransactionR: Route = (pathEnd & post & entity(as[ErgoTransaction])) { tx =>
     validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
@@ -183,7 +196,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     // we check parsed with max version available
     val version = ergoSettings.chainSettings.protocolVersion
     VersionContext.withVersions(version, version) {
-      Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+      parseTransactionBytes(txBytesStr) match {
         case Success(tx) =>
           validateTransactionAndProcess(tx)(validTx => sendLocalTransactionRoute(nodeViewActorRef, validTx))
         case Failure(e) =>
@@ -203,7 +216,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     // actual tree version is properly set in ErgoTreeSerializer inside
     val version = ergoSettings.chainSettings.protocolVersion
     VersionContext.withVersions(version, version) {
-      Base16.decode(fromJsonOrPlain(txBytesStr)).flatMap(ErgoTransactionSerializer.parseBytesTry) match {
+      parseTransactionBytes(txBytesStr) match {
         case Success(tx) =>
           validateTransactionAndProcess(tx)(validTx => ApiResponse(validTx.transaction.id))
         case Failure(e) =>

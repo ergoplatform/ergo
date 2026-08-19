@@ -4,23 +4,18 @@ import akka.actor.ActorContext
 import org.ergoplatform.consensus.ProgressInfo
 
 import java.io.File
-import java.nio.{ByteBuffer, ByteOrder}
-import java.nio.charset.StandardCharsets
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
-  IndexedHeightKey, NewestVersion, NewestVersionBytes, RollbackToKey, SchemaVersionKey}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings.{Algos, ErgoSettings}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
-import scorex.db.ByteArrayWrapper
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 
 import scala.util.{Failure, Success, Try}
 
@@ -270,113 +265,12 @@ object ErgoHistory extends ScorexLogging {
     var db = HistoryStorage(ergoSettings)
 
     // ExtraIndexer db check
-    if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
-      def storedBytes(key: Array[Byte]): Option[Array[Byte]] = db.modifierBytesById(bytesToId(key))
-      def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
-        .filter(_.length == Integer.BYTES)
-        .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
-      def longValue(bytesOpt: Option[Array[Byte]]): Option[Long] = bytesOpt
-        .filter(_.length == java.lang.Long.BYTES)
-        .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getLong)
-
-      val schemaVersionBytesOpt = storedBytes(SchemaVersionKey)
-      val indexedHeightBytesOpt = storedBytes(IndexedHeightKey)
-      val globalTxIndexBytesOpt = storedBytes(GlobalTxIndexKey)
-      val globalBoxIndexBytesOpt = storedBytes(GlobalBoxIndexKey)
-      val rollbackToBytesOpt = storedBytes(RollbackToKey)
-      val schemaVersionOpt = intValue(schemaVersionBytesOpt)
-      val indexedHeightOpt = intValue(indexedHeightBytesOpt)
-      val globalTxIndexOpt = longValue(globalTxIndexBytesOpt)
-      val globalBoxIndexOpt = longValue(globalBoxIndexBytesOpt)
-      val rollbackToOpt = intValue(rollbackToBytesOpt)
-      val indexedHeight = indexedHeightOpt.getOrElse(0)
-      val globalTxIndex = globalTxIndexOpt.getOrElse(0L)
-      val globalBoxIndex = globalBoxIndexOpt.getOrElse(0L)
-      val rollbackTo = rollbackToOpt.getOrElse(0)
-      val indexedHeaderIdBytesOpt = db.modifierBytesById(bytesToId(IndexedHeaderIdKey))
-      val indexedHeaderOpt = indexedHeaderIdBytesOpt
-        .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
-        .flatMap { idBytes =>
-        val id = bytesToId(idBytes)
-        val validityKey = ByteArrayWrapper(Algos.hash("validity".getBytes(StandardCharsets.UTF_8) ++ idToBytes(id)))
-        val isValid = db.getIndex(validityKey).exists(_.sameElements(Array(1.toByte)))
-        if (isValid) db.modifierById(id).collect {
-          case header: Header if header.height == indexedHeight && header.id == id => header
-        } else None
-      }
-      val terminalRowsMatchCheckpoint = indexedHeaderOpt.exists { header =>
-        if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
-          false
-        } else {
-          db.modifierById(header.transactionsId).collect {
-            case transactions: BlockTransactions if transactions.headerId == header.id =>
-              val lastTx = transactions.txs.last
-              val lastTxIndex = globalTxIndex - 1
-              val firstTxBoxIndex = globalBoxIndex - lastTx.outputs.size
-              val expectedOutputNums = Array.tabulate(lastTx.outputs.size)(i => firstTxBoxIndex + i)
-              val expectedInputNumsOpt = if (header.height <= 1) {
-                Some(Array.fill[Long](lastTx.inputs.size)(0L))
-              } else {
-                val inputNums = lastTx.inputs.map { input =>
-                  val inputId = bytesToId(input.boxId)
-                  db.getExtraIndex(inputId).collect {
-                    case box: IndexedErgoBox
-                      if box.id == inputId && box.spendingTxIdOpt.contains(lastTx.id) &&
-                        box.spendingHeightOpt.contains(header.height) => box.globalIndex
-                  }
-                }
-                if (inputNums.forall(_.isDefined)) Some(inputNums.flatten.toArray) else None
-              }
-              val numericTxMatches = db.getExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex))).exists {
-                case NumericTxIndex(index, id) => index == lastTxIndex && id == lastTx.id
-                case _ => false
-              }
-              val indexedTxMatches = db.getExtraIndex(lastTx.id).exists {
-                case tx: IndexedErgoTransaction =>
-                  tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
-                    tx.index == transactions.txs.size - 1 && tx.size == lastTx.size &&
-                    expectedInputNumsOpt.exists(expected => tx.inputNums.sameElements(expected)) &&
-                    tx.outputNums.sameElements(expectedOutputNums) && tx.dataInputs.sameElements(lastTx.dataInputs)
-                case _ => false
-              }
-              val outputRowsMatch = expectedOutputNums.zip(lastTx.outputs).forall { case (boxIndex, output) =>
-                val boxId = bytesToId(output.id)
-                val numericBoxMatches = db.getExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex))).exists {
-                  case NumericBoxIndex(index, id) => index == boxIndex && id == boxId
-                  case _ => false
-                }
-                val indexedBoxMatches = db.getExtraIndex(boxId).exists {
-                  case box: IndexedErgoBox =>
-                    box.globalIndex == boxIndex && box.inclusionHeight == header.height && box.id == boxId &&
-                      box.spendingTxIdOpt.isEmpty && box.spendingHeightOpt.isEmpty && box.spendingProofOpt.isEmpty
-                  case _ => false
-                }
-                numericBoxMatches && indexedBoxMatches
-              }
-              numericTxMatches && indexedTxMatches && outputRowsMatch
-          }.contains(true)
-        }
-      }
-      val numericValuesAreWellFormed = Seq(
-        indexedHeightBytesOpt.forall(_.length == Integer.BYTES),
-        globalTxIndexBytesOpt.forall(_.length == java.lang.Long.BYTES),
-        globalBoxIndexBytesOpt.forall(_.length == java.lang.Long.BYTES),
-        rollbackToBytesOpt.forall(_.length == Integer.BYTES)
-      ).forall(identity)
-      val valuesAreNonNegative = indexedHeight >= 0 && globalTxIndex >= 0 && globalBoxIndex >= 0 && rollbackTo >= 0
-      val emptyCheckpoint = indexedHeight == 0 && globalTxIndex == 0 && globalBoxIndex == 0 &&
-        rollbackTo == 0 && indexedHeaderIdBytesOpt.isEmpty
-      val nonEmptyCheckpoint = indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
-        .forall(_.isDefined) && rollbackTo == 0 && terminalRowsMatchCheckpoint
-      val checkpointIsValid = schemaVersionOpt.contains(NewestVersion) && numericValuesAreWellFormed &&
-        valuesAreNonNegative && (emptyCheckpoint || nonEmptyCheckpoint)
-      if (!checkpointIsValid) {
-        val freshDb = db.deleteExtraDBTry(ergoSettings).get
-        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty).recoverWith { case error =>
-          Try(freshDb.close()).failed.foreach(error.addSuppressed)
-          Failure(error)
-        }.get
-        db = freshDb
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema
+      val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
+      if (schemaVersion != NewestVersion) {
+        if(getIndex(IndexedHeightKey, db).getInt > 0)
+          db = db.deleteExtraDB(ergoSettings) // older schema -> delete and reopen db
+        db.insertExtra(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty) // update version key
       }
     }
 

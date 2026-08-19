@@ -77,6 +77,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
+  private var lastRequestedDownloadTypeId: Option[NetworkObjectTypeId.Value] = None
+
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
@@ -650,6 +652,45 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
+  private def limitFetchedModifiers(fetched: Map[NetworkObjectTypeId.Value, Seq[ModifierId]],
+                                    limit: Int,
+                                    afterTypeId: Option[NetworkObjectTypeId.Value])
+  : (Map[NetworkObjectTypeId.Value, Seq[ModifierId]], Option[NetworkObjectTypeId.Value]) = {
+    @tailrec
+    def takeRound(remaining: Vector[(NetworkObjectTypeId.Value, Seq[ModifierId])],
+                  slotsLeft: Int,
+                  selected: Map[NetworkObjectTypeId.Value, Vector[ModifierId]],
+                  lastSelectedTypeId: Option[NetworkObjectTypeId.Value])
+    : (Map[NetworkObjectTypeId.Value, Seq[ModifierId]], Option[NetworkObjectTypeId.Value]) = {
+      if (slotsLeft <= 0 || remaining.isEmpty) {
+        selected.map { case (typeId, modifierIds) => typeId -> modifierIds } -> lastSelectedTypeId
+      } else {
+        val roundSize = Math.min(slotsLeft, remaining.size)
+        val (round, untouched) = remaining.splitAt(roundSize)
+        val updatedSelected = round.foldLeft(selected) { case (acc, (typeId, modifierIds)) =>
+          acc.updated(typeId, acc.getOrElse(typeId, Vector.empty) :+ modifierIds.head)
+        }
+        val nextRound = round.flatMap { case (typeId, modifierIds) =>
+          val tail = modifierIds.tail
+          if (tail.nonEmpty) Some(typeId -> tail) else None
+        } ++ untouched
+        takeRound(nextRound, slotsLeft - roundSize, updatedSelected, round.lastOption.map(_._1))
+      }
+    }
+
+    val sortedCandidates = fetched.toVector
+      .filter(_._2.nonEmpty)
+      .sortBy { case (typeId, _) => typeId.toInt & 0xff }
+    val candidates = afterTypeId.flatMap { previousTypeId =>
+      val previousId = previousTypeId.toInt & 0xff
+      sortedCandidates.indexWhere { case (typeId, _) => (typeId.toInt & 0xff) > previousId } match {
+        case -1 => None
+        case nextTypeIndex => Some(sortedCandidates.drop(nextTypeIndex) ++ sortedCandidates.take(nextTypeIndex))
+      }
+    }.getOrElse(sortedCandidates)
+    takeRound(candidates, limit, Map.empty, None)
+  }
+
   /**
     * Modifier download method that is given min/max constraints for modifiers to download from peers.
     * It sends requests for modifiers to given peers in optimally sized batches.
@@ -667,7 +708,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(peers) if peers.nonEmpty =>
         val peersCount = peers.size
         val maxElementsToFetch = Math.min(maxModifiers, peersCount * maxModifiersPerBucket)
-        val fetched = if (maxElementsToFetch <= 0) {
+        val fetched: Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = if (maxElementsToFetch <= 0) {
           Map.empty
         } else {
           fetchMax(maxElementsToFetch)
@@ -677,7 +718,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // to start downloading UTXO set snapshots
           requestSnapshotsInfo()
         } else {
-          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
+          val hasNonHeaderCandidates = fetched.keys.exists(_ != Header.modifierTypeId)
+          val rotateAfter = if (hasNonHeaderCandidates) lastRequestedDownloadTypeId else None
+          val (limitedFetched, lastSelectedTypeId) =
+            limitFetchedModifiers(fetched, maxElementsToFetch, rotateAfter)
+          if (hasNonHeaderCandidates) {
+            lastSelectedTypeId.foreach(typeId => lastRequestedDownloadTypeId = Some(typeId))
+          }
+          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, limitedFetched)
           // collect and log useful downloading progress information, don't worry it does not run frequently
           modifiersByBucket.headOption.foreach { _ =>
             modifiersByBucket

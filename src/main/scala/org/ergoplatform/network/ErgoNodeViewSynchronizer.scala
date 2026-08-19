@@ -608,8 +608,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
-    deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
+  private def requestManifest(manifestId: ManifestId,
+                              peer: ConnectedPeer,
+                              checksDone: Int = 0): Unit = {
+    deliveryTracker.setRequested(
+      ManifestTypeId.value,
+      ModifierId @@ Algos.encode(manifestId),
+      peer,
+      checksDone) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetManifestSpec, Right(manifestId), None)
@@ -1269,7 +1275,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
           if (checksDone < maxDeliveryChecks) {
-            if (modifierTypeId == UtxoSnapshotChunkTypeId.value) {
+            if (modifierTypeId == ManifestTypeId.value) {
+              log.info(s"Rescheduling request for UTXO set manifest $modifierId, peer $peer")
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              requestManifest(Digest32 @@ Algos.decode(modifierId).get, peer, checksDone)
+            } else if (modifierTypeId == UtxoSnapshotChunkTypeId.value) {
               // randomly choosing a peer to download UTXO set snapshot chunk
               val newPeerOpt = hr.randomPeerToDownloadChunks()
               log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")

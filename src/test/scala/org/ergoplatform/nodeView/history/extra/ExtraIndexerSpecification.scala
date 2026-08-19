@@ -386,7 +386,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
 
     // Simulate the state after a headers-only fork briefly became the best chain
-    // and then lost: caughtUp=false, but the indexed tip is still on the main chain.
+    // and then lost: caughtUp = false, while the indexed tip remains on the main chain.
     indexer ! SetCaughtUp(caughtUp = false)
 
     // Without the FullBlockApplied handler for !caughtUp, this event would be

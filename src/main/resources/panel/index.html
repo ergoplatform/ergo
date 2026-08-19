@@ -1,1 +1,578 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="shortcut icon" href="/favicon.svg"/><meta name="viewport" content="minimum-scale=1,initial-scale=1,width=device-width,shrink-to-fit=no"/><meta name="theme-color" content="#000000"/><link rel="manifest" href="/manifest.json"/><title>Ergo node interface</title><link href="/static/css/2.8e5c4313.chunk.css" rel="stylesheet"><link href="/static/css/main.95603572.chunk.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div><div id="modal-root"></div><script>!function(l){function e(e){for(var r,t,n=e[0],o=e[1],u=e[2],f=0,i=[];f<n.length;f++)t=n[f],Object.prototype.hasOwnProperty.call(c,t)&&c[t]&&i.push(c[t][0]),c[t]=0;for(r in o)Object.prototype.hasOwnProperty.call(o,r)&&(l[r]=o[r]);for(s&&s(e);i.length;)i.shift()();return p.push.apply(p,u||[]),a()}function a(){for(var e,r=0;r<p.length;r++){for(var t=p[r],n=!0,o=1;o<t.length;o++){var u=t[o];0!==c[u]&&(n=!1)}n&&(p.splice(r--,1),e=f(f.s=t[0]))}return e}var t={},c={1:0},p=[];function f(e){if(t[e])return t[e].exports;var r=t[e]={i:e,l:!1,exports:{}};return l[e].call(r.exports,r,r.exports,f),r.l=!0,r.exports}f.m=l,f.c=t,f.d=function(e,r,t){f.o(e,r)||Object.defineProperty(e,r,{enumerable:!0,get:t})},f.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},f.t=function(r,e){if(1&e&&(r=f(r)),8&e)return r;if(4&e&&"object"==typeof r&&r&&r.__esModule)return r;var t=Object.create(null);if(f.r(t),Object.defineProperty(t,"default",{enumerable:!0,value:r}),2&e&&"string"!=typeof r)for(var n in r)f.d(t,n,function(e){return r[e]}.bind(null,n));return t},f.n=function(e){var r=e&&e.__esModule?function(){return e.default}:function(){return e};return f.d(r,"a",r),r},f.o=function(e,r){return Object.prototype.hasOwnProperty.call(e,r)},f.p="/";var r=this["webpackJsonpergo-node-interface"]=this["webpackJsonpergo-node-interface"]||[],n=r.push.bind(r);r.push=e,r=r.slice();for(var o=0;o<r.length;o++)e(r[o]);var s=n;a()}([])</script><script src="/static/js/2.82289ad5.chunk.js"></script><script src="/static/js/main.4a62f34b.chunk.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <link rel="shortcut icon" href="/favicon.svg"/>
+  <meta name="viewport" content="minimum-scale=1,initial-scale=1,width=device-width,shrink-to-fit=no"/>
+  <meta name="theme-color" content="#000000"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <title>Ergo node interface</title>
+  <script>
+    (function() {
+      var cls = "panel-dark";
+      var key = "panel-theme";
+      try {
+        var stored = localStorage.getItem(key);
+        if (stored === "dark") {
+          document.documentElement.classList.add(cls);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <link href="/static/css/2.8e5c4313.chunk.css" rel="stylesheet">
+  <link href="/static/css/main.95603572.chunk.css" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --surface: #ffffff;
+      --panel: #f0f2f5;
+      --border: #d1d5db;
+      --text: #0f172a;
+      --muted: #4b5563;
+      --accent: #66d9ef;
+    }
+    html.panel-dark {
+      color-scheme: dark;
+      --bg: #0b0d11;
+      --surface: #111827;
+      --panel: #0f141d;
+      --border: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #66d9ef;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+    #root,
+    #modal-root {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main, section, article, .container, .content, .layout, .wrapper, .page, .page-content {
+      background-color: var(--bg) !important;
+      color: var(--text) !important;
+    }
+    html.panel-dark body,
+    html.panel-dark body * {
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    html.panel-dark h1, html.panel-dark h2, html.panel-dark h3,
+    html.panel-dark h4, html.panel-dark h5, html.panel-dark h6,
+    html.panel-dark strong, html.panel-dark b {
+      color: var(--text) !important;
+    }
+    main, section, article, .container, .content, .layout, .wrapper, .page, .page-content {
+      background-color: var(--bg) !important;
+      color: var(--text) !important;
+    }
+    a { color: var(--accent); }
+    p, span, div, label { color: var(--text); }
+    input, select, textarea {
+      background-color: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button {
+      background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+      color: #0f172a;
+      border: 1px solid var(--border);
+    }
+    html.panel-dark button {
+      background: linear-gradient(135deg, #1f2a44, #182132);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    table { background: var(--panel); color: var(--text); }
+    th, td { border-color: var(--border); }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #2b364d; border-radius: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    /* Core surface overrides */
+    .MuiPaper-root,
+    .MuiPaper-elevation1,
+    .MuiPaper-outlined,
+    .MuiCard-root,
+    .MuiCardContent-root,
+    .MuiDrawer-paper,
+    .paper,
+    .card,
+    [class*="Paper"],
+    [class*="Card"] { background-color: var(--panel) !important; color: var(--text) !important; }
+    .card, .card-body, .card-header, .card-footer,
+    .panel, .panel-body, .panel-heading, .panel-footer,
+    .widget, .box {
+      background-color: var(--panel) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    .MuiAppBar-root { background-color: #0b0d11 !important; color: var(--text) !important; }
+    .MuiToolbar-root { color: var(--text) !important; }
+    .MuiListItem-root, .MuiListItem-button { color: var(--text) !important; }
+    .MuiListItem-button:hover { background-color: rgba(255,255,255,0.04) !important; }
+    .MuiTypography-root { color: var(--text) !important; }
+    .MuiTypography-colorTextSecondary, .muted { color: var(--muted) !important; }
+    /* Tables */
+    .MuiTable-root, .MuiTableBody-root, .MuiTableHead-root,
+    .MuiTableRow-root, .MuiTableCell-root { background-color: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
+    table, thead, tbody, tr, th, td { background-color: var(--panel) !important; color: var(--text) !important; border-color: var(--border) !important; }
+    /* Forms */
+    .MuiInputBase-input, .MuiInputBase-root, .MuiFormControl-root, .MuiSelect-root, .MuiSelect-select {
+      background-color: var(--surface) !important;
+      color: var(--text) !important;
+    }
+    .MuiOutlinedInput-notchedOutline, .MuiOutlinedInput-root, fieldset {
+      border-color: var(--border) !important;
+    }
+    .MuiFormLabel-root, .MuiInputLabel-root { color: var(--muted) !important; }
+    .MuiCheckbox-root, .MuiRadio-root, .MuiIconButton-root { color: var(--text) !important; }
+    /* Layout background fill */
+    .MuiContainer-root, .MuiGrid-root, .MuiBox-root { background-color: transparent !important; color: var(--text) !important; }
+    .MuiGrid-item { color: var(--text) !important; }
+    .MuiGrid-root > .MuiGrid-item, .grid, .row, .col, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6, .col-7, .col-8, .col-9, .col-10, .col-11, .col-12 {
+      background-color: transparent !important;
+      color: var(--text) !important;
+    }
+    /* Progress bars / dividers */
+    .MuiLinearProgress-root { background-color: var(--border) !important; }
+    .MuiLinearProgress-bar { background-color: var(--accent) !important; }
+    hr, .MuiDivider-root { border-color: var(--border) !important; background-color: var(--border) !important; }
+    /* Menu panel */
+    .MuiDrawer-paperAnchorLeft, nav, header { background-color: var(--bg) !important; }
+    .list-group-item,
+    .list-group-item-action {
+      background-color: var(--bg) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    .list-group-item-action:hover { background-color: rgba(0,0,0,0.04) !important; }
+    .list-group-item.active,
+    .list-group-item-action.active {
+      background-color: #e5e7f0 !important;
+      color: #0f172a !important;
+      border-color: #cbd5e1 !important;
+    }
+    html.panel-dark .list-group-item.active,
+    html.panel-dark .list-group-item-action.active {
+      background-color: #1f2a44 !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    /* Override app CSS variables for dark mode */
+    html.panel-dark {
+      --white: #0f141d;
+      --black: #e5e7eb;
+      --gray1: #1f2937;
+      --gray2: #374151;
+      --gray3: #4b5563;
+      --gray4: #9ca3af;
+      --gray5: #d1d5db;
+    }
+    /* Bootstrap .modal-content has hardcoded #fff */
+    html.panel-dark .modal-content {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark .modal-header {
+      background-color: #0f141d !important;
+      border-bottom-color: #1f2937 !important;
+    }
+    html.panel-dark .modal-body {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .modal-footer {
+      background-color: #0f141d !important;
+      border-top-color: #1f2937 !important;
+    }
+    html.panel-dark .modal-body *,
+    html.panel-dark .modal-content * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .modal-content a,
+    html.panel-dark .modal-body a {
+      color: var(--accent) !important;
+    }
+    /* info-modal (app-specific React modal) uses var(--white)/var(--black) */
+    html.panel-dark .info-modal {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal *,
+    html.panel-dark .info-modal__content,
+    html.panel-dark .info-modal__content * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal a {
+      color: var(--accent) !important;
+    }
+    html.panel-dark .info-modal__button--close svg path {
+      fill: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal-backdrop {
+      background-color: rgba(0,0,0,0.7) !important;
+    }
+    /* HTML dialog element has hardcoded #fff */
+    html.panel-dark dialog {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    .modal-backdrop, .modal-backdrop.show { background-color: rgba(0,0,0,0.65) !important; }
+    /* Catch-all for #modal-root portal */
+    html.panel-dark #modal-root > *,
+    html.panel-dark #modal-root div {
+      background-color: #0f141d !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark #modal-root a {
+      color: var(--accent) !important;
+    }
+    /* Generic fallbacks to squash stray white blocks */
+    .container-fluid, .content-block, .widget-block, .panel-block, .info-block, .card-block {
+      background-color: var(--panel) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    /* Explicit dark for dashboard/wallet panes */
+    .dashboard,
+    .dashboard *,
+    .wallet-container,
+    .wallet-container *,
+    .wallet-table,
+    .wallet-table *,
+    .wallet-table__header,
+    .wallet-table__body {
+      background-color: var(--panel) !important;
+      color: var(--text) !important;
+      border-color: var(--border) !important;
+    }
+    /* Logo visibility: default dark on light mode; unfiltered on dark mode */
+    .navbar-brand img,
+    .navbar-brand svg,
+    .navbar-brand path {
+      filter: invert(0.1) brightness(0.35) saturate(0.2);
+    }
+    html.panel-dark .navbar-brand img,
+    html.panel-dark .navbar-brand svg,
+    html.panel-dark .navbar-brand path {
+      filter: none;
+    }
+    /* Modal and toast readability */
+    .modal-content input,
+    .modal-content input::placeholder {
+      color: var(--text) !important;
+      background-color: var(--surface) !important;
+    }
+    .toast,
+    .toast-body,
+    .toast-header {
+      background-color: var(--surface) !important;
+      background-image: none !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    }
+    .toast * {
+      color: var(--text) !important;
+    }
+    .toast .close,
+    .toast button.close {
+      opacity: 0.9 !important;
+      color: var(--text) !important;
+    }
+    /* Explicit light-mode toast contrast */
+    html:not(.panel-dark) .toast,
+    html:not(.panel-dark) .toast-body,
+    html:not(.panel-dark) .toast-header,
+    html:not(.panel-dark) .toast * {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd5e1 !important;
+    }
+    /* Toastify overrides (stronger selectors) */
+    .Toastify__toast {
+      background-color: var(--surface) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12) !important;
+    }
+    .Toastify__toast-body,
+    .Toastify__toast-body * {
+      color: var(--text) !important;
+    }
+    .Toastify__toast .Toastify__close-button {
+      color: var(--text) !important;
+      opacity: 0.9 !important;
+    }
+    html:not(.panel-dark) .Toastify__toast,
+    html:not(.panel-dark) .Toastify__toast-body,
+    html:not(.panel-dark) .Toastify__toast-body *,
+    html:not(.panel-dark) .Toastify__toast .Toastify__close-button {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd5e1 !important;
+    }
+    #theme-toggle {
+      position: absolute;
+      top: 10px;
+      right: 16px;
+      z-index: 9999;
+      padding: 6px 10px;
+      border-radius: 14px;
+      font-size: 12px;
+      line-height: 1;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.12s ease, background 0.2s ease, color 0.2s ease;
+    }
+    #theme-toggle:hover { transform: translateY(-1px); }
+    #theme-toggle .theme-icon { font-size: 14px; }
+  </style>
+  <script>
+    (function() {
+      var cls = "panel-dark";
+      var key = "panel-theme";
+      var btn;
+      function isDark() { return document.documentElement.classList.contains(cls); }
+      function setTheme(next) {
+        if (next === "dark") {
+          document.documentElement.classList.add(cls);
+        } else {
+          document.documentElement.classList.remove(cls);
+        }
+        try { localStorage.setItem(key, next); } catch (e) {}
+        updateButton(next);
+      }
+      function updateButton(theme) {
+        if (!btn) return;
+        var dark = theme === "dark";
+        btn.innerHTML = '<span class="theme-icon">' + (dark ? "&#9728;" : "&#9790;") + "</span>" + (dark ? "Light" : "Dark") + " mode";
+      }
+      function buildButton() {
+        btn = document.createElement("button");
+        btn.id = "theme-toggle";
+        btn.type = "button";
+        btn.setAttribute("aria-label", "Toggle dark mode");
+        btn.addEventListener("click", function() {
+          setTheme(isDark() ? "light" : "dark");
+        });
+        updateButton(isDark() ? "dark" : "light");
+        return btn;
+      }
+      function mount() {
+        var b = buildButton();
+        var header = document.querySelector("header, .MuiAppBar-root, nav, .navbar");
+        if (header) {
+          var pos = getComputedStyle(header).position;
+          if (pos === "static" || !pos) {
+            header.style.position = "relative";
+          }
+          b.style.position = "absolute";
+          b.style.top = "10px";
+          b.style.right = "16px";
+          header.appendChild(b);
+        } else {
+          b.style.position = "fixed";
+          b.style.top = "10px";
+          b.style.right = "16px";
+          document.body.appendChild(b);
+        }
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", mount);
+      } else {
+        mount();
+      }
+    })();
+  </script>
+</head>
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+  <div id="modal-root"></div>
+  <script>
+!function(l){function e(e){for(var r,t,n=e[0],o=e[1],u=e[2],f=0,i=[];f<n.length;f++)t=n[f],Object.prototype.hasOwnProperty.call(c,t)&&c[t]&&i.push(c[t][0]),c[t]=0;for(r in o)Object.prototype.hasOwnProperty.call(o,r)&&(l[r]=o[r]);for(s&&s(e);i.length;)i.shift()();return p.push.apply(p,u||[]),a()}function a(){for(var e,r=0;r<p.length;r++){for(var t=p[r],n=!0,o=1;o<t.length;o++){var u=t[o];0!==c[u]&&(n=!1)}n&&(p.splice(r--,1),e=f(f.s=t[0]))}return e}var t={},c={1:0},p=[];function f(e){if(t[e])return t[e].exports;var r=t[e]={i:e,l:!1,exports:{}};return l[e].call(r.exports,r,r.exports,f),r.l=!0,r.exports}f.m=l,f.c=t,f.d=function(e,r,t){f.o(e,r)||Object.defineProperty(e,r,{enumerable:!0,get:t})},f.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},f.t=function(r,e){if(1&e&&(r=f(r)),8&e)return r;if(4&e&&"object"==typeof r&&r&&r.__esModule)return r;var t=Object.create(null);if(f.r(t),Object.defineProperty(t,"default",{enumerable:!0,value:r}),2&e&&"string"!=typeof r)for(var n in r)f.d(t,n,function(e){return r[e]}.bind(null,n));return t},f.n=function(e){var r=e&&e.__esModule?function(){return e.default}:function(){return e};return f.d(r,"a",r),r},f.o=function(e,r){return Object.prototype.hasOwnProperty.call(e,r)},f.p="/";var r=this["webpackJsonpergo-node-interface"]=this["webpackJsonpergo-node-interface"]||[],n=r.push.bind(r);r.push=e,r=r.slice();for(var o=0;o<r.length;o++)e(r[o]);var s=n;a()}([]);
+  </script>
+  <script src="/static/js/2.82289ad5.chunk.js"></script>
+  <script src="/static/js/main.4a62f34b.chunk.js"></script>
+  <style id="dark-modal-fix">
+    /* Last-loaded overrides — wins cascade over all chunk CSS */
+    html.panel-dark {
+      --white: #0f141d !important;
+      --black: #e5e7eb !important;
+    }
+    /* Bootstrap modal — shared styling for all modals */
+    html.panel-dark .modal-content {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #1f2937 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
+      overflow: hidden !important;
+    }
+    html.panel-dark .modal-header {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      border-bottom: 1px solid #1f2937 !important;
+      padding: 1.2rem 1.5rem !important;
+    }
+    html.panel-dark .modal-body {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      color: #e5e7eb !important;
+      padding: 1.2rem 1.5rem !important;
+    }
+    html.panel-dark .modal-footer {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      border-top: 1px solid #1f2937 !important;
+      padding: 1rem 1.5rem !important;
+    }
+    html.panel-dark .modal-content *,
+    html.panel-dark .modal-body *,
+    html.panel-dark .modal-header *,
+    html.panel-dark .modal-footer * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .modal-content a,
+    html.panel-dark .modal-body a {
+      color: #66d9ef !important;
+    }
+    /* Modal title styling */
+    html.panel-dark .modal-title,
+    html.panel-dark .modal-styling-title,
+    html.panel-dark .modal-header h4,
+    html.panel-dark .modal-header h5 {
+      color: #e5e7eb !important;
+      font-weight: 600 !important;
+    }
+    /* Modal inputs (API key, wallet password) */
+    html.panel-dark .modal-content input,
+    html.panel-dark .modal-content input[type="text"],
+    html.panel-dark .modal-content input[type="password"],
+    html.panel-dark .modal-body input,
+    html.panel-dark .password-input,
+    html.panel-dark .wallet-password-input {
+      background-color: #0b0d11 !important;
+      background: #0b0d11 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #374151 !important;
+      border-radius: 8px !important;
+      padding: 8px 12px !important;
+    }
+    html.panel-dark .modal-content input::placeholder,
+    html.panel-dark .modal-body input::placeholder {
+      color: #6b7280 !important;
+    }
+    /* Modal buttons */
+    html.panel-dark .modal-footer .btn,
+    html.panel-dark .modal-footer button,
+    html.panel-dark .modal-content .btn,
+    html.panel-dark .modal-body button {
+      background: linear-gradient(135deg, #1f2a44, #182132) !important;
+      color: #e5e7eb !important;
+      border: 1px solid #374151 !important;
+      border-radius: 8px !important;
+      padding: 6px 16px !important;
+      cursor: pointer !important;
+    }
+    html.panel-dark .modal-footer .btn:hover,
+    html.panel-dark .modal-footer button:hover {
+      background: linear-gradient(135deg, #2a3654, #1e2940) !important;
+    }
+    /* Close button (X) in modals */
+    html.panel-dark .modal-header .close,
+    html.panel-dark .modal-header button.close,
+    html.panel-dark .modal__button--close {
+      color: #9ca3af !important;
+      opacity: 0.9 !important;
+      text-shadow: none !important;
+      background: none !important;
+      border: none !important;
+    }
+    html.panel-dark .modal-header .close:hover {
+      color: #e5e7eb !important;
+    }
+    /* info-modal (success/congratulations/burn modals) */
+    html.panel-dark .info-modal {
+      background-color: #111827 !important;
+      background: #111827 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #1f2937 !important;
+      border-radius: 16px !important;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
+    }
+    html.panel-dark .info-modal * {
+      color: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal a {
+      color: #66d9ef !important;
+    }
+    html.panel-dark .info-modal__button--close svg path {
+      fill: #9ca3af !important;
+    }
+    html.panel-dark .info-modal__button--close:hover svg path {
+      fill: #e5e7eb !important;
+    }
+    html.panel-dark .info-modal button,
+    html.panel-dark .info-modal .btn {
+      background: linear-gradient(135deg, #1f2a44, #182132) !important;
+      color: #e5e7eb !important;
+      border: 1px solid #374151 !important;
+      border-radius: 8px !important;
+    }
+    /* HTML dialog element */
+    html.panel-dark dialog {
+      background-color: #111827 !important;
+      color: #e5e7eb !important;
+      border: 1px solid #1f2937 !important;
+      border-radius: 16px !important;
+    }
+    /* Wallet table dark mode */
+    html.panel-dark .wallet-table {
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark .wallet-table__header {
+      background: #0f141d !important;
+      border-bottom-color: #1f2937 !important;
+    }
+    html.panel-dark .wallet-table__item {
+      background: #111827 !important;
+    }
+    html.panel-dark .wallet-table__title,
+    html.panel-dark .wallet-table-item-body,
+    html.panel-dark .wallet-table-item-header__title {
+      color: #e5e7eb !important;
+    }
+    /* #modal-root catch-all */
+    html.panel-dark #modal-root > *,
+    html.panel-dark #modal-root div {
+      background-color: #111827 !important;
+      color: #e5e7eb !important;
+      border-color: #1f2937 !important;
+    }
+    html.panel-dark #modal-root a {
+      color: #66d9ef !important;
+    }
+    html.panel-dark .modal-backdrop.show {
+      opacity: 0.7 !important;
+    }
+  </style>
+</body>
+</html>

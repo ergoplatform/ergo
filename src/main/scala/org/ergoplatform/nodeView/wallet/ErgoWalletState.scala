@@ -121,7 +121,7 @@ case class ErgoWalletState(
     */
   def getBoxesToSpend: Seq[TrackedBox] = {
     require(walletVars.publicKeyAddresses.nonEmpty, "No public keys in the prover to extract change address from")
-    (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ offChainRegistry.offChainBoxes).distinct
+    (registry.walletUnspentBoxes(maxInputsToUse * BoxSelector.ScanDepthFactor) ++ offChainRegistry.walletOffChainBoxes).distinct
   }
 
 }

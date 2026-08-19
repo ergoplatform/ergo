@@ -433,4 +433,36 @@ class ErgoWalletServiceSpec
     }
   }
 
+
+  property("wallet-related APIs should not use boxes belonging to external scans only") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val customScanId = ScanId @@ 42.shortValue()
+        val emptyTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
+        val walletBox =
+          TrackedBox(emptyTx, creationOutIndex = 0, None, testBox(1000000000L, TrueTree, 0), Set(PaymentsScanId))
+        val customScanBox =
+          TrackedBox(emptyTx, creationOutIndex = 1, None, testBox(2000000000L, TrueTree, 0, boxIndex = 1), Set(customScanId))
+        val sharedBox =
+          TrackedBox(emptyTx, creationOutIndex = 2, None, testBox(3000000000L, TrueTree, 0, boxIndex = 2), Set(PaymentsScanId, customScanId))
+
+        val offChainRegistry =
+          OffChainRegistry.empty.copy(offChainBoxes = Seq(walletBox, customScanBox, sharedBox))
+        val walletState = initialState(store, versionedStore).copy(offChainRegistry = offChainRegistry)
+        val walletService = new ErgoWalletServiceImpl(settings)
+
+        // boxes the wallet can spend must not include boxes tracked by external scans only
+        walletState.getBoxesToSpend.map(_.boxId) should contain theSameElementsAs Seq(walletBox.boxId, sharedBox.boxId)
+
+        // /wallet/boxes/unspent with considerUnconfirmed must not return them either
+        val unspent = walletService.getWalletBoxes(walletState, unspentOnly = true, considerUnconfirmed = true)
+        unspent.map(_.trackedBox.boxId) should contain theSameElementsAs Seq(walletBox.boxId, sharedBox.boxId)
+
+        // while scan-related API still sees the box of the external scan
+        val scanBoxes = walletService.getScanUnspentBoxes(walletState, customScanId, considerUnconfirmed = true, 0, Int.MaxValue)
+        scanBoxes.map(_.trackedBox.boxId) should contain theSameElementsAs Seq(customScanBox.boxId, sharedBox.boxId)
+      }
+    }
+  }
+
 }

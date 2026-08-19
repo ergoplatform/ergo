@@ -403,7 +403,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       val confirmed = state.registry.walletUnspentBoxes(state.maxInputsToUse * BoxSelector.ScanDepthFactor)
       if (considerUnconfirmed) {
         // We filter out spent boxes in the same way as wallet does when assembling a transaction
-        (confirmed ++ state.offChainRegistry.offChainBoxes).filter(state.walletFilter)
+        (confirmed ++ state.offChainRegistry.walletOffChainBoxes).filter(state.walletFilter)
       } else {
         confirmed
       }
@@ -411,7 +411,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       val confirmed = state.registry.walletConfirmedBoxes()
       if (considerUnconfirmed) {
         // Just adding boxes created off-chain
-        confirmed ++ state.offChainRegistry.offChainBoxes
+        confirmed ++ state.offChainRegistry.walletOffChainBoxes
       } else {
         confirmed
       }

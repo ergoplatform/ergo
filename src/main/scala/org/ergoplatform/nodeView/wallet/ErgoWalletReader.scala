@@ -100,8 +100,28 @@ trait ErgoWalletReader extends NodeViewComponent {
   def generateTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true))
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true, reserveInputs = false))
       .mapTo[Try[ErgoTransaction]]
+
+  /**
+    * Generate signed transaction which is going to be broadcast right away. Unlike
+    * `generateTransaction`, inputs of the transaction are reserved, so consequent
+    * generation requests will not select them and can not produce a double-spend.
+    * If the transaction is not sent to the mempool afterwards, the reservation
+    * must be released via `releaseReservedInputs`
+    */
+  def generateTransactionForSend(requests: Seq[TransactionGenerationRequest],
+                                 inputsRaw: Seq[String] = Seq.empty,
+                                 dataInputsRaw: Seq[String] = Seq.empty): Future[Try[ErgoTransaction]] =
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = true, reserveInputs = true))
+      .mapTo[Try[ErgoTransaction]]
+
+  /**
+    * Release inputs reserved by `generateTransactionForSend`, to be called when the
+    * generated transaction is not sent to the mempool (e.g. it failed verification)
+    */
+  def releaseReservedInputs(txId: ModifierId): Unit =
+    walletActor ! ReleaseReservedInputs(txId)
 
   def generateCommitmentsFor(unsignedErgoTransaction: UnsignedErgoTransaction,
                              externalSecretsOpt: Option[Seq[ExternalSecret]],
@@ -114,7 +134,8 @@ trait ErgoWalletReader extends NodeViewComponent {
   def generateUnsignedTransaction(requests: Seq[TransactionGenerationRequest],
                           inputsRaw: Seq[String] = Seq.empty,
                           dataInputsRaw: Seq[String] = Seq.empty): Future[Try[UnsignedErgoTransaction]] =
-    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = false)).mapTo[Try[UnsignedErgoTransaction]]
+    (walletActor ? GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign = false, reserveInputs = false))
+      .mapTo[Try[UnsignedErgoTransaction]]
 
 
   def signTransaction(tx: UnsignedErgoTransaction,

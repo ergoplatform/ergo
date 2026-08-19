@@ -6,12 +6,12 @@ import org.ergoplatform._
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.nodeView.wallet.ErgoWalletState.FilterFn
+import org.ergoplatform.nodeView.wallet.ErgoWalletState.{FilterFn, ReservedInputs}
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.Try
 
@@ -28,8 +28,15 @@ case class ErgoWalletState(
     parameters: Parameters,
     maxInputsToUse: Int,
     error: Option[String] = None,
-    rescanInProgress: Boolean
+    rescanInProgress: Boolean,
+    // inputs of generated transactions not known to be in the mempool yet, txId -> reservation;
+    // a reservation is converted into normal off-chain state when the transaction is scanned
+    // off-chain, and removed when the transaction is rejected by the mempool
+    reservedInputs: Map[ModifierId, ReservedInputs] = Map.empty
   ) extends ScorexLogging {
+
+  private lazy val reservedBoxIds: Set[IdUtils.EncodedBoxId] =
+    reservedInputs.values.flatMap(_.boxIds).toSet
 
   /**
     * This filter is selecting boxes which are onchain and not spent offchain yet or created offchain
@@ -44,6 +51,11 @@ case class ErgoWalletState(
     }
 
     val bid = trackedBox.box.id
+
+    // check that box is not an input of a generated transaction not in the mempool yet
+    def notReserved: Boolean = {
+      !reservedBoxIds.contains(IdUtils.EncodedBoxId @@@ trackedBox.boxId)
+    }
 
     // double-check that box is not spent yet by inputs of mempool transactions
     def notInInputs: Boolean = {
@@ -60,7 +72,7 @@ case class ErgoWalletState(
       }
     }
 
-    preStatus && notInInputs && inOutputs
+    preStatus && notReserved && notInInputs && inOutputs
   }
 
   // Secret is set in form of keystore file of testMnemonic in the config
@@ -127,6 +139,15 @@ case class ErgoWalletState(
 }
 
 object ErgoWalletState {
+
+  /**
+    * Inputs reserved by a generated transaction until the transaction is known to the
+    * mempool
+    *
+    * @param height - wallet height at the moment of reservation
+    * @param boxIds - ids of reserved input boxes
+    */
+  final case class ReservedInputs(height: Height, boxIds: Seq[IdUtils.EncodedBoxId])
 
   private type FilterFn = TrackedBox => Boolean
 

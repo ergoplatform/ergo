@@ -1,7 +1,8 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FailedTransaction
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletDigestSerializer}
@@ -91,6 +92,99 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         tx3.inputs.foreach { in =>
           tx2.inputs.exists(tx2In => tx2In.boxId sameElements in.boxId) shouldBe false
         }
+      }
+    }
+  }
+
+  property("do not select inputs reserved by a previous generation request") {
+    withFixture { implicit w =>
+      val address = getPublicKeys.head
+      val genesisBlock = makeGenesisBlock(address.pubkey)
+      applyBlock(genesisBlock) shouldBe 'success
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
+      val confirmedBalance = eventually {
+        val balance = getConfirmedBalances.walletBalance
+        balance should be > 0L
+        balance
+      }
+      // spend the whole confirmed balance, so a second request can not pick other on-chain boxes
+      val req = Seq(PaymentRequest(address, confirmedBalance, Array.empty, Map.empty))
+      val tx1 = await(wallet.generateTransactionForSend(req)).get
+      // immediate second request, no off-chain scan or mempool update happened in between;
+      // without input reservation it would select the same inputs as tx1 (double-spend),
+      // with inputs of tx1 reserved there is nothing to spend until tx1 is in the mempool
+      val tx2Try = await(wallet.generateTransactionForSend(req))
+      tx2Try shouldBe 'failure
+      // rejection of the transaction by the mempool releases the reservation
+      w.actorSystem.eventStream.publish(
+        FailedTransaction(UnconfirmedTransaction(tx1, source = None), new Exception("rejected"))
+      )
+      val tx2 = eventually {
+        await(wallet.generateTransactionForSend(req)).get
+      }
+      // releasing the reservation explicitly (as the send endpoint does when a generated
+      // transaction fails verification) also makes the inputs available again
+      await(wallet.generateTransactionForSend(req)) shouldBe 'failure
+      wallet.releaseReservedInputs(tx2.id)
+      val tx3 = eventually {
+        await(wallet.generateTransactionForSend(req)).get
+      }
+      tx3.inputs.foreach { in =>
+        tx1.inputs.exists(_.boxId sameElements in.boxId) shouldBe true
+      }
+      // reservation is converted into normal off-chain state when the transaction
+      // gets into the mempool
+      wallet.scanOffchain(tx3)
+      eventually {
+        getBalancesWithUnconfirmed.walletBalance shouldBe confirmedBalance
+      }
+    }
+  }
+
+  property("input reservations survive a block and are pruned after TTL") {
+    withFixture { implicit w =>
+      val address = getPublicKeys.head
+      val genesisBlock = makeGenesisBlock(address.pubkey)
+      applyBlock(genesisBlock) shouldBe 'success
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
+      eventually {
+        getConfirmedBalances.walletBalance should be > 0L
+      }
+
+      // seed a chain of anyone-can-spend boxes for building filler blocks
+      // which do not touch wallet boxes
+      val seedTx = await(wallet.generateTransaction(
+        Seq(PaymentRequest(Pay2SAddress(TrueTree), MinBoxValue, Array.empty, Map.empty))
+      )).get
+      val seedBlock = makeNextBlock(getUtxoState, Seq(seedTx))
+      applyBlock(seedBlock) shouldBe 'success
+      val confirmedBalance = eventually {
+        getConfirmedBalances.height shouldBe seedBlock.height
+        getConfirmedBalances.walletBalance
+      }
+
+      var fillerBox = seedTx.outputs.find(_.ergoTree.bytes sameElements TrueTree.bytes).get
+      def applyFillerBlock(): Int = {
+        val fillerTx = makeTx(Seq(fillerBox), emptyProverResult, fillerBox.value, TrueTree)
+        fillerBox = fillerTx.outputs.head
+        val block = makeNextBlock(getUtxoState, Seq(fillerTx))
+        applyBlock(block) shouldBe 'success
+        block.height
+      }
+
+      val req = Seq(PaymentRequest(address, confirmedBalance, Array.empty, Map.empty))
+      await(wallet.generateTransactionForSend(req)) shouldBe 'success
+      // a fresh reservation is not dropped by a block boundary, so send requests being
+      // verified or broadcast when a block arrives stay protected
+      val height1 = applyFillerBlock()
+      eventually {
+        getConfirmedBalances.height shouldBe height1
+        await(wallet.generateTransactionForSend(req)) shouldBe 'failure
+      }
+      // a reservation whose transaction never got to the mempool is pruned after TTL
+      (0 until ErgoWalletActor.ReservedInputsTtlBlocks).foreach(_ => applyFillerBlock())
+      eventually {
+        await(wallet.generateTransactionForSend(req)) shouldBe 'success
       }
     }
   }

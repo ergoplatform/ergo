@@ -53,7 +53,7 @@ case class IndexedToken(tokenId: ModifierId,
       toRemove += id // all segments empty after rollback, delete parent
       log.info(s"Removing token $tokenId because no more boxes are associated with it")
     } else
-      history.historyStorage.insertExtraTry(Array.empty, Array(this)).get // save the changes made to this address
+      history.historyStorage.insertExtra(Array.empty, Array(this)) // save the changes made to this address
 
     toRemove.toArray
   }

@@ -13,11 +13,13 @@ import org.ergoplatform.network.message.MessageSerializer
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import org.ergoplatform.settings.ScorexSettings
 import scorex.util.ScorexLogging
+import scorex.util.serialization.VLQByteBufferReader
 
+import java.nio.{BufferUnderflowException, ByteBuffer}
 import scala.annotation.tailrec
 import scala.collection.immutable.TreeMap
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class PeerConnectionHandler(scorexSettings: ScorexSettings,
                             networkControllerRef: ActorRef,
@@ -91,15 +93,38 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
   private def receiveAndHandleHandshake(handler: Handshake => Unit): Receive = {
     case Received(data) =>
-      HandshakeSerializer.parseBytesTry(data.toArray) match {
+      val candidate = chunksBuffer ++ data
+      val reader = new VLQByteBufferReader(
+        ByteBuffer.wrap(candidate.take(HandshakeSerializer.maxHandshakeSize).toArray)
+      ) {
+        override def getBytes(size: Int): Array[Byte] = {
+          if (size > remaining) {
+            throw new BufferUnderflowException()
+          }
+          super.getBytes(size)
+        }
+      }
+
+      Try(HandshakeSerializer.parse(reader)) match {
         case Success(handshake) =>
+          chunksBuffer = candidate.drop(reader.position)
           if (handshake.peerSpec.protocolVersion < Eip37ForkVersion) {
             // peers not suporting EIP-37 hard-fork are stuck on another chain
             log.info(s"Peer of version < 4.0.100 sent handshake $handshake")
             banPeer()
           } else {
             handler(handshake)
+            processRemoteData()
           }
+
+        case Failure(t) if candidate.length >= HandshakeSerializer.maxHandshakeSize =>
+          log.info(s"Handshake from $connectionId reached the size limit", t)
+          context become closing
+          self ! CloseConnection
+
+        case Failure(_: BufferUnderflowException) =>
+          chunksBuffer = candidate
+          connection ! ResumeReading
 
         case Failure(t) =>
           log.info(s"Error during parsing a handshake: ${t.getMessage}", t)
@@ -124,6 +149,9 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
       remoteInterface orElse
       closeCommands orElse
       reportStrangeInput
+
+  private def closing: Receive =
+    closeCommands orElse reportStrangeInput
 
   private def closeCommands: Receive = {
     case CloseConnection =>
@@ -192,32 +220,31 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
     case Received(data) =>
 
       chunksBuffer ++= data
-
-      @tailrec
-      def process(): Unit = {
-        messageSerializer.deserialize(chunksBuffer, selfPeer) match {
-          case Success(Some(message)) =>
-            log.debug("Received message " + message.spec + " from " + connectionId)
-            networkControllerRef ! message
-            chunksBuffer = chunksBuffer.drop(message.messageLength)
-            process()
-          case Success(None) =>
-          case Failure(e) =>
-            e match {
-              //peer is doing bad things, ban it
-              case MaliciousBehaviorException(msg) =>
-                log.warn(s"Banning peer for malicious behaviour($msg): ${connectionId.toString}")
-                //peer will be added to the blacklist and the network controller will send CloseConnection
-                networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
-              //non-malicious corruptions
-              case _ =>
-                log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}")
-            }
-        }
-      }
-
-      process()
+      processRemoteData()
       connection ! ResumeReading
+  }
+
+  @tailrec
+  private def processRemoteData(): Unit = {
+    messageSerializer.deserialize(chunksBuffer, selfPeer) match {
+      case Success(Some(message)) =>
+        log.debug("Received message " + message.spec + " from " + connectionId)
+        networkControllerRef ! message
+        chunksBuffer = chunksBuffer.drop(message.messageLength)
+        processRemoteData()
+      case Success(None) =>
+      case Failure(e) =>
+        e match {
+          //peer is doing bad things, ban it
+          case MaliciousBehaviorException(msg) =>
+            log.warn(s"Banning peer for malicious behaviour($msg): ${connectionId.toString}")
+            //peer will be added to the blacklist and the network controller will send CloseConnection
+            networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
+          //non-malicious corruptions
+          case _ =>
+            log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}")
+        }
+    }
   }
 
   private def reportStrangeInput: Receive = {

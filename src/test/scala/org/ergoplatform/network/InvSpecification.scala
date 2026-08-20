@@ -74,4 +74,14 @@ class InvSpecification extends ErgoCorePropertyTest {
     checkSum shouldBe hash.Blake2b256(Array(modifierTypeId, headersCount.toByte) ++ headerId).take(4)
   }
 
+  property("inv parser rejects trailing payload bytes") {
+    val invSpec = InvSpec
+    val headerId = Array.fill(16)(1: Byte) ++ Array.fill(16)(2: Byte)
+    val headerIdEncoded = ModifierId @@ Base16.encode(headerId)
+    val invData = InvData(Header.modifierTypeId, Seq(headerIdEncoded))
+    val payload = invSpec.toBytes(invData)
+
+    invSpec.parseBytesTry(payload ++ Array(0: Byte)).isFailure shouldBe true
+  }
+
 }

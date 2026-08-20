@@ -121,11 +121,27 @@ class UtilsApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject raw public keys with trailing bytes" in {
+    val raw = Base16.encode(p2pkaddress.contentBytes)
+
+    Get(s"$prefix/rawToAddress/${raw}00") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "derive address from ErgoTree (p2pk)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2pkaddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+    }
+  }
+
+  it should "reject ErgoTree bytes with trailing data" in {
+    val et = Base16.encode(treeSerializer.serializeErgoTree(p2pkaddress.script))
+
+    Get(s"$prefix/ergoTreeToAddress/${et}00") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

@@ -274,6 +274,22 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: rejects header bytes with trailing payload") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      val olderChain = chain.take(1001)
+      val header = olderChain.last
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> (header.bytes ++ Array(0: Byte))))
+      val modSpec = ModifiersSpec
+      synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+      eventually {
+        deliveryTracker.status(header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: apply continuation header from syncV2 and download its block") {
     withFixture2 { ctx =>
       import ctx._

@@ -36,6 +36,17 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val peerManagerProbe = TestProbe()
 
+  it should "reject connect requests with invalid ports" in {
+    val networkControllerProbe = TestProbe()
+    val route = Route.seal(ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route)
+
+    Post("/peers/connect", Json.fromString("127.0.0.1:70000")) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    networkControllerProbe.expectNoMessage()
+  }
+
   it should "return all peers" in {
     forAll(connectedPeerGen(Actor.noSender)) { peer =>
       val networkControllerProbe = TestProbe()

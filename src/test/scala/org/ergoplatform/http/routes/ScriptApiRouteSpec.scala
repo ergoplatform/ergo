@@ -1,6 +1,7 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -13,6 +14,7 @@ import org.ergoplatform.http.api.ScriptApiRoute
 import org.ergoplatform.settings.Constants.TrueTree
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant
@@ -32,6 +34,15 @@ class ScriptApiRouteSpec extends AnyFlatSpec
   val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScriptApiRoute(digestReadersRef, settings).route
+  private val apiKey = "test-api-key"
+  private val apiKeyHeader = RawHeader("api_key", apiKey)
+  private val protectedSettings = settings.copy(
+    scorexSettings = settings.scorexSettings.copy(
+      restApi = settings.scorexSettings.restApi.copy(apiKeyHash = Some(Base16.encode(Blake2b256(apiKey))))
+    )
+  )
+  private val protectedRoute: Route = ScriptApiRoute(digestReadersRef, protectedSettings).route
+  private val sealedProtectedRoute: Route = Route.seal(protectedRoute)
 
   val settingsWithAuth: ErgoSettings = settings.copy(
     scorexSettings = settings.scorexSettings.copy(
@@ -74,6 +85,17 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
   }
 
+  it should "require API key for script execution" in {
+    val suffix = "/executeWithContext"
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val req = scala.io.Source.fromInputStream(stream).getLines().mkString("\n")
+    val json = io.circe.parser.parse(req)
+
+    Post(prefix + suffix, json) ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+  }
+
   it should "generate valid P2SAddress form source" in {
     val suffix = "/p2sAddress"
     val assertion = (json: Json) => {
@@ -86,6 +108,19 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       check(assertion(responseAs[Json]))
   }
 
+  it should "require API key for P2SAddress generation" in {
+    val suffix = "/p2sAddress"
+    val request = Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)
+
+    Post(prefix + suffix, request) ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+
+    Post(prefix + suffix, request).withHeaders(apiKeyHeader) ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
   it should "generate valid P2SHAddress form source" in {
     val suffix = "/p2shAddress"
     val assertion = (json: Json) => {
@@ -96,6 +131,19 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     Post(prefix + suffix, Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> route ~> check(assertion(responseAs[Json]))
     Post(prefix + suffix, Json.obj("source" -> scriptSourceSigProp.asJson, "treeVersion" -> 0.asJson)) ~> route ~>
       check(assertion(responseAs[Json]))
+  }
+
+  it should "require API key for P2SHAddress generation" in {
+    val suffix = "/p2shAddress"
+    val request = Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)
+
+    Post(prefix + suffix, request) ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+
+    Post(prefix + suffix, request).withHeaders(apiKeyHeader) ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
   }
 
   it should "get through address <-> ergoTree round-trip" in {
@@ -124,6 +172,18 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     val p2s = addressEncoder.toString(addressEncoder.fromProposition(tree).get)
     p2s shouldBe "Ms7smJwLGbUAjuWQ"
     Get(s"$prefix/$suffix/$p2s") ~> route ~> check(assertion(responseAs[Json], p2s))
+  }
+
+  it should "keep address conversion endpoints public when API key is configured" in {
+    val p2pk = "3WvsT2Gm4EpsM9Pg18PdY6XyhNNMqXDsvJTbbf6ihLvAmSb7u5RN"
+
+    Get(s"$prefix/addressToTree/$p2pk") ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Get(s"$prefix/addressToBytes/$p2pk") ~> sealedProtectedRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
   }
 
   it should "address <-> bytes roundtrip via addressToBytes" in {

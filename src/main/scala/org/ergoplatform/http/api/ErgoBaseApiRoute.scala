@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome._
 import scorex.util.encode.Base16
 import sigma.ast.ErgoTree
-import sigma.serialization.ErgoTreeSerializer
+import sigma.serialization.{ErgoTreeSerializer, SigmaSerializer}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
@@ -78,7 +78,18 @@ trait ErgoBaseApiRoute extends ApiRoute with ApiCodecs {
   private def handleErgoTree(value: String): Directive1[ErgoTree] = {
     Base16.decode(fromJsonOrPlain(value)) match {
       case Success(bytes) =>
-        provide(ErgoTreeSerializer.DefaultSerializer.deserializeErgoTree(bytes))
+        Try {
+          val reader = SigmaSerializer.startReader(bytes)
+          val tree = ErgoTreeSerializer.DefaultSerializer
+            .deserializeErgoTree(reader, SigmaSerializer.MaxPropositionSize)
+          if (reader.position != bytes.length) {
+            throw new IllegalArgumentException("ErgoTree bytes contain trailing data")
+          }
+          tree
+        } match {
+          case Success(tree) => provide(tree)
+          case Failure(e)    => reject(ValidationRejection(e.getMessage))
+        }
       case _ => reject(ValidationRejection("Invalid hex data"))
     }
 

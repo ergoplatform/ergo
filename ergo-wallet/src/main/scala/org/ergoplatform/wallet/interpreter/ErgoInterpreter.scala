@@ -40,7 +40,7 @@ class ErgoInterpreter(params: BlockchainParameters)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    val storageFee = params.storageFeeFactor * box.bytes.length
+    val storageFee = params.storageFeeFactor.toLong * box.bytes.length
 
     val storageFeeNotCovered = box.value - storageFee <= 0
     lazy val correctCreationHeight = output.creationHeight == currentHeight

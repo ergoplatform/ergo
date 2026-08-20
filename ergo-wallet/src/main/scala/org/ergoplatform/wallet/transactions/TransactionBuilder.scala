@@ -17,6 +17,9 @@ import scala.util.Try
 
 object TransactionBuilder {
 
+  def sumLongExact(values: Iterable[Long]): Long =
+    values.foldLeft(0L)(java7.compat.Math.addExact(_, _))
+
   /**
     * @param recipientAddress - payment recipient address
     * @param transferAmt - amount of ERGs to transfer
@@ -170,7 +173,7 @@ object TransactionBuilder {
     require(outputCandidates.size <= Short.MaxValue,
       s"too many outputCandidates - ${outputCandidates.size} (max ${Short.MaxValue})")
     require(outputCandidates.forall(_.value >= 0), s"outputCandidate.value must be >= 0")
-    val outputSumTry = Try(outputCandidates.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
+    val outputSumTry = Try(sumLongExact(outputCandidates.map(_.value)))
     require(outputSumTry.isSuccess, s"Sum of transaction output values should not exceed ${Long.MaxValue}")
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
   }
@@ -208,10 +211,10 @@ object TransactionBuilder {
 
     val feeAmount = createFeeOutput.getOrElse(0L)
     require(createFeeOutput.fold(true)(_ > 0), s"expected fee amount > 0, got $feeAmount")
-    val inputTotal  = inputs.map(_.value).sum
-    val outputSum   = outputCandidates.map(_.value).sum
-    val outputTotal = outputSum + feeAmount
-    val changeAmt   = inputTotal - outputTotal
+    val inputTotal  = sumLongExact(inputs.map(_.value))
+    val outputSum   = sumLongExact(outputCandidates.map(_.value))
+    val outputTotal = java7.compat.Math.addExact(outputSum, feeAmount)
+    val changeAmt   = java7.compat.Math.subtractExact(inputTotal, outputTotal)
     require(changeAmt >= 0, s"total inputs $inputTotal is less then total outputs $outputTotal")
 
     val firstInputBoxId = bytesToId(inputs(0).id)

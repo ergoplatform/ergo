@@ -274,6 +274,40 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("it should reject unsigned transaction requests whose total ERG value overflows") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+
+        val encodedBoxes =
+          boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
+            .map { box =>
+              Base16.encode(ErgoBoxSerializer.toBytes(box))
+            }
+        val requests = Seq(
+          PaymentRequest(pks.head, Long.MaxValue, Array.empty, Map.empty),
+          PaymentRequest(pks.head, Long.MaxValue, Array.empty, Map.empty)
+        )
+        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
+
+        generateUnsignedTransaction(wState, boxSelector, requests, inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty).isFailure shouldBe true
+      }
+    }
+  }
+
+  property("it should reject invalid collect boxes targets") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val boxSelector = new ReplaceCompactCollectBoxSelector(settings.walletSettings.maxInputs, settings.walletSettings.optimalInputs, None)
+
+        walletService.collectBoxes(wState, boxSelector, targetBalance = -1L, targetAssets = Map.empty).isFailure shouldBe true
+        walletService.collectBoxes(wState, boxSelector, targetBalance = 0L, targetAssets = Map(randomNewAsset.head._1 -> -1L)).isFailure shouldBe true
+      }
+    }
+  }
+
   property("it should process unlock using preEip3Derivation") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>

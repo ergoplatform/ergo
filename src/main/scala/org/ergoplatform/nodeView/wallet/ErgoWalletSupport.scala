@@ -329,7 +329,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           .map(_._1)
           .headOption
 
-        val targetBalance = outputs.map(_.value).sum
+        val targetBalance = TransactionBuilder.sumLongExact(outputs.map(_.value))
         val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
 
         //add burnTokens to target assets so that they are excluded from the change outputs

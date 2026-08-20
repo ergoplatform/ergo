@@ -43,9 +43,9 @@ class PaymentRequestDecoder(ergoSettings: ErgoSettings) extends Decoder[PaymentR
     for {
       address <- cursor.downField("address").as[ErgoAddress]
       value <- cursor.downField("value").as[Long]
-      assets <- cursor.downField("assets").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
+      assets <- WalletRequestCodecs.decodeTokenAmounts(cursor, "assets")
       registers <- cursor.downField("registers").as[Option[Map[NonMandatoryRegisterId, EvaluatedValue[SType]]]]
-    } yield PaymentRequest(address, value, assets.toArray.flatten, registers.getOrElse(Map.empty))
+    } yield PaymentRequest(address, value, assets, registers.getOrElse(Map.empty))
   }
 
 }

@@ -240,7 +240,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
               currentValidationState
                 .validate(exBlockVersion, calculatedParams.blockVersion == header.version, InvalidModifier(s"${calculatedParams.blockVersion} == ${header.version}", extension.id, extension.modifierTypeId))
                 .validateNoFailure(exMatchParameters, Parameters.matchParameters(parsedParams, calculatedParams), extension.id, extension.modifierTypeId)
-                .validateNoFailure(exMatchParameters60, Parameters.matchParameters60(parsedParams, calculatedParams, header.version), extension.id, extension.modifierTypeId)
+                .validateNoFailure(exMatchParameters60, Parameters.matchParameters60(calculatedParams, parsedParams, header.version), extension.id, extension.modifierTypeId)
                 .validate(exMatchValidationSettings, parsedSettings == calculatedSettings, InvalidModifier(s"$parsedSettings vs $calculatedSettings", extension.id, extension.modifierTypeId))
           }.result
       }.result

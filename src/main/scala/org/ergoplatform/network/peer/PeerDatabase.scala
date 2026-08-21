@@ -7,6 +7,7 @@ import java.io.{
   ObjectOutputStream
 }
 import java.net.{InetAddress, InetSocketAddress}
+import java.util.concurrent.ThreadLocalRandom
 import org.ergoplatform.settings.ErgoSettings
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
@@ -15,11 +16,34 @@ import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
-  * In-memory peer database implementation supporting temporal blacklisting.
+  * In-memory peer database with temporal blacklisting and peer count cap.
   */
-final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
+final class PeerDatabase(
+  settings: ErgoSettings,
+  private[peer] val maxKnownPeers: Int = PeerDatabase.MaxKnownPeers
+) extends ScorexLogging {
 
   private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
+
+  /**
+    * Serialized peer info size must stay below this bound. The value is twice
+    * the maximum handshake size (8KB) to leave a comfortable margin while still
+    * preventing a single malformed/crafted entry from consuming a lot of memory.
+    */
+  private val MaxSerializedPeerInfoSize = 16384
+
+  /**
+    * Serialized peer address (InetSocketAddress Java serialization) size bound.
+    * Legitimate hostnames can be up to 253 characters, so leave plenty of headroom.
+    */
+  private val MaxSerializedPeerAddressSize = 1024
+
+  private case class LoadedPeer(
+    lastHandshake: Long,
+    address: InetSocketAddress,
+    peerInfo: PeerInfo,
+    keyBytes: Array[Byte]
+  )
 
   /**
     * banned peer ip -> ban expiration timestamp
@@ -62,28 +86,139 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
   }
 
   /*
-   * Load peers from persistent storage
+   * Load peers from persistent storage.
+   *
+   * Enforces the in-memory cap and per-entry size limits at load time so a
+   * pre-existing or malformed DB cannot OOM the node on startup. Oversized or
+   * excess entries are dropped from the loaded set (and excess keys are removed
+   * from the store to keep the DB trimmed).
    */
   private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
-    var peers = Map.empty[InetSocketAddress, PeerInfo]
-    for ((addr, peer) <- persistentStore.getAll) {
-      val address  = deserialize(addr).asInstanceOf[InetSocketAddress]
-      val peerInfo = PeerInfoSerializer.parseBytes(peer)
-      peers += address -> peerInfo
+    val (oversizedKeys, validPeers) =
+      persistentStore.getAll.toVector.foldLeft(
+        (List.empty[Array[Byte]], List.empty[LoadedPeer])
+      ) { case ((badKeys, goodPeers), (addr, peer)) =>
+        if (addr.length > MaxSerializedPeerAddressSize || peer.length > MaxSerializedPeerInfoSize) {
+          log.warn(
+            s"Dropping oversized peer entry from database: key=${addr.length} bytes, " +
+            s"value=${peer.length} bytes"
+          )
+          (addr :: badKeys, goodPeers)
+        } else {
+          val addressTry  = Try(deserialize(addr).asInstanceOf[InetSocketAddress])
+          val peerInfoTry = PeerInfoSerializer.parseBytesTry(peer)
+          (addressTry, peerInfoTry) match {
+            case (Success(address), Success(peerInfo)) =>
+              val loaded = LoadedPeer(peerInfo.lastHandshake, address, peerInfo, addr)
+              (badKeys, loaded :: goodPeers)
+            case _ =>
+              log.warn(s"Unable to deserialize peer entry from database, skipping it")
+              (badKeys, goodPeers)
+          }
+        }
+      }
+
+    val (kept, drop) = validPeers.splitAt(maxKnownPeers)
+    val keysToRemove = oversizedKeys ++ drop.map(_.keyBytes)
+
+    flushKeysToRemove(keysToRemove.toArray)
+    kept.map(p => p.address -> p.peerInfo).toMap
+  }
+
+  private def flushKeysToRemove(keys: Array[Array[Byte]]): Unit = {
+    if (keys.nonEmpty) {
+      persistentStore.remove(keys) match {
+        case Success(_) => // ok
+        case Failure(ex) =>
+          log.warn("Unable to remove dropped peer entries from persistent store", ex)
+      }
     }
-    peers
   }
 
   def get(peer: InetSocketAddress): Option[PeerInfo] = peers.get(peer)
 
-  def addOrUpdateKnownPeer(peerInfo: PeerInfo): Unit = {
+  def addOrUpdateKnownPeer(
+    peerInfo: PeerInfo,
+    connectedPeers: Set[InetSocketAddress] = Set.empty
+  ): Unit = {
     if (!peerInfo.peerSpec.declaredAddress.exists(x => isBlacklisted(x.getAddress))) {
       peerInfo.peerSpec.address.foreach { address =>
-        log.debug(s"Updating peer info for $address")
-        peers += address -> peerInfo
-        persistentStore.insert(serialize(address), PeerInfoSerializer.toBytes(peerInfo))
+        if (peers.contains(address)) {
+          log.debug(s"Updating peer info for $address")
+          updatePeer(address, peerInfo)
+        } else if (peers.size < maxKnownPeers ||
+                   makeRoomForPeer(peerInfo.lastHandshake, connectedPeers)) {
+          log.debug(s"Adding peer info for $address")
+          updatePeer(address, peerInfo)
+        } else {
+          log.debug(s"Peer database is full, ignoring $address")
+        }
       }
     }
+  }
+
+  private def updatePeer(address: InetSocketAddress, peerInfo: PeerInfo): Unit = {
+    peers += address -> peerInfo
+    persistentStore.insert(serialize(address), PeerInfoSerializer.toBytes(peerInfo))
+  }
+
+  /**
+    * Evict the oldest known peer (by lastHandshake) from a random sample to make room
+    * for a new peer, but never evict a currently connected peer.
+    *
+    * @param candidateHandshake - lastHandshake of the peer we want to insert
+    * @return true if room was made, false otherwise
+    */
+  private def makeRoomForPeer(
+    candidateHandshake: Long,
+    connectedPeers: Set[InetSocketAddress]
+  ): Boolean = {
+    val EvictionSampleSize = 16
+    val oldest = randomPeerSample(EvictionSampleSize)
+      .filterNot { case (address, _) => connectedPeers.contains(address) }
+      .sortBy(_._2.lastHandshake)
+      .headOption
+
+    oldest match {
+      case Some((oldestAddress, oldestInfo))
+          if candidateHandshake > oldestInfo.lastHandshake =>
+        log.info(
+          s"Evicting peer $oldestAddress with lastHandshake " +
+          s"${oldestInfo.lastHandshake} to make room for a newer peer"
+        )
+        remove(oldestAddress)
+        true
+      case _ =>
+        false
+    }
+  }
+
+  /**
+    * Select a small random slice of known peers to consider for eviction.
+    * The slice is contiguous in the map's iteration order and bounded by
+    * `sampleSize`, so the cost stays low even when the peer set is large.
+    */
+  private def randomPeerSample(sampleSize: Int): Seq[(InetSocketAddress, PeerInfo)] = {
+    if (peers.isEmpty) {
+      Seq.empty
+    } else {
+      val sample = math.min(sampleSize, peers.size)
+      val start  = ThreadLocalRandom.current().nextInt(peers.size - sample + 1)
+      peers.slice(start, start + sample).toSeq
+    }
+  }
+
+  /**
+    * Remove peers whose lastHandshake is older than 60 days, excluding connected peers.
+    */
+  def removeOldPeers(connectedPeers: Set[InetSocketAddress] = Set.empty): Unit = {
+    val cutoff = System.currentTimeMillis() - PeerDatabase.KnownPeerMaxAgeMs
+    val toRemove = peers.collect {
+      case (address, info)
+          if !connectedPeers.contains(address) && info.lastHandshake < cutoff =>
+        address
+    }
+    toRemove.foreach(remove)
   }
 
   def addToBlacklist(socketAddress: InetSocketAddress, penaltyType: PenaltyType): Unit = {
@@ -100,7 +235,7 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
     }
   }
 
-  def removeFromBlacklist(address: InetAddress): Unit = {
+  private def removeFromBlacklist(address: InetAddress): Unit = {
     log.info(s"$address removed from blacklist")
     blacklist -= address
   }
@@ -111,6 +246,11 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
   }
 
   def knownPeers: Map[InetSocketAddress, PeerInfo] = peers
+
+  /**
+    * Close the underlying persistent store.
+    */
+  def close(): Unit = persistentStore.close()
 
   def blacklistedPeers: Seq[InetAddress] =
     blacklist.map {
@@ -187,4 +327,23 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
       case PenaltyType.PermanentPenalty =>
         (360 * 10).days.toMillis
     }
+}
+
+object PeerDatabase {
+
+  /**
+    * Hardcoded cap on the total number of known peers.
+    */
+  val MaxKnownPeers: Int = 32768
+
+  /**
+    * Hardcoded maximum age (60 days) for a known peer's lastHandshake.
+    */
+  val KnownPeerMaxAgeMs: Long = 60.days.toMillis
+
+  /**
+    * Hardcoded interval (24 hours) between cleanup runs.
+    */
+  val KnownPeerCleanupIntervalMs: Long = 24.hours.toMillis
+
 }

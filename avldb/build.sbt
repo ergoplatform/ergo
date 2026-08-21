@@ -30,7 +30,7 @@ val Versions = new {
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.13",
   "com.google.guava" % "guava" % "23.0",
-  "org.scorexfoundation" %% "scrypto" % "2.3.0",
+  "org.scorexfoundation" %% "scrypto" % "3.1.1",
   "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "org.scalacheck" %% "scalacheck" % Versions.scalacheck(scalaVersion.value) % Test,
   Versions.scalatestplus(scalaVersion.value),

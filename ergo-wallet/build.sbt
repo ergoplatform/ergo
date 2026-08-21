@@ -8,9 +8,9 @@ val deps211 = Seq(
   "io.circe" %% "circe-generic" % "0.10.0",
   "io.circe" %% "circe-parser" % "0.10.0")
 val deps212 = Seq(
-  "io.circe" %% "circe-core" % "0.13.0",
-  "io.circe" %% "circe-generic" % "0.13.0",
-  "io.circe" %% "circe-parser" % "0.13.0")
+  "io.circe" %% "circe-core" % "0.14.15",
+  "io.circe" %% "circe-generic" % "0.14.15",
+  "io.circe" %% "circe-parser" % "0.14.15")
 
 libraryDependencies ++= Seq(
   "org.scodec" %% "scodec-bits" % "1.1.34",

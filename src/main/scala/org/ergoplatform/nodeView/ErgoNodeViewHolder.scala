@@ -4,23 +4,24 @@ import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.core._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
-import org.ergoplatform.core._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.utils.ScorexEncoding
-import org.ergoplatform.validation.RecoverableModifierError
+import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -252,6 +253,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
               history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
+                ErgoNodeViewHolder.extractFailedTxId(e).foreach { txId =>
+                  log.warn(s"Removing transaction $txId which caused the block validation failure from the mempool")
+                  val updatedPool = memoryPool().invalidate(txId)
+                  updateNodeView(updatedMempool = Some(updatedPool))
+                  context.system.eventStream.publish(FailedOnRecheckTransaction(txId, new Exception("Became invalid")))
+                }
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
               }
           }
@@ -761,6 +768,24 @@ object ErgoNodeViewHolder {
   case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
+
+  /**
+    * Extract id of a transaction which caused block validation failure, walking the cause chain.
+    * Transaction-level validation errors are reported as [[MalformedModifierError]] tagged with
+    * the transaction id, or as [[TooHighCostError]] carrying the transaction itself.
+    */
+  @tailrec
+  def extractFailedTxId(error: Throwable): Option[ModifierId] = error match {
+    case null =>
+      None
+    case mme: MalformedModifierError
+        if mme.modifierTypeId == ErgoTransaction.modifierTypeId =>
+      Some(mme.modifierId)
+    case TooHighCostError(tx, _) =>
+      Some(tx.id)
+    case other =>
+      extractFailedTxId(other.getCause)
+  }
 
   /**
     * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.

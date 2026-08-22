@@ -221,6 +221,16 @@ trait ErgoWalletService {
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
+    * Advance the wallet's scanned height past a block whose data is unavailable (e.g. pruned
+    * before the wallet could scan it), so the wallet does not get stuck. Balances are unchanged.
+    *
+    * @param state       current wallet state
+    * @param blockId     - identifier of the header at `blockHeight` (still present after pruning)
+    * @param blockHeight - height to advance the wallet to
+    */
+  def skipBlockUpdate(state: ErgoWalletState, blockId: ModifierId, blockHeight: Int): Try[ErgoWalletState]
+
+  /**
     * Sign a transaction
     */
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
@@ -595,6 +605,9 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
+
+  override def skipBlockUpdate(state: ErgoWalletState, blockId: ModifierId, blockHeight: Int): Try[ErgoWalletState] =
+    state.registry.skipBlock(blockId, blockHeight).map(_ => state)
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

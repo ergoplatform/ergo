@@ -224,6 +224,31 @@ class WalletRegistrySpec
     }
   }
 
+  it should "skipBlock() advance height without changing balances and be rollback-able" in {
+    forAll(registrySummaryGen, modifierIdGen) { (index, blockId) =>
+      withVersionedStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+        val baseHeight = 100
+        val baseDigest = index.copy(height = baseHeight)
+        val checkpoint = scorex.utils.Random.randomBytes()
+
+        WalletRegistry.putDigest(emptyBag, baseDigest).transact(store, checkpoint).get
+        reg.fetchDigest() shouldBe baseDigest
+
+        // skipping the next (unavailable) block advances the height but keeps balances untouched
+        reg.skipBlock(blockId, baseHeight + 1).get
+        val skipped = reg.fetchDigest()
+        skipped.height shouldBe baseHeight + 1
+        skipped.walletBalance shouldBe baseDigest.walletBalance
+        skipped.walletAssetBalances shouldBe baseDigest.walletAssetBalances
+
+        // rolling back to the checkpoint restores the previous height
+        reg.rollback(VersionTag @@ Base16.encode(checkpoint)).isSuccess shouldBe true
+        reg.fetchDigest().height shouldBe baseHeight
+      }
+    }
+  }
+
   it should "update scans correctly" in {
     val appId1: ScanId = ScanId @@ 21.toShort
     val appId2: ScanId = ScanId @@ 22.toShort

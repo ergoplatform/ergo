@@ -248,8 +248,27 @@ class ErgoWalletActor(settings: ErgoSettings,
                 case Success(updatedState) =>
                   updatedState
               }
+            case None if settings.nodeSettings.isFullBlocksPruned =>
+              // The block data is unavailable - it was pruned before the wallet could scan it.
+              // Advance the wallet height past it (using the still-present header as version tag)
+              // so scanning does not get stuck; the block's wallet transactions, if any, are lost.
+              historyReader.bestHeaderIdAtHeight(blockHeight) match {
+                case Some(headerId) =>
+                  ergoWalletService.skipBlockUpdate(state, headerId, blockHeight) match {
+                    case Failure(ex) =>
+                      val errorMsg = s"Skipping unavailable block at height $blockHeight failed : ${ex.getMessage}"
+                      log.error(errorMsg, ex)
+                      state.copy(error = Some(errorMsg))
+                    case Success(updatedState) =>
+                      log.warn(s"Wallet skipped unavailable (pruned) block at height $blockHeight")
+                      updatedState
+                  }
+                case None =>
+                  log.warn(s"No header at height $blockHeight to skip, wallet left at ${state.getWalletHeight}")
+                  state
+              }
             case None =>
-              state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
+              state // We may do not have a block, e.g. it is not downloaded yet. This is okay, just skip it.
         }
         context.become(loadedWallet(newState))
         if (blockHeight < newState.fullHeight) {

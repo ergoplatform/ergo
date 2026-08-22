@@ -442,6 +442,9 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.take(11).toSeq.map(_.transaction.id) shouldBe ids
     pool.getAll.map(_.transaction.id) shouldBe ids
     pool.getAllPrioritized.map(_.transaction.id) shouldBe ids
+    pool.getAll shouldBe a [Vector[_]]
+    pool.getAllPrioritized shouldBe a [Vector[_]]
+    pool.weightedTransactionIds(11) shouldBe a [Vector[_]]
 
     val conformingTxs = pool.take(3).toSeq
     val stateWithTxs = wus.withUnconfirmedTransactions(conformingTxs)

@@ -57,9 +57,12 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     pool.orderedTransactions.values.take(limit)
   }
 
+  private def orderedTransactionsSnapshot: Vector[UnconfirmedTransaction] =
+    pool.orderedTransactions.valuesIterator.toVector
+
   def random(limit: Int): Iterable[UnconfirmedTransaction] = {
     val result = mutable.WrappedArray.newBuilder[UnconfirmedTransaction]
-    val txSeq = pool.orderedTransactions.values.to[Vector]
+    val txSeq = orderedTransactionsSnapshot
     val total = txSeq.size
     val start = if (total <= limit) {
       0
@@ -77,14 +80,14 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     result.result()
   }
 
-  override def getAll: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAll: Seq[UnconfirmedTransaction] = orderedTransactionsSnapshot
 
   override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = ids.flatMap(pool.get)
 
   /**
     * Returns all transactions resided in pool sorted by weight in descending order
     */
-  override def getAllPrioritized: Seq[UnconfirmedTransaction] = pool.orderedTransactions.values.toSeq
+  override def getAllPrioritized: Seq[UnconfirmedTransaction] = orderedTransactionsSnapshot
 
   /**
     * Method to put a transaction into the memory pool. Validation of the transactions against
@@ -299,7 +302,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
-  def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toSeq
+  def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = pool.orderedTransactions.keysIterator.take(limit).toVector
 
   private def extractFee(tx: ErgoTransaction): Long = {
     tx.outputs

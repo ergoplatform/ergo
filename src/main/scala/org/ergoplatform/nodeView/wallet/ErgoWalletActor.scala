@@ -407,6 +407,15 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! DeriveNextKeyResult(Failure(t))
       }
 
+    case AddSecret(secret) =>
+      ergoWalletService.addSecret(state, secret) match {
+        case Success((p2pkAddress, newState)) =>
+          context.become(loadedWallet(newState))
+          sender() ! Success(p2pkAddress)
+        case f@Failure(_) =>
+          sender() ! f
+      }
+
     case UpdateChangeAddress(address) =>
       state.storage.updateChangeAddress(address) match {
         case Success(_) =>

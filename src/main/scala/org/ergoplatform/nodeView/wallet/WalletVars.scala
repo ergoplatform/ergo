@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.wallet
 import com.google.common.hash.BloomFilter
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.scanning.Scan
-import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{ExtendedPublicKey, ExtendedSecretKey, SecretKey}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
@@ -77,6 +77,27 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
       case Some(prover) =>
         val newProver = prover.withNewExtendedSecret(secret)
         this.copy(proverOpt = Some(newProver))
+      case None =>
+        log.warn(s"Trying to add new secret, but prover is not initialized")
+        this
+    }
+  }
+
+  /**
+    * Add a new primitive (non-hierarchical) secret to the prover. The secret is held in memory only and
+    * is lost when the wallet is locked or the node restarts. Adding a secret already known to the prover
+    * is a no-op.
+    *
+    * @param secret - secret to add to existing ones
+    * @return updated WalletVars instance
+    */
+  def withSecret(secret: SecretKey): Try[WalletVars] = Try {
+    proverOpt match {
+      case Some(prover) if prover.secretKeys.exists(_.privateInput == secret.privateInput) =>
+        log.warn(s"Trying to add a secret already known to the prover, ignoring")
+        this
+      case Some(prover) =>
+        this.copy(proverOpt = Some(prover.withNewSecret(secret)))
       case None =>
         log.warn(s"Trying to add new secret, but prover is not initialized")
         this

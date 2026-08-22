@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.fixtures.WalletFixture
@@ -28,6 +28,7 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.helpers.TestingHelpers.testBox
 
 import scala.collection.compat.immutable.ArraySeq
@@ -87,6 +88,77 @@ class ErgoWalletServiceSpec
           walletPass = SecretString.create("y"),
           usePre1627KeyDerivation = false
         ).failed.get.getMessage shouldBe "Unable to restore wallet when pruning is enabled"
+      }
+    }
+  }
+
+  property("addSecret adds a primitive secret to the prover and returns its address") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val secret = DlogSecretKey(DLogProverInput.random())
+
+        val before = walletState.walletVars.proverOpt.get
+        val (address, newState) = walletService.addSecret(walletState, secret).get
+        val after = newState.walletVars.proverOpt.get
+
+        address shouldBe P2PKAddress(secret.privateInput.publicImage)(settings.addressEncoder)
+        after.secretKeys.length shouldBe before.secretKeys.length + 1
+        after.secretKeys.contains(secret) shouldBe true
+        // adding a primitive secret must not affect the hierarchical keys / tracking machinery
+        after.hdKeys.length shouldBe before.hdKeys.length
+
+        // adding the same secret again is a no-op
+        val (_, sameState) = walletService.addSecret(newState, secret).get
+        sameState.walletVars.proverOpt.get.secretKeys.length shouldBe after.secretKeys.length
+      }
+    }
+  }
+
+  property("addSecret fails when the wallet is locked") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val lockedState = initialState(store, versionedStore).copy(
+          walletVars = WalletVars(None, Seq.empty, None)
+        )
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val secret = DlogSecretKey(DLogProverInput.random())
+        val result = walletService.addSecret(lockedState, secret)
+        result.isFailure shouldBe true
+        result.failed.get.getMessage shouldBe "Unable to add secret, wallet is locked"
+      }
+    }
+  }
+
+  property("a custom secret added to the wallet is cleared on lock") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val secret = DlogSecretKey(DLogProverInput.random())
+
+        val (_, withSecret) = walletService.addSecret(walletState, secret).get
+        withSecret.walletVars.proverOpt.get.secretKeys.contains(secret) shouldBe true
+
+        val locked = walletService.lockWallet(withSecret)
+        locked.walletVars.proverOpt shouldBe None
+      }
+    }
+  }
+
+  property("addSecret deduplicates a secret matching an existing hierarchical key") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletState = initialState(store, versionedStore)
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val before = walletState.walletVars.proverOpt.get
+
+        // wrap an existing HD key's secret exponent as a primitive DLog secret
+        val existing = DlogSecretKey(before.secretKeys.head.privateInput.asInstanceOf[DLogProverInput])
+        val (_, newState) = walletService.addSecret(walletState, existing).get
+
+        newState.walletVars.proverOpt.get.secretKeys.length shouldBe before.secretKeys.length
       }
     }
   }

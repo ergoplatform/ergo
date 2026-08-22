@@ -89,6 +89,20 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   }
 
   /**
+    * Produces updated instance of ErgoProvingInterpreter with a new primitive (non-hierarchical) secret included.
+    *
+    * cachedHdPubKeysOpt is preserved unchanged: a primitive secret is not an ExtendedSecretKey, so it is not
+    * collected into hdKeys and the cached public keys still correspond one-to-one to the hierarchical secrets.
+    *
+    * @param secret - new primitive secret to add
+    * @return modified prover
+    */
+  def withNewSecret(secret: SecretKey): ErgoProvingInterpreter = {
+    val sks = secretKeys :+ secret
+    new ErgoProvingInterpreter(sks, params, cachedHdPubKeysOpt)
+  }
+
+  /**
     * Produces updated instance of ErgoProvingInterpreter with updated parameters
     * @param newParams - updated parameters
     * @return modified prover

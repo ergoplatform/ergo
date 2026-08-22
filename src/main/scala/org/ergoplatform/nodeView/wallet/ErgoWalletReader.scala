@@ -11,7 +11,7 @@ import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{BoxesRequest, ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.ScanRequest
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey}
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DlogSecretKey, ExtendedPublicKey}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.boxes.ChainStatus.{OffChain, OnChain}
@@ -62,6 +62,9 @@ trait ErgoWalletReader extends NodeViewComponent {
 
   def deriveNextKey: Future[DeriveNextKeyResult] =
     (walletActor ? DeriveNextKey).mapTo[DeriveNextKeyResult]
+
+  def addSecret(secret: DlogSecretKey): Future[Try[P2PKAddress]] =
+    (walletActor ? AddSecret(secret)).mapTo[Try[P2PKAddress]]
 
   def balances(chainStatus: ChainStatus): Future[WalletDigest] =
     (walletActor ? ReadBalances(chainStatus)).mapTo[WalletDigest]

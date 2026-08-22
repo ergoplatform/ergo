@@ -46,10 +46,13 @@ class ErgoInterpreter(params: BlockchainParameters)
     lazy val correctCreationHeight = output.creationHeight == currentHeight
     lazy val correctOutValue = output.value >= box.value - storageFee
 
-    // all the registers except of R0 (monetary value) and R3 (creation height and reference) must be preserved
-    lazy val correctRegisters = ErgoBox.allRegisters
-      .iterator
-      .forall(rId => rId == ErgoBox.ValueRegId || rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
+    // All registers except R0 (monetary value) and R3 (creation height and reference)
+    // must be preserved. Of the mandatory registers only R1 (script) and R2 (tokens)
+    // need comparing; the rest (R4..R9) are non-mandatory.
+    lazy val correctRegisters =
+      box.get(ErgoBox.ScriptRegId) == output.get(ErgoBox.ScriptRegId) &&
+        box.get(ErgoBox.TokensRegId) == output.get(ErgoBox.TokensRegId) &&
+        ErgoInterpreter.sameNonMandatoryRegisters(box, output)
 
     storageFeeNotCovered || (correctCreationHeight && correctOutValue && correctRegisters)
   }
@@ -98,6 +101,10 @@ object ErgoInterpreter {
   /** Creates an interpreter with the given parameters. */
   def apply(params: BlockchainParameters): ErgoInterpreter =
     new ErgoInterpreter(params)
+
+  /** Checks that two boxes carry the same non-mandatory registers (R4..R9). */
+  def sameNonMandatoryRegisters(box1: ErgoBoxCandidate, box2: ErgoBoxCandidate): Boolean =
+    box1.additionalRegisters == box2.additionalRegisters
 
   /** Create [[AvlTreeData]] with the given digest and all operations enabled. */
   def avlTreeFromDigest(digest: Coll[Byte]): AvlTreeData = {

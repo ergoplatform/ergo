@@ -9,6 +9,7 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.Extensions.LongOps
 import scorex.util.ScorexLogging
+import spire.syntax.all.cfor
 
 /**
   * A structure representing NiPoPow proof as a persistent modifier.
@@ -212,19 +213,21 @@ class NipopowProofSerializer(poPowAlgos: NipopowAlgos) extends ErgoSerializer[Ni
     val m = r.getUInt().toIntExact
     val k = r.getUInt().toIntExact
     val prefixSize = r.getUInt().toIntExact
-    val prefix = (0 until prefixSize).map { _ =>
+    val prefix = new Array[PoPowHeader](prefixSize)
+    cfor(0)(_ < prefixSize, _ + 1) { i =>
       val size = r.getUInt().toIntExact
-      PoPowHeaderSerializer.parseBytes(r.getBytes(size))
+      prefix(i) = PoPowHeaderSerializer.parseBytes(r.getBytes(size))
     }
     val suffixHeadSize = r.getUInt().toIntExact
     val suffixHead = PoPowHeaderSerializer.parseBytes(r.getBytes(suffixHeadSize))
     val suffixSize = r.getUInt().toIntExact
-    val suffixTail = (0 until suffixSize).map { _ =>
+    val suffixTail = new Array[Header](suffixSize)
+    cfor(0)(_ < suffixSize, _ + 1) { i =>
       val size = r.getUInt().toIntExact
-      HeaderSerializer.parseBytes(r.getBytes(size))
+      suffixTail(i) = HeaderSerializer.parseBytes(r.getBytes(size))
     }
     val continuous = if (r.getByte() == 1) true else false
-    NipopowProof(poPowAlgos, m, k, prefix, suffixHead, suffixTail, continuous)
+    NipopowProof(poPowAlgos, m, k, prefix.toIndexedSeq, suffixHead, suffixTail.toIndexedSeq, continuous)
   }
 
 }

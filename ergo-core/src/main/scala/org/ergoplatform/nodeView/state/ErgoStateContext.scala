@@ -23,6 +23,7 @@ import sigma.eval.SigmaDsl
 import sigma.Extensions.ArrayOps
 import sigma.crypto.EcPointType
 import sigma.validation.SigmaValidationSettings
+import spire.syntax.all.cfor
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
@@ -432,7 +433,10 @@ case class ErgoStateContextSerializer(chainSettings: ChainSettings) extends Ergo
   override def parse(r: Reader): ErgoStateContext = {
     val genesisDigest = ADDigest @@ r.getBytes(33)
     val headersLength = r.getUByte()
-    val lastHeaders = (1 to headersLength).map(_ => HeaderSerializer.parse(r))
+    val lastHeaders = new Array[Header](headersLength)
+    cfor(0)(_ < headersLength, _ + 1) { i =>
+      lastHeaders(i) = HeaderSerializer.parse(r)
+    }
     val votingData = VotingDataSerializer.parse(r)
     val params = ParametersSerializer.parse(r)
     val validationSettings = ErgoValidationSettingsSerializer.parse(r)
@@ -448,7 +452,7 @@ case class ErgoStateContextSerializer(chainSettings: ChainSettings) extends Ergo
       lastExtensionOpt = Some(ExtensionSerializer.parse(r))
     }
 
-    new ErgoStateContext(lastHeaders, lastExtensionOpt, genesisDigest, params, validationSettings,
+    new ErgoStateContext(lastHeaders.toIndexedSeq, lastExtensionOpt, genesisDigest, params, validationSettings,
       votingData)(chainSettings)
   }
 

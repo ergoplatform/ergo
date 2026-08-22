@@ -9,6 +9,9 @@ import org.ergoplatform.{ErgoBox, ErgoBoxAssets, ErgoLikeTransaction}
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import sigma.Extensions.CollBytesOps
+import spire.syntax.all.cfor
+
+import scala.collection.mutable
 
 /**
   * A box tracked by a wallet that contains Ergo box itself as well as
@@ -133,7 +136,9 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val appStatuses: Set[ScanId] = if (appsCount == 0){
       Set(Constants.PaymentsScanId)
     } else {
-      (0 until appsCount).map(_ => ScanId @@ r.getShort()).toSet
+      val ids = new mutable.ArrayBuffer[ScanId](appsCount)
+      cfor(0)(_ < appsCount, _ + 1) { _ => ids += (ScanId @@ r.getShort()) }
+      ids.toSet
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(

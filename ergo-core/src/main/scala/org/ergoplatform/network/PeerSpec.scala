@@ -6,8 +6,11 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.Extensions._
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
+import spire.syntax.all.cfor
 
 import java.net.{InetAddress, InetSocketAddress, URL}
+
+import scala.collection.mutable
 
 /**
   * Declared information about peer
@@ -87,7 +90,8 @@ object PeerSpecSerializer extends ErgoSerializer[PeerSpec] with ScorexLogging {
 
     val featuresCount = r.getByte()
     require(featuresCount >= 0)
-    val feats = (1 to featuresCount.toInt).flatMap { _ =>
+    val feats = new mutable.ArrayBuffer[PeerFeature](featuresCount.toInt)
+    cfor(0)(_ < featuresCount.toInt, _ + 1) { _ =>
       val featId = r.getByte()
       val featBytesCount = r.getUShort().toShortExact
       val featChunk = r.getChunk(featBytesCount.toInt)
@@ -98,9 +102,9 @@ object PeerSpecSerializer extends ErgoSerializer[PeerSpec] with ScorexLogging {
       }
       serializer.flatMap { featureSerializer =>
         featureSerializer.parseTry(r.newReader(featChunk)).toOption
-      }
+      }.foreach(feats += _)
     }
-    PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats)
+    PeerSpec(appName, protocolVersion, nodeName, declaredAddressOpt, feats.toIndexedSeq)
   }
 
 }

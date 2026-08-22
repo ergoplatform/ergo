@@ -4,8 +4,9 @@ import org.ergoplatform.settings.Constants
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{bytesToId, idToBytes}
+import spire.syntax.all.cfor
 
-import scala.annotation.nowarn
+import scala.collection.mutable
 
 object ExtensionSerializer extends ErgoSerializer[Extension] {
 
@@ -19,20 +20,19 @@ object ExtensionSerializer extends ErgoSerializer[Extension] {
     }
   }
 
-  @nowarn
   override def parse(r: Reader): Extension = {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val fieldsSize = r.getUShort()
-    val fieldsView = (1 to fieldsSize).toStream.map { _ =>
+    val fields = new mutable.ArrayBuffer[(Array[Byte], Array[Byte])](fieldsSize)
+    cfor(0)(i => i < fieldsSize && (r.position - startPosition < Constants.MaxExtensionSizeMax), _ + 1) { _ =>
       val key = r.getBytes(Extension.FieldKeySize)
       val length = r.getUByte()
       val value = r.getBytes(length)
-      (key, value)
+      fields += ((key, value))
     }
-    val fields = fieldsView.takeWhile(_ => r.position - startPosition < Constants.MaxExtensionSizeMax)
     require(r.position - startPosition < Constants.MaxExtensionSizeMax)
-    Extension(headerId, fields, Some(r.position - startPosition))
+    Extension(headerId, fields.toIndexedSeq, Some(r.position - startPosition))
   }
 
 }

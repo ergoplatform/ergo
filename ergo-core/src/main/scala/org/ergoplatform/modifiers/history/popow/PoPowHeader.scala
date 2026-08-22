@@ -19,6 +19,7 @@ import scorex.crypto.hash.Digest32
 import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
+import spire.syntax.all.cfor
 
 import scala.util.Try
 
@@ -160,10 +161,13 @@ object PoPowHeaderSerializer extends ErgoSerializer[PoPowHeader] {
     val headerSize = r.getUInt().toIntExact
     val header = HeaderSerializer.parseBytes(r.getBytes(headerSize))
     val linksQty = r.getUInt().toIntExact
-    val interlinks = (0 until linksQty).map(_ => bytesToId(r.getBytes(ModifierIdLength)))
+    val interlinks = new Array[ModifierId](linksQty)
+    cfor(0)(_ < linksQty, _ + 1) { i =>
+      interlinks(i) = bytesToId(r.getBytes(ModifierIdLength))
+    }
     val interlinksProofSize = r.getUInt().toIntExact
     val interlinksProof = merkleProofSerializer.deserialize(r.getBytes(interlinksProofSize)).get
-    PoPowHeader(header, interlinks, interlinksProof)
+    PoPowHeader(header, interlinks.toIndexedSeq, interlinksProof)
   }
 
 }

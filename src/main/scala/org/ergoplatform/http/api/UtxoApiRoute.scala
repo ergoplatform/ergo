@@ -27,7 +27,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
   override val route: Route = pathPrefix("utxo") {
-    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolByIds ~ withPoolSerializedById ~ getBoxesBinaryProof ~ getSnapshotsInfo
+    byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolByIds ~ withPoolSerializedById ~ getBoxesBinaryProof ~ getSnapshotsInfo ~ stats
   }
 
   def withPoolById: Route = (get & path("withPool" / "byId" / Segment)) { id =>
@@ -105,6 +105,18 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     ApiResponse(getState.map {
       case usr: UtxoSetSnapshotPersistence =>
         Some(usr.getSnapshotInfo())
+      case _ => None
+    })
+  }
+
+  /**
+    * Handler for /utxo/stats API call, providing statistics about the UTXO set and its backing
+    * store (record/box counts and sizes). Available on UTXO-set nodes only; returns 404 in digest mode.
+    * Note: this scans the whole state database, so it is an expensive, diagnostic-grade call.
+    */
+  def stats: Route = (get & path("stats")) {
+    ApiResponse(getState.map {
+      case usr: UtxoStateReader => usr.utxoSetStats().toOption
       case _ => None
     })
   }

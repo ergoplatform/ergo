@@ -9,6 +9,7 @@ import org.ergoplatform.nodeView.history.extra.{BalanceInfo, IndexedErgoBox, Ind
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
+import scorex.crypto.authds.avltree.batch.AvlStorageStats
 
 /**
   * JSON codecs related to extra indices (available via /blockchain API methods), and also few codecs for wallet
@@ -112,6 +113,25 @@ trait ApiExtraCodecs extends JsonCodecs {
     for {
       availableManifests <- Decoder.decodeMap[Int, ManifestId].tryDecode(cursor.downField("availableManifests"))
     } yield new SnapshotsInfo(availableManifests)
+  }
+
+  implicit val avlStorageStatsEncoder: Encoder[AvlStorageStats] = { s =>
+    Json.obj(
+      "totalRecords" -> s.totalRecords.asJson,
+      "totalKeyBytes" -> s.totalKeyBytes.asJson,
+      "totalValueBytes" -> s.totalValueBytes.asJson,
+      "leafRecords" -> s.leafRecords.asJson,
+      "leafRecordBytes" -> s.leafRecordBytes.asJson,
+      "leafValueBytes" -> s.leafValueBytes.asJson,
+      "internalRecords" -> s.internalRecords.asJson,
+      "internalRecordBytes" -> s.internalRecordBytes.asJson,
+      "otherRecords" -> s.otherRecords.asJson,
+      "otherRecordBytes" -> s.otherRecordBytes.asJson,
+      "liveBoxes" -> s.liveBoxes.asJson,
+      "liveBoxValueBytes" -> s.liveBoxValueBytes.asJson,
+      "liveInternalNodes" -> s.liveInternalNodes.asJson,
+      "treeHeight" -> s.treeHeight.asJson
+    )
   }
 
   implicit val indexedBlockEncoder: Encoder[IndexedBlock] = { iBlock =>

@@ -11,7 +11,7 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.MalformedModifierError
-import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{AvlStorageStats, Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 
@@ -39,6 +39,13 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     boxes.map { box => persistentProver.performOneOperation(Lookup(ADKey @@@ box)) }
     persistentProver.prover().generateProof()
   }
+
+  /**
+    * Collect statistics about the UTXO set and the database backing its authenticating AVL+ tree
+    * (record/box counts and sizes). This scans the whole state database, so it is intended for
+    * occasional/diagnostic use.
+    */
+  def utxoSetStats(): Try[AvlStorageStats] = storage.collectStats
 
   /**
     * Validate transaction against provided state context, if specified,

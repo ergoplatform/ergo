@@ -17,6 +17,10 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, SerializationTests}
 import org.scalacheck.Gen
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Blake2b256
+import scorex.util.{ByteArrayBuilder, ModifierId, idToBytes}
+import scorex.util.serialization.VLQByteBufferWriter
+
+import scala.util.{Failure, Try}
 
 class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with SerializationTests {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
@@ -54,6 +58,34 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
     inputBlockId <- modifierIdGen
     txIds <- Gen.listOf(genBytes(ErgoTransaction.WeakIdLength)).map(_.take(5))
   } yield InputBlockTransactionsRequest(inputBlockId, txIds)
+
+  /**
+    * Builds a raw message payload with an arbitrary declared count, so that counts which do not
+    * match the actual payload can be fed to the parsers.
+    */
+  private def payloadWithDeclaredCount(inputBlockId: ModifierId,
+                                       declaredCount: Long,
+                                       payload: Array[Byte]): Array[Byte] = {
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    w.putBytes(idToBytes(inputBlockId))
+    w.putUInt(declaredCount)
+    w.putBytes(payload)
+    w.result().toBytes
+  }
+
+  private def weakIds(n: Int): Array[Byte] =
+    Array.tabulate(n * ErgoTransaction.WeakIdLength)(i => (i % 256).toByte)
+
+  /**
+    * True iff parsing was rejected by the structural count bound (an `IllegalArgumentException`
+    * thrown by `require` before any allocation or per-element reading is done).
+    */
+  private def rejectedByCountBound(res: Try[_]): Boolean = res match {
+    case Failure(e: IllegalArgumentException) =>
+      Option(e.getMessage).exists(_.contains("Too many transaction"))
+    case _ =>
+      false
+  }
 
   property("InputBlockAnnouncement serialization roundtrip") {
     forAll(inputBlockInfoGen) { info =>
@@ -245,5 +277,187 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
     
     zeroTxIdsRecovered.inputBlockId shouldEqual zeroTxIdsData.inputBlockId
     zeroTxIdsRecovered.transactionIds.map(_.toSeq) shouldEqual zeroTxIdsData.transactionIds.map(_.toSeq)
+  }
+
+  //
+  // Structural bounds on untrusted counts (messages 102, 104, 105)
+  //
+
+  property("InputBlockTransactionsData parsing rejects tx count exceeding remaining bytes") {
+    forAll(modifierIdGen) { blockId =>
+      // a 39 byte payload (about 52 bytes once framed as a P2P message), but a million
+      // transactions declared
+      val bytes = payloadWithDeclaredCount(blockId, 1000000L, Array.fill(4)(0.toByte))
+      bytes.length should be < 64
+
+      val res = inputBlockTransactionsMessageSpec.parseBytesTry(bytes)
+      rejectedByCountBound(res) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionsData parsing rejects Int.MaxValue tx count without allocating") {
+    forAll(modifierIdGen) { blockId =>
+      val bytes = payloadWithDeclaredCount(blockId, Int.MaxValue.toLong, Array.fill(4)(0.toByte))
+
+      // An Array[ErgoTransaction] of Int.MaxValue elements needs gigabytes of heap, so had the
+      // allocation been attempted this would have died with a (fatal, uncatchable by Try)
+      // OutOfMemoryError instead of returning a Failure. Getting the require message back proves
+      // the parser bailed out before `new Array[ErgoTransaction](txsCount)`.
+      val res = inputBlockTransactionsMessageSpec.parseBytesTry(bytes)
+      rejectedByCountBound(res) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionsData parsing accepts tx count equal to remaining bytes, rejects one above") {
+    forAll(modifierIdGen) { blockId =>
+      val payload = Array.fill(8)(0.toByte)
+
+      // One byte per transaction is a deliberately conservative lower bound, not a tight one:
+      // ErgoTransactionSerializer delegates to ErgoLikeTransactionSerializer, which writes four
+      // collection counts even for an empty transaction, so four bytes is the real minimum. The
+      // guard only has to be sound, so at count == remaining it must not fire - whatever the
+      // transaction parser then makes of the bytes
+      val atBound = inputBlockTransactionsMessageSpec.parseBytesTry(
+        payloadWithDeclaredCount(blockId, payload.length.toLong, payload))
+      rejectedByCountBound(atBound) shouldBe false
+
+      val aboveBound = inputBlockTransactionsMessageSpec.parseBytesTry(
+        payloadWithDeclaredCount(blockId, payload.length.toLong + 1, payload))
+      rejectedByCountBound(aboveBound) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionsData with realistic tx count still roundtrips") {
+    forAll(modifierIdGen, Gen.listOfN(3, invalidErgoTransactionGen)) { (blockId, txs) =>
+      val data = InputBlockTransactionsData(blockId, txs)
+      val recovered = inputBlockTransactionsMessageSpec.parseBytes(inputBlockTransactionsMessageSpec.toBytes(data))
+
+      recovered.inputBlockId shouldEqual blockId
+      recovered.transactions shouldEqual txs
+    }
+  }
+
+  property("InputBlockTransactionsData with zero tx count parses to empty") {
+    forAll(modifierIdGen) { blockId =>
+      val recovered = inputBlockTransactionsMessageSpec.parseBytes(
+        payloadWithDeclaredCount(blockId, 0L, Array.emptyByteArray))
+
+      recovered.inputBlockId shouldEqual blockId
+      recovered.transactions shouldBe empty
+    }
+  }
+
+  property("InputBlockTransactionsRequest parsing rejects id count exceeding remaining bytes") {
+    forAll(modifierIdGen) { blockId =>
+      val bytes = payloadWithDeclaredCount(blockId, 1000000L, weakIds(2))
+      bytes.length should be < 64
+
+      val res = inputBlockTransactionsRequestMessageSpec.parseBytesTry(bytes)
+      rejectedByCountBound(res) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionsRequest parsing rejects Int.MaxValue id count safely") {
+    forAll(modifierIdGen) { blockId =>
+      val res = inputBlockTransactionsRequestMessageSpec.parseBytesTry(
+        payloadWithDeclaredCount(blockId, Int.MaxValue.toLong, weakIds(2)))
+
+      // Int.MaxValue * WeakIdLength overflows Int arithmetic, the check is done in Long
+      rejectedByCountBound(res) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionsRequest parsing accepts id count whose ids exactly fill the remaining bytes, rejects one above") {
+    forAll(modifierIdGen) { blockId =>
+      val payload = weakIds(5)
+
+      val recovered = inputBlockTransactionsRequestMessageSpec.parseBytes(
+        payloadWithDeclaredCount(blockId, 5L, payload))
+      recovered.inputBlockId shouldEqual blockId
+      recovered.txIds.length shouldBe 5
+
+      val aboveBound = inputBlockTransactionsRequestMessageSpec.parseBytesTry(
+        payloadWithDeclaredCount(blockId, 6L, payload))
+      rejectedByCountBound(aboveBound) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionsRequest with realistic id count still roundtrips") {
+    forAll(modifierIdGen) { blockId =>
+      val txIds = Seq.tabulate(5)(i => Array.fill(ErgoTransaction.WeakIdLength)(i.toByte))
+      val request = InputBlockTransactionsRequest(blockId, txIds)
+      val recovered = inputBlockTransactionsRequestMessageSpec.parseBytes(
+        inputBlockTransactionsRequestMessageSpec.toBytes(request))
+
+      recovered.inputBlockId shouldEqual blockId
+      recovered.txIds.map(_.toSeq) shouldEqual txIds.map(_.toSeq)
+    }
+  }
+
+  property("InputBlockTransactionsRequest with zero id count parses to empty") {
+    forAll(modifierIdGen) { blockId =>
+      val recovered = inputBlockTransactionsRequestMessageSpec.parseBytes(
+        payloadWithDeclaredCount(blockId, 0L, Array.emptyByteArray))
+
+      recovered.inputBlockId shouldEqual blockId
+      recovered.txIds shouldBe empty
+    }
+  }
+
+  property("InputBlockTransactionIdsData parsing rejects id count exceeding remaining bytes") {
+    forAll(modifierIdGen) { blockId =>
+      val bytes = payloadWithDeclaredCount(blockId, 1000000L, weakIds(2))
+      bytes.length should be < 64
+
+      val res = inputBlockTransactionIdsMessageSpec.parseBytesTry(bytes)
+      rejectedByCountBound(res) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionIdsData parsing rejects Int.MaxValue id count safely") {
+    forAll(modifierIdGen) { blockId =>
+      val res = inputBlockTransactionIdsMessageSpec.parseBytesTry(
+        payloadWithDeclaredCount(blockId, Int.MaxValue.toLong, weakIds(2)))
+
+      // Int.MaxValue * WeakIdLength overflows Int arithmetic, the check is done in Long
+      rejectedByCountBound(res) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionIdsData parsing accepts id count whose ids exactly fill the remaining bytes, rejects one above") {
+    forAll(modifierIdGen) { blockId =>
+      val payload = weakIds(5)
+
+      val recovered = inputBlockTransactionIdsMessageSpec.parseBytes(
+        payloadWithDeclaredCount(blockId, 5L, payload))
+      recovered.inputBlockId shouldEqual blockId
+      recovered.transactionIds.length shouldBe 5
+
+      val aboveBound = inputBlockTransactionIdsMessageSpec.parseBytesTry(
+        payloadWithDeclaredCount(blockId, 6L, payload))
+      rejectedByCountBound(aboveBound) shouldBe true
+    }
+  }
+
+  property("InputBlockTransactionIdsData with realistic id count still roundtrips") {
+    forAll(modifierIdGen) { blockId =>
+      val txIds = Seq.tabulate(5)(i => Array.fill(ErgoTransaction.WeakIdLength)(i.toByte))
+      val data = InputBlockTransactionIdsData(blockId, txIds)
+      val recovered = inputBlockTransactionIdsMessageSpec.parseBytes(
+        inputBlockTransactionIdsMessageSpec.toBytes(data))
+
+      recovered.inputBlockId shouldEqual blockId
+      recovered.transactionIds.map(_.toSeq) shouldEqual txIds.map(_.toSeq)
+    }
+  }
+
+  property("InputBlockTransactionIdsData with zero id count parses to empty") {
+    forAll(modifierIdGen) { blockId =>
+      val recovered = inputBlockTransactionIdsMessageSpec.parseBytes(
+        payloadWithDeclaredCount(blockId, 0L, Array.emptyByteArray))
+
+      recovered.inputBlockId shouldEqual blockId
+      recovered.transactionIds shouldBe empty
+    }
   }
 }

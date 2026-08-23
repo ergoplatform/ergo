@@ -29,6 +29,9 @@ object InputBlockTransactionIdsMessageSpec extends MessageSpecInputBlocks[InputB
   override def parse(r: Reader): InputBlockTransactionIdsData = {
     val subBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txsCount = r.getUInt().toIntExact
+    // every weak id takes exactly WeakIdLength bytes, so a bigger count is not possible to fulfil
+    require(txsCount.toLong * ErgoTransaction.WeakIdLength <= r.remaining,
+      s"Too many transaction ids declared: $txsCount, while only ${r.remaining} bytes remaining")
     val transactionIds = (1 to txsCount).map { _ =>
       r.getBytes(ErgoTransaction.WeakIdLength)
     }

@@ -30,6 +30,8 @@ object InputBlockTransactionsMessageSpec extends MessageSpecInputBlocks[InputBlo
   override def parse(r: Reader): InputBlockTransactionsData = {
     val subBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txsCount = r.getUInt().toIntExact
+    // every serialized transaction takes at least one byte, so a bigger count is not possible to fulfil
+    require(txsCount <= r.remaining, s"Too many transactions declared: $txsCount, while only ${r.remaining} bytes remaining")
 
     val txs = new Array[ErgoTransaction](txsCount)
     cfor(0)(_ < txsCount, _ + 1) { i =>

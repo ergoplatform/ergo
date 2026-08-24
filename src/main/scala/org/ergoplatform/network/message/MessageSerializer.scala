@@ -60,6 +60,14 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
         }
         val spec = specsMap
           .getOrElse(msgCode, throw new Error(s"No message handler found for $msgCode"))
+        sourceOpt.flatMap(_.peerInfo).foreach { peerInfo =>
+          val peerVersion = peerInfo.peerSpec.protocolVersion
+          if (peerVersion.compare(spec.protocolVersion) < 0) {
+            throw MaliciousBehaviorException(
+              s"Peer protocol version $peerVersion is below required ${spec.protocolVersion} for ${spec.messageName}"
+            )
+          }
+        }
         val msgData = if (length > 0) {
           val checksum = it.getBytes(ChecksumLength)
           val data     = it.getBytes(length)

@@ -6,7 +6,7 @@ logLevel := Level.Debug
 // this values should be in sync with ergo-wallet/build.sbt
 val scala211 = "2.11.12"
 val scala212 = "2.12.20"
-val scala213 = "2.13.16"
+val scala213 = "2.13.18"
 
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
@@ -336,7 +336,7 @@ lazy val ergo = (project in file("."))
       "com.github.scopt" %% "scopt" % "4.1.0",
 
       // API dependencies
-      "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
+      "de.heikoseeberger" %% "akka-http-circe" % "1.39.2",
 
       // app dependencies
       // jaxb-api is included only to avoid a runtime exception

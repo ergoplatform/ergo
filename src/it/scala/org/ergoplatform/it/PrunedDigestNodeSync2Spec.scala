@@ -24,18 +24,18 @@ class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
   val minerConfig: Config = nodeSeedConfigs.head
     .withFallback(internalMinerPollingIntervalConfig(1000))
     .withFallback(specialDataDirConfig(remoteVolume))
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val nodeForSyncingConfig: Config = minerConfig
     .withFallback(nonGeneratingPeerConfig)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val digestConfig: Config = digestStatePeerConfig
     .withFallback(blockIntervalConfig(600))
     .withFallback(prunedHistoryConfig(blocksToKeep))
     .withFallback(nonGeneratingPeerConfig)
     .withFallback(nodeSeedConfigs(1))
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   // Testing scenario:
   // 1. Start up mining node and let it mine chain of length ~ {approxTargetHeight};
@@ -49,7 +49,7 @@ class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
     val minerNode: Node = docker.startDevNetNode(minerConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
     val result = Async.async {
-      Async.await(minerNode.waitForHeight(approxTargetHeight, 20.second))
+      Async.await(minerNode.waitForHeight(approxTargetHeight, 1.second))
 //      docker.stopNode(minerNode, secondsToWait = 0)
       val digestNode = docker.startDevNetNode(digestConfig).get
       Async.await(digestNode.waitForHeight(approxTargetHeight))

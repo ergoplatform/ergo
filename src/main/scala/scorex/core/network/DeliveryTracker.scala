@@ -137,6 +137,15 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     requested.get(typeId).flatMap(_.get(id))
   }
 
+  /** Get peer we're communicating with in regards with modifier `id` **/
+  def getSource(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Option[ConnectedPeer] = {
+    status(id, modifierTypeId, Seq.empty) match {
+      case Requested => requested.get(modifierTypeId).flatMap(_.get(id)).map(_.peer)
+      case Received => received.get(modifierTypeId).flatMap(_.get(id))
+      case _ => None
+    }
+  }
+
   /**
     * Modified with id `id` is permanently invalid - set its status to `Invalid`
     * and return [[ConnectedPeer]] which sent bad modifier.
@@ -227,6 +236,21 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
         received.adjust(modifierTypeId)(_.fold(Map(id -> sender))(_.updated(id, sender)))
       }
     }
+
+  /**
+    * Set modifier status to Received directly without a prior Requested state.
+    * Used when a modifier is already known (e.g. from a sync message) and
+    * does not need a network download request.
+    *
+    * Precondition: the caller MUST verify that the modifier status is Unknown
+    * before calling this method. If the status is Requested, use `setReceived`
+    * instead to properly clean up the delivery check timeout.
+    */
+  def setReceivedDirectly(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, sender: ConnectedPeer): Unit = {
+    tryWithLogging {
+      received.adjust(modifierTypeId)(_.fold(Map(id -> sender))(_.updated(id, sender)))
+    }
+  }
 
   /**
     * Self-check that transition between states is correct.

@@ -2,7 +2,7 @@ package org.ergoplatform.http.routes
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{AuthorizationFailedRejection, Route}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.pattern.StatusReply
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -42,6 +42,15 @@ class MiningApiRouteSpec
 
   val localSetting: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(useExternalMiner = true))
   val route: Route = MiningApiRoute(minerRef, localSetting).route
+
+  val settingsWithAuth: ErgoSettings = localSetting.copy(
+    scorexSettings = localSetting.scorexSettings.copy(
+      restApi = localSetting.scorexSettings.restApi.copy(
+        apiKeyHash = Some("e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10")
+      )
+    )
+  )
+  val routeWithAuth: Route = MiningApiRoute(minerRef, settingsWithAuth).route
 
   val solution = new AutolykosSolution(genECPoint.sample.get, genECPoint.sample.get, Array.fill(32)(9: Byte), BigInt(0))
   val weakSolution = WeakAutolykosSolution(genECPoint.sample.get, Array.fill(32)(9: Byte))
@@ -138,6 +147,36 @@ class MiningApiRouteSpec
     Post(prefix + "/candidateWithTxsAndPk", request.asJson) ~> route ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[Json]) shouldBe 'success
+    }
+  }
+
+  it should "return candidate without api_key when auth is enabled" in {
+    Get(prefix + "/candidate") ~> routeWithAuth ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "return reward address without api_key when auth is enabled" in {
+    Get(prefix + "/rewardAddress") ~> routeWithAuth ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "return reward public key without api_key when auth is enabled" in {
+    Get(prefix + "/rewardPublicKey") ~> routeWithAuth ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "accept solution without api_key when auth is enabled" in {
+    Post(prefix + "/solution", solution.asJson) ~> routeWithAuth ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "reject candidateWithTxs without api_key when auth is enabled" in {
+    Post(prefix + "/candidateWithTxs", Json.arr()) ~> routeWithAuth ~> check {
+      rejection shouldBe AuthorizationFailedRejection
     }
   }
 

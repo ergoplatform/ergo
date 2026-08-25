@@ -1,6 +1,6 @@
 package org.ergoplatform.http.api
 
-import akka.actor.{ActorRef, ActorRefFactory}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.server.{Directive, Route}
 import akka.pattern.ask
 import io.circe.Json
@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.NewBlockMined
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
 import scorex.crypto.hash.Digest32
@@ -21,7 +22,7 @@ import scorex.util.ModifierId
 import scala.concurrent.Future
 
 case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergoSettings: ErgoSettings)
-                         (implicit val context: ActorRefFactory) extends ErgoBaseApiRoute with ApiCodecs {
+                         (implicit val context: ActorSystem) extends ErgoBaseApiRoute with ApiCodecs {
 
   // Limit for requests returning headers, to avoid too heavy requests
   private val MaxHeaders = 16384
@@ -128,14 +129,22 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     }
   }
 
-  def postBlocksR: Route = (post & entity(as[ErgoFullBlock])) { block =>
+  def postBlocksR: Route = (post & entity(as[ErgoFullBlock]) & withAuth) { block =>
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
-      log.info("Received a new valid block through the API: " + block)
+      log.info(s"Received a new valid block through API: ${block.id}")
 
       viewHolderRef ! LocallyGeneratedBlockSection(block.header)
       block.blockSections.foreach {
         viewHolderRef ! LocallyGeneratedBlockSection(_)
       }
+
+      // Immediately announce newly mined block to network BEFORE local application.
+      // This reduces propagation latency by avoiding the wait for NodeViewHolder
+      // to fully validate and apply the block. LocalBlockApplied arrives later
+      // and skips broadcast since the block was already announced.
+      // TODO: Consider switching to direct actor message for lower latency
+      //       instead of event bus publish.
+      context.eventStream.publish(NewBlockMined(block.header))
 
       ApiResponse.OK
     } else {
@@ -146,7 +155,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   def getChainSliceR: Route = (pathPrefix("chainSlice") & chainPagination) { (fromHeight, toHeight) =>
     if (toHeight < fromHeight) {
       BadRequest("toHeight < fromHeight")
-    } else if (fromHeight - toHeight > MaxHeaders) {
+    } else if (toHeight.toLong - fromHeight.toLong > MaxHeaders) {
       BadRequest(s"No more than $MaxHeaders headers can be requested")
     } else {
       ApiResponse(getChainSlice(fromHeight, toHeight))

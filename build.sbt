@@ -174,10 +174,30 @@ inConfig(Linux)(
 Defaults.itSettings
 configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
-  parallelExecution := false,
+  // Run integration suites in parallel. Each suite is forked into its own JVM (testGrouping
+  // below) and the number running at once is bounded by the global Tags.ForkedTestGroup limit,
+  // so we get parallelism without exhausting host RAM (a suite can launch ~4 node containers).
+  parallelExecution := true,
+  testGrouping := {
+    val opts = forkOptions.value
+    definedTests.value.map { t =>
+      Tests.Group(name = t.name, tests = Seq(t), runPolicy = Tests.SubProcess(opts))
+    }
+  },
   test := (test dependsOn docker).value,
   scalacOptions ++= Seq("-Xasync")
 ))
+
+// Cap how many forked test JVMs run concurrently.  sbt's default
+// concurrentRestrictions already contains Tags.limit(Tags.ForkedTestGroup, 1);
+// simply += adds a second, looser rule and the strictest wins, so the
+// 2-way parallelism would be a no-op.  We replace the default rule by
+// keeping the other defaults and setting ForkedTestGroup to 2.
+Global / concurrentRestrictions := Seq(
+  Tags.limitAll(math.max(1, java.lang.Runtime.getRuntime.availableProcessors())),
+  Tags.limit(Tags.ForkedTestGroup, 2),
+  Tags.exclusiveGroup(Tags.Clean)
+)
 
 docker / dockerfile := {
   val configDevNet = (IntegrationTest / resourceDirectory).value / "devnetTemplate.conf"

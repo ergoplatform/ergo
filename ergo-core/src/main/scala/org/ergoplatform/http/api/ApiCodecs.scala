@@ -45,6 +45,14 @@ trait ApiCodecs extends JsonCodecs {
     fromTry(validationResult.toTry)
   }
 
+  private def fromTryAt[T](value: Try[T], cursor: ACursor): Decoder.Result[T] = value match {
+    case Success(result) => Right(result)
+    case Failure(e) => Left(DecodingFailure.fromThrowable(e, cursor.history))
+  }
+
+  private def decodeBase16(value: String, cursor: ACursor): Decoder.Result[Array[Byte]] =
+    fromTryAt(Base16.decode(value), cursor)
+
   implicit val leafDataEncoder: Encoder[LeafData] = Encoder.instance(xs => Base16.encode(xs).asJson)
 
   implicit val digestEncoder: Encoder[Digest] = Encoder.instance(x => Base16.encode(x).asJson)
@@ -338,11 +346,14 @@ trait ApiCodecs extends JsonCodecs {
           pubkey <- c.downField("pubkey").as[SigmaLeaf]
           proof <- c.downField("proof").as[String]
           position <- c.downField("position").as[NodePosition]
+          challengeBytes <- decodeBase16(challenge, c.downField("challenge"))
+          proofBytes <- decodeBase16(proof, c.downField("proof"))
+          proofTree <- fromTryAt(Try(SigSerializer.parseAndComputeChallenges(pubkey, proofBytes)(null)), c.downField("proof"))
         } yield
           RealSecretProof(
             pubkey,
-            Challenge @@ Base16.decode(challenge).get.toColl,
-            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)(null),
+            Challenge @@ challengeBytes.toColl,
+            proofTree,
             position
           )
       case h: String if h == "proofSimulated" =>
@@ -351,11 +362,14 @@ trait ApiCodecs extends JsonCodecs {
           pubkey <- c.downField("pubkey").as[SigmaLeaf]
           proof <- c.downField("proof").as[String]
           position <- c.downField("position").as[NodePosition]
+          challengeBytes <- decodeBase16(challenge, c.downField("challenge"))
+          proofBytes <- decodeBase16(proof, c.downField("proof"))
+          proofTree <- fromTryAt(Try(SigSerializer.parseAndComputeChallenges(pubkey, proofBytes)(null)), c.downField("proof"))
         } yield
           SimulatedSecretProof(
             pubkey,
-            Challenge @@ Base16.decode(challenge).get.toColl,
-            SigSerializer.parseAndComputeChallenges(pubkey, Base16.decode(proof).get)(null),
+            Challenge @@ challengeBytes.toColl,
+            proofTree,
             position
           )
       case _ =>

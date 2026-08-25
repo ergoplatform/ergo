@@ -5,10 +5,11 @@ import akka.pattern.StatusReply
 import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.nodeView.state.DigestState
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{FirstSecretResponse, GetFirstSecret, GetMiningPubKey, MiningPubKeyResponse}
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
 import scorex.util.ScorexLogging
 import sigma.data.ProveDlog
@@ -133,30 +134,31 @@ class ErgoMiner(
     case StartMining
         if minerState.secretKeyOpt.isDefined || ergoSettings.nodeSettings.useExternalMiner =>
       // Check if blockchain is synced before starting mining
-      viewHolderRef ! GetDataFromCurrentView[DigestState, Unit] { v =>
-        val headersHeight = v.history.headersHeight
-        val fullBlockHeight = v.history.fullBlockHeight
-        if (isBlockchainNearlySynced(headersHeight, fullBlockHeight)) {
-          log.info(s"Blockchain is (almost) synced (headers: $headersHeight, full blocks: $fullBlockHeight), starting mining")
-          if (!ergoSettings.nodeSettings.useExternalMiner && ergoSettings.nodeSettings.internalMinersCount != 0) {
-            log.info(
-              s"Starting ${ergoSettings.nodeSettings.internalMinersCount} native miner(s)"
-            )
-            (1 to ergoSettings.nodeSettings.internalMinersCount) foreach { _ =>
-              ErgoMiningThread(
-                ergoSettings,
-                minerState.candidateGeneratorRef,
-                minerState.secretKeyOpt.get.w
-              )(context)
-            }
+      readersHolderRef ! GetReaders
+
+    case Readers(historyReader, _, _, _) =>
+      val headersHeight = historyReader.headersHeight
+      val fullBlockHeight = historyReader.fullBlockHeight
+      if (isBlockchainNearlySynced(headersHeight, fullBlockHeight)) {
+        log.info(s"Blockchain is (almost) synced (headers: $headersHeight, full blocks: $fullBlockHeight), starting mining")
+        if (!ergoSettings.nodeSettings.useExternalMiner && ergoSettings.nodeSettings.internalMinersCount != 0) {
+          log.info(
+            s"Starting ${ergoSettings.nodeSettings.internalMinersCount} native miner(s)"
+          )
+          (1 to ergoSettings.nodeSettings.internalMinersCount) foreach { _ =>
+            ErgoMiningThread(
+              ergoSettings,
+              minerState.candidateGeneratorRef,
+              minerState.secretKeyOpt.get.w
+            )(context)
           }
-          context.system.eventStream
-            .unsubscribe(self, classOf[FullBlockApplied])
-          context.become(started(minerState))
-        } else {
-          log.info(s"Blockchain not synced yet (headers: $headersHeight, full blocks: $fullBlockHeight), waiting for sync")
-          // Stay in `starting` state and keep listening for FullBlockApplied to re-check sync status
         }
+        context.system.eventStream
+          .unsubscribe(self, classOf[FullBlockApplied])
+        context.become(started(minerState))
+      } else {
+        log.info(s"Blockchain not synced yet (headers: $headersHeight, full blocks: $fullBlockHeight), waiting for sync")
+        // Stay in `starting` state and keep listening for FullBlockApplied to re-check sync status
       }
 
     case StartMining =>
@@ -193,6 +195,9 @@ class ErgoMiner(
 
     case ReadMinerPk => // used in /mining/rewardAddress API method
       sender() ! StatusReply.success(minerState.publicKey)
+
+    // asked in "starting" state, could arrive after another signal which cause switching to started state
+    case _: Readers =>
 
     case m =>
       log.warn(s"Unexpected message $m of class: ${m.getClass}")

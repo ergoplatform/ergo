@@ -46,9 +46,9 @@ object SnapshotsInfoSerializer extends ErgoSerializer[SnapshotsInfo] {
   }
 
   override def parse(r: Reader): SnapshotsInfo = {
-    val manifestsCount = r.getUInt().toInt // we read from trusted source, no need for extra checks
+    val manifestsCount = r.getUIntExact() // we read from trusted source, no need for extra checks
     val manifests = (1 to manifestsCount).map { _ =>
-      val h = r.getUInt().toInt
+      val h = r.getUIntExact()
       val manifestId = Digest32 @@ r.getBytes(Constants.HashLength)
       h -> manifestId
     }.toMap

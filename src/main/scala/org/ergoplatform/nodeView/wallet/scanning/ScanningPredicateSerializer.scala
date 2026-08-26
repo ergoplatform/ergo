@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet.scanning
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.RegisterId
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import sigma.ast.{EvaluatedValue, SType}
 import sigma.serialization.ValueSerializer
@@ -55,7 +54,7 @@ object ScanningPredicateSerializer extends ErgoSerializer[ScanningPredicate] {
 
     def parseRegisterAndBytes(r: Reader): (RegisterId, EvaluatedValue[_ <: SType]) = {
       val reg = ErgoBox.registerByIndex(r.getByte())
-      val len  = r.getUInt().toIntExact
+      val len  = r.getUIntExact()
       val bs = r.getBytes(len)
       val vs = ValueSerializer.deserialize(bs)
       reg -> vs.asInstanceOf[EvaluatedValue[SType]]

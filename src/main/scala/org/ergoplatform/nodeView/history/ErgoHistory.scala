@@ -10,8 +10,8 @@ import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
+import org.ergoplatform.nodeView.history.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockProcessor, FullBlockSectionProcessor}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
@@ -95,7 +95,7 @@ trait ErgoHistory
     log.debug(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as valid ")
     modifier match {
       case fb: ErgoFullBlock =>
-        val nonMarkedIds = (fb.header.id +: fb.header.sectionIds.map(_._2))
+        val nonMarkedIds = (fb.header.sectionIds.values ++ Iterable(fb.header.id))
           .filter(id => historyStorage.getIndex(validityKey(id)).isEmpty).toArray
 
         if (nonMarkedIds.nonEmpty) {
@@ -119,9 +119,7 @@ trait ErgoHistory
     * @return ProgressInfo with next modifier to try to apply
     */
   @SuppressWarnings(Array("OptionGet", "TraversableHead"))
-  def reportModifierIsInvalid(modifier: BlockSection,
-                              progressInfo: ProgressInfo[BlockSection]
-                             ): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
+  def reportModifierIsInvalid(modifier: BlockSection): Try[(ErgoHistory, ProgressInfo[BlockSection])] = synchronized {
     log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is marked as invalid")
     correspondingHeader(modifier) match {
       case Some(invalidatedHeader) =>
@@ -136,7 +134,7 @@ trait ErgoHistory
           case (false, false) =>
             // Modifiers from best header and best full chain are not involved, no rollback and links change required
             historyStorage.insert(validityRow, BlockSection.emptyArray).map { _ =>
-              this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+              this -> ProgressInfo.empty
             }
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
@@ -148,7 +146,7 @@ trait ErgoHistory
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
                 BlockSection.emptyArray
               ).map { _ =>
-                this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+                this -> ProgressInfo.empty
               }
             } else {
               val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
@@ -176,7 +174,7 @@ trait ErgoHistory
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow
               historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
                 val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
-                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Map.empty)
               }
             }
         }
@@ -184,7 +182,7 @@ trait ErgoHistory
         //No headers become invalid. Just mark this modifier as invalid
         log.warn(s"Modifier ${modifier.encodedId} of type ${modifier.modifierTypeId} is missing corresponding header")
         historyStorage.insert(Array(validityKey(modifier.id) -> Array(0.toByte)), BlockSection.emptyArray).map { _ =>
-          this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+          this -> ProgressInfo.empty
         }
     }
   }

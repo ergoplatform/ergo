@@ -6,12 +6,12 @@ import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadInputBlock, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -19,7 +19,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.{ModifierId, ScorexLogging}
@@ -27,9 +26,11 @@ import spire.syntax.all.cfor
 
 import java.io.File
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.network.message.inputblocks.{InputBlockTransactionsRequest, OrderingBlockAnnouncement}
+import org.ergoplatform.subblocks.InputBlockAnnouncement
+import scorex.core.network.ConnectedPeer
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -41,7 +42,7 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor with ScorexLogging with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -88,6 +89,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Escalate
     }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted node view holder restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
@@ -132,14 +138,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
   private def requestDownloads(pi: ProgressInfo[BlockSection]): Unit = {
-    //TODO: actually, pi.toDownload contains only 1 modifierid per type,
-    //TODO: see the only case where toDownload is not empty during ProgressInfo construction
-    //TODO: so the code below can be optimized
-    val toDownload = mutable.Map[NetworkObjectTypeId.Value, Seq[ModifierId]]()
-    pi.toDownload.foreach { case (tid, mid) =>
-      toDownload.put(tid, toDownload.getOrElse(tid, Seq()) :+ mid)
-    }
-    context.system.eventStream.publish(DownloadRequest(toDownload.toMap))
+    val toDownload = pi.toDownload.mapValues(mid => Seq(mid))
+    context.system.eventStream.publish(DownloadRequest(toDownload))
   }
 
 
@@ -234,24 +234,31 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         if (updateInfo.failedMod.isEmpty) {
           val chainTipOpt = history.estimatedTip()
           // todo: make cleaner ADProofs dump instead of pmodModify , see https://github.com/ergoplatform/ergo/issues/2413
-          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
+          updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.blockSection, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
                   val fullBlock = modToApply.asInstanceOf[ErgoFullBlock]
+                  val header = fullBlock.header
                   val txIds = fullBlock.blockTransactions.transactions.map(_.id)
                   val event = if (local) {
-                    LocalBlockApplied(fullBlock.header, txIds)
+                    LocalBlockApplied(header, txIds)
                   } else {
-                    RemoteBlockApplied(fullBlock.header, txIds)
+                    RemoteBlockApplied(header, txIds)
                   }
                   context.system.eventStream.publish(event)
+
+                  // if this is new best block, reset best input block ref around the node
+                  if (header.height == chainTipOpt.getOrElse(-1) + 1) {
+                    history.updateStateWithOrderingBlock(header)
+                    context.system.eventStream.publish(NewBestInputBlock(None, local = false))
+                  }
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
             case Failure(e) =>
               log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
-              history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
+              history.reportModifierIsInvalid(modToApply).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
                 ErgoNodeViewHolder.extractFailedTxId(e).foreach { txId =>
                   log.warn(s"Removing transaction $txId which caused the block validation failure from the mempool")
@@ -268,7 +275,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def txModify(unconfirmedTx: UnconfirmedTransaction): ProcessingOutcome = {
     val tx = unconfirmedTx.transaction
-    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState())
+    val inputBlockTransactions = history().bestInputBlocksChain().flatMap { id =>
+      history().getInputBlockTransactions(id).getOrElse(Seq.empty)
+    }
+    val (newPool, processingOutcome) = memoryPool().process(unconfirmedTx, minimalState(), inputBlockTransactions)
     processingOutcome match {
       case acc: ProcessingOutcome.Accepted =>
         log.debug(s"Unconfirmed transaction $tx added to the memory pool")
@@ -319,6 +329,179 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           updateNodeView(updatedHistory = Some(history()))
         }
       }
+
+    /*
+     *  Input and ordering blocks related logic
+     */
+
+    // process input block got from p2p network (with no transactions)
+    case ProcessInputBlock(inputBlockInfo, remote) =>
+      // apply input block with no transaction, and check if downloading parent input block is needed
+      val toDownloadOpt = history().applyInputBlock(inputBlockInfo)
+
+      // ask for parent input block
+      // we do it before asking for transactions of this input-block to get parent and its transactions ASAP
+      toDownloadOpt.foreach { inputId =>
+        log.debug(s"Don't have parent of input-block ${inputBlockInfo.id}, asking it")
+        context.system.eventStream.publish(DownloadInputBlock(inputId, remote))
+      }
+
+      history().getInputBlockTransactions(inputBlockInfo.id) match {
+        case Some(txs) =>
+          // we already have transactions, that is possible sometimes if they arrive before the input block
+          // over p2p network
+          log.debug(s"Got input block ${inputBlockInfo.id} transactions before the input block itself")
+          processInputBlockTransactions(inputBlockInfo.id, txs, local = false)
+        case None =>
+          // we dont do anything here, p2p layer (ErgoNodeViewSynchronizer) will download transactions
+          // and call ProcessInputBlockTransactions
+      }
+
+    case ProcessInputBlockTransactions(std) =>
+      processInputBlockTransactions(std.inputBlockId, std.transactions, local = false)
+
+    case ProcessOrderingBlock(orderingBlockAnnouncement) =>
+      processOrderingBlock(orderingBlockAnnouncement)
+  }
+
+  /**
+    * Process transactions for input block
+    * @param inputBlockId - input block id
+    * @param transactions - input block transactions
+    * @param local - true if the input block is generated locally, false if it is got over p2p network
+    */
+  private def processInputBlockTransactions(inputBlockId: ModifierId,
+                                            transactions: Seq[ErgoTransaction],
+                                            local: Boolean): Unit = {
+    try {
+      // apply input block transactions
+      val (newBestInputBlocks, rollbackInputBlocks) = {
+        history().applyInputBlockTransactions(inputBlockId, transactions, minimalState())
+      }
+
+      rollbackInputBlocks.foreach { id =>
+        history().getInputBlockTransactions(id) match {
+          case Some(txs) =>
+            val updMp = memoryPool().put(txs.map(tx => UnconfirmedTransaction(tx, None)))
+            updateNodeView(updatedMempool = Some(updMp))
+
+            val newVault = vault().rollbackInputBlock(id)
+            updateNodeView(updatedVault = Some(newVault))
+          case None =>
+        }
+      }
+
+      // clear mempool from input block transactions
+      newBestInputBlocks.foreach { id =>
+        history().getInputBlockTransactions(id) match {
+          case Some(txs) =>
+            val updMp = memoryPool().removeWithDoubleSpends(txs)
+            updateNodeView(updatedMempool = Some(updMp))
+
+            val newVault = vault().scanInputBlock(id)
+            updateNodeView(updatedVault = Some(newVault))
+          case None =>
+        }
+      }
+
+      // send rollback signal
+      newBestInputBlocks.foreach { id =>
+        log.debug(s"New input-block with transactions found: $id")
+        context.system.eventStream.publish(NewBestInputBlock(Some(id), local))
+      }
+    } catch {
+      case t: Throwable => log.error(s"Exception during input block $inputBlockId processing ", t)
+    }
+  }
+
+  private def processOrderingBlock(oba: OrderingBlockAnnouncement): Unit = {
+    val header   = oba.header
+    val parentId = header.parentId
+    val headerId = header.id
+
+    log.info(s"Processing ordering block announcement for $headerId")
+
+    history().typedModifierById[Header](parentId) match {
+      case Some(_) =>
+        // apply header and extension section got from ordering block announcement
+        pmodModify(header, local = false)
+        val ext = Extension(header.id, oba.extensionFields)
+        pmodModify(ext, local = false)
+
+        val broadcastedTransactionIds = oba.broadcastedTransactionIds
+        val mempoolTransactions = memoryPool().getAll(broadcastedTransactionIds).map(_.transaction) // todo: more efficint iteration
+
+        val allTransactionsDownloaded = mempoolTransactions.size == broadcastedTransactionIds.size
+
+        // todo: download only txs which are not in the mempool if allTransactionsDownloaded == false,
+        // todo: currently the whole block is downloaded
+
+        if (allTransactionsDownloaded) {
+          val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ mempoolTransactions
+          history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
+          val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+
+          // todo: check if ordering block transactions should come first
+          val txs = orderingBlockTransactions ++ inputBlocksTransactions
+
+          log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
+            s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +
+            s"total transactions: ${txs.length} ")
+
+          val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
+          val blockDigest = header.transactionsRoot
+
+          // checking Merkle root of collected transactions
+          val merkleRootCorrect = blockDigest.sameElements(calculatedDigest)
+          if (merkleRootCorrect) {
+            // we apply header and extension from ordering block announcement
+            log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
+            val bs = new BlockTransactions(headerId, header.version, txs)
+            pmodModify(bs, local = false)
+
+            // for other cases, NewBestInputBlock(None) is sent in applyState() of this class
+            context.system.eventStream.publish(NewBestInputBlock(None, local = false))
+          } else {
+            log.warn(s"Downloading block transactions fully for $headerId as Merkle root does not match")
+            context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
+          }
+        } else {
+          log.warn(s"Downloading block transactions fully for $headerId as not all the transactions available")
+          context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
+        }
+
+        applyFromCacheLoop(headersCache)
+
+        // todo: check ADProofs section generation
+        
+      case None =>
+        // Parent header is missing - cache the ordering block and request the parent
+        log.warn(s"Parent header not found for ordering block $headerId, caching its header and requesting parent $parentId")
+        
+        // Also put the header into headersCache so it can be applied when parent arrives
+        headersCache.put(headerId, header)
+        
+        // Request the parent header from peers
+        context.system.eventStream.publish(
+          DownloadRequest(Map(Header.modifierTypeId -> Seq(parentId)))
+        )
+        
+        log.info(s"Requested parent header $parentId for ordering block $headerId")
+    }
+  }
+
+  @tailrec
+  private def applyFromCacheLoop(cache: ErgoModifiersCache): Unit = {
+    val at0 = System.currentTimeMillis()
+    cache.popCandidate(history()) match {
+      case Some(mod) =>
+        pmodModify(mod, local = false)
+        val at = System.currentTimeMillis()
+        log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
+        applyFromCacheLoop(cache)
+      case None =>
+        ()
+    }
   }
 
   /**
@@ -329,20 +512,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
-      @tailrec
-      def applyFromCacheLoop(cache: ErgoModifiersCache): Unit = {
-        val at0 = System.currentTimeMillis()
-        cache.popCandidate(history()) match {
-          case Some(mod) =>
-            pmodModify(mod, local = false)
-            val at = System.currentTimeMillis()
-            log.debug(s"Modifier application time for ${mod.id}: ${at - at0}")
-            applyFromCacheLoop(cache)
-          case None =>
-            ()
-        }
-      }
-
       mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
@@ -589,7 +758,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info("State and history are both empty on startup")
         Success(stateIn)
       case (stateId, Some(block), _) if stateId == block.id =>
-        log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
+        log.info(s"State and history have the same version ${Algos.encode(stateId)}, no recovery needed.")
         Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
@@ -679,9 +848,39 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   protected def processLocallyGeneratedModifiers: Receive = {
-    case lm: LocallyGeneratedModifier =>
-      log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
-      pmodModify(lm.pmod, local = true)
+    case lm: LocallyGeneratedBlockSection =>
+      log.info(s"Got locally generated modifier ${lm.blockSection.encodedId} of type ${lm.blockSection.modifierTypeId}")
+      pmodModify(lm.blockSection, local = true)
+
+    case l@LocallyGeneratedOrderingBlock(efb, orderingBlockTransactions) =>
+      log.info(s"Got locally generated ordering block ${efb.id}")
+
+      // todo: send directly to ENVS instead of publishing
+      context.system.eventStream.publish(l)
+      pmodModify(efb.header, local = true)
+      val sectionsToApply = if (settings.nodeSettings.stateType == StateType.Digest) {
+        efb.blockSections
+      } else {
+        efb.mandatoryBlockSections
+      }
+      sectionsToApply.foreach { section =>
+        pmodModify(section, local = true)
+      }
+      history().saveOrderingBlockTransactions(efb.id, orderingBlockTransactions)
+
+      context.system.eventStream.publish(LocalBlockApplied(efb.header, orderingBlockTransactions.map(_.id)))
+
+    case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
+      log.info(s"Got locally generated input block ${subblockInfo.header.id}")
+      val toDownloadOpt = history().applyInputBlock(subblockInfo)
+
+      // this handling done just in case, shouldn't happen
+      toDownloadOpt.foreach { _ =>
+        log.error(s"Shouldn't be there: input-block ${subblockInfo.id} generated locally when its parent is not available")
+      }
+
+      val inputBlockTxs = subBlockTransactionsData.transactions
+      processInputBlockTransactions(subblockInfo.id, inputBlockTxs, local = true)
   }
 
   protected def getCurrentInfo: Receive = {
@@ -734,6 +933,10 @@ object ErgoNodeViewHolder {
     // Modifiers received from the remote peer with new elements in it
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
 
+    /**
+      * Wrapper for a locally generated input-block submitted via API
+      */
+    case class LocallyGeneratedInputBlock(sbi: InputBlockAnnouncement)
 
     /**
       * Wrapper for a transaction submitted via API
@@ -766,6 +969,9 @@ object ErgoNodeViewHolder {
     * to download them
     */
   case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
+
+  case class DownloadInputBlock(subblockId: ModifierId, remote: ConnectedPeer)
+  case class DownloadInputBlockTransactions(req: InputBlockTransactionsRequest, remote: ConnectedPeer)
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
 

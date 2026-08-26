@@ -1,6 +1,6 @@
 package org.ergoplatform.modifiers.history.header
 
-import org.ergoplatform.mining.AutolykosSolution
+import org.ergoplatform.AutolykosSolution
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId

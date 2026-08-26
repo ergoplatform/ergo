@@ -12,12 +12,13 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
+import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import scorex.db.ByteArrayWrapper
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.settings.Constants.FalseTree
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
@@ -49,16 +50,32 @@ trait ErgoState[IState <: ErgoState[IState]] extends ErgoStateReader {
 
   /**
     *
-    * @param mod modifire to apply to the state
+    * @param mod modifier to apply to the state
     * @param estimatedTip - estimated height of blockchain tip
     * @param generate function that handles newly created modifier as a result of application the current one
     * @return new State
     */
-  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedModifier => Unit): Try[IState]
+  def applyModifier(mod: BlockSection, estimatedTip: Option[Height])(generate: LocallyGeneratedBlockSection => Unit): Try[IState]
 
   def rollbackTo(version: VersionTag): Try[IState]
 
   def rollbackVersions: Iterable[VersionTag]
+
+  /**
+    * Validates transactions within an input block against the current state.
+    *
+    * Input blocks are part of Ergo's two-tier architecture, where full (ordering) blocks
+    * contain headers and proofs, while input blocks contain transactions referencing them.
+    * This method validates the input block's transactions without modifying persistent state,
+    * checking both stateless and stateful validity, and ensuring no double spending occurs
+    * across the current and previous input block transactions.
+    *
+    * @param txs transactions in the current input block
+    * @param previousTransactions transactions from earlier input blocks in the chain
+    * @param header the ordering block header this input block references
+    * @return total validation cost on success, or failure if validation or double-spend check fails
+    */
+  def applyInputBlock(txs: Seq[ErgoTransaction], previousTransactions: Seq[ErgoTransaction], header: Header): Try[Long]
 
   /**
     * @return read-only view of this state
@@ -97,6 +114,45 @@ object ErgoState extends ScorexLogging {
   }
 
   /**
+    * Validates that transactions within a single input block are topologically sorted.
+    *
+    * A transaction can only spend outputs from transactions that appear BEFORE it
+    * in the sequence. This ensures deterministic validation and matches full block semantics.
+    *
+    * @param txs transactions in a single input block
+    * @return Success if transactions are properly ordered, Failure otherwise
+    */
+  def validateTopologicalOrdering(txs: Seq[ErgoTransaction]): Try[Unit] = {
+    val outputToTxIndex = mutable.HashMap.empty[ByteArrayWrapper, Int]
+    txs.zipWithIndex.foreach { case (tx, idx) =>
+      tx.outputs.foreach(o => outputToTxIndex.put(ByteArrayWrapper(o.id), idx))
+    }
+
+    val firstViolation = txs.zipWithIndex.collectFirst {
+      case (tx, idx) =>
+        // Only check regular inputs (spending). Data-inputs may reference
+        // outputs from transactions that appear later in the block.
+        val outOfOrderInput = tx.inputs.iterator.map(_.boxId).find { boxId =>
+          outputToTxIndex.get(ByteArrayWrapper(boxId)) match {
+            case Some(creatingIdx) if creatingIdx >= idx => true
+            case _ => false
+          }
+        }
+        outOfOrderInput.map(boxId => (idx, boxId, outputToTxIndex(ByteArrayWrapper(boxId))))
+    }.flatten
+
+    firstViolation match {
+      case Some((spendingIdx, boxId, creatingIdx)) =>
+        Failure(new Exception(
+          s"Out-of-order spending in input block: transaction at index $spendingIdx " +
+            s"references box ${Algos.encode(boxId)} created by transaction at index $creatingIdx. " +
+            s"Transactions must be topologically sorted within an input block."))
+      case None =>
+        Success(())
+    }
+  }
+
+  /**
     * Tries to validate and execute transactions.
     * @param transactions to be validated and executed
     * @param currentStateContext to be used for tx execution
@@ -105,7 +161,8 @@ object ErgoState extends ScorexLogging {
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext,
-                       nodeSettings: NodeConfigurationSettings)
+                       nodeSettings: NodeConfigurationSettings,
+                       softFieldsAllowed: Boolean = true)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
@@ -132,7 +189,7 @@ object ErgoState extends ScorexLogging {
       }
     }
 
-    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
+    val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(-1)
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
     } else {
@@ -151,7 +208,7 @@ object ErgoState extends ScorexLogging {
           .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
           .payload[Long](validCostResult.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
-            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
+            tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value, softFieldsAllowed)(verifier).result
           }
       }
       costResult
@@ -257,7 +314,7 @@ object ErgoState extends ScorexLogging {
   /**
     * Genesis state boxes generator.
     * Genesis state is corresponding to the state before the very first block processed.
-    * For Ergo mainnet, contains emission contract box, proof-of-no--premine box, and treasury contract box
+    * For Ergo mainnet, contains emission contract box, proof-of-no-premine box, and treasury contract box
     */
   def genesisBoxes(chainSettings: ChainSettings): Seq[ErgoBox] = {
     Seq(genesisEmissionBox(chainSettings), noPremineBox(chainSettings), genesisFoundersBox(chainSettings))

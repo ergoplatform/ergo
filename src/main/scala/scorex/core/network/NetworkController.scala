@@ -92,6 +92,11 @@ class NetworkController(ergoSettings: ErgoSettings,
       nonsense
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted network controller restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def postRestart(reason: Throwable): Unit = {
     log.error(s"Network controller restarted due to ${reason.getMessage}", reason)
     super.postRestart(reason)

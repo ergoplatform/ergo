@@ -317,6 +317,8 @@ object Parameters {
 
   val MaxBlockCostDefault: Int = 1000000
 
+  val SubsPerBlockDefault: Int = 64
+
   val DefaultParameters: Map[Byte, Int] = Map(
     StorageFeeFactorIncrease -> StorageFeeFactorDefault,
     MinValuePerByteIncrease -> MinValuePerByteDefault,
@@ -326,6 +328,7 @@ object Parameters {
     OutputCostIncrease -> OutputCostDefault,
     MaxBlockSizeIncrease -> MaxBlockSizeDefault,
     MaxBlockCostIncrease -> MaxBlockCostDefault,
+    SubblocksPerBlockIncrease -> SubsPerBlockDefault,
     BlockVersion -> 1
   )
 
@@ -338,7 +341,8 @@ object Parameters {
     TokenAccessCostIncrease -> "Token access cost",
     InputCostIncrease -> "Cost per one transaction input",
     DataInputCostIncrease -> "Cost per one data input",
-    OutputCostIncrease -> "Cost per one transaction output"
+    OutputCostIncrease -> "Cost per one transaction output",
+    SubblocksPerBlockIncrease -> "Input blocks per finalizing block (on average)"
   )
 
   val stepsTable: Map[Byte, Int] = Map(

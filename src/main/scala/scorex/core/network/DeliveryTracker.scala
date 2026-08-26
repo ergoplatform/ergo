@@ -104,10 +104,11 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     else if (requested.get(modifierTypeId).exists(_.contains(modifierId))) Requested
     else if (invalidModifierCache.mightContain(modifierId)) Invalid
     else if (modifierKeepers.exists(_.contains(modifierId))) Held
+    else if (!NetworkObjectTypeId.isTypeKnown(modifierTypeId)) UnknownStatus
     else Unknown
 
   // Write ERR message about incorrect transition into the log, so devs will find it eventually
-  def checkStatusTransition(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
+  private def checkStatusTransition(oldStatus: ModifiersStatus, expectedStatues: ModifiersStatus): Unit = {
     if (!isCorrectTransition(oldStatus, expectedStatues)) {
       log.error(s"Illegal status transition: $oldStatus -> $expectedStatues")
     }

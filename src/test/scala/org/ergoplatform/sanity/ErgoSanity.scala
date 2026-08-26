@@ -1,7 +1,7 @@
 package org.ergoplatform.sanity
 
 import akka.actor.ActorRef
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, InputBlockFound, InputBlockHeaderFound, NothingFound, OrderingBlockFound, OrderingBlockHeaderFound}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -12,7 +12,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInf
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.settings.Constants.HashLength
 import scorex.testkit.generators.{ModifierProducerTemplateItem, SynInvalid, Valid}
 import scorex.testkit.properties.HistoryTests
@@ -49,6 +49,7 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
 
   override def syntacticallyValidModifier(history: HT): Header = {
     val bestTimestamp = history.bestHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
     powScheme.prove(
       history.bestHeaderOpt,
@@ -60,8 +61,17 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
       Math.max(System.currentTimeMillis(), bestTimestamp),
       Digest32 @@ Array.fill(HashLength)(0.toByte),
       Array.fill(3)(0: Byte),
-      defaultMinerSecretNumber
-    ).get
+      defaultMinerSecretNumber,
+      Long.MinValue,
+      Long.MaxValue,
+      defaultParams
+    ) match {
+      case InputBlockHeaderFound(h) => h
+      case OrderingBlockHeaderFound(h) => h
+      case InputBlockFound(fb) => fb.header
+      case OrderingBlockFound(fb) => fb.header
+      case NothingFound => throw new RuntimeException("No valid PoW found")
+    }
   }
 
   override def syntacticallyInvalidModifier(history: HT): PM =

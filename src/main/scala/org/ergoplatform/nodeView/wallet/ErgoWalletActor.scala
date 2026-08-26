@@ -12,8 +12,9 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResu
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.BoxSelector
+import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
+import org.ergoplatform.nodeView.wallet.persistence.{Balance, InputBlockDiff}
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
@@ -47,6 +48,11 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.error(s"Wallet failed with: $e")
         Restart
     }
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted wallet actor restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
 
   override def postRestart(reason: Throwable): Unit = {
     log.error(s"Wallet actor restarted due to ${reason.getMessage}", reason)
@@ -197,7 +203,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /* STATE CHANGE */
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
-      val newState = ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)))
+      val newState = ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)), historyReader)
       context.become(loadedWallet(newState))
 
     case ChangedState(s: ErgoStateReader@unchecked) =>
@@ -212,7 +218,7 @@ class ErgoWalletActor(settings: ErgoSettings,
               state.walletVars
           }
           val updState = state.copy(stateReaderOpt = Some(s), parameters = cp, walletVars = newWalletVars)
-          val newState = ergoWalletService.updateUtxoState(updState)
+          val newState = ergoWalletService.updateUtxoState(updState, historyReader)
           context.become(loadedWallet(newState))
         case Failure(t) =>
           val errorMsg = s"Updating wallet state context failed : ${t.getMessage}"
@@ -226,10 +232,72 @@ class ErgoWalletActor(settings: ErgoSettings,
       val dustLimit = settings.walletSettings.dustLimit
       val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
       val inputs = WalletScanLogic.extractInputBoxes(tx)
-      val newState = state.copy(offChainRegistry =
-        state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
-      )
+      val newOffChainRegistry = state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
+      val newState = state.copy(offChainRegistry = newOffChainRegistry)
       context.become(loadedWallet(newState))
+
+    case ScanInputBlock(inputBlockId) =>
+      if (state.inputBlockIds.contains(inputBlockId)) {
+        log.warn(s"Ignoring duplicate ScanInputBlock for $inputBlockId")
+      } else {
+        historyReader.getInputBlockTransactions(inputBlockId) match {
+          case Some(txs) =>
+            val dustLimit = settings.walletSettings.dustLimit
+
+            // Process all transactions atomically and record the net diff for rollback support
+            val (finalRegistry, allAdded, allRemovedOffChain, allRemovedOnChain) =
+              txs.foldLeft(
+                (state.offChainRegistry, Seq.empty[TrackedBox], Seq.empty[TrackedBox], Seq.empty[Balance])
+              ) { case ((registry, addedAcc, removedOffAcc, removedOnAcc), tx) =>
+                val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+                val inputs = WalletScanLogic.extractInputBoxes(tx)
+                val (newRegistry, removedOff, removedOn) =
+                  registry.updateOnTransactionWithDiff(newWalletBoxes, inputs, state.walletVars.externalScans)
+                (newRegistry, addedAcc ++ newWalletBoxes, removedOffAcc ++ removedOff, removedOnAcc ++ removedOn)
+              }
+
+            val diff = InputBlockDiff(allAdded, allRemovedOffChain, allRemovedOnChain)
+            val registryWithDiff = finalRegistry.copy(
+              inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff)
+            )
+
+            val newInputBlockIds = state.inputBlockIds :+ inputBlockId
+            val baseState = state.copy(
+              offChainRegistry = registryWithDiff,
+              inputBlockIds = newInputBlockIds
+            )
+            val newState = ergoWalletService.updateUtxoState(baseState, historyReader)
+            context.become(loadedWallet(newState))
+          case None =>
+            log.warn(s"No transactions found for input block $inputBlockId")
+        }
+      }
+
+    case RollbackInputBlock(inputBlockId) =>
+      // Find the position of the block to rollback in the ordered sequence.
+      // Since later input blocks may depend on earlier ones (e.g., spending outputs),
+      // we must rollback the target block AND all blocks that were added after it.
+      val keepIndex = state.inputBlockIds.indexOf(inputBlockId)
+      val (newInputBlockIds, newRegistry) = if (keepIndex >= 0) {
+        val rolledBackIds = state.inputBlockIds.drop(keepIndex)
+        // Rollback in reverse chronological order (last block first) to maintain consistency
+        val rolledBackRegistry = rolledBackIds.reverse.foldLeft(state.offChainRegistry) { (reg, blockId) =>
+          reg.rollbackInputBlock(blockId)
+        }
+        log.info(s"Rolled back input blocks: ${rolledBackIds.mkString(", ")}")
+        (state.inputBlockIds.take(keepIndex), rolledBackRegistry)
+      } else {
+        // Block not found, nothing to rollback
+        (state.inputBlockIds, state.offChainRegistry)
+      }
+      // Rebuild UTXO state reader from remaining input blocks
+      val baseState = state.copy(
+        offChainRegistry = newRegistry,
+        inputBlockIds = newInputBlockIds
+      )
+      val newState = ergoWalletService.updateUtxoState(baseState, historyReader)
+      context.become(loadedWallet(newState))
+
 
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>

@@ -13,29 +13,31 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
-import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
+import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.subblocks.InputBlockAnnouncement
+import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{AutolykosSolution, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound}
+import scorex.crypto.authds.LeafData
+import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
-import sigma.ast.syntax.ErgoBoxRType
-import sigma.Extensions.ArrayOps
-import sigma.crypto.CryptoFacade
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.data.{Digest32Coll, ProveDlog}
+import sigma.crypto.CryptoFacade
 import sigma.interpreter.ProverResult
 import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
-import scala.annotation.tailrec
+import scala.collection.mutable.{ArrayBuffer => MutableArray}
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -52,36 +54,39 @@ class CandidateGenerator(
 
   import org.ergoplatform.mining.CandidateGenerator._
 
-  private val candidateGenInterval =
-    ergoSettings.nodeSettings.blockCandidateGenerationInterval
-
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
     log.info("CandidateGenerator is starting")
     readersHolderRef ! GetReaders
   }
 
-  /** Send solved block to local blockchain controller */
-  private def sendToNodeView(newBlock: ErgoFullBlock): Unit = {
-    log.info(
-      s"New block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
-    )
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted candidate generator restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
 
+  /** Send solved ordering block to processing */
+  private def sendOrderingToNodeView(newBlock: ErgoFullBlock,
+                                     orderingBlockTransactions: Seq[ErgoTransaction]): Unit = {
+    log.info(
+      s"New ordering block ${newBlock.id} w. nonce ${Longs.fromByteArray(newBlock.header.powSolution.n)}"
+    )
     // Immediately announce newly mined block to network BEFORE local application.
     // This reduces propagation latency by avoiding the wait for NodeViewHolder
-    // to fully validate and apply the block. LocalBlockApplied arrives later
-    // and skips broadcast since the block was already announced.
-    // TODO: Consider switching to direct actor message for lower latency
-    //       instead of event bus publish.
+    // to fully validate and apply the block.
+    // Ordering block announcement to peers supporting input blocks is sent separately
+    // on LocallyGeneratedOrderingBlock below.
     context.system.eventStream.publish(NewBlockMined(newBlock.header))
 
-    viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
-    val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
-      newBlock.blockSections
-    } else {
-      newBlock.mandatoryBlockSections
-    }
-    sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+    viewHolderRef ! LocallyGeneratedOrderingBlock(newBlock, orderingBlockTransactions)
+  }
+
+  /** Send solved input block to processing */
+  private def sendInputToNodeView(sbi: InputBlockAnnouncement, sbt: InputBlockTransactionsData): Unit = {
+    log.info(
+      s"New input block ${sbi.header.id} w. nonce ${Longs.fromByteArray(sbi.header.powSolution.n)}"
+    )
+    viewHolderRef ! LocallyGeneratedInputBlock(sbi, sbt)
   }
 
   /**
@@ -106,29 +111,22 @@ class CandidateGenerator(
 
     // first we need to get Readers to have some initial state to work with
     case Readers(h, s: UtxoStateReader, m, _) =>
-      val lastHeaders   = h.lastHeaders(500).headers
-      val avgMiningTime = getBlockMiningTimeAvg(lastHeaders.map(_.timestamp))
-      val avgTxsCount = getTxsPerBlockCountAvg(
-        lastHeaders.flatMap(h.getFullBlock).map(_.transactions.size)
-      )
-      log.info(
-        s"CandidateGenerator initialized, avgMiningTime: ${avgMiningTime.toSeconds}s, avgTxsCount: $avgTxsCount"
-      )
+      log.info(s"CandidateGenerator initialized")
       context.become(
         initialized(
           CandidateGeneratorState(
-            cachedCandidate = None,
+            cachedCandidate       = None,
             cachedPreviousCandidate = None,
             solvedBlock = None,
-            h,
-            s,
-            m,
+            hr = h,
+            sr = s,
+            mpr = m,
             avgGenTime = 1000.millis,
             lastAppliedBlockTxs = None
           )
         )
       )
-      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
+      self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false, optPk = None)
       context.system.eventStream
         .subscribe(self, classOf[FullBlockApplied])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
@@ -148,19 +146,7 @@ class CandidateGenerator(
     case ChangedState(s: UtxoStateReader) =>
       context.become(initialized(state.copy(sr = s)))
     case ChangedMempool(mp: ErgoMemPoolReader) =>
-      if (hasCandidateExpired(
-        state.cachedCandidate,
-        state.solvedBlock,
-        candidateGenInterval
-      )) {
-        log.debug(s"Regenerating candidate block")
-        // with forced = true, state.cachedCandidate will be ignored in GenerateCandidate processing,
-        // but state.previousCachedCandidate will be set to cachedCandidate
-        context.become(initialized(state.copy(mpr = mp)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = true)
-      } else {
-        context.become(initialized(state.copy(mpr = mp)))
-      }
+      context.become(initialized(state.copy(mpr = mp)))
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
 
@@ -180,7 +166,7 @@ class CandidateGenerator(
           context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
         else
           context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
+        self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false, optPk = None)
       } else {
         context.become(initialized(stateWithAppliedTxs))
       }
@@ -242,35 +228,61 @@ class CandidateGenerator(
         }
       }
 
-    case preSolution: AutolykosSolution
+    case sf: SolutionFound
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
+      val preSolution = sf.as
       val solution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          new AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
         } else {
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
-          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
-            log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
-          }
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
-          case Success(_) =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
-          case Failure(exception) =>
-            log.warn(s"Removing candidates due to invalid block", exception)
-            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
-            )
+        sf match {
+          case _: OrderingSolutionFound =>
+            // Try to complete the current candidate first; if the solution does not fit it
+            // (e.g. a new block arrived while we were mining), fall back to the previous candidate
+            val candidateAndBlock = state.cachedCandidate
+              .map(c => c -> completeOrderingBlock(c.candidateBlock, solution))
+              .filter { case (_, block) =>
+                ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess
+              }
+              .orElse {
+                log.info(s"Using previous candidate as a solution: ${state.cachedPreviousCandidate}")
+                state.cachedPreviousCandidate.map(c => c -> completeOrderingBlock(c.candidateBlock, solution))
+              }
+
+            candidateAndBlock match {
+              case Some((sourceCandidate, block)) =>
+                log.info(s"New block mined, header: ${block.header}")
+                sendOrderingToNodeView(block, sourceCandidate.candidateBlock.orderingBlockTransactions)
+                context.become(initialized(state.copy(solvedBlock = Some(block))))
+                StatusReply.success(())
+              case None =>
+                log.warn(s"Removing candidates due to invalid block")
+                context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+                StatusReply.error(
+                  new Exception(s"Invalid block mined: no candidate matches the solution")
+                )
+            }
+          case _: InputSolutionFound =>
+            val cachedCandidate = state.cachedCandidate.get
+            val (sbi, sbt) = completeInputBlock(cachedCandidate.candidateBlock, solution)
+            val parameters = cachedCandidate.parameters
+            val powValid = ergoSettings.chainSettings.powScheme.checkInputBlockPoW(sbi.header, parameters)
+            if (powValid) { // check PoW only
+              log.info(s"Input-block ${sbi.id} mined @ height ${sbi.header.height}!")
+              sendInputToNodeView(sbi, sbt)
+              context.become(initialized(state.copy(cachedCandidate = None))) // todo: cache input block ?
+              StatusReply.success(())
+            } else {
+              log.warn(s"Removing candidate due to invalid input block")
+              context.become(initialized(state.copy(cachedCandidate = None)))
+              StatusReply.error(
+                new Exception(s"Invalid input block! PoW valid: $powValid")
+              )
+            }
         }
       }
       log.info(s"Processed solution $solution with the result $result")
@@ -294,11 +306,13 @@ object CandidateGenerator extends ScorexLogging {
     * @param candidateBlock  - block candidate
     * @param externalVersion - message for external miner
     * @param txsToInclude    - transactions which were prioritized for inclusion in the block candidate
+    * @param parameters      - blockchain parameters at the time of candidate creation
     */
   case class Candidate(
     candidateBlock: CandidateBlock,
     externalVersion: WorkMessage,
-    txsToInclude: Seq[ErgoTransaction]
+    txsToInclude: Seq[ErgoTransaction],
+    parameters: Parameters
   )
 
   case class GenerateCandidate(
@@ -403,22 +417,6 @@ object CandidateGenerator extends ScorexLogging {
       }
     }
   }
-
-  /** Calculate average mining time from latest block header timestamps */
-  def getBlockMiningTimeAvg(
-    timestamps: IndexedSeq[Header.Timestamp]
-  ): FiniteDuration = {
-    val miningTimes =
-      timestamps.sorted
-        .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
-        .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
-  }
-
-  /** Get average count of transactions per block */
-  def getTxsPerBlockCountAvg(txsPerBlock: IndexedSeq[Int]): Long =
-    Math.round(txsPerBlock.sum / txsPerBlock.length.toDouble)
 
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
@@ -591,7 +589,10 @@ object CandidateGenerator extends ScorexLogging {
     * @param emissionTxOpt           - optional emission transaction
     * @param prioritizedTransactions - transactions which are going into the block in the first place
     *                                (before transactions from the pool). No guarantee of inclusion in general case.
-    * @return - candidate or an error
+    *
+    * Block formed via createCandidate() should be validated in the same way as a block coming from outside.
+    *
+    * @return - block candidate or an error
     */
   def createCandidate(
                        minerPk: ProveDlog,
@@ -604,31 +605,45 @@ object CandidateGenerator extends ScorexLogging {
                        ergoSettings: ErgoSettings
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
+
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
-      // Extract best header and extension of a best block user their data for assembling a new block
-      val bestHeaderOpt: Option[Header] = history.bestFullBlockOpt.map(_.header)
+      val stateContext = state.stateContext
+
+      // Extract best header and extension of a best block for assembling a new block
+      val (bestHeaderOpt, bestInputBlock) = history.bestBlocks
       val bestExtensionOpt: Option[Extension] = bestHeaderOpt
         .flatMap(h => history.typedModifierById[Extension](h.extensionId))
 
       // Make progress in time since last block.
       // If no progress is made, then, by consensus rules, the block will be rejected.
-      val timestamp =
-        Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
+      val timestamp = Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
-      val stateContext = state.stateContext
+      // Calculate required difficulty for the new block, the same diff for subblock
+      val nBits: Long = if (bestInputBlock.isDefined) {
+        // just take nbits from previous input block
+        bestInputBlock.get.header.nBits // .get is ok as lastSubblockOpt.exists in continueSubblock checks emptiness
+      } else {
+        bestHeaderOpt
+          .map(parent => history.requiredDifficultyAfter(parent))
+          .map(d => DifficultySerializer.encodeCompactBits(d))
+          .getOrElse(ergoSettings.chainSettings.initialNBits)
+      }
 
-      // Calculate required difficulty for the new block
-      val nBits: Long = bestHeaderOpt
-        .map(parent => history.requiredDifficultyAfter(parent))
-        .map(d => DifficultySerializer.encodeCompactBits(d))
-        .getOrElse(ergoSettings.chainSettings.initialNBits)
+      // todo: do not recalculate interlink vector if subblock available
 
       // Obtain NiPoPoW interlinks vector to pack it into the extension section
       val updInterlinks       = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
       val interlinksExtension = popowAlgos.interlinksToExtension(updInterlinks)
-      val votingSettings      = ergoSettings.chainSettings.voting
-      val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
+
+      // todo: cache votes and version for a header, do not recalculate it each block
+      /*
+       * Calculate extension candidate without input-block specific fields, votes, and block version
+       */
+
+      val (preExtensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
         .map { header =>
+          val votingSettings      = ergoSettings.chainSettings.voting
+
           val newHeight     = header.height + 1
           val currentParams = stateContext.currentParameters
           val voteForSoftFork = forkOrdered(ergoSettings, currentParams, header)
@@ -665,6 +680,15 @@ object CandidateGenerator extends ScorexLogging {
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
+      // form input block related data
+      val parentInputBlockIdOpt = bestInputBlock.map(bestInput => idToBytes(bestInput.id))
+      val previousOrderingBlockTransactions = history.getBestOrderingCollectedInputBlocksTransactions()
+      val previousOrderingBlockTransactionIds = previousOrderingBlockTransactions.map(_.id)
+
+      /*
+      * Forming transactions to get included
+      */
+
       val upcomingContext = state.stateContext.upcoming(
         minerPk.value,
         timestamp,
@@ -674,9 +698,7 @@ object CandidateGenerator extends ScorexLogging {
         version
       )
 
-      val emissionTxs = emissionTxOpt.toSeq
-
-      // todo: remove in 5.0
+      // todo: could be removed after 5.0, but we still slowly decreasing it for starters
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
       val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {
@@ -687,21 +709,55 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      val (txs, toEliminate) = collectTxs(
+      // new transactions coming from API (prioritizedTransactions), mempool, and also emission transaction
+      // to spread to next input and ordering blocks
+      // within collectTxs(), transactions from previous input blocks will be accounted in addition to the new txs
+      val newTransactionCandidates = emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+
+      val (preInputBlockTransactions, orderingTxs, toEliminate) = collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+        newTransactionCandidates
       )
+
+      // filter out transactions included in previous input-blocks
+      // todo: clear them from mempool on new best input block / add to mempool on input blocks chain forking
+      val inputBlockTransactions = preInputBlockTransactions.filterNot(tx => previousOrderingBlockTransactionIds.contains(tx.id))
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
-      if (txs.isEmpty) {
+      if (previousOrderingBlockTransactionIds.size + orderingTxs.size == 0) {
         throw new IllegalArgumentException(
-          s"Proofs for 0 txs cannot be generated : emissionTxs: ${emissionTxs.size}, priorityTxs: ${prioritizedTransactions.size}, poolTxs: ${poolTxs.size}"
+          s"Proofs for 0 txs cannot be generated : " +
+            s"previousOrderingBlockTransactionIds: ${previousOrderingBlockTransactionIds}, " +
+            s"emissionTx: ${emissionTxOpt.isDefined}, " +
+            s"priorityTxs: ${prioritizedTransactions.size}, " +
+            s"poolTxs: ${poolTxs.size}"
         )
+      }
+
+      /*
+       * Put input block related fields into extension section of block candidate
+       */
+
+      // digest (Merkle tree root) of new first-class transactions since last input-block
+      val inputBlockTransactionsDigestValue = Algos.merkleTreeRoot(inputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
+
+      // digest (Merkle tree root) first class transactions since ordering block till last input-block
+      val previousInputBlocksTransactionsDigest = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
+
+      val inputBlockExtCandidate = InputBlockFields.toExtensionFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, inputBlockTransactionsDigestValue)
+
+      val extensionCandidate = preExtensionCandidate ++ inputBlockExtCandidate
+
+      val inputBlockFields = extensionCandidate.proofForInputBlockData match {
+        case Some(inputBlockFieldsProof) =>
+          new InputBlockFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsDigest, inputBlockFieldsProof)
+        case None =>
+          throw new IllegalArgumentException("Input block fields proof not available in extension candidate")
       }
 
       def deriveWorkMessage(block: CandidateBlock) = {
@@ -711,6 +767,8 @@ object CandidateGenerator extends ScorexLogging {
           prioritizedTransactions.map(_.id)
         )
       }
+
+      val txs = previousOrderingBlockTransactions ++ orderingTxs
 
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
@@ -723,7 +781,10 @@ object CandidateGenerator extends ScorexLogging {
             txs,
             timestamp,
             extensionCandidate,
-            votes
+            votes,
+            inputBlockFields,
+            inputBlockTransactions,
+            orderingTxs
           )
           val ext = deriveWorkMessage(candidate)
           log.info(
@@ -731,7 +792,7 @@ object CandidateGenerator extends ScorexLogging {
             s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
           )
           Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
+            Candidate(candidate, ext, prioritizedTransactions, upcomingContext.currentParameters) -> eliminateTransactions
           )
         case Failure(t: Throwable) =>
           // We can not produce a block for some reason, so print out an error
@@ -755,12 +816,16 @@ object CandidateGenerator extends ScorexLogging {
                     fallbackTxs,
                     timestamp,
                     extensionCandidate,
-                    votes
+                    votes,
+                    inputBlockFields = InputBlockFields.empty, // todo: recheck, likely should be not empty
+                    inputBlockTransactions = inputBlockTransactions,
+                    fallbackTxs
                   )
                   Candidate(
                     candidate,
                     deriveWorkMessage(candidate),
-                    prioritizedTransactions
+                    prioritizedTransactions,
+                    upcomingContext.currentParameters
                   ) -> eliminateTransactions
               }
             case None =>
@@ -903,13 +968,21 @@ object CandidateGenerator extends ScorexLogging {
       .newBoxes(txs)
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
     val feeTxOpt: Option[ErgoTransaction] = if (feeBoxes.nonEmpty) {
-      val feeAmount = feeBoxes.map(_.value).sum
-      val feeAssets =
+      // todo: sub-blocks: fix tx fee collection , old code is commented out below for now
+      /*
+       import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
+       import sigma.ast.syntax.ErgoBoxRType
+       import sigma.Extensions.ArrayOps
+
+       val feeAmount = feeBoxes.map(_.value).sum
+       val feeAssets =
         feeBoxes.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
-      val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
-      val minerBox =
+       val inputs = feeBoxes.map(b => new Input(b.id, ProverResult.empty))
+       val minerBox =
         new ErgoBoxCandidate(feeAmount, minerProp, nextHeight, feeAssets, Map())
-      Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
+       Some(ErgoTransaction(inputs.toIndexedSeq, IndexedSeq(), IndexedSeq(minerBox)))
+      */
+      None
     } else {
       None
     }
@@ -920,7 +993,7 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Helper function which decides whether transactions can fit into a block with given cost and size limits
     */
-  def correctLimits(
+  private def correctLimits(
     blockTxs: Seq[CostedTransaction],
     maxBlockCost: Long,
     maxBlockSize: Long
@@ -935,7 +1008,7 @@ object CandidateGenerator extends ScorexLogging {
     * Resulting transactions total cost does not exceed `maxBlockCost`, total size does not exceed `maxBlockSize`,
     * and the miner's transaction is correct.
     *
-    * @return - transactions to include into the block, transaction ids turned out to be invalid.
+    * @return - input block transactions to include, ordering blocks transactions to include, transaction ids turned out to be invalid.
     */
   def collectTxs(
                   minerPk: ProveDlog,
@@ -944,7 +1017,7 @@ object CandidateGenerator extends ScorexLogging {
                   us: UtxoStateReader,
                   upcomingContext: ErgoStateContext,
                   transactions: Seq[ErgoTransaction]
-                ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+                ): (Seq[ErgoTransaction], Seq[ErgoTransaction], Seq[ModifierId]) = {
 
     val currentHeight = us.stateContext.currentHeight
     val nextHeight = upcomingContext.currentHeight
@@ -955,80 +1028,127 @@ object CandidateGenerator extends ScorexLogging {
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
 
-    @tailrec
-    def loop(
-              mempoolTxs: Iterable[ErgoTransaction],
-              acc: Seq[CostedTransaction],
-              lastFeeTx: Option[CostedTransaction],
-              invalidTxs: Seq[ModifierId]
-            ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
-      // transactions from mempool and fee txs from the previous step
-      val currentCosted = acc ++ lastFeeTx
-      def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
+    // Mutable state for iterative transaction processing
+    var remainingTxs = transactions
+    val accInput = MutableArray.empty[CostedTransaction]
+    val accOrdering = MutableArray.empty[CostedTransaction]
+    var lastFeeTx: Option[CostedTransaction] = None
+    val invalidTxs = MutableArray.empty[ModifierId]
+    var done = false
 
-      val stateWithTxs = us.withTransactions(current)
+    while (!done) {
+      val acc: Seq[CostedTransaction] = accInput ++ accOrdering
 
-      mempoolTxs.headOption match {
+      def currentInput: Seq[ErgoTransaction] = accInput.map(_._1)
+      def currentOrdering: Seq[ErgoTransaction] = (accOrdering ++ lastFeeTx.toSeq).map(_._1)
+      val allCurrent = currentInput ++ currentOrdering
+      val stateWithTxs = us.withTransactions(allCurrent)
+
+      remainingTxs.headOption match {
         case Some(tx) =>
-          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(current, tx)) {
-            //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
-            //do these checks before validating the scripts to save time
+          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(allCurrent, tx)) {
+            // Mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
+            // Do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+            invalidTxs += tx.id
+            remainingTxs = remainingTxs.tail
           } else {
-            // check validity and calculate transaction cost
-            stateWithTxs.validateWithCost(
-              tx,
-              upcomingContext,
-              maxBlockCost,
-              Some(verifier)
-            ) match {
+
+            def validateTx(softFieldsAllowed: Boolean): Try[Int] = {
+              stateWithTxs.validateWithCost(
+                tx,
+                upcomingContext,
+                maxBlockCost,
+                Some(verifier),
+                softFieldsAllowed)
+            }
+
+            def collectFeeAndCheckLimits(newTxs: Seq[CostedTransaction],
+                                         inputTx: Boolean,
+                                         costConsumed: Int): Boolean = {
+              val newBoxes = newTxs.flatMap(_._1.outputs)
+
+              collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
+                case Some(feeTx) =>
+                  val boxesToSpend = feeTx.inputs.flatMap(i =>
+                    newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
+                  )
+                  feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
+                    case Success(cost) =>
+                      val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
+                      if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                        if (inputTx) {
+                          accInput += ((tx, costConsumed))
+                          lastFeeTx = Some(feeTx -> cost)
+                        } else {
+                          accOrdering += ((tx, costConsumed))
+                          lastFeeTx = Some(feeTx -> cost)
+                        }
+                        remainingTxs = remainingTxs.tail
+                        true // continue
+                      } else {
+                        lazy val totalCost = (accOrdering ++ lastFeeTx.toSeq).map(_._2).sum
+                        log.debug(s"Finishing block assembly on limits overflow, " +
+                                  s"cost is $totalCost, cost limit: $maxBlockCost")
+                        done = true
+                        false // stop
+                      }
+                    case Failure(e) =>
+                      log.warn(
+                        s"Fee collecting tx is invalid, not including it, " +
+                          s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                      )
+                      done = true
+                      false // stop
+                  }
+                case None =>
+                  log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                  val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
+                  if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
+                    if (inputTx) {
+                      accInput += ((tx, costConsumed))
+                    } else {
+                      accOrdering += ((tx, costConsumed))
+                    }
+                    remainingTxs = remainingTxs.tail
+                    true // continue
+                  } else {
+                    done = true
+                    false // stop
+                  }
+              }
+            }
+
+            def failTx(e: Throwable): Unit = {
+              log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
+              invalidTxs += tx.id
+              remainingTxs = remainingTxs.tail
+            }
+
+            // Check validity and calculate transaction cost
+            validateTx(softFieldsAllowed = false) match {
               case Success(costConsumed) =>
                 val newTxs = acc :+ (tx -> costConsumed)
-                val newBoxes = newTxs.flatMap(_._1.outputs)
-
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
-                  case Some(feeTx) =>
-                    val boxesToSpend = feeTx.inputs.flatMap(i =>
-                      newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
-                    )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
-                      case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
-                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
-                        } else {
-                          log.debug(s"Finishing block assembly on limits overflow, " +
-                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
-                          current -> invalidTxs
-                        }
-                      case Failure(e) =>
-                        log.warn(
-                          s"Fee collecting tx is invalid, not including it, " +
-                            s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
-                        )
-                        current -> invalidTxs
-                    }
-                  case None =>
-                    log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
-                    } else {
-                      current -> invalidTxs
-                    }
+                collectFeeAndCheckLimits(newTxs, inputTx = true, costConsumed)
+              case Failure(e) if e.isInstanceOf[SoftFieldsAccessError] =>
+                log.info(s"Rechecking transaction: $tx.id")
+                validateTx(softFieldsAllowed = true) match {
+                  case Success(costConsumed) =>
+                    val newTxs = acc :+ (tx -> costConsumed)
+                    collectFeeAndCheckLimits(newTxs, inputTx = false, costConsumed)
+                  case Failure(e) =>
+                    failTx(e)
                 }
               case Failure(e) =>
-                log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+                failTx(e)
             }
           }
         case None => // mempool is empty
-          current -> invalidTxs
+          done = true
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    val res = (accInput.map(_._1), accOrdering.map(_._1), invalidTxs)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")
@@ -1070,12 +1190,37 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Assemble `ErgoFullBlock` using candidate block and provided pow solution.
     */
-  def completeBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
+  def completeOrderingBlock(candidate: CandidateBlock, solution: AutolykosSolution): ErgoFullBlock = {
     val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
     val adProofs = ADProofs(header.id, candidate.adProofBytes)
     val blockTransactions = BlockTransactions(header.id, candidate.version, candidate.transactions)
     val extension = Extension(header.id, candidate.extension.fields)
     new ErgoFullBlock(header, blockTransactions, extension, Some(adProofs))
+  }
+
+  def completeInputBlock(candidate: CandidateBlock,
+                         solution: AutolykosSolution): (InputBlockAnnouncement, InputBlockTransactionsData) = {
+
+    val header = deriveUnprovenHeader(candidate).toHeader(solution, None)
+    val txs = candidate.inputBlockTransactions
+
+    // todo: check links?
+    // todo: update candidate generator state
+    val prevInputBlockId: Option[Array[Byte]] = candidate.inputBlockFields.prevInputBlockId
+
+    // todo: add
+    val inputBlockTransactionsDigest: Digest32 = candidate.inputBlockFields.transactionsDigest
+    val prevTransactionsDigest: Digest32 = candidate.inputBlockFields.prevTransactionsDigest
+    val merkleProof: BatchMerkleProof[Digest32] = candidate.inputBlockFields.inputBlockFieldsProof
+
+    val ibf = new InputBlockFields(prevInputBlockId, inputBlockTransactionsDigest, prevTransactionsDigest, merkleProof)
+
+    val weakIds = txs.map(_.weakId)
+
+    val sbi: InputBlockAnnouncement = InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, ibf, Some(weakIds))
+    val sbt : InputBlockTransactionsData = InputBlockTransactionsData(sbi.header.id, txs)
+
+    (sbi, sbt)
   }
 
 }

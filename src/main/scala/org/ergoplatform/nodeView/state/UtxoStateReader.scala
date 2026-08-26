@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, OutputsHolder}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -14,6 +14,7 @@ import org.ergoplatform.validation.MalformedModifierError
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 
 import scala.util.{Failure, Success, Try}
 
@@ -47,7 +48,8 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
   def validateWithCost(tx: ErgoTransaction,
                        context: ErgoStateContext,
                        costLimit: Int,
-                       interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
+                       interpreterOpt: Option[ErgoInterpreter],
+                       softFieldsAllowed: Boolean): Try[Int] = {
     val parameters = context.currentParameters.withBlockCost(costLimit)
     val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
 
@@ -57,14 +59,16 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
         boxesToSpend,
         tx.dataInputs.flatMap(i => boxById(i.boxId)),
         context,
-        accumulatedCost = 0L)(verifier) match {
+        accumulatedCost = 0L,
+        softFieldsAllowed)(verifier) match {
         case Success(txCost) if txCost > costLimit =>
           Failure(TooHighCostError(tx, Some(txCost)))
         case Success(txCost) =>
           Success(txCost)
         case Failure(mme: MalformedModifierError) if mme.message.contains("CostLimitException") =>
           Failure(TooHighCostError(tx, None))
-        case f: Failure[_] => f
+        case f: Failure[_] =>
+          f
       }
     }
   }
@@ -158,24 +162,10 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
   }
 
   /**
-    * Producing a copy of the state which takes into account outputs of given transactions.
-    * Useful when checking mempool transactions.
-    */
-  def withUnconfirmedTransactions(unconfirmedTxs: Seq[UnconfirmedTransaction]): UtxoState = {
-    new UtxoState(persistentProver, version, store, ergoSettings) {
-      lazy val createdBoxes: Seq[ErgoBox] = unconfirmedTxs.map(_.transaction).flatMap(_.outputs)
-
-      override def boxById(id: ADKey): Option[ErgoBox] = {
-        super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
-      }
-    }
-  }
-
-  /**
    * Producing a copy of the state which takes into account outputs of given transactions.
    * Useful when checking mempool transactions.
    */
-  def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
+  def withTransactions(transactions: Seq[OutputsHolder]): UtxoState = {
     new UtxoState(persistentProver, version, store, ergoSettings) {
       lazy val createdBoxes: Seq[ErgoBox] = transactions.flatMap(_.outputs)
 
@@ -189,6 +179,34 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * Producing a copy of the state which takes into account pool of unconfirmed transactions.
     * Useful when checking mempool transactions.
     */
-  def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
+  def withMempool(mp: ErgoMemPoolReader): UtxoState = withTransactions(mp.getAll)
+
+  /**
+    * Producing a copy of the state which takes into account both the mempool and
+    * input-block transactions (e.g. of the best input-blocks chain). Outputs of both are
+    * visible via [[boxById]], but only inputs spent by input-block transactions are treated
+    * as already spent, while mempool-spent inputs remain visible, to not interfere with
+    * mempool replace-by-fee logic.
+    * Useful when validating transactions which may spend outputs of input-block transactions.
+    */
+  def withMempoolAndInputBlocks(mp: ErgoMemPoolReader, inputBlockTransactions: Seq[ErgoTransaction]): UtxoState = {
+    if (inputBlockTransactions.isEmpty) {
+      withMempool(mp)
+    } else {
+      new UtxoState(persistentProver, version, store, ergoSettings) {
+        lazy val createdBoxes: Seq[ErgoBox] = (inputBlockTransactions ++ mp.getAll).flatMap(_.outputs)
+        lazy val spentBoxIds: Set[ByteArrayWrapper] =
+          inputBlockTransactions.flatMap(_.inputs.map(inp => ByteArrayWrapper(inp.boxId))).toSet
+
+        override def boxById(id: ADKey): Option[ErgoBox] = {
+          if (spentBoxIds.contains(ByteArrayWrapper(id))) {
+            None
+          } else {
+            super.boxById(id).orElse(createdBoxes.find(box => box.id.sameElements(id)))
+          }
+        }
+      }
+    }
+  }
 
 }

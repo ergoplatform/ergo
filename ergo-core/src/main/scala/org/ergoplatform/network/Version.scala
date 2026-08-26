@@ -29,13 +29,17 @@ object Version {
 
   def apply(v: String): Version = {
     val splitted = v.split("\\.")
+    if (splitted.length != 3) {
+      throw new IllegalArgumentException(s"Version string must have exactly 3 components separated by dots: $v")
+    }
     Version(splitted(0).toByte, splitted(1).toByte, splitted(2).toByte)
   }
 
   val initial: Version = Version(0, 0, 1)
 
   val Eip37ForkVersion: Version = Version(4, 0, 100)
-  val JitSoftForkVersion: Version = Version(5, 0, 0)
+
+  val SubblocksVersion: Version = Version(6, 5, 0)
 
   val UtxoSnapsnotActivationVersion: Version = Version(5, 0, 12)
 

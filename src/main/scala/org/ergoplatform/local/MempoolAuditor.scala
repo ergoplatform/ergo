@@ -24,6 +24,11 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
                      networkControllerRef: ActorRef,
                      settings: ErgoSettings) extends Actor with ScorexLogging {
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted mempool auditor restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def postRestart(reason: Throwable): Unit = {
     log.error(s"Mempool auditor actor restarted due to ${reason.getMessage}", reason)
     super.postRestart(reason)
@@ -98,7 +103,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
-          val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
+          val stateToCheck = utxoState.withTransactions(toBroadcast)
           toBroadcast.foreach { unconfirmedTx =>
             if (unconfirmedTx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
               log.info(s"Rebroadcasting $unconfirmedTx")

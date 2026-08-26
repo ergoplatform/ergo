@@ -72,6 +72,40 @@ object Extension extends ApiCodecs {
   val ValidationRulesPrefix: Byte = 0x02
 
   /**
+    * Prefix for keys related to input-blocks related data.
+    */
+  val InputBlocksDataPrefix: Byte = 0x03
+
+  /**
+    * Digest (Merkle tree root) of new first-class transactions since last input-block
+    */
+  val InputBlockTransactionsDigestKey: Array[Byte] = Array(InputBlocksDataPrefix, 0x00)
+
+  /**
+   * Digest (Merkle tree root) first class transactions since ordering block till last input-block
+   */
+  val PreviousInputBlockTransactionsDigestKey: Array[Byte] = Array(InputBlocksDataPrefix, 0x01)
+
+  /**
+    * Reference to last seen input block
+    */
+  val PrevInputBlockIdKey: Array[Byte] = Array(InputBlocksDataPrefix, 0x02)
+
+  val InputBlockKeys = Array(InputBlockTransactionsDigestKey, PreviousInputBlockTransactionsDigestKey, PrevInputBlockIdKey)
+
+
+  /**
+    * Prefix for keys related to sidechains data. Not used for now, reserved for future.
+    */
+  val SidechainsDataPrefix: Byte = 0x04
+
+  /**
+    * Prefix for keys related to rollup related blobs. Not used for now, reserved for future.
+    */
+  val RollupBlobsDataPrefix: Byte = 0x05
+
+
+  /**
     * Id a type of network object encoding extension
     */
   val modifierTypeId: NetworkObjectTypeId.Value = ExtensionTypeId.value

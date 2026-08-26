@@ -44,6 +44,8 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
 
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
+  def transactionByWeakId(wId: ErgoTransaction.WeakId): Option[ErgoTransaction]
+
   /**
     * Returns transaction ids with weights. Weight depends on a fee a transaction is paying.
     * Resulting transactions are sorted by weight in descending order.

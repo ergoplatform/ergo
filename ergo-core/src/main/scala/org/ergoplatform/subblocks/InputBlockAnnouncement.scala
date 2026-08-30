@@ -34,6 +34,11 @@ case class InputBlockAnnouncement(version: Byte,
              expectedNBits: Option[Long] = None): Boolean = {
     val powValid = powScheme.checkInputBlockPoW(header, parameters)
     val extValid = inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
+    val fieldsBound = InputBlockFields.fieldHashes(inputBlockFields).forall { expectedFieldHash =>
+      inputBlockFields.inputBlockFieldsProof.indices.exists {
+        case (_, provenFieldHash) => provenFieldHash.sameElements(expectedFieldHash)
+      }
+    }
     val nBitsValid = expectedNBits.forall(header.nBits == _)
 
     if (!powValid) {
@@ -42,11 +47,14 @@ case class InputBlockAnnouncement(version: Byte,
     if (!extValid) {
       log.warn(s"Extension section check fails for sub-block ${header.id}")
     }
+    if (!fieldsBound) {
+      log.warn(s"Input block fields are not bound to extension proof for sub-block ${header.id}")
+    }
     if (!nBitsValid) {
       log.warn(s"Difficulty (nBits) mismatch for sub-block ${header.id}: " +
         s"header.nBits=${header.nBits}, expected=${expectedNBits.getOrElse("unknown")}")
     }
-    powValid && extValid && nBitsValid
+    powValid && extValid && fieldsBound && nBitsValid
   }
 
   lazy val prevInputBlockId: Option[ModifierId] = inputBlockFields.prevInputBlockId.map(bytesToId)

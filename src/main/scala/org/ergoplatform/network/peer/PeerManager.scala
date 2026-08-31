@@ -1,7 +1,12 @@
 package org.ergoplatform.network.peer
 
 import java.net.{InetAddress, InetSocketAddress}
+import java.util.concurrent.ThreadLocalRandom
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
+  DisconnectedPeer,
+  HandshakedPeer
+}
 import org.ergoplatform.network.PeerSpec
 import org.ergoplatform.settings.ErgoSettings
 import scorex.core.app.ScorexContext
@@ -9,6 +14,7 @@ import scorex.core.network._
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
+import scala.concurrent.duration._
 import scala.util.Random
 
 /**
@@ -20,13 +26,34 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
   import PeerManager.ReceivableMessages._
 
   private val peerDatabase = new PeerDatabase(settings)
+  private var connectedPeerAddresses = Set.empty[InetSocketAddress]
+
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[HandshakedPeer])
+    context.system.eventStream.subscribe(self, classOf[DisconnectedPeer])
+    scheduleOldPeersCleanup()
+  }
+
+  override def postStop(): Unit = {
+    peerDatabase.close()
+    super.postStop()
+  }
+
+  private def scheduleOldPeersCleanup(): Unit = {
+    context.system.scheduler.scheduleWithFixedDelay(
+      FiniteDuration(PeerDatabase.KnownPeerCleanupIntervalMs, MILLISECONDS),
+      FiniteDuration(PeerDatabase.KnownPeerCleanupIntervalMs, MILLISECONDS),
+      self,
+      CleanupOldPeers
+    )(context.system.dispatcher)
+  }
 
   if (peerDatabase.isEmpty) {
     // fill database with peers from config file if empty
     log.info("No peers in database, seeding peers database with nodes from config")
     settings.scorexSettings.network.knownPeers.foreach { address =>
       if (!isSelf(address)) {
-        peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
+        peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address), connectedPeerAddresses)
       }
     }
   } else {
@@ -51,8 +78,17 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
     case AddOrUpdatePeer(peerInfo) =>
       // We have connected to a peer and got his peerInfo from him
       if (!isSelf(peerInfo.peerSpec) && !peerInfo.peerSpec.address.exists(isLocal(_))) {
-        peerDatabase.addOrUpdateKnownPeer(peerInfo)
+        peerDatabase.addOrUpdateKnownPeer(peerInfo, connectedPeerAddresses)
       }
+
+    case CleanupOldPeers =>
+      peerDatabase.removeOldPeers(connectedPeerAddresses)
+
+    case HandshakedPeer(remote) =>
+      connectedPeerAddresses += remote.connectionId.remoteAddress
+
+    case DisconnectedPeer(connectedPeer) =>
+      connectedPeerAddresses -= connectedPeer.connectionId.remoteAddress
 
     case Penalize(peer, penaltyType) =>
       log.info(s"$peer penalized, penalty: $penaltyType")
@@ -67,7 +103,7 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
       if (peerSpec.address.forall(a => peerDatabase.get(a).isEmpty) && !isSelf(peerSpec) && !peerSpec.address.exists(isLocal(_))) {
         val peerInfo: PeerInfo = PeerInfo(peerSpec, 0, None)
         log.info(s"New discovered peer: $peerInfo")
-        peerDatabase.addOrUpdateKnownPeer(peerInfo)
+        peerDatabase.addOrUpdateKnownPeer(peerInfo, connectedPeerAddresses)
       }
 
     case RemovePeer(address) =>
@@ -125,6 +161,8 @@ object PeerManager {
 
     case class RemovePeer(address: InetSocketAddress)
 
+    case object CleanupOldPeers
+
     /**
       * Message to get peers from known peers map filtered by `choose` function
       */
@@ -141,28 +179,45 @@ object PeerManager {
       */
     case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] with ScorexLogging {
 
-      val limit: Long = 3 * 60 * 60 * 1000 // 3h
+      val limit: Long = 3.hours.toMillis // 3h
+
+      private val ScanBudgetMultiplier = 8
+      private val MinScanBudget = 256
 
       override def choose(knownPeers: Map[InetSocketAddress, PeerInfo],
                           blacklistedPeers: Seq[InetAddress],
                           sc: ScorexContext): Seq[PeerInfo] = {
-        val nonBlacklisted = knownPeers.values.toSeq
-          .filter { p =>
-            (p.connectionType.isDefined || p.lastHandshake > 0) &&
-              !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
-          }
-
-        val recentlySeenNonBlacklisted = nonBlacklisted.filter { p =>
-          (System.currentTimeMillis() - p.lastStoredActivityTime < limit)
-        }
-
-        if (recentlySeenNonBlacklisted.nonEmpty) {
-          val res = Random.shuffle(recentlySeenNonBlacklisted).take(howMany)
-          log.debug(s"Sending ${res.length} active peers: " + res)
-          res
+        if (howMany <= 0 || knownPeers.isEmpty) {
+          Seq.empty
         } else {
-          val res = Random.shuffle(nonBlacklisted).take(howMany)
-          log.debug(s"Sending ${res.length} known peers: " + res)
+          val scanBudget = math.max(howMany * ScanBudgetMultiplier, MinScanBudget)
+          val size = knownPeers.size
+          val window = math.min(scanBudget, size)
+          val start =
+            if (window == size) {
+              0
+            } else {
+              ThreadLocalRandom.current().nextInt(size - window + 1)
+            }
+
+          val now = System.currentTimeMillis()
+          val cutoff = now - limit
+
+          def isBlacklisted(p: PeerInfo): Boolean =
+            blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
+
+          val candidates = knownPeers.valuesIterator
+            .drop(start)
+            .take(window)
+            .toSeq
+            .filter { p =>
+              (p.connectionType.isDefined || p.lastHandshake > 0) && !isBlacklisted(p)
+            }
+
+          val recentCandidates = candidates.filter(_.lastStoredActivityTime > cutoff)
+          val chosen = if (recentCandidates.nonEmpty) recentCandidates else candidates
+          val res = Random.shuffle(chosen).take(howMany)
+          log.debug(s"Sending ${res.length} peers (scanned $window of $size, window $start-${start + window})")
           res
         }
       }

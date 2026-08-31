@@ -1473,7 +1473,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             log.info(s"Penalize spamming peer $peer for too costly transaction $id")
             penalizeSpammingPeer(peer)
           case _ =>
-            log.info(s"Penalize peer $peer for too costly transaction $id (reason: $error)")
+            log.info(s"Penalize peer $peer for transaction $id (reason: $error)")
             penalizeMisbehavingPeer(peer)
         }
       }

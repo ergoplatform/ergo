@@ -151,6 +151,70 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "recover when locally mined block is invalidated by full block id" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    // fake node view holder: solved block is never applied, so solvedBlock stays set
+    val viewHolderProbe = new TestProbe(system)
+
+    // real readers holder over real node view holder, needed for candidate generation
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef  = ErgoReadersHolderRef(realViewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        defaultSettings
+      )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+    val block = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+    }
+
+    candidateGenerator.tell(block.header.powSolution, replyProbe.ref)
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+
+    // block sections were sent to the (fake) node view holder
+    viewHolderProbe.expectMsg(LocallyGeneratedModifier(block.header))
+    block.mandatoryBlockSections.foreach { section =>
+      viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))
+    }
+
+    // mining is stalled: new solutions are rejected while solvedBlock is set
+    candidateGenerator.tell(block.header.powSolution, replyProbe.ref)
+    replyProbe.expectMsgPF(blockValidationDelay) {
+      case r: StatusReply[_] if r.isError =>
+    }
+
+    // node view holder invalidates the block using full-block typeId and block id
+    val failedTxId = block.blockTransactions.txs.head.id
+    val error =
+      new MalformedModifierError("tx failed", failedTxId, ErgoTransaction.modifierTypeId)
+    system.eventStream.publish(
+      SemanticallyFailedModification(ErgoFullBlock.modifierTypeId, block.id, error)
+    )
+
+    // mining resumes: a new candidate is generated and new solutions are accepted again
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+    val newBlock = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+    }
+    candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+
+    system.terminate()
+  }
+
   it should "let multiple miners compete" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)

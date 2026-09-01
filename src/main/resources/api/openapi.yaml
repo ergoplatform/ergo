@@ -5071,6 +5071,12 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Generate and send arbitrary transaction
+      description: Inputs of the generated transaction are reserved, so they are not
+        selected by consequent send requests; the reservation is lifted when the
+        transaction gets into the mempool or is rejected by it (transactions obtained
+        via /wallet/transaction/generate are not reserving inputs, so clients
+        broadcasting transactions themselves should not generate conflicting
+        transactions)
       operationId: walletTransactionGenerateAndSend
       tags:
         - wallet
@@ -5106,6 +5112,12 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Generate and send payment transaction (default fee of 0.001 Erg is used)
+      description: Inputs of the generated transaction are reserved, so they are not
+        selected by consequent send requests; the reservation is lifted when the
+        transaction gets into the mempool or is rejected by it (transactions obtained
+        via /wallet/transaction/generate are not reserving inputs, so clients
+        broadcasting transactions themselves should not generate conflicting
+        transactions)
       operationId: walletPaymentTransactionGenerateAndSend
       tags:
         - wallet

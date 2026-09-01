@@ -65,11 +65,31 @@ object ErgoWalletActorMessages {
    * @param inputsRaw
    * @param dataInputsRaw
    * @param sign
+   * @param reserveInputs - reserve inputs of the generated transaction, so consequent
+   *                        generation requests will not select them. Used by the send API
+   *                        endpoints which broadcast the transaction right away; pure
+   *                        generation endpoints do not reserve anything, so clients
+   *                        broadcasting transactions themselves are responsible for not
+   *                        generating conflicting transactions. A reservation is converted
+   *                        into normal off-chain state once the transaction gets into the
+   *                        mempool, and released when the transaction is rejected by the
+   *                        mempool or via ReleaseReservedInputs; leaked reservations are
+   *                        pruned after ErgoWalletActor.ReservedInputsTtlBlocks blocks
    */
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest],
                                        inputsRaw: Seq[String],
                                        dataInputsRaw: Seq[String],
-                                       sign: Boolean)
+                                       sign: Boolean,
+                                       reserveInputs: Boolean)
+
+  /**
+   * Release inputs reserved during transaction generation, making them available to
+   * consequent generation requests (used when a generated transaction is not sent
+   * to the mempool, e.g. it failed verification)
+   *
+   * @param txId - identifier of a transaction which inputs are to be released
+   */
+  final case class ReleaseReservedInputs(txId: ModifierId)
 
   /**
    * Request to generate commitments for an unsigned transaction

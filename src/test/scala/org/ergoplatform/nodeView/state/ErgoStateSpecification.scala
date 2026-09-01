@@ -13,12 +13,13 @@ import org.ergoplatform.core.{bytesToId, bytesToVersion}
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{boxesHolderGen, validTransactionFromBoxes}
 import org.ergoplatform.validation.ValidationResult.{Invalid, Valid}
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.db.ByteArrayWrapper
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
-class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpers with ErgoStateContextHelpers {
+class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpers with ErgoStateContextHelpers with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._

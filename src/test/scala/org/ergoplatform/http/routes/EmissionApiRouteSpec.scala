@@ -10,12 +10,14 @@ import io.circe.syntax._
 import org.ergoplatform.http.api.EmissionApiRoute
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, ReemissionSettings}
+import org.ergoplatform.wallet.utils.FileUtils
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration._
 
 class EmissionApiRouteSpec extends AnyFlatSpec
+  with FileUtils
   with Matchers
   with ScalatestRouteTest
   with FailFastCirceSupport {

@@ -1,7 +1,7 @@
 package org.ergoplatform.serialization
 
 import scorex.crypto.authds.avltree.batch.Constants.DigestType
-import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes, VersionedRocksDBAVLStorage}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.util.ScorexLogging
 import scorex.util.serialization.{Reader, Writer}
@@ -10,7 +10,7 @@ import scorex.util.serialization.{Reader, Writer}
   * Serializer for subtree
   */
 object SubtreeSerializer extends ErgoSerializer[BatchAVLProverSubtree[DigestType]] with ScorexLogging {
-  private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
+  private val nodeSerializer = VersionedRocksDBAVLStorage.noStoreSerializer
 
   override def serialize(subtree: BatchAVLProverSubtree[DigestType], w: Writer): Unit = {
     def loop(node: ProverNodes[DigestType]): Unit = {

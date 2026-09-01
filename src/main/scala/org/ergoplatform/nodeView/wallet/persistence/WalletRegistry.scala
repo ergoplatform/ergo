@@ -15,7 +15,7 @@ import org.ergoplatform.wallet.boxes.{TrackedBox, TrackedBoxSerializer}
 import org.ergoplatform.wallet.transactions.TransactionBuilder
 import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADKey
-import scorex.db.LDBVersionedStore
+import scorex.db.RocksDBVersionedStore
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
@@ -31,7 +31,7 @@ import scala.util.{Failure, Success, Try}
   * * boxes, spent or not
   *
   */
-class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
+class WalletRegistry(private val store: RocksDBVersionedStore)(ws: WalletSettings) extends ScorexLogging {
 
   import WalletRegistry._
 
@@ -454,7 +454,7 @@ object WalletRegistry {
   def apply(settings: ErgoSettings): Try[WalletRegistry] = Try {
       val dir = registryFolder(settings)
       dir.mkdirs()
-      new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
+      new RocksDBVersionedStore(dir, settings.nodeSettings.keepVersions)
     }.flatMap {
       case store if !store.versionIdExists(PreGenesisStateVersion) =>
         // Create pre-genesis state checkpoint
@@ -679,14 +679,14 @@ case class KeyValuePairsBag(toInsert: Seq[(Array[Byte], Array[Byte])],
     * Applies non-versioned transaction to a given `store`.
     *
     */
-  def transact(store: LDBVersionedStore): Try[Unit] = transact(store, None)
+  def transact(store: RocksDBVersionedStore): Try[Unit] = transact(store, None)
 
   /**
     * Applies versioned transaction to a given `store`.
     */
-  def transact(store: LDBVersionedStore, version: Array[Byte]): Try[Unit] = transact(store, Some(version))
+  def transact(store: RocksDBVersionedStore, version: Array[Byte]): Try[Unit] = transact(store, Some(version))
 
-  private def transact(store: LDBVersionedStore, versionOpt: Option[Array[Byte]]): Try[Unit] =
+  private def transact(store: RocksDBVersionedStore, versionOpt: Option[Array[Byte]]): Try[Unit] =
     if (toInsert.nonEmpty || toRemove.nonEmpty) {
       store.update(versionOpt.getOrElse(scorex.utils.Random.randomBytes()), toRemove, toInsert)
     } else {

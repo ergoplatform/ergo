@@ -149,6 +149,10 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetPrivateKeyFromPath(path: DerivationPath) =>
       sender() ! ergoWalletService.getPrivateKeyFromPath(state, path)
 
+    case SignMessage(message, addressOpt) =>
+      val result = ergoWalletService.signMessage(state, message, addressOpt)
+      sender() ! result
+
     case GetMiningPubKey =>
       state.walletVars.trackedPubKeys.headOption match {
         case Some(pk) =>

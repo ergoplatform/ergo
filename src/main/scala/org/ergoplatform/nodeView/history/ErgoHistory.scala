@@ -89,6 +89,47 @@ trait ErgoHistory
   }
 
   /**
+    * Prune history to the specified height (discarding all blocks with height > targetHeight)
+    */
+  def pruneTo(targetHeight: Int): Try[ErgoHistory] = Try {
+    require(targetHeight > 0, "Target height cannot be 0")
+    if (targetHeight < headersHeight) {
+      log.info(s"Pruning history from $headersHeight to $targetHeight")
+
+      val heightsToRemove = (targetHeight + 1) to headersHeight
+
+      // Collect all IDs to remove
+      val idsToRemove = heightsToRemove.flatMap { h =>
+        headerIdsAtHeight(h)
+      }
+
+      // Remove headers and their indexes
+      idsToRemove.foreach { id =>
+        forgetHeader(id)
+      }
+
+      // Remove height->ids indexes
+      val heightKeysToRemove = heightsToRemove.map(h => heightIdsKey(h))
+      historyStorage.remove(heightKeysToRemove.toArray, Array.empty)
+
+      // Update BestHeaderKey
+      val bestHeaderId = bestHeaderIdAtHeight(targetHeight).get
+      historyStorage.insert(Array(BestHeaderKey -> idToBytes(bestHeaderId)), Array.empty)
+
+      // Update BestFullBlockKey
+      if (bestFullBlockOpt.exists(_.height > targetHeight)) {
+        if (typedModifierById[Header](bestHeaderId).flatMap(getFullBlock).isDefined) {
+          historyStorage.insert(Array(BestFullBlockKey -> idToBytes(bestHeaderId)), Array.empty)
+        } else {
+           historyStorage.remove(Array(BestFullBlockKey), Array.empty)
+        }
+      }
+    }
+    this
+  }
+}
+
+  /**
     * Mark modifier as valid
     */
   def reportModifierIsValid(modifier: BlockSection): Try[ErgoHistory] = synchronized {

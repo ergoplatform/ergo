@@ -10,6 +10,7 @@ import scorex.crypto.hash
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.ScorexLogging
+import spire.syntax.all.cfor
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
@@ -58,32 +59,83 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
   override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[DigestType, _],
                                                           additionalData: Seq[(K, V)]): Try[Unit] = {
     val digestWrapper = prover.digest
-    val indexes = Seq(topNodeHashKey -> nodeLabel(prover.topNode),
-      topNodeHeightKey -> Ints.toByteArray(prover.rootNodeHeight))
+    val topNodeLabel = nodeLabel(prover.topNode)
+    val topNodeHeightBytes = Ints.toByteArray(prover.rootNodeHeight)
+    
+    // Collect serialized nodes efficiently using ArrayBuilder
     val toInsert = serializedVisitedNodes(prover.topNode, isTop = true)
-    val toRemove = prover.removedNodes().map(rn => rn.label)
-    val toUpdate = indexes ++ toInsert
-    val toUpdateWithWrapped = toUpdate ++ additionalData
+    
+    // Collect removed nodes efficiently
+    val removedNodes = prover.removedNodes()
+    val toRemove = new mutable.ArrayBuilder.ofRef[Array[Byte]]
+    toRemove.sizeHint(removedNodes.length)
+    cfor(0)(_ < removedNodes.length, _ + 1) { i =>
+      toRemove += removedNodes(i).label
+    }
+    
+    // Build toUpdate array efficiently
+    val additionalDataSize = additionalData.size
+    val toUpdate = new mutable.ArrayBuilder.ofRef[(Array[Byte], Array[Byte])]
+    toUpdate.sizeHint(2 + toInsert.length + additionalDataSize)
+    
+    // Add indexes
+    toUpdate += ((topNodeHashKey, topNodeLabel))
+    toUpdate += ((topNodeHeightKey, topNodeHeightBytes))
+    
+    // Add serialized nodes
+    cfor(0)(_ < toInsert.length, _ + 1) { i =>
+      toUpdate += toInsert(i)
+    }
+    
+    // Add additional data
+    if (additionalDataSize > 0) {
+      additionalData.foreach(toUpdate += _)
+    }
 
-    store.update(digestWrapper, toRemove, toUpdateWithWrapped)
+    store.update(digestWrapper, toRemove.result(), toUpdate.result())
   }
 
-  //todo: optimize the method
+  /**
+    * Optimized method to collect all visited nodes that need to be serialized
+    * Uses ArrayBuilder and iterative approach to avoid Array concatenation overhead
+    */
   private def serializedVisitedNodes(node: ProverNodes[DigestType],
                                      isTop: Boolean): Array[(Array[Byte], Array[Byte])] = {
-    // Should always serialize top node. It may not be new if it is the creation of the tree
-    if (node.isNew || isTop) {
-      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), VersionedLDBAVLStorage.noStoreSerializer.toBytes(node))
-      node match {
-        case n: InternalProverNode[DigestType] =>
-          val leftSubtree = serializedVisitedNodes(n.left, isTop = false)
-          val rightSubtree = serializedVisitedNodes(n.right, isTop = false)
-          pair +: (leftSubtree ++ rightSubtree)
-        case _: ProverLeaf[DigestType] => Array(pair)
+    val result = new mutable.ArrayBuilder.ofRef[(Array[Byte], Array[Byte])]
+    result.sizeHint(128) // reasonable initial capacity
+    
+    // Stack-based traversal to avoid recursive overhead
+    val stack = new mutable.ArrayBuilder.ofRef[(ProverNodes[DigestType], Boolean)]
+    stack += ((node, isTop))
+    
+    while (stack.result().nonEmpty) {
+      val stackArray = stack.result()
+      val lastIdx = stackArray.length - 1
+      val (currentNode, isTopNode) = stackArray(lastIdx)
+      
+      // Remove last element from stack
+      stack.clear()
+      cfor(0)(_ < lastIdx, _ + 1) { i =>
+        stack += stackArray(i)
       }
-    } else {
-      Array.empty
+      
+      // Should always serialize top node. It may not be new if it is the creation of the tree
+      if (currentNode.isNew || isTopNode) {
+        val pair: (Array[Byte], Array[Byte]) = (nodeLabel(currentNode), VersionedLDBAVLStorage.noStoreSerializer.toBytes(currentNode))
+        result += pair
+        
+        currentNode match {
+          case n: InternalProverNode[DigestType] =>
+            // Push children onto stack (right first so left is processed first)
+            stack += ((n.right, false))
+            stack += ((n.left, false))
+          case _: ProverLeaf[DigestType] =>
+          // Leaf node, nothing more to add
+        }
+      }
     }
+    
+    result.result()
   }
 
   //todo: this method is not used, should be removed on next scrypto update?

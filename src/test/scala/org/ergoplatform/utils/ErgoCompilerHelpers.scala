@@ -12,6 +12,15 @@ import scala.util.{Failure, Success, Try}
   */
 trait ErgoCompilerHelpers {
 
+  /**
+    * Compiles ErgoScript source code into an ErgoTree.
+    *
+    * @param source The ErgoScript source code string to compile
+    * @param scriptVersion The version of the script compiler to use
+    * @param treeVersion The version of the ErgoTree to generate
+    * @return The compiled ErgoTree representing the source code
+    * @throws Exception if compilation fails or if the result is not of expected type (SBoolean or SSigmaProp)
+    */
   def compileSource(source: String, scriptVersion: Byte, treeVersion: Byte): ErgoTree = {
     VersionContext.withVersions(scriptVersion, treeVersion) {
       val compiler = new SigmaCompiler(16.toByte)

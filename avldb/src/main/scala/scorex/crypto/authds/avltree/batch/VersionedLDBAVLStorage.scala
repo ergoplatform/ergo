@@ -2,7 +2,7 @@ package scorex.crypto.authds.avltree.batch
 
 import com.google.common.primitives.Ints
 import scorex.crypto.authds.avltree.batch.Constants.{DigestType, HashFnType, hashFn}
-import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{topNodeHashKey, topNodeHeightKey}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.{InternalNodePrefix, LeafPrefix, noStoreSerializer, topNodeHashKey, topNodeHeightKey}
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree, ProxyInternalNode}
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.util.encode.Base16
@@ -153,7 +153,121 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
       rootNodeLabel
     }
   }
+
+  /**
+    * Collect statistics about the UTXO set and its backing store, see [[AvlStorageStats]].
+    *
+    * Does two passes over the database:
+    *   - a physical pass over every record in the main store ([[LDBVersionedStore.processAll]]), classifying each
+    *     record as a leaf (a box), an internal tree node, or other (metadata / index) record by its serialized
+    *     layout, and summing record and box-value sizes;
+    *   - a logical pass over the live AVL+ tree from its current root ([[LDBVersionedStore.processSnapshot]]),
+    *     yielding the exact current UTXO-set box count and total box-value size (without versioning overhead).
+    *
+    * The method reads potentially millions of records, so it is intended for occasional/diagnostic use.
+    */
+  def collectStats: Try[AvlStorageStats] = Try {
+    val keySize = StateTreeParameters.keySize
+    val labelSize = StateTreeParameters.labelSize
+    // serialized internal node: prefix + balance + key + left label + right label
+    val internalNodeSize = 1 + 1 + keySize + 2 * labelSize
+    // serialized leaf overhead (everything but the value): prefix + key + value length + nextLeafKey
+    val leafOverhead = 1 + keySize + 4 + labelSize
+    // offset of the 4-byte value length, stored right after the prefix and key
+    val valueLenOffset = 1 + keySize
+
+    var totalRecords, totalKeyBytes, totalValueBytes = 0L
+    var leafRecords, leafRecordBytes, leafValueBytes = 0L
+    var internalRecords, internalRecordBytes = 0L
+    var otherRecords, otherRecordBytes = 0L
+
+    // physical pass: classify every record in the main store
+    store.processAll { (k, v) =>
+      totalRecords += 1
+      totalKeyBytes += k.length
+      totalValueBytes += v.length
+      if (v.length == internalNodeSize && v(0) == InternalNodePrefix) {
+        internalRecords += 1
+        internalRecordBytes += v.length
+      } else if (v.length >= leafOverhead && v(0) == LeafPrefix &&
+        v.length == leafOverhead + Ints.fromBytes(
+          v(valueLenOffset), v(valueLenOffset + 1), v(valueLenOffset + 2), v(valueLenOffset + 3))) {
+        leafRecords += 1
+        leafRecordBytes += v.length
+        leafValueBytes += v.length - leafOverhead
+      } else {
+        otherRecords += 1
+        otherRecordBytes += v.length
+      }
+    }
+
+    // logical pass: traverse the live tree from its current root for the exact UTXO-set numbers
+    val (liveBoxes, liveBoxValueBytes, liveInternalNodes, treeHeight) = store.processSnapshot { dbReader =>
+      var boxes, boxValueBytes, internals = 0L
+      val height = Ints.fromByteArray(dbReader.get(topNodeHeightKey))
+
+      def loop(label: Array[Byte]): Unit = {
+        noStoreSerializer.parseBytes(dbReader.get(label)) match {
+          case in: ProxyInternalNode[DigestType] =>
+            internals += 1
+            loop(in.leftLabel)
+            loop(in.rightLabel)
+          case leaf: ProverLeaf[DigestType] =>
+            boxes += 1
+            boxValueBytes += leaf.value.length
+        }
+      }
+
+      loop(dbReader.get(topNodeHashKey))
+      (boxes, boxValueBytes, internals, height)
+    }.get
+
+    AvlStorageStats(
+      totalRecords, totalKeyBytes, totalValueBytes,
+      leafRecords, leafRecordBytes, leafValueBytes,
+      internalRecords, internalRecordBytes,
+      otherRecords, otherRecordBytes,
+      liveBoxes, liveBoxValueBytes, liveInternalNodes, treeHeight)
+  }
 }
+
+/**
+  * Aggregate statistics about the UTXO set and the database backing its authenticating AVL+ tree.
+  *
+  * The first group of fields describes the physical state store (all records currently in the main database):
+  *
+  * @param totalRecords        - total number of records in the store
+  * @param totalKeyBytes       - total size of all record keys, in bytes
+  * @param totalValueBytes     - total size of all record values, in bytes
+  * @param leafRecords         - number of records that are AVL+ tree leaves (boxes)
+  * @param leafRecordBytes     - total serialized size of leaf records, in bytes
+  * @param leafValueBytes      - total size of box payloads stored in leaves (leaf values only), in bytes
+  * @param internalRecords     - number of records that are internal AVL+ tree nodes
+  * @param internalRecordBytes - total serialized size of internal-node records, in bytes
+  * @param otherRecords        - number of remaining records (metadata / index records)
+  * @param otherRecordBytes    - total serialized size of metadata / index records, in bytes
+  *
+  * The second group describes the live UTXO set (the AVL+ tree reachable from the current root):
+  *
+  * @param liveBoxes           - exact number of boxes in the current UTXO set
+  * @param liveBoxValueBytes   - total size of box payloads in the current UTXO set, in bytes
+  * @param liveInternalNodes   - number of internal nodes in the current tree
+  * @param treeHeight          - height of the current AVL+ tree
+  */
+case class AvlStorageStats(totalRecords: Long,
+                           totalKeyBytes: Long,
+                           totalValueBytes: Long,
+                           leafRecords: Long,
+                           leafRecordBytes: Long,
+                           leafValueBytes: Long,
+                           internalRecords: Long,
+                           internalRecordBytes: Long,
+                           otherRecords: Long,
+                           otherRecordBytes: Long,
+                           liveBoxes: Long,
+                           liveBoxValueBytes: Long,
+                           liveInternalNodes: Long,
+                           treeHeight: Int)
 
 
 object VersionedLDBAVLStorage {

@@ -107,6 +107,86 @@ components:
           items:
             type: object
 
+    UtxoSetStats:
+      type: object
+      description: >-
+        Statistics about the UTXO set and the database backing its authenticating AVL+ tree.
+        Fields prefixed with totals/leaf/internal/other describe the physical state store (all
+        records in the database); fields prefixed with live describe the current UTXO set (the tree
+        reachable from the current root, without versioning overhead).
+      required:
+        - totalRecords
+        - totalKeyBytes
+        - totalValueBytes
+        - leafRecords
+        - leafRecordBytes
+        - leafValueBytes
+        - internalRecords
+        - internalRecordBytes
+        - otherRecords
+        - otherRecordBytes
+        - liveBoxes
+        - liveBoxValueBytes
+        - liveInternalNodes
+        - treeHeight
+      properties:
+        totalRecords:
+          description: Total number of records in the state store
+          type: integer
+          format: int64
+        totalKeyBytes:
+          description: Total size of all record keys, in bytes
+          type: integer
+          format: int64
+        totalValueBytes:
+          description: Total size of all record values, in bytes
+          type: integer
+          format: int64
+        leafRecords:
+          description: Number of records that are AVL+ tree leaves (boxes)
+          type: integer
+          format: int64
+        leafRecordBytes:
+          description: Total serialized size of leaf records, in bytes
+          type: integer
+          format: int64
+        leafValueBytes:
+          description: Total size of box payloads stored in leaves (leaf values only), in bytes
+          type: integer
+          format: int64
+        internalRecords:
+          description: Number of records that are internal AVL+ tree nodes
+          type: integer
+          format: int64
+        internalRecordBytes:
+          description: Total serialized size of internal-node records, in bytes
+          type: integer
+          format: int64
+        otherRecords:
+          description: Number of remaining records (metadata / index records)
+          type: integer
+          format: int64
+        otherRecordBytes:
+          description: Total serialized size of metadata / index records, in bytes
+          type: integer
+          format: int64
+        liveBoxes:
+          description: Exact number of boxes in the current UTXO set
+          type: integer
+          format: int64
+        liveBoxValueBytes:
+          description: Total size of box payloads in the current UTXO set, in bytes
+          type: integer
+          format: int64
+        liveInternalNodes:
+          description: Number of internal nodes in the current tree
+          type: integer
+          format: int64
+        treeHeight:
+          description: Height of the current AVL+ tree
+          type: integer
+          format: int32
+
     ErgoTransactionOutput:
       type: object
       required:
@@ -5559,6 +5639,37 @@ paths:
                   $ref: '#/components/schemas/ErgoTransactionOutput'
         '404':
           description: Box with this id doesn't exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /utxo/stats:
+    get:
+      summary: Get statistics about the UTXO set and its backing store
+      description: >-
+        Returns record/box counts and sizes for the UTXO set and the database backing its
+        authenticating AVL+ tree. Available on UTXO-set nodes only; nodes running in digest
+        (stateless) mode return 404. Note: this scans the whole state database and is therefore an
+        expensive, diagnostic-grade call.
+      operationId: utxoSetStats
+      tags:
+        - utxo
+      responses:
+        '200':
+          description: UTXO set statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtxoSetStats'
+        '404':
+          description: Statistics are not available (node is not in UTXO-set mode)
           content:
             application/json:
               schema:

@@ -18,6 +18,8 @@ class WalletStorageSpec
     with DBSpec {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
+  import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen
+  import org.ergoplatform.utils.generators.CoreObjectGenerators.modifierIdGen
   import org.ergoplatform.wallet.utils.WalletGenerators._
 
   it should "add and read derivation paths" in {
@@ -65,6 +67,45 @@ class WalletStorageSpec
         storageApps.map(_.scanId).foreach(storage.removeScan(_).get)
         storage.allScans.length shouldBe 0
       }
+    }
+  }
+
+  it should "add, read and forget unconfirmed transactions" in {
+    forAll(validErgoTransactionGen, extendedPubKeyListGen, externalScanReqGen) {
+      case ((_, tx), pubKeys, scanReq) =>
+        withStore { store =>
+          val storage = new WalletStorage(store, settings)
+          storage.readUnconfirmedTransactions() shouldBe empty
+          storage.unconfirmedTransactionHeights shouldBe empty
+
+          storage.addUnconfirmedTransaction(tx, 100).get
+          storage.readUnconfirmedTransactions().map { case (t, h) => t.id -> h } shouldBe Seq(tx.id -> 100)
+          storage.unconfirmedTransactionHeights shouldBe Map(tx.id -> 100)
+
+          // reading the database again is what happens on a node restart, and is the whole point
+          new WalletStorage(store, settings)
+            .readUnconfirmedTransactions().map { case (t, h) => t.id -> h } shouldBe Seq(tx.id -> 100)
+
+          // storing it again keeps the height it was first seen at, so that expiry is not pushed back
+          storage.addUnconfirmedTransaction(tx, 200).get
+          storage.unconfirmedTransactionHeights shouldBe Map(tx.id -> 100)
+
+          // the new bucket does not overlap with the ones already in this database
+          pubKeys.foreach(storage.addPublicKey(_).get)
+          storage.addScan(scanReq).get
+          storage.readAllKeys() should contain theSameElementsAs pubKeys.toSet
+          storage.allScans.length shouldBe 1
+          storage.readUnconfirmedTransactions().length shouldBe 1
+
+          // forgetting a transaction which is not there changes nothing
+          storage.removeUnconfirmedTransactions(Seq(modifierIdGen.sample.get)).get
+          storage.readUnconfirmedTransactions().length shouldBe 1
+
+          storage.removeUnconfirmedTransactions(Seq(tx.id)).get
+          storage.readUnconfirmedTransactions() shouldBe empty
+          storage.unconfirmedTransactionHeights shouldBe empty
+          new WalletStorage(store, settings).readUnconfirmedTransactions() shouldBe empty
+        }
     }
   }
 

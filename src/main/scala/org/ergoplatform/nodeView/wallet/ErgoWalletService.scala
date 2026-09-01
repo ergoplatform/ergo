@@ -221,6 +221,21 @@ trait ErgoWalletService {
   def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock, dustLimit: Option[Long]): Try[ErgoWalletState]
 
   /**
+    * Update the off-chain part of the wallet with a transaction which is not on the blockchain yet.
+    *
+    * @return the updated state, and whether the transaction is of any interest to the wallet, that
+    *         is whether it pays the wallet or spends one of its boxes
+    */
+  def scanOffChainUpdate(state: ErgoWalletState, tx: ErgoTransaction): (ErgoWalletState, Boolean)
+
+  /**
+    * Rebuild the off-chain part of the wallet from the transactions which were unconfirmed when the
+    * node was stopped. Without it the wallet forgets that it already spent their inputs and can
+    * build a conflicting transaction spending the same boxes a second time.
+    */
+  def restoreOffChainState(state: ErgoWalletState): ErgoWalletState
+
+  /**
     * Sign a transaction
     */
   def signTransaction(proverOpt: Option[ErgoProvingInterpreter],
@@ -595,6 +610,33 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         ergoSettings.walletSettings.walletProfile).map { case (reg, offReg, updatedOutputsFilter) =>
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
+
+  override def scanOffChainUpdate(state: ErgoWalletState, tx: ErgoTransaction): (ErgoWalletState, Boolean) = {
+    val dustLimit = ergoSettings.walletSettings.dustLimit
+    val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+    val inputs = WalletScanLogic.extractInputBoxes(tx)
+
+    def spendsWalletBox: Boolean =
+      state.offChainRegistry.offChainBoxes.exists(box => inputs.contains(box.boxId)) ||
+        tx.inputs.exists(input => state.registry.getBox(input.boxId).isDefined)
+
+    val newState = state.copy(offChainRegistry =
+      state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
+    )
+    (newState, newWalletBoxes.nonEmpty || spendsWalletBox)
+  }
+
+  override def restoreOffChainState(state: ErgoWalletState): ErgoWalletState = {
+    val stored = state.storage.readUnconfirmedTransactions().map(_._1)
+    if (stored.isEmpty) {
+      state
+    } else {
+      log.info(s"Wallet is restoring ${stored.size} unconfirmed transaction(s) kept across restart")
+      ErgoWalletActor.orderByDependency(stored).foldLeft(state) { case (acc, tx) =>
+        scanOffChainUpdate(acc, tx)._1
+      }
+    }
+  }
 
   override def updateUtxoState(state: ErgoWalletState): ErgoWalletState = {
     (state.mempoolReaderOpt, state.stateReaderOpt) match {

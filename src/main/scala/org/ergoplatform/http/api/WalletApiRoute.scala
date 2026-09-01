@@ -307,7 +307,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     (minConfNum, maxConfNum, minHeight, maxHeight, limit, offset) =>
       val considerUnconfirmed = minConfNum == -1
       withWallet { wallet =>
-        wallet.walletBoxes(unspentOnly = true, considerUnconfirmed)
+        wallet.walletBoxes(unspentOnly = true, considerUnconfirmed, minHeight, maxHeight)
           .map { boxes =>
             boxes
               .filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
@@ -320,7 +320,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
     (minConfNum, maxConfNum, minHeight, maxHeight, limit, offset)  =>
       val considerUnconfirmed = minConfNum == -1
       withWallet {
-        _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed)
+        _.walletBoxes(unspentOnly = false, considerUnconfirmed = considerUnconfirmed, minHeight, maxHeight)
           .map {
             _.filter(boxConfirmationHeightFilter(_, minConfNum, maxConfNum, minHeight, maxHeight))
             .slice(offset, offset + limit)

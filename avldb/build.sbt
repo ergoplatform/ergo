@@ -2,7 +2,7 @@ import sbt.Keys.testFrameworks
 
 val scala211 = "2.11.12"
 val scala212 = "2.12.20"
-val scala213 = "2.13.16"
+val scala213 = "2.13.18"
 
 name := "avldb"
 
@@ -30,7 +30,7 @@ val Versions = new {
 libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.13",
   "com.google.guava" % "guava" % "23.0",
-  "org.scorexfoundation" %% "scrypto" % "2.3.0",
+  "org.scorexfoundation" %% "scrypto" % "3.1.1",
   "org.scalatest" %% "scalatest" % "3.2.19" % Test,
   "org.scalacheck" %% "scalacheck" % Versions.scalacheck(scalaVersion.value) % Test,
   Versions.scalatestplus(scalaVersion.value),

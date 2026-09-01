@@ -8,6 +8,7 @@ import akka.http.scaladsl.server.Directive0
 import akka.http.scaladsl.server.directives.RouteDirectives
 import scorex.core.api.http.{ApiErrorHandler, ApiRejectionHandler, ApiRoute, CorsHandler}
 import akka.http.scaladsl.model.headers._
+import scorex.util.ScorexLogging
 
 import scala.collection.immutable
 
@@ -15,7 +16,7 @@ final case class ErgoHttpService(
   apiRoutes: Seq[ApiRoute],
   swaggerRoute: SwaggerRoute,
   panelRoute: NodePanelRoute
-)(implicit val system: ActorSystem) extends CorsHandler {
+)(implicit val system: ActorSystem) extends CorsHandler with ScorexLogging {
 
   def rejectionHandler: RejectionHandler = ApiRejectionHandler.rejectionHandler
 
@@ -36,15 +37,41 @@ final case class ErgoHttpService(
     super.respondWithHeaders(corsResponseHeaders)
   }
 
+  /**
+    * Logs every query served by the node's HTTP interface: method, relative URI (path and query
+    * string), response status and how long it took.
+    *
+    * Bodies are deliberately not logged, as requests carry secrets (a mnemonic on
+    * `/wallet/restore`, a password on `/wallet/unlock`, and so on) and responses can be large.
+    *
+    * Off by default, since the root logger is at INFO. To switch it on, add to `logback.xml`:
+    * {{{
+    *   <logger name="org.ergoplatform.http.ErgoHttpService" level="DEBUG"/>
+    * }}}
+    * When it is off, the message is never built: `log.debug` is a macro guarded by `isDebugEnabled`.
+    */
+  private val logQueries: Directive0 =
+    extractRequest.flatMap { request =>
+      val startTime = System.currentTimeMillis()
+      mapResponse { response =>
+        val elapsedMs = System.currentTimeMillis() - startTime
+        log.debug(s"${request.method.value} ${request.uri.toRelative} - " +
+          s"${response.status.intValue()} in $elapsedMs ms")
+        response
+      }
+    }
+
   val compositeRoute: Route =
-    handleRejections(rejectionHandler) {
-      handleExceptions(exceptionHandler) {
-        corsHandler {
-          apiR ~
-            apiSpecR ~
-            swaggerRoute.route ~
-            panelRoute.route ~
-            redirectToSwaggerR
+    logQueries {
+      handleRejections(rejectionHandler) {
+        handleExceptions(exceptionHandler) {
+          corsHandler {
+            apiR ~
+              apiSpecR ~
+              swaggerRoute.route ~
+              panelRoute.route ~
+              redirectToSwaggerR
+          }
         }
       }
     }

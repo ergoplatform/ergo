@@ -27,6 +27,13 @@ class UtxoApiRouteSpec
   val route: Route =
     UtxoApiRoute(utxoReadersRef, utxoSettings.scorexSettings.restApi).route
 
+  val apiKey = "test-api-key"
+  val authenticatedRoute: Route =
+    UtxoApiRoute(
+      utxoReadersRef,
+      utxoSettings.scorexSettings.restApi.copy(apiKeyHash = Some(Base16.encode(Blake2b256(apiKey))))
+    ).route
+
   it should "get utxo box with /byId" in {
     val box   = utxoState.takeBoxes(1).head
     val boxId = Base16.encode(box.id)
@@ -119,6 +126,18 @@ class UtxoApiRouteSpec
   it should "get serialized proof for given boxes" in {
     val boxes = utxoState.takeBoxes(10).map(box => Base16.encode(box.id))
     Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "require api key to get serialized proof for given boxes" in {
+    val boxes = utxoState.takeBoxes(10).map(box => Base16.encode(box.id))
+
+    Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> Route.seal(authenticatedRoute) ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+
+    Post(prefix + s"/getBoxesBinaryProof", boxes.asJson) ~> addHeader("api_key", apiKey) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }

@@ -67,10 +67,10 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     val now = System.currentTimeMillis()
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
-    val allPoolTxs = mempool.getAllPrioritized
-    val txsToValidate = allPoolTxs.filter { utx =>
+    val allPoolTxs = mempool.getAllPrioritized.toVector
+    val txsToValidate = allPoolTxs.iterator.filter { utx =>
       (now - utx.lastCheckedTime) > TimeLimit
-    }.toList
+    }
 
 
     // Take into account other transactions from the pool.
@@ -79,25 +79,25 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
-    def validationLoop(txs: Seq[UnconfirmedTransaction],
+    def validationLoop(txs: Iterator[UnconfirmedTransaction],
                        validated: mutable.ArrayBuilder[UnconfirmedTransaction],
                        invalidated: mutable.ArrayBuilder[ModifierId],
-                       costAcc: Long
+                      costAcc: Long
                       ): (mutable.ArrayBuilder[UnconfirmedTransaction], mutable.ArrayBuilder[ModifierId]) = {
-      txs match {
-        case head :: tail if costAcc < CostLimit =>
-          val validationContext = state.stateContext.simplifiedUpcoming()
-          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
-            case Success(txCost) =>
-              val updTx = head.withCost(txCost)
-              validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
-            case Failure(e) =>
-              val txId = head.id
-              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
-          }
-        case _ =>
-          validated -> invalidated
+      if (costAcc < CostLimit && txs.hasNext) {
+        val head = txs.next()
+        val validationContext = state.stateContext.simplifiedUpcoming()
+        state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
+          case Success(txCost) =>
+            val updTx = head.withCost(txCost)
+            validationLoop(txs, validated += updTx, invalidated, txCost + costAcc)
+          case Failure(e) =>
+            val txId = head.id
+            log.info(s"Transaction $txId invalidated: ${e.getMessage}")
+            validationLoop(txs, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+        }
+      } else {
+        validated -> invalidated
       }
     }
 

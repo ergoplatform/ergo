@@ -104,7 +104,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   private def updateStatsOnRemoval(tx: ErgoTransaction): MemPoolStatistics = {
     val wtx = pool.transactionsRegistry.get(tx.id)
     wtx.map(wgtx => stats.add(System.currentTimeMillis(), wgtx))
-       .getOrElse(MemPoolStatistics(System.currentTimeMillis(), 0, System.currentTimeMillis()))
+       .getOrElse(stats)
   }
 
   /**

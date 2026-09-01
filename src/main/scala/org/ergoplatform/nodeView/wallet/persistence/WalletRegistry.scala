@@ -312,6 +312,22 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     }
   }
 
+  /**
+    * Advance the wallet's scanned height past a block whose data is unavailable (for example, it
+    * was pruned before the wallet could scan it). Balances are left untouched - only the digest
+    * height moves forward - and a new version is transacted so that rollback keeps working.
+    *
+    * @param blockId     - identifier of the (still-known) header at this height, used as version tag
+    * @param blockHeight - height to advance the wallet to
+    */
+  def skipBlock(blockId: ModifierId, blockHeight: Int): Try[Unit] =
+    updateDigest(KeyValuePairsBag.empty) { case WalletDigest(height, wBalance, wTokensSeq) =>
+      if (height + 1 != blockHeight) {
+        log.warn(s"Wallet skipping unscanned block(s), from $height until $blockHeight (data unavailable)")
+      }
+      Success(WalletDigest(blockHeight, wBalance, wTokensSeq))
+    }.flatMap(_.transact(store, idToBytes(blockId)))
+
   def rollback(version: VersionTag): Try[Unit] = {
     cache.clear()
     store.rollbackTo(org.ergoplatform.core.versionToBytes(version))

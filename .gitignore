@@ -67,6 +67,7 @@ local.conf
 project/metals.sbt
 null/
 out/
-
+ergoplatform-ergo-8a5edab282632443.txt
+.github/instructions
 # scala worksheets
 *.worksheet.sc

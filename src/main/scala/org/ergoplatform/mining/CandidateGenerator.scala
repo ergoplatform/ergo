@@ -84,6 +84,24 @@ class CandidateGenerator(
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
   }
 
+  /**
+    * Reaction on invalidation of the block solved by us (e.g. due to a transaction which became
+    * invalid after the block candidate was generated): drop the solved block along with cached
+    * candidates. Mining will resume on the next external request, which will generate a fresh
+    * candidate because the cached one was dropped.
+    */
+  private def onSolvedBlockFailed(state: CandidateGeneratorState, modId: ModifierId, error: Throwable): Unit = {
+    state.solvedBlock.filter(_.toSeq.exists(_.id == modId)).foreach { block =>
+      log.warn(
+        s"Locally mined block ${block.id} invalidated by the node view holder, resuming mining",
+        error
+      )
+      context.become(
+        initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None))
+      )
+    }
+  }
+
   override def receive: Receive = {
 
     // first we need to get Readers to have some initial state to work with
@@ -105,7 +123,8 @@ class CandidateGenerator(
             h,
             s,
             m,
-            avgGenTime = 1000.millis
+            avgGenTime = 1000.millis,
+            lastAppliedBlockTxs = None
           )
         )
       )
@@ -113,6 +132,8 @@ class CandidateGenerator(
       context.system.eventStream
         .subscribe(self, classOf[FullBlockApplied])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
+      context.system.eventStream.subscribe(self, classOf[SemanticallyFailedModification])
+      context.system.eventStream.subscribe(self, classOf[SyntacticallyFailedModification])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
     case m =>
@@ -147,19 +168,33 @@ class CandidateGenerator(
      * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,
      * we need to generate new candidate and possibly also discard existing solution if it is also behind
      */
-    case FullBlockApplied(header) =>
+    case applied: FullBlockApplied =>
+      val header = applied.header
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
+      val stateWithAppliedTxs =
+        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet))
       if (needNewCandidate(state.cachedCandidate, header)) {
         if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
+          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
         else
-          context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
-        context.become(initialized(state))
+        context.become(initialized(stateWithAppliedTxs))
       }
+
+    /*
+     * If a block solved by us was invalidated by the node view holder, we need to drop it along
+     * with cached candidates, as otherwise mining would stall (new solutions are rejected with
+     * "Block already solved" and candidate regeneration is paused while solvedBlock is set).
+     */
+    case SemanticallyFailedModification(_, modId, error) =>
+      onSolvedBlockFailed(state, modId, error)
+
+    case SyntacticallyFailedModification(_, modId, error) =>
+      onSolvedBlockFailed(state, modId, error)
 
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
@@ -174,6 +209,7 @@ class CandidateGenerator(
           state.mpr,
           effectiveMinerPk,
           txsToInclude,
+          state.lastAppliedBlockTxs,
           ergoSettings
         ) match {
           case Some(Failure(ex)) =>
@@ -280,7 +316,8 @@ object CandidateGenerator extends ScorexLogging {
     hr: ErgoHistoryReader,
     sr: UtxoStateReader,
     mpr: ErgoMemPoolReader,
-    avgGenTime: FiniteDuration // approximation of average block generation time for more efficient retries
+    avgGenTime: FiniteDuration, // approximation of average block generation time for more efficient retries
+    lastAppliedBlockTxs: Option[(ModifierId, Set[ModifierId])] // header id and tx ids of the last applied block
   )
 
   def apply(
@@ -388,6 +425,38 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
+    * Checks that the best full block in the history corresponds to the state.
+    * Evaluated via live history storage reads, so re-checking it after candidate assembly
+    * detects a block applied concurrently with the assembly.
+    */
+  def isChainSynced(
+    bestFullBlockIdOpt: Option[ModifierId],
+    stateContext: ErgoStateContext
+  ): Boolean =
+    bestFullBlockIdOpt == stateContext.lastHeaderOpt.map(_.id)
+
+  /**
+    * Filters out from `poolTxs` transactions included into the last applied block
+    * (`lastAppliedBlockTxs`), if the block is still the best full block (`bestFullBlockIdOpt`).
+    * Such transactions are removed from the mempool by the node view holder itself on block
+    * application, so there is no need to validate them during candidate assembly (which logs
+    * misleading double-spending messages) nor to eliminate them via EliminateTransactions.
+    */
+  def excludeAppliedTxs(
+    poolTxs: Seq[UnconfirmedTransaction],
+    lastAppliedBlockTxs: Option[(ModifierId, Set[ModifierId])],
+    bestFullBlockIdOpt: Option[ModifierId]
+  ): Seq[UnconfirmedTransaction] = {
+    lastAppliedBlockTxs match {
+      case Some((appliedHeaderId, appliedTxIds))
+          if appliedTxIds.nonEmpty && bestFullBlockIdOpt.contains(appliedHeaderId) =>
+        poolTxs.filterNot(tx => appliedTxIds.contains(tx.id))
+      case _ =>
+        poolTxs
+    }
+  }
+
+  /**
     * @return None if chain is not synced or Some of attempt to create candidate
     */
   def generateCandidate(
@@ -396,6 +465,7 @@ object CandidateGenerator extends ScorexLogging {
     m: ErgoMemPoolReader,
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
+    lastAppliedBlockTxs: Option[(ModifierId, Set[ModifierId])],
     ergoSettings: ErgoSettings
   ): Option[Try[(Candidate, EliminateTransactions)]] = {
     // mandatory transactions to include into next block taken from the previous candidate
@@ -406,14 +476,16 @@ object CandidateGenerator extends ScorexLogging {
 
     val stateContext = s.stateContext
 
-    //only transactions valid from against the current utxo state we take from the mem pool
-    lazy val poolTransactions = m.getAllPrioritized
+    //only transactions valid from against the current utxo state we take from the mem pool,
+    //skipping transactions already included into the last applied block
+    lazy val poolTransactions =
+      excludeAppliedTxs(m.getAllPrioritized, lastAppliedBlockTxs, h.bestFullBlockOpt.map(_.id))
 
     lazy val emissionTxOpt =
       CandidateGenerator.collectEmission(s, pk, stateContext)
 
     def chainSynced =
-      h.bestFullBlockOpt.map(_.id) == stateContext.lastHeaderOpt.map(_.id)
+      isChainSynced(h.bestFullBlockOpt.map(_.id), stateContext)
 
     def hasAnyMemPoolOrMinerTx =
       poolTransactions.nonEmpty || unspentTxsToInclude.nonEmpty || emissionTxOpt.nonEmpty
@@ -436,18 +508,25 @@ object CandidateGenerator extends ScorexLogging {
       } else {
         ergoSettings.votingTargets.desiredUpdate
       }
-      Some(
-        createCandidate(
-          pk,
-          h,
-          desiredUpdate,
-          s,
-          poolTransactions,
-          emissionTxOpt,
-          unspentTxsToInclude,
-          ergoSettings
-        )
+      val candidateAttempt = createCandidate(
+        pk,
+        h,
+        desiredUpdate,
+        s,
+        poolTransactions,
+        emissionTxOpt,
+        unspentTxsToInclude,
+        ergoSettings
       )
+      if (!chainSynced) {
+        log.debug(
+          "Discarding block candidate as a new block was applied during its assembly, " +
+          "a new candidate will be generated on FullBlockApplied"
+        )
+        None
+      } else {
+        Some(candidateAttempt)
+      }
     }
   }
 

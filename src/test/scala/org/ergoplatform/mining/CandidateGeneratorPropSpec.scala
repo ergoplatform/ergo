@@ -1,12 +1,14 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoTreePredef
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{BoxUtils, ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
+import scorex.util.{ModifierId, bytesToId}
 import sigma.data.ProveDlog
 
 import scala.concurrent.duration._
@@ -320,6 +322,143 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
 
     // and the miner still receives the whole amount
     txs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
+  }
+
+  property("stale emission tx is invalidated when its box was spent by concurrently applied block") {
+    val us0 = createUtxoState(settings)._1
+    us0.emissionBoxOpt should not be None
+    val emissionTx =
+      CandidateGenerator.collectEmission(us0, defaultMinerPk, emptyStateContext).toSeq.head
+
+    val appliedBlock = validFullBlock(None, us0, Seq(emissionTx))
+    val us1          = us0.applyModifier(appliedBlock, None)(_ => ()).get
+
+    val h = appliedBlock.header
+    val upcomingContext = us1.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      parameters.maxBlockCost,
+      parameters.maxBlockSize,
+      us1,
+      upcomingContext,
+      Seq(emissionTx)
+    )
+
+    collected shouldBe empty
+    invalid shouldBe Seq(emissionTx.id)
+  }
+
+  property("mempool transactions spent by applied block are invalidated at next candidate assembly") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper
+    val us0      = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(10)
+    val mempoolTxs =
+      inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp))
+
+    val appliedBlock = validFullBlock(None, us0, mempoolTxs)
+    val us1          = us0.applyModifier(appliedBlock, None)(_ => ()).get
+
+    val h = appliedBlock.header
+    val upcomingContext = us1.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      parameters.maxBlockCost,
+      parameters.maxBlockSize,
+      us1,
+      upcomingContext,
+      mempoolTxs
+    )
+
+    collected shouldBe empty
+    invalid should contain theSameElementsAs mempoolTxs.map(_.id)
+  }
+
+  property("zero-fee transactions are collected without creating fee transaction") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(5)
+    val zeroFeeTxs = inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false))
+    zeroFeeTxs should not be empty
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      parameters.maxBlockCost,
+      parameters.maxBlockSize,
+      us,
+      upcomingContext,
+      zeroFeeTxs
+    )
+
+    invalid shouldBe empty
+    collected should contain theSameElementsAs zeroFeeTxs
+  }
+
+  property("excludeAppliedTxs filters transactions of the applied best block only") {
+    val now = System.currentTimeMillis()
+    def utx(t: ErgoTransaction): UnconfirmedTransaction =
+      new UnconfirmedTransaction(t, None, now, now, None, None)
+
+    val tx1 = validErgoTransactionGen.sample.get._2
+    val tx2 = validErgoTransactionGen.sample.get._2
+    val tx3 = validErgoTransactionGen.sample.get._2
+    val pool = Seq(utx(tx1), utx(tx2), utx(tx3))
+    val appliedId = bytesToId(Array.fill(32)(11.toByte))
+    val otherId = bytesToId(Array.fill(32)(22.toByte))
+
+    CandidateGenerator.excludeAppliedTxs(
+      pool,
+      Some(appliedId -> Set(tx1.id, tx3.id)),
+      Some(appliedId)
+    ).map(_.id) shouldBe Seq(tx2.id)
+
+    CandidateGenerator.excludeAppliedTxs(
+      pool,
+      Some(appliedId -> Set(tx1.id, tx3.id)),
+      Some(otherId)
+    ).map(_.id) shouldBe Seq(tx1.id, tx2.id, tx3.id)
+
+    CandidateGenerator.excludeAppliedTxs(pool, None, Some(appliedId)) shouldBe pool
+
+    CandidateGenerator.excludeAppliedTxs(
+      pool,
+      Some(appliedId -> Set.empty[ModifierId]),
+      Some(appliedId)
+    ) shouldBe pool
+  }
+
+  property("isChainSynced compares best full block id with state context last header id") {
+    CandidateGenerator.isChainSynced(None, emptyStateContext) shouldBe true
+    CandidateGenerator.isChainSynced(Some(bytesToId(Array.fill(32)(33.toByte))), emptyStateContext) shouldBe false
   }
 
   property("it should calculate average block mining time from creation timestamps") {

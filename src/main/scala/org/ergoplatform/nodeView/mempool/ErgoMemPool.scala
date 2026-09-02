@@ -323,7 +323,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
         case _ => None
       }
 
-    loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
+    val recommendedFee = loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
+    math.max(recommendedFee, settings.nodeSettings.minimalFeeAmount)
   }
 
   /**
@@ -350,7 +351,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     histogramEstimateMs.getOrElse {
       // Fallback (no suitable statistics gathered yet): estimate the wait time from the
       // transaction's position in the pool and the average take rate. The elapsed time is
-      // bounded by the statistics measurement window, so that long periods during which no
+      // capped by the statistics measurement window, so that long periods during which no
       // transactions are taken from the pool (e.g. stuck transactions, see #1884) cannot
       // produce absurdly long estimates.
       val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
@@ -359,13 +360,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       // Find position of entry in mempool
       val posInPool = pool.orderedTransactions.keySet.until(wtx).size
 
-      // Time since statistics measurement start (bounded by the measurement window)
-      val elapsed = math.min(
-        System.currentTimeMillis() - stats.startMeasurement,
-        2L * MemPoolStatistics.measurementIntervalMsec
-      )
-      if (stats.takenTxns != 0) {
-        elapsed * posInPool / stats.takenTxns
+      // Time since statistics measurement interval (needed to calculate average tx rate)
+      val elapsed = System.currentTimeMillis() - stats.startMeasurement
+      val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
+      if (stats.takenTxns > 0) {
+        cappedElapsed * posInPool / stats.takenTxns
       } else {
         0
       }

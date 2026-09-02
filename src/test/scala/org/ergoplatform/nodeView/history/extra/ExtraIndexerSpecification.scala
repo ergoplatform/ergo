@@ -18,6 +18,7 @@ import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
 import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.reflect.ClassTag
 
 class ExtraIndexerSpecification extends ErgoCorePropertyTest {
@@ -26,8 +27,10 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   implicit val addressEncoder: ErgoAddressEncoder = settings.addressEncoder
   val initSettings: ErgoSettings = settings
   case class CreateDB(blockCount: Int)
+  case class ExtendDB(blockCount: Int)
   case class Reset()
   case class GenerateBetterChainTip()
+  case class SetCaughtUp(caughtUp: Boolean)
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
@@ -44,6 +47,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   val lock: ReentrantLock = new ReentrantLock()
   val done: Condition = lock.newCondition()
   val created: Condition = lock.newCondition()
+
+  def awaitCondition(condition: Condition): Unit = {
+    lock.lock()
+    try condition.await()
+    finally lock.unlock()
+  }
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
                                 ID_LL, // template -> (spentBoxCount,unspentBoxCount)
@@ -241,6 +250,31 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
+  property("skips a duplicate applied block without blocking later blocks") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+
+    indexer ! ExtendDB(HEIGHT + 2)
+    awaitCondition(created)
+    val firstHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
+    val secondHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 2).get).get
+    val blocks = (1 to HEIGHT + 2).map(height => history.bestBlockTransactionsAt(height).get)
+    val expectedTxCount = blocks.map(_.txs.size.toLong).sum
+    val expectedBoxCount = blocks.flatMap(_.txs).map(_.outputs.size.toLong).sum
+    indexer ! RemoteBlockApplied(firstHeader, history.getFullBlock(firstHeader).get.transactions.map(_.id))
+    indexer ! RemoteBlockApplied(firstHeader, history.getFullBlock(firstHeader).get.transactions.map(_.id))
+    indexer ! RemoteBlockApplied(secondHeader, history.getFullBlock(secondHeader).get.transactions.map(_.id))
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 2
+      state.globalTxIndex shouldBe expectedTxCount
+      state.globalBoxIndex shouldBe expectedBoxCount
+    }
+    indexer ! Reset()
+  }
+
   property("transactions") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
@@ -319,16 +353,15 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
   }
 
-  property("tokens dont disappear when rolling back with orphan block") {
+  property("indexes replacement blocks after rolling back an orphan block") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
     indexer ! GenerateBetterChainTip()
     lock.lock()
     created.await()
     val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
-    indexer ! RemoteBlockApplied(newBestHeaderOpt.get) // will be ignored
+    indexer ! RemoteBlockApplied(newBestHeaderOpt.get, Seq.empty) // will be ignored
     indexer ! CreateDB(HEIGHT + 1)
     lock.lock()
     created.await()
@@ -340,6 +373,31 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     done.await()
     val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
     checkTokens(indexedTokens) shouldBe 0
+    indexer ! Reset()
+  }
+
+  property("resumes catch-up from a deferred state on FullBlockApplied") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+
+    indexer ! ExtendDB(HEIGHT + 1)
+    awaitCondition(created)
+    val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
+
+    // Simulate the state after a headers-only fork briefly became the best chain
+    // and then lost: caughtUp=false, but the indexed tip is still on the main chain.
+    indexer ! SetCaughtUp(caughtUp = false)
+
+    // Without the FullBlockApplied handler for !caughtUp, this event would be
+    // dropped and the indexer would stay stalled.
+    indexer ! RemoteBlockApplied(nextHeader, history.getFullBlock(nextHeader).get.transactions.map(_.id))
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 1
+      state.caughtUp shouldBe true
+    }
     indexer ! Reset()
   }
 }

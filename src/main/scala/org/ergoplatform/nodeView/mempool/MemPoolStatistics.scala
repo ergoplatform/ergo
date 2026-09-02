@@ -51,7 +51,7 @@ case class MemPoolStatistics(startMeasurement: Long,
 object MemPoolStatistics {
   // Time parameters of mempool statistics
   val nHistogramBins: Int = 60  /* one hour */
-  val measurementIntervalMsec: Int = 60 * 60 * 1000 /* one hour */
+  val measurementIntervalMsec: Int = 60 * 1000 /* one minute */
 
   val defaultPoolHistogram: List[FeeHistogramBin] = List.fill(MemPoolStatistics.nHistogramBins)(FeeHistogramBin(0, 0))
 }

@@ -596,6 +596,83 @@ components:
           type: string
           example: '02a7955281885bf0f0ca4a48678848cad8dc5b328ce8bc1d4481d041c98e891ff3'
 
+    MessageSigningRequest:
+      description: A request to sign a message with a wallet secret
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: Message to sign, as text
+          type: string
+          example: 'I am the owner of this address'
+        address:
+          description:
+            P2PK address to sign for, which has to belong to the wallet. The wallet's first address is used
+            if this is not given.
+          $ref: '#/components/schemas/ErgoAddress'
+
+    SignedMessage:
+      description: A message signature, along with the byte string it was made over
+      type: object
+      required:
+        - address
+        - signedMessage
+        - proof
+      properties:
+        address:
+          description: Address the message was signed for
+          $ref: '#/components/schemas/ErgoAddress'
+        signedMessage:
+          description:
+            Base16-encoded byte string actually signed, that is the message with the prefix and the salt
+            prepended. Pass it verbatim to /utils/verifyMessage.
+          type: string
+          example: '4572676f207369676e6564206d6573736167653a0aaa19c25574c54441165d52b75b6d6bb909bcad472e508ef2cc192410562a64804920616d20746865206f776e6572206f6620746869732061646472657373'
+        proof:
+          description: Base16-encoded signature, 56 bytes for a single key
+          type: string
+          example: '32ee9acb56bcf5520eaa98a3f0ee6bc7493839889482ff402fb057970a5e0f7552a40997d6811f31d885b5573f3af3b6c5a233adc6c48828'
+
+    MessageVerificationRequest:
+      description: A request to check a message signature
+      type: object
+      required:
+        - address
+        - signedMessage
+        - proof
+      properties:
+        address:
+          description: P2PK address the message claims to be signed by
+          $ref: '#/components/schemas/ErgoAddress'
+        signedMessage:
+          description: Base16-encoded byte string which was signed, as returned by /wallet/signMessage
+          type: string
+          example: '4572676f207369676e6564206d6573736167653a0aaa19c25574c54441165d52b75b6d6bb909bcad472e508ef2cc192410562a64804920616d20746865206f776e6572206f6620746869732061646472657373'
+        proof:
+          description: Base16-encoded signature, 56 bytes for a single key
+          type: string
+          example: '32ee9acb56bcf5520eaa98a3f0ee6bc7493839889482ff402fb057970a5e0f7552a40997d6811f31d885b5573f3af3b6c5a233adc6c48828'
+
+    MessageVerificationResult:
+      type: object
+      required:
+        - isValid
+      properties:
+        isValid:
+          description: Whether the signature is valid for the address and the byte string given
+          type: boolean
+        message:
+          description:
+            The message the signed byte string carries, or null when the byte string is not wrapped for
+            message signing at all. It is the UTF-8 decoding of the signed payload, so a payload which
+            is not UTF-8 text - which a signer following this convention does not produce, but an
+            external one might - comes back lossily decoded. Check `signedMessage` itself if the exact
+            bytes matter.
+          type: string
+          nullable: true
+          example: 'I am the owner of this address'
+
     TransactionSigningRequest:
       description: A request to sign a transaction with secrets provided
       type: object
@@ -4188,6 +4265,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
 
+  /utils/verifyMessage:
+    post:
+      summary: Check a message signature produced by /wallet/signMessage
+      description:
+        Checks that `proof` is a signature of `signedMessage` under the key of `address`. Needs neither the wallet
+        nor blockchain state, so it can be used by anyone holding the three values.
+
+        `signedMessage` is what the signer actually signed, which is the message with a prefix and random bytes
+        prepended by the signer. Byte strings without that wrapping are rejected without looking at the proof, since
+        a signature over bare bytes may be the input proof of a transaction rather than a message signature.
+      operationId: verifyMessage
+      tags:
+        - utils
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageVerificationRequest'
+      responses:
+        '200':
+          description: Whether the signature is valid, and the message it attests to
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageVerificationResult'
+        '400':
+          description: Bad verification request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
   /utils/seed/{length}:
     get:
       summary: Generate random seed of specified length in bytes
@@ -5055,6 +5171,51 @@ paths:
                 $ref: '#/components/schemas/ErgoTransaction'
         '400':
           description: Bad transaction request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /wallet/signMessage:
+    post:
+      security:
+        - ApiKeyAuth: [api_key]
+      summary: Sign an arbitrary message with a wallet secret
+      description:
+        Proves that the wallet holds the secret behind an address, without moving any funds. The wallet has to be
+        unlocked.
+
+        The message is not signed as given. A sigma proof over an arbitrary byte string is the very same object as
+        the proof which spends a box, so signing the caller's bytes verbatim would let the caller obtain a spending
+        proof for a transaction of their choosing. The node therefore signs `"Ergo signed message:\n" || salt ||
+        message` with 32 fresh random bytes as salt, and reports back the byte string it actually signed. This
+        follows what EIP-0028 (ErgoAuth) prescribes for wallet applications.
+
+        The signature can be checked with /utils/verifyMessage, which needs no wallet.
+      operationId: walletSignMessage
+      tags:
+        - wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageSigningRequest'
+      responses:
+        '200':
+          description: The byte string signed and its signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedMessage'
+        '400':
+          description: Bad message signing request, e.g. the wallet holds no secret for the address asked for
           content:
             application/json:
               schema:

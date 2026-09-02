@@ -5,6 +5,10 @@ import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
+  ChangeAddressNotOwned,
+  WalletLockedForChangeAddress
+}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
@@ -28,10 +32,11 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.helpers.TestingHelpers.testBox
 
 import scala.collection.compat.immutable.ArraySeq
-import scala.util.Random
+import scala.util.{Random, Success}
 
 class ErgoWalletServiceSpec
   extends ErgoCorePropertyTest
@@ -324,6 +329,94 @@ class ErgoWalletServiceSpec
         finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
         finalUnlockedState.storage.readAllKeys().size shouldBe 1
         finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("change address update should require an unlocked wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val ownedAddress = unlockedState.walletVars.publicKeyAddresses.head
+        val lockedState = walletService.lockWallet(unlockedState)
+
+        val result = walletService.updateChangeAddress(lockedState, ownedAddress)
+
+        result.isFailure shouldBe true
+        result.failed.get shouldBe a[WalletLockedForChangeAddress]
+        result.failed.get.getMessage should include("locked")
+        lockedState.storage.readChangeAddress shouldBe empty
+      }
+    }
+  }
+
+  property("change address update should reject an address not owned by the wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val unownedAddress = P2PKAddress(
+          DLogProverInput.random().publicImage
+        )(settings.addressEncoder)
+
+        val result = walletService.updateChangeAddress(unlockedState, unownedAddress)
+
+        result.isFailure shouldBe true
+        result.failed.get shouldBe a[ChangeAddressNotOwned]
+        result.failed.get.getMessage should include("not owned")
+        unlockedState.storage.readChangeAddress shouldBe empty
+      }
+    }
+  }
+
+  property("change address update should accept an address owned by an unlocked wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val ownedAddress = unlockedState.walletVars.publicKeyAddresses.head
+
+        walletService.updateChangeAddress(
+          unlockedState,
+          ownedAddress
+        ) shouldBe Success(())
+        unlockedState.storage.readChangeAddress shouldBe Some(ownedAddress)
+      }
+    }
+  }
+
+  property("change address lookup should ignore a persisted unowned address") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val unownedAddress = P2PKAddress(
+          DLogProverInput.random().publicImage
+        )(settings.addressEncoder)
+        val rootAddress = P2PKAddress(
+          unlockedState.walletVars.proverOpt.get.hdPubKeys.head.key
+        )(settings.addressEncoder)
+
+        unlockedState.storage.updateChangeAddress(unownedAddress).get
+
+        unlockedState.getChangeAddress(settings.addressEncoder) shouldBe Some(rootAddress)
+        unlockedState.storage.readChangeAddress shouldBe Some(unownedAddress)
       }
     }
   }

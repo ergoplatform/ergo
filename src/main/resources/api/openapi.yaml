@@ -4435,6 +4435,7 @@ paths:
       security:
         - ApiKeyAuth: [api_key]
       summary: Update address to be used to send change to
+      description: The wallet must be unlocked and the address must be owned by the wallet.
       operationId: walletUpdateChangeAddress
       tags:
         - wallet
@@ -4452,6 +4453,12 @@ paths:
       responses:
         '200':
           description: Change address updated successfully
+        '400':
+          description: Wallet is locked or the address is not owned by the wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

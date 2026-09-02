@@ -1147,8 +1147,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-        invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+        // During UTXO set snapshot bootstrap, ignore block-section invs (extension, transactions, ADProofs)
+        // until the snapshot is applied. Headers and snapshot-related types are still processed.
+        val utxoBootstrapInProgress =
+          settings.nodeSettings.utxoSettings.utxoBootstrap &&
+            !hr.isUtxoSnapshotApplied &&
+            modifierTypeId != Header.modifierTypeId &&
+            modifierTypeId != ManifestTypeId.value &&
+            modifierTypeId != UtxoSnapshotChunkTypeId.value
+
+        if (utxoBootstrapInProgress) {
+          log.debug(s"Ignoring ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer: UTXO snapshot bootstrap in progress")
+          Seq.empty
+        } else {
+          log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
+          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+        }
     }
 
     if (newModifierIds.nonEmpty) {

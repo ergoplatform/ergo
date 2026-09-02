@@ -316,6 +316,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (history().isEmpty) {
         history().applyPopowProof(proof)
         if (!history().isEmpty) {
+          // When UTXO set snapshot bootstrap is enabled, mark headers chain as synced right after
+          // a trusted NiPoPoW proof is applied. This allows the node to start requesting UTXO set
+          // snapshots immediately, instead of waiting for normal header sync to reach the tip.
+          if (settings.nodeSettings.utxoSettings.utxoBootstrap) {
+            history().setHeadersChainSynced()
+          }
           updateNodeView(updatedHistory = Some(history()))
         }
       }

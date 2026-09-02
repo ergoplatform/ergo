@@ -337,21 +337,37 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     * @return average time for this transaction to be placed in block
     */
   def getExpectedWaitTime(txFee : Long, txSize : Int): Long  = {
-    // Create dummy transaction entry
     val feePerKb = txFee * 1024 / txSize
-    val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
-    val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
 
-    // Find position of entry in mempool
-    val posInPool = pool.orderedTransactions.keySet.until(wtx).size
+    // First, try to estimate the wait time from the fee histogram (the same statistics
+    // `getRecommendedFee` is based on, which makes the two endpoints consistent with
+    // each other): find the earliest wait-time bin such that transactions paying on
+    // average no more than `feePerKb` were included in blocks within that time.
+    val histogramEstimateMs = stats.histogram.zipWithIndex.collectFirst {
+      case (bin, waitMinutes) if bin.nTxns > 0 && bin.totalFee / bin.nTxns <= feePerKb =>
+        waitMinutes.toLong * 60 * 1000
+    }
 
-    // Time since statistics measurement interval (needed to calculate average tx rate)
-    val elapsed = System.currentTimeMillis() - stats.startMeasurement
-    val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
-    if (stats.takenTxns > 0) {
-      cappedElapsed * posInPool / stats.takenTxns
-    } else {
-      0
+    histogramEstimateMs.getOrElse {
+      // Fallback (no suitable statistics gathered yet): estimate the wait time from the
+      // transaction's position in the pool and the average take rate. The elapsed time is
+      // capped by the statistics measurement window, so that long periods during which no
+      // transactions are taken from the pool (e.g. stuck transactions, see #1884) cannot
+      // produce absurdly long estimates.
+      val dummyModifierId = bytesToId(Array.fill(32)(0.toByte))
+      val wtx = WeightedTxId(dummyModifierId, feePerKb, feePerKb, 0)
+
+      // Find position of entry in mempool
+      val posInPool = pool.orderedTransactions.keySet.until(wtx).size
+
+      // Time since statistics measurement interval (needed to calculate average tx rate)
+      val elapsed = System.currentTimeMillis() - stats.startMeasurement
+      val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
+      if (stats.takenTxns > 0) {
+        cappedElapsed * posInPool / stats.takenTxns
+      } else {
+        0
+      }
     }
   }
 

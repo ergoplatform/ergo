@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{Constants => NodeConstants}
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
@@ -369,23 +368,25 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txsByScanIdParams) {
     case (id, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed) =>
-      if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
-        BadRequest("Bad request: both heights and confirmations set")
-      else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
-        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort, includeUnconfirmed)) {
-          resp => ApiResponse(resp.result.asJson)
+      withScanId(id) { scanId =>
+        if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
+          BadRequest("Bad request: both heights and confirmations set")
+        else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
+          withWalletOp(_.transactionsByScanId(scanId, includeUnconfirmed)) {
+            resp => ApiResponse(resp.result.asJson)
+          }
         }
-      }
-      else {
-        withWalletOp(_.filteredScanTransactions(
-          List(ScanId @@ id.toShort),
-          minHeight,
-          maxHeight,
-          minConfNum,
-          maxConfNum,
-          includeUnconfirmed)
-        ) {
-          resp => ApiResponse(resp.asJson)
+        else {
+          withWalletOp(_.filteredScanTransactions(
+            List(scanId),
+            minHeight,
+            maxHeight,
+            minConfNum,
+            maxConfNum,
+            includeUnconfirmed)
+          ) {
+            resp => ApiResponse(resp.asJson)
+          }
         }
       }
   }

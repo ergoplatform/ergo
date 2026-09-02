@@ -44,6 +44,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
   val ergoSettings: ErgoSettings = ErgoSettingsReader.read(
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, settings).route
+  val sealedRoute: Route = Route.seal(route)
   val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
   val failingRoute: Route = WalletApiRoute(digestReadersRef, failingNodeViewRef, settings).route
 
@@ -353,6 +354,16 @@ class WalletApiRouteSpec extends AnyFlatSpec
       }
       walletTxs.size shouldBe response.size
       walletTxs.forall(_.numConfirmations == 0) shouldBe true
+    }
+  }
+
+  it should "reject invalid transactionsByScanId values" in {
+    Get(prefix + "/transactionsByScanId/not-a-number") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(prefix + "/transactionsByScanId/32768") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 

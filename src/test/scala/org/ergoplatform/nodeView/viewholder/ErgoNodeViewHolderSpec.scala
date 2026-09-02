@@ -3,13 +3,18 @@ package org.ergoplatform.nodeView.viewholder
 import java.io.File
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, RandomWrapper, TestCase}
+import org.ergoplatform.validation.MalformedModifierError
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier}
@@ -18,7 +23,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Acce
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
-import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -525,6 +530,94 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  private val t20 = TestCase("SemanticallyFailedModification carries failing transaction id") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(fixture.settings)
+    val wus = WrappedUtxoState(us, bh, fixture.settings)
+
+    val genesis = validFullBlock(None, wus)
+
+    // Apply genesis through the standard NVH route first, so the next block can reference it.
+    applyBlock(genesis) shouldBe 'success
+    val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
+
+    val box = wusAfterGenesis.takeBoxes(1).head
+    val validTx = validTransactionFromBoxes(IndexedSeq(box), new RandomWrapper)
+    val invalidOutputs = validTx.outputCandidates.map { out =>
+      new ErgoBoxCandidate(-1, out.ergoTree, out.creationHeight, out.additionalTokens, out.additionalRegisters)
+    }
+    val invalidTx = validTx.copy(outputCandidates = invalidOutputs)
+
+    val (adProofBytes, adDigest) = wusAfterGenesis.proofsForTransactions(Seq(invalidTx)).get
+    val time = genesis.header.timestamp + 1
+    val parentOpt = Some(genesis.header)
+    val parentExtensionOpt = wusAfterGenesis.stateContext.lastExtensionOpt
+    val nipopowAlgos = new NipopowAlgos(settings.chainSettings)
+    val extension = parameters.toExtensionCandidate ++
+      nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
+
+    val invalidBlock = settings.chainSettings.powScheme.proveBlock(
+      parentOpt,
+      Header.InitialVersion,
+      settings.chainSettings.initialNBits,
+      adDigest,
+      adProofBytes,
+      Seq(invalidTx),
+      time,
+      extension,
+      Array.fill(3)(0: Byte),
+      defaultMinerSecretNumber
+    ).get
+
+    subscribeEvents(classOf[SemanticallyFailedModification])
+
+    if (verifyTransactions) {
+      applyBlock(invalidBlock) shouldBe 'success
+
+      val semFailed = expectMsgType[SemanticallyFailedModification]
+      ErgoNodeViewHolder.extractFailedTxId(semFailed.error) shouldBe Some(invalidTx.id)
+    }
+  }
+
+  private val t21 = TestCase("txScriptFailure carries failing transaction id") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(fixture.settings)
+    val wus = WrappedUtxoState(us, bh, fixture.settings)
+
+    val genesis = validFullBlock(None, wus)
+
+    // Apply genesis through the standard NVH route first.
+    applyBlock(genesis) shouldBe 'success
+    val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
+
+    // Create a valid tx that pays to a FalseTree output.
+    val box = wusAfterGenesis.takeBoxes(1).head
+    val validTx = validTransactionFromBoxes(IndexedSeq(box), outputsProposition = FalseTree)
+
+    val validBlock = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
+
+    // Apply valid block and advance wrapped state.
+    applyBlock(validBlock) shouldBe 'success
+    val wusAfterValidBlock = wusAfterGenesis.applyModifier(validBlock)(_ => ()).get
+
+    // Create a tx spending the FalseTree output; prover cannot sign it, so it has empty proofs.
+    val falseTreeBox = validTx.outputs.head
+    val invalidTx = validTransactionFromBoxes(IndexedSeq(falseTreeBox))
+
+    val invalidBlock = validFullBlock(Some(validBlock), wusAfterValidBlock, Seq(invalidTx))
+
+    subscribeEvents(classOf[SemanticallyFailedModification])
+
+    if (verifyTransactions) {
+      applyBlock(invalidBlock) shouldBe 'success
+
+      val semFailed = expectMsgType[SemanticallyFailedModification]
+      ErgoNodeViewHolder.extractFailedTxId(semFailed.error) shouldBe Some(invalidTx.id)
+    }
+  }
+
   val cases: List[TestCase] = List(t0, t1, t2, t3, t3a, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
@@ -535,7 +628,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
-  val verifyingTxCases: List[TestCase] = List(t10, t11, t12, t13)
+  val verifyingTxCases: List[TestCase] = List(t10, t11, t12, t13, t20, t21)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>
@@ -554,6 +647,37 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   genesisIdTestCases.foreach { t =>
     property(t.name) {
       t.run(parameters, NodeViewTestConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = true))
+    }
+  }
+
+  property("extractFailedTxId should extract failing transaction id from validation error shapes") {
+    forAll(invalidErgoTransactionGen) { tx =>
+      // transaction-level error tagged with the transaction id
+      val txError =
+        new MalformedModifierError("tx failed", tx.id, ErgoTransaction.modifierTypeId)
+      ErgoNodeViewHolder.extractFailedTxId(txError) shouldBe Some(tx.id)
+
+      // block-level error with non-transaction modifier id should be ignored
+      val blockError = new MalformedModifierError(
+        "block failed",
+        bytesToId(Array.fill(32)(0.toByte)),
+        BlockTransactions.modifierTypeId
+      )
+      ErgoNodeViewHolder.extractFailedTxId(blockError) shouldBe None
+
+      // header-level error should be ignored
+      val headerError = new MalformedModifierError("header failed", tx.id, Header.modifierTypeId)
+      ErgoNodeViewHolder.extractFailedTxId(headerError) shouldBe None
+
+      // too high cost error carries the transaction itself
+      ErgoNodeViewHolder.extractFailedTxId(TooHighCostError(tx, Some(1000))) shouldBe Some(tx.id)
+
+      // errors wrapped into other exceptions are found via the cause chain
+      val wrapped = new Exception("wrapper", new RuntimeException(txError))
+      ErgoNodeViewHolder.extractFailedTxId(wrapped) shouldBe Some(tx.id)
+
+      // unrelated exception
+      ErgoNodeViewHolder.extractFailedTxId(new Exception("unrelated")) shouldBe None
     }
   }
 

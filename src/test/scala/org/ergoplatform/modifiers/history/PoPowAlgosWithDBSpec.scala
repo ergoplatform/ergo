@@ -12,7 +12,7 @@ class PoPowAlgosWithDBSpec extends AnyPropSpec with Matchers {
   import org.ergoplatform.utils.generators.ChainGenerator._
 
   property("proof(chain) is equivalent to proof(histReader)") {
-    val poPowParams = PoPowParams(m = 5, k = 6, continuous = false)
+    val poPowParams = PoPowParams(m = 5, k = 6, continuous = false).get
     val blocksChain = genChain(3000)
     val pchain = blocksChain.map(b => PoPowHeader.fromBlock(b).get)
     val proof0 = nipopowAlgos.prove(pchain)(poPowParams).get
@@ -30,7 +30,7 @@ class PoPowAlgosWithDBSpec extends AnyPropSpec with Matchers {
   }
 
   property("proof(histReader) for a header in the past") {
-    val poPowParams = PoPowParams(5, 6, continuous = false)
+    val poPowParams = PoPowParams(5, 6, continuous = false).get
     val blocksChain = genChain(300)
 
     val at = 200

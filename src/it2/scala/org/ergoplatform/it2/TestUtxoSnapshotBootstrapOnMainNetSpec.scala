@@ -23,6 +23,9 @@ class TestUtxoSnapshotBootstrapOnMainNetSpec
     s"""
        |ergo.node.utxo.utxoBootstrap = true
        |ergo.node.nipopow.nipopowBootstrap = true
+       |# genesisId of mainnet.conf, needed for ErgoSettings validation on the test host,
+       |# where the network config file is not loaded (see Docker.buildErgoSettings)
+       |ergo.chain.genesisId = "b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b"
     """.stripMargin
   )
 

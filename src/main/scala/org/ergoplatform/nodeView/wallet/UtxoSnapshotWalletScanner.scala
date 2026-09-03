@@ -7,7 +7,7 @@ import org.ergoplatform.{ErgoBox, GlobalConstants}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{UtxoSnapshotScanSource, UtxoSnapshotScanSourceReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
-import org.ergoplatform.nodeView.wallet.persistence.UtxoSnapshotScanStatus
+import org.ergoplatform.nodeView.wallet.persistence.{UtxoSnapshotChunkIntegrityException, UtxoSnapshotScanStatus}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import scorex.crypto.authds.avltree.batch.Constants.DigestType
@@ -72,7 +72,14 @@ private[wallet] class UtxoSnapshotWalletScanner(walletActor: ActorRef,
         activeSource = None
         log.info(s"UTXO snapshot wallet scan is already completed at height ${status.snapshotHeight}")
       } else {
-        readBatch(id, run, attempt, source, status)
+        lastCommittedBatchStatus(status) match {
+          case Success(Some(checkpointStatus)) =>
+            readBatch(id, run, attempt, source, checkpointStatus)
+          case Success(None) =>
+            readBatch(id, run, attempt, source, status)
+          case Failure(t) =>
+            retryOrFail(id, run, attempt, t)
+        }
       }
 
     case Initialized(id, run, attempt, Failure(t)) if isCurrent(id, run) =>
@@ -103,6 +110,14 @@ private[wallet] class UtxoSnapshotWalletScanner(walletActor: ActorRef,
             new IllegalStateException("Validated UTXO snapshot scan source is unavailable"))
         }
       }
+
+    case Applied(_, run, _, Failure(t: UtxoSnapshotChunkIntegrityException))
+      if activeRun.contains(run) =>
+      timers.cancel(RetryTimerKey)
+      activeRun = None
+      activeSource = None
+      terminalFailures += run.snapshotHeight -> run.snapshotBlockId
+      log.error("UTXO snapshot wallet scan stopped after durable frontier integrity failure", t)
 
     case Applied(id, run, attempt, Failure(t)) if isCurrent(id, run) =>
       retryOrFail(id, run, attempt, t)
@@ -184,7 +199,8 @@ private[wallet] final case class UtxoSnapshotFinalizationPlan(state: UtxoSnapsho
                                                                tryCleanup: Boolean)
 
 private[wallet] final case class UtxoSnapshotFinalizationState(catchUpScheduled: Set[ModifierId],
-                                                                cleanupCompleted: Set[ModifierId]) {
+                                                                cleanupCompleted: Set[ModifierId],
+                                                                sourceCleanupStarted: Set[ModifierId]) {
   def plan(status: UtxoSnapshotScanStatus,
            catchUpReady: Boolean): UtxoSnapshotFinalizationPlan = {
     require(status.completed, "Only completed UTXO snapshot scans can be finalized")
@@ -198,7 +214,26 @@ private[wallet] final case class UtxoSnapshotFinalizationState(catchUpScheduled:
   }
 
   def cleanupSucceeded(snapshotBlockId: ModifierId): UtxoSnapshotFinalizationState =
-    copy(cleanupCompleted = cleanupCompleted + snapshotBlockId)
+    copy(
+      cleanupCompleted = cleanupCompleted + snapshotBlockId,
+      sourceCleanupStarted = sourceCleanupStarted - snapshotBlockId)
+
+  def sourceCleanupRetryExhausted(snapshotBlockId: ModifierId): UtxoSnapshotFinalizationState =
+    copy(sourceCleanupStarted = sourceCleanupStarted - snapshotBlockId)
+
+  def claimSourceCleanup(snapshotBlockId: ModifierId): (UtxoSnapshotFinalizationState, Boolean) = {
+    val shouldStart = !sourceCleanupStarted.contains(snapshotBlockId) &&
+      !cleanupCompleted.contains(snapshotBlockId)
+    val next = if (shouldStart) {
+      copy(sourceCleanupStarted = sourceCleanupStarted + snapshotBlockId)
+    } else {
+      this
+    }
+    next -> shouldStart
+  }
+
+  def isSourceCleanupStarted(snapshotBlockId: ModifierId): Boolean =
+    sourceCleanupStarted.contains(snapshotBlockId)
 
   def catchUpFailed(snapshotBlockId: ModifierId): UtxoSnapshotFinalizationState =
     copy(catchUpScheduled = catchUpScheduled - snapshotBlockId)
@@ -209,18 +244,20 @@ private[wallet] final case class UtxoSnapshotFinalizationState(catchUpScheduled:
   def invalidate(snapshotBlockId: ModifierId): UtxoSnapshotFinalizationState =
     copy(
       catchUpScheduled = catchUpScheduled - snapshotBlockId,
-      cleanupCompleted = cleanupCompleted - snapshotBlockId
+      cleanupCompleted = cleanupCompleted - snapshotBlockId,
+      sourceCleanupStarted = sourceCleanupStarted - snapshotBlockId
     )
 }
 
 private[wallet] object UtxoSnapshotFinalizationState {
-  val empty: UtxoSnapshotFinalizationState = UtxoSnapshotFinalizationState(Set.empty, Set.empty)
+  val empty: UtxoSnapshotFinalizationState =
+    UtxoSnapshotFinalizationState(Set.empty, Set.empty, Set.empty)
 }
 
 private[wallet] object UtxoSnapshotScanStartPolicy {
   def shouldStartApplied(snapshotHeight: Height,
                          snapshotBlockId: ModifierId,
-                         walletHeight: Height,
+                         registryPristine: Boolean,
                          rescanInProgress: Boolean,
                          statusOpt: Option[UtxoSnapshotScanStatus]): Boolean = if (rescanInProgress) {
     false
@@ -229,13 +266,13 @@ private[wallet] object UtxoSnapshotScanStartPolicy {
       !status.completed &&
         status.snapshotHeight == snapshotHeight &&
         status.snapshotBlockId == snapshotBlockId
-    case None => walletHeight == 0
+    case None => registryPristine
   }
 }
 
 private[wallet] object UtxoSnapshotWalletScanner {
 
-  val SnapshotScanBatchSize: Int = 32
+  val SnapshotScanBatchSize: Int = UtxoSnapshotScanDefinition.SnapshotScanBatchSize
   private val MaxRetryAttempts: Int = 3
   private val RetryDelay: FiniteDuration = 1.second
   private case object RetryTimerKey
@@ -268,12 +305,38 @@ private[wallet] object UtxoSnapshotWalletScanner {
                                      run: UtxoSnapshotScanRun,
                                      attempt: Int)
 
+  private[wallet] def lastCommittedBatchStatus(
+    status: UtxoSnapshotScanStatus): Try[Option[UtxoSnapshotScanStatus]] = Try {
+    require(!status.completed, "Completed UTXO snapshot progress has no resumable frontier")
+    require(status.totalSubtrees > 0,
+      s"Invalid UTXO snapshot part count ${status.totalSubtrees}")
+    require(status.nextSubtreeIndex >= 0 &&
+      status.nextSubtreeIndex < status.totalSubtrees,
+      s"Invalid UTXO snapshot scan cursor ${status.nextSubtreeIndex}/${status.totalSubtrees}")
+    if (status.nextSubtreeIndex == 0) {
+      None
+    } else {
+      require(status.nextSubtreeIndex % SnapshotScanBatchSize == 0,
+        s"Unaligned UTXO snapshot scan cursor ${status.nextSubtreeIndex}/${status.totalSubtrees}")
+      val previousCursor = Math.subtractExact(status.nextSubtreeIndex, SnapshotScanBatchSize)
+      require(previousCursor >= 0 &&
+        nextBatchCursor(status.totalSubtrees, previousCursor) == status.nextSubtreeIndex,
+        s"Unaligned UTXO snapshot scan cursor ${status.nextSubtreeIndex}/${status.totalSubtrees}")
+      Some(status.copy(nextSubtreeIndex = previousCursor, completed = false))
+    }
+  }
+
+  private[wallet] def nextBatchCursor(totalSubtrees: Int, subtreeIndex: Int): Int =
+    Math.min(
+      totalSubtrees.toLong,
+      subtreeIndex.toLong + SnapshotScanBatchSize.toLong).toInt
+
   private[wallet] def readSnapshotBatch(sourceReader: UtxoSnapshotScanSourceReader,
                                         source: UtxoSnapshotScanSource,
                                         status: UtxoSnapshotScanStatus): Try[SnapshotBatch] = Try {
     require(status.nextSubtreeIndex >= 0 && status.nextSubtreeIndex < status.totalSubtrees,
       s"Invalid UTXO snapshot scan cursor ${status.nextSubtreeIndex}/${status.totalSubtrees}")
-    val end = Math.min(status.totalSubtrees, status.nextSubtreeIndex + SnapshotScanBatchSize)
+    val end = nextBatchCursor(status.totalSubtrees, status.nextSubtreeIndex)
     val boxesBuilder = Vector.newBuilder[ErgoBox]
     var index = status.nextSubtreeIndex
     while (index < end) {
@@ -296,6 +359,9 @@ private[wallet] object UtxoSnapshotWalletScanner {
     val boxes = mutable.ArrayBuffer.empty[ErgoBox]
 
     def loop(node: ProverNodes[DigestType]): Try[Unit] = node match {
+      case leaf: ProverLeaf[DigestType]
+          if leaf.key.length == UtxoKeyLength && leaf.key.forall(_ == 0) && leaf.value.isEmpty =>
+        Success(())
       case leaf: ProverLeaf[DigestType] =>
         ErgoBoxSerializer.parseBytesTry(leaf.value).map(box => boxes += box)
       case proxy: ProxyInternalNode[DigestType] =>
@@ -306,4 +372,6 @@ private[wallet] object UtxoSnapshotWalletScanner {
 
     loop(subtree.subtreeTop).map(_ => boxes.toVector)
   }
+
+  private val UtxoKeyLength = 32
 }

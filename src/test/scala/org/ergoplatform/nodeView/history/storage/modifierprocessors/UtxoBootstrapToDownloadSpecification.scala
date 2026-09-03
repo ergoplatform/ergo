@@ -36,6 +36,14 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     (updHistory, chain)
   }
 
+  /** Simulate the persisted download boundary after snapshot finalization.
+    * Canonical snapshot finalization is covered by the dedicated processor and
+    * node-view-holder specifications; this suite exercises download selection.
+    */
+  private def simulatePersistedPostSnapshotDownloadBoundary(history: ErgoHistory,
+                                                              snapshotHeight: Int): Unit =
+    history.writeMinimalFullBlockHeight(snapshotHeight + 1)
+
   property("snapshot request is issued when headers chain synced and no full blocks applied") {
     var history = genUtxoBootstrapHistory()
     val chain = genChain(BlocksInChain, history)
@@ -76,7 +84,7 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     val manifestBytes = us.snapshotsDb.readManifestBytes(manifestId).get
     val manifest = ManifestSerializer.defaultSerializer.parseBytes(manifestBytes)
 
-    history.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)
+    history.registerManifestToDownload(manifest, manifestBytes, snapshotHeight, Seq.empty)
     history.utxoSetSnapshotDownloadPlan() should not be empty
     history.isUtxoSnapshotApplied shouldBe false
 
@@ -98,9 +106,8 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     val piBefore = history.append(freshHeader).get._2
     piBefore.toDownload shouldBe Seq.empty
 
-    // apply snapshot at freshHeader's height, so that full blocks downloading
-    // starts from nextHeader
-    history.onUtxoSnapshotApplied(freshHeader.height)
+    // Cross the persisted post-snapshot boundary so downloads start from nextHeader.
+    simulatePersistedPostSnapshotDownloadBoundary(history, freshHeader.height)
     history.isUtxoSnapshotApplied shouldBe true
 
     val piAfter = history.append(nextHeader).get._2

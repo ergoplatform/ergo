@@ -135,22 +135,88 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
     }
   }
 
-  property("scanSnapshotBoxes extracts tracked boxes without wallet transactions") {
+  property("scanSnapshotBoxes uses snapshot height as a conservative inclusion height") {
     forAll(trackedTransactionGen, walletVarsGen) { case (trackedTransaction, walletVars) =>
-      val scanResults = scanSnapshotBoxes(trackedTransaction.tx.outputs, walletVars, None)
+      val snapshotHeight = 100
+      trackedTransaction.tx.outputs.map(_.creationHeight).distinct shouldBe Seq(1)
+      val scanResults = scanSnapshotBoxes(
+        trackedTransaction.tx.outputs, snapshotHeight, walletVars, None)
 
       scanResults.outputs.length shouldBe trackedTransaction.scriptsCount
       scanResults.inputsSpent shouldBe empty
       scanResults.relatedTransactions shouldBe empty
-      scanResults.outputs.map(_.inclusionHeightOpt).forall(_ == Some(1)) shouldBe true
+      scanResults.outputs.map(_.inclusionHeightOpt).forall(_ == Some(snapshotHeight)) shouldBe true
       scanResults.outputs.map(_.value).sum shouldBe trackedTransaction.valuesSum
+    }
+  }
+
+  property("historical scanSnapshotBoxes overload preserves box creation heights") {
+    forAll(trackedTransactionGen, walletVarsGen) { case (trackedTransaction, walletVars) =>
+      val scanResults = scanSnapshotBoxes(trackedTransaction.tx.outputs, walletVars, None)
+
+      scanResults.outputs.length shouldBe trackedTransaction.scriptsCount
+      scanResults.outputs.map(_.inclusionHeightOpt).forall(_ == Some(1)) shouldBe true
+    }
+  }
+
+  property("scanSnapshotBoxes classifies the mining maturity boundary at the snapshot tip") {
+    withVersionedStore(10) { store =>
+      val snapshotHeight = 1000
+      val cache = WalletCache(pubkeys, s)
+      val miningPredicate = EqualsScanningPredicate(
+        ErgoBox.ScriptRegId,
+        ByteArrayConstant(miningScripts.head.bytes))
+      val sharedMiningScan = ScanRequest(
+        "Mining reward detector",
+        miningPredicate,
+        Some(ScanWalletInteraction.Shared),
+        None).toScan(scanId).get
+      val walletVars = WalletVars(None, Seq(sharedMiningScan), Some(cache))(s)
+      val cutoff = snapshotHeight - walletVars.settings.miningRewardDelay
+      val matureCandidate = new ErgoBoxCandidate(
+        value = 1000000L,
+        ergoTree = miningScripts.head,
+        creationHeight = cutoff)
+      val immatureCandidate = new ErgoBoxCandidate(
+        value = 2000000L,
+        ergoTree = miningScripts.head,
+        creationHeight = cutoff + 1)
+      val rewardTx = new ErgoTransaction(
+        fakeInputs,
+        IndexedSeq.empty,
+        IndexedSeq(matureCandidate, immatureCandidate))
+      val snapshotResults = scanSnapshotBoxes(
+        rewardTx.outputs, snapshotHeight, walletVars, dustLimit = None)
+
+      snapshotResults.outputs should have size 2
+      val mature = snapshotResults.outputs.find(_.box.creationHeight == cutoff).get
+      val immature = snapshotResults.outputs.find(_.box.creationHeight == cutoff + 1).get
+      mature.inclusionHeightOpt shouldBe Some(snapshotHeight)
+      immature.inclusionHeightOpt shouldBe Some(snapshotHeight)
+      mature.scans shouldBe Set(Constants.PaymentsScanId, scanId)
+      immature.scans shouldBe Set(Constants.MiningScanId, scanId)
+
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      registry.updateOnSnapshotChunk(
+        snapshotResults,
+        modIdGen.sample.get,
+        snapshotHeight,
+        subtreeIndex = 0,
+        finalChunk = true).get
+
+      registry.fetchDigest().height shouldBe snapshotHeight
+      registry.fetchDigest().walletBalance shouldBe mature.box.value
+      registry.unspentBoxes(Constants.PaymentsScanId).map(_.box.id.toSeq) should contain (mature.box.id.toSeq)
+      registry.unspentBoxes(Constants.MiningScanId).map(_.box.id.toSeq) should contain (immature.box.id.toSeq)
     }
   }
 
   property("scanSnapshotBoxes applies dust limit") {
     forAll(trackedTransactionGen, walletVarsGen) { case (trackedTransaction, walletVars) =>
-      scanSnapshotBoxes(trackedTransaction.tx.outputs, walletVars, Some(Long.MaxValue)).outputs shouldBe empty
-      scanSnapshotBoxes(trackedTransaction.tx.outputs, walletVars, Some(1L)).outputs.forall(_.value > 1) shouldBe true
+      scanSnapshotBoxes(
+        trackedTransaction.tx.outputs, snapshotHeight = 100, walletVars, Some(Long.MaxValue)).outputs shouldBe empty
+      scanSnapshotBoxes(
+        trackedTransaction.tx.outputs, snapshotHeight = 100, walletVars, Some(1L)).outputs.forall(_.value > 1) shouldBe true
     }
   }
 

@@ -91,7 +91,10 @@ object WalletScanLogic extends ScorexLogging {
     // We choose only boxes which are mature enough to be spent
     // (i.e. miningRewardDelay blocks passed since a mining reward box mined)
     val maxMiningHeight = height - walletVars.settings.miningRewardDelay
-    val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.inclusionHeightOpt.getOrElse(0) <= maxMiningHeight)
+    // The reward proposition is locked against the box creation height. Snapshot-scanned
+    // boxes use the snapshot height as a conservative inclusion height, so it cannot
+    // determine reward maturity without delaying already mature rewards.
+    val miningBoxes = registry.unspentBoxes(MiningScanId).filter(_.box.creationHeight <= maxMiningHeight)
     val resolvedBoxes = miningBoxes.map { tb =>
       registry.removeScan(tb.box.id, MiningScanId)
       tb.copy(scans = Set(PaymentsScanId))
@@ -199,6 +202,35 @@ object WalletScanLogic extends ScorexLogging {
     ScanResults(
       boxes.flatMap { bx =>
         filterWalletOutput(bx, Some(bx.creationHeight), walletVars, dustLimit)
+      },
+      inputsSpent = ArraySeq.empty,
+      relatedTransactions = ArraySeq.empty
+    )
+  }
+
+  /**
+    * Extracts all tracked boxes from a UTXO set snapshot chunk using the snapshot tip as the
+    * conservative inclusion height.
+    */
+  def scanSnapshotBoxes(boxes: Seq[ErgoBox],
+                        snapshotHeight: Int,
+                        walletVars: WalletVars,
+                        dustLimit: Option[Long]): ScanResults = {
+    ScanResults(
+      boxes.flatMap { bx =>
+        // A snapshot proves only that the box was included no later than this height.
+        // Using the snapshot height keeps confirmations and height filters conservative.
+        filterWalletOutput(bx, Some(snapshotHeight), walletVars, dustLimit).map { trackedBox =>
+          val rewardDelay = walletVars.settings.miningRewardDelay
+          val matureMiningReward = rewardDelay > 0 &&
+            trackedBox.scans.contains(MiningScanId) &&
+            bx.creationHeight.toLong <= snapshotHeight.toLong - rewardDelay.toLong
+          if (matureMiningReward) {
+            trackedBox.copy(scans = (trackedBox.scans - MiningScanId) + PaymentsScanId)
+          } else {
+            trackedBox
+          }
+        }
       },
       inputsSpent = ArraySeq.empty,
       relatedTransactions = ArraySeq.empty

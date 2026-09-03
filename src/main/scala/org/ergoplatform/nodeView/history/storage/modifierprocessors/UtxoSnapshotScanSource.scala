@@ -1,19 +1,54 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
+import java.nio.ByteBuffer
+
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import scorex.crypto.authds.avltree.batch.Constants.DigestType
 import scorex.crypto.authds.avltree.batch.{InternalProverNode, ProverLeaf, ProverNodes}
-import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverSubtree, ProxyInternalNode}
+import scorex.crypto.authds.avltree.batch.serialization.{
+  BatchAVLProverManifest,
+  BatchAVLProverSubtree,
+  ProxyInternalNode
+}
 import scorex.crypto.hash.Digest32
 import scorex.util.{ModifierId, bytesToId, idToBytes}
-import scorex.util.serialization.{Reader, Writer}
+import scorex.util.serialization.{Reader, VLQByteBufferReader, Writer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
+/** Strict, local decoder for network and persisted UTXO snapshot chunks. */
+private[ergoplatform] object UtxoSnapshotChunkSerializer {
+  def parseBytesTry(bytes: Array[Byte]): Try[BatchAVLProverSubtree[DigestType]] = Try {
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val subtree = SubtreeSerializer.parse(reader)
+    require(reader.remaining == 0, s"Unexpected trailing UTXO snapshot chunk bytes: ${reader.remaining}")
+    subtree
+  }
+}
+
+/** Strict, local decoder for network and persisted UTXO snapshot manifests. */
+private[ergoplatform] object UtxoSnapshotManifestSerializer {
+  def parseBytesTry(
+    bytes: Array[Byte],
+    manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth
+  ): Try[BatchAVLProverManifest[DigestType]] = Try {
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val manifest = new ManifestSerializer(manifestDepth).parse(reader)
+    require(reader.remaining == 0,
+      s"Unexpected trailing UTXO snapshot manifest bytes: ${reader.remaining}")
+    manifest
+  }
+}
+
 /** Narrow read-only authority for persisted immutable UTXO snapshot scan parts. */
 trait UtxoSnapshotScanSourceReader {
+  /** Read and validate the single persisted snapshot source. */
+  def readUtxoSnapshotScanSource(): Try[UtxoSnapshotScanSource] =
+    Failure(new UnsupportedOperationException(
+      "Reading a UTXO snapshot scan source without an expected block id is not supported"))
+
   /** Read and validate the source identified by the expected snapshot block. */
   def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource]
 
@@ -48,7 +83,7 @@ final case class UtxoSnapshotScanSource(snapshotHeight: Height,
       Success(new BatchAVLProverSubtree[DigestType](leaf))
     case UtxoSnapshotScanSource.ChunkPart(ordinal, expectedId) =>
       readChunk(ordinal)
-        .flatMap(SubtreeSerializer.parseBytesTry)
+        .flatMap(UtxoSnapshotChunkSerializer.parseBytesTry)
         .flatMap { subtree =>
           if (subtree.verify(expectedId)) Success(subtree)
           else Failure(new IllegalArgumentException(
@@ -67,7 +102,7 @@ object UtxoSnapshotScanSource {
              snapshotBlockId: ModifierId,
              manifestDepth: Byte,
              manifestBytes: Array[Byte]): Try[UtxoSnapshotScanSource] = {
-    new ManifestSerializer(manifestDepth).parseBytesTry(manifestBytes).map { manifest =>
+    UtxoSnapshotManifestSerializer.parseBytesTry(manifestBytes, manifestDepth).map { manifest =>
       val parts = ArrayBuffer.empty[Part]
       var chunkOrdinal = 0
 
@@ -119,9 +154,7 @@ object UtxoSnapshotScanSourceSerializer extends ErgoSerializer[UtxoSnapshotScanS
     val height = r.getInt()
     val blockId = bytesToId(r.getBytes(32))
     val manifestDepth = r.getByte()
-    val manifestLengthLong = r.getUInt()
-    require(manifestLengthLong <= Int.MaxValue, "Snapshot manifest bytes are too large")
-    val manifestLength = manifestLengthLong.toInt
+    val manifestLength = r.getUIntExact()
     require(manifestLength > 0 && manifestLength <= MaxManifestBytes,
       s"Snapshot manifest length $manifestLength is out of bounds")
     val source = UtxoSnapshotScanSource

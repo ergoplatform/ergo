@@ -9,7 +9,11 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestT
 import org.ergoplatform.nodeView.history.{ErgoSyncInfoV1, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.BlockAppliedTransactions
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotDownloadPlan
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{
+  UtxoSetSnapshotDownloadPlan,
+  UtxoSnapshotChunkSerializer,
+  UtxoSnapshotManifestSerializer
+}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{Algos, ErgoSettings, NetworkSettings}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder._
@@ -37,7 +41,7 @@ import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younge
 import org.ergoplatform.modifiers.history.{ADProofs, ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
@@ -81,6 +85,9 @@ private[network] trait UtxoSnapshotChunkPersistenceRetrySupport {
 
   protected final def isLocalChunkPersistenceRetryPending(chunkId: ModifierId): Boolean =
     pendingLocalChunkPersistence.contains(chunkId)
+
+  protected final def cancelLocalChunkPersistenceRetries(chunkIds: Iterable[ModifierId]): Unit =
+    chunkIds.foreach(clearLocalChunkPersistenceRetry)
 
   protected final def beginLocalChunkPersistenceRetry(
     chunkId: ModifierId,
@@ -400,6 +407,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
+    context.system.eventStream.subscribe(self, classOf[UtxoSnapshotStateRestorationFailed])
 
     // subscribe for immediate block mining announcements (fast propagation)
     context.system.eventStream.subscribe(self, classOf[NewBlockMined])
@@ -1083,7 +1091,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           requestMore = () => requestMoreChunksIfNeeded(hr),
           invalidateAndRedownload = () =>
             ErgoNodeViewSynchronizer.invalidateAndRedownloadUtxoSnapshot(
-              invalidate = () => hr.invalidateUtxoSetSnapshotDownload(),
+              invalidate = () => hr.invalidateUtxoSetSnapshotDownload().map { _ =>
+                val staleChunkIds = downloadPlan.expectedChunkIds.map { subtreeId =>
+                  ModifierId @@ Algos.encode(subtreeId)
+                }
+                cancelLocalChunkPersistenceRetries(staleChunkIds)
+                staleChunkIds.foreach { chunkId =>
+                  deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value)
+                }
+              },
               requestFresh = () => requestSnapshotsInfo(),
               abort = cause => {
                 log.error("Failed to invalidate stale UTXO set snapshot; shutting down", cause)
@@ -1106,6 +1122,40 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       hr.isUtxoSnapshotApplied,
       continue = () => continueUtxoSnapshotDownload(hr)
     )
+
+  private def processUtxoSnapshotStateRestorationFailure(
+    hr: ErgoHistory,
+    failure: UtxoSnapshotStateRestorationFailed
+  ): Unit = {
+    val handled = ErgoNodeViewSynchronizer.handleUtxoSnapshotStateRestorationFailure(
+      failure,
+      hr.utxoSetSnapshotDownloadPlan(),
+      hr.bestHeaderIdAtHeight(failure.blockHeight),
+      invalidate = () => hr.invalidateUtxoSetSnapshotDownload(),
+      cancelLocalRetries = cancelLocalChunkPersistenceRetries,
+      clearRequested = chunkId =>
+        deliveryTracker.setUnknown(chunkId, UtxoSnapshotChunkTypeId.value),
+      requestFresh = () => requestSnapshotsInfo(),
+      abort = cause => {
+        log.error("Failed to invalidate rejected UTXO set snapshot; shutting down", cause)
+        ErgoApp.shutdownSystem()(context.system)
+        ()
+      }
+    )
+
+    if (handled) {
+      log.warn(
+        s"UTXO set snapshot restoration failed for block ${failure.blockId} at height " +
+          s"${failure.blockHeight}; invalidating its download plan and requesting a replacement",
+        failure.error
+      )
+    } else {
+      log.debug(
+        s"Ignoring stale UTXO set snapshot restoration failure for block ${failure.blockId} " +
+          s"at height ${failure.blockHeight}: ${failure.error.getMessage}"
+      )
+    }
+  }
 
   /**
     * Process information about snapshots got from another peer
@@ -1136,7 +1186,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // process serialized manifest got from another peer
   private def processManifest(hr: ErgoHistory, manifestBytes: Array[Byte], remote: ConnectedPeer): Unit = {
-    ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes) match {
+    UtxoSnapshotManifestSerializer.parseBytesTry(manifestBytes) match {
       case Success(manifest) =>
         val manifestId = ModifierId @@ Algos.encode(manifest.id)
         log.info(s"Got manifest $manifestId from $remote")
@@ -1156,11 +1206,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                   .map(splitDigest)
                   .exists { case (expRoot, expHeight) => manifest.verify(Digest32 @@ expRoot, expHeight) }
 
-                if(manifestVerified) {
-                  log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
-                  hr.registerManifestToDownload(manifest, manifestBytes, height, peersToDownload)
+                if (manifestVerified && hr.isUtxoSnapshotApplied) {
+                  log.warn(
+                    s"Ignoring manifest ${Algos.encode(manifest.id)} because a UTXO snapshot is already applied")
                   availableManifests.clear()
-                  continueUtxoSnapshotDownload(hr)
+                } else if (manifestVerified) {
+                  Try(hr.registerManifestToDownload(
+                    manifest, manifestBytes, height, peersToDownload)) match {
+                    case Success(_) =>
+                      log.info(
+                        s"Going to download chunks for manifest ${Algos.encode(manifest.id)} " +
+                          s"at height $height from $peersToDownload")
+                      availableManifests.clear()
+                      continueUtxoSnapshotDownload(hr)
+                    case Failure(t) =>
+                      log.warn(
+                        s"Not starting UTXO snapshot download for manifest ${Algos.encode(manifest.id)}",
+                        t)
+                      availableManifests.clear()
+                  }
                 } else {
                   log.error(s"Got invalid manifest from $remote")
                   penalizeMaliciousPeer(remote)
@@ -1180,7 +1244,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // process utxo set snapshot chunk got from another peer
   private def processUtxoSnapshotChunk(serializedChunk: Array[Byte], hr: ErgoHistory, remote: ConnectedPeer): Unit = {
-    SubtreeSerializer.parseBytesTry(serializedChunk) match {
+    UtxoSnapshotChunkSerializer.parseBytesTry(serializedChunk) match {
       case Success(subtree) =>
         val chunkId = ModifierId @@ Algos.encode(subtree.id)
         deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) match {
@@ -1576,6 +1640,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
+          !historyReader.isUtxoSnapshotApplied &&
           availableManifests.nonEmpty &&
           historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {
       val res = availableManifests.filter { case (_, (_, peers)) => peers.length >= MinSnapshots }
@@ -1596,6 +1661,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                  mempoolReader: ErgoMemPool,
                                  utxoStateReaderOpt: Option[UtxoStateReader],
                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Receive = {
+    case failure: UtxoSnapshotStateRestorationFailed =>
+      processUtxoSnapshotStateRestorationFailure(historyReader, failure)
+
     // Requests BlockSections with `Unknown` status that are defined by block headers but not downloaded yet.
     // Trying to keep size of requested queue equals to `desiredSizeOfExpectingQueue`.
     case CheckModifiersToDownload =>
@@ -1906,6 +1974,35 @@ object ErgoNodeViewSynchronizer {
     }
   }
 
+  private[network] def handleUtxoSnapshotStateRestorationFailure(
+    failure: UtxoSnapshotStateRestorationFailed,
+    currentPlan: Option[UtxoSetSnapshotDownloadPlan],
+    currentBlockId: Option[ModifierId],
+    invalidate: () => Try[Unit],
+    cancelLocalRetries: Iterable[ModifierId] => Unit,
+    clearRequested: ModifierId => Unit,
+    requestFresh: () => Unit,
+    abort: Throwable => Unit
+  ): Boolean =
+    currentPlan.filter { plan =>
+      plan.fullyDownloaded &&
+        plan.snapshotHeight == failure.blockHeight &&
+        plan.createdTime == failure.planCreatedTime &&
+        plan.id.sameElements(failure.snapshotId) &&
+        currentBlockId.contains(failure.blockId)
+    }.exists { plan =>
+      val chunkIds = plan.expectedChunkIds.map(id => ModifierId @@ Algos.encode(id))
+      invalidateAndRedownloadUtxoSnapshot(
+        invalidate = () => invalidate().map { _ =>
+          cancelLocalRetries(chunkIds)
+          chunkIds.foreach(clearRequested)
+        },
+        requestFresh = requestFresh,
+        abort = abort
+      )
+      true
+    }
+
   private[network] def continueUtxoSnapshotDownload(
     plan: UtxoSetSnapshotDownloadPlan,
     snapshotAlreadyApplied: Boolean,
@@ -1917,12 +2014,12 @@ object ErgoNodeViewSynchronizer {
     warnAlreadyApplied: () => Unit,
     reportMissingHeader: Height => Unit
   ): Unit = {
-    if (!plan.fullyDownloaded) {
-      requestMore()
-    } else if (snapshotAlreadyApplied) {
+    if (snapshotAlreadyApplied) {
       warnAlreadyApplied()
     } else if (!snapshotMatchesCurrentHeader) {
       invalidateAndRedownload()
+    } else if (!plan.fullyDownloaded) {
+      requestMore()
     } else {
       blockIdAtHeight(plan.snapshotHeight) match {
         case Some(blockId) => initialize(plan.snapshotHeight, blockId)

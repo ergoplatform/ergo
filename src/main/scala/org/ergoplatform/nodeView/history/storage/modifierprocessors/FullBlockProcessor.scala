@@ -60,6 +60,7 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private def isValidFirstFullBlock(header: Header): Boolean = {
     isHeadersChainSynced &&
+      isInBestChain(header) &&
       header.height == minimalFullBlockHeight &&
       bestFullBlockIdOpt.isEmpty
   }

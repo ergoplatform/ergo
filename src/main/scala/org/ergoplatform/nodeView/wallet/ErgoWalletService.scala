@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.IdUtils.encodedBoxId
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.models.{ChangeBox, CollectedBoxes}
-import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletDigest, WalletRegistry, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.SecretString
@@ -32,7 +32,6 @@ import java.nio.file.{Files, LinkOption, NoSuchFileException, Path, StandardCopy
 import java.util.UUID
 import scala.collection.JavaConverters._
 import scala.collection.compat.immutable.ArraySeq
-import scala.collection.immutable.TreeSet
 import scala.util.{Failure, Success, Try}
 
 object ErgoWalletService {
@@ -131,7 +130,10 @@ trait ErgoWalletService {
   def recreateRegistryForUtxoSnapshotRecovery(
     state: ErgoWalletState,
     settings: ErgoSettings
-  ): ErgoWalletService.RegistryResetOutcome
+  ): ErgoWalletService.RegistryResetOutcome =
+    ErgoWalletService.RegistryResetUnavailable(
+      new UnsupportedOperationException(
+        "UTXO snapshot registry recovery is not implemented by this wallet service"))
 
   /**
     * Close it, recursively delete storageFolder from filesystem if present and create new storage
@@ -241,6 +243,35 @@ trait ErgoWalletService {
     */
   def updateUtxoState(state: ErgoWalletState): ErgoWalletState
 
+  /** Rebuild derived off-chain data from the current canonical registry and mempool. */
+  def reconcileOffChainRegistry(state: ErgoWalletState,
+                                dustLimit: Option[Long]): ErgoWalletState = {
+    val initial = OffChainRegistry.init(state.registry)
+    val onChainIds = state.registry.allUnspentBoxes()
+      .iterator
+      .map(box => encodedBoxId(box.box.id))
+      .toSet
+    val reconciled = state.mempoolReaderOpt.fold(initial) { mempool =>
+      val transactions = mempool.getAllPrioritized.map(_.transaction)
+      val replayed = transactions.foldLeft(initial) { case (offChain, tx) =>
+        val newBoxes = WalletScanLogic
+          .extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+          .filterNot(box => onChainIds.contains(encodedBoxId(box.box.id)))
+        offChain.updateOnTransaction(
+          newBoxes,
+          WalletScanLogic.extractInputBoxes(tx),
+          state.walletVars.externalScans)
+      }
+      // Priority ordering is not an interface guarantee. This final pass removes every spent
+      // output even if a child appeared before its parent during replay.
+      replayed.updateOnTransaction(
+        newBoxes = Seq.empty,
+        spentIds = transactions.flatMap(WalletScanLogic.extractInputBoxes),
+        scans = state.walletVars.externalScans)
+    }
+    state.copy(offChainRegistry = reconciled)
+  }
+
   /**
     * Process the block transactions and update database and in-memory structures for offchain data accordingly
     *
@@ -275,7 +306,9 @@ trait ErgoWalletService {
                             subtreeIndex: Int,
                             nextSubtreeIndex: Int,
                             finalChunk: Boolean,
-                            dustLimit: Option[Long]): Try[ErgoWalletState]
+                            dustLimit: Option[Long]): Try[ErgoWalletState] =
+    Failure(new UnsupportedOperationException(
+      "UTXO snapshot scanning is not implemented by this wallet service"))
 
   /**
     * Sign a transaction
@@ -519,6 +552,10 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     def consumedHandleFailure(): Throwable =
       new IllegalStateException("Canonical registry open returned the consumed input handle")
 
+    def nonPristineFailure(): Throwable =
+      new IllegalStateException(
+        "Fresh canonical wallet registry is not pristine for UTXO snapshot recovery")
+
     def ready(
       candidate: WalletRegistry,
       recoveredFrom: Option[Throwable]
@@ -558,7 +595,18 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         case Success(candidate) =>
           Try(candidate.fetchDigest()) match {
             case Success(digest) if digest == WalletDigest.empty =>
-              ready(candidate, Some(firstFailure))
+              candidate.isPristineForUtxoSnapshot match {
+                case Success(true) =>
+                  ready(candidate, Some(firstFailure))
+                case Success(false) =>
+                  val validationFailure = nonPristineFailure()
+                  suppressDistinct(validationFailure, firstFailure)
+                  RegistryResetDeferred(state.copy(registry = candidate), validationFailure)
+                case Failure(fallbackFailure) =>
+                  suppressDistinct(firstFailure, fallbackFailure)
+                  closeRejectedCandidate(candidate, firstFailure)
+                  RegistryResetUnavailable(firstFailure)
+              }
             case Success(_) =>
               RegistryResetDeferred(state.copy(registry = candidate), firstFailure)
             case Failure(fallbackFailure) =>
@@ -578,7 +626,17 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         case Success(candidate) =>
           Try(candidate.fetchDigest()) match {
             case Success(digest) if digest == WalletDigest.empty =>
-              ready(candidate, None)
+              candidate.isPristineForUtxoSnapshot match {
+                case Success(true) =>
+                  ready(candidate, None)
+                case Success(false) =>
+                  val firstFailure = nonPristineFailure()
+                  closeRejectedCandidate(candidate, firstFailure)
+                  fallbackAfterFreshFailure(firstFailure)
+                case Failure(firstFailure) =>
+                  closeRejectedCandidate(candidate, firstFailure)
+                  fallbackAfterFreshFailure(firstFailure)
+              }
             case Success(digest) =>
               val firstFailure = new IllegalStateException(
                 s"Fresh canonical wallet registry is not empty: $digest"
@@ -826,6 +884,10 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         state.copy(registry = reg, offChainRegistry = offReg, outputsFilter = Some(updatedOutputsFilter))
       }
 
+  override def reconcileOffChainRegistry(state: ErgoWalletState,
+                                         dustLimit: Option[Long]): ErgoWalletState =
+    super.reconcileOffChainRegistry(state, dustLimit)
+
   override def scanUtxoSnapshotChunk(state: ErgoWalletState,
                                      boxes: Seq[ErgoBox],
                                      snapshotBlockId: ModifierId,
@@ -834,7 +896,8 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
                                      nextSubtreeIndex: Int,
                                      finalChunk: Boolean,
                                      dustLimit: Option[Long]): Try[ErgoWalletState] = {
-    val scanResults = WalletScanLogic.scanSnapshotBoxes(boxes, state.walletVars, dustLimit)
+    val scanResults = WalletScanLogic.scanSnapshotBoxes(
+      boxes, snapshotHeight, state.walletVars, dustLimit)
     state.registry.updateOnSnapshotChunk(
       scanResults,
       snapshotBlockId,
@@ -843,11 +906,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       nextSubtreeIndex,
       finalChunk
     ).map { _ =>
-      val walletUnspent = state.registry.walletUnspentBoxes()
-      val newOnChainIds = scanResults.outputs.map(x => encodedBoxId(x.box.id)).to[TreeSet]
-      val offChainHeight = if (finalChunk) snapshotHeight else state.offChainRegistry.height
-      val offChainRegistry = state.offChainRegistry.updateOnBlock(offChainHeight, walletUnspent, newOnChainIds)
-      state.copy(registry = state.registry, offChainRegistry = offChainRegistry, outputsFilter = None)
+      reconcileOffChainRegistry(state, dustLimit).copy(outputsFilter = None)
     }
   }
 

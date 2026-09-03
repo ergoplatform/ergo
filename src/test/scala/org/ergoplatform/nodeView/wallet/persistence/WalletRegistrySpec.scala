@@ -14,6 +14,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base16
+import scorex.util.{bytesToId, idToBytes}
 import scorex.db.LDBVersionedStore
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -144,6 +145,29 @@ class WalletRegistrySpec
     }
   }
 
+  it should "treat only an application-empty pre-genesis registry as pristine for a UTXO snapshot" in {
+    val externalScanId = ScanId @@ (PaymentsScanId + 1).toShort
+    Seq(Set(externalScanId), Set(PaymentsScanId)).foreach { scans =>
+      withVersionedStore(10) { store =>
+        store.update(WalletRegistry.PreGenesisStateVersion, Seq.empty, Seq.empty).get
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+
+        withClue(s"before adding $scans: ") {
+          registry.lastVersionId shouldBe Some(PreGenesisHeader.id)
+          registry.isPristineForUtxoSnapshot.get shouldBe true
+        }
+
+        registry.updateScans(scans, trackedBoxGen.sample.get.box).get
+
+        withClue(s"after adding $scans: ") {
+          registry.fetchDigest().height shouldBe EmptyHistoryHeight
+          registry.lastVersionId shouldBe Some(PreGenesisHeader.id)
+          registry.isPristineForUtxoSnapshot.get shouldBe false
+        }
+      }
+    }
+  }
+
   it should "report the exact block id after updateOnBlock" in {
     withVersionedStore(10) { store =>
       val registry = new WalletRegistry(store)(settings.walletSettings)
@@ -197,7 +221,7 @@ class WalletRegistrySpec
     val initializationFailure = new IllegalStateException("injected initialization failure")
     val closeCount = new AtomicInteger(0)
     val store = new LDBVersionedStore(registryDir, 10) {
-      override def versionIdExists(versionID: Array[Byte]): Boolean =
+      override def lastVersionID: Option[Array[Byte]] =
         throw initializationFailure
 
       override def close(): Unit = {
@@ -228,7 +252,7 @@ class WalletRegistrySpec
     val closeFailure = new IllegalStateException("injected close failure")
     val closeCount = new AtomicInteger(0)
     val store = new LDBVersionedStore(registryDir, 10) {
-      override def versionIdExists(versionID: Array[Byte]): Boolean =
+      override def lastVersionID: Option[Array[Byte]] =
         throw initializationFailure
 
       override def close(): Unit = {
@@ -265,6 +289,32 @@ class WalletRegistrySpec
       registry.lastVersionId shouldBe Some(PreGenesisHeader.id)
     } finally {
       registry.close()
+    }
+  }
+
+  it should "preserve the latest version when pre-genesis was pruned before reopen" in {
+    val registryDir = createTempDir
+    val keepVersions = 3
+    val latestVersion = Array.fill(32)(5.toByte)
+    val originalStore = new LDBVersionedStore(registryDir, keepVersions)
+    try {
+      originalStore.update(WalletRegistry.PreGenesisStateVersion, Seq.empty, Seq.empty).get
+      (1 to 5).foreach { version =>
+        originalStore.update(Array.fill(32)(version.toByte), Seq.empty, Seq.empty).get
+      }
+      originalStore.versionIdExists(WalletRegistry.PreGenesisStateVersion) shouldBe false
+      originalStore.lastVersionID.get.sameElements(latestVersion) shouldBe true
+    } finally {
+      originalStore.close()
+    }
+
+    val reopenedStore = new LDBVersionedStore(registryDir, keepVersions)
+    val reopened = WalletRegistry.initializeOpenedStore(reopenedStore, settings.walletSettings).get
+    try {
+      reopenedStore.lastVersionID.get.sameElements(latestVersion) shouldBe true
+      reopened.lastVersionId should not be Some(PreGenesisHeader.id)
+    } finally {
+      reopened.close()
     }
   }
 
@@ -451,6 +501,141 @@ class WalletRegistrySpec
       ).isFailure shouldBe true
       registry.walletUnspentBoxes() shouldBe empty
       registry.fetchDigest() shouldBe WalletDigest.empty
+    }
+  }
+
+  it should "report only the contiguous snapshot cursor proven by registry markers" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val emptyResults = ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty)
+      val batchSize = 32
+      val totalParts = batchSize * 3
+
+      registry.contiguousSnapshotCursor(snapshotBlockId, totalParts, batchSize).get shouldBe 0
+      registry.updateOnSnapshotChunk(
+        emptyResults, snapshotBlockId, 100, 0, batchSize, finalChunk = false).get
+      registry.contiguousSnapshotCursor(snapshotBlockId, totalParts, batchSize).get shouldBe batchSize
+
+      registry.updateOnSnapshotChunk(
+        emptyResults, snapshotBlockId, 100, batchSize * 2, totalParts, finalChunk = true).get
+      registry.contiguousSnapshotCursor(snapshotBlockId, totalParts, batchSize).isFailure shouldBe true
+
+      registry.updateOnSnapshotChunk(
+        emptyResults, snapshotBlockId, 100, batchSize, batchSize * 2, finalChunk = false).get
+      registry.contiguousSnapshotCursor(snapshotBlockId, totalParts, batchSize).get shouldBe totalParts
+    }
+  }
+
+  it should "reject a same-length snapshot marker with a corrupted batch digest" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val emptyResults = ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty)
+      val batchSize = 32
+
+      registry.updateOnSnapshotChunk(
+        emptyResults, snapshotBlockId, 100, 0, batchSize, finalChunk = false).get
+      val markerKey = Array(0x09.toByte) ++ idToBytes(snapshotBlockId) ++ Ints.toByteArray(0)
+      val corruptedMarker = store.get(markerKey).get.clone()
+      corruptedMarker(corruptedMarker.length - 1) =
+        (corruptedMarker.last ^ 0x01).toByte
+      store.update(
+        Array.fill(32)(0x71.toByte),
+        Seq.empty,
+        Seq(markerKey -> corruptedMarker)).get
+
+      registry.validateSnapshotChunk(
+        emptyResults, snapshotBlockId, 100, 0, batchSize, finalChunk = false).isFailure shouldBe true
+    }
+  }
+
+  it should "reject a snapshot marker whose persisted output row is missing" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box = unspentWalletBox(trackedBoxGen.sample.get)
+      val scanResults = ScanResults(Seq(box), ArraySeq.empty, ArraySeq.empty)
+      val batchSize = 32
+
+      registry.updateOnSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, batchSize, finalChunk = false).get
+      val boxKey = Array(0x01.toByte) ++ box.box.id
+      store.update(
+        Array.fill(32)(0x72.toByte),
+        Seq(boxKey),
+        Seq.empty).get
+
+      val digestBefore = registry.fetchDigest()
+      val cacheBefore = registry.cache.toMap
+      registry.validateSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, batchSize, finalChunk = false).isFailure shouldBe true
+      registry.updateOnSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, batchSize, finalChunk = false).isFailure shouldBe true
+      registry.fetchDigest() shouldBe digestBefore
+      registry.cache.toMap shouldBe cacheBefore
+    }
+  }
+
+  it should "reject a snapshot marker whose persisted unspent index is missing" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box = unspentWalletBox(trackedBoxGen.sample.get)
+      val scanResults = ScanResults(Seq(box), ArraySeq.empty, ArraySeq.empty)
+      val unspentIndexKey = WalletRegistry.composeKeyWithId(
+        0x03.toByte, PaymentsScanId, box.box.id)
+
+      registry.updateOnSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, 32, finalChunk = false).get
+      store.update(
+        Array.fill(32)(0x73.toByte),
+        Seq(unspentIndexKey),
+        Seq.empty).get
+
+      registry.validateSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, 32, finalChunk = false).isFailure shouldBe true
+    }
+  }
+
+  it should "reject a snapshot marker whose persisted inclusion-height index is missing" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box = unspentWalletBox(trackedBoxGen.sample.get).copy(inclusionHeightOpt = Some(100))
+      val scanResults = ScanResults(Seq(box), ArraySeq.empty, ArraySeq.empty)
+      val inclusionIndexKey = WalletRegistry.composeKeyWithHeightAndId(
+        0x07.toByte, PaymentsScanId, 100, box.box.id)
+
+      registry.updateOnSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, 32, finalChunk = false).get
+      store.update(
+        Array.fill(32)(0x74.toByte),
+        Seq(inclusionIndexKey),
+        Seq.empty).get
+
+      registry.validateSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, 32, finalChunk = false).isFailure shouldBe true
+    }
+  }
+
+  it should "reject a snapshot marker whose persisted tracked box bytes are corrupt" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box = unspentWalletBox(trackedBoxGen.sample.get)
+      val scanResults = ScanResults(Seq(box), ArraySeq.empty, ArraySeq.empty)
+      val boxKey = Array(0x01.toByte) ++ box.box.id
+
+      registry.updateOnSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, 32, finalChunk = false).get
+      store.update(
+        Array.fill(32)(0x75.toByte),
+        Seq.empty,
+        Seq(boxKey -> Array[Byte](1, 2, 3))).get
+
+      registry.validateSnapshotChunk(
+        scanResults, snapshotBlockId, 100, 0, 32, finalChunk = false).isFailure shouldBe true
     }
   }
 
@@ -681,6 +866,40 @@ class WalletRegistrySpec
       markerValues should have size 1
       markerValues.head should have length 33
       markerValues.head.head shouldBe 2.toByte
+    }
+  }
+
+  it should "updateOnSnapshotChunk return a failed Try when marker lookup throws" in {
+    val markerReadFailure = new IllegalStateException("injected snapshot marker read failure")
+    val store = new LDBVersionedStore(createTempDir, 10) {
+      override def get(key: Array[Byte]): Option[Array[Byte]] =
+        if (key.length == 37 && key.head == 0x09.toByte) {
+          throw markerReadFailure
+        } else {
+          super.get(key)
+        }
+    }
+
+    try {
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box = unspentWalletBox(trackedBoxGen.sample.get)
+      val digestBefore = registry.fetchDigest()
+
+      val result = registry.updateOnSnapshotChunk(
+        ScanResults(Seq(box), ArraySeq.empty, ArraySeq.empty),
+        snapshotBlockId,
+        snapshotHeight = 100,
+        subtreeIndex = 0,
+        finalChunk = false)
+
+      result.isFailure shouldBe true
+      (result.failed.get eq markerReadFailure) shouldBe true
+      registry.fetchDigest() shouldBe digestBefore
+      registry.walletUnspentBoxes() shouldBe empty
+      registry.cache shouldBe empty
+    } finally {
+      store.close()
     }
   }
 
@@ -1024,6 +1243,27 @@ class WalletRegistrySpec
 
       val key4 = (prefix +: Shorts.toByteArray(scanId)) ++ Ints.toByteArray(height) ++ id
       WalletRegistry.composeKeyWithHeightAndId(prefix, ScanId @@ scanId, height, id) shouldBe key4
+    }
+  }
+
+  it should "expose retained rollback version ids newest first" in {
+    withVersionedStore(10) { store =>
+      val older = Array.fill(32)(0x31.toByte)
+      val newer = Array.fill(32)(0x32.toByte)
+      store.update(older, Seq.empty, Seq.empty).get
+      store.update(newer, Seq.empty, Seq.empty).get
+
+      val registry = new WalletRegistry(store)(ws)
+      registry.rollbackVersionIds.get shouldBe Seq(bytesToId(newer), bytesToId(older))
+    }
+  }
+
+  it should "fail closed on a retained rollback version with an invalid id length" in {
+    withVersionedStore(10) { store =>
+      store.update(Array.fill(31)(0x33.toByte), Seq.empty, Seq.empty).get
+
+      val registry = new WalletRegistry(store)(ws)
+      registry.rollbackVersionIds.isFailure shouldBe true
     }
   }
 

@@ -227,6 +227,69 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def removeUtxoSnapshotScanStatus(): Try[Unit] =
     store.remove(Array(UtxoSnapshotScanStatusKey))
 
+  /** Read rollback recovery evidence without treating corrupt bytes as an absent intent. */
+  def readWalletRollbackIntentTry(): Try[Option[WalletRollbackIntent]] =
+    Try(store.get(WalletRollbackIntentKey)).flatMap {
+      case Some(bytes) =>
+        Try {
+          val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+          val intent = WalletRollbackIntentSerializer.parse(reader)
+          require(reader.remaining == 0,
+            s"Unexpected trailing wallet rollback intent bytes: ${reader.remaining}")
+          validateWalletRollbackIntent(intent).get
+          require(java.util.Arrays.equals(bytes, WalletRollbackIntentSerializer.toBytes(intent)),
+            "Non-canonical wallet rollback intent encoding")
+          Some(intent)
+        }
+      case None => Success(None)
+    }
+
+  /**
+    * Persist rollback evidence before mutating the versioned wallet registry.
+    * Repeating the same intent is safe; a different active lifecycle is never overwritten.
+    */
+  def writeWalletRollbackIntent(intent: WalletRollbackIntent): Try[Unit] =
+    validateWalletRollbackIntent(intent).flatMap { _ =>
+      readWalletRollbackIntentTry().flatMap {
+        case None =>
+          store.insert(WalletRollbackIntentKey, WalletRollbackIntentSerializer.toBytes(intent))
+        case Some(current) if current == intent =>
+          Success(())
+        case Some(current) =>
+          Failure(new IllegalStateException(
+            s"Conflicting wallet rollback intent: current=$current, requested=$intent"))
+      }
+    }
+
+  /**
+    * Replace rollback evidence only when the durable record still identifies the
+    * expected lifecycle. The wallet actor serializes this read-check-write sequence.
+    */
+  def replaceWalletRollbackIntent(
+    expected: WalletRollbackIntent,
+    replacement: WalletRollbackIntent): Try[Boolean] =
+    validateWalletRollbackIntent(expected).flatMap { _ =>
+      validateWalletRollbackIntent(replacement)
+    }.flatMap { _ =>
+      readWalletRollbackIntentTry().flatMap {
+        case Some(current) if current == expected =>
+          store.insert(
+            WalletRollbackIntentKey,
+            WalletRollbackIntentSerializer.toBytes(replacement)).map(_ => true)
+        case _ => Success(false)
+      }
+    }
+
+  /** Remove rollback evidence only when it still identifies the completed lifecycle exactly. */
+  def clearWalletRollbackIntent(expected: WalletRollbackIntent): Try[Boolean] =
+    validateWalletRollbackIntent(expected).flatMap { _ =>
+      readWalletRollbackIntentTry().flatMap {
+        case Some(current) if current == expected =>
+          store.remove(Array(WalletRollbackIntentKey)).map(_ => true)
+        case _ => Success(false)
+      }
+    }
+
   /** Read completed snapshot provenance without treating corrupt durable bytes as absent. */
   def readUtxoSnapshotWalletOriginTry(): Try[Option[UtxoSnapshotWalletOrigin]] =
     Try(store.get(UtxoSnapshotWalletOriginKey)).flatMap {
@@ -355,6 +418,14 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
       s"Inconsistent UTXO snapshot completion at ${status.nextSubtreeIndex}/${status.totalSubtrees}")
   }
 
+  private def validateWalletRollbackIntent(intent: WalletRollbackIntent): Try[Unit] = Try {
+    require(intent != null, "Wallet rollback intent must not be null")
+    require(intent.expectedHeight >= 0,
+      s"Invalid wallet rollback target height ${intent.expectedHeight}")
+    require(scorex.util.idToBytes(intent.targetVersionId).length == Constants.ModifierIdSize,
+      "Wallet rollback target must be a modifier id")
+  }
+
   private def validateUtxoSnapshotScanInvalidation(invalidation: UtxoSnapshotScanInvalidation): Try[Unit] = Try {
     require(invalidation.snapshotHeight >= 0, s"Invalid UTXO snapshot invalidation height ${invalidation.snapshotHeight}")
   }
@@ -448,6 +519,7 @@ object WalletStorage {
   val UtxoSnapshotScanStatusKey: Array[Byte] = noPrefixKey("utxo_snapshot_scan_status")
   val UtxoSnapshotScanInvalidationKey: Array[Byte] = noPrefixKey("utxo_snapshot_scan_invalidation")
   val UtxoSnapshotWalletOriginKey: Array[Byte] = noPrefixKey("utxo_snapshot_wallet_origin")
+  val WalletRollbackIntentKey: Array[Byte] = noPrefixKey("wallet_rollback_intent")
 
 
   /**

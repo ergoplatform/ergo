@@ -24,7 +24,8 @@ final case class UtxoSnapshotScanDefinition(semanticsVersion: Byte, digest: Byte
 }
 
 object UtxoSnapshotScanDefinition {
-  val WalletScanSemanticsVersion: Byte = 1
+  val WalletScanSemanticsVersion: Byte = 2
+  val SnapshotScanBatchSize: Int = 32
   val DigestLength: Int = 32
 
   private val DomainSeparator: ByteString = ByteString(
@@ -93,16 +94,16 @@ object UtxoSnapshotScanDefinition {
     val mining = canonicalScripts(miningPropositionBytes, "mining")
     require(externalScans != null, "External scans must not be null")
     require(externalScans.forall(_ != null), "External scans must not contain null")
-
     val scanIds = externalScans.map(_.scanId)
     require(scanIds.distinct.length == scanIds.length, "Duplicate external scan ID")
     val scans = externalScans.sortBy(_.scanId.toShort)
 
     val writer = new VLQByteStringWriter()
     writer.put(WalletScanSemanticsVersion)
+    writer.putUInt(SnapshotScanBatchSize)
     putBlobs(writer, tracked)
     putBlobs(writer, mining)
-    writer.put(if (miningRewardDelay > 0) 1.toByte else 0.toByte)
+    writer.putUInt(math.max(miningRewardDelay, 0))
     writer.putUInt(scans.length)
     scans.foreach { scan =>
       writer.putShort(scan.scanId)

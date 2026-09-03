@@ -11,12 +11,14 @@ import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings}
 import org.ergoplatform.core.VersionTag
 import scorex.core.network.ConnectedPeer
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.serialization.{ManifestSerializer, SubtreeSerializer}
+import org.ergoplatform.serialization.ManifestSerializer
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.{ModifierId, ScorexLogging}
+import java.nio.file.{Files, Path, Paths}
+import scala.collection.JavaConverters._
 import scala.util.{Failure, Random, Success, Try}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 
@@ -82,7 +84,7 @@ trait UtxoSetSnapshotProcessor
       _ <- Try(require(plan.expectedChunkIds.size == manifest.subtreesIds.size &&
         plan.expectedChunkIds.zip(manifest.subtreesIds).forall { case (a, b) => a.sameElements(b) },
         "UTXO snapshot download plan does not match manifest chunk identifiers"))
-      serializedManifest <- ManifestSerializer.defaultSerializer.parseBytesTry(manifestBytes)
+      serializedManifest <- UtxoSnapshotManifestSerializer.parseBytesTry(manifestBytes)
       _ <- Try(require(
         serializedManifest.id.sameElements(manifest.id) &&
           serializedManifest.rootHeight == manifest.rootHeight &&
@@ -96,7 +98,7 @@ trait UtxoSetSnapshotProcessor
         plan.expectedChunkIds.indices.foreach { ordinal =>
           val bytes = historyStorage.get(chunkIdFromIndex(ordinal)).getOrElse(
             throw new IllegalStateException(s"Missing downloaded UTXO snapshot chunk $ordinal"))
-          val subtree = SubtreeSerializer.parseBytesTry(bytes).get
+          val subtree = UtxoSnapshotChunkSerializer.parseBytesTry(bytes).get
           require(subtree.verify(plan.expectedChunkIds(ordinal)),
             s"Downloaded UTXO snapshot chunk $ordinal does not match its manifest identifier")
         }
@@ -145,6 +147,20 @@ trait UtxoSetSnapshotProcessor
                                  manifestBytes: Array[Byte],
                                  blockHeight: Height,
                                  peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
+    require(!isUtxoSnapshotApplied,
+      "Cannot register another UTXO snapshot manifest after a snapshot has been applied")
+    require(_cachedDownloadPlan.isEmpty,
+      "Cannot replace an active UTXO snapshot download plan")
+    val serializedManifest = UtxoSnapshotManifestSerializer.parseBytesTry(manifestBytes).get
+    require(
+      serializedManifest.id.sameElements(manifest.id) &&
+        serializedManifest.rootHeight == manifest.rootHeight &&
+        serializedManifest.subtreesIds.size == manifest.subtreesIds.size &&
+        serializedManifest.subtreesIds.zip(manifest.subtreesIds).forall {
+          case (a, b) => a.sameElements(b)
+        },
+      "Exact UTXO snapshot manifest bytes do not match the supplied manifest"
+    )
     val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight, peersToDownload)
     _manifest = Some(manifest)
     _manifestBytes = Some(manifestBytes.clone())
@@ -208,7 +224,7 @@ trait UtxoSetSnapshotProcessor
     * Write serialized UTXO set snapshot chunk to the database
     */
   def registerDownloadedChunk(chunkId: Array[Byte], chunkSerialized: Array[Byte]): Try[Unit] = {
-    SubtreeSerializer.parseBytesTry(chunkSerialized).flatMap { subtree =>
+    UtxoSnapshotChunkSerializer.parseBytesTry(chunkSerialized).flatMap { subtree =>
       if (!subtree.verify(Digest32 @@ chunkId)) {
         Failure(new IllegalArgumentException(
           s"Downloaded UTXO snapshot chunk ${Algos.encode(chunkId)} has a different root"))
@@ -278,7 +294,7 @@ trait UtxoSetSnapshotProcessor
         downloadedChunkIdsIterator(plan.totalChunks).map { chunkId =>
           val bytes = historyStorage.get(chunkId).getOrElse(
             throw new IllegalStateException(s"Missing downloaded UTXO snapshot chunk ${Algos.encode(chunkId)}"))
-          SubtreeSerializer.parseBytesTry(bytes).get
+          UtxoSnapshotChunkSerializer.parseBytesTry(bytes).get
         }
       case None =>
         log.error("No download plan found in downloadedChunksIterator")
@@ -286,21 +302,28 @@ trait UtxoSetSnapshotProcessor
     }
   }
 
-  /** Read and validate the persisted immutable source for the expected snapshot block. */
-  def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource] = for {
+  /** Read and validate the single persisted immutable source against canonical history. */
+  override def readUtxoSnapshotScanSource(): Try[UtxoSnapshotScanSource] = for {
     bytes <- required(historyStorage.getIndex(UtxoSetSnapshotProcessor.SnapshotScanSourceKey),
       new IllegalStateException("No persisted UTXO snapshot scan source"))
     source <- UtxoSnapshotScanSourceSerializer.parseBytesTry(bytes)
-    _ <- Try(require(source.snapshotBlockId == expectedBlockId,
-      s"Persisted snapshot block ${source.snapshotBlockId} does not match expected $expectedBlockId"))
     header <- required(snapshotHeaderStateAtHeight(source.snapshotHeight),
       new IllegalStateException(s"No header found for persisted snapshot height ${source.snapshotHeight}"))
-    _ <- Try(require(header._1 == expectedBlockId,
+    _ <- Try(require(header._1 == source.snapshotBlockId,
       s"Persisted snapshot identity does not match the header at height ${source.snapshotHeight}"))
-    manifest <- new ManifestSerializer(source.manifestDepth).parseBytesTry(source.manifestBytes)
+    manifest <- UtxoSnapshotManifestSerializer.parseBytesTry(
+      source.manifestBytes, source.manifestDepth)
     _ <- Try(require(header._2.sameElements(VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)),
       s"Persisted snapshot manifest root does not match the header at height ${source.snapshotHeight}"))
   } yield source
+
+  /** Read the persisted immutable source and require the expected snapshot block. */
+  def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource] =
+    readUtxoSnapshotScanSource().flatMap { source =>
+      Try(require(source.snapshotBlockId == expectedBlockId,
+        s"Persisted snapshot block ${source.snapshotBlockId} does not match expected $expectedBlockId"))
+        .map(_ => source)
+    }
 
   /** Read and verify one persisted scan part by deterministic index. */
   def readUtxoSnapshotScanPart(source: UtxoSnapshotScanSource,
@@ -326,6 +349,100 @@ trait UtxoSetSnapshotProcessor
     }
 
   /**
+    * Reset durable UTXO-snapshot bootstrap state before falling back to Genesis.
+    *
+    * Chunk deletion precedes the atomic index update so an interrupted reset is idempotent:
+    * while the descriptor remains, the same bounded chunk range can be removed again.
+    */
+  def resetUtxoSnapshotBootstrap(): Try[Unit] = {
+    val sourceTry: Try[Option[UtxoSnapshotScanSource]] =
+      historyStorage.getIndex(UtxoSetSnapshotProcessor.SnapshotScanSourceKey) match {
+        case Some(bytes) => UtxoSnapshotScanSourceSerializer.parseBytesTry(bytes).map(Some(_))
+        case None => Success(None)
+      }
+
+    for {
+      _ <- invalidateUtxoSetSnapshotDownload()
+      sourceOpt <- sourceTry
+      _ <- sourceOpt.fold[Try[Unit]](Success(())) { source =>
+        historyStorage.removeRawObjects(
+          Array.range(0, source.chunkCount).map(UtxoSetSnapshotProcessor.snapshotScanChunkKey))
+      }
+      _ <- historyStorage.updateIndices(
+        indexesToInsert = Array(minimalFullBlockHeightKey -> Ints.toByteArray(GenesisHeight)),
+        indexesToRemove = Array(UtxoSetSnapshotProcessor.SnapshotScanSourceKey))
+    } yield {
+      _manifest = None
+      _manifestBytes = None
+      _cachedDownloadPlan = None
+    }
+  }
+
+  private def checkedPersistentProver(
+      ldbStorage: VersionedLDBAVLStorage): Try[PersistentBatchAVLProver[Digest32, HF]] =
+    ldbStorage.restorePrunedProver().flatMap { prunedAvlProver =>
+      Try {
+        val persistentProver = new PersistentBatchAVLProver[Digest32, HF] {
+          override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+          override val storage: VersionedLDBAVLStorage = ldbStorage
+        }
+        persistentProver.checkTree(postProof = false)
+        persistentProver
+      }
+    }
+
+  private def deleteSnapshotStagingDirectory(path: Path): Try[Unit] = Try {
+    val paths = Files.walk(path)
+    try paths.iterator().asScala.toSeq.reverse.foreach(p => Files.delete(p))
+    finally paths.close()
+  }
+
+  private def validateSnapshotInStagingStore(
+      manifest: BatchAVLProverManifest[Digest32],
+      metadata: Seq[(Array[Byte], Array[Byte])]): Try[Unit] =
+    Try {
+      val stagingParent = Paths.get(settings.directory)
+      Files.createDirectories(stagingParent)
+      Files.createTempDirectory(stagingParent, ".utxo-snapshot-stage-")
+    }.flatMap { stagingPath =>
+      var stagingStoreOpt = Option.empty[LDBVersionedStore]
+      val validationResult = Try {
+        val stagingStore = new LDBVersionedStore(stagingPath.toFile, initialKeepVersions = 0)
+        stagingStoreOpt = Some(stagingStore)
+        stagingStore
+      }.flatMap { stagingStore =>
+        VersionedLDBAVLStorage
+          .recreate(manifest, downloadedChunksIterator(), metadata.toIterator, stagingStore)
+          .flatMap(checkedPersistentProver)
+          .map(_ => ())
+      }
+      val cleanupResult = Try(stagingStoreOpt.foreach(_.close()))
+        .flatMap(_ => deleteSnapshotStagingDirectory(stagingPath))
+
+      (validationResult, cleanupResult) match {
+        case (Failure(validationError), Failure(cleanupError)) =>
+          validationError.addSuppressed(cleanupError)
+          Failure(validationError)
+        case (failure@Failure(_), _) => failure
+        case (Success(_), cleanup) => cleanup
+      }
+    }
+
+  private def restoreStateStoreOnFailure[A](
+      stateStore: LDBVersionedStore,
+      previousVersion: Array[Byte])(
+      result: => Try[A]): Try[A] =
+    Try(result).flatten.recoverWith { case restorationError =>
+      stateStore.rollbackTo(previousVersion) match {
+        case Success(_) => Failure(restorationError)
+        case Failure(rollbackError) =>
+          restorationError.addSuppressed(rollbackError)
+          Try(stateStore.close()).failed.foreach(restorationError.addSuppressed)
+          Failure(restorationError)
+      }
+    }
+
+  /**
     * Create disk-persistent authenticated AVL+ tree prover
     * @param stateStore - disk database where AVL+ tree will be after restoration
     * @param historyReader - history readed to get headers to restore state context
@@ -344,16 +461,24 @@ trait UtxoSetSnapshotProcessor
         ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
           case Success(esc) =>
             val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-            VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
-              ldbStorage =>
-                log.info("Finished UTXO set snapshot transfer into state database")
-                ldbStorage.restorePrunedProver().map {
-                  prunedAvlProver =>
-                    new PersistentBatchAVLProver[Digest32, HF] {
-                      override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-                      override val storage: VersionedLDBAVLStorage = ldbStorage
-                    }
-                }
+            val snapshotVersion = VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)
+            val restoreResult = for {
+              previousVersion <- required(stateStore.lastVersionID,
+                new IllegalStateException("Cannot atomically replace an unversioned state store"))
+              _ <- Try(require(stateStore.getKeepVersions > 0,
+                "Cannot atomically replace a state store with rollback disabled"))
+              _ <- Try(require(!previousVersion.sameElements(snapshotVersion),
+                "Cannot atomically replace a state store at the snapshot version"))
+              _ <- validateSnapshotInStagingStore(manifest, metadata)
+              persistentProver <- restoreStateStoreOnFailure(stateStore, previousVersion) {
+                VersionedLDBAVLStorage
+                  .recreate(manifest, downloadedChunksIterator(), metadata.toIterator, stateStore)
+                  .flatMap(checkedPersistentProver)
+              }
+            } yield persistentProver
+            restoreResult.map { persistentProver =>
+              log.info("Finished UTXO set snapshot transfer into state database")
+              persistentProver
             }
           case Failure(e) =>
             log.warn("Can't reconstruct state context in createPersistentProver ", e)

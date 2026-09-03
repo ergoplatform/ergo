@@ -1,15 +1,19 @@
 package org.ergoplatform.nodeView.viewholder
 
 import java.io.File
-import org.ergoplatform.core.idToVersion
-import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
+import java.util.UUID
+import akka.actor.Props
+import akka.testkit.TestProbe
+import org.ergoplatform.core.{VersionTag, idToVersion, versionToId}
+import org.ergoplatform.{CriticalSystemException, ErgoBoxCandidate}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils, HistoryStorageTestAccess}
+import ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -19,14 +23,20 @@ import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.validation.MalformedModifierError
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier, UtxoNodeViewHolder}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
 import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
+import org.ergoplatform.nodeView.wallet.ErgoWallet
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{Rollback => WalletRollback, ScanOnChain}
+
+import scala.util.{Failure, Success}
+import scala.concurrent.duration._
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -683,6 +693,100 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  property("notify the wallet in producer order when a UTXO reorg applies its fork") {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+
+    new NodeViewFixture(protoSettings, parameters).apply { fixture =>
+      import fixture._
+
+      stopNodeViewHolder()
+      val walletObserver = TestProbe()(actorSystem)
+      val stateObserver = TestProbe()(actorSystem)
+      val nonWalletMempoolObserver = TestProbe()(actorSystem)
+      actorSystem.eventStream.subscribe(stateObserver.ref, classOf[ChangedState])
+      actorSystem.eventStream.subscribe(nonWalletMempoolObserver.ref, classOf[ChangedMempool])
+      nodeViewHolderRef = actorSystem.actorOf(Props(new UtxoNodeViewHolder(settings) {
+        override protected[nodeView] def rollbackWallet(wallet: ErgoWallet,
+                                                         version: VersionTag) = {
+          walletObserver.ref.tell(WalletRollback(version), akka.actor.ActorRef.noSender)
+          Success(wallet)
+        }
+
+        override protected[nodeView] def scanWalletPersistent(wallet: ErgoWallet,
+                                                              modifier: BlockSection) = {
+          modifier match {
+            case fullBlock: ErgoFullBlock =>
+              walletObserver.ref.tell(ScanOnChain(fullBlock), akka.actor.ActorRef.noSender)
+            case _ =>
+          }
+          wallet
+        }
+
+        override protected[nodeView] def refreshWalletMempool(wallet: ErgoWallet,
+                                                               mempool: ErgoMemPoolReader): Unit =
+          walletObserver.ref.tell(ChangedMempool(mempool), akka.actor.ActorRef.noSender)
+      }))
+
+      val (genesisState, boxHolder) = createUtxoState(settings)
+      val genesis = validFullBlock(None, genesisState, boxHolder)
+      val stateAfterGenesis = WrappedUtxoState(genesisState, boxHolder, settings)
+        .applyModifier(genesis)(_ => ())
+        .get
+      applyBlock(genesis) shouldBe 'success
+
+      val oldTip = validFullBlock(Some(genesis), stateAfterGenesis)
+      applyBlock(oldTip) shouldBe 'success
+
+      val forkBlock = validFullBlock(Some(genesis), stateAfterGenesis)
+      applyBlock(forkBlock) shouldBe 'success
+      getBestFullBlockOpt shouldBe Some(oldTip)
+      walletObserver.receiveWhile() { case _ => () }
+      stateObserver.receiveWhile() { case _ => () }
+      nonWalletMempoolObserver.receiveWhile() { case _ => () }
+
+      val stateAfterForkBlock = stateAfterGenesis.applyModifier(forkBlock)(_ => ()).get
+      val forkTip = validFullBlock(Some(forkBlock), stateAfterForkBlock)
+      applyBlock(forkTip) shouldBe 'success
+      getBestFullBlockOpt shouldBe Some(forkTip)
+
+      walletObserver.expectMsg(WalletRollback(idToVersion(genesis.id)))
+      walletObserver.expectMsg(ScanOnChain(forkBlock))
+      walletObserver.expectMsg(ScanOnChain(forkTip))
+      walletObserver.expectMsgType[ChangedMempool]
+      walletObserver.expectNoMessage()
+      val changedState = stateObserver.expectMsgType[ChangedState]
+      changedState.reader.version shouldBe idToVersion(forkTip.id)
+      stateObserver.expectNoMessage()
+      nonWalletMempoolObserver.expectMsgType[ChangedMempool]
+      nonWalletMempoolObserver.expectNoMessage()
+
+      stateAfterForkBlock.closeStorage()
+    }
+  }
+
+  property("serve one correlated current view without an unsolicited startup notification") {
+    val ordinarySettings = NodeViewTestConfig(
+      StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
+
+    new NodeViewFixture(ordinarySettings, parameters).apply { fixture =>
+      import fixture._
+
+      stopNodeViewHolder()
+      val walletObserver = TestProbe()(actorSystem)
+      nodeViewHolderRef = actorSystem.actorOf(Props(new UtxoNodeViewHolder(settings)))
+
+      walletObserver.expectNoMessage(300.millis)
+
+      val requestId = UUID.randomUUID()
+      actorSystem.eventStream.publish(RequestCurrentWalletView(requestId, walletObserver.ref))
+      val currentView = walletObserver.expectMsgType[CurrentWalletView]
+      currentView.requestId shouldBe requestId
+      currentView.appliedSnapshot shouldBe None
+      walletObserver.expectNoMessage(300.millis)
+    }
+  }
+
   property("preserve a prepared UTXO snapshot state across restart") {
     val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
       .toSettings
@@ -730,17 +834,72 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         .get
       persistedSnapshot.closeStorage()
 
-      startNodeViewHolder()
+      val walletObserver = TestProbe()(actorSystem)
+      nodeViewHolderRef = actorSystem.actorOf(Props(new UtxoNodeViewHolder(settings)))
 
+      walletObserver.expectNoMessage(300.millis)
+      val requestId = UUID.randomUUID()
+      actorSystem.eventStream.publish(RequestCurrentWalletView(requestId, walletObserver.ref))
+      val currentView = walletObserver.expectMsgType[CurrentWalletView]
+      currentView.requestId shouldBe requestId
+      val snapshotApplied = currentView.appliedSnapshot.get
+      (currentView.state eq snapshotApplied.stateReader) shouldBe true
+      snapshotApplied.blockHeight shouldBe snapshotBlock.height
+      snapshotApplied.blockId shouldBe snapshotBlock.id
+      java.util.Arrays.equals(snapshotApplied.stateReader.rootDigest, snapshotBlock.header.stateRoot) shouldBe true
+      walletObserver.expectNoMessage(300.millis)
       getRootHash shouldBe Algos.encode(snapshotBlock.header.stateRoot)
       applyBlock(nextBlock) shouldBe 'success
       getRootHash shouldBe Algos.encode(nextBlock.header.stateRoot)
+
+      stopNodeViewHolder()
+      val advancedWalletObserver = TestProbe()(actorSystem)
+      nodeViewHolderRef = actorSystem.actorOf(Props(new UtxoNodeViewHolder(settings)))
+      advancedWalletObserver.expectNoMessage(300.millis)
+      val advancedRequestId = UUID.randomUUID()
+      actorSystem.eventStream.publish(
+        RequestCurrentWalletView(advancedRequestId, advancedWalletObserver.ref))
+      val advancedView = advancedWalletObserver.expectMsgType[CurrentWalletView]
+      advancedView.requestId shouldBe advancedRequestId
+      advancedView.state.version shouldBe idToVersion(nextBlock.id)
+      java.util.Arrays.equals(advancedView.state.rootDigest, nextBlock.header.stateRoot) shouldBe true
+      advancedView.appliedSnapshot shouldBe None
+      advancedWalletObserver.expectNoMessage(300.millis)
+
+      stopNodeViewHolder()
+      val incompleteHistory = ErgoHistory.readOrGenerate(settings)(null)
+      val stateBeforeIncompleteRecovery = ErgoState.readOrGenerate(settings).asInstanceOf[UtxoState]
+      try {
+        incompleteHistory.bestFullBlockIdOpt shouldBe Some(nextBlock.id)
+        HistoryStorageTestAccess
+          .removeModifier(incompleteHistory, nextBlock.blockTransactions.id)
+          .get
+        incompleteHistory.bestFullBlockIdOpt shouldBe Some(nextBlock.id)
+        incompleteHistory.bestFullBlockOpt shouldBe None
+
+        val versionBefore = stateBeforeIncompleteRecovery.version
+        val rootBefore = stateBeforeIncompleteRecovery.rootDigest.clone()
+        val result = ErgoNodeViewHolder.validateUtxoSnapshotRecovery(
+          stateBeforeIncompleteRecovery,
+          incompleteHistory,
+          utxoBootstrap = true)
+
+        result.isFailure shouldBe true
+        result.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+        stateBeforeIncompleteRecovery.version shouldBe versionBefore
+        java.util.Arrays.equals(stateBeforeIncompleteRecovery.rootDigest, rootBefore) shouldBe true
+        incompleteHistory.isUtxoSnapshotApplied shouldBe true
+        incompleteHistory.readMinimalFullBlockHeight() shouldBe snapshotBlock.height + 1
+      } finally {
+        stateBeforeIncompleteRecovery.closeStorage()
+        incompleteHistory.closeStorage()
+      }
 
       sourceAtSnapshot.closeStorage()
     }
   }
 
-  property("reject a prepared UTXO snapshot state from a noncanonical fork on restart") {
+  property("reject a noncanonical prepared snapshot state without resetting snapshot metadata") {
     val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
       .toSettings
     val snapshotSettings = protoSettings.copy(
@@ -760,12 +919,30 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       firstBlock.id should not be secondBlock.id
       java.util.Arrays.equals(firstBlock.header.stateRoot, secondBlock.header.stateRoot) shouldBe true
 
+      val sourceAtSnapshot = WrappedUtxoState(sourceState, boxHolder, settings)
+        .applyModifier(firstBlock)(_ => ())
+        .get
+      sourceAtSnapshot
+        .dumpSnapshot(firstBlock.height, sourceAtSnapshot.rootDigest.dropRight(1))
+        .get
+      val manifestId = sourceAtSnapshot.snapshotsDb.readSnapshotsInfo
+        .availableManifests(firstBlock.height)
+      val manifestBytes = sourceAtSnapshot.snapshotsDb.readManifestBytes(manifestId).get
+      val manifest = ManifestSerializer.defaultSerializer.parseBytes(manifestBytes)
+      val chunks = manifest.subtreesIds.map(sourceAtSnapshot.snapshotsDb.readSubtreeBytes(_).get)
+
       applyHeader(firstBlock.header).get
       applyHeader(secondBlock.header).get
       val canonicalHeader = getHistory.bestHeaderAtHeight(firstBlock.height).get
       val noncanonicalBlock = Seq(firstBlock, secondBlock).find(_.id != canonicalHeader.id).get
       java.util.Arrays.equals(noncanonicalBlock.header.stateRoot, canonicalHeader.stateRoot) shouldBe true
-      getHistory.onUtxoSnapshotApplied(noncanonicalBlock.height)
+      getHistory.registerManifestToDownload(manifest, manifestBytes, canonicalHeader.height, Seq.empty)
+      getHistory.getChunkIdsToDownload(manifest.subtreesIds.size).zip(chunks).foreach {
+        case (chunkId, bytes) => getHistory.registerDownloadedChunk(chunkId, bytes).get
+      }
+      getHistory.onUtxoSnapshotApplied(canonicalHeader.height, canonicalHeader.id).get
+      getHistory.readMinimalFullBlockHeight() shouldBe canonicalHeader.height + 1
+      getHistory.readUtxoSnapshotScanSource(canonicalHeader.id).get.snapshotBlockId shouldBe canonicalHeader.id
       stopNodeViewHolder()
 
       val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
@@ -782,11 +959,29 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       java.util.Arrays.equals(persistedForkState.rootDigest, canonicalHeader.stateRoot) shouldBe true
       persistedForkState.closeStorage()
 
-      startNodeViewHolder()
+      val reopenedHistory = ErgoHistory.readOrGenerate(settings)(null)
+      val reopenedState = ErgoState.readOrGenerate(settings).asInstanceOf[UtxoState]
+      try {
+        val stateVersionBefore = reopenedState.version
+        val stateRootBefore = reopenedState.rootDigest.clone()
+        val result = ErgoNodeViewHolder.validateUtxoSnapshotRecovery(
+          reopenedState,
+          reopenedHistory,
+          true)
 
-      getRootHash shouldBe Algos.encode(settings.chainSettings.genesisStateDigest)
+        result.isFailure shouldBe true
+        result.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+        reopenedState.version shouldBe stateVersionBefore
+        java.util.Arrays.equals(reopenedState.rootDigest, stateRootBefore) shouldBe true
+        reopenedHistory.readMinimalFullBlockHeight() shouldBe canonicalHeader.height + 1
+        reopenedHistory.isUtxoSnapshotApplied shouldBe true
+        reopenedHistory.readUtxoSnapshotScanSource(canonicalHeader.id).get.snapshotBlockId shouldBe canonicalHeader.id
+      } finally {
+        reopenedState.closeStorage()
+        reopenedHistory.closeStorage()
+      }
 
-      sourceState.closeStorage()
+      sourceAtSnapshot.closeStorage()
     }
   }
 
@@ -874,6 +1069,215 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       snapshotHeaderRead shouldBe false
     } finally {
       state.closeStorage()
+    }
+  }
+
+  property("turn an unavailable state rollback into a critical failure without changing state") {
+    val (state, _) = createUtxoState(settings)
+
+    try {
+      val versionBefore = state.version
+      val rootBefore = state.rootDigest.clone()
+      val unavailableVersion = modifierIdGen.sample.value
+      unavailableVersion should not be versionToId(versionBefore)
+
+      val result = ErgoNodeViewHolder.rollbackStateForChainSwitch(state, unavailableVersion)
+
+      result.isFailure shouldBe true
+      result.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+      state.version shouldBe versionBefore
+      java.util.Arrays.equals(state.rootDigest, rootBefore) shouldBe true
+    } finally {
+      state.closeStorage()
+    }
+  }
+
+  property("materialize every startup replay block before rolling UTXO state back") {
+    val protoSettings = NodeViewTestConfig(
+      StateType.Utxo,
+      verifyTransactions = true,
+      popowBootstrap = false).toSettings
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep = 10)
+    try {
+      val (generationState, generationBoxes) =
+        createUtxoState(protoSettings, Some(parameters))
+      try {
+        val genesis = validFullBlock(None, generationState, generationBoxes)
+        val generationAtGenesis = WrappedUtxoState(generationState, generationBoxes, protoSettings)
+          .applyModifier(genesis)(_ => ())
+          .get
+        val canonicalBlock = validFullBlock(
+          Some(genesis), generationAtGenesis, genesis.header.timestamp + 1)
+        val forkBlock = validFullBlock(
+          Some(genesis), generationAtGenesis, genesis.header.timestamp + 2)
+        canonicalBlock.id should not be forkBlock.id
+        val generationAtCanonical = generationAtGenesis.applyModifier(canonicalBlock)(_ => ()).get
+        val canonicalTip = validFullBlock(
+          Some(canonicalBlock), generationAtCanonical, canonicalBlock.header.timestamp + 1)
+
+        org.ergoplatform.utils.generators.ChainGenerator
+          .applyChain(history, Seq(genesis, canonicalBlock, canonicalTip, forkBlock))
+        history.bestFullBlockIdOpt shouldBe Some(canonicalTip.id)
+
+        val (forkState0, forkBoxes) = createUtxoState(protoSettings, Some(parameters))
+        try {
+          val stateAtGenesis = WrappedUtxoState(forkState0, forkBoxes, protoSettings)
+            .applyModifier(genesis)(_ => ())
+            .get
+          val stateOnFork: UtxoState = stateAtGenesis.applyModifier(forkBlock)(_ => ()).get
+          val versionBefore = stateOnFork.version
+          val rootBefore = stateOnFork.rootDigest.clone()
+          val rollbackVersionsBefore = stateOnFork.rollbackVersions.toSeq
+          val (rollbackId, newChain) =
+            history.chainToHeader(Some(forkBlock.header), canonicalTip.header)
+          rollbackId shouldBe Some(genesis.id)
+
+          HistoryStorageTestAccess.removeModifier(history, canonicalBlock.blockTransactions.id).get
+          history.getFullBlock(canonicalBlock.header) shouldBe None
+
+          val result = ErgoNodeViewHolder.recoverStateChain(
+            stateOnFork,
+            history,
+            rollbackId,
+            newChain,
+            recreateState = Failure(new AssertionError("recreate state must not run")))(_ => ())
+
+          result.isFailure shouldBe true
+          stateOnFork.version shouldBe versionBefore
+          java.util.Arrays.equals(stateOnFork.rootDigest, rootBefore) shouldBe true
+          stateOnFork.rollbackVersions.toSeq shouldBe rollbackVersionsBefore
+        } finally {
+          forkState0.closeStorage()
+        }
+      } finally {
+        generationState.closeStorage()
+      }
+    } finally {
+      history.closeStorage()
+    }
+  }
+
+  property("persist the last successful startup replay block and resume after the next one fails") {
+    val protoSettings = NodeViewTestConfig(
+      StateType.Utxo,
+      verifyTransactions = true,
+      popowBootstrap = false).toSettings
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep = 10)
+    try {
+      val (generationState, generationBoxes) =
+        createUtxoState(protoSettings, Some(parameters))
+      try {
+        val genesis = validFullBlock(None, generationState, generationBoxes)
+        val generationAtGenesis =
+          WrappedUtxoState(generationState, generationBoxes, protoSettings)
+            .applyModifier(genesis)(_ => ())
+            .get
+        val canonicalNMinus1 = validFullBlock(
+          Some(genesis),
+          generationAtGenesis,
+          genesis.header.timestamp + 1)
+        val forkBlock = validFullBlock(
+          Some(genesis),
+          generationAtGenesis,
+          genesis.header.timestamp + 2)
+        canonicalNMinus1.id should not be forkBlock.id
+
+        val generationAtNMinus1 =
+          generationAtGenesis.applyModifier(canonicalNMinus1)(_ => ()).get
+        val failingN = generateInvalidFullBlock(Some(canonicalNMinus1), generationAtNMinus1)
+        val replacementN = validFullBlock(
+          Some(canonicalNMinus1),
+          generationAtNMinus1,
+          failingN.header.timestamp + 1)
+        replacementN.id should not be failingN.id
+
+        org.ergoplatform.utils.generators.ChainGenerator.applyChain(
+          history,
+          Seq(genesis, canonicalNMinus1, failingN, forkBlock))
+        history.bestFullBlockIdOpt shouldBe Some(failingN.id)
+
+        val stateDir = new File(createTempDir, "state")
+        stateDir.mkdirs() shouldBe true
+        val (persistentGenesis, _) = ErgoState.generateGenesisUtxoState(
+          stateDir,
+          protoSettings,
+          Some(parameters))
+        var persistentStoreOpen = true
+        try {
+          val persistentAtGenesis = persistentGenesis.applyModifier(genesis, None)(_ => ()).get
+          val stateOnFork = persistentAtGenesis.applyModifier(forkBlock, None)(_ => ()).get
+
+          val (rollbackId, recoveryChain) =
+            history.chainToHeader(Some(forkBlock.header), failingN.header)
+          rollbackId shouldBe Some(genesis.id)
+          recoveryChain.headers.map(_.id) shouldBe Seq(canonicalNMinus1.id, failingN.id)
+
+          var attempted = Vector.empty[ModifierId]
+          val failedRecovery = ErgoNodeViewHolder.recoverStateChain(
+            stateOnFork,
+            history,
+            rollbackId,
+            recoveryChain,
+            recreateState = Failure(new AssertionError("recreate state must not run")))(
+            generate = _ => (),
+            beforeApply = block => attempted = attempted :+ block.id)
+
+          failedRecovery.isFailure shouldBe true
+          attempted shouldBe Vector(canonicalNMinus1.id, failingN.id)
+
+          persistentGenesis.closeStorage()
+          persistentStoreOpen = false
+
+          val reopenedAtNMinus1 = UtxoState.create(stateDir, protoSettings)
+          try {
+            reopenedAtNMinus1.version shouldBe idToVersion(canonicalNMinus1.id)
+            java.util.Arrays.equals(
+              reopenedAtNMinus1.rootDigest,
+              canonicalNMinus1.header.stateRoot) shouldBe true
+
+            org.ergoplatform.utils.generators.ChainGenerator.applyChain(
+              history,
+              Seq(replacementN))
+            val (resumeRollbackId, resumeChain) = history.chainToHeader(
+              Some(canonicalNMinus1.header),
+              replacementN.header)
+
+            resumeRollbackId shouldBe Some(canonicalNMinus1.id)
+            resumeChain.headers.map(_.id) shouldBe Seq(replacementN.id)
+
+            val resumedState = ErgoNodeViewHolder.recoverStateChain(
+              reopenedAtNMinus1,
+              history,
+              resumeRollbackId,
+              resumeChain,
+              recreateState = Failure(new AssertionError("recreate state must not run")))(_ => ())
+              .get
+
+            resumedState.version shouldBe idToVersion(replacementN.id)
+            java.util.Arrays.equals(
+              resumedState.rootDigest,
+              replacementN.header.stateRoot) shouldBe true
+          } finally {
+            reopenedAtNMinus1.closeStorage()
+          }
+        } finally {
+          if (persistentStoreOpen) {
+            persistentGenesis.closeStorage()
+          }
+        }
+      } finally {
+        generationState.closeStorage()
+      }
+    } finally {
+      history.closeStorage()
     }
   }
 

@@ -224,6 +224,35 @@ class WalletStorageSpec
         store.insert(WalletStorage.UtxoSnapshotScanStatusKey, validBytes :+ 0.toByte).get
         storage.readUtxoSnapshotScanStatusTry().isFailure shouldBe true
 
+        def statusBytes(snapshotHeight: Long = 100L,
+                        manifestDepth: Long = 6L,
+                        nextSubtreeIndex: Long = 1L,
+                        totalSubtrees: Long = 2L): Array[Byte] = {
+          val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+          writer.putBytes(validBytes.take(7))
+          writer.putUInt(snapshotHeight)
+          writer.putBytes(idToBytes(snapshotBlockId))
+          writer.putUInt(manifestDepth)
+          writer.putUInt(nextSubtreeIndex)
+          writer.putUInt(totalSubtrees)
+          writer.putBoolean(false)
+          UtxoSnapshotScanDefinitionSerializer.serialize(ScanDefinitionA, writer)
+          writer.result().toBytes
+        }
+
+        val overflow = Int.MaxValue.toLong + 1L
+        Seq(
+          "snapshot height" -> statusBytes(snapshotHeight = overflow),
+          "manifest depth" -> statusBytes(manifestDepth = overflow),
+          "next subtree index" -> statusBytes(nextSubtreeIndex = overflow),
+          "total subtrees" -> statusBytes(totalSubtrees = overflow)
+        ).foreach { case (field, bytes) =>
+          store.insert(WalletStorage.UtxoSnapshotScanStatusKey, bytes).get
+          withClue(s"overflowing $field") {
+            storage.readUtxoSnapshotScanStatusTry().isFailure shouldBe true
+          }
+        }
+
         Seq(0, 1, 127, 128, 16383, 16384, Int.MaxValue).foreach { height =>
           Seq((0, false), (1, false), (2, true)).foreach { case (nextSubtreeIndex, completed) =>
             val legacy = new VLQByteBufferWriter(new ByteArrayBuilder())
@@ -663,6 +692,12 @@ class WalletStorageSpec
         store.insert(WalletStorage.UtxoSnapshotScanInvalidationKey, trailing).get
         storage.readUtxoSnapshotScanInvalidationTry().isFailure shouldBe true
 
+        val overflowWriter = new VLQByteBufferWriter(new ByteArrayBuilder())
+        overflowWriter.putUInt(Int.MaxValue.toLong + 1L)
+        overflowWriter.putBytes(idToBytes(snapshotBlockId))
+        store.insert(WalletStorage.UtxoSnapshotScanInvalidationKey, overflowWriter.result().toBytes).get
+        storage.readUtxoSnapshotScanInvalidationTry().isFailure shouldBe true
+
         storage.writeUtxoSnapshotScanInvalidation(valid.copy(snapshotHeight = -1)).isFailure shouldBe true
       }
     }
@@ -1042,6 +1077,84 @@ class WalletStorageSpec
         updateCalls shouldBe 1
         java.util.Arrays.equals(store.get(WalletStorage.UtxoSnapshotScanInvalidationKey).get, markerBytes) shouldBe true
         java.util.Arrays.equals(store.get(WalletStorage.UtxoSnapshotScanStatusKey).get, statusBytes) shouldBe true
+      }
+    }
+  }
+
+  it should "persist a rollback intent and clear only the exact durable record" in {
+    forAll(modifierIdGen, modifierIdGen) { (targetVersionId, differentVersionId) =>
+      whenever(targetVersionId != differentVersionId) {
+        withStore { store =>
+          val storage = new WalletStorage(store, settings)
+          val expected = WalletRollbackIntent(targetVersionId, expectedHeight = 100)
+          val different = WalletRollbackIntent(differentVersionId, expectedHeight = 99)
+
+          storage.readWalletRollbackIntentTry().get shouldBe None
+          storage.writeWalletRollbackIntent(expected).get
+          val canonicalBytes = store.get(WalletStorage.WalletRollbackIntentKey).get.clone()
+          storage.readWalletRollbackIntentTry().get shouldBe Some(expected)
+
+          storage.writeWalletRollbackIntent(expected).get
+          java.util.Arrays.equals(
+            store.get(WalletStorage.WalletRollbackIntentKey).get,
+            canonicalBytes) shouldBe true
+
+          storage.writeWalletRollbackIntent(different).isFailure shouldBe true
+          storage.readWalletRollbackIntentTry().get shouldBe Some(expected)
+          storage.clearWalletRollbackIntent(different).get shouldBe false
+          storage.readWalletRollbackIntentTry().get shouldBe Some(expected)
+          storage.clearWalletRollbackIntent(expected).get shouldBe true
+          storage.readWalletRollbackIntentTry().get shouldBe None
+          storage.clearWalletRollbackIntent(expected).get shouldBe false
+        }
+      }
+    }
+  }
+
+  it should "replace only the exact durable rollback intent" in {
+    forAll(modifierIdGen, modifierIdGen, modifierIdGen) {
+      (currentVersionId, replacementVersionId, otherVersionId) =>
+        whenever(currentVersionId != replacementVersionId &&
+          currentVersionId != otherVersionId && replacementVersionId != otherVersionId) {
+          withStore { store =>
+            val storage = new WalletStorage(store, settings)
+            val current = WalletRollbackIntent(currentVersionId, expectedHeight = 100)
+            val replacement = WalletRollbackIntent(replacementVersionId, expectedHeight = 99)
+            val other = WalletRollbackIntent(otherVersionId, expectedHeight = 98)
+
+            storage.writeWalletRollbackIntent(current).get
+            storage.replaceWalletRollbackIntent(other, replacement).get shouldBe false
+            storage.readWalletRollbackIntentTry().get shouldBe Some(current)
+
+            storage.replaceWalletRollbackIntent(current, replacement).get shouldBe true
+            storage.readWalletRollbackIntentTry().get shouldBe Some(replacement)
+
+            storage.replaceWalletRollbackIntent(current, other).get shouldBe false
+            storage.readWalletRollbackIntentTry().get shouldBe Some(replacement)
+          }
+        }
+    }
+  }
+
+  it should "fail closed on malformed rollback intent bytes" in {
+    forAll(modifierIdGen) { targetVersionId =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        val expected = WalletRollbackIntent(targetVersionId, expectedHeight = 100)
+        val canonicalBytes = WalletRollbackIntentSerializer.toBytes(expected)
+        val malformedEncodings = Seq(
+          canonicalBytes.dropRight(1),
+          canonicalBytes :+ 0.toByte,
+          canonicalBytes.updated(0, (canonicalBytes.head ^ 0x01).toByte)
+        )
+
+        malformedEncodings.foreach { malformed =>
+          store.insert(WalletStorage.WalletRollbackIntentKey, malformed).get
+          storage.readWalletRollbackIntentTry().isFailure shouldBe true
+        }
+
+        storage.writeWalletRollbackIntent(expected.copy(expectedHeight = -1)).isFailure shouldBe true
+        storage.readWalletRollbackIntentTry().isFailure shouldBe true
       }
     }
   }

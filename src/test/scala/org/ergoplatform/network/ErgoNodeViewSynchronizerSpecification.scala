@@ -276,6 +276,15 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  /** Simulate the persisted download boundary after snapshot finalization.
+    * Canonical snapshot finalization is covered by the dedicated history and
+    * node-view-holder specifications; these synchronizer tests only exercise
+    * inventory filtering on either side of that boundary.
+    */
+  private def simulatePersistedPostSnapshotDownloadBoundary(history: ErgoHistory,
+                                                              snapshotHeight: Int): Unit =
+    history.writeMinimalFullBlockHeight(snapshotHeight + 1)
+
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {
     withFixture { ctx =>
       import ctx._
@@ -1293,8 +1302,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
       import ctx._
 
-      // apply snapshot, so that block sections downloading is allowed again
-      updHistory.onUtxoSnapshotApplied(ctx.chain.last.height)
+      // Cross the persisted post-snapshot boundary so block sections are allowed again.
+      simulatePersistedPostSnapshotDownloadBoundary(updHistory, ctx.chain.last.height)
 
       val unknownSectionId = modifierIdGen.sample.get
       synchronizerMockRef ! Message(InvSpec,

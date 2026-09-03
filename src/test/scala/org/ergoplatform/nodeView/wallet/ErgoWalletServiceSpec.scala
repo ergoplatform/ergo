@@ -582,6 +582,61 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("recovery-specific registry reset should not accept an empty digest with application rows") {
+    withStore { store =>
+      val isolatedSettings = this.isolatedSettings()
+      val inputRegistry = openTestRegistry(
+        isolatedSettings,
+        closeFailure = None,
+        onClose = () => ()
+      )
+      inputRegistry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, Seq.empty),
+        modifierIdGen.sample.get,
+        blockHeight = 12
+      ).get
+      val walletState = initialState(store, inputRegistry, None)
+      val externalScanId = ScanId @@ 77.toShort
+      val staleBox = trackedBoxGen.sample.get.box
+      var openCount = 0
+      var cleanupCount = 0
+      val walletService = new ErgoWalletServiceImpl(isolatedSettings) {
+        override protected[wallet] def openRegistry(settings: ErgoSettings): Try[WalletRegistry] = Try {
+          openCount += 1
+          val candidate = openTestRegistry(
+            settings,
+            closeFailure = None,
+            onClose = () => ()
+          )
+          if (openCount == 1) {
+            candidate.updateScans(Set(externalScanId), staleBox).get
+            candidate.fetchDigest() shouldBe WalletDigest.empty
+            candidate.isPristineForUtxoSnapshot.get shouldBe false
+          }
+          candidate
+        }
+
+        override protected[wallet] def deleteRegistryTombstone(path: Path): Try[Unit] = {
+          cleanupCount += 1
+          super.deleteRegistryTombstone(path)
+        }
+      }
+
+      walletService.recreateRegistryForUtxoSnapshotRecovery(walletState, isolatedSettings) match {
+        case ErgoWalletService.RegistryResetDeferred(recoveredState, cause) =>
+          try {
+            cause.getMessage.toLowerCase should include("pristine")
+            recoveredState.registry.fetchDigest() shouldBe WalletDigest.empty
+            recoveredState.registry.isPristineForUtxoSnapshot.get shouldBe false
+          } finally recoveredState.registry.close()
+        case other =>
+          fail(s"Expected deferred registry reset, got $other")
+      }
+
+      cleanupCount shouldBe 0
+    }
+  }
+
   property("recovery-specific registry reset should reject and close an unreadable fallback candidate") {
     withStore { store =>
       val isolatedSettings = this.isolatedSettings()
@@ -1008,7 +1063,8 @@ class ErgoWalletServiceSpec
           val walletService = new ErgoWalletServiceImpl(settings)
           val wState = initialState(store, versionedStore)
           val boxes = boxesAvailable(makeGenesisBlock(pks.head.pubkey, randomNewAsset), pks.head.pubkey)
-          val scanResults = WalletScanLogic.scanSnapshotBoxes(boxes, wState.walletVars, None)
+          val scanResults = WalletScanLogic.scanSnapshotBoxes(
+            boxes, snapshotHeight = 100, wState.walletVars, None)
 
           val updatedState = walletService.scanUtxoSnapshotChunk(
             wState,
@@ -1025,6 +1081,183 @@ class ErgoWalletServiceSpec
           updatedState.registry.fetchDigest().height shouldBe 100
           updatedState.outputsFilter shouldBe empty
         }
+      }
+    }
+  }
+
+  property("it should keep snapshot boxes spent in the mempool out of off-chain balances") {
+    withVersionedStore(10) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val snapshotBlock = makeGenesisBlock(pks.head.pubkey)
+        val boxes = boxesAvailable(snapshotBlock, pks.head.pubkey)
+        val spendingTx = makeSpendingTx(boxes, pks.head, balanceToReturn = 0L)
+        val state = initialState(
+          store,
+          versionedStore,
+          Some(new FakeMempool(Seq(UnconfirmedTransaction(spendingTx, None))))
+        )
+        val stateAfterEarlyScan = state.copy(
+          offChainRegistry = state.offChainRegistry.updateOnTransaction(
+            WalletScanLogic.extractWalletOutputs(spendingTx, None, state.walletVars, None),
+            WalletScanLogic.extractInputBoxes(spendingTx),
+            state.walletVars.externalScans
+          )
+        )
+
+        stateAfterEarlyScan.offChainRegistry.digest.walletBalance shouldBe 0L
+
+        val firstChunkState = walletService.scanUtxoSnapshotChunk(
+          stateAfterEarlyScan,
+          boxes,
+          snapshotBlock.id,
+          snapshotHeight = 100,
+          subtreeIndex = 0,
+          finalChunk = false,
+          dustLimit = None
+        ).get
+
+        firstChunkState.registry.fetchDigest().walletBalance shouldBe balanceAmount(boxes)
+        firstChunkState.offChainRegistry.digest.walletBalance shouldBe 0L
+        firstChunkState.offChainRegistry.onChainBalances shouldBe empty
+
+        val replayedState = walletService.scanUtxoSnapshotChunk(
+          firstChunkState,
+          boxes,
+          snapshotBlock.id,
+          snapshotHeight = 100,
+          subtreeIndex = 0,
+          finalChunk = false,
+          dustLimit = None
+        ).get
+
+        replayedState.offChainRegistry.digest shouldBe firstChunkState.offChainRegistry.digest
+
+        val stateAfterMempoolRemoval = replayedState.copy(
+          mempoolReaderOpt = Some(new FakeMempool(Seq.empty[UnconfirmedTransaction]))
+        )
+        val finalizedState = walletService.scanUtxoSnapshotChunk(
+          stateAfterMempoolRemoval,
+          Seq.empty,
+          snapshotBlock.id,
+          snapshotHeight = 100,
+          subtreeIndex = 1,
+          finalChunk = true,
+          dustLimit = None
+        ).get
+
+        finalizedState.offChainRegistry.digest.walletBalance shouldBe balanceAmount(boxes)
+        finalizedState.offChainRegistry.digest.walletBalance shouldBe finalizedState.registry.fetchDigest().walletBalance
+      }
+    }
+  }
+
+  property("it should rebuild wallet change from the current mempool after a snapshot registry reset") {
+    withVersionedStore(10) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val snapshotBlock = makeGenesisBlock(pks.head.pubkey)
+        val boxes = boxesAvailable(snapshotBlock, pks.head.pubkey)
+        val changeValue = balanceAmount(boxes) / 2
+        val spendingTx = makeSpendingTx(boxes, pks.head, balanceToReturn = changeValue)
+        val state = initialState(
+          store,
+          versionedStore,
+          Some(new FakeMempool(Seq(UnconfirmedTransaction(spendingTx, None))))
+        )
+        val expectedChangeIds = WalletScanLogic
+          .extractWalletOutputs(spendingTx, None, state.walletVars, None)
+          .map(box => Base16.encode(box.box.id))
+        expectedChangeIds should not be empty
+
+        val scanned = walletService.scanUtxoSnapshotChunk(
+          state,
+          boxes,
+          snapshotBlock.id,
+          snapshotHeight = 100,
+          subtreeIndex = 0,
+          finalChunk = true,
+          dustLimit = None
+        ).get
+
+        scanned.offChainRegistry.offChainBoxes.map(box => Base16.encode(box.box.id)) should
+          contain theSameElementsAs expectedChangeIds
+        scanned.offChainRegistry.digest.walletBalance shouldBe changeValue
+      }
+    }
+  }
+
+  property("it should remove spent parent outputs even when mempool priority order is inverted") {
+    withVersionedStore(10) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val snapshotBlock = makeGenesisBlock(pks.head.pubkey)
+        val snapshotBoxes = boxesAvailable(snapshotBlock, pks.head.pubkey)
+        val parentTx = makeSpendingTx(
+          snapshotBoxes, pks.head, balanceToReturn = balanceAmount(snapshotBoxes) / 2)
+        val parentWalletBoxes = boxesAvailable(parentTx, pks.head.pubkey)
+        val childValue = balanceAmount(parentWalletBoxes) / 2
+        val childTx = makeSpendingTx(parentWalletBoxes, pks.head, balanceToReturn = childValue)
+        val state = initialState(
+          store,
+          versionedStore,
+          Some(new FakeMempool(Seq(
+            UnconfirmedTransaction(childTx, None),
+            UnconfirmedTransaction(parentTx, None))))
+        )
+        val expectedChildIds = WalletScanLogic
+          .extractWalletOutputs(childTx, None, state.walletVars, None)
+          .map(box => Base16.encode(box.box.id))
+
+        val scanned = walletService.scanUtxoSnapshotChunk(
+          state,
+          snapshotBoxes,
+          snapshotBlock.id,
+          snapshotHeight = 100,
+          subtreeIndex = 0,
+          finalChunk = true,
+          dustLimit = None
+        ).get
+
+        scanned.offChainRegistry.offChainBoxes.map(box => Base16.encode(box.box.id)) should
+          contain theSameElementsAs expectedChildIds
+        scanned.offChainRegistry.digest.walletBalance shouldBe childValue
+      }
+    }
+  }
+
+  property("it should drop an evicted mempool output while rebuilding snapshot off-chain state") {
+    withVersionedStore(10) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val snapshotBlock = makeGenesisBlock(pks.head.pubkey)
+        val boxes = boxesAvailable(snapshotBlock, pks.head.pubkey)
+        val spendingTx = makeSpendingTx(
+          boxes, pks.head, balanceToReturn = balanceAmount(boxes) / 2)
+        val state = initialState(
+          store,
+          versionedStore,
+          Some(new FakeMempool(Seq.empty[UnconfirmedTransaction]))
+        )
+        val staleOffChain = state.offChainRegistry.updateOnTransaction(
+          WalletScanLogic.extractWalletOutputs(spendingTx, None, state.walletVars, None),
+          WalletScanLogic.extractInputBoxes(spendingTx),
+          state.walletVars.externalScans
+        )
+        staleOffChain.offChainBoxes should not be empty
+
+        val scanned = walletService.scanUtxoSnapshotChunk(
+          state.copy(offChainRegistry = staleOffChain),
+          boxes,
+          snapshotBlock.id,
+          snapshotHeight = 100,
+          subtreeIndex = 0,
+          finalChunk = true,
+          dustLimit = None
+        ).get
+
+        scanned.offChainRegistry.offChainBoxes shouldBe empty
+        scanned.offChainRegistry.digest.walletBalance shouldBe balanceAmount(boxes)
       }
     }
   }

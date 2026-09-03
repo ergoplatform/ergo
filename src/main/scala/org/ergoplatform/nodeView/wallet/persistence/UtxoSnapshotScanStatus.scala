@@ -3,7 +3,6 @@ package org.ergoplatform.nodeView.wallet.persistence
 import org.ergoplatform.serialization.ErgoSerializer
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.nodeView.wallet.{UtxoSnapshotScanDefinition, UtxoSnapshotScanDefinitionSerializer}
-import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
@@ -50,11 +49,11 @@ object UtxoSnapshotScanStatusSerializer extends ErgoSerializer[UtxoSnapshotScanS
     require(java.util.Arrays.equals(prefix, FormatPrefix),
       "Unsupported UTXO snapshot scan status format")
     UtxoSnapshotScanStatus(
-      snapshotHeight = r.getUInt().toIntExact,
+      snapshotHeight = r.getUIntExact(),
       snapshotBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize)),
-      manifestDepth = r.getUInt().toIntExact,
-      nextSubtreeIndex = r.getUInt().toIntExact,
-      totalSubtrees = r.getUInt().toIntExact,
+      manifestDepth = r.getUIntExact(),
+      nextSubtreeIndex = r.getUIntExact(),
+      totalSubtrees = r.getUIntExact(),
       completed = r.getByte() != 0,
       scanDefinition = UtxoSnapshotScanDefinitionSerializer.parse(r)
     )
@@ -70,7 +69,7 @@ object UtxoSnapshotScanInvalidationSerializer extends ErgoSerializer[UtxoSnapsho
 
   override def parse(r: Reader): UtxoSnapshotScanInvalidation = {
     UtxoSnapshotScanInvalidation(
-      snapshotHeight = r.getUInt().toIntExact,
+      snapshotHeight = r.getUIntExact(),
       snapshotBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     )
   }
@@ -90,7 +89,7 @@ object UtxoSnapshotWalletOriginSerializer extends ErgoSerializer[UtxoSnapshotWal
     val version = r.getByte()
     require(version == FormatVersion, s"Unsupported UTXO snapshot wallet origin version $version")
     UtxoSnapshotWalletOrigin(
-      snapshotHeight = r.getUInt().toIntExact,
+      snapshotHeight = r.getUIntExact(),
       snapshotBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize)),
       scanDefinition = UtxoSnapshotScanDefinitionSerializer.parse(r)
     )

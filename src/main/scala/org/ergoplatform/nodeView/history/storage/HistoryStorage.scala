@@ -148,6 +148,22 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     }
   }
 
+  /** Atomically insert and remove history-index rows in one LevelDB batch. */
+  def updateIndices(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
+                    indexesToRemove: Array[ByteArrayWrapper]): Try[Unit] =
+    indexStore.update(
+      indexesToInsert.map(_._1.data),
+      indexesToInsert.map(_._2),
+      indexesToRemove.map(_.data)
+    ).map { _ =>
+      cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
+        indexCache.invalidate(indexesToRemove(i))
+      }
+      cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
+        indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
+      }
+    }
+
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[ExtraIndex]): Unit = {
     extraStore.insert(

@@ -1,21 +1,25 @@
 package org.ergoplatform.nodeView.wallet
 
-import akka.actor.{ActorRef, ActorSystem, Props, Status}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props, Status}
 import akka.pattern.ask
 import akka.testkit.TestProbe
 import akka.util.{ByteString, Timeout}
+import com.google.common.primitives.Ints
 import org.ergoplatform._
 import org.ergoplatform.ErgoBox.R1
-import org.ergoplatform.core.{idToVersion, versionToId}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedState, UtxoSnapshotAppliedToState}
+import org.ergoplatform.core.{VersionTag, idToVersion, versionToId}
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
+import org.ergoplatform.modifiers.history.header.PreGenesisHeader
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState, CurrentWalletView, RequestCurrentWalletView, UtxoSnapshotAppliedToState}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, UtxoStateReader, VotingData}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, UtxoSnapshotScanInvalidation, UtxoSnapshotScanStatus, UtxoSnapshotScanStatusSerializer, UtxoSnapshotWalletOrigin, UtxoSnapshotWalletOriginSerializer, WalletDigest, WalletDigestSerializer, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, UtxoSnapshotScanInvalidation, UtxoSnapshotScanStatus, UtxoSnapshotScanStatusSerializer, UtxoSnapshotWalletOrigin, UtxoSnapshotWalletOriginSerializer, WalletDigest, WalletDigestSerializer, WalletRegistry, WalletRollbackIntent, WalletStorage}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, ExternalSecret, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{ContainsAssetPredicate, EqualsScanningPredicate, Scan, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.wallet.secrets.PrimitiveSecretKey
@@ -32,7 +36,7 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import scorex.crypto.authds.ADDigest
 import scorex.db.{LDBFactory, LDBVersionedStore}
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, idToBytes}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, ErgoTree}
@@ -51,7 +55,7 @@ import scala.collection.compat.immutable.ArraySeq
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
-class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
+class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with MempoolTestHelpers with Eventually {
   import ErgoWalletService._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -121,16 +125,28 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
                              scanDefinition: UtxoSnapshotScanDefinition): UtxoSnapshotWalletOrigin =
     new UtxoSnapshotWalletOrigin(snapshotHeight, snapshotBlockId, scanDefinition)
 
+  private def publishCurrentMempool(implicit w: WalletFixture): Unit =
+    w.actorSystem.eventStream.publish(ChangedMempool(getCurrentView.pool))
+
   private def withProbeWalletActor[T](baseSettings: org.ergoplatform.settings.ErgoSettings,
                                       directory: File = Files.createTempDirectory("wallet-run-fence-").toFile,
-                                      historyReader: ErgoHistoryReader = null,
+                                      historyReader: ErgoHistoryReader = strictHistoryReader(),
                                        sourceIdentity: Option[ModifierId => Try[UtxoSnapshotSourceIdentity]] = None,
+                                       availableSourceIdentity: Option[() => Try[UtxoSnapshotSourceIdentity]] = None,
                                        registryTip: Option[ErgoWalletState => Try[(Int, Option[ModifierId])]] = None,
+                                       currentStateTip: Option[ErgoWalletState => Try[(Int, Option[ModifierId])]] = None,
                                        bestHeaderId: Option[Int => Try[Option[ModifierId]]] = None,
                                        bestHeaderState: Option[Int => Try[Option[(ModifierId, ADDigest)]]] = None,
                                        snapshotFullHeight: Option[ErgoWalletState => Int] = None,
                                        catchUpReady: Option[Int => Boolean] = None,
                                        catchUpScan: Option[(ErgoWalletState, Int) => Try[ErgoWalletState]] = None,
+                                       registryRollback: Option[(ErgoWalletState, VersionTag) => Try[Unit]] = None,
+                                       rollbackIntentWrite: Option[(ErgoWalletState, WalletRollbackIntent) =>
+                                         Try[Unit]] = None,
+                                       offChainReconciliation: Option[(ErgoWalletState, Option[Long],
+                                         () => ErgoWalletState) => ErgoWalletState] = None,
+                                       utxoStateUpdate: Option[(ErgoWalletState, () => ErgoWalletState) =>
+                                         ErgoWalletState] = None,
                                        statusRemoval: Option[ErgoWalletState => Try[Unit]] = None,
                                        sourceRemoval: Option[ModifierId => Try[Unit]] = None,
                                        walletOriginRead: Option[(ErgoWalletState,
@@ -155,8 +171,12 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
                                         snapshotDefinitionCalculation: Option[(ErgoWalletState,
                                           () => Try[UtxoSnapshotScanDefinition]) =>
                                           Try[UtxoSnapshotScanDefinition]] = None,
-                                        actorPreStart: Option[() => Unit] = None,
-                                        expectedInitialized: Boolean = true)
+                                         actorPreStart: Option[() => Unit] = None,
+                                         startupStateReader: Option[ErgoStateReader] = None,
+                                         publishStartupState: Boolean = true,
+                                         startupViewResponse:
+                                           Option[RequestCurrentWalletView => Option[CurrentWalletView]] = None,
+                                         expectedInitialized: Boolean = true)
                                      (test: (ActorRef, TestProbe, TestProbe) => T): T = {
     implicit val actorSystem: ActorSystem =
       ActorSystem(s"wallet-run-fence-${UUID.randomUUID().toString}")
@@ -168,6 +188,36 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       walletSettings = baseSettings.walletSettings.copy(
         secretStorage = baseSettings.walletSettings.secretStorage.copy(
           secretDir = s"$isolatedDirectory/wallet/keystore")))
+    val effectiveStartupStateReader = if (publishStartupState) {
+      startupStateReader.orElse {
+        val storage = WalletStorage.readOrCreate(isolatedSettings)
+        try Some(genericStateReader(storage.getStateContext(parameters)))
+        finally storage.close()
+      }
+    } else {
+      None
+    }
+    val startupResponses = new AtomicInteger(0)
+    val startupViewResponder = actorSystem.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case request: RequestCurrentWalletView =>
+          val response = startupViewResponse match {
+            case Some(customResponse) => customResponse(request)
+            case None => effectiveStartupStateReader.map { reader =>
+              CurrentWalletView(
+                request.requestId,
+                reader,
+                new FakeMempool(Seq.empty),
+                appliedSnapshot = None)
+            }
+          }
+          response.foreach { currentView =>
+            startupResponses.incrementAndGet()
+            request.replyTo ! currentView
+          }
+      }
+    }))
+    actorSystem.eventStream.subscribe(startupViewResponder, classOf[RequestCurrentWalletView])
     val boxSelector = new ReplaceCompactCollectBoxSelector(
       isolatedSettings.walletSettings.maxInputs,
       isolatedSettings.walletSettings.optimalInputs,
@@ -200,6 +250,18 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         rescanRegistryRecreation.fold(super.recreateRegistry(state, actorSettings)) { recreate =>
           recreate(state, () => super.recreateRegistry(state, actorSettings))
         }
+
+      override def reconcileOffChainRegistry(
+        state: ErgoWalletState,
+        dustLimit: Option[Long]): ErgoWalletState =
+        offChainReconciliation.fold(super.reconcileOffChainRegistry(state, dustLimit)) { reconcile =>
+          reconcile(state, dustLimit, () => super.reconcileOffChainRegistry(state, dustLimit))
+        }
+
+      override def updateUtxoState(state: ErgoWalletState): ErgoWalletState =
+        utxoStateUpdate.fold(super.updateUtxoState(state)) { update =>
+          update(state, () => super.updateUtxoState(state))
+        }
     }
     val actor = actorSystem.actorOf(Props(new ErgoWalletActor(
       isolatedSettings,
@@ -218,9 +280,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         expectedBlockId: ModifierId): Try[UtxoSnapshotSourceIdentity] =
         sourceIdentity.fold(super.readUtxoSnapshotSourceIdentity(expectedBlockId))(_(expectedBlockId))
 
+      override protected[wallet] def readAvailableUtxoSnapshotSourceIdentity(): Try[UtxoSnapshotSourceIdentity] =
+        availableSourceIdentity.fold(super.readAvailableUtxoSnapshotSourceIdentity())(_())
+
       override protected[wallet] def readWalletRegistryTip(
         state: ErgoWalletState): Try[(Int, Option[ModifierId])] =
         registryTip.fold(super.readWalletRegistryTip(state))(_(state))
+
+      override protected[wallet] def readCurrentStateTip(
+        state: ErgoWalletState): Try[(Int, Option[ModifierId])] =
+        currentStateTip.fold(super.readCurrentStateTip(state))(_(state))
 
       override protected[wallet] def readBestHeaderIdAtHeight(
         height: Int): Try[Option[ModifierId]] =
@@ -240,6 +309,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         state: ErgoWalletState,
         height: Int): Try[ErgoWalletState] =
         catchUpScan.fold(super.scanUtxoSnapshotCatchUpHeight(state, height))(_(state, height))
+
+      override protected[wallet] def rollbackWalletRegistry(
+        state: ErgoWalletState,
+        version: VersionTag): Try[Unit] =
+        registryRollback.fold(super.rollbackWalletRegistry(state, version))(_(state, version))
+
+      override protected[wallet] def writeWalletRollbackIntent(
+        state: ErgoWalletState,
+        intent: WalletRollbackIntent): Try[Unit] =
+        rollbackIntentWrite.fold(super.writeWalletRollbackIntent(state, intent))(_(state, intent))
 
       override protected[wallet] def removeUtxoSnapshotScanStatus(
         state: ErgoWalletState): Try[Unit] =
@@ -315,6 +394,15 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     }))
     client.send(actor, GetWalletStatus)
     client.expectMsgType[WalletStatus](10.seconds).initialized shouldBe expectedInitialized
+    if (publishStartupState) {
+      client.awaitAssert({
+        startupResponses.get() should be > 0
+        client.send(actor, GetWalletStatus)
+        val status = client.expectMsgType[WalletStatus](10.seconds)
+        status.error.exists(_.contains(
+          "Wallet operations are unavailable while startup canonical alignment is pending")) shouldBe false
+      }, 10.seconds, 100.millis)
+    }
     try {
       test(actor, scanner, client)
     } finally {
@@ -334,17 +422,26 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     finally storage.close()
   }
 
-  private def strictHistoryReader(bestFullBlockReads: AtomicInteger = new AtomicInteger(0)):
+  private def strictHistoryReader(bestFullBlockReads: AtomicInteger = new AtomicInteger(0),
+                                  heightLookup: ModifierId => Option[Int] = _ => None,
+                                  bestFullBlockRead: Int => Unit = _ => (),
+                                  bestFullBlockResult: Int => Option[ErgoFullBlock] = _ => None,
+                                  minFullBlockAvailable: Int = Int.MaxValue,
+                                  utxoSnapshotApplied: Boolean = false):
     ErgoHistoryReader = {
     Proxy.newProxyInstance(
       classOf[ErgoHistoryReader].getClassLoader,
       Array(classOf[ErgoHistoryReader]),
       new InvocationHandler {
         override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef = method.getName match {
-          case "heightOf" => None
+          case "heightOf" => heightLookup(args(0).asInstanceOf[ModifierId])
           case "bestFullBlockAt" =>
             bestFullBlockReads.incrementAndGet()
-            None
+            val height = args(0).asInstanceOf[Int]
+            bestFullBlockRead(height)
+            bestFullBlockResult(height)
+          case "minFullBlockAvailable" => Int.box(minFullBlockAvailable)
+          case "isUtxoSnapshotApplied" => Boolean.box(utxoSnapshotApplied)
           case "removeUtxoSnapshotScanSource" => Success(())
           case "toString" => "strict-history-reader"
           case "hashCode" => Int.box(System.identityHashCode(proxy))
@@ -389,6 +486,21 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           }
       }).asInstanceOf[UtxoStateReader]
   }
+
+  private def genericStateReader(stateContext: ErgoStateContext): ErgoStateReader =
+    Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" => stateContext
+            case "toString" => "wallet-startup-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
 
   private final class SnapshotRecoveryPreflightCase(
     val label: String,
@@ -449,6 +561,64 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     } finally registry.close()
   }
 
+  private def seedWalletRegistryVersions(
+    baseSettings: org.ergoplatform.settings.ErgoSettings,
+    directory: File,
+    versions: Seq[(ModifierId, Int)]): Unit = {
+    val isolatedSettings = baseSettings.copy(directory = directory.getAbsolutePath)
+    val registry = WalletRegistry(isolatedSettings).get
+    try {
+      versions.foreach { case (versionId, height) =>
+        registry.updateOnBlock(
+          ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+          versionId,
+          blockHeight = height).get
+      }
+    } finally registry.close()
+  }
+
+  private def seedEmptySnapshotRegistryBatch(
+    baseSettings: org.ergoplatform.settings.ErgoSettings,
+    directory: File,
+    snapshotBlockId: ModifierId,
+    snapshotHeight: Int,
+    subtreeIndex: Int,
+    nextSubtreeIndex: Int,
+    finalChunk: Boolean): Unit = {
+    val isolatedSettings = baseSettings.copy(directory = directory.getAbsolutePath)
+    val registry = WalletRegistry(isolatedSettings).get
+    try {
+      registry.updateOnSnapshotChunk(
+        ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+        snapshotBlockId,
+        snapshotHeight,
+        subtreeIndex,
+        nextSubtreeIndex,
+        finalChunk).get
+    } finally registry.close()
+  }
+
+  private def corruptSnapshotRegistryMarker(
+    baseSettings: org.ergoplatform.settings.ErgoSettings,
+    directory: File,
+    snapshotBlockId: ModifierId,
+    subtreeIndex: Int): Unit = {
+    val isolatedSettings = baseSettings.copy(directory = directory.getAbsolutePath)
+    val store = new LDBVersionedStore(
+      WalletRegistry.registryFolder(isolatedSettings),
+      isolatedSettings.nodeSettings.keepVersions)
+    try {
+      val markerKey =
+        Array(0x09.toByte) ++ idToBytes(snapshotBlockId) ++ Ints.toByteArray(subtreeIndex)
+      val corrupted = store.get(markerKey).get.clone()
+      corrupted(corrupted.length - 1) = (corrupted.last ^ 0x01).toByte
+      store.update(
+        Array.fill(32)(0x76.toByte),
+        Seq.empty,
+        Seq(markerKey -> corrupted)).get
+    } finally store.close()
+  }
+
   private def openObservedWalletRegistry(
     baseSettings: org.ergoplatform.settings.ErgoSettings,
     directory: File,
@@ -502,6 +672,233 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     watcher.expectTerminated(scanner, 5.seconds)
   }
 
+  property("require a correlated retried current view before startup canonical alignment") {
+    val directory = Files.createTempDirectory("wallet-startup-alignment-gate-").toFile
+    val reconciliations = new AtomicInteger(0)
+    val rollbackAttempts = new AtomicInteger(0)
+    val requestCount = new AtomicInteger(0)
+    val observedRequestId = new AtomicReference[UUID](null)
+    val requestIdChanged = new AtomicBoolean(false)
+    val firstMempool = new FakeMempool(Seq.empty)
+    val latestMempool = new FakeMempool(Seq.empty)
+    val startupState = genericStateReader(
+      ErgoStateContext.empty(settings.chainSettings, parameters))
+
+    withProbeWalletActor(
+      settings,
+      directory,
+      offChainReconciliation = Some((state, _, fallback) => {
+        state.mempoolReaderOpt shouldBe Some(latestMempool)
+        reconciliations.incrementAndGet()
+        fallback()
+      }),
+      registryRollback = Some((state, version) => {
+        rollbackAttempts.incrementAndGet()
+        state.registry.rollback(version)
+      }),
+      publishStartupState = false,
+      startupViewResponse = Some(request => {
+        val firstRequestId = observedRequestId.get()
+        if (firstRequestId == null) observedRequestId.compareAndSet(null, request.requestId)
+        else if (firstRequestId != request.requestId) requestIdChanged.set(true)
+        requestCount.incrementAndGet()
+        None
+      })) { (actor, scanner, client) =>
+      client.awaitAssert(requestCount.get() should be > 0, 5.seconds, 100.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get.toLowerCase should include("startup canonical alignment")
+
+      // Ambient view events and a response for another actor incarnation must not unlock startup.
+      client.send(actor, ChangedState(startupState))
+      client.send(actor, ChangedMempool(firstMempool))
+      client.send(actor, ChangedMempool(latestMempool))
+      client.send(actor, CurrentWalletView(
+        UUID.randomUUID(), startupState, latestMempool, appliedSnapshot = None))
+      client.send(actor, Rollback(idToVersion(PreGenesisHeader.id)))
+      client.send(actor, DeriveNextKey)
+      client.expectMsgType[DeriveNextKeyResult].result.isFailure shouldBe true
+      reconciliations.get() shouldBe 0
+      rollbackAttempts.get() shouldBe 0
+      scanner.expectNoMessage(300.millis)
+
+      client.awaitAssert(requestCount.get() should be >= 2, 5.seconds, 100.millis)
+      requestIdChanged.get() shouldBe false
+      client.send(actor, CurrentWalletView(
+        observedRequestId.get(), startupState, latestMempool, appliedSnapshot = None))
+      client.awaitAssert({
+        reconciliations.get() shouldBe 1
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+    }
+  }
+
+  property("apply a captured startup view before newer queued state and mempool events") {
+    val directory = Files.createTempDirectory("wallet-startup-view-order-").toFile
+    val requestCount = new AtomicInteger(0)
+    val observedRequestId = new AtomicReference[UUID](null)
+    val stateReadEntered = new CountDownLatch(1)
+    val releaseStateRead = new CountDownLatch(1)
+    val reconciledViews = scala.collection.mutable.ArrayBuffer.empty[
+      (Option[ErgoStateReader], Option[ErgoMemPoolReader])]
+    val stateContext = ErgoStateContext.empty(settings.chainSettings, parameters)
+    val capturedMempool = new FakeMempool(Seq.empty)
+    val latestMempool = new FakeMempool(Seq.empty)
+    val latestState = genericStateReader(stateContext)
+    val capturedState = Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" =>
+              stateReadEntered.countDown()
+              if (!releaseStateRead.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to queue the newer wallet view")
+              }
+              stateContext
+            case "toString" => "captured-startup-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
+
+    def recordView(state: ErgoWalletState): Unit = reconciledViews.synchronized {
+      reconciledViews += state.stateReaderOpt -> state.mempoolReaderOpt
+    }
+
+    withProbeWalletActor(
+      settings,
+      directory,
+      publishStartupState = false,
+      startupViewResponse = Some(request => {
+        observedRequestId.compareAndSet(null, request.requestId)
+        requestCount.incrementAndGet()
+        None
+      }),
+      offChainReconciliation = Some((state, _, fallback) => {
+        recordView(state)
+        fallback()
+      })) { (actor, scanner, client) =>
+      client.awaitAssert(requestCount.get() should be > 0, 5.seconds, 100.millis)
+
+      client.send(actor, CurrentWalletView(
+        observedRequestId.get(), capturedState, capturedMempool, appliedSnapshot = None))
+      stateReadEntered.await(5, TimeUnit.SECONDS) shouldBe true
+
+      client.send(actor, ChangedState(latestState))
+      client.send(actor, ChangedMempool(latestMempool))
+      releaseStateRead.countDown()
+
+      client.awaitAssert({
+        val observed = reconciledViews.synchronized(reconciledViews.toVector)
+        observed.size should be >= 2
+        observed.head._1.value should be theSameInstanceAs capturedState
+        observed.head._2.value should be theSameInstanceAs capturedMempool
+        observed.last._1.value should be theSameInstanceAs latestState
+        observed.last._2.value should be theSameInstanceAs latestMempool
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+    }
+  }
+
+  property("apply a captured startup view atomically while resuming a durable rollback") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-durable-startup-view-order-").toFile
+    val originalTip = ModifierId @@ Algos.encode(Array.fill(32)(125: Byte))
+    val expectedIntent = WalletRollbackIntent(PreGenesisHeader.id, expectedHeight = 0)
+    seedNonemptyWalletRegistry(ordinarySettings, directory, originalTip)
+    val seededRegistry = WalletRegistry(
+      ordinarySettings.copy(directory = directory.getAbsolutePath)).get
+    try seededRegistry.rollback(idToVersion(PreGenesisHeader.id)).get
+    finally seededRegistry.close()
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.writeWalletRollbackIntent(expectedIntent).get
+    }
+
+    val requestCount = new AtomicInteger(0)
+    val observedRequestId = new AtomicReference[UUID](null)
+    val rollbackAttempts = new AtomicInteger(0)
+    val stateReadEntered = new CountDownLatch(1)
+    val releaseStateRead = new CountDownLatch(1)
+    val reconciledViews = scala.collection.mutable.ArrayBuffer.empty[
+      (Option[ErgoStateReader], Option[ErgoMemPoolReader])]
+    val stateContext = ErgoStateContext.empty(ordinarySettings.chainSettings, parameters)
+    val capturedMempool = new FakeMempool(Seq.empty)
+    val latestMempool = new FakeMempool(Seq.empty)
+    val latestState = genericStateReader(stateContext)
+    val capturedState = Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" =>
+              stateReadEntered.countDown()
+              if (!releaseStateRead.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to queue the newer wallet view")
+              }
+              stateContext
+            case "toString" => "captured-durable-startup-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
+
+    def recordView(state: ErgoWalletState): Unit = reconciledViews.synchronized {
+      reconciledViews += state.stateReaderOpt -> state.mempoolReaderOpt
+    }
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      publishStartupState = false,
+      startupViewResponse = Some(request => {
+        observedRequestId.compareAndSet(null, request.requestId)
+        requestCount.incrementAndGet()
+        None
+      }),
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException("completed durable rollback must not run twice"))
+      }),
+      offChainReconciliation = Some((state, _, fallback) => {
+        recordView(state)
+        fallback()
+      })) { (actor, scanner, client) =>
+      client.awaitAssert(requestCount.get() should be > 0, 5.seconds, 100.millis)
+
+      client.send(actor, CurrentWalletView(
+        observedRequestId.get(), capturedState, capturedMempool, appliedSnapshot = None))
+      stateReadEntered.await(5, TimeUnit.SECONDS) shouldBe true
+
+      client.send(actor, ChangedState(latestState))
+      client.send(actor, ChangedMempool(latestMempool))
+      releaseStateRead.countDown()
+
+      client.awaitAssert({
+        val observed = reconciledViews.synchronized(reconciledViews.toVector)
+        observed.size should be >= 2
+        observed.head._1.value should be theSameInstanceAs capturedState
+        observed.head._2.value should be theSameInstanceAs capturedMempool
+        observed.last._1.value should be theSameInstanceAs latestState
+        observed.last._2.value should be theSameInstanceAs latestMempool
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+  }
+
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>
       val assets = preAssets.map { case (id, amt) => ModifierId @@ Algos.encode(id) -> amt }
@@ -532,7 +929,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 33))
       val status = client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
       client.send(actor, ReadBalances(ChainStatus.OnChain))
-      val digestBefore = client.expectMsgType[WalletDigest]
+      client.expectMsgType[Status.Failure]
 
       client.send(actor, ApplyUtxoSnapshotScanBatch(
         staleRun, subtreeIndex = 0, nextSubtreeIndex = 32,
@@ -547,7 +944,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       client.send(actor, GetWalletStatus)
       client.expectMsgType[WalletStatus].error shouldBe None
       client.send(actor, ReadBalances(ChainStatus.OnChain))
-      client.expectMsgType[WalletDigest] shouldBe digestBefore
+      client.expectMsgType[Status.Failure]
       client.send(actor, GetOrInitUtxoSnapshotScanStatus(
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 33))
       client.expectMsgType[Try[UtxoSnapshotScanStatus]].get shouldBe status
@@ -622,7 +1019,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       snapshotDefinitionCalculation = Some((_, fallback) => {
         activeDefinitionCalls.incrementAndGet()
         fallback()
-      })) { (actor, scanner, client) =>
+      }),
+      utxoStateUpdate = Some((state, _) => state)) { (actor, scanner, client) =>
       val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
       client.send(actor, GetOrInitUtxoSnapshotScanStatus(
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 33))
@@ -702,7 +1100,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         statusBytesBefore = UtxoSnapshotScanStatusSerializer.toBytes(initialStatus)
 
         client.send(actor, ReadBalances(ChainStatus.OnChain))
-        val digestBefore = client.expectMsgType[WalletDigest]
+        client.expectMsgType[Status.Failure]
         liveDefinition.set(WalletVarsExternalScanDefinition)
 
         client.send(actor, GetOrInitUtxoSnapshotScanStatus(
@@ -716,14 +1114,13 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           boxes = IndexedSeq.empty))
         val applyResult = client.expectMsgType[Try[UtxoSnapshotScanStatus]]
         client.send(actor, ReadBalances(ChainStatus.OnChain))
-        val digestAfter = client.expectMsgType[WalletDigest]
+        client.expectMsgType[Status.Failure]
 
         getResult.isFailure shouldBe true
         getResult.failed.get.getMessage.toLowerCase should include("definition")
         applyResult.isFailure shouldBe true
         applyResult.failed.get.getMessage.toLowerCase should include("definition")
         chunkScans.get() shouldBe 0
-        digestAfter shouldBe digestBefore
     }
 
     readWalletStorageEntry(
@@ -1003,6 +1400,600 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       client.expectMsgType[WalletStatus].error.get.toLowerCase should include("quarantine")
       client.send(actor, ReadBalances(ChainStatus.OnChain))
       client.expectMsgType[Status.Failure].cause.getMessage.toLowerCase should include("quarantine")
+    }
+  }
+
+  property("quarantine an applied snapshot when the height-zero wallet registry is non-pristine") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-non-pristine-snapshot-").toFile
+    val isolatedSettings = bootstrapSettings.copy(directory = directory.getAbsolutePath)
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x45.toByte))
+    val externalScanId = ScanId @@ 51.toShort
+    val preexistingBox = new ErgoTransaction(
+      fakeInputs,
+      IndexedSeq.empty,
+      IndexedSeq(new ErgoBoxCandidate(MinBoxValue, TrueTree, creationHeight = 0))).outputs.head
+    val registry = WalletRegistry(isolatedSettings).get
+    try {
+      registry.updateScans(Set(externalScanId), preexistingBox).get
+      registry.fetchDigest() shouldBe WalletDigest.empty
+    } finally registry.close()
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader()) { (actor, scanner, client) =>
+      client.send(actor, UtxoSnapshotAppliedToState(0, snapshotId, null))
+      val result = client.expectMsgType[Try[Option[UtxoSnapshotScanRun]]](5.seconds)
+
+      result.isFailure shouldBe true
+      result.failed.get.getMessage.toLowerCase should include("pristine")
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get.toLowerCase should include("pristine")
+    }
+  }
+
+  property("start an available snapshot from its persisted identity after the state tip advances") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-source-behind-tip-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x46.toByte))
+    val tipHeight = snapshotHeight + 3
+    val tipId = ModifierId @@ Algos.encode(Array.fill(32)(0x47.toByte))
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      partCount = 33)
+    val sourceReads = new AtomicInteger(0)
+    val tipReader = snapshotRecoveryStateReader(
+      bootstrapSettings,
+      tipId,
+      versionId = Some(tipId),
+      stateHeight = tipHeight)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(utxoSnapshotApplied = true),
+      availableSourceIdentity = Some(() => {
+        sourceReads.incrementAndGet()
+        Success(source)
+      }),
+      currentStateTip = Some(_ => Success(tipHeight -> Some(tipId))),
+      bestHeaderId = Some(height => Success(
+        if (height == tipHeight) Some(tipId) else None)),
+      catchUpReady = Some(_ == snapshotHeight + 1),
+      startupStateReader = Some(tipReader),
+      utxoStateUpdate = Some((state, _) => state)) { (actor, scanner, client) =>
+      val start = scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds)
+      start.run.hasSnapshot(snapshotHeight, snapshotId) shouldBe true
+      start.run.hasSnapshot(tipHeight, tipId) shouldBe false
+      sourceReads.get() shouldBe 1
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+    }
+  }
+
+  property("fail closed before scanning an available snapshot outside the full-block pruning horizon") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-source-pruned-catch-up-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x4a.toByte))
+    val tipHeight = snapshotHeight + 3
+    val tipId = ModifierId @@ Algos.encode(Array.fill(32)(0x4b.toByte))
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      partCount = 33)
+    val readinessChecks = new AtomicInteger(0)
+    val tipReader = snapshotRecoveryStateReader(
+      bootstrapSettings,
+      tipId,
+      versionId = Some(tipId),
+      stateHeight = tipHeight)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(utxoSnapshotApplied = true),
+      availableSourceIdentity = Some(() => Success(source)),
+      currentStateTip = Some(_ => Success(tipHeight -> Some(tipId))),
+      bestHeaderId = Some(height => Success(
+        if (height == tipHeight) Some(tipId) else None)),
+      snapshotFullHeight = Some(_ => tipHeight),
+      catchUpReady = Some(height => {
+        height shouldBe snapshotHeight + 1
+        readinessChecks.incrementAndGet()
+        false
+      }),
+      startupStateReader = Some(tipReader),
+      utxoStateUpdate = Some((state, _) => state)) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      readinessChecks.get() shouldBe 1
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("pruning horizon")
+      error should include("resync")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe None
+    }
+  }
+
+  property("fail closed before resuming persisted snapshot progress outside the full-block pruning horizon") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-persisted-snapshot-pruned-catch-up-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x4c.toByte))
+    val tipHeight = snapshotHeight + 3
+    val status = snapshotStatus(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 0,
+      totalSubtrees = 33,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight, snapshotId, status.manifestDepth, status.totalSubtrees)
+    val readinessChecks = new AtomicInteger(0)
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source)),
+      snapshotFullHeight = Some(_ => tipHeight),
+      catchUpReady = Some(height => {
+        height shouldBe snapshotHeight + 1
+        readinessChecks.incrementAndGet()
+        false
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      readinessChecks.get() shouldBe 1
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("pruning horizon")
+      error should include("resync from genesis")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe None
+    }
+  }
+
+  property("quarantine snapshot progress when its registry batch marker is missing after restart") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-cursor-rewind-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x48.toByte))
+    val status = snapshotStatus(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = UtxoSnapshotWalletScanner.SnapshotScanBatchSize,
+      totalSubtrees = UtxoSnapshotWalletScanner.SnapshotScanBatchSize * 2,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight,
+      snapshotId,
+      status.manifestDepth,
+      status.totalSubtrees)
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("quarantine")
+      error should include("marker")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe
+        Some(UtxoSnapshotScanInvalidation(snapshotHeight, snapshotId))
+    }
+  }
+
+  property("validate the last durable snapshot registry batch without rewriting progress") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-frontier-valid-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x47.toByte))
+    val batchSize = UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+    val status = snapshotStatus(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = batchSize,
+      totalSubtrees = batchSize * 2,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight, snapshotId, status.manifestDepth, status.totalSubtrees)
+    seedEmptySnapshotRegistryBatch(
+      bootstrapSettings,
+      directory,
+      snapshotId,
+      snapshotHeight,
+      subtreeIndex = 0,
+      nextSubtreeIndex = batchSize,
+      finalChunk = false)
+    withSeededWalletStorage(bootstrapSettings, directory)(
+      _.writeUtxoSnapshotScanStatus(status).get)
+    val statusBytesBefore = readWalletStorageEntry(
+      bootstrapSettings, directory, WalletStorage.UtxoSnapshotScanStatusKey).get
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
+      val start = scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds)
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        start.run,
+        subtreeIndex = 0,
+        nextSubtreeIndex = batchSize,
+        completed = false,
+        boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get shouldBe status
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+    }
+
+    readWalletStorageEntry(
+      bootstrapSettings, directory, WalletStorage.UtxoSnapshotScanStatusKey).get should
+      contain theSameElementsInOrderAs statusBytesBefore
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+    }
+  }
+
+  property("quarantine a corrupt last durable snapshot registry batch") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-frontier-corrupt-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x46.toByte))
+    val batchSize = UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+    val status = snapshotStatus(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = batchSize,
+      totalSubtrees = batchSize * 2,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight, snapshotId, status.manifestDepth, status.totalSubtrees)
+    seedEmptySnapshotRegistryBatch(
+      bootstrapSettings,
+      directory,
+      snapshotId,
+      snapshotHeight,
+      subtreeIndex = 0,
+      nextSubtreeIndex = batchSize,
+      finalChunk = false)
+    corruptSnapshotRegistryMarker(
+      bootstrapSettings, directory, snapshotId, subtreeIndex = 0)
+    withSeededWalletStorage(bootstrapSettings, directory)(
+      _.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
+      val start = scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds)
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        start.run,
+        subtreeIndex = 0,
+        nextSubtreeIndex = batchSize,
+        completed = false,
+        boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].isFailure shouldBe true
+      scanner.expectMsg(AbortUtxoSnapshotScan(start.run))
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("quarantine")
+      error should include("marker")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe
+        Some(UtxoSnapshotScanInvalidation(snapshotHeight, snapshotId))
+    }
+  }
+
+  property("recover the single registry-ahead snapshot batch without double applying it") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-registry-ahead-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x45.toByte))
+    val batchSize = UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+    val status = snapshotStatus(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 0,
+      totalSubtrees = batchSize * 2,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight, snapshotId, status.manifestDepth, status.totalSubtrees)
+    seedEmptySnapshotRegistryBatch(
+      bootstrapSettings,
+      directory,
+      snapshotId,
+      snapshotHeight,
+      subtreeIndex = 0,
+      nextSubtreeIndex = batchSize,
+      finalChunk = false)
+    withSeededWalletStorage(bootstrapSettings, directory)(
+      _.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
+      val start = scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds)
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        start.run,
+        subtreeIndex = 0,
+        nextSubtreeIndex = batchSize,
+        completed = false,
+        boxes = IndexedSeq.empty))
+      val recovered = client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      recovered.nextSubtreeIndex shouldBe batchSize
+      recovered.completed shouldBe false
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      val recovered = storage.readUtxoSnapshotScanStatusTry().get.get
+      recovered.nextSubtreeIndex shouldBe batchSize
+      recovered.completed shouldBe false
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+    }
+  }
+
+  property("quarantine a snapshot registry more than one batch ahead of durable progress") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-registry-too-far-ahead-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(0x44.toByte))
+    val batchSize = UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+    val status = snapshotStatus(
+      snapshotHeight,
+      snapshotId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 0,
+      totalSubtrees = batchSize * 3,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight, snapshotId, status.manifestDepth, status.totalSubtrees)
+    Seq(0, batchSize).foreach { subtreeIndex =>
+      seedEmptySnapshotRegistryBatch(
+        bootstrapSettings,
+        directory,
+        snapshotId,
+        snapshotHeight,
+        subtreeIndex,
+        nextSubtreeIndex = subtreeIndex + batchSize,
+        finalChunk = false)
+    }
+    withSeededWalletStorage(bootstrapSettings, directory)(
+      _.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("quarantine")
+      error should include("more than one batch ahead")
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe
+        Some(UtxoSnapshotScanInvalidation(snapshotHeight, snapshotId))
+    }
+  }
+
+  property("retain only the latest mempool reader while a snapshot wallet is quarantined") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-quarantine-mempool-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(125: Byte))
+    val invalidation = UtxoSnapshotScanInvalidation(0, snapshotId)
+    val oldStatus = snapshotStatus(
+      invalidation.snapshotHeight,
+      invalidation.snapshotBlockId,
+      ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 7,
+      totalSubtrees = 33,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      invalidation.snapshotHeight,
+      invalidation.snapshotBlockId,
+      oldStatus.manifestDepth,
+      oldStatus.totalSubtrees)
+    val stateReader = snapshotRecoveryStateReader(bootstrapSettings, snapshotId)
+    val staleMempool = new FakeMempool(Seq.empty)
+    val currentMempool = new FakeMempool(Seq.empty)
+    val observedMempool = new AtomicReference[ErgoMemPoolReader](null)
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.writeUtxoSnapshotScanStatus(oldStatus).get
+      storage.writeUtxoSnapshotScanInvalidation(invalidation).get
+    }
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source)),
+      bestHeaderState = Some(_ => Success(Some(snapshotId -> startDigest))),
+      recoveryRestart = Some((state, _, _, fallback) => {
+        observedMempool.set(state.mempoolReaderOpt.orNull)
+        fallback()
+      })) { (actor, scanner, client) =>
+      client.send(actor, ChangedMempool(staleMempool))
+      client.send(actor, ChangedMempool(currentMempool))
+      client.send(actor, UtxoSnapshotAppliedToState(
+        invalidation.snapshotHeight, invalidation.snapshotBlockId, stateReader))
+      val recoveryResult = client.fishForMessage(5.seconds) {
+        case _: Try[_] => true
+        case _ => false
+      }.asInstanceOf[Try[Option[UtxoSnapshotScanRun]]]
+
+      recoveryResult.isSuccess shouldBe true
+      (observedMempool.get() eq currentMempool) shouldBe true
+      scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds).forceRestart shouldBe true
+    }
+  }
+
+  property("skip duplicate operational notifications for the same immutable mempool reader") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-operational-mempool-noop-").toFile
+    val stateReader = genericStateReader(
+      ErgoStateContext.empty(ordinarySettings.chainSettings, parameters))
+    val mempoolReader = new FakeMempool(Seq.empty)
+    val reconciliations = new AtomicInteger(0)
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      publishStartupState = false,
+      startupViewResponse = Some(request => Some(CurrentWalletView(
+        request.requestId, stateReader, mempoolReader, appliedSnapshot = None))),
+      offChainReconciliation = Some((_, _, fallback) => {
+        reconciliations.incrementAndGet()
+        fallback()
+      })) { (actor, scanner, client) =>
+      client.awaitAssert(reconciliations.get() shouldBe 1, 5.seconds, 100.millis)
+
+      (1 to 100).foreach(_ => client.send(actor, ChangedMempool(mempoolReader)))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      reconciliations.get() shouldBe 1
+      scanner.expectNoMessage(300.millis)
+    }
+  }
+
+  property("reconcile off-chain outputs when the operational mempool reader changes") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-operational-mempool-reconcile-").toFile
+    val walletKey = defaultProver.hdPubKeys.head.key
+    val walletAddress = P2PKAddress(walletKey)(ordinarySettings.addressEncoder)
+    val fundingTx = makeGenesisTx(walletKey)
+    val fundingBoxes = boxesAvailable(fundingTx, walletKey)
+    val changeValue = balanceAmount(fundingBoxes) / 2
+    val spendingTx = makeSpendingTx(
+      fundingBoxes, walletAddress, balanceToReturn = changeValue)
+
+    withProbeWalletActor(ordinarySettings, directory) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, ScanOffChain(spendingTx))
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[WalletDigest].walletBalance shouldBe changeValue
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[WalletDigest].walletBalance shouldBe 0L
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq(
+        UnconfirmedTransaction(spendingTx, None)))))
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[WalletDigest].walletBalance shouldBe changeValue
+    }
+  }
+
+  property("retry a quarantined operational reconciliation with the same mempool reader") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-operational-mempool-failure-").toFile
+    val preStarts = new AtomicInteger(0)
+    val rollbackIntentWrites = new AtomicInteger(0)
+    val remainingFailures = new AtomicInteger(1)
+    val injectedMessage = "injected operational mempool reconciliation failure"
+    val failingMempool = new FakeMempool(Seq.empty) {
+      override def getAllPrioritized: Seq[UnconfirmedTransaction] = {
+        if (remainingFailures.getAndDecrement() > 0) {
+          throw new IllegalStateException(injectedMessage)
+        }
+        super.getAllPrioritized
+      }
+    }
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      actorPreStart = Some(() => preStarts.incrementAndGet()),
+      rollbackIntentWrite = Some((state, intent) => {
+        rollbackIntentWrites.incrementAndGet()
+        state.storage.writeWalletRollbackIntent(intent)
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      preStarts.get() shouldBe 1
+
+      client.send(actor, ChangedMempool(failingMempool))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get should include(injectedMessage)
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[Status.Failure]
+      preStarts.get() shouldBe 1
+      rollbackIntentWrites.get() shouldBe 0
+
+      // Quarantine must retry even when the immutable reader instance is unchanged.
+      client.send(actor, ChangedMempool(failingMempool))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[WalletDigest].walletBalance shouldBe 0L
+      preStarts.get() shouldBe 1
+      rollbackIntentWrites.get() shouldBe 0
     }
   }
 
@@ -1993,6 +2984,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           restartCalls.incrementAndGet()
           Success(false)
         })) { (actor, scanner, client) =>
+        val fenceReadsBaseline = fenceReads.get()
         client.send(actor, UtxoSnapshotAppliedToState(
           invalidation.snapshotHeight,
           invalidation.snapshotBlockId,
@@ -2001,7 +2993,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         withClue(testCase.label) {
           result.isFailure shouldBe true
           result.failed.get.getMessage.toLowerCase should include(testCase.expectedError)
-          fenceReads.get() shouldBe testCase.expectedFenceReads
+          fenceReads.get() - fenceReadsBaseline shouldBe testCase.expectedFenceReads
           parameterUpdates.get() shouldBe testCase.expectedParameterUpdates
           contextWrites.get() shouldBe testCase.expectedContextWrites
           resetCalls.get() shouldBe 0
@@ -2328,7 +3320,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       sourceIdentity = Some(_ => {
         duplicateResumeSourceReads.incrementAndGet()
         scala.util.Failure(new IllegalStateException("completed status must not resume twice"))
-      })) { (actor, scanner, client) =>
+      }),
+      registryTip = Some(_ => Success(status.snapshotHeight -> Some(snapshotId))),
+      bestHeaderId = Some(_ => Success(Some(snapshotId))),
+      sourceRemoval = Some(_ => Success(()))) { (actor, scanner, client) =>
       scanner.expectNoMessage(300.millis)
       client.send(actor, ReadBalances(ChainStatus.OnChain))
       client.expectMsgType[WalletDigest]
@@ -2442,7 +3437,657 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     }
   }
 
-  property("recover completed finalization when the initially missing catch-up block becomes available") {
+  property("recover completed finalization after automatic cleanup retry exhaustion") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-cleanup-recovery-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(70: Byte))
+    val allowCleanup = new AtomicBoolean(false)
+    val statusAttempts = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      snapshotFullHeight = Some(_ => 0),
+      statusRemoval = Some(state => {
+        statusAttempts.incrementAndGet()
+        if (allowCleanup.get()) state.storage.removeUtxoSnapshotScanStatus()
+        else Failure(new IllegalStateException("injected persistent status removal failure"))
+      }),
+      sourceRemoval = Some(id => {
+        id shouldBe snapshotId
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      val completedStatus = client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.awaitAssert(
+        statusAttempts.get() shouldBe ErgoWalletActor.MaxFinalizationCleanupRetries + 1,
+        8.seconds,
+        100.millis)
+      client.expectNoMessage(ErgoWalletActor.FinalizationCleanupRetryDelay + 300.millis)
+      sourceRemovals.get() shouldBe 0
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get should include(
+        "Unable to persist completed UTXO snapshot origin or remove completed UTXO snapshot scan status")
+
+      allowCleanup.set(true)
+      client.send(actor, FinalizeUtxoSnapshotScan(run, completedStatus, cleanupAttempt = 0))
+      client.awaitAssert({
+        statusAttempts.get() shouldBe ErgoWalletActor.MaxFinalizationCleanupRetries + 2
+        sourceRemovals.get() shouldBe 1
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("reject a wallet read queued behind the final snapshot batch until durable finalization") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-prequeued-read-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(119: Byte))
+    val actorRef = new AtomicReference[ActorRef]()
+    val clientRef = new AtomicReference[ActorRef]()
+    val queuedRead = new AtomicBoolean(false)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      snapshotFullHeight = Some(_ => 0),
+      snapshotChunkScan = Some(() => {
+        if (queuedRead.compareAndSet(false, true)) {
+          actorRef.get().tell(ReadBalances(ChainStatus.OnChain), clientRef.get())
+        }
+      }),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      actorRef.set(actor)
+      clientRef.set(client.ref)
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+      client.expectMsgType[Status.Failure]
+
+      client.awaitAssert({
+        statusRemovals.get() shouldBe 1
+        sourceRemovals.get() shouldBe 1
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest]
+    }
+  }
+
+  property("drain a deferred snapshot block before reopening wallet operations") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-deferred-finalization-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(120: Byte))
+    val deferredBase = invalidErgoFullBlockGen.sample.get
+    val deferredBlock = deferredBase.copy(
+      header = deferredBase.header.copy(height = 1, parentId = snapshotId))
+    val actorRef = new AtomicReference[ActorRef]()
+    val clientRef = new AtomicReference[ActorRef]()
+    val deferredSent = new AtomicBoolean(false)
+    val queuedRead = new AtomicBoolean(false)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+    val events = scala.collection.mutable.ArrayBuffer.empty[String]
+    def record(event: String): Unit = events.synchronized(events += event)
+    def observedEvents: Seq[String] = events.synchronized(events.toSeq)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      snapshotFullHeight = Some(_ => 0),
+      bestHeaderId = Some {
+        case 1 => Success(Some(deferredBlock.id))
+        case _ => Success(None)
+      },
+      offChainReconciliation = Some((state, _, fallback) => {
+        record(s"reconcile-${state.getWalletHeight}")
+        fallback()
+      }),
+      snapshotChunkScan = Some(() => {
+        if (deferredSent.compareAndSet(false, true)) {
+          actorRef.get().tell(ScanOnChain(deferredBlock), actorRef.get())
+          actorRef.get().tell(
+            ChangedMempool(new FakeMempool(Seq.empty)), actorRef.get())
+        }
+      }),
+      statusRemoval = Some(state => {
+        record("status-remove")
+        statusRemovals.incrementAndGet()
+        if (queuedRead.compareAndSet(false, true)) {
+          actorRef.get().tell(ReadBalances(ChainStatus.OnChain), clientRef.get())
+        }
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      actorRef.set(actor)
+      clientRef.set(client.ref)
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+      client.expectMsgType[WalletDigest](5.seconds).height shouldBe 1
+
+      client.awaitAssert({
+        observedEvents.takeRight(2) shouldBe Seq("reconcile-1", "status-remove")
+        statusRemovals.get() shouldBe 1
+        sourceRemovals.get() shouldBe 1
+      }, 5.seconds, 100.millis)
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("reject a retained snapshot catch-up block that is not canonical") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-retained-noncanonical-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(121: Byte))
+    val canonicalSiblingId = ModifierId @@ Algos.encode(Array.fill(32)(122: Byte))
+    val retainedBase = invalidErgoFullBlockGen.sample.get
+    val retainedBlock = retainedBase.copy(
+      header = retainedBase.header.copy(height = 1, parentId = snapshotId))
+    val actorRef = new AtomicReference[ActorRef]()
+    val retainedSent = new AtomicBoolean(false)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      snapshotFullHeight = Some(_ => 0),
+      bestHeaderId = Some {
+        case 1 => Success(Some(canonicalSiblingId))
+        case _ => Success(None)
+      },
+      snapshotChunkScan = Some(() => {
+        if (retainedSent.compareAndSet(false, true)) {
+          actorRef.get().tell(ScanOnChain(retainedBlock), actorRef.get())
+        }
+      }),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      actorRef.set(actor)
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should include("not canonical")
+      }, 5.seconds, 100.millis)
+      statusRemovals.get() shouldBe 0
+      sourceRemovals.get() shouldBe 0
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    val registry = WalletRegistry(
+      bootstrapSettings.copy(directory = directory.getAbsolutePath)).get
+    try {
+      registry.lastVersionId shouldBe Some(snapshotId)
+      registry.fetchDigest().height shouldBe 0
+    } finally registry.close()
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get.map(_.completed) shouldBe Some(true)
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("reconcile the latest mempool after ordinary catch-up before reopening") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-catchup-final-mempool-").toFile
+    val blockOneBase = invalidErgoFullBlockGen.sample.get
+    val blockOne = blockOneBase.copy(
+      header = blockOneBase.header.copy(height = 1, parentId = PreGenesisHeader.id))
+    val blockTwoBase = invalidErgoFullBlockGen.sample.get
+    val blockTwo = blockTwoBase.copy(
+      header = blockTwoBase.header.copy(height = 2, parentId = blockOne.id))
+    val firstCatchUpRead = new CountDownLatch(1)
+    val releaseFirstCatchUpRead = new CountDownLatch(1)
+    val reconciliationHeights = scala.collection.mutable.ArrayBuffer.empty[Int]
+    def recordReconciliation(height: Int): Unit =
+      reconciliationHeights.synchronized(reconciliationHeights += height)
+    def observedReconciliationHeights: Seq[Int] =
+      reconciliationHeights.synchronized(reconciliationHeights.toSeq)
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(
+        bestFullBlockRead = {
+          case 1 =>
+            firstCatchUpRead.countDown()
+            if (!releaseFirstCatchUpRead.await(5, TimeUnit.SECONDS)) {
+              throw new IllegalStateException("Timed out waiting to release the first catch-up read")
+            }
+          case _ => ()
+        },
+        bestFullBlockResult = {
+          case 1 => Some(blockOne)
+          case 2 => Some(blockTwo)
+          case _ => None
+        }),
+      offChainReconciliation = Some((state, _, fallback) => {
+        recordReconciliation(state.getWalletHeight)
+        fallback()
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, ScanOnChain(blockTwo))
+      firstCatchUpRead.await(5, TimeUnit.SECONDS) shouldBe true
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      releaseFirstCatchUpRead.countDown()
+
+      client.expectMsgType[Status.Failure](5.seconds)
+      client.awaitAssert({
+        observedReconciliationHeights.lastOption shouldBe Some(2)
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+      observedReconciliationHeights should contain (1)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest].height shouldBe 2
+    }
+  }
+
+  property("retry completed snapshot catch-up while its block remains inside the pruning horizon") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 10,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-retained-catchup-retry-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(75: Byte))
+    val status = snapshotStatus(
+      snapshotHeight = 0,
+      snapshotBlockId = snapshotId,
+      manifestDepth = ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 1,
+      totalSubtrees = 1,
+      completed = true)
+    val source = UtxoSnapshotSourceIdentity(
+      status.snapshotHeight, status.snapshotBlockId, status.manifestDepth, status.totalSubtrees)
+    val blockBase = invalidErgoFullBlockGen.sample.get
+    val catchUpBlock = blockBase.copy(
+      header = blockBase.header.copy(height = 1, parentId = snapshotId))
+    val blockAvailable = new AtomicBoolean(false)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+    val catchUpStateContext = new ErgoStateContext(
+      Seq(catchUpBlock.header),
+      None,
+      startDigest,
+      parameters,
+      validationSettingsNoIl,
+      VotingData.empty)(bootstrapSettings.chainSettings)
+    val stateReader = snapshotRecoveryStateReader(
+      bootstrapSettings,
+      catchUpBlock.id,
+      versionId = Some(catchUpBlock.id),
+      stateHeight = 1,
+      stateContextOverride = Some(catchUpStateContext))
+
+    seedWalletRegistryVersions(bootstrapSettings, directory, Seq(snapshotId -> 0))
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(bestFullBlockResult = {
+        case 1 if blockAvailable.get() => Some(catchUpBlock)
+        case _ => None
+      }, minFullBlockAvailable = 1),
+      sourceIdentity = Some(_ => Success(source)),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(catchUpBlock.id))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 1),
+      catchUpReady = Some(_ => true),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("canonical state change or rollback retries")
+        error should not include "pruning"
+        error should not include "re-bootstrap"
+      }, 5.seconds, 100.millis)
+      statusRemovals.get() shouldBe 0
+      sourceRemovals.get() shouldBe 0
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+
+      blockAvailable.set(true)
+      actor.tell(ChangedState(stateReader), ActorRef.noSender)
+
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+        statusRemovals.get() shouldBe 1
+        sourceRemovals.get() shouldBe 1
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest].height shouldBe 1
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("keep the ordinary post-catch-up barrier closed when final mempool reconciliation fails") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-catchup-final-mempool-failure-").toFile
+    val blockOneBase = invalidErgoFullBlockGen.sample.get
+    val blockOne = blockOneBase.copy(
+      header = blockOneBase.header.copy(height = 1, parentId = PreGenesisHeader.id))
+    val blockTwoBase = invalidErgoFullBlockGen.sample.get
+    val blockTwo = blockTwoBase.copy(
+      header = blockTwoBase.header.copy(height = 2, parentId = blockOne.id))
+    val firstCatchUpRead = new CountDownLatch(1)
+    val releaseFirstCatchUpRead = new CountDownLatch(1)
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(
+        bestFullBlockRead = {
+          case 1 =>
+            firstCatchUpRead.countDown()
+            if (!releaseFirstCatchUpRead.await(5, TimeUnit.SECONDS)) {
+              throw new IllegalStateException("Timed out waiting to release the first catch-up read")
+            }
+          case _ => ()
+        },
+        bestFullBlockResult = {
+          case 1 => Some(blockOne)
+          case 2 => Some(blockTwo)
+          case _ => None
+        }),
+      offChainReconciliation = Some((state, _, fallback) => {
+        if (state.getWalletHeight == 2) {
+          throw new IllegalStateException("injected post-catch-up reconciliation failure")
+        }
+        fallback()
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, ScanOnChain(blockTwo))
+      firstCatchUpRead.await(5, TimeUnit.SECONDS) shouldBe true
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      releaseFirstCatchUpRead.countDown()
+
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("final mempool reconciliation")
+        error should include("injected post-catch-up reconciliation failure")
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+  }
+
+  property("keep the snapshot post-catch-up barrier closed when final mempool reconciliation fails") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-final-mempool-failure-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(76: Byte))
+    val status = snapshotStatus(
+      snapshotHeight = 0,
+      snapshotBlockId = snapshotId,
+      manifestDepth = ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 1,
+      totalSubtrees = 1,
+      completed = true)
+    val source = UtxoSnapshotSourceIdentity(
+      status.snapshotHeight, status.snapshotBlockId, status.manifestDepth, status.totalSubtrees)
+    val blockBase = invalidErgoFullBlockGen.sample.get
+    val catchUpBlock = blockBase.copy(
+      header = blockBase.header.copy(height = 1, parentId = snapshotId))
+    val statusRemovals = new AtomicInteger(0)
+
+    seedWalletRegistryVersions(bootstrapSettings, directory, Seq(snapshotId -> 0))
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(bestFullBlockResult = {
+        case 1 => Some(catchUpBlock)
+        case _ => None
+      }),
+      sourceIdentity = Some(_ => Success(source)),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 1),
+      catchUpReady = Some(_ => true),
+      offChainReconciliation = Some((state, _, fallback) => {
+        if (state.getWalletHeight == 1) {
+          throw new IllegalStateException("injected post-catch-up reconciliation failure")
+        }
+        fallback()
+      }),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("injected post-catch-up reconciliation failure")
+        statusRemovals.get() shouldBe 0
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+    }
+  }
+
+  property("reject an ordinary catch-up block with the wrong height or parent before registry mutation") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(77: Byte))
+    val foreignParent = ModifierId @@ Algos.encode(Array.fill(32)(78: Byte))
+    val wrongHeightBase = invalidErgoFullBlockGen.sample.get
+    val wrongHeightBlock = wrongHeightBase.copy(
+      header = wrongHeightBase.header.copy(height = 8, parentId = canonicalAncestor))
+    val wrongParentBase = invalidErgoFullBlockGen.sample.get
+    val wrongParentBlock = wrongParentBase.copy(
+      header = wrongParentBase.header.copy(height = 7, parentId = foreignParent))
+
+    Seq(
+      ("height", wrongHeightBlock, "requested height"),
+      ("parent", wrongParentBlock, "parent")
+    ).foreach { case (label, returnedBlock, expectedError) =>
+      withClue(s"$label mutant: ") {
+        val directory = Files.createTempDirectory(s"wallet-catchup-$label-mutant-").toFile
+        val stateReader = snapshotRecoveryStateReader(
+          ordinarySettings,
+          returnedBlock.id,
+          versionId = Some(returnedBlock.id),
+          stateHeight = 7)
+        seedWalletRegistryVersions(
+          ordinarySettings, directory, Seq(canonicalAncestor -> 6))
+        withSeededWalletStorage(ordinarySettings, directory)(
+          _.updateStateContext(stateReader.stateContext).get)
+
+        withProbeWalletActor(
+          ordinarySettings,
+          directory,
+          strictHistoryReader(bestFullBlockResult = {
+            case 7 => Some(returnedBlock)
+            case _ => None
+          }),
+          currentStateTip = Some(_ => Success(7 -> Some(returnedBlock.id))),
+          bestHeaderId = Some {
+            case 6 => Success(Some(canonicalAncestor))
+            case 7 => Success(Some(returnedBlock.id))
+            case _ => Success(None)
+          }) { (actor, scanner, client) =>
+          client.send(actor, ChangedState(stateReader))
+          scanner.expectNoMessage(300.millis)
+          client.awaitAssert({
+            client.send(actor, GetWalletStatus)
+            client.expectMsgType[WalletStatus].error.get.toLowerCase should include(expectedError)
+          }, 5.seconds, 100.millis)
+          client.send(actor, ReadBalances(ChainStatus.OnChain))
+          client.expectMsgType[Status.Failure]
+        }
+
+        val registry = WalletRegistry(ordinarySettings.copy(directory = directory.getAbsolutePath)).get
+        try {
+          registry.lastVersionId shouldBe Some(canonicalAncestor)
+          registry.fetchDigest().height shouldBe 6
+        } finally registry.close()
+      }
+    }
+  }
+
+  property("reject a snapshot catch-up block with a foreign parent before registry mutation") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-catchup-parent-mutant-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(79: Byte))
+    val foreignParent = ModifierId @@ Algos.encode(Array.fill(32)(80: Byte))
+    val status = snapshotStatus(
+      snapshotHeight = 0,
+      snapshotBlockId = snapshotId,
+      manifestDepth = ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 1,
+      totalSubtrees = 1,
+      completed = true)
+    val source = UtxoSnapshotSourceIdentity(
+      status.snapshotHeight, status.snapshotBlockId, status.manifestDepth, status.totalSubtrees)
+    val blockBase = invalidErgoFullBlockGen.sample.get
+    val foreignBlock = blockBase.copy(
+      header = blockBase.header.copy(height = 1, parentId = foreignParent))
+    val statusRemovals = new AtomicInteger(0)
+
+    seedWalletRegistryVersions(bootstrapSettings, directory, Seq(snapshotId -> 0))
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(bestFullBlockResult = {
+        case 1 => Some(foreignBlock)
+        case _ => None
+      }),
+      sourceIdentity = Some(_ => Success(source)),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 1),
+      catchUpReady = Some(_ => true),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("parent")
+        error should include(snapshotId.toString.toLowerCase)
+      }, 5.seconds, 100.millis)
+      statusRemovals.get() shouldBe 0
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    val registry = WalletRegistry(bootstrapSettings.copy(directory = directory.getAbsolutePath)).get
+    try {
+      registry.lastVersionId shouldBe Some(snapshotId)
+      registry.fetchDigest().height shouldBe 0
+    } finally registry.close()
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+    }
+  }
+
+  property("quarantine completed finalization when its first catch-up block is unavailable") {
     val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
     val directory = Files.createTempDirectory("wallet-snapshot-catchup-recovery-").toFile
@@ -2500,33 +4145,1820 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       })) { (actor, scanner, client) =>
       client.awaitAssert({
         client.send(actor, GetWalletStatus)
-        client.expectMsgType[WalletStatus].error.get should include("unavailable")
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("pruning horizon")
+        error should include("resync from genesis")
       }, 5.seconds, 100.millis)
       catchUpScans.get() shouldBe 0
       statusRemovals.get() shouldBe 0
       sourceRemovals.get() shouldBe 0
+      val abort = scanner.expectMsgType[AbortUtxoSnapshotScan](5.seconds)
+      abort.run.hasSnapshot(status.snapshotHeight, status.snapshotBlockId) shouldBe true
 
       catchUpAvailable.set(true)
-      client.send(actor, ChangedState(stateReader))
-      client.send(actor, ChangedState(stateReader))
+      actor.tell(ChangedState(stateReader), ActorRef.noSender)
+      actor.tell(ChangedState(stateReader), ActorRef.noSender)
 
       client.awaitAssert({
-        catchUpScans.get() shouldBe 1
+        catchUpScans.get() shouldBe 0
+        statusRemovals.get() shouldBe 0
+        sourceRemovals.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should include("pruning horizon")
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      scanner.expectNoMessage(300.millis)
+    }
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
+    }
+  }
+
+  property("restart blocked snapshot catch-up in producer order using its retained canonical tip") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-blocked-reorg-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(74: Byte))
+    val oldHeightOneBase = invalidErgoFullBlockGen.sample.get
+    val oldHeightOneBlock = oldHeightOneBase.copy(
+      header = oldHeightOneBase.header.copy(height = 1, parentId = snapshotId))
+    val oldHeightOneId = oldHeightOneBlock.id
+    val oldHeightTwoId = ModifierId @@ Algos.encode(Array.fill(32)(126: Byte))
+    val newHeightOneBase = invalidErgoFullBlockGen.sample.get
+    val newHeightOneBlock = newHeightOneBase.copy(
+      header = newHeightOneBase.header.copy(height = 1, parentId = snapshotId))
+    val newHeightOneId = newHeightOneBlock.id
+    val newHeightTwoBase = invalidErgoFullBlockGen.sample.get
+    val newHeightTwoBlock = newHeightTwoBase.copy(
+      header = newHeightTwoBase.header.copy(height = 2, parentId = newHeightOneId))
+    val newHeightTwoId = newHeightTwoBlock.id
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight = 0,
+      snapshotBlockId = snapshotId,
+      manifestDepth = ManifestSerializer.MainnetManifestDepth.toInt,
+      partCount = 1)
+    val newFork = new AtomicBoolean(false)
+    val newHeightTwoReady = new AtomicBoolean(false)
+    val stateTipUpdated = new AtomicBoolean(false)
+    val actorRef = new AtomicReference[ActorRef]()
+    val clientRef = new AtomicReference[ActorRef]()
+    val readinessChecks = new AtomicInteger(0)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+    val rollbackAttempts = new AtomicInteger(0)
+    val rollbackIntentWrites = new AtomicInteger(0)
+    val catchUpCalls = scala.collection.mutable.ArrayBuffer.empty[(String, Int)]
+    def observedCatchUpCalls: Seq[(String, Int)] =
+      catchUpCalls.synchronized(catchUpCalls.toSeq)
+    def updateAt(state: ErgoWalletState, blockId: ModifierId, height: Int): Try[ErgoWalletState] =
+      state.registry.updateOnBlock(
+        ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+        blockId,
+        height).map(_ => state)
+    val currentStateContext = snapshotRecoveryStateReader(
+      bootstrapSettings,
+      newHeightTwoId,
+      versionId = Some(newHeightTwoId),
+      stateHeight = 2).stateContext
+    val currentState = Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" => currentStateContext
+            case "toString" => "blocked-catch-up-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(
+        heightLookup = id => if (id == snapshotId) Some(0) else None,
+        bestFullBlockResult = {
+          case 1 if !newFork.get() => Some(oldHeightOneBlock)
+          case _ => None
+        },
+        minFullBlockAvailable = 2),
+      sourceIdentity = Some(_ => Success(source)),
+      currentStateTip = Some(_ =>
+        if (stateTipUpdated.get()) Success(2 -> Some(newHeightTwoId))
+        else Success(2 -> Some(oldHeightTwoId))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(if (newFork.get()) newHeightOneId else oldHeightOneId))
+        case 2 => Success(Some(if (newFork.get()) newHeightTwoId else oldHeightTwoId))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 2),
+      catchUpReady = Some(_ => {
+        if (readinessChecks.incrementAndGet() == 3) {
+          actorRef.get().tell(ReadBalances(ChainStatus.OnChain), clientRef.get())
+        }
+        true
+      }),
+      catchUpScan = Some((state, height) => {
+        val fork = if (newFork.get()) "new" else "old"
+        catchUpCalls.synchronized(catchUpCalls += fork -> height)
+        (fork, height) match {
+          case ("old", 1) => updateAt(state, oldHeightOneId, height)
+          case ("old", 2) => Failure(new IllegalStateException("old fork tip unavailable"))
+          case ("new", 1) => updateAt(state, newHeightOneId, height)
+          case ("new", 2) if newHeightTwoReady.get() => updateAt(state, newHeightTwoId, height)
+          case ("new", 2) => Failure(new IllegalStateException("new fork tip unavailable"))
+          case other => Failure(new IllegalStateException(s"unexpected catch-up request $other"))
+        }
+      }),
+      registryRollback = Some((state, version) => {
+        rollbackAttempts.incrementAndGet()
+        state.registry.rollback(version)
+      }),
+      rollbackIntentWrite = Some((state, intent) => {
+        rollbackIntentWrites.incrementAndGet()
+        state.storage.writeWalletRollbackIntent(intent)
+      }),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      actorRef.set(actor)
+      clientRef.set(client.ref)
+      val oldRun = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        oldRun, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        oldRun, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      val completedStatus = client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.awaitAssert({
+        observedCatchUpCalls shouldBe Seq("old" -> 1, "old" -> 2)
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get should include("old fork tip unavailable")
+      }, 5.seconds, 100.millis)
+      statusRemovals.get() shouldBe 0
+      sourceRemovals.get() shouldBe 0
+      client.send(actor, GetWalletStatus)
+      val oldForkFailure = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      oldForkFailure should not include "pruning"
+      oldForkFailure should not include "re-bootstrap"
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      client.send(actor, DeriveNextKey)
+      client.expectMsgType[DeriveNextKeyResult].result.isFailure shouldBe true
+
+      newFork.set(true)
+      client.send(actor, Rollback(idToVersion(snapshotId)))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        rollbackIntentWrites.get() shouldBe 0
+        statusRemovals.get() shouldBe 0
+        sourceRemovals.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val preparation = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        preparation should include("preparation")
+        preparation should include("waiting")
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+
+      client.send(actor, ScanOnChain(newHeightOneBlock))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        rollbackIntentWrites.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val preparation = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        preparation should include("preparation")
+        preparation should include("waiting")
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+
+      client.send(actor, ScanOnChain(newHeightTwoBlock))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        rollbackIntentWrites.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val preparation = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        preparation should include("preparation")
+        preparation should include("waiting")
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+
+      stateTipUpdated.set(true)
+      client.send(actor, ChangedState(currentState))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 1
+        rollbackIntentWrites.get() shouldBe 1
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should include("pending")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      scanner.expectMsg(AbortUtxoSnapshotScan(oldRun))
+      client.awaitAssert({
+        observedCatchUpCalls shouldBe
+          Seq("old" -> 1, "old" -> 2, "new" -> 1, "new" -> 2)
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get should include("new fork tip unavailable")
+      }, 5.seconds, 100.millis)
+      client.send(actor, GetWalletStatus)
+      val newForkFailure = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      newForkFailure should not include "pruning"
+      newForkFailure should not include "re-bootstrap"
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      client.send(actor, DeriveNextKey)
+      client.expectMsgType[DeriveNextKeyResult].result.isFailure shouldBe true
+
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        oldRun, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].isFailure shouldBe true
+
+      newHeightTwoReady.set(true)
+      client.send(actor, ChangedState(currentState))
+      client.expectMsgType[Status.Failure]
+      client.send(actor, ContinueUtxoSnapshotCatchUp(oldRun, blockHeight = 1))
+      client.send(actor, FinalizeUtxoSnapshotScan(oldRun, completedStatus, cleanupAttempt = 1))
+      client.awaitAssert({
+        observedCatchUpCalls shouldBe
+          Seq("old" -> 1, "old" -> 2, "new" -> 1, "new" -> 2, "new" -> 2)
         statusRemovals.get() shouldBe 1
         sourceRemovals.get() shouldBe 1
         client.send(actor, GetWalletStatus)
         client.expectMsgType[WalletStatus].error shouldBe None
       }, 5.seconds, 100.millis)
       client.send(actor, ReadBalances(ChainStatus.OnChain))
-      client.expectMsgType[WalletDigest]
+      client.expectMsgType[WalletDigest].height shouldBe 2
+      readinessChecks.get() shouldBe 3
       scanner.expectNoMessage(300.millis)
     }
+
     withSeededWalletStorage(bootstrapSettings, directory) { storage =>
       storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
     }
   }
 
-  property("keep the wallet usable when source cleanup fails after completed status removal") {
+  property("quarantine an incomplete producer-ordered snapshot rollback at batch close") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory =
+      Files.createTempDirectory("wallet-snapshot-rollback-pruned-preflight-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(127: Byte))
+    val oldHeightOneBase = invalidErgoFullBlockGen.sample.get
+    val oldHeightOneBlock = oldHeightOneBase.copy(
+      header = oldHeightOneBase.header.copy(height = 1, parentId = snapshotId))
+    val newHeightOneBase = invalidErgoFullBlockGen.sample.get
+    val newHeightOneBlock = newHeightOneBase.copy(
+      header = newHeightOneBase.header.copy(height = 1, parentId = snapshotId))
+    val newHeightTwoBase = invalidErgoFullBlockGen.sample.get
+    val newHeightTwoBlock = newHeightTwoBase.copy(
+      header = newHeightTwoBase.header.copy(height = 2, parentId = newHeightOneBlock.id))
+    val reorgStarted = new AtomicBoolean(false)
+    val rollbackAttempts = new AtomicInteger(0)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+    val catchUpCalls = scala.collection.mutable.ArrayBuffer.empty[Int]
+
+    def observedCatchUpCalls: Seq[Int] =
+      catchUpCalls.synchronized(catchUpCalls.toSeq)
+
+    def updateAt(
+      state: ErgoWalletState,
+      blockId: ModifierId,
+      height: Int): Try[ErgoWalletState] =
+      state.registry
+        .updateOnBlock(
+          ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+          blockId,
+          height)
+        .map(_ => state)
+
+    val currentState = snapshotRecoveryStateReader(
+      bootstrapSettings,
+      newHeightTwoBlock.id,
+      versionId = Some(newHeightTwoBlock.id),
+      stateHeight = 2)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(
+        heightLookup = {
+          case `snapshotId` => Some(0)
+          case _ => None
+        },
+        bestFullBlockResult = {
+          case 1 if !reorgStarted.get() => Some(oldHeightOneBlock)
+          case _ => None
+        },
+        minFullBlockAvailable = 3),
+      currentStateTip = Some(_ => Success(2 -> Some(newHeightTwoBlock.id))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(newHeightOneBlock.id))
+        case 2 => Success(Some(newHeightTwoBlock.id))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 2),
+      catchUpReady = Some(_ => true),
+      catchUpScan = Some((state, height) => {
+        catchUpCalls.synchronized(catchUpCalls += height)
+        height match {
+          case 1 => updateAt(state, oldHeightOneBlock.id, height)
+          case 2 => Failure(new IllegalStateException("injected old-fork tip failure"))
+          case other => Failure(new IllegalStateException(s"unexpected catch-up height $other"))
+        }
+      }),
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException(
+          "registry rollback must not run when required evidence was pruned"))
+      }),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+
+      client.awaitAssert({
+        observedCatchUpCalls shouldBe Seq(1, 2)
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get should include("injected old-fork tip failure")
+      }, 5.seconds, 100.millis)
+
+      reorgStarted.set(true)
+      client.send(actor, Rollback(idToVersion(snapshotId)))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        statusRemovals.get() shouldBe 0
+        sourceRemovals.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("preparation is waiting")
+        error should not include "pruning horizon"
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+
+      client.send(actor, ScanOnChain(newHeightOneBlock))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should
+          include("preparation is waiting")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, ChangedState(currentState))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        observedCatchUpCalls shouldBe Seq(1, 2)
+        statusRemovals.get() shouldBe 0
+        sourceRemovals.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should include("pruning horizon")
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      scanner.expectNoMessage(300.millis)
+    }
+
+    val registry =
+      WalletRegistry(bootstrapSettings.copy(directory = directory.getAbsolutePath)).get
+    try {
+      registry.lastVersionId shouldBe Some(oldHeightOneBlock.id)
+      registry.fetchDigest().height shouldBe 1
+    } finally registry.close()
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+      storage.readUtxoSnapshotScanStatusTry().get.map(_.completed) shouldBe Some(true)
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("reconcile a completed snapshot rollback whose branch point is ahead of the wallet") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory =
+      Files.createTempDirectory("wallet-snapshot-rollback-ahead-of-wallet-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(123: Byte))
+    val branchBase = invalidErgoFullBlockGen.sample.get
+    val branchBlock = branchBase.copy(
+      header = branchBase.header.copy(height = 1, parentId = snapshotId))
+    val tipBase = invalidErgoFullBlockGen.sample.get
+    val tipBlock = tipBase.copy(
+      header = tipBase.header.copy(height = 2, parentId = branchBlock.id))
+    val retryCatchUp = new AtomicBoolean(false)
+    val rollbackAttempts = new AtomicInteger(0)
+    val catchUpCalls = scala.collection.mutable.ArrayBuffer.empty[Int]
+
+    def observedCatchUpCalls: Seq[Int] =
+      catchUpCalls.synchronized(catchUpCalls.toSeq)
+
+    def updateAt(
+      state: ErgoWalletState,
+      blockId: ModifierId,
+      height: Int): Try[ErgoWalletState] =
+      state.registry
+        .updateOnBlock(
+          ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+          blockId,
+          height)
+        .map(_ => state)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(
+        heightLookup = {
+          case `snapshotId` => Some(0)
+          case id if id == branchBlock.id => Some(1)
+          case id if id == tipBlock.id => Some(2)
+          case _ => None
+        },
+        bestFullBlockResult = {
+          case 1 => Some(branchBlock)
+          case 2 => Some(tipBlock)
+          case _ => None
+        }),
+      currentStateTip = Some(_ => Success(2 -> Some(tipBlock.id))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(branchBlock.id))
+        case 2 => Success(Some(tipBlock.id))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 2),
+      catchUpScan = Some((state, height) => {
+        catchUpCalls.synchronized(catchUpCalls += height)
+        height match {
+          case 1 if !retryCatchUp.get() =>
+            Failure(new IllegalStateException("injected initial catch-up failure"))
+          case 1 =>
+            updateAt(state, branchBlock.id, height)
+          case 2 =>
+            updateAt(state, tipBlock.id, height)
+          case other =>
+            Failure(new IllegalStateException(s"unexpected catch-up height $other"))
+        }
+      }),
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException(
+          "registry rollback must not run while the wallet is below the branch point"))
+      })) { (actor, scanner, client) =>
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+
+      client.awaitAssert({
+        observedCatchUpCalls shouldBe Seq(1)
+        client.send(actor, GetWalletStatus)
+        client
+          .expectMsgType[WalletStatus]
+          .error
+          .get should include("injected initial catch-up failure")
+      }, 5.seconds, 100.millis)
+
+      retryCatchUp.set(true)
+      client.send(actor, Rollback(idToVersion(branchBlock.id)))
+
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        client
+          .expectMsgType[WalletStatus]
+          .error
+          .get
+          .toLowerCase should include("pending")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      scanner.expectMsg(5.seconds, AbortUtxoSnapshotScan(run))
+
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        observedCatchUpCalls shouldBe Seq(1, 1, 2)
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+        client.send(actor, ReadBalances(ChainStatus.OnChain))
+        client.expectMsgType[WalletDigest].height shouldBe 2
+      }, 5.seconds, 100.millis)
+    }
+
+    val registry =
+      WalletRegistry(bootstrapSettings.copy(directory = directory.getAbsolutePath)).get
+    try {
+      registry.lastVersionId shouldBe Some(tipBlock.id)
+      registry.fetchDigest().height shouldBe 2
+    } finally registry.close()
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("reject a producer-ordered non-canonical retained block during snapshot rollback preflight") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory =
+      Files.createTempDirectory("wallet-snapshot-rollback-retained-noncanonical-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(124: Byte))
+    val blockOneBase = invalidErgoFullBlockGen.sample.get
+    val blockOne = blockOneBase.copy(
+      header = blockOneBase.header.copy(height = 1, parentId = snapshotId))
+    val retainedBase = invalidErgoFullBlockGen.sample.get
+    val retainedBlock = retainedBase.copy(
+      header = retainedBase.header.copy(height = 2, parentId = blockOne.id))
+    val canonicalSiblingId =
+      ModifierId @@ Algos.encode(Array.fill(32)(125: Byte))
+    val blockThreeBase = invalidErgoFullBlockGen.sample.get
+    val blockThree = blockThreeBase.copy(
+      header = blockThreeBase.header.copy(height = 3, parentId = retainedBlock.id))
+    val rollbackAttempts = new AtomicInteger(0)
+    val catchUpCalls = scala.collection.mutable.ArrayBuffer.empty[Int]
+
+    def observedCatchUpCalls: Seq[Int] =
+      catchUpCalls.synchronized(catchUpCalls.toSeq)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(
+        heightLookup = {
+          case `snapshotId` => Some(0)
+          case id if id == blockOne.id => Some(1)
+          case _ => None
+        },
+        bestFullBlockResult = {
+          case 1 => Some(blockOne)
+          case 3 => Some(blockThree)
+          case _ => None
+        },
+        minFullBlockAvailable = 0),
+      currentStateTip = Some(_ => Success(3 -> Some(blockThree.id))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(blockOne.id))
+        case 2 => Success(Some(canonicalSiblingId))
+        case 3 => Success(Some(blockThree.id))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 3),
+      catchUpScan = Some((state, height) => {
+        catchUpCalls.synchronized(catchUpCalls += height)
+        height match {
+          case 1 =>
+            state.registry
+              .updateOnBlock(
+                ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+                blockOne.id,
+                height)
+              .map(_ => state)
+          case 2 =>
+            Failure(new IllegalStateException("injected intermediate catch-up failure"))
+          case other =>
+            Failure(new IllegalStateException(s"unexpected catch-up height $other"))
+        }
+      }),
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException(
+          "registry rollback must not run for a non-canonical retained block"))
+      })) { (actor, scanner, client) =>
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+
+      client.awaitAssert({
+        observedCatchUpCalls shouldBe Seq(1, 2)
+        client.send(actor, GetWalletStatus)
+        client
+          .expectMsgType[WalletStatus]
+          .error
+          .get should include("injected intermediate catch-up failure")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, Rollback(idToVersion(snapshotId)))
+
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val preparation = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        preparation should include("preparation")
+        preparation should include("waiting")
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+
+      client.send(actor, Rollback(idToVersion(blockOne.id)))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val preparation = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        preparation should include("preparation")
+        preparation should include("waiting")
+        preparation should not include "superseded"
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+
+      client.send(actor, ScanOnChain(retainedBlock))
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("retained wallet catch-up block")
+        error should include("not canonical")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      scanner.expectNoMessage(300.millis)
+    }
+
+    val registry =
+      WalletRegistry(bootstrapSettings.copy(directory = directory.getAbsolutePath)).get
+    try {
+      registry.lastVersionId shouldBe Some(blockOne.id)
+      registry.fetchDigest().height shouldBe 1
+    } finally registry.close()
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+      storage.readUtxoSnapshotScanStatusTry().get.map(_.completed) shouldBe Some(true)
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
+  property("wait for producer-ordered evidence before an ordinary wallet rollback") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-ordinary-rollback-producer-order-").toFile
+    val staleTipId = ModifierId @@ Algos.encode(Array.fill(32)(126: Byte))
+    val forkBase = invalidErgoFullBlockGen.sample.get
+    val forkBlock = forkBase.copy(
+      header = forkBase.header.copy(height = 1, parentId = PreGenesisHeader.id))
+    val currentStateTip = new AtomicReference[(Int, Option[ModifierId])](
+      1 -> Some(staleTipId))
+    val bestHeaderTip = new AtomicReference[ModifierId](staleTipId)
+    val rollbackCompleted = new AtomicBoolean(false)
+    val rollbackAttempts = new AtomicInteger(0)
+    val forkStateContext = snapshotRecoveryStateReader(
+      ordinarySettings,
+      forkBlock.id,
+      versionId = Some(forkBlock.id),
+      stateHeight = 1).stateContext
+    val forkState = Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" => forkStateContext
+            case "toString" => "ordinary-rollback-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(
+              s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(minFullBlockAvailable = 0),
+      registryTip = Some(_ => Success(
+        if (rollbackCompleted.get()) 0 -> Some(PreGenesisHeader.id)
+        else 1 -> Some(staleTipId))),
+      currentStateTip = Some(_ => Success(currentStateTip.get())),
+      bestHeaderId = Some {
+        case 1 => Success(Some(bestHeaderTip.get()))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, version) => {
+        version shouldBe idToVersion(PreGenesisHeader.id)
+        rollbackAttempts.incrementAndGet()
+        rollbackCompleted.set(true)
+        Success(())
+    })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      bestHeaderTip.set(forkBlock.id)
+      client.send(actor, Rollback(idToVersion(PreGenesisHeader.id)))
+
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 0
+        client.send(actor, GetWalletStatus)
+        val preparation = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        preparation should include("preparation")
+        preparation should include("waiting")
+        preparation should not include "restart"
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, ScanOnChain(forkBlock))
+      rollbackAttempts.get() shouldBe 0
+      currentStateTip.set(1 -> Some(forkBlock.id))
+      client.send(actor, ChangedState(forkState))
+
+      client.awaitAssert({
+        rollbackAttempts.get() shouldBe 1
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should
+          include("pending a fresh mempool")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+  }
+
+  property("quarantine blocked snapshot catch-up when registry rollback fails") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-blocked-rollback-failure-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(78: Byte))
+    val oldHeightOneId = ModifierId @@ Algos.encode(Array.fill(32)(79: Byte))
+    val rollbackAttempts = new AtomicInteger(0)
+    val catchUpCalls = new AtomicInteger(0)
+    var completedStatus: Option[UtxoSnapshotScanStatus] = None
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(heightLookup = id => if (id == snapshotId) Some(0) else None),
+      currentStateTip = Some(_ => Success(0 -> Some(snapshotId))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 2),
+      catchUpReady = Some(_ => true),
+      catchUpScan = Some((state, height) => {
+        catchUpCalls.incrementAndGet()
+        if (height == 1) {
+          state.registry.updateOnBlock(
+            ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+            oldHeightOneId,
+            height).map(_ => state)
+        } else {
+          Failure(new IllegalStateException("catch-up blocked before rollback"))
+        }
+      }),
+      registryRollback = Some((_, version) => {
+        version shouldBe idToVersion(snapshotId)
+        rollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException("injected registry rollback failure"))
+      })) { (actor, scanner, client) =>
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      completedStatus = Some(client.expectMsgType[Try[UtxoSnapshotScanStatus]].get)
+
+      client.awaitAssert({
+        catchUpCalls.get() shouldBe 2
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get should include("catch-up blocked before rollback")
+      }, 5.seconds, 100.millis)
+
+      client.send(actor, Rollback(idToVersion(snapshotId)))
+      scanner.expectMsg(AbortUtxoSnapshotScan(run))
+      rollbackAttempts.get() shouldBe 1
+      client.send(actor, GetWalletStatus)
+      val quarantineError = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      quarantineError should include("quarantine")
+      quarantineError should include("injected registry rollback failure")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe completedStatus
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+      storage.readWalletRollbackIntentTry().get shouldBe
+        Some(WalletRollbackIntent(snapshotId, expectedHeight = 0))
+    }
+  }
+
+  property("fail closed when ordinary rollback succeeds but off-chain reconciliation fails") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-rollback-reconciliation-failure-").toFile
+    val registryTip = ModifierId @@ Algos.encode(Array.fill(32)(116: Byte))
+    seedNonemptyWalletRegistry(ordinarySettings, directory, registryTip)
+    val failNextReconciliation = new AtomicBoolean(false)
+    val reconciliationAttempts = new AtomicInteger(0)
+    val currentStateTip = new AtomicReference[(Int, Option[ModifierId])](
+      7 -> Some(registryTip))
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(),
+      currentStateTip = Some(_ => Success(currentStateTip.get())),
+      bestHeaderId = Some {
+        case 7 => Success(Some(registryTip))
+        case _ => Success(None)
+      },
+      offChainReconciliation = Some((state, _, fallback) => {
+        if (failNextReconciliation.compareAndSet(true, false)) {
+          reconciliationAttempts.incrementAndGet()
+          state.registry.lastVersionId shouldBe Some(PreGenesisHeader.id)
+          throw new IllegalStateException("injected post-rollback off-chain reconciliation failure")
+        }
+        fallback()
+    })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      currentStateTip.set(0 -> None)
+      client.send(actor, ChangedState(genericStateReader(
+        ErgoStateContext.empty(ordinarySettings.chainSettings, parameters))))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      failNextReconciliation.set(true)
+      client.send(actor, Rollback(idToVersion(PreGenesisHeader.id)))
+      client.send(actor, GetWalletStatus)
+      val waitingError = client.expectMsgType[WalletStatus].error.get
+      reconciliationAttempts.get() shouldBe 0
+      waitingError.toLowerCase should include("pending")
+
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      client.send(actor, DeriveNextKey)
+      client.expectMsgType[DeriveNextKeyResult].result.isFailure shouldBe true
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.send(actor, GetWalletStatus)
+      val rollbackError = client.expectMsgType[WalletStatus].error.get
+      reconciliationAttempts.get() shouldBe 1
+      rollbackError should include("injected post-rollback off-chain reconciliation failure")
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[Status.Failure]
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      val confirmed = client.expectMsgType[WalletDigest]
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[WalletDigest] shouldBe confirmed
+    }
+
+    val reopened = WalletRegistry(ordinarySettings.copy(directory = directory.getAbsolutePath)).get
+    try reopened.lastVersionId shouldBe Some(PreGenesisHeader.id)
+    finally reopened.close()
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+  }
+
+  property("resume a durable rollback after restart without rolling the registry back twice") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-durable-rollback-restart-").toFile
+    val originalTip = ModifierId @@ Algos.encode(Array.fill(32)(117: Byte))
+    val expectedIntent = WalletRollbackIntent(PreGenesisHeader.id, expectedHeight = 0)
+    val firstRollbackAttempts = new AtomicInteger(0)
+    val currentStateTip = new AtomicReference[(Int, Option[ModifierId])](
+      7 -> Some(originalTip))
+
+    seedNonemptyWalletRegistry(ordinarySettings, directory, originalTip)
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(),
+      currentStateTip = Some(_ => Success(currentStateTip.get())),
+      bestHeaderId = Some {
+        case 7 => Success(Some(originalTip))
+        case _ => Success(None)
+      },
+      registryRollback = Some((state, version) => {
+        state.storage.readWalletRollbackIntentTry().get shouldBe Some(expectedIntent)
+        firstRollbackAttempts.incrementAndGet()
+        state.registry.rollback(version)
+    })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      currentStateTip.set(0 -> None)
+      client.send(actor, ChangedState(genericStateReader(
+        ErgoStateContext.empty(ordinarySettings.chainSettings, parameters))))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      client.send(actor, Rollback(idToVersion(PreGenesisHeader.id)))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get.toLowerCase should include("pending")
+      firstRollbackAttempts.get() shouldBe 1
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe Some(expectedIntent)
+    }
+
+    val restartedRollbackAttempts = new AtomicInteger(0)
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(),
+      registryRollback = Some((_, _) => {
+        restartedRollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException("restart must not repeat an exact rollback"))
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+        restartedRollbackAttempts.get() shouldBe 0
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest]
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+  }
+
+  property("recover a completed durable rollback whose target became non-canonical while stopped") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-stale-rollback-intent-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(121: Byte))
+    val staleTarget = ModifierId @@ Algos.encode(Array.fill(32)(122: Byte))
+    val currentBestBase = invalidErgoFullBlockGen.sample.get
+    val currentBestBlock = currentBestBase.copy(
+      header = currentBestBase.header.copy(height = 7, parentId = canonicalAncestor))
+    val currentBest = currentBestBlock.id
+    val staleIntent = WalletRollbackIntent(staleTarget, expectedHeight = 7)
+    val replacementIntent = WalletRollbackIntent(canonicalAncestor, expectedHeight = 6)
+    val rollbackAttempts = new AtomicInteger(0)
+    val reconciliationAttempts = new AtomicInteger(0)
+    val catchUpHeight = new AtomicInteger(-1)
+
+    seedWalletRegistryVersions(
+      ordinarySettings,
+      directory,
+      Seq(canonicalAncestor -> 6, staleTarget -> 7))
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.writeWalletRollbackIntent(staleIntent).get
+    }
+
+    val history = strictHistoryReader(
+      heightLookup = {
+        case `canonicalAncestor` => Some(6)
+        case `staleTarget` => Some(7)
+        case _ => None
+      },
+      bestFullBlockRead = catchUpHeight.set,
+      bestFullBlockResult = {
+        case 7 => Some(currentBestBlock)
+        case _ => None
+      })
+    val catchUpStateContext = snapshotRecoveryStateReader(
+      ordinarySettings, currentBest, versionId = Some(currentBest), stateHeight = 7).stateContext
+    val catchUpStateReader = Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" => catchUpStateContext
+            case "toString" => "rollback-catchup-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      history,
+      currentStateTip = Some(_ => Success(7 -> Some(currentBest))),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(currentBest))
+        case _ => Success(None)
+      },
+      registryRollback = Some((state, version) => {
+        version shouldBe idToVersion(canonicalAncestor)
+        state.storage.readWalletRollbackIntentTry().get shouldBe Some(replacementIntent)
+        rollbackAttempts.incrementAndGet()
+        state.registry.rollback(version)
+      }),
+      offChainReconciliation = Some((state, _, fallback) => {
+        val expectedTip = reconciliationAttempts.getAndIncrement() match {
+          case 0 => canonicalAncestor
+          case 1 => currentBest
+          case attempt => fail(s"Unexpected rollback reconciliation attempt $attempt")
+        }
+        state.registry.lastVersionId shouldBe Some(expectedTip)
+        fallback()
+      }),
+      startupStateReader = Some(catchUpStateReader)) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+        rollbackAttempts.get() shouldBe 1
+        reconciliationAttempts.get() shouldBe 2
+        catchUpHeight.get() shouldBe 7
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest].height shouldBe 7
+    }
+
+    val reopened = WalletRegistry(ordinarySettings.copy(directory = directory.getAbsolutePath)).get
+    try reopened.lastVersionId shouldBe Some(currentBest)
+    finally reopened.close()
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+  }
+
+  property("recover a same-height orphan wallet tip without a durable intent after restart") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-no-intent-orphan-restart-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(81: Byte))
+    val canonicalTipBase = invalidErgoFullBlockGen.sample.get
+    val canonicalTipBlock = canonicalTipBase.copy(
+      header = canonicalTipBase.header.copy(height = 7, parentId = canonicalAncestor))
+    val canonicalTip = canonicalTipBlock.id
+    val orphanHeader = canonicalTipBlock.header.copy(
+      timestamp = canonicalTipBlock.header.timestamp + 1L)
+    val orphanTip = orphanHeader.id
+    val staleIntent = WalletRollbackIntent(orphanTip, expectedHeight = 7)
+    val replacementIntent = WalletRollbackIntent(canonicalAncestor, expectedHeight = 6)
+    val rollbackAttempts = new AtomicInteger(0)
+    val restartedRollbackAttempts = new AtomicInteger(0)
+
+    seedWalletRegistryVersions(
+      ordinarySettings,
+      directory,
+      Seq(canonicalAncestor -> 6, orphanTip -> 7))
+    orphanTip should not be canonicalTip
+    val orphanStateContext = new ErgoStateContext(
+      Seq(orphanHeader),
+      None,
+      startDigest,
+      parameters,
+      validationSettingsNoIl,
+      VotingData.empty)(ordinarySettings.chainSettings)
+    val canonicalStateContext = new ErgoStateContext(
+      Seq(canonicalTipBlock.header),
+      None,
+      startDigest,
+      parameters,
+      validationSettingsNoIl,
+      VotingData.empty)(ordinarySettings.chainSettings)
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.updateStateContext(orphanStateContext).get
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+
+    val history = strictHistoryReader(
+      heightLookup = {
+        case `canonicalAncestor` => Some(6)
+        case `orphanTip` => Some(7)
+        case `canonicalTip` => Some(7)
+        case _ => None
+      },
+      bestFullBlockResult = {
+        case 7 => Some(canonicalTipBlock)
+        case _ => None
+      })
+    val canonicalStateReader = Proxy.newProxyInstance(
+      classOf[ErgoStateReader].getClassLoader,
+      Array(classOf[ErgoStateReader]),
+      new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "stateContext" => canonicalStateContext
+            case "toString" => "no-intent-canonical-state-reader"
+            case "hashCode" => Int.box(System.identityHashCode(proxy))
+            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
+            case other => throw new UnsupportedOperationException(
+              s"Unexpected state read: $other")
+          }
+      }).asInstanceOf[ErgoStateReader]
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      history,
+      startupStateReader = Some(canonicalStateReader),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(canonicalTip))
+        case _ => Success(None)
+      },
+      registryRollback = Some((state, version) => {
+        version shouldBe idToVersion(canonicalAncestor)
+        state.storage.readWalletRollbackIntentTry().get shouldBe Some(replacementIntent)
+        rollbackAttempts.incrementAndGet()
+        state.registry.rollback(version)
+      }),
+      rollbackIntentWrite = Some((state, intent) => {
+        intent shouldBe staleIntent
+        state.storage.writeWalletRollbackIntent(intent)
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+        rollbackAttempts.get() shouldBe 1
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest].height shouldBe 7
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      history,
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(canonicalTip))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, _) => {
+        restartedRollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException("restart must not repeat the recovered rollback"))
+      }),
+      startupStateReader = Some(canonicalStateReader)) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+        restartedRollbackAttempts.get() shouldBe 0
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest].height shouldBe 7
+    }
+
+    val reopened = WalletRegistry(ordinarySettings.copy(directory = directory.getAbsolutePath)).get
+    try reopened.lastVersionId shouldBe Some(canonicalTip)
+    finally reopened.close()
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+  }
+
+  property("retain a stale durable rollback intent when its catch-up block was pruned") {
+    val prunedSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-stale-rollback-pruned-catch-up-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(84: Byte))
+    val staleTarget = ModifierId @@ Algos.encode(Array.fill(32)(85: Byte))
+    val currentBest = ModifierId @@ Algos.encode(Array.fill(32)(86: Byte))
+    val staleIntent = WalletRollbackIntent(staleTarget, expectedHeight = 7)
+    val rollbackAttempts = new AtomicInteger(0)
+    val catchUpChecks = new AtomicInteger(0)
+    val stateContext = snapshotRecoveryStateReader(
+      prunedSettings, currentBest, versionId = Some(currentBest), stateHeight = 7).stateContext
+
+    seedWalletRegistryVersions(
+      prunedSettings,
+      directory,
+      Seq(canonicalAncestor -> 6, staleTarget -> 7))
+    withSeededWalletStorage(prunedSettings, directory) { storage =>
+      storage.writeWalletRollbackIntent(staleIntent).get
+      storage.updateStateContext(stateContext).get
+    }
+    val intentBytes = readWalletStorageEntry(
+      prunedSettings, directory, WalletStorage.WalletRollbackIntentKey).get
+
+    withProbeWalletActor(
+      prunedSettings,
+      directory,
+      strictHistoryReader(
+        heightLookup = {
+          case `canonicalAncestor` => Some(6)
+          case `staleTarget` => Some(7)
+          case _ => None
+        },
+        bestFullBlockRead = _ => catchUpChecks.incrementAndGet()),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(currentBest))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("pruning horizon")
+      error should include("resync from genesis")
+      rollbackAttempts.get() shouldBe 0
+      catchUpChecks.get() shouldBe 1
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    readWalletStorageEntry(
+      prunedSettings,
+      directory,
+      WalletStorage.WalletRollbackIntentKey).get should contain theSameElementsInOrderAs intentBytes
+  }
+
+  property("retain a stale durable rollback intent when a later multiblock catch-up height was pruned") {
+    val prunedSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-stale-rollback-multiblock-pruned-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(101: Byte))
+    val staleTarget = ModifierId @@ Algos.encode(Array.fill(32)(102: Byte))
+    val blockSevenBase = invalidErgoFullBlockGen.sample.get
+    val blockSeven = blockSevenBase.copy(
+      header = blockSevenBase.header.copy(height = 7, parentId = canonicalAncestor))
+    val blockEightBase = invalidErgoFullBlockGen.sample.get
+    val blockEight = blockEightBase.copy(
+      header = blockEightBase.header.copy(height = 8, parentId = blockSeven.id))
+    val currentBest = blockEight.id
+    val staleIntent = WalletRollbackIntent(staleTarget, expectedHeight = 7)
+    val rollbackAttempts = new AtomicInteger(0)
+    val catchUpHeights = scala.collection.mutable.ArrayBuffer.empty[Int]
+    def observedCatchUpHeights: Seq[Int] = catchUpHeights.synchronized(catchUpHeights.toSeq)
+    val stateContext = snapshotRecoveryStateReader(
+      prunedSettings, currentBest, versionId = Some(currentBest), stateHeight = 8).stateContext
+
+    seedWalletRegistryVersions(
+      prunedSettings,
+      directory,
+      Seq(canonicalAncestor -> 6, staleTarget -> 7))
+    withSeededWalletStorage(prunedSettings, directory) { storage =>
+      storage.writeWalletRollbackIntent(staleIntent).get
+      storage.updateStateContext(stateContext).get
+    }
+    val intentBytes = readWalletStorageEntry(
+      prunedSettings, directory, WalletStorage.WalletRollbackIntentKey).get
+
+    withProbeWalletActor(
+      prunedSettings,
+      directory,
+      strictHistoryReader(
+        heightLookup = {
+          case `canonicalAncestor` => Some(6)
+          case `staleTarget` => Some(7)
+          case _ => None
+        },
+        bestFullBlockRead = height => catchUpHeights.synchronized(catchUpHeights += height),
+        bestFullBlockResult = {
+          case 7 => Some(blockSeven)
+          case _ => None
+        }),
+      currentStateTip = Some(_ => Success(8 -> Some(currentBest))),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(blockSeven.id))
+        case 8 => Success(Some(currentBest))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("pruning horizon")
+      error should include("height 8")
+      rollbackAttempts.get() shouldBe 0
+      observedCatchUpHeights shouldBe Seq(7, 8)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    readWalletStorageEntry(
+      prunedSettings,
+      directory,
+      WalletStorage.WalletRollbackIntentKey).get should contain theSameElementsInOrderAs intentBytes
+    val reopened = WalletRegistry(prunedSettings.copy(directory = directory.getAbsolutePath)).get
+    try reopened.lastVersionId shouldBe Some(staleTarget)
+    finally reopened.close()
+  }
+
+  property("refuse rollback when the frozen state tip is no longer the best header") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-rollback-tip-reorg-").toFile
+    val blockOneBase = invalidErgoFullBlockGen.sample.get
+    val blockOne = blockOneBase.copy(
+      header = blockOneBase.header.copy(height = 1, parentId = PreGenesisHeader.id))
+    val competingTip = ModifierId @@ Algos.encode(Array.fill(32)(104: Byte))
+    val rollbackAttempts = new AtomicInteger(0)
+
+    seedWalletRegistryVersions(ordinarySettings, directory, Seq(blockOne.id -> 1))
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(bestFullBlockResult = {
+        case 1 => Some(blockOne)
+        case _ => None
+      }),
+      currentStateTip = Some(_ => Success(1 -> Some(blockOne.id))),
+      bestHeaderId = Some {
+        case 1 => Success(Some(competingTip))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      client.send(actor, Rollback(idToVersion(PreGenesisHeader.id)))
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("state tip")
+        error should include("best header")
+        rollbackAttempts.get() shouldBe 0
+      }, 5.seconds, 100.millis)
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+    val reopened = WalletRegistry(ordinarySettings.copy(directory = directory.getAbsolutePath)).get
+    try reopened.lastVersionId shouldBe Some(blockOne.id)
+    finally reopened.close()
+  }
+
+  property("retain a stale durable rollback intent when the registry tip is not its exact target") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-stale-rollback-intent-mismatch-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(124: Byte))
+    val staleTarget = ModifierId @@ Algos.encode(Array.fill(32)(125: Byte))
+    val currentBest = ModifierId @@ Algos.encode(Array.fill(32)(126: Byte))
+    val staleIntent = WalletRollbackIntent(staleTarget, expectedHeight = 7)
+    val rollbackAttempts = new AtomicInteger(0)
+
+    seedWalletRegistryVersions(ordinarySettings, directory, Seq(canonicalAncestor -> 6))
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.writeWalletRollbackIntent(staleIntent).get
+    }
+    val intentBytes = readWalletStorageEntry(
+      ordinarySettings, directory, WalletStorage.WalletRollbackIntentKey).get
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(heightLookup = {
+        case `canonicalAncestor` => Some(6)
+        case `staleTarget` => Some(7)
+        case _ => None
+      }),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(currentBest))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("indeterminate")
+      error should include("restart")
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      rollbackAttempts.get() shouldBe 0
+    }
+
+    readWalletStorageEntry(
+      ordinarySettings,
+      directory,
+      WalletStorage.WalletRollbackIntentKey).get should contain theSameElementsInOrderAs intentBytes
+  }
+
+  property("refuse stale retarget when target canonicality is indeterminate") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val cases = Seq[(String, Try[Option[ModifierId]], String)](
+      ("history read failure",
+        Failure(new IllegalStateException("injected best-header read failure")),
+        "injected best-header read failure"),
+      ("missing best header", Success(None), "no best header"))
+
+    cases.zipWithIndex.foreach { case ((label, targetCanonicality, expectedError), index) =>
+      val directory = Files.createTempDirectory(s"wallet-stale-retarget-indeterminate-$index-").toFile
+      val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)((90 + index).toByte))
+      val staleTarget = ModifierId @@ Algos.encode(Array.fill(32)((92 + index).toByte))
+      val staleIntent = WalletRollbackIntent(staleTarget, expectedHeight = 7)
+      val rollbackAttempts = new AtomicInteger(0)
+
+      seedWalletRegistryVersions(
+        ordinarySettings,
+        directory,
+        Seq(canonicalAncestor -> 6, staleTarget -> 7))
+      withSeededWalletStorage(ordinarySettings, directory) { storage =>
+        storage.writeWalletRollbackIntent(staleIntent).get
+      }
+      val intentBytes = readWalletStorageEntry(
+        ordinarySettings, directory, WalletStorage.WalletRollbackIntentKey).get
+
+      withProbeWalletActor(
+        ordinarySettings,
+        directory,
+        strictHistoryReader(heightLookup = {
+          case `canonicalAncestor` => Some(6)
+          case `staleTarget` => Some(7)
+          case _ => None
+        }),
+        bestHeaderId = Some {
+          case 6 => Success(Some(canonicalAncestor))
+          case 7 => targetCanonicality
+          case _ => Success(None)
+        },
+        registryRollback = Some((_, _) => {
+          rollbackAttempts.incrementAndGet()
+          Success(())
+        })) { (actor, scanner, client) =>
+        scanner.expectNoMessage(300.millis)
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        withClue(label) {
+          error should include("indeterminate")
+          error should include("restart")
+          error should include(expectedError)
+          rollbackAttempts.get() shouldBe 0
+        }
+      }
+
+      readWalletStorageEntry(
+        ordinarySettings,
+        directory,
+        WalletStorage.WalletRollbackIntentKey).get should contain theSameElementsInOrderAs intentBytes
+    }
+  }
+
+  property("resume ordinary catch-up after restart cleared a completed rollback intent") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-cleared-rollback-catchup-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(96: Byte))
+    val currentBestBase = invalidErgoFullBlockGen.sample.get
+    val currentBestBlock = currentBestBase.copy(
+      header = currentBestBase.header.copy(height = 7, parentId = canonicalAncestor))
+    val currentBest = currentBestBlock.id
+    val catchUpHeight = new AtomicInteger(-1)
+
+    seedWalletRegistryVersions(
+      ordinarySettings,
+      directory,
+      Seq(canonicalAncestor -> 6))
+    val fullStateReader = snapshotRecoveryStateReader(
+      ordinarySettings, currentBest, versionId = Some(currentBest), stateHeight = 7)
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.updateStateContext(fullStateReader.stateContext).get
+      storage.readWalletRollbackIntentTry().get shouldBe None
+    }
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(
+        bestFullBlockRead = catchUpHeight.set,
+        bestFullBlockResult = {
+          case 7 => Some(currentBestBlock)
+          case _ => None
+        }),
+      currentStateTip = Some(_ => Success(7 -> Some(currentBest))),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(currentBest))
+        case _ => Success(None)
+      },
+      startupStateReader = Some(fullStateReader),
+      utxoStateUpdate = Some((state, _) => state)) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert(catchUpHeight.get() shouldBe 7, 5.seconds, 100.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest].height shouldBe 7
+    }
+  }
+
+  property("quarantine startup catch-up when the next wallet block was pruned") {
+    val prunedSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-startup-pruned-catchup-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(87: Byte))
+    val currentBest = ModifierId @@ Algos.encode(Array.fill(32)(88: Byte))
+    val catchUpChecks = new AtomicInteger(0)
+    val stateReader = snapshotRecoveryStateReader(
+      prunedSettings, currentBest, versionId = Some(currentBest), stateHeight = 7)
+
+    seedWalletRegistryVersions(prunedSettings, directory, Seq(canonicalAncestor -> 6))
+    withSeededWalletStorage(prunedSettings, directory)(
+      _.updateStateContext(stateReader.stateContext).get)
+
+    withProbeWalletActor(
+      prunedSettings,
+      directory,
+      strictHistoryReader(bestFullBlockRead = _ => catchUpChecks.incrementAndGet()),
+      currentStateTip = Some(_ => Success(7 -> Some(currentBest))),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(currentBest))
+        case _ => Success(None)
+      },
+      startupStateReader = Some(stateReader),
+      utxoStateUpdate = Some((state, _) => state)) {
+      (actor, scanner, client) =>
+        scanner.expectNoMessage(300.millis)
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("pruning horizon")
+        error should include("resync from genesis")
+        catchUpChecks.get() shouldBe 1
+        client.send(actor, ReadBalances(ChainStatus.OnChain))
+        client.expectMsgType[Status.Failure]
+    }
+  }
+
+  property("quarantine when pruning advances after ordinary catch-up preflight") {
+    val prunedSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-catchup-pruning-race-").toFile
+    val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(117: Byte))
+    val currentBest = ModifierId @@ Algos.encode(Array.fill(32)(118: Byte))
+    val readinessChecks = new AtomicInteger(0)
+    val consumingReads = new AtomicInteger(0)
+    val stateReader = snapshotRecoveryStateReader(
+      prunedSettings, currentBest, versionId = Some(currentBest), stateHeight = 7)
+
+    seedWalletRegistryVersions(prunedSettings, directory, Seq(canonicalAncestor -> 6))
+    withSeededWalletStorage(prunedSettings, directory)(
+      _.updateStateContext(stateReader.stateContext).get)
+
+    withProbeWalletActor(
+      prunedSettings,
+      directory,
+      strictHistoryReader(bestFullBlockRead = _ => consumingReads.incrementAndGet()),
+      catchUpReady = Some(height => {
+        height shouldBe 7
+        readinessChecks.incrementAndGet()
+        true
+      }),
+      currentStateTip = Some(_ => Success(7 -> Some(currentBest))),
+      bestHeaderId = Some {
+        case 6 => Success(Some(canonicalAncestor))
+        case 7 => Success(Some(currentBest))
+        case _ => Success(None)
+      }) { (actor, scanner, client) =>
+      client.send(actor, ChangedState(stateReader))
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        consumingReads.get() shouldBe 1
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("pruning horizon")
+        error should include("resync from genesis")
+      }, 5.seconds, 100.millis)
+      readinessChecks.get() shouldBe 1
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      client.send(actor, DeriveNextKey)
+      client.expectMsgType[DeriveNextKeyResult].result.isFailure shouldBe true
+    }
+  }
+
+  property("quarantine an unreadable durable rollback intent before wallet operations") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-corrupt-rollback-intent-").toFile
+    val rollbackAttempts = new AtomicInteger(0)
+    overwriteWalletStorageEntry(
+      ordinarySettings,
+      directory,
+      WalletStorage.WalletRollbackIntentKey,
+      Array[Byte](1, 2, 3))
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(),
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      error should include("rollback intent")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      rollbackAttempts.get() shouldBe 0
+    }
+
+    val retainedBytes = readWalletStorageEntry(
+      ordinarySettings,
+      directory,
+      WalletStorage.WalletRollbackIntentKey).get
+    retainedBytes should contain theSameElementsInOrderAs Array[Byte](1, 2, 3)
+  }
+
+  property("fail closed when ordinary registry rollback result is indeterminate") {
+    val ordinarySettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val directory = Files.createTempDirectory("wallet-rollback-indeterminate-").toFile
+    val originalTip = ModifierId @@ Algos.encode(Array.fill(32)(118: Byte))
+    val rollbackAttempts = new AtomicInteger(0)
+    val reconciliationAttempts = new AtomicInteger(0)
+    seedNonemptyWalletRegistry(ordinarySettings, directory, originalTip)
+    val currentStateTip = new AtomicReference[(Int, Option[ModifierId])](
+      7 -> Some(originalTip))
+
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(),
+      currentStateTip = Some(_ => Success(currentStateTip.get())),
+      bestHeaderId = Some {
+        case 7 => Success(Some(originalTip))
+        case _ => Success(None)
+      },
+      registryRollback = Some((_, _) => {
+        rollbackAttempts.incrementAndGet()
+        Failure(new IllegalStateException("injected indeterminate registry rollback failure"))
+      }),
+      offChainReconciliation = Some((_, _, fallback) => {
+        reconciliationAttempts.incrementAndGet()
+        fallback()
+    })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      val reconciliationBaseline = reconciliationAttempts.get()
+      currentStateTip.set(0 -> None)
+      client.send(actor, ChangedState(genericStateReader(
+        ErgoStateContext.empty(ordinarySettings.chainSettings, parameters))))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+      client.send(actor, Rollback(idToVersion(PreGenesisHeader.id)))
+      client.send(actor, GetWalletStatus)
+      val rollbackError = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      rollbackAttempts.get() shouldBe 1
+      rollbackError should include("quarantine")
+      rollbackError should include("injected indeterminate registry rollback failure")
+      rollbackError should include("restart")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+
+      client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get.toLowerCase should include("restart")
+      reconciliationAttempts.get() shouldBe reconciliationBaseline
+      client.send(actor, ReadBalances(ChainStatus.OffChain))
+      client.expectMsgType[Status.Failure]
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(ordinarySettings, directory) { storage =>
+      storage.readWalletRollbackIntentTry().get shouldBe
+        Some(WalletRollbackIntent(PreGenesisHeader.id, expectedHeight = 0))
+    }
+  }
+
+  property("reject guarded mutation before queued initial catch-up failure is delivered") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-queued-catch-up-failure-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(115: Byte))
+    val actorRef = new AtomicReference[ActorRef]()
+    val clientRef = new AtomicReference[ActorRef]()
+    val readinessChecks = new AtomicInteger(0)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+    val scanRequest = ScanRequest(
+      "queued-catch-up-mutation",
+      ActorDefinitionOtherPredicate,
+      Some(ScanWalletInteraction.Off),
+      Some(false))
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      snapshotFullHeight = Some(_ => 1),
+      catchUpReady = Some(height => {
+        height shouldBe 1
+        readinessChecks.incrementAndGet()
+        actorRef.get().tell(AddScan(scanRequest), clientRef.get())
+        false
+      }),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      actorRef.set(actor)
+      clientRef.set(client.ref)
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+
+      val mutation = client.expectMsgType[AddScanResponse](5.seconds).response
+      mutation.isFailure shouldBe true
+      mutation.failed.get.getMessage.toLowerCase should include("pruning horizon")
+      client.send(actor, ReadScans)
+      client.expectMsgType[Status.Failure]
+      readinessChecks.get() shouldBe 1
+      statusRemovals.get() shouldBe 0
+      sourceRemovals.get() shouldBe 0
+      client.awaitAssert({
+        client.send(actor, GetWalletStatus)
+        val error = client.expectMsgType[WalletStatus].error.get.toLowerCase
+        error should include("pruning horizon")
+        error should include("resync from genesis")
+      }, 5.seconds, 100.millis)
+      scanner.expectMsg(AbortUtxoSnapshotScan(run))
+    }
+  }
+
+  property("retry source cleanup after completed status removal while keeping the wallet usable") {
     val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
     val directory = Files.createTempDirectory("wallet-snapshot-source-cleanup-failure-").toFile
@@ -2540,6 +5972,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       completed = true)
     val source = UtxoSnapshotSourceIdentity(
       status.snapshotHeight, status.snapshotBlockId, status.manifestDepth, status.totalSubtrees)
+    val sourceAttempts = new AtomicInteger(0)
+    val firstAttemptAt = new AtomicLong(0L)
+    val secondAttemptAt = new AtomicLong(0L)
     withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
 
     withProbeWalletActor(
@@ -2549,20 +5984,217 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       sourceIdentity = Some(_ => Success(source)),
       registryTip = Some(_ => Success(status.snapshotHeight -> Some(snapshotId))),
       bestHeaderId = Some(_ => Success(Some(snapshotId))),
-      sourceRemoval = Some(_ =>
-        scala.util.Failure(new IllegalStateException("injected source cleanup failure")))) {
+      sourceRemoval = Some(id => {
+        id shouldBe snapshotId
+        sourceAttempts.incrementAndGet() match {
+          case 1 =>
+            firstAttemptAt.set(System.nanoTime())
+            Failure(new IllegalStateException("injected source cleanup failure"))
+          case 2 =>
+            secondAttemptAt.set(System.nanoTime())
+            Success(())
+          case attempt =>
+            Failure(new IllegalStateException(s"unexpected source cleanup attempt $attempt"))
+        }
+      })) {
       (actor, scanner, client) =>
         scanner.expectNoMessage(300.millis)
         client.awaitAssert({
+          sourceAttempts.get() shouldBe 2
           client.send(actor, GetWalletStatus)
-          client.expectMsgType[WalletStatus].error.get should include("remove completed UTXO snapshot scan source")
-        }, 5.seconds, 100.millis)
+          client.expectMsgType[WalletStatus].error shouldBe None
+        }, 6.seconds, 100.millis)
         client.send(actor, ReadBalances(ChainStatus.OnChain))
         client.expectMsgType[WalletDigest]
     }
+    (secondAttemptAt.get() - firstAttemptAt.get()).nanos should be >= 500.millis
     withSeededWalletStorage(bootstrapSettings, directory) { storage =>
       storage.readUtxoSnapshotScanStatusTry().get shouldBe None
       storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(status.snapshotHeight, status.snapshotBlockId))
+    }
+  }
+
+  property("rearm exhausted snapshot source cleanup on state change") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-source-cleanup-rearm-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(73: Byte))
+    val status = snapshotStatus(
+      snapshotHeight = 0,
+      snapshotBlockId = snapshotId,
+      manifestDepth = ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 33,
+      totalSubtrees = 33,
+      completed = true)
+    val source = UtxoSnapshotSourceIdentity(
+      status.snapshotHeight, status.snapshotBlockId, status.manifestDepth, status.totalSubtrees)
+    val allowCleanup = new AtomicBoolean(false)
+    val sourceAttempts = new AtomicInteger(0)
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source)),
+      registryTip = Some(_ => Success(status.snapshotHeight -> Some(snapshotId))),
+      currentStateTip = Some(_ => Success(status.snapshotHeight -> Some(snapshotId))),
+      bestHeaderId = Some(_ => Success(Some(snapshotId))),
+      sourceRemoval = Some(id => {
+        id shouldBe snapshotId
+        sourceAttempts.incrementAndGet()
+        if (allowCleanup.get()) Success(())
+        else Failure(new IllegalStateException("persistent source cleanup failure"))
+      })) { (actor, scanner, client) =>
+      val initialStateReader = snapshotRecoveryStateReader(
+        bootstrapSettings, snapshotId, versionId = Some(snapshotId))
+      client.send(actor, ChangedState(initialStateReader))
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert(
+        sourceAttempts.get() shouldBe ErgoWalletActor.MaxFinalizationCleanupRetries + 1,
+        8.seconds,
+        100.millis)
+      client.expectNoMessage(ErgoWalletActor.FinalizationCleanupRetryDelay + 300.millis)
+      sourceAttempts.get() shouldBe ErgoWalletActor.MaxFinalizationCleanupRetries + 1
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get should
+        include("Unable to remove completed UTXO snapshot scan source")
+
+      allowCleanup.set(true)
+      val stateReader = snapshotRecoveryStateReader(
+        bootstrapSettings, snapshotId, versionId = Some(snapshotId))
+      client.send(actor, ChangedState(stateReader))
+      client.send(actor, ChangedState(stateReader))
+      client.awaitAssert({
+        sourceAttempts.get() shouldBe ErgoWalletActor.MaxFinalizationCleanupRetries + 2
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
+      client.expectNoMessage(ErgoWalletActor.FinalizationCleanupRetryDelay + 300.millis)
+      sourceAttempts.get() shouldBe ErgoWalletActor.MaxFinalizationCleanupRetries + 2
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(status.snapshotHeight, status.snapshotBlockId))
+    }
+  }
+
+  property("resume a cursor-zero recovery after a crash preserved the completed origin") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-recovery-resume-").toFile
+    val snapshotHeight = 5
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(121: Byte))
+    val completed = snapshotStatus(
+      snapshotHeight, snapshotId, manifestDepth = 6,
+      nextSubtreeIndex = 3, totalSubtrees = 3, completed = true)
+    val freshStatus = completed.copy(nextSubtreeIndex = 0, completed = false)
+    val invalidation = UtxoSnapshotScanInvalidation(snapshotHeight, snapshotId)
+    val source = UtxoSnapshotSourceIdentity(
+      snapshotHeight, snapshotId, freshStatus.manifestDepth, freshStatus.totalSubtrees)
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.completeUtxoSnapshotScan(completed).get
+      storage.writeUtxoSnapshotScanInvalidation(invalidation).get
+      storage.restartUtxoSnapshotScanRecovery(invalidation, freshStatus).get shouldBe true
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+    }
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
+      val start = scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds)
+      start.run.hasSnapshot(snapshotHeight, snapshotId) shouldBe true
+      start.forceRestart shouldBe false
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(freshStatus)
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(snapshotHeight, snapshotId))
+    }
+  }
+
+  property("resume source-only cleanup and fence rollback below the completed origin") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-origin-cleanup-restart-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(113: Byte))
+    val rollbackId = ModifierId @@ Algos.encode(Array.fill(32)(114: Byte))
+    val status = snapshotStatus(0, snapshotId, 6, 1, 1, completed = true)
+    val sourceReads = new AtomicInteger(0)
+    val sourceAttempts = new AtomicInteger(0)
+    val rollbackAttempts = new AtomicInteger(0)
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.completeUtxoSnapshotScan(status).get
+      storage.removeUtxoSnapshotScanStatus().get
+    }
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(heightLookup = id => if (id == rollbackId) Some(-1) else None),
+      sourceIdentity = Some(_ => {
+        sourceReads.incrementAndGet()
+        Failure(new IllegalStateException("source-only cleanup must not resume the scanner"))
+      }),
+      registryTip = Some(_ => Success(status.snapshotHeight -> Some(snapshotId))),
+      bestHeaderId = Some(_ => Success(Some(snapshotId))),
+      sourceRemoval = Some(id => {
+        id shouldBe snapshotId
+        if (sourceAttempts.incrementAndGet() == 1) {
+          Failure(new IllegalStateException("injected restart cleanup failure"))
+        } else {
+          Success(())
+        }
+      }),
+      registryRollback = Some((_, version) => {
+        version shouldBe idToVersion(rollbackId)
+        rollbackAttempts.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      scanner.expectNoMessage(300.millis)
+      client.awaitAssert({
+        sourceAttempts.get() shouldBe 2
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 6.seconds, 100.millis)
+      sourceReads.get() shouldBe 0
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[WalletDigest]
+      scanner.expectNoMessage(300.millis)
+
+      client.send(actor, Rollback(idToVersion(rollbackId)))
+      client.send(actor, GetWalletStatus)
+      val rollbackError = client.expectMsgType[WalletStatus].error.get.toLowerCase
+      rollbackAttempts.get() shouldBe 0
+      rollbackError should include("quarantine")
+      rollbackError should include("invalidates completed utxo snapshot origin")
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+      scanner.expectNoMessage(300.millis)
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe
+        Some(UtxoSnapshotScanInvalidation(status.snapshotHeight, status.snapshotBlockId))
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(status.snapshotHeight, status.snapshotBlockId))
     }
   }
 
@@ -2578,6 +6210,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       bootstrapSettings,
       directory,
       strictHistoryReader()) { (actor, scanner, client) =>
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      expectedDigestBytes = WalletDigestSerializer.toBytes(client.expectMsgType[WalletDigest])
       val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
       client.send(actor, GetOrInitUtxoSnapshotScanStatus(
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 33))
@@ -2587,7 +6221,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val applied = client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
       expectedStatusBytes = UtxoSnapshotScanStatusSerializer.toBytes(applied)
       client.send(actor, ReadBalances(ChainStatus.OnChain))
-      expectedDigestBytes = WalletDigestSerializer.toBytes(client.expectMsgType[WalletDigest])
+      client.expectMsgType[Status.Failure]
 
       client.send(actor, Rollback(idToVersion(ModifierId @@ Algos.encode(Array.fill(32)(70: Byte)))))
       scanner.expectMsg(AbortUtxoSnapshotScan(run))
@@ -2664,7 +6298,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     }
   }
 
-  property("skip on-chain block scan while UTXO snapshot scan is pending") {
+  property("drain an on-chain block retained while UTXO snapshot scan is pending") {
     val bootstrapSettings = settings.copy(
       nodeSettings = settings.nodeSettings.copy(
         utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)
@@ -2675,10 +6309,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val genesisBlock = makeGenesisBlock(address.pubkey)
       val initialBoxes = boxesAvailable(genesisBlock, address.pubkey)
       val initialBalance = balanceAmount(initialBoxes)
+      stopFixtureUtxoSnapshotScanner(wallet.walletActor, w.actorSystem)
       val run = await(wallet.walletActor ? UtxoSnapshotAppliedToState(
         genesisBlock.height, genesisBlock.id, getUtxoState))
         .asInstanceOf[Try[Option[UtxoSnapshotScanRun]]].get.get
-      stopFixtureUtxoSnapshotScanner(wallet.walletActor, w.actorSystem)
 
       await(wallet.walletActor ? GetOrInitUtxoSnapshotScanStatus(
         run,
@@ -2694,19 +6328,30 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       )) shouldBe a[Success[_]]
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
-      eventually {
-        getConfirmedBalances.walletBalance shouldBe initialBalance
-      }
+      Try(await(wallet.walletActor ? ReadBalances(ChainStatus.OnChain))).failed.get.getMessage should include("unresolved")
 
       applyBlock(genesisBlock) shouldBe 'success
 
       val returnBalance = initialBalance / 2
-      val spendingTx = makeSpendingTx(initialBoxes, address, returnBalance)
+      val spendingTemplate = makeSpendingTx(initialBoxes, address, returnBalance)
+      val unsignedSpendingTx = UnsignedErgoTransaction(
+        initialBoxes.map(box => new UnsignedInput(box.id)).toIndexedSeq,
+        IndexedSeq.empty,
+        spendingTemplate.outputCandidates)
+      val spendingTx = ErgoTransaction(defaultProver.sign(
+        unsignedSpendingTx,
+        initialBoxes.toIndexedSeq,
+        emptyDataBoxes,
+        getUtxoState.stateContext).get)
       val nextBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
 
+      applyBlock(nextBlock) shouldBe 'success
       wallet.scanPersistent(nextBlock)
+      eventually {
+        getHistory.bestHeaderAtHeight(nextBlock.height).map(_.id) shouldBe Some(nextBlock.id)
+      }
       Thread.sleep(500)
-      getConfirmedBalances.walletBalance shouldBe initialBalance
+      Try(await(wallet.walletActor ? ReadBalances(ChainStatus.OnChain))).failed.get.getMessage should include("unresolved")
 
       await(wallet.walletActor ? ApplyUtxoSnapshotScanBatch(
         run,
@@ -2716,9 +6361,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         boxes = IndexedSeq.empty
       )) shouldBe a[Success[_]]
 
-      wallet.scanPersistent(nextBlock)
       eventually {
-        getConfirmedBalances.walletBalance shouldBe returnBalance
+        val balances = getConfirmedBalances
+        balances.walletBalance shouldBe returnBalance
+        balances.height shouldBe nextBlock.height
       }
     }
   }
@@ -2733,16 +6379,12 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val snapshotBoxes = boxesAvailable(snapshot, address.pubkey)
       val boxToStopTracking = snapshotBoxes.head
       val blockedAddBox = boxesAvailable(makeGenesisBlock(address.pubkey, randomNewAsset), address.pubkey).head
+      stopFixtureUtxoSnapshotScanner(wallet.walletActor, w.actorSystem)
       val run = await(wallet.walletActor ? UtxoSnapshotAppliedToState(
         snapshot.height, snapshot.id, getUtxoState))
         .asInstanceOf[Try[Option[UtxoSnapshotScanRun]]].get.get
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
-      def trackedState: (Seq[String], WalletDigest) = (
-        await(wallet.walletBoxes(unspentOnly = false, considerUnconfirmed = false))
-          .map(box => Base16.encode(TrackedBoxSerializer.toBytes(box.trackedBox))),
-        getConfirmedBalances)
-
       await(wallet.walletActor ? GetOrInitUtxoSnapshotScanStatus(
         run,
         ManifestSerializer.MainnetManifestDepth.toInt,
@@ -2753,28 +6395,32 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         nextSubtreeIndex = 32,
         completed = false,
         boxes = snapshotBoxes.toIndexedSeq)) shouldBe a[Success[_]]
-      eventually {
-        getConfirmedBalances.walletBalance shouldBe balanceAmount(snapshotBoxes)
-      }
 
-      val beforeAdd = trackedState
       val addResponse = await(wallet.addBox(blockedAddBox, Set(org.ergoplatform.wallet.Constants.PaymentsScanId)))
-      val afterAdd = trackedState
-
-      val beforeStopTracking = trackedState
       val stopTrackingResponse = await(wallet.stopTracking(
         org.ergoplatform.wallet.Constants.PaymentsScanId,
         boxToStopTracking.id))
-      val afterStopTracking = trackedState
 
       addResponse.status.isFailure shouldBe true
-      afterAdd shouldBe beforeAdd
       stopTrackingResponse.status.isFailure shouldBe true
-      afterStopTracking shouldBe beforeStopTracking
+
+      await(wallet.walletActor ? ApplyUtxoSnapshotScanBatch(
+        run,
+        subtreeIndex = 32,
+        nextSubtreeIndex = 33,
+        completed = true,
+        boxes = IndexedSeq.empty)) shouldBe a[Success[_]]
+      eventually {
+        val tracked = await(wallet.walletBoxes(unspentOnly = false, considerUnconfirmed = false))
+        tracked.exists(box => java.util.Arrays.equals(box.trackedBox.box.id, blockedAddBox.id)) shouldBe false
+        tracked.find(box => java.util.Arrays.equals(box.trackedBox.box.id, boxToStopTracking.id))
+          .get.trackedBox.scans should contain(org.ergoplatform.wallet.Constants.PaymentsScanId)
+        getConfirmedBalances.walletBalance shouldBe balanceAmount(snapshotBoxes)
+      }
     }
   }
 
-  property("enforce UTXO snapshot identity cursor completion and replay invariants") {
+  property("enforce UTXO snapshot identity cursor and replay quarantine invariants") {
     val bootstrapSettings = settings.copy(
       nodeSettings = settings.nodeSettings.copy(
         utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
@@ -2783,10 +6429,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val snapshot = makeGenesisBlock(address.pubkey)
       val trackedBox = boxesAvailable(snapshot, address.pubkey).head
       val otherBlockId = ModifierId @@ Algos.encode(Array.fill(32)(91: Byte))
+      stopFixtureUtxoSnapshotScanner(wallet.walletActor, w.actorSystem)
       val run = await(wallet.walletActor ? UtxoSnapshotAppliedToState(
         snapshot.height, snapshot.id, getUtxoState))
         .asInstanceOf[Try[Option[UtxoSnapshotScanRun]]].get.get
-      stopFixtureUtxoSnapshotScanner(wallet.walletActor, w.actorSystem)
       val otherRun = run.copy(snapshotBlockId = otherBlockId)
       val activeStatus = snapshotStatus(
         run.snapshotHeight,
@@ -2810,7 +6456,6 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       ErgoWalletActor.shouldResumeCompletedActiveRun(
         run, completedStatus.copy(snapshotBlockId = otherBlockId), finalizingRun = None) shouldBe false
       applyBlock(snapshot) shouldBe 'success
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
 
       def askTry(message: Any): Try[UtxoSnapshotScanStatus] =
         await(wallet.walletActor ? message).asInstanceOf[Try[UtxoSnapshotScanStatus]]
@@ -2845,17 +6490,17 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       askTry(first).get.nextSubtreeIndex shouldBe 32
       askTry(first).get.nextSubtreeIndex shouldBe 32
 
-      val spendingTx = eventually {
-        await(wallet.generateTransaction(Seq(
-          PaymentRequest(address, trackedBox.value / 2, Array.empty, Map.empty)))).get
-      }
+      Try(await(wallet.walletActor ? ReadBalances(ChainStatus.OnChain))).failed.get
+        .isInstanceOf[IllegalStateException] shouldBe true
 
       val divergentReplay = ApplyUtxoSnapshotScanBatch(
         run, 0, 32, completed = false, IndexedSeq.empty)
       askTry(divergentReplay).isFailure shouldBe true
 
-      val keysBefore = await(wallet.publicKeys(0, Int.MaxValue))
-      val scansBefore = await(wallet.readScans()).apps
+      Try(await(wallet.walletActor ? ReadPublicKeys(0, Int.MaxValue))).failed.get
+        .isInstanceOf[IllegalStateException] shouldBe true
+      Try(await(wallet.walletActor ? ReadScans)).failed.get
+        .isInstanceOf[IllegalStateException] shouldBe true
       await(wallet.walletActor ? DeriveKey("m/1")).asInstanceOf[Try[_]].isFailure shouldBe true
       await(wallet.walletActor ? DeriveNextKey)
         .asInstanceOf[DeriveNextKeyResult].result.isFailure shouldBe true
@@ -2868,28 +6513,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         .asInstanceOf[AddScanResponse].response.isFailure shouldBe true
       await(wallet.walletActor ? RemoveScan(org.ergoplatform.wallet.Constants.ScanId @@ 11.toShort))
         .asInstanceOf[RemoveScanResponse].response.isFailure shouldBe true
-      await(wallet.publicKeys(0, Int.MaxValue)) shouldBe keysBefore
-      await(wallet.readScans()).apps shouldBe scansBefore
-
-      val digestBeforeRollback = getConfirmedBalances
+      Try(await(wallet.walletActor ? ReadBalances(ChainStatus.OnChain))).failed.get
+        .isInstanceOf[IllegalStateException] shouldBe true
       w.testProbe.send(wallet.walletActor, Rollback(idToVersion(snapshot.id)))
       w.testProbe.send(wallet.walletActor, GetOrInitUtxoSnapshotScanStatus(
         run,
         ManifestSerializer.MainnetManifestDepth.toInt,
         totalSubtrees = 33))
-      w.testProbe.expectMsgType[Try[UtxoSnapshotScanStatus]].get.nextSubtreeIndex shouldBe 32
-      getConfirmedBalances shouldBe digestBeforeRollback
-
-      val nextBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
-      applyBlock(nextBlock) shouldBe 'success
-
-      askTry(ApplyUtxoSnapshotScanBatch(
-        run, 32, 33, completed = true, IndexedSeq.empty
-      )).get.completed shouldBe true
-      eventually {
-        getConfirmedBalances.height shouldBe nextBlock.height
-      }
-
+      w.testProbe.expectMsgType[Status.Failure].cause.getMessage.toLowerCase should include("quarantined")
+      Try(await(wallet.walletActor ? ReadBalances(ChainStatus.OnChain))).failed.get
+        .isInstanceOf[IllegalStateException] shouldBe true
     }
   }
 
@@ -3027,6 +6660,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
     val directory = Files.createTempDirectory("wallet-snapshot-origin-scan-change-").toFile
     val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(106: Byte))
+    val registryId = ModifierId @@ Algos.encode(Array.fill(32)(107: Byte))
+    val stateId = ModifierId @@ Algos.encode(Array.fill(32)(108: Byte))
     val completed = snapshotStatus(
       snapshotHeight = 0,
       snapshotBlockId = snapshotId,
@@ -3096,6 +6731,17 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         sourceReads.incrementAndGet()
         Failure(new IllegalStateException("origin-only wallet must not read snapshot source"))
       }),
+      registryTip = Some(_ => Success(
+        (completed.snapshotHeight + 1) -> Some(registryId))),
+      currentStateTip = Some(_ => Success(
+        (completed.snapshotHeight + 2) -> Some(stateId))),
+      bestHeaderId = Some {
+        case height if height == completed.snapshotHeight => Success(Some(snapshotId))
+        case height if height == completed.snapshotHeight + 1 => Success(Some(registryId))
+        case height if height == completed.snapshotHeight + 2 => Success(Some(stateId))
+        case _ => Success(None)
+      },
+      sourceRemoval = Some(_ => Success(())),
       rescanRegistryRecreation = Some((_, _) => {
         registryRecreations.incrementAndGet()
         Failure(new IllegalStateException("snapshot origin must refuse registry recreation"))
@@ -3235,10 +6881,22 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     val (digestBytesBefore, versionBefore) =
       seedNonemptyWalletRegistry(ordinarySettings, directory, registryVersion)
 
-    withProbeWalletActor(ordinarySettings, directory, strictHistoryReader()) { (actor, scanner, client) =>
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(),
+      registryTip = Some(_ => Success(7 -> Some(registryVersion))),
+      currentStateTip = Some(_ => Success(7 -> Some(registryVersion))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 7 => Success(Some(registryVersion))
+        case _ => Success(None)
+      },
+      sourceRemoval = Some(_ => Success(()))) { (actor, scanner, client) =>
       scanner.expectNoMessage(300.millis)
       client.send(actor, RescanWallet(0))
-      client.expectMsgType[Try[Unit]].isFailure shouldBe true
+      client.expectMsgType[Try[Unit]].failed.get.getMessage.toLowerCase should
+        include("completed from utxo snapshot")
     }
 
     val reopened = WalletRegistry(ordinarySettings.copy(directory = directory.getAbsolutePath)).get
@@ -3265,6 +6923,12 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       ordinarySettings,
       directory,
       strictHistoryReader(),
+      registryTip = Some(_ => Success(7 -> Some(registryVersion))),
+      currentStateTip = Some(_ => Success(7 -> Some(registryVersion))),
+      bestHeaderId = Some {
+        case 7 => Success(Some(registryVersion))
+        case _ => Success(None)
+      },
       walletOriginRead = Some((_, fallback) => {
         originReads.incrementAndGet()
         if (corruptAfterStartup.get()) {
@@ -3301,10 +6965,19 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
     val directory = Files.createTempDirectory("wallet-genuine-no-origin-").toFile
 
-    withProbeWalletActor(ordinarySettings, directory, strictHistoryReader()) { (actor, scanner, client) =>
+    val fullBlockReads = new AtomicInteger(0)
+    withProbeWalletActor(
+      ordinarySettings,
+      directory,
+      strictHistoryReader(fullBlockReads)) { (actor, scanner, client) =>
       scanner.expectNoMessage(300.millis)
       client.send(actor, RescanWallet(0))
       client.expectMsgType[Try[Unit]].isSuccess shouldBe true
+      client.awaitAssert({
+        fullBlockReads.get() shouldBe 1
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error shouldBe None
+      }, 5.seconds, 100.millis)
     }
   }
 
@@ -3324,6 +6997,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     withProbeWalletActor(
       bootstrapSettings,
       directory,
+      strictHistoryReader(),
+      registryTip = Some(_ => Success(completed.snapshotHeight -> Some(snapshotId))),
+      bestHeaderId = Some(_ => Success(Some(snapshotId))),
+      sourceRemoval = Some(_ => Success(())),
       snapshotDefinitionCalculation = Some((_, _) => {
         definitionCalls.incrementAndGet()
         Failure(new IllegalStateException(
@@ -3335,6 +7012,187 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       client.expectMsgType[Try[Option[UtxoSnapshotScanRun]]].get shouldBe None
       definitionCalls.get() shouldBe 0
       scanner.expectNoMessage(300.millis)
+    }
+  }
+
+  property("quarantine applied snapshots that conflict with a completed wallet origin") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val originId = ModifierId @@ Algos.encode(Array.fill(32)(107: Byte))
+    val otherId = ModifierId @@ Algos.encode(Array.fill(32)(108: Byte))
+    val originHeight = 0
+
+    Seq[(String, (Int, ModifierId))](
+      ("height", (originHeight + 1, originId)),
+      ("block id", (originHeight, otherId))
+    ).foreach { case (label, (eventHeight, eventId)) =>
+      val directory = Files.createTempDirectory(
+        s"wallet-snapshot-origin-event-${label.replace(' ', '-')}-").toFile
+      val completed = snapshotStatus(originHeight, originId, 6, 1, 1, completed = true)
+      withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+        storage.completeUtxoSnapshotScan(completed).get
+        storage.removeUtxoSnapshotScanStatus().get
+      }
+
+      withProbeWalletActor(
+        bootstrapSettings,
+        directory,
+        strictHistoryReader(),
+        registryTip = Some(_ => Success(originHeight -> Some(originId))),
+        bestHeaderId = Some(_ => Success(Some(originId))),
+        sourceRemoval = Some(_ => Success(()))) { (actor, scanner, client) =>
+        scanner.expectNoMessage(300.millis)
+        client.send(actor, UtxoSnapshotAppliedToState(eventHeight, eventId, null))
+        withClue(label) {
+          client.expectMsgType[Try[Option[UtxoSnapshotScanRun]]].isFailure shouldBe true
+        }
+        client.send(actor, GetWalletStatus)
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should include("origin")
+        scanner.expectNoMessage(300.millis)
+      }
+
+      withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+        withClue(label) {
+          storage.readUtxoSnapshotScanInvalidationTry().get shouldBe
+            Some(UtxoSnapshotScanInvalidation(originHeight, originId))
+          storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+            Some(snapshotOrigin(originHeight, originId))
+        }
+      }
+    }
+  }
+
+  property("quarantine a completed wallet origin that diverges from history or current state") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val originHeight = 5
+    val originId = ModifierId @@ Algos.encode(Array.fill(32)(109: Byte))
+    val otherId = ModifierId @@ Algos.encode(Array.fill(32)(110: Byte))
+    val registryId = ModifierId @@ Algos.encode(Array.fill(32)(111: Byte))
+    val stateId = ModifierId @@ Algos.encode(Array.fill(32)(112: Byte))
+
+    final case class DivergenceCase(label: String,
+                                    currentStateTip: (Int, Option[ModifierId]),
+                                    registryTip: (Int, Option[ModifierId]),
+                                    bestAt: Int => Option[ModifierId],
+                                    expectedError: String,
+                                    expectedFence: Option[UtxoSnapshotScanInvalidation])
+    val cases = Seq(
+      DivergenceCase(
+        "origin header",
+        originHeight -> Some(otherId),
+        originHeight -> Some(otherId),
+        _ => Some(otherId),
+        expectedError = "origin",
+        expectedFence = Some(UtxoSnapshotScanInvalidation(originHeight, originId))),
+      DivergenceCase(
+        "state below origin",
+        (originHeight - 1) -> Some(otherId),
+        originHeight -> Some(originId),
+        height => if (height == originHeight) Some(originId) else Some(otherId),
+        expectedError = "origin",
+        expectedFence = Some(UtxoSnapshotScanInvalidation(originHeight, originId))),
+      DivergenceCase(
+        "noncanonical current state tip",
+        (originHeight + 2) -> Some(stateId),
+        (originHeight + 1) -> Some(registryId),
+        height => height match {
+          case `originHeight` => Some(originId)
+          case h if h == originHeight + 1 => Some(registryId)
+          case _ => Some(otherId)
+        },
+        expectedError = "state tip",
+        expectedFence = None)
+    )
+
+    cases.foreach { testCase =>
+      val directory = Files.createTempDirectory(
+        s"wallet-snapshot-origin-divergence-${testCase.label.replace(' ', '-')}-").toFile
+      val completed = snapshotStatus(originHeight, originId, 6, 1, 1, completed = true)
+      withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+        storage.completeUtxoSnapshotScan(completed).get
+        storage.removeUtxoSnapshotScanStatus().get
+      }
+
+      withProbeWalletActor(
+        bootstrapSettings,
+        directory,
+        strictHistoryReader(),
+        registryTip = Some(_ => Success(testCase.registryTip)),
+        currentStateTip = Some(_ => Success(testCase.currentStateTip)),
+        bestHeaderId = Some(height => Success(testCase.bestAt(height))),
+        sourceRemoval = Some(_ => Success(()))) { (actor, scanner, client) =>
+        scanner.expectNoMessage(300.millis)
+        client.send(actor, GetWalletStatus)
+        withClue(testCase.label) {
+          client.expectMsgType[WalletStatus].error.get.toLowerCase should include(testCase.expectedError)
+        }
+        scanner.expectNoMessage(300.millis)
+      }
+
+      withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+        withClue(testCase.label) {
+          storage.readUtxoSnapshotScanInvalidationTry().get shouldBe testCase.expectedFence
+          storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+            Some(snapshotOrigin(originHeight, originId))
+        }
+      }
+    }
+  }
+
+  property("accept a canonical wallet registry ahead of a delayed canonical state notification") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = 0,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-origin-registry-ahead-").toFile
+    val originHeight = 5
+    val stateHeight = originHeight + 1
+    val registryHeight = stateHeight + 1
+    val originId = ModifierId @@ Algos.encode(Array.fill(32)(122: Byte))
+    val stateId = ModifierId @@ Algos.encode(Array.fill(32)(123: Byte))
+    val registryId = ModifierId @@ Algos.encode(Array.fill(32)(124: Byte))
+    val completed = snapshotStatus(originHeight, originId, 6, 1, 1, completed = true)
+    val source = UtxoSnapshotSourceIdentity(
+      originHeight, originId, completed.manifestDepth, completed.totalSubtrees)
+    val cleanupCalls = new AtomicInteger(0)
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.completeUtxoSnapshotScan(completed).get
+    }
+    seedNonemptyWalletRegistry(bootstrapSettings, directory, registryId)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(),
+      sourceIdentity = Some(id => {
+        id shouldBe originId
+        Success(source)
+      }),
+      currentStateTip = Some(_ => Success(stateHeight -> Some(stateId))),
+      bestHeaderId = Some(height => Success(height match {
+        case `originHeight` => Some(originId)
+        case `stateHeight` => Some(stateId)
+        case `registryHeight` => Some(registryId)
+        case _ => None
+      })),
+      snapshotFullHeight = Some(_ => stateHeight),
+      sourceRemoval = Some(_ => {
+        cleanupCalls.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      eventually(cleanupCalls.get() shouldBe 1)
+      scanner.expectNoMessage(300.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error shouldBe None
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+      storage.readUtxoSnapshotScanInvalidationTry().get shouldBe None
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe
+        Some(snapshotOrigin(originHeight, originId))
     }
   }
 
@@ -3357,6 +7215,11 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     withProbeWalletActor(
       bootstrapSettings,
       directory,
+      strictHistoryReader(),
+      registryTip = Some(_ => Success(status.snapshotHeight -> Some(originId))),
+      currentStateTip = Some(_ => Success(
+        status.snapshotHeight -> Option.empty[ModifierId])),
+      bestHeaderId = Some(_ => Success(Some(originId))),
       sourceIdentity = Some(_ => Success(source))) { (actor, scanner, client) =>
       scanner.expectNoMessage(300.millis)
       client.send(actor, GetWalletStatus)
@@ -3424,9 +7287,13 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       w.testProbe.send(wallet.walletActor, DeriveKey("m/1"))
       w.testProbe.expectMsgType[Try[_]].isFailure shouldBe true
 
+      val blockedInitPass = SecretString.create("blocked-init")
+      val blockedMnemonicPass = SecretString.create("blocked-mnemonic-pass")
       w.testProbe.send(wallet.walletActor,
-        InitWallet(SecretString.create("blocked-init"), None))
+        InitWallet(blockedInitPass, Some(blockedMnemonicPass)))
       w.testProbe.expectMsgType[Try[_]].isFailure shouldBe true
+      an[RuntimeException] should be thrownBy blockedInitPass.getData
+      an[RuntimeException] should be thrownBy blockedMnemonicPass.getData
       w.testProbe.send(wallet.walletActor, RestoreWallet(
         SecretString.create("blocked mnemonic"),
         None,
@@ -4101,6 +7968,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.pubkey)
       val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
       applyBlock(block) shouldBe 'success
+      // applyBlock returns after syntactic acceptance. This ask is processed only after the
+      // NodeViewHolder finishes that actor turn, including its state and mempool notifications.
+      getCurrentView
       wallet.scanPersistent(block)
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
       val confirmedBalance =
@@ -4118,7 +7988,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       val balanceToReturn = randomLong(balanceAmount(boxesToSpend))
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
-      wallet.scanOffchain(spendingTx)
+      wallet.walletActor ! ChangedMempool(new FakeMempool(Seq(
+        UnconfirmedTransaction(spendingTx, None))))
 
       eventually {
         val confirmedAfterSpending = getConfirmedBalances.walletBalance
@@ -4132,6 +8003,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       }
 
       wallet.rollback(initialState.version)
+      publishCurrentMempool
       eventually {
         val balanceAfterRollback = getConfirmedBalances.walletBalance
         val totalAfterRollback = getBalancesWithUnconfirmed.walletBalance
@@ -4140,7 +8012,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
         balanceAfterRollback shouldBe initialBalance
-        totalAfterRollback shouldBe balanceToReturn
+        totalAfterRollback shouldBe balanceAfterRollback
       }
     }
   }
@@ -4181,6 +8053,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         totalBeforeRollback shouldBe confirmedBeforeRollback
       }
       wallet.rollback(initialState.version)
+      publishCurrentMempool
       eventually {
         val confirmedAfterRollback = getConfirmedBalances
         val totalAfterRollback = getBalancesWithUnconfirmed
@@ -4190,8 +8063,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
         confirmedAfterRollback.walletBalance shouldBe initialBalance
         confirmedAfterRollback.walletAssetBalances shouldBe empty
-        totalAfterRollback.walletBalance shouldBe balanceToSpend
-        totalAfterRollback.walletAssetBalances shouldBe initialAssets
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }
@@ -4220,8 +8092,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         }
       wallet.scanPersistent(block)
 
-      val confirmedBeforeRollback =
-        eventually {
+      eventually {
           val historyHeight = getHistory.headersHeight
 
           val confirmedBeforeRollback = getConfirmedBalances
@@ -4235,10 +8106,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           confirmedBeforeRollback.walletBalance shouldBe 0L
           confirmedBeforeRollback.walletAssetBalances shouldBe empty
           totalBeforeRollback shouldBe confirmedBeforeRollback
-          confirmedBeforeRollback
-        }
+      }
 
       wallet.rollback(initialState.version)
+      publishCurrentMempool
       eventually {
         val confirmedAfterRollback = getConfirmedBalances
         val totalAfterRollback = getBalancesWithUnconfirmed
@@ -4246,8 +8117,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
         confirmedAfterRollback shouldBe initialSnapshot
-        totalAfterRollback.walletBalance shouldBe confirmedBeforeRollback.walletBalance
-        totalAfterRollback.walletAssetBalances shouldBe confirmedBeforeRollback.walletAssetBalances
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }
@@ -4284,8 +8154,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         }
       wallet.scanPersistent(block)
 
-      val totalBeforeRollback =
-        eventually {
+      eventually {
           val historyHeight = getHistory.headersHeight
           val confirmedBeforeRollback = getConfirmedBalances
           val totalBeforeRollback = getBalancesWithUnconfirmed
@@ -4297,9 +8166,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           confirmedBeforeRollback.walletAssetBalances should have size 2
           totalBeforeRollback.walletBalance shouldBe balanceToReturn
           totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
-          totalBeforeRollback
-        }
+      }
       wallet.rollback(initialState.version)
+      publishCurrentMempool
 
       eventually {
         val confirmedAfterRollback = getConfirmedBalances
@@ -4308,8 +8177,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
         confirmedAfterRollback shouldBe initialSnapshot
         confirmedAfterRollback.walletAssetBalances.toMap shouldBe asset1Map
-        totalAfterRollback.walletBalance shouldBe balanceToReturn
-        totalAfterRollback.walletAssetBalances shouldBe totalBeforeRollback.walletAssetBalances
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }
@@ -4343,8 +8211,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       wallet.scanPersistent(block)
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
-      val totalBeforeRollback =
-        eventually {
+      eventually {
           val historyHeight = getHistory.headersHeight
 
           val confirmedBeforeRollback = getConfirmedBalances
@@ -4358,9 +8225,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
           totalBeforeRollback.walletBalance shouldBe confirmedBeforeRollback.walletBalance
           totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
-          totalBeforeRollback
-        }
+      }
       wallet.rollback(initialState.version)
+      publishCurrentMempool
 
       eventually {
         val confirmedAfterRollback = getConfirmedBalances
@@ -4370,8 +8237,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
         confirmedAfterRollback.walletBalance shouldBe initialBalance
-        totalAfterRollback.walletBalance shouldBe balanceToReturn
-        totalAfterRollback.walletAssetBalances shouldBe totalBeforeRollback.walletAssetBalances
+        totalAfterRollback.walletBalance shouldBe confirmedAfterRollback.walletBalance
+        totalAfterRollback.walletAssetBalances.toMap shouldBe
+          confirmedAfterRollback.walletAssetBalances.toMap
       }
     }
   }

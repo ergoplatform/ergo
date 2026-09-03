@@ -5,7 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
-import org.ergoplatform.nodeView.wallet.persistence.{UtxoSnapshotScanInvalidation, UtxoSnapshotScanStatus}
+import org.ergoplatform.nodeView.wallet.persistence.{UtxoSnapshotScanInvalidation, UtxoSnapshotScanStatus, UtxoSnapshotWalletOrigin}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
@@ -54,7 +54,8 @@ object ErgoWalletActorMessages {
                                                            fence: Option[UtxoSnapshotScanInvalidation])
 
   private[wallet] final case class ContinueUtxoSnapshotCatchUp(run: UtxoSnapshotScanRun,
-                                                                blockHeight: Height)
+                                                                blockHeight: Height,
+                                                                cleanupAttempt: Int = 0)
 
 
   // Publicly available signals for the wallet actor
@@ -101,6 +102,10 @@ object ErgoWalletActorMessages {
 
   private[wallet] final case class UtxoSnapshotCleanupFailed(run: UtxoSnapshotScanRun,
                                                               message: String)
+
+  private[wallet] final case class RetryUtxoSnapshotSourceCleanup(
+    expectedOrigin: UtxoSnapshotWalletOrigin,
+    attempt: Int)
 
   /**
    * Rollback to previous version of the wallet, by throwing away effects of blocks after the version

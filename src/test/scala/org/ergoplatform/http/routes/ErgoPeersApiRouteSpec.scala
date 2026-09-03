@@ -91,7 +91,7 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "return at most 50 peers by default" in {
+  it should "return all known peers" in {
     val networkControllerProbe = TestProbe()
     val route: Route = ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route
     val peers = (1 to 55).map { i =>
@@ -105,59 +105,7 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
 
     Get("/peers/all") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[Json].asArray.get.size shouldBe 50
-    }
-  }
-
-  it should "respect limit and offset query parameters" in {
-    val networkControllerProbe = TestProbe()
-    val route: Route = ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route
-    val peers = (1 to 20).map { i =>
-      val addr = new InetSocketAddress(s"8.8.0.$i", 9000 + i)
-      addr -> PeerInfo.fromAddress(addr)
-    }.toMap
-    val sortedAddresses = peers.keys.toSeq.sortBy(_.toString)
-    Future {
-      peerManagerProbe.expectMsg(GetAllPeers)
-      peerManagerProbe.reply(peers)
-    }
-
-    Get("/peers/all?limit=5&offset=10") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      val arr = responseAs[Json].asArray.get
-      arr.size shouldBe 5
-      arr.head.hcursor.downField("address").as[String] shouldEqual Right(sortedAddresses(10).toString)
-    }
-  }
-
-  it should "return empty array when offset is beyond peer count" in {
-    val networkControllerProbe = TestProbe()
-    val route: Route = ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route
-    val peers = (1 to 5).map { i =>
-      val addr = new InetSocketAddress(s"8.8.0.$i", 9000 + i)
-      addr -> PeerInfo.fromAddress(addr)
-    }.toMap
-    Future {
-      peerManagerProbe.expectMsg(GetAllPeers)
-      peerManagerProbe.reply(peers)
-    }
-
-    Get("/peers/all?offset=100") ~> route ~> check {
-      status shouldBe StatusCodes.OK
-      responseAs[Json].asArray.get shouldBe empty
-    }
-  }
-
-  it should "reject invalid pagination parameters" in {
-    val networkControllerProbe = TestProbe()
-    val route: Route = ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route
-    Future {
-      peerManagerProbe.expectMsg(GetAllPeers)
-      peerManagerProbe.reply(Map.empty[InetSocketAddress, PeerInfo])
-    }
-
-    Get("/peers/all?limit=-1") ~> Route.seal(route) ~> check {
-      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].asArray.get.size shouldBe 55
     }
   }
 }

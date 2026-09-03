@@ -5,6 +5,7 @@ import org.ergoplatform.network.PeerSpec
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants._
+import scorex.db.LDBFactory
 
 import java.io.File
 import java.net.InetSocketAddress
@@ -157,24 +158,101 @@ class PeerDatabaseSpec extends ErgoCorePropertyTest with DBSpec {
     val dir = createTempDir
     val dbSettings = testSettings(dir)
     val addresses = (1 to 5).map(i => new InetSocketAddress(s"8.8.8.$i", 9000 + i))
+    // timestamps permuted independently of insertion/address ordering: the newest
+    // timestamps belong to addresses(2), addresses(4) and addresses(0)
+    val timestamps = Map(
+      addresses(0) -> 40L,
+      addresses(1) -> 10L,
+      addresses(2) -> 50L,
+      addresses(3) -> 20L,
+      addresses(4) -> 30L
+    )
     try {
       val db1 = new PeerDatabase(dbSettings, maxKnownPeers = 5)
-      addresses.zip(Seq(10L, 20L, 30L, 40L, 50L)).foreach { case (addr, ts) =>
-        db1.addOrUpdateKnownPeer(peerInfo(addr, ts))
+      addresses.foreach { addr =>
+        db1.addOrUpdateKnownPeer(peerInfo(addr, timestamps(addr)))
       }
       db1.knownPeers should have size 5
       db1.close()
 
+      // cap shrunk to 3: retention must be driven by timestamps, not store order
       val db2 = new PeerDatabase(dbSettings, maxKnownPeers = 3)
       db2.knownPeers should have size 3
+      db2.knownPeers.keys should contain(addresses(0))
       db2.knownPeers.keys should contain(addresses(2))
-      db2.knownPeers.keys should contain(addresses(3))
       db2.knownPeers.keys should contain(addresses(4))
-      db2.knownPeers.keys should not contain addresses(0)
       db2.knownPeers.keys should not contain addresses(1)
+      db2.knownPeers.keys should not contain addresses(3)
       db2.close()
+
+      // dropped records must be physically deleted from the store: reopening with
+      // the original cap must not resurrect them
+      val db3 = new PeerDatabase(dbSettings, maxKnownPeers = 5)
+      db3.knownPeers should have size 3
+      db3.knownPeers.keys should contain(addresses(0))
+      db3.knownPeers.keys should contain(addresses(2))
+      db3.knownPeers.keys should contain(addresses(4))
+      db3.close()
     } finally {
       deleteRecursive(dir)
+    }
+  }
+
+  property("PeerDatabase should physically remove malformed and oversized records on startup") {
+    val dir = createTempDir
+    val dbSettings = testSettings(dir)
+    val address = new InetSocketAddress("8.8.8.8", 9001)
+    val garbageKey = Array[Byte](1, 2, 3)
+    val garbageValue = Array[Byte](4, 5, 6)
+    val oversizedKey = new Array[Byte](PeerDatabase.MaxSerializedPeerAddressSize + 1)
+    val oversizedValue = new Array[Byte](PeerDatabase.MaxSerializedPeerInfoSize + 1)
+    try {
+      val db1 = new PeerDatabase(dbSettings)
+      db1.addOrUpdateKnownPeer(peerInfo(address, 100L))
+      db1.close()
+
+      // plant malformed records directly into the store
+      val rawStore = LDBFactory.createKvDb(s"${dir.getAbsolutePath}/peers")
+      rawStore.insert(garbageKey, garbageValue)
+      rawStore.insert(oversizedKey, oversizedValue)
+      rawStore.close()
+
+      val db2 = new PeerDatabase(dbSettings)
+      // valid peer survives, malformed records are skipped
+      db2.knownPeers.keys should contain(address)
+      db2.knownPeers should have size 1
+      db2.close()
+
+      // malformed records are physically removed, not reparsed on every startup
+      val db3 = new PeerDatabase(dbSettings)
+      db3.knownPeers should have size 1
+      db3.close()
+
+      val checkStore = LDBFactory.createKvDb(s"${dir.getAbsolutePath}/peers")
+      checkStore.get(garbageKey) shouldBe empty
+      checkStore.get(oversizedKey) shouldBe empty
+      checkStore.close()
+    } finally {
+      deleteRecursive(dir)
+    }
+  }
+
+  property("PeerDatabase should keep untried peers (zero lastHandshake) during cleanup") {
+    val untried = new InetSocketAddress("8.8.8.1", 9001)
+    val unavailableSeed = new InetSocketAddress("8.8.8.2", 9002)
+    val oldHandshaked = new InetSocketAddress("8.8.8.3", 9003)
+    val recent = new InetSocketAddress("8.8.8.4", 9004)
+    val now = System.currentTimeMillis()
+    withDb(maxKnownPeers = 100) { db =>
+      db.addOrUpdateKnownPeer(peerInfo(untried, 0L))
+      db.addOrUpdateKnownPeer(peerInfo(unavailableSeed, 0L))
+      db.addOrUpdateKnownPeer(peerInfo(oldHandshaked, now - PeerDatabase.KnownPeerMaxAgeMs - 1000))
+      db.addOrUpdateKnownPeer(peerInfo(recent, now - 1000))
+      db.removeOldPeers()
+      db.knownPeers.keys should contain(untried)
+      db.knownPeers.keys should contain(unavailableSeed)
+      db.knownPeers.keys should contain(recent)
+      db.knownPeers.keys should not contain oldHandshaked
     }
   }
 

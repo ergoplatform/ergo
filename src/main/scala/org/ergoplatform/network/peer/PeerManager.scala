@@ -85,10 +85,16 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
       peerDatabase.removeOldPeers(connectedPeerAddresses)
 
     case HandshakedPeer(remote) =>
+      // Track both the transport endpoint and the advertised address (the database
+      // key). For inbound connections they differ: the socket address carries the
+      // peer's ephemeral source port, while the database is keyed by the advertised
+      // listening address from the handshake. Both must be protected from eviction.
       connectedPeerAddresses += remote.connectionId.remoteAddress
+      remote.peerInfo.flatMap(_.peerSpec.address).foreach(connectedPeerAddresses += _)
 
     case DisconnectedPeer(connectedPeer) =>
       connectedPeerAddresses -= connectedPeer.connectionId.remoteAddress
+      connectedPeer.peerInfo.flatMap(_.peerSpec.address).foreach(connectedPeerAddresses -= _)
 
     case Penalize(peer, penaltyType) =>
       log.info(s"$peer penalized, penalty: $penaltyType")
@@ -176,6 +182,10 @@ object PeerManager {
       * Choose at most `howMany` random peers, which were connected to our peer and weren't blacklisted.
       *
       * Used in peer propagation: peers chosen are recommended to a peer asking our node about more peers.
+      *
+      * Note: only a bounded window of the database is scanned. If that window happens
+      * to contain no eligible peers, the result is empty even when eligible peers exist
+      * elsewhere in the database. This is an accepted bounded-work tradeoff.
       */
     case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] with ScorexLogging {
 

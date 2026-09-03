@@ -12,6 +12,7 @@ import org.ergoplatform.settings.ErgoSettings
 import scorex.db.LDBFactory
 import scorex.util.ScorexLogging
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -24,19 +25,6 @@ final class PeerDatabase(
 ) extends ScorexLogging {
 
   private val persistentStore = LDBFactory.createKvDb(s"${settings.directory}/peers")
-
-  /**
-    * Serialized peer info size must stay below this bound. The value is twice
-    * the maximum handshake size (8KB) to leave a comfortable margin while still
-    * preventing a single malformed/crafted entry from consuming a lot of memory.
-    */
-  private val MaxSerializedPeerInfoSize = 16384
-
-  /**
-    * Serialized peer address (InetSocketAddress Java serialization) size bound.
-    * Legitimate hostnames can be up to 253 characters, so leave plenty of headroom.
-    */
-  private val MaxSerializedPeerAddressSize = 1024
 
   private case class LoadedPeer(
     lastHandshake: Long,
@@ -86,43 +74,96 @@ final class PeerDatabase(
   }
 
   /*
+   * Number of store keys removed per batch while loading peers, so that
+   * cleanup of a severely oversized database does not build one huge in-memory batch.
+   */
+  private val RemovalBatchSize = 1024
+
+  /*
    * Load peers from persistent storage.
    *
-   * Enforces the in-memory cap and per-entry size limits at load time so a
-   * pre-existing or malformed DB cannot OOM the node on startup. Oversized or
-   * excess entries are dropped from the loaded set (and excess keys are removed
-   * from the store to keep the DB trimmed).
+   * Retention is driven by recency, not store iteration order: while streaming over
+   * the store we keep at most `maxKnownPeers` entries with the newest `lastHandshake`
+   * values, using a bounded min-heap keyed by `lastHandshake`, so peak extra memory
+   * stays O(maxKnownPeers + RemovalBatchSize) and an oversized or malformed database
+   * cannot OOM the node on startup.
+   *
+   * Oversized, unparseable, duplicated (same address, older handshake) and excess
+   * entries are physically removed from the store in bounded batches during the scan.
    */
   private def loadPeers: Try[Map[InetSocketAddress, PeerInfo]] = Try {
-    val (oversizedKeys, validPeers) =
-      persistentStore.getAll.toVector.foldLeft(
-        (List.empty[Array[Byte]], List.empty[LoadedPeer])
-      ) { case ((badKeys, goodPeers), (addr, peer)) =>
-        if (addr.length > MaxSerializedPeerAddressSize || peer.length > MaxSerializedPeerInfoSize) {
-          log.warn(
-            s"Dropping oversized peer entry from database: key=${addr.length} bytes, " +
-            s"value=${peer.length} bytes"
-          )
-          (addr :: badKeys, goodPeers)
-        } else {
-          val addressTry  = Try(deserialize(addr).asInstanceOf[InetSocketAddress])
-          val peerInfoTry = PeerInfoSerializer.parseBytesTry(peer)
-          (addressTry, peerInfoTry) match {
-            case (Success(address), Success(peerInfo)) =>
-              val loaded = LoadedPeer(peerInfo.lastHandshake, address, peerInfo, addr)
-              (badKeys, loaded :: goodPeers)
-            case _ =>
-              log.warn(s"Unable to deserialize peer entry from database, skipping it")
-              (badKeys, goodPeers)
-          }
+    val kept = mutable.HashMap.empty[InetSocketAddress, LoadedPeer]
+    // min-heap by lastHandshake (oldest at the head); may contain stale entries
+    // superseded by a newer record for the same address, cleaned lazily on eviction
+    val oldestFirst =
+      mutable.PriorityQueue.empty[LoadedPeer](Ordering.by[LoadedPeer, Long](_.lastHandshake).reverse)
+    val keysToRemove  = mutable.ArrayBuffer.empty[Array[Byte]]
+    var removedRecords = 0L
+
+    def flushRemovalBuffer(force: Boolean = false): Unit = {
+      if (keysToRemove.nonEmpty && (force || keysToRemove.length >= RemovalBatchSize)) {
+        flushKeysToRemove(keysToRemove.toArray)
+        removedRecords += keysToRemove.length
+        keysToRemove.clear()
+      }
+    }
+
+    def dropKey(key: Array[Byte]): Unit = {
+      keysToRemove += key
+      flushRemovalBuffer()
+    }
+
+    persistentStore.getAll.foreach { case (key, value) =>
+      if (key.length > PeerDatabase.MaxSerializedPeerAddressSize ||
+          value.length > PeerDatabase.MaxSerializedPeerInfoSize) {
+        log.warn(
+          s"Dropping oversized peer entry from database: key=${key.length} bytes, " +
+          s"value=${value.length} bytes"
+        )
+        dropKey(key)
+      } else {
+        val addressTry  = Try(deserialize(key).asInstanceOf[InetSocketAddress])
+        val peerInfoTry = PeerInfoSerializer.parseBytesTry(value)
+        (addressTry, peerInfoTry) match {
+          case (Success(address), Success(peerInfo)) =>
+            val loaded = LoadedPeer(peerInfo.lastHandshake, address, peerInfo, key)
+            kept.get(address) match {
+              case Some(existing) if existing.lastHandshake >= loaded.lastHandshake =>
+                dropKey(key)
+              case Some(existing) =>
+                kept(address) = loaded
+                oldestFirst.enqueue(loaded)
+                dropKey(existing.keyBytes)
+              case None if kept.size < maxKnownPeers =>
+                kept(address) = loaded
+                oldestFirst.enqueue(loaded)
+              case None =>
+                // evict the oldest kept peer if the loaded one is newer
+                while (oldestFirst.headOption.exists(p => kept.get(p.address).forall(_ != p))) {
+                  oldestFirst.dequeue()
+                }
+                oldestFirst.headOption match {
+                  case Some(oldest) if loaded.lastHandshake > oldest.lastHandshake =>
+                    kept -= oldest.address
+                    kept(address) = loaded
+                    oldestFirst.enqueue(loaded)
+                    dropKey(oldest.keyBytes)
+                  case _ =>
+                    dropKey(key)
+                }
+            }
+          case _ =>
+            log.warn(s"Unable to deserialize peer entry from database, removing it")
+            dropKey(key)
         }
       }
+    }
+    flushRemovalBuffer(force = true)
 
-    val (kept, drop) = validPeers.splitAt(maxKnownPeers)
-    val keysToRemove = oversizedKeys ++ drop.map(_.keyBytes)
-
-    flushKeysToRemove(keysToRemove.toArray)
-    kept.map(p => p.address -> p.peerInfo).toMap
+    if (removedRecords > 0) {
+      log.info(s"Removed $removedRecords malformed, oversized or excess peer entries from database on startup")
+    }
+    kept.map { case (address, loaded) => address -> loaded.peerInfo }.toMap
   }
 
   private def flushKeysToRemove(keys: Array[Array[Byte]]): Unit = {
@@ -165,6 +206,10 @@ final class PeerDatabase(
   /**
     * Evict the oldest known peer (by lastHandshake) from a random sample to make room
     * for a new peer, but never evict a currently connected peer.
+    *
+    * Note: a candidate with `lastHandshake == 0` (a peer we have not handshaked with yet)
+    * can never displace an existing peer. This is an intentional anti-spam policy: data
+    * about not-yet-verified peers must not evict verified ones.
     *
     * @param candidateHandshake - lastHandshake of the peer we want to insert
     * @return true if room was made, false otherwise
@@ -209,13 +254,18 @@ final class PeerDatabase(
   }
 
   /**
-    * Remove peers whose lastHandshake is older than 60 days, excluding connected peers.
+    * Remove peers whose lastHandshake is older than 60 days, excluding connected peers
+    * and peers without a successful handshake (`lastHandshake == 0`, e.g. discovered
+    * but not yet tried peers and unavailable configured seeds), so that untried peers
+    * are not purged shortly after being discovered.
     */
   def removeOldPeers(connectedPeers: Set[InetSocketAddress] = Set.empty): Unit = {
     val cutoff = System.currentTimeMillis() - PeerDatabase.KnownPeerMaxAgeMs
     val toRemove = peers.collect {
       case (address, info)
-          if !connectedPeers.contains(address) && info.lastHandshake < cutoff =>
+          if !connectedPeers.contains(address) &&
+             info.lastHandshake != 0 &&
+             info.lastHandshake < cutoff =>
         address
     }
     toRemove.foreach(remove)
@@ -337,7 +387,21 @@ object PeerDatabase {
   val MaxKnownPeers: Int = 32768
 
   /**
+    * Serialized peer info size must stay below this bound. The value is twice
+    * the maximum handshake size (8KB) to leave a comfortable margin while still
+    * preventing a single malformed/crafted entry from consuming a lot of memory.
+    */
+  private[peer] val MaxSerializedPeerInfoSize: Int = 16384
+
+  /**
+    * Serialized peer address (InetSocketAddress Java serialization) size bound.
+    * Legitimate hostnames can be up to 253 characters, so leave plenty of headroom.
+    */
+  private[peer] val MaxSerializedPeerAddressSize: Int = 1024
+
+  /**
     * Hardcoded maximum age (60 days) for a known peer's lastHandshake.
+    * Peers with `lastHandshake == 0` (never handshaked) are exempt from age cleanup.
     */
   val KnownPeerMaxAgeMs: Long = 60.days.toMillis
 

@@ -12,7 +12,7 @@ import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants._
 import scorex.core.app.ScorexContext
-import scorex.core.network.{ConnectionDirection, ConnectionId, ConnectedPeer, Outgoing}
+import scorex.core.network.{ConnectionDirection, ConnectionId, ConnectedPeer, Incoming, Outgoing}
 import scorex.testkit.utils.AkkaFixture
 
 import java.io.File
@@ -24,7 +24,7 @@ class PeerManagerSpec extends ErgoCorePropertyTest with DBSpec {
 
   import PeerManager.ReceivableMessages._
 
-  private class PeerManagerFixture extends AkkaFixture {
+  private class PeerManagerFixture(knownPeers: Seq[InetSocketAddress] = Seq.empty) extends AkkaFixture {
     val dir: File = createTempDir
 
     val settings: ErgoSettings = {
@@ -32,7 +32,7 @@ class PeerManagerSpec extends ErgoCorePropertyTest with DBSpec {
       base.copy(
         scorexSettings = base.scorexSettings.copy(
           network = base.scorexSettings.network.copy(
-            knownPeers = Seq.empty
+            knownPeers = knownPeers
           )
         )
       )
@@ -82,7 +82,7 @@ class PeerManagerSpec extends ErgoCorePropertyTest with DBSpec {
     )
   }
 
-  property("PeerManager should keep a connected peer during old-peer cleanup") {
+  property("PeerManager should keep a connected peer during old-peer cleanup and not purge untried peers") {
     withFixture { f =>
       import f._
       val address = new InetSocketAddress("8.8.8.8", 9001)
@@ -104,7 +104,62 @@ class PeerManagerSpec extends ErgoCorePropertyTest with DBSpec {
       probe.send(peerManager, CleanupOldPeers)
       probe.send(peerManager, GetAllPeers)
       val peers3 = probe.expectMsgType[Map[InetSocketAddress, PeerInfo]]
-      peers3.keys should not contain address
+      // the peer was never handshaked with (lastHandshake == 0), so it is exempt
+      // from handshake-age cleanup
+      peers3.keys should contain(address)
+    }
+  }
+
+  property("PeerManager should protect an inbound peer whose advertised address differs from the socket address") {
+    withFixture { f =>
+      import f._
+      // for an inbound connection the transport endpoint carries the peer's ephemeral
+      // source port, while the peer database is keyed by the advertised listening address
+      val socketAddress = new InetSocketAddress("8.8.8.8", 54321)
+      val advertised = new InetSocketAddress("8.8.8.8", 9001)
+      val oldTs = System.currentTimeMillis() - PeerDatabase.KnownPeerMaxAgeMs - 1000
+      val probe = TestProbe()
+
+      probe.send(peerManager, AddOrUpdatePeer(peerInfo(advertised, lastHandshake = oldTs)))
+
+      val localAddress = new InetSocketAddress("127.0.0.1", 9002)
+      val inbound = ConnectedPeer(
+        ConnectionId(socketAddress, localAddress, Incoming),
+        ActorRef.noSender,
+        Some(peerInfo(advertised, lastHandshake = oldTs))
+      )
+      probe.send(peerManager, HandshakedPeer(inbound))
+      probe.send(peerManager, CleanupOldPeers)
+      probe.send(peerManager, GetAllPeers)
+      val peers1 = probe.expectMsgType[Map[InetSocketAddress, PeerInfo]]
+      peers1.keys should contain(advertised)
+
+      probe.send(peerManager, DisconnectedPeer(inbound))
+      probe.send(peerManager, CleanupOldPeers)
+      probe.send(peerManager, GetAllPeers)
+      val peers2 = probe.expectMsgType[Map[InetSocketAddress, PeerInfo]]
+      peers2.keys should not contain advertised
+    }
+  }
+
+  property("PeerManager should keep unavailable configured seed peers during cleanup") {
+    val seed = new InetSocketAddress("8.8.8.8", 9001)
+    val f = new PeerManagerFixture(Seq(seed))
+    try {
+      import f._
+      val probe = TestProbe()
+
+      // the seed is added on startup with lastHandshake == 0
+      probe.send(peerManager, GetAllPeers)
+      val peers1 = probe.expectMsgType[Map[InetSocketAddress, PeerInfo]]
+      peers1.keys should contain(seed)
+
+      probe.send(peerManager, CleanupOldPeers)
+      probe.send(peerManager, GetAllPeers)
+      val peers2 = probe.expectMsgType[Map[InetSocketAddress, PeerInfo]]
+      peers2.keys should contain(seed)
+    } finally {
+      Await.result(f.system.terminate(), Duration.Inf)
     }
   }
 
@@ -164,6 +219,21 @@ class PeerManagerSpec extends ErgoCorePropertyTest with DBSpec {
   property("SeenPeers should return all peers when howMany exceeds eligible count") {
     val peers = (1 to 5).map(i => address(i) -> peerInfo(address(i), lastHandshake = 1L)).toMap
     seenPeers(10, peers).size shouldBe 5
+  }
+
+  property("SeenPeers may skip eligible peers outside the bounded scan window") {
+    val eligibleAddr = address(1)
+    val eligible = Map(eligibleAddr -> peerInfo(eligibleAddr, lastHandshake = 1L))
+    // all other peers are ineligible (never handshaked, no connection record)
+    val ineligible = (2 to 2000).map(i => address(i) -> peerInfo(address(i))).toMap
+    val peers = eligible ++ ineligible
+    // With a single eligible peer among 2000, most random scan windows contain only
+    // ineligible records and yield an empty result; windows that do cover the eligible
+    // peer return only it. This is the accepted bounded-work tradeoff: the scan never
+    // examines more than a bounded window even though eligible peers may be missed.
+    val chosen = (1 to 20).flatMap(_ => seenPeers(5, peers))
+    chosen.size should be <= 20
+    chosen.forall(_.peerSpec.declaredAddress.contains(eligibleAddr)) shouldBe true
   }
 
 }

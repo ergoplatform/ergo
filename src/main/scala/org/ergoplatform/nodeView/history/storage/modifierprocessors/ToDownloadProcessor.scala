@@ -111,6 +111,11 @@ trait ToDownloadProcessor
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
+    } else if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) {
+      // While bootstrapping from a UTXO set snapshot, do not download full block sections
+      // until the snapshot has been applied. Block sections downloaded before the snapshot
+      // would be stored as non-best and never applied to the freshly recreated state.
+      Nil
     } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)

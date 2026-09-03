@@ -3,7 +3,8 @@ package org.ergoplatform.network
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
@@ -11,7 +12,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
@@ -41,6 +42,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
   import org.ergoplatform.utils.generators.ChainGenerator._
@@ -201,6 +203,77 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       pchProbe.ref,
       Some(peerInfo)
     )
+  }
+
+  /**
+    * Fixture for UTXO set snapshot bootstrap tests: synchronizer and history are built with
+    * `utxoBootstrap` enabled (or disabled, for control tests), history contains headers only.
+    */
+  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean) extends AkkaFixture {
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+    val ncProbe = TestProbe("NetworkControllerProbe")
+    val pchProbe = TestProbe("PeerHandlerProbe")
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+
+    val synchronizerSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(
+        utxoSettings = UtxoSettings(utxoBootstrap, 0, 2)
+      )
+    )
+
+    deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
+    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+
+    val synchronizerMockRef = system.actorOf(Props(
+      new SynchronizerMock(
+        ncProbe.ref,
+        nodeViewHolderMockRef,
+        ErgoSyncInfoMessageSpec,
+        synchronizerSettings,
+        syncTracker,
+        deliveryTracker)
+    ))
+
+    val history = generateHistory(verifyTransactions = true,
+                                  StateType.Utxo,
+                                  PoPoWBootstrap = false,
+                                  blocksToKeep = -1,
+                                  utxoBootstrap = utxoBootstrap)
+    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val updHistory = applyHeaderChain(history, chain)
+
+    synchronizerMockRef ! ChangedHistory(updHistory)
+    synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(synchronizerSettings))
+
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+    @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+    val peer: ConnectedPeer = ConnectedPeer(
+      connectionIdGen.sample.get,
+      pchProbe.ref,
+      Some(peerInfo)
+    )
+  }
+
+  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
+    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap)
+    try {
+      testCode(fixture)
+    }
+    finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  private def requestForModifierSent(ncProbe: TestProbe, typeId: org.ergoplatform.modifiers.NetworkObjectTypeId.Value, id: scorex.util.ModifierId): Unit = {
+    ncProbe.fishForMessage(3 seconds) {
+      case stn: SendToNetwork =>
+        stn.message.spec.messageCode == RequestModifierSpec.messageCode && {
+          val invData = stn.message.data.get.asInstanceOf[InvData]
+          invData.typeId == typeId && invData.ids.contains(id)
+        }
+      case _ => false
+    }
   }
 
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {
@@ -1165,6 +1238,83 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Verify header inv was broadcast for the second block
       receivedInvs.get(Header.modifierTypeId) shouldBe defined
       receivedInvs(Header.modifierTypeId) should contain(newBlock2.header.id)
+    }
+  }
+
+  /**
+    * During UTXO set snapshot bootstrap block section invs must be ignored until the snapshot is applied.
+    */
+  property("NodeViewSynchronizer: InvSpec - block section invs are ignored during utxo bootstrap") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      val unknownSectionId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Extension.modifierTypeId, Seq(unknownSectionId)))),
+        Some(peer))
+
+      // request must not be sent, the inv is dropped
+      ncProbe.expectNoMessage(1.second)
+    }
+  }
+
+  property("NodeViewSynchronizer: InvSpec - header invs are still processed during utxo bootstrap") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      val unknownHeaderId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(unknownHeaderId)))),
+        Some(peer))
+
+      requestForModifierSent(ncProbe, Header.modifierTypeId, unknownHeaderId)
+    }
+  }
+
+  property("NodeViewSynchronizer: InvSpec - snapshot-related invs are not filtered during utxo bootstrap") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      val manifestId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(ManifestTypeId.value, Seq(manifestId)))),
+        Some(peer))
+      requestForModifierSent(ncProbe, ManifestTypeId.value, manifestId)
+
+      val chunkId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(UtxoSnapshotChunkTypeId.value, Seq(chunkId)))),
+        Some(peer))
+      requestForModifierSent(ncProbe, UtxoSnapshotChunkTypeId.value, chunkId)
+    }
+  }
+
+  property("NodeViewSynchronizer: InvSpec - block section invs processed after utxo snapshot applied") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      // apply snapshot, so that block sections downloading is allowed again
+      updHistory.onUtxoSnapshotApplied(ctx.chain.last.height)
+
+      val unknownSectionId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Extension.modifierTypeId, Seq(unknownSectionId)))),
+        Some(peer))
+
+      requestForModifierSent(ncProbe, Extension.modifierTypeId, unknownSectionId)
+    }
+  }
+
+  property("NodeViewSynchronizer: InvSpec - block section invs processed when utxoBootstrap disabled") {
+    withUtxoBootstrapFixture(utxoBootstrap = false) { ctx =>
+      import ctx._
+
+      val unknownSectionId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Extension.modifierTypeId, Seq(unknownSectionId)))),
+        Some(peer))
+
+      requestForModifierSent(ncProbe, Extension.modifierTypeId, unknownSectionId)
     }
   }
 

@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.viewholder
 
 import java.io.File
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
@@ -32,6 +32,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+  import org.ergoplatform.utils.generators.ChainGenerator._
 
   private val t0 = TestCase("check chain is healthy") { fixture =>
     val (us, bh) = createUtxoState(settings)
@@ -618,6 +619,47 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  /**
+    * Applies a valid NiPoPoW proof from a separately generated chain to an empty node view holder.
+    * With utxoBootstrap enabled, the node must start UTXO set snapshot bootstrap right after the proof
+    * (headers chain marked as synced, no full blocks downloaded yet). Without utxoBootstrap, normal
+    * full blocks downloading must be started instead.
+    */
+  private val t22 = TestCase("apply nipopow proof to empty holder") { fixture =>
+    import fixture._
+
+    // sender history: generate a chain and a NiPoPoW proof for it
+    val senderHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+    val senderChain = genChain(5000, senderHistory)
+    val updSenderHistory = applyChain(senderHistory, senderChain)
+    val popowProof = updSenderHistory.nipopowSerializer.parseBytes(updSenderHistory.popowProofBytes().get)
+
+    // the holder must expect sender's genesis id, as with nipopow bootstrapping
+    updateConfig(genesisIdConfig(updSenderHistory.bestHeaderAtHeight(1).map(_.id)))
+
+    subscribeEvents(classOf[ChangedHistory])
+
+    nodeViewHolderRef ! ProcessNipopow(popowProof)
+    expectMsgType[ChangedHistory]
+
+    getHistory.headersHeight shouldBe updSenderHistory.headersHeight
+    getHistory.isHeadersChainSynced shouldBe true
+
+    val toDownloadMap = getHistory.nextModifiersToDownload(1, (_, id) => !getHistory.contains(id))
+    if (settings.nodeSettings.utxoSettings.utxoBootstrap) {
+      // no full blocks must be downloaded before UTXO set snapshot is applied, ask peers for snapshots
+      toDownloadMap shouldBe Map(SnapshotsInfoTypeId.value -> Seq.empty)
+    } else {
+      // normal nipopow bootstrap: full blocks downloading is started, no snapshot request
+      toDownloadMap.contains(SnapshotsInfoTypeId.value) shouldBe false
+    }
+
+    // second proof must not be applied as history is not empty anymore
+    nodeViewHolderRef ! ProcessNipopow(popowProof)
+    expectNoMsg()
+    getHistory.headersHeight shouldBe updSenderHistory.headersHeight
+  }
+
   val cases: List[TestCase] = List(t0, t1, t2, t3, t3a, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
@@ -648,6 +690,14 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     property(t.name) {
       t.run(parameters, NodeViewTestConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = true))
     }
+  }
+
+  property("nipopow proof starts utxo snapshot bootstrap when utxoBootstrap enabled") {
+    t22.run(parameters, NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true, utxoBootstrap = true))
+  }
+
+  property("nipopow proof starts full blocks downloading when utxoBootstrap disabled") {
+    t22.run(parameters, NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true, utxoBootstrap = false))
   }
 
   property("extractFailedTxId should extract failing transaction id from validation error shapes") {

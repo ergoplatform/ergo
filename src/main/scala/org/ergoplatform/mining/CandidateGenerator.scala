@@ -84,6 +84,24 @@ class CandidateGenerator(
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
   }
 
+  /**
+    * Reaction on invalidation of the block solved by us (e.g. due to a transaction which became
+    * invalid after the block candidate was generated): drop the solved block along with cached
+    * candidates. Mining will resume on the next external request, which will generate a fresh
+    * candidate because the cached one was dropped.
+    */
+  private def onSolvedBlockFailed(state: CandidateGeneratorState, modId: ModifierId, error: Throwable): Unit = {
+    state.solvedBlock.filter(_.toSeq.exists(_.id == modId)).foreach { block =>
+      log.warn(
+        s"Locally mined block ${block.id} invalidated by the node view holder, resuming mining",
+        error
+      )
+      context.become(
+        initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None))
+      )
+    }
+  }
+
   override def receive: Receive = {
 
     // first we need to get Readers to have some initial state to work with
@@ -114,6 +132,8 @@ class CandidateGenerator(
       context.system.eventStream
         .subscribe(self, classOf[FullBlockApplied])
       context.system.eventStream.subscribe(self, classOf[NodeViewChange])
+      context.system.eventStream.subscribe(self, classOf[SemanticallyFailedModification])
+      context.system.eventStream.subscribe(self, classOf[SyntacticallyFailedModification])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
     case m =>
@@ -164,6 +184,17 @@ class CandidateGenerator(
       } else {
         context.become(initialized(stateWithAppliedTxs))
       }
+
+    /*
+     * If a block solved by us was invalidated by the node view holder, we need to drop it along
+     * with cached candidates, as otherwise mining would stall (new solutions are rejected with
+     * "Block already solved" and candidate regeneration is paused while solvedBlock is set).
+     */
+    case SemanticallyFailedModification(_, modId, error) =>
+      onSolvedBlockFailed(state, modId, error)
+
+    case SyntacticallyFailedModification(_, modId, error) =>
+      onSolvedBlockFailed(state, modId, error)
 
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None

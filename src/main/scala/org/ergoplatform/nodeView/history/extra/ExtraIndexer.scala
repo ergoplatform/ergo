@@ -524,6 +524,13 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     case _: FullBlockApplied if state.rollbackInProgress => stash()
 
+    // Resume catch-up when a block is applied while the indexer is behind.
+    // Without this the indexer can stall after logging "Deferring catch-up",
+    // because no Index() message is scheduled and further FullBlockApplied events
+    // are dropped while caughtUp = false.
+    case _: FullBlockApplied if !state.caughtUp && !state.rollbackInProgress =>
+      self ! Index()
+
     case Rollback(branchPoint: ModifierId) =>
       if (state.rollbackInProgress) {
         log.warn(s"Rollback already in progress")

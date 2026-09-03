@@ -4,7 +4,6 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.IdUtils._
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.serialization.ErgoSerializer
-import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import sigmastate.eval.Extensions.ArrayByteOps
 
@@ -42,10 +41,10 @@ object WalletDigestSerializer extends ErgoSerializer[WalletDigest] {
   }
 
   override def parse(r: Reader): WalletDigest = {
-    val height = r.getUInt().toIntExact
+    val height = r.getUIntExact()
     val balance = r.getULong()
 
-    val walletAssetBalancesSize = r.getUInt().toIntExact
+    val walletAssetBalancesSize = r.getUIntExact()
 
     val walletAssetBalances = mutable.LinkedHashMap.empty[EncodedTokenId, Long]
     (0 until walletAssetBalancesSize).foreach { _ =>

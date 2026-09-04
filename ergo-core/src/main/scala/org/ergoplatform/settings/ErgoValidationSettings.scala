@@ -33,7 +33,16 @@ case class ErgoValidationSettings(rules: Map[Short, RuleStatus],
   override val isFailFast: Boolean = true
 
   override def getError(id: Short, invalidMod: InvalidModifier): ValidationResult.Invalid = {
-    rules.get(id).map(_.invalidMod(invalidMod)).getOrElse(ModifierValidator.fatal(invalidMod.error, invalidMod.modifierId, invalidMod.modifierTypeId))
+    rules.get(id).map(_.invalidMod(invalidMod)).getOrElse {
+      // Rule 414 remains unregistered to preserve existing update parsing
+      // and activation semantics.
+      val error = if (id == ValidationRules.exMatchParameters60) {
+        s"Validation rule 414 (exMatchParameters60) failed. ${invalidMod.error}"
+      } else {
+        invalidMod.error
+      }
+      ModifierValidator.fatal(error, invalidMod.modifierId, invalidMod.modifierTypeId)
+    }
   }
 
   override def isActive(id: Short): Boolean = {

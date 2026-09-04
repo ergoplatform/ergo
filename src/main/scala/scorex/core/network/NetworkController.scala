@@ -63,6 +63,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
+  private var unconfirmedIncomingConnections = Map.empty[InetSocketAddress, ActorRef]
 
   private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
@@ -163,11 +164,22 @@ class NetworkController(ergoSettings: ErgoSettings,
       peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
     case Blacklisted(peerAddress) =>
-      connections.get(peerAddress).foreach { peer =>
-        connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
-          Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
+      Option(peerAddress.getAddress).foreach { blacklistedIp =>
+        val peersToClose = connections.valuesIterator.filter { peer =>
+          Option(peer.connectionId.remoteAddress.getAddress).contains(blacklistedIp)
+        }.toSeq
+        peersToClose.foreach(_.handlerRef ! CloseConnection)
+
+        val pendingToClose = unconfirmedIncomingConnections.iterator.collect {
+          case (address, connectionRef)
+            if Option(address.getAddress).contains(blacklistedIp) =>
+            address -> connectionRef
+        }.toSeq
+        pendingToClose.foreach { case (address, connectionRef) =>
+          unconfirmedIncomingConnections -= address
+          context.unwatch(connectionRef)
+          connectionRef ! Close
         }
-        peer.handlerRef ! CloseConnection
       }
   }
 
@@ -179,13 +191,20 @@ class NetworkController(ergoSettings: ErgoSettings,
       log.info(s"Unconfirmed connection: ($remoteAddress, $localAddress) => $connectionId")
       if (connectionDirection.isOutgoing) {
         createPeerConnectionHandler(connectionId, sender())
+      } else if (unconfirmedIncomingConnections.contains(remoteAddress)) {
+        log.warn(s"Connection to peer $remoteAddress is already pending")
+        sender() ! Close
       } else {
-        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
+        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming) +
+          unconfirmedIncomingConnections.size
         if (incomingCount >= incomingLimit) {
           log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
           sender() ! Close
         } else {
-          peerManagerRef ! ConfirmConnection(connectionId, sender())
+          val connectionRef = sender()
+          unconfirmedIncomingConnections += remoteAddress -> connectionRef
+          context.watch(connectionRef)
+          peerManagerRef ! ConfirmConnection(connectionId, connectionRef)
         }
       }
 
@@ -194,11 +213,39 @@ class NetworkController(ergoSettings: ErgoSettings,
       sender() ! Close
 
     case ConnectionConfirmed(connectionId, handlerRef) =>
-      log.info(s"Connection confirmed to $connectionId")
-      createPeerConnectionHandler(connectionId, handlerRef)
+      if (connectionId.direction.isIncoming) {
+        val remoteAddress = connectionId.remoteAddress
+        if (unconfirmedIncomingConnections.get(remoteAddress).contains(handlerRef)) {
+          unconfirmedIncomingConnections -= remoteAddress
+          context.unwatch(handlerRef)
+          val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
+          if (incomingCount >= incomingLimit) {
+            log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
+            handlerRef ! Close
+          } else {
+            log.info(s"Connection confirmed to $connectionId")
+            createPeerConnectionHandler(connectionId, handlerRef)
+          }
+        } else {
+          log.info(s"Ignoring stale incoming connection confirmation from $remoteAddress")
+          handlerRef ! Close
+        }
+      } else {
+        log.info(s"Connection confirmed to $connectionId")
+        createPeerConnectionHandler(connectionId, handlerRef)
+      }
 
     case ConnectionDenied(connectionId, handlerRef) =>
       log.info(s"Incoming connection from ${connectionId.remoteAddress} denied")
+      if (connectionId.direction.isIncoming) {
+        val remoteAddress = connectionId.remoteAddress
+        if (unconfirmedIncomingConnections.get(remoteAddress).contains(handlerRef)) {
+          unconfirmedIncomingConnections -= remoteAddress
+          context.unwatch(handlerRef)
+        } else {
+          log.info(s"Ignoring stale incoming connection denial from $remoteAddress")
+        }
+      }
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
@@ -222,6 +269,14 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
 
     case Terminated(ref) =>
+      val pendingAddress = unconfirmedIncomingConnections.collectFirst {
+        case (address, connectionRef) if connectionRef == ref => address
+      }
+      pendingAddress.foreach { address =>
+        log.info(s"Pending incoming connection from $address terminated")
+        unconfirmedIncomingConnections -= address
+      }
+
       connectionForHandler(ref) match {
         case Some(connectedPeer) =>
           log.info(s"Terminating connection to $connectedPeer")
@@ -229,11 +284,16 @@ class NetworkController(ergoSettings: ErgoSettings,
           connections -= remoteAddress
           unconfirmedConnections -= remoteAddress
           context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
-        case None =>
+        case None if pendingAddress.isEmpty =>
           log.warn(s"No connection found for $ref during termination")
+        case None => ()
       }
 
     case _: ConnectionClosed =>
+      val connectionRef = sender()
+      unconfirmedIncomingConnections =
+        unconfirmedIncomingConnections.filterNot { case (_, ref) => ref == connectionRef }
+      context.unwatch(connectionRef)
       log.info("Denied connection has been closed")
   }
 

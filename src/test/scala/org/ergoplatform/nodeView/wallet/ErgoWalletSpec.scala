@@ -1127,4 +1127,17 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     }
   }
 
+  property("keep the wallet actor responsive when hint boxes are unavailable") {
+    withFixture { implicit w =>
+      val tx = org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgoTransactionGen.sample.get._2
+
+      val failure = intercept[IllegalArgumentException] {
+        await(wallet.extractHints(tx, Seq.empty, Seq.empty, None, None))
+      }
+
+      failure.getMessage should include ("Input box count")
+      await(wallet.getWalletStatus).initialized shouldBe true
+    }
+  }
+
 }

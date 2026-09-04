@@ -31,7 +31,7 @@ import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.{augWalletTransactionForScanGen, augWalletTransactionGen, boxesHolderGen}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.{ChainStatus, TrackedBox}
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
@@ -270,6 +270,12 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
         sender() ! ergoWalletService.signTransaction(Some(prover), tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt, parameters, sc) { boxId =>
           utxoState.versionedBoxHolder.get(ByteArrayWrapper(boxId))
         }
+
+      case ExtractHints(_, _, _, None, None) =>
+        sender() ! akka.actor.Status.Failure(new IllegalArgumentException("Referenced transaction boxes are unavailable"))
+
+      case ExtractHints(_, _, _, _, _) =>
+        sender() ! ExtractHintsResult(TransactionHintsBag.empty)
     }
   }
 

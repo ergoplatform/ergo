@@ -251,28 +251,41 @@ class CandidateGenerator(
         } else {
           preSolution
         }
-      val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
-          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
-            log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
-          }
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
-          case Success(_) =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
-          case Failure(exception) =>
-            log.warn(s"Removing candidates due to invalid block", exception)
-            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
-            )
+      val newBlockOpt = state.cachedCandidate
+        .map(candidate => completeBlock(candidate.candidateBlock, solution))
+        .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
+        .orElse {
+          log.info(
+            s"Using previous candidate as a solution: ${state.cachedPreviousCandidate}"
+          )
+          state.cachedPreviousCandidate.map(candidate =>
+            completeBlock(candidate.candidateBlock, solution)
+          )
         }
-      }
+      val result: StatusReply[Unit] = newBlockOpt match {
+        case Some(newBlock) =>
+          log.info(s"New block mined, header: ${newBlock.header}")
+          ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
+            case Success(_) =>
+              sendToNodeView(newBlock)
+              context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
+              StatusReply.success(())
+            case Failure(exception) =>
+              log.warn(s"Removing candidates due to invalid block", exception)
+              context.become(
+                initialized(
+                  state.copy(cachedCandidate = None, cachedPreviousCandidate = None)
+                )
+              )
+              StatusReply.error(
+                new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+              )
+          }
+        case None =>
+          StatusReply.error(
+            "Invalid solution for current candidate and no previous candidate available"
+          )
+        }
       log.info(s"Processed solution $solution with the result $result")
       sender() ! result
 

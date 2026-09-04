@@ -15,10 +15,13 @@ class MessageSerializerSpecification extends ErgoCorePropertyTest {
   private val magic = Array(1: Byte, 0: Byte, 2: Byte, 4: Byte)
   private val serializer = new MessageSerializer(Seq(ModifiersSpec), magic)
 
-  private def headerWithLength(length: Int): ByteString = {
+  private def headerWithLength(
+    length: Int,
+    messageCode: Byte = ModifiersSpec.messageCode
+  ): ByteString = {
     ByteString.createBuilder
       .putBytes(magic)
-      .putByte(ModifiersSpec.messageCode)
+      .putByte(messageCode)
       .putInt(length)
       .result()
   }
@@ -47,5 +50,14 @@ class MessageSerializerSpecification extends ErgoCorePropertyTest {
 
   property("message serializer waits for header before checking payload length") {
     serializer.deserialize(ByteString(Array.fill(HeaderLength - 1)(0.toByte)), None).get shouldBe None
+  }
+
+  property("message serializer rejects unknown message codes as malicious") {
+    val unknownCode = (ModifiersSpec.messageCode + 1).toByte
+    val result = serializer.deserialize(headerWithLength(0, unknownCode), None)
+
+    result.isFailure shouldBe true
+    result.failed.get shouldBe a[MaliciousBehaviorException]
+    result.failed.get.getMessage should include(unknownCode.toString)
   }
 }

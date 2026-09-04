@@ -70,6 +70,17 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     )
   }
 
+  property("should read null CORS origin as disabled") {
+    val config = ConfigFactory
+      .parseString("scorex.restApi.corsAllowedOrigin = null")
+      .withFallback(ConfigFactory.load())
+      .resolve()
+
+    ErgoSettingsReader
+      .fromConfig(config)
+      .scorexSettings.restApi.corsAllowedOrigin shouldBe None
+  }
+
   property("should read user settings from json file") {
     val settings = ErgoSettingsReader.read(Args(Some("src/test/resources/settings.json"), None))
     settings.nodeSettings shouldBe NodeConfigurationSettings(

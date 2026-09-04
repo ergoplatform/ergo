@@ -36,6 +36,7 @@ import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -63,6 +64,15 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
   private val defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
 
+  private class ToggleRejectingPowScheme(k: Int, n: Int)
+      extends DefaultFakePowScheme(k, n) {
+    @volatile var rejectSolutions: Boolean = false
+
+    override def validate(header: Header): Try[Unit] =
+      if (rejectSolutions) Failure(new Exception("Rejected by test PoW scheme"))
+      else super.validate(header)
+  }
+
   it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
     ActorSystem()
   ) {
@@ -84,6 +94,60 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // after applying solution from miner
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    system.terminate()
+  }
+
+  it should "reject an invalid first solution without restarting" in new TestKit(
+    ActorSystem()
+  ) {
+    val testProbe = new TestProbe(system)
+    val powScheme = new ToggleRejectingPowScheme(
+      defaultSettings.chainSettings.powScheme.k,
+      defaultSettings.chainSettings.powScheme.n
+    )
+    val testSettings = defaultSettings.copy(
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = powScheme),
+      directory =
+        s"${defaultSettings.directory}-invalid-first-${System.currentTimeMillis()}"
+    )
+    val viewHolderRef = ErgoNodeViewRef(testSettings)
+    val readersHolderRef = ErgoReadersHolderRef(viewHolderRef)
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderRef,
+      testSettings
+    )
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false),
+      testProbe.ref
+    )
+    val candidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    val solution = powScheme
+      .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+      .get
+      .header
+      .powSolution
+    powScheme.rejectSolutions = true
+
+    candidateGenerator.tell(solution, testProbe.ref)
+
+    testProbe.expectMsgPF(blockValidationDelay) {
+      case StatusReply.Error(error) =>
+        error.getMessage shouldBe
+          "Invalid solution for current candidate and no previous candidate available"
+    }
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false),
+      testProbe.ref
+    )
+    val cachedCandidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    cachedCandidate should be theSameInstanceAs candidate
     system.terminate()
   }
 

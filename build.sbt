@@ -41,7 +41,7 @@ publishArtifact in (Compile, packageDoc) := false
 
 val circeVersion = "0.14.15"
 val akkaVersion = "2.6.10"
-val akkaHttpVersion = "10.2.4"
+val akkaHttpVersion = "10.2.10"
 
 val sigmaStateVersion = "6.0.6"
 val ficusVersion = "1.4.7"

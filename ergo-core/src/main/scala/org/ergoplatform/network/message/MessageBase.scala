@@ -28,7 +28,7 @@ trait MessageBase[Content] {
     * Structured message content
     */
   lazy val data: Try[Content] = input match {
-    case Left(db) => spec.parseBytesTry(db)
+    case Left(db) => spec.parsePayloadBytesTry(db)
     case Right(d) => Success(d)
   }
 

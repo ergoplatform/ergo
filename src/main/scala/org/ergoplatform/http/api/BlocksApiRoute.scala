@@ -190,7 +190,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getFullBlockByHeaderIdsR: Route = (post & path("headerIds") & modifierIds) { ids =>
-    ApiResponse(getFullBlockByHeaderIds(ids))
+    if (ids.length > MaxHeaders) {
+      BadRequest(s"No more than $MaxHeaders headers can be requested")
+    } else {
+      ApiResponse(getFullBlockByHeaderIds(ids))
+    }
   }
 
 }

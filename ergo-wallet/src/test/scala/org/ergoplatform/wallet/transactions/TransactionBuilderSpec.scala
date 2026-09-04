@@ -116,6 +116,37 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     tx.outputCandidates(0) shouldEqual outBox
   }
 
+  property("reject output and fee total overflow") {
+    val inputBox = box(Long.MaxValue)
+    val outBox = boxCandidate(Long.MaxValue)
+    val res = transaction(inputBox, outBox, fee = Some(1L))
+
+    res.isFailure shouldBe true
+    res.failed.get shouldBe a[ArithmeticException]
+  }
+
+  property("reject input total overflow") {
+    val inputBoxes = IndexedSeq(
+      testBox(Long.MaxValue, TrueTree, currentHeight, boxIndex = 0),
+      testBox(1L, TrueTree, currentHeight, boxIndex = 1)
+    )
+    val outBox = boxCandidate(minBoxValue)
+    val changeAddress = P2PKAddress(rootSecret.privateInput.publicImage)
+    val res = buildUnsignedTx(
+      inputs = inputBoxes,
+      dataInputs = IndexedSeq.empty,
+      outputCandidates = IndexedSeq(outBox),
+      currentHeight = currentHeight,
+      createFeeOutput = Some(minBoxValue),
+      changeAddress = changeAddress,
+      minChangeValue = minChangeValue,
+      minerRewardDelay = minerRewardDelay
+    )
+
+    res.isFailure shouldBe true
+    res.failed.get shouldBe a[ArithmeticException]
+  }
+
   property("change goes to fee, but no outFee box") {
     val inputBox = box(minBoxValue + minBoxValue / 2)
     val tokenId  = inputBox.id.toTokenId

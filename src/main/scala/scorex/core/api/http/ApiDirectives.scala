@@ -9,6 +9,8 @@ trait ApiDirectives extends CorsHandler with ScorexEncoding {
   val settings: RESTApiSettings
   val apiKeyHeaderName: String
 
+  override protected def corsAllowedOrigin: Option[String] = settings.corsAllowedOrigin
+
   lazy val withAuth: Directive0 = optionalHeaderValueByName(apiKeyHeaderName).flatMap {
     case _ if settings.apiKeyHash.isEmpty => pass
     case None => reject(AuthorizationFailedRejection)

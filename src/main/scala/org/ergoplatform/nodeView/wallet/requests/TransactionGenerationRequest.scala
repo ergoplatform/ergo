@@ -28,18 +28,15 @@ class TransactionRequestDecoder(settings: ErgoSettings) extends Decoder[Transact
   val burnTokensRequestDecoder: BurnTokensRequestDecoder = new BurnTokensRequestDecoder()
 
   def apply(cursor: HCursor): Decoder.Result[TransactionGenerationRequest] = {
-    val paymentRequestDecoderResult = paymentRequestDecoder.apply(cursor)
-    val assetIssueRequestDecoderResult = assetIssueRequestDecoder.apply(cursor)
-    val burnTokensRequestDecoderResult = burnTokensRequestDecoder.apply(cursor)
-    if (paymentRequestDecoderResult.isLeft &&
-        assetIssueRequestDecoderResult.isLeft &&
-        burnTokensRequestDecoderResult.isLeft
-    ) {
-      paymentRequestDecoderResult
+    val keys = cursor.keys.map(_.toSet).getOrElse(Set.empty[String])
+    if (keys.contains("value") || keys.contains("assets")) {
+      paymentRequestDecoder(cursor)
+    } else if (Seq("amount", "name", "description", "decimals", "ergValue").exists(keys.contains)) {
+      assetIssueRequestDecoder(cursor)
+    } else if (keys.contains("assetsToBurn")) {
+      burnTokensRequestDecoder(cursor)
     } else {
-      Seq(paymentRequestDecoderResult, assetIssueRequestDecoderResult, burnTokensRequestDecoderResult)
-        .find(_.isRight)
-        .get
+      Left(DecodingFailure("Missing transaction request discriminator", cursor.history))
     }
   }
 

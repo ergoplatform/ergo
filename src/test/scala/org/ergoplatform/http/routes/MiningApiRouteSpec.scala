@@ -32,13 +32,7 @@ class MiningApiRouteSpec
   val localSetting: ErgoSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(useExternalMiner = true))
   val route: Route = MiningApiRoute(minerRef, localSetting).route
 
-  val settingsWithAuth: ErgoSettings = localSetting.copy(
-    scorexSettings = localSetting.scorexSettings.copy(
-      restApi = localSetting.scorexSettings.restApi.copy(
-        apiKeyHash = Some("e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10")
-      )
-    )
-  )
+  val settingsWithAuth: ErgoSettings = ApiTestAuth.settingsWithApiKey(localSetting)
   val routeWithAuth: Route = MiningApiRoute(minerRef, settingsWithAuth).route
 
   val solution = AutolykosSolution(genECPoint.sample.get, genECPoint.sample.get, Array.fill(32)(9: Byte), BigInt(0))
@@ -71,7 +65,8 @@ class MiningApiRouteSpec
   it should "return candidate with valid custom miner public key" in {
     val request = MiningRequest(Seq.empty, validPkHex)
 
-    Post(prefix + "/candidateWithTxsAndPk", request.asJson) ~> route ~> check {
+    Post(prefix + "/candidateWithTxsAndPk", request.asJson) ~>
+      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> routeWithAuth ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[Json]) shouldBe 'success
     }

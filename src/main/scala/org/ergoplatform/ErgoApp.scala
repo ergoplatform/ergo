@@ -37,10 +37,9 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val ergoSettings: ErgoSettings = ErgoSettingsReader.read(args)
 
-  require(
-    ergoSettings.scorexSettings.restApi.apiKeyHash.isDefined,
-    "API key hash must be set"
-  )
+  if (ergoSettings.scorexSettings.restApi.apiKeyHash.isEmpty) {
+    log.warn("No API key hash configured. Protected REST routes are disabled.")
+  }
   log.info(s"Working directory: ${ergoSettings.directory}")
   log.info(s"Secret directory: ${ergoSettings.walletSettings.secretStorage.secretDir}")
 

@@ -15,7 +15,7 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 
 import java.security.SecureRandom
-import scala.util.Failure
+import scala.util.{Failure, Try}
 import sigma.serialization.{ErgoTreeSerializer, GroupElementSerializer, SigmaSerializer}
 
 class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
@@ -69,9 +69,17 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   def rawToAddressR: Route = (get & path("rawToAddress" / Segment)) { pubKeyHex =>
     Base16
       .decode(pubKeyHex)
-      .flatMap(pkBytes =>
-        GroupElementSerializer.parseTry(SigmaSerializer.startReader(pkBytes))
-      )
+      .flatMap { pkBytes =>
+        val reader = SigmaSerializer.startReader(pkBytes)
+        GroupElementSerializer.parseTry(reader).flatMap { pkPoint =>
+          Try {
+            if (reader.position != pkBytes.length) {
+              throw new IllegalArgumentException("Public key bytes contain trailing data")
+            }
+            pkPoint
+          }
+        }
+      }
       .map(pkPoint => P2PKAddress(ProveDlog(pkPoint)))
       .fold(
         e => BadRequest(e.getMessage),
@@ -94,7 +102,14 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     Base16
       .decode(ergoTreeHex)
       .flatMap { etBytes =>
-        ergoAddressEncoder.fromProposition(treeSerializer.deserializeErgoTree(etBytes))
+        Try {
+          val reader = SigmaSerializer.startReader(etBytes)
+          val tree = treeSerializer.deserializeErgoTree(reader, SigmaSerializer.MaxPropositionSize)
+          if (reader.position != etBytes.length) {
+            throw new IllegalArgumentException("ErgoTree bytes contain trailing data")
+          }
+          tree
+        }.flatMap(ergoAddressEncoder.fromProposition)
       }
       .fold(
         e => BadRequest(e.getMessage),

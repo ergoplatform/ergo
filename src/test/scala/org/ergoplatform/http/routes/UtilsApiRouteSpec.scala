@@ -29,6 +29,7 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val route: Route = ErgoUtilsApiRoute(settings).route
+  val sealedRoute: Route = Route.seal(route)
   val p2pkaddress = P2PKAddress(defaultMinerPk)(settings.addressEncoder)
   val p2shaddress = Pay2SHAddress(feeProp)(settings.addressEncoder)
   val p2saddress = Pay2SAddress(feeProp)(settings.addressEncoder)
@@ -40,6 +41,47 @@ class UtilsApiRouteSpec extends AnyFlatSpec
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2saddress.toString())
+    }
+  }
+
+  it should "derive address from ErgoTree through POST" in {
+    val et = Base16.encode(treeSerializer.serializeErgoTree(p2saddress.script))
+
+    Post(s"$prefix/ergoTreeToAddress", Json.fromString(et)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2saddress.toString())
+    }
+  }
+
+  it should "reject malformed ErgoTree data through GET" in {
+    Get(s"$prefix/ergoTreeToAddress/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject malformed ErgoTree data through POST" in {
+    Post(s"$prefix/ergoTreeToAddress", Json.fromString("00")) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject ErgoTree bytes with trailing data through GET" in {
+    val et = Base16.encode(treeSerializer.serializeErgoTree(p2saddress.script))
+
+    Get(s"$prefix/ergoTreeToAddress/${et}00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String] shouldEqual
+        Right("ErgoTree bytes contain trailing data")
+    }
+  }
+
+  it should "reject ErgoTree bytes with trailing data through POST" in {
+    val et = Base16.encode(treeSerializer.serializeErgoTree(p2saddress.script))
+
+    Post(s"$prefix/ergoTreeToAddress", Json.fromString(et + "00")) ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String] shouldEqual
+        Right("ErgoTree bytes contain trailing data")
     }
   }
 
@@ -118,6 +160,16 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       val json = responseAs[Json]
       val c = json.hcursor
       c.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+    }
+  }
+
+  it should "reject raw public keys with trailing bytes" in {
+    val raw = Base16.encode(p2pkaddress.contentBytes)
+
+    Get(s"$prefix/rawToAddress/${raw}00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String] shouldEqual
+        Right("Public key bytes contain trailing data")
     }
   }
 

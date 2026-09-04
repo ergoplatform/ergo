@@ -3,13 +3,13 @@ package org.ergoplatform.network
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{SnapshotTestAccess, StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
@@ -18,10 +18,10 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
-import org.ergoplatform.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
@@ -773,6 +773,56 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       eventually {
         deliveryTracker.status(modifierId, nonHeaderTypeId, Seq.empty) shouldBe Unknown
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery should exhaust the snapshot chunk retry budget") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val boxes = boxesHolderGenOfSize(128).sample.get
+      val state = createUtxoState(boxes, parameters)
+      val snapshotHeight = 1
+      val manifestDepth = 2.toByte
+      val manifest = SnapshotTestAccess.dumpManifest(state, snapshotHeight, manifestDepth)
+      val plan = hhistory.registerManifestToDownload(manifest, snapshotHeight, Seq(peer))
+
+      val chunkBytes = plan.expectedChunkIds.head
+      val chunkId = bytesToId(chunkBytes)
+      val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
+      val checksBeforeTimeout = maxDeliveryChecks - 2
+
+      ncProbe.send(synchronizerMockRef, ChangedHistory(hhistory))
+      ncProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
+      deliveryTracker.setRequested(
+        UtxoSnapshotChunkTypeId.value,
+        chunkId,
+        peer,
+        checksBeforeTimeout)(_ => Cancellable.alreadyCancelled)
+
+      ncProbe.send(synchronizerMockRef, CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId))
+      ncProbe.expectMsg(PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.NonDeliveryPenalty))
+      ncProbe.expectMsgPF(3.seconds) {
+        case SendToNetwork(message, SendToPeer(selectedPeer)) if message.spec == GetUtxoSnapshotChunkSpec =>
+          selectedPeer shouldBe peer
+          message.data.get.asInstanceOf[Array[Byte]].sameElements(chunkBytes) shouldBe true
+      }
+
+      eventually {
+        val requestedInfo = deliveryTracker
+          .getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId)
+          .get
+        requestedInfo.checks shouldBe checksBeforeTimeout + 1
+        requestedInfo.peer shouldBe peer
+      }
+
+      ncProbe.send(synchronizerMockRef, CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId))
+      ncProbe.expectMsg(PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.NonDeliveryPenalty))
+      eventually {
+        deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Unknown
+      }
+      ncProbe.expectNoMessage(1.second)
     }
   }
 

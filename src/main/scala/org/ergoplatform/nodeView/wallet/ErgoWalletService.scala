@@ -454,16 +454,22 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
       boxSelector: BoxSelector,
       targetBalance: Long,
       targetAssets: Map[ErgoBox.TokenId, Long]): Try[CollectedBoxes] = {
-    val assetsMap = targetAssets.map(t => t._1.toModifierId -> t._2)
-    val inputBoxes = state.getBoxesToSpend
-    boxSelector
-      .select(inputBoxes.iterator, state.walletFilter, targetBalance, assetsMap)
-      .leftMap(m => new Exception(m.message))
-      .map { res =>
-        val ergoBoxes = res.inputBoxes.map(_.box)
-        val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens))
-        CollectedBoxes(ergoBoxes, changeBoxes)
-      }.toTry
+    if (targetBalance < 0) {
+      Failure(new IllegalArgumentException(s"targetBalance must be >= 0, got $targetBalance"))
+    } else if (!targetAssets.values.forall(_ > 0)) {
+      Failure(new IllegalArgumentException(s"targetAssets values must be > 0, got $targetAssets"))
+    } else {
+      val assetsMap = targetAssets.map(t => t._1.toModifierId -> t._2)
+      val inputBoxes = state.getBoxesToSpend
+      boxSelector
+        .select(inputBoxes.iterator, state.walletFilter, targetBalance, assetsMap)
+        .leftMap(m => new Exception(m.message))
+        .map { res =>
+          val ergoBoxes = res.inputBoxes.map(_.box)
+          val changeBoxes = res.changeBoxes.map(b => ChangeBox(b.value, b.tokens))
+          CollectedBoxes(ergoBoxes, changeBoxes)
+        }.toTry
+    }
   }
 
   override def generateTransaction(state: ErgoWalletState,

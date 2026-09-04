@@ -9,7 +9,7 @@ import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, TokenId}
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.settings.RESTApiSettings
 import org.ergoplatform.utils.Stubs
@@ -17,6 +17,7 @@ import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
+import sigma.VersionContext
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, SType}
@@ -56,6 +57,12 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   val output: ErgoBoxCandidate =
      new ErgoBoxCandidate(inputBox.value, TrueTree, creationHeight = 0, tokens.toArray.toColl, registers)
   val tx: ErgoTransaction = ErgoTransaction(IndexedSeq(input), IndexedSeq(dataInput), IndexedSeq(output))
+  val canonicalTxBytes: String = {
+    val version = settings.chainSettings.protocolVersion
+    VersionContext.withVersions(version, version) {
+      Base16.encode(ErgoTransactionSerializer.toBytes(tx))
+    }
+  }
 
   val chainedInput = Input(tx.outputs.head.id, emptyProverResult)
   val chainedTx: ErgoTransaction = ErgoTransaction(IndexedSeq(chainedInput), IndexedSeq(output))
@@ -124,6 +131,34 @@ class TransactionApiRouteSpec extends AnyFlatSpec
         status shouldBe StatusCodes.OK
         responseAs[String] shouldEqual chainedTx.id
       }
+  }
+
+  it should "accept canonical transaction bytes" in {
+    Seq("checkBytes", "bytes").foreach { endpoint =>
+      withClue(endpoint) {
+        Post(prefix + s"/$endpoint", canonicalTxBytes) ~> route ~> check {
+          status shouldBe StatusCodes.OK
+          responseAs[String] shouldBe tx.id
+        }
+      }
+    }
+  }
+
+  it should "reject transaction bytes with trailing data" in {
+    val txBytes = canonicalTxBytes + "00"
+
+    Seq("checkBytes", "bytes").foreach { endpoint =>
+      withClue(endpoint) {
+        Post(prefix + s"/$endpoint", txBytes) ~> route ~> check {
+          status shouldBe StatusCodes.BadRequest
+          val response = responseAs[Json].hcursor
+          response.get[Int]("error") shouldBe Right(StatusCodes.BadRequest.intValue)
+          response.get[String]("reason") shouldBe Right("bad.request")
+          response.get[String]("detail") shouldBe
+            Right("Can not parse transaction bytes: Transaction bytes contain trailing data")
+        }
+      }
+    }
   }
 
   it should "get unconfirmed txs from mempool" in {

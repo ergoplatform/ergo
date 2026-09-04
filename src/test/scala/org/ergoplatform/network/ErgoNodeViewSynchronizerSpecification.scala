@@ -2,10 +2,14 @@ package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
+import org.ergoplatform.modifiers.history.{ADProofsSerializer, BlockTransactions, BlockTransactionsSerializer}
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.mempool.ErgoTransactionSerializer
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetNodeViewChanges, TransactionFromRemote}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -18,15 +22,16 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
-import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.testkit.utils.AkkaFixture
+import sigma.VersionContext
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
@@ -59,6 +64,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
   private def withFixture2(testCode: Synchronizer2Fixture => Any): Unit = {
     val fixture = new Synchronizer2Fixture
+    try {
+      testCode(fixture)
+    }
+    finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  private def withTransactionIngressFixture(testCode: TransactionIngressFixture => Any): Unit = {
+    val fixture = new TransactionIngressFixture
     try {
       testCode(fixture)
     }
@@ -203,6 +218,41 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
   }
 
+  class TransactionIngressFixture extends AkkaFixture {
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+    val h = localHistoryGen.sample.get
+    val pool = ErgoMemPool.empty(settings)
+    val ncProbe = TestProbe("TransactionNetworkControllerProbe")
+    val viewHolderProbe = TestProbe("TransactionViewHolderProbe")
+    val pchProbe = TestProbe("TransactionPeerHandlerProbe")
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+
+    deleteRecursive(ErgoHistory.historyDir(settings))
+    val synchronizer = system.actorOf(Props(
+      new SynchronizerMock(
+        ncProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker)
+    ))
+
+    viewHolderProbe.expectMsgType[GetNodeViewChanges](3.seconds)
+
+    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+    val peer: ConnectedPeer = ConnectedPeer(
+      connectionIdGen.sample.get,
+      pchProbe.ref,
+      Some(peerInfo)
+    )
+    val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+
+    viewHolderProbe.send(synchronizer, ChangedHistory(h))
+    viewHolderProbe.send(synchronizer, ChangedMempool(pool))
+  }
+
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - younger peer") {
     withFixture { ctx =>
       import ctx._
@@ -271,6 +321,97 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       eventually {
         deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: rejects header bytes with trailing payload") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> (header.bytes ++ Array(0: Byte))))
+      val modSpec = ModifiersSpec
+      synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+
+      eventually {
+        deliveryTracker.status(header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: transaction ingress accepts canonical bytes and rejects a trailing byte") {
+    withTransactionIngressFixture { ctx =>
+      import ctx._
+      val typeId = tx.modifierTypeId
+      val scriptVersion = Header.scriptFromBlockVersion(Header.InitialVersion)
+      val canonicalBytes = VersionContext.withVersions(scriptVersion, scriptVersion) {
+        ErgoTransactionSerializer.toBytes(tx)
+      }
+
+      def sendTransaction(bytes: Array[Byte]): Unit = {
+        val data = ModifiersData(typeId, Map(tx.id -> bytes))
+        viewHolderProbe.send(
+          synchronizer,
+          Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(peer))
+        )
+      }
+
+      deliveryTracker.setRequested(typeId, tx.id, peer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.status(tx.id, typeId, Seq.empty) shouldBe Requested
+
+      sendTransaction(canonicalBytes)
+      val accepted = viewHolderProbe.expectMsgType[TransactionFromRemote](3.seconds)
+      accepted.unconfirmedTx.transaction shouldBe tx
+      accepted.unconfirmedTx.transactionBytes.exists(_.sameElements(canonicalBytes)) shouldBe true
+      accepted.unconfirmedTx.source shouldBe Some(peer)
+
+      sendTransaction(canonicalBytes ++ Array(0: Byte))
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      viewHolderProbe.expectNoMessage(300.millis)
+
+      deliveryTracker.status(tx.id, typeId, Seq.empty) shouldBe Requested
+      viewHolderProbe.send(synchronizer, CheckDelivery(peer, typeId, tx.id))
+      eventually {
+        deliveryTracker.status(tx.id, typeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: exact modifier parsing accepts canonical bytes and rejects trailing bytes") {
+    def checkExact[M](serializer: ErgoSerializer[M], bytes: Array[Byte]): Unit = {
+      ErgoNodeViewSynchronizer.parseBytesExact(serializer, bytes).isSuccess shouldBe true
+      ErgoNodeViewSynchronizer.parseBytesExact(serializer, bytes ++ Array(0: Byte)).isFailure shouldBe true
+    }
+
+    val header = chain.take(1001).last
+    val tx = org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators.invalidErgoTransactionGen.sample.get
+    val blockTransactions = BlockTransactions(header.id, Header.InitialVersion, Seq(tx))
+    val adProofs = org.ergoplatform.utils.generators.ErgoCoreGenerators.randomADProofsGen.sample.get
+    val extension = Extension(
+      header.id,
+      Seq(
+        Array[Byte](0, 1) -> Array[Byte](1, 2),
+        Array[Byte](0, 2) -> Array[Byte](3, 4)
+      )
+    )
+    val scriptVersion = Header.scriptFromBlockVersion(Header.InitialVersion)
+
+    VersionContext.withVersions(scriptVersion, scriptVersion) {
+      checkExact(HeaderSerializer, HeaderSerializer.toBytes(header))
+      checkExact(ErgoTransactionSerializer, ErgoTransactionSerializer.toBytes(tx))
+      checkExact(BlockTransactionsSerializer, BlockTransactionsSerializer.toBytes(blockTransactions))
+      checkExact(ADProofsSerializer, ADProofsSerializer.toBytes(adProofs))
+      checkExact(ExtensionSerializer, ExtensionSerializer.toBytes(extension))
     }
   }
 

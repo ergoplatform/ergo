@@ -30,6 +30,14 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
     */
   def isHeadersChainSynced: Boolean = isHeadersChainSyncedVar
 
+  /** Marks headers chain as synchronized. Used by NiPoPoW / UTXO-set-snapshot bootstrap to start
+    * downloading UTXO set snapshots immediately after a trusted NiPoPoW proof is applied,
+    * instead of waiting for a "new" header to arrive through normal header sync.
+    */
+  def setHeadersChainSynced(): Unit = {
+    if (!isHeadersChainSyncedVar) isHeadersChainSyncedVar = true
+  }
+
   /** Start height to download full blocks from
     */
   def minimalFullBlockHeight: Int = readMinimalFullBlockHeight()

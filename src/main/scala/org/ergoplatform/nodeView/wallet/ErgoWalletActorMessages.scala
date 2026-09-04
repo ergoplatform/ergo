@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
+import org.ergoplatform.nodeView.wallet.persistence.{UtxoSnapshotScanInvalidation, UtxoSnapshotScanStatus, UtxoSnapshotWalletOrigin}
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
@@ -18,6 +19,7 @@ import scorex.util.ModifierId
 import sigma.data.{ProveDlog, SigmaBoolean}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
+import java.util.UUID
 import scala.util.Try
 
 /**
@@ -33,6 +35,27 @@ object ErgoWalletActorMessages {
    * @param rescan - scan a block even if height is out of order, to serve rescan requests from arbitrary height
    */
   final case class ScanInThePast(blockHeight: Height, rescan: Boolean)
+
+  private[wallet] final case class UtxoSnapshotRunToken(value: UUID) extends AnyVal
+
+  private[wallet] final case class UtxoSnapshotScanRun(token: UtxoSnapshotRunToken,
+                                                        snapshotHeight: Height,
+                                                        snapshotBlockId: ModifierId) {
+    def hasSnapshot(height: Height, blockId: ModifierId): Boolean =
+      snapshotHeight == height && snapshotBlockId == blockId
+  }
+
+  private[wallet] final case class UtxoSnapshotSourceIdentity(snapshotHeight: Height,
+                                                               snapshotBlockId: ModifierId,
+                                                               manifestDepth: Int,
+                                                               partCount: Int)
+
+  private[wallet] final case class UtxoSnapshotQuarantine(reason: String,
+                                                           fence: Option[UtxoSnapshotScanInvalidation])
+
+  private[wallet] final case class ContinueUtxoSnapshotCatchUp(run: UtxoSnapshotScanRun,
+                                                                blockHeight: Height,
+                                                                cleanupAttempt: Int = 0)
 
 
   // Publicly available signals for the wallet actor
@@ -50,6 +73,39 @@ object ErgoWalletActorMessages {
    * @param block - block to scan
    */
   final case class ScanOnChain(block: ErgoFullBlock)
+
+  private[wallet] final case class GetOrInitUtxoSnapshotScanStatus(run: UtxoSnapshotScanRun,
+                                                                   manifestDepth: Int,
+                                                                   totalSubtrees: Int)
+
+  private[wallet] final case class ApplyUtxoSnapshotScanBatch(run: UtxoSnapshotScanRun,
+                                                              subtreeIndex: Int,
+                                                              nextSubtreeIndex: Int,
+                                                              completed: Boolean,
+                                                              boxes: IndexedSeq[ErgoBox])
+
+  private[wallet] final case class StartUtxoSnapshotScan(run: UtxoSnapshotScanRun,
+                                                         forceRestart: Boolean)
+
+  private[wallet] final case class UtxoSnapshotScanTerminated(run: UtxoSnapshotScanRun,
+                                                               message: String)
+
+  private[wallet] final case class AbortUtxoSnapshotScan(run: UtxoSnapshotScanRun)
+
+  private[wallet] final case class FinalizeUtxoSnapshotScan(run: UtxoSnapshotScanRun,
+                                                             status: UtxoSnapshotScanStatus,
+                                                             cleanupAttempt: Int = 0)
+
+  private[wallet] final case class UtxoSnapshotCatchUpFailed(run: UtxoSnapshotScanRun,
+                                                              status: UtxoSnapshotScanStatus,
+                                                              message: String)
+
+  private[wallet] final case class UtxoSnapshotCleanupFailed(run: UtxoSnapshotScanRun,
+                                                              message: String)
+
+  private[wallet] final case class RetryUtxoSnapshotSourceCleanup(
+    expectedOrigin: UtxoSnapshotWalletOrigin,
+    attempt: Int)
 
   /**
    * Rollback to previous version of the wallet, by throwing away effects of blocks after the version

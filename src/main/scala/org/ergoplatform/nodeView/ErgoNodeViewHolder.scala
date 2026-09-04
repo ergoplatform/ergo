@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props, Stash, Timers}
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, HeaderChain, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
@@ -14,7 +14,8 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
@@ -30,7 +31,98 @@ import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+
+private[nodeView] final case class RetryUtxoSnapshotFinalization(generation: Long)
+
+private[nodeView] final case class PendingUtxoSnapshotFinalization(height: Int,
+                                                                  blockId: ModifierId,
+                                                                  generation: Long,
+                                                                  attempt: Int,
+                                                                  installState: () => Unit)
+
+private[nodeView] trait UtxoSnapshotFinalizationSupport {
+  this: Actor with Timers with Stash with ScorexLogging =>
+
+  private case object SnapshotFinalizationRetryTimerKey
+
+  private var snapshotFinalizationGeneration: Long = 0L
+  private var pendingSnapshotFinalization: Option[PendingUtxoSnapshotFinalization] = None
+
+  protected def snapshotFinalizationRetryDelay: FiniteDuration = 1.second
+
+  protected def maxSnapshotFinalizationRetries: Int = 3
+
+  protected def persistUtxoSnapshotFinalization(height: Int, blockId: ModifierId): Try[Unit]
+
+  protected def abortUtxoSnapshotFinalization(cause: Throwable): Unit = {
+    log.error("UTXO set snapshot finalization failed permanently; shutting down", cause)
+    ErgoApp.shutdownSystem()(context.system)
+    ()
+  }
+
+  protected final def beginUtxoSnapshotFinalization(height: Int,
+                                                     blockId: ModifierId)(installState: => Unit): Unit = {
+    require(pendingSnapshotFinalization.isEmpty, "UTXO snapshot finalization is already pending")
+    snapshotFinalizationGeneration += 1
+    val pending = PendingUtxoSnapshotFinalization(
+      height,
+      blockId,
+      snapshotFinalizationGeneration,
+      attempt = 0,
+      () => installState
+    )
+    pendingSnapshotFinalization = Some(pending)
+    attemptUtxoSnapshotFinalization(pending, enterWaiting = true)
+  }
+
+  private def attemptUtxoSnapshotFinalization(pending: PendingUtxoSnapshotFinalization,
+                                              enterWaiting: Boolean): Unit = {
+    persistUtxoSnapshotFinalization(pending.height, pending.blockId) match {
+      case Success(_) =>
+        pendingSnapshotFinalization = None
+        timers.cancel(SnapshotFinalizationRetryTimerKey)
+        Try(pending.installState()) match {
+          case Success(_) if !enterWaiting =>
+            context.unbecome()
+            unstashAll()
+          case Success(_) =>
+          case Failure(t) => abortUtxoSnapshotFinalization(t)
+        }
+      case Failure(t) if pending.attempt < maxSnapshotFinalizationRetries =>
+        val next = pending.copy(attempt = pending.attempt + 1)
+        pendingSnapshotFinalization = Some(next)
+        if (enterWaiting) {
+          context.become(waitingForUtxoSnapshotFinalization, discardOld = false)
+        }
+        log.warn(
+          s"UTXO set snapshot finalization failed; retrying ${next.attempt}/$maxSnapshotFinalizationRetries",
+          t
+        )
+        timers.startSingleTimer(
+          SnapshotFinalizationRetryTimerKey,
+          RetryUtxoSnapshotFinalization(next.generation),
+          snapshotFinalizationRetryDelay
+        )
+      case Failure(t) =>
+        pendingSnapshotFinalization = None
+        timers.cancel(SnapshotFinalizationRetryTimerKey)
+        abortUtxoSnapshotFinalization(t)
+    }
+  }
+
+  private def waitingForUtxoSnapshotFinalization: Receive = {
+    case RetryUtxoSnapshotFinalization(generation) =>
+      pendingSnapshotFinalization match {
+        case Some(pending) if pending.generation == generation =>
+          attemptUtxoSnapshotFinalization(pending, enterWaiting = false)
+        case _ =>
+          log.debug(s"Ignoring stale UTXO snapshot finalization retry generation $generation")
+      }
+    case _ => stash()
+  }
+}
 
 /**
   * Composite local view of the node
@@ -41,7 +133,13 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor
+    with Timers
+    with Stash
+    with UtxoSnapshotFinalizationSupport
+    with ScorexLogging
+    with ScorexEncoding
+    with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -79,7 +177,23 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def vault(): ErgoWallet = nodeView._3
 
+  protected[nodeView] def rollbackWallet(wallet: ErgoWallet,
+                                          version: VersionTag): Try[ErgoWallet] =
+    wallet.rollback(version)
+
+  protected[nodeView] def scanWalletPersistent(wallet: ErgoWallet,
+                                                modifier: BlockSection): ErgoWallet =
+    wallet.scanPersistent(modifier)
+
+  protected[nodeView] def refreshWalletMempool(wallet: ErgoWallet,
+                                                mempool: ErgoMemPoolReader): Unit =
+    wallet.walletActor.tell(ChangedMempool(mempool), self)
+
   protected def memoryPool(): ErgoMemPool = nodeView._4
+
+  override protected def persistUtxoSnapshotFinalization(height: Int,
+                                                          blockId: ModifierId): Try[Unit] =
+    history().onUtxoSnapshotApplied(height, blockId)
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy() {
@@ -87,6 +201,32 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.error(s"NodeViewHolder failed, killing whole application ...", e)
         Escalate
     }
+
+  private def notifyWalletOfCurrentView(requestId: java.util.UUID,
+                                        walletActor: ActorRef): Unit = {
+    val currentState = minimalState()
+    val appliedSnapshot = currentState match {
+      case state: UtxoState
+          if settings.nodeSettings.utxoSettings.utxoBootstrap && history().isUtxoSnapshotApplied =>
+        if (history().bestFullBlockOpt.isEmpty && isPreparedUtxoSnapshotState(currentState, history())) {
+          val snapshotHeight = history().minimalFullBlockHeight - 1
+          val snapshotBlockId = versionToId(state.version)
+          log.info(
+            s"Restoring wallet notification for prepared UTXO snapshot state ${encoder.encode(snapshotBlockId)} " +
+              s"at height $snapshotHeight")
+          Some(UtxoSnapshotAppliedToState(snapshotHeight, snapshotBlockId, state))
+        } else None
+      case _ => None
+    }
+    walletActor.tell(
+      CurrentWalletView(requestId, currentState, memoryPool().getReader, appliedSnapshot),
+      self)
+  }
+
+  override def preStart(): Unit = {
+    super.preStart()
+    context.system.eventStream.subscribe(self, classOf[RequestCurrentWalletView])
+  }
 
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
@@ -192,8 +332,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[BlockSection]) = if (progressInfo.chainSwitchingNeeded) {
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
       val branchingPoint = progressInfo.branchPoint.get //todo: .get
-      if (state.version != branchingPoint) {
-        state.rollbackTo(idToVersion(branchingPoint)) -> trimChainSuffix(suffixApplied, branchingPoint)
+      if (versionToId(state.version) != branchingPoint) {
+        ErgoNodeViewHolder.rollbackStateForChainSwitch(state, branchingPoint) ->
+          trimChainSuffix(suffixApplied, branchingPoint)
       } else Success(state) -> IndexedSeq.empty
     } else Success(state) -> suffixApplied
 
@@ -215,8 +356,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case Failure(e) =>
         log.error("Rollback failed: ", e)
         context.system.eventStream.publish(RollbackFailed)
-        //todo: what to return here? the situation is totally wrong
-        ???
+        (history, Failure(e), suffixApplied)
     }
   }
 
@@ -298,15 +438,30 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot(height, blockId) =>
       if (!history().isUtxoSnapshotApplied) {
-        val store = minimalState().store
-        history().createPersistentProver(store, history(), height, blockId) match {
-          case Success(pp) =>
-            log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            history().onUtxoSnapshotApplied(height)
-            val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
-            updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
-          case Failure(t) =>
-            log.error("UTXO set snapshot application failed: ", t)
+        history().utxoSetSnapshotDownloadPlan() match {
+          case Some(downloadPlan) if history().isUtxoSetSnapshotDownloadCurrent(height, blockId) =>
+            val store = minimalState().store
+            history().createPersistentProver(store, history(), height, blockId) match {
+              case Success(pp) =>
+                log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
+                beginUtxoSnapshotFinalization(height, blockId) {
+                  val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
+                  updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+                  context.system.eventStream.publish(UtxoSnapshotAppliedToState(height, blockId, newState))
+                }
+              case Failure(t) =>
+                log.error("UTXO set snapshot application failed: ", t)
+                context.system.eventStream.publish(UtxoSnapshotStateRestorationFailed(
+                  height,
+                  blockId,
+                  downloadPlan.id,
+                  downloadPlan.createdTime,
+                  t
+                ))
+            }
+          case _ =>
+            log.warn(
+              s"Ignoring stale UTXO set snapshot initialization for block $blockId at height $height")
         }
       } else {
         log.warn("InitStateFromSnapshot arrived when state already initialized")
@@ -316,6 +471,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (history().isEmpty) {
         history().applyPopowProof(proof)
         if (!history().isEmpty) {
+          // When UTXO set snapshot bootstrap is enabled, mark headers chain as synced right after
+          // a trusted NiPoPoW proof is applied. This allows the node to start requesting UTXO set
+          // snapshots immediately, instead of waiting for normal header sync to reach the tip.
+          if (settings.nodeSettings.utxoSettings.utxoBootstrap) {
+            history().setHeadersChainSynced()
+          }
           updateNodeView(updatedHistory = Some(history()))
         }
       }
@@ -449,7 +610,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
+    val storedState = ErgoState.readOrGenerate(settings).asInstanceOf[State]
+    restoreConsistentState(storedState, history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -460,8 +622,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
         log.error("Failed to recover state, try to resync from genesis manually", ex)
+        Try(history.closeStorage())
+        Try(storedState.closeStorage())
         ErgoApp.shutdownSystem()(context.system)
-        None
+        throw ex
     }
   }
 
@@ -515,7 +679,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
                   val v = vault()
                   val newVault = if (progressInfo.chainSwitchingNeeded) {
-                    v.rollback(idToVersion(progressInfo.branchPoint.get)) match {
+                    rollbackWallet(v, idToVersion(progressInfo.branchPoint.get)) match {
                       case Success(nv) => nv
                       case Failure(e) => log.warn("Wallet rollback failed: ", e); v
                     }
@@ -524,7 +688,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   }
 
                   if (almostSynced) {
-                    blocksApplied.foreach(newVault.scanPersistent)
+                    blocksApplied.foreach(scanWalletPersistent(newVault, _))
                   }
 
                   // if blockchain is synced,
@@ -544,7 +708,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
                   if (progressInfo.chainSwitchingNeeded) {
                     context.system.eventStream.publish(Rollback(progressInfo.branchPoint.get))
+                    // The wallet deliberately clears any cached mempool reader before its durable
+                    // rollback. Refresh only the wallet after Rollback and the fork blocks, from
+                    // this actor, so off-chain reconciliation cannot reuse pre-reorg state.
+                    refreshWalletMempool(newVault, newMemPool.getReader)
                   }
+                case Failure(CriticalSystemException(error)) =>
+                  log.error(error)
+                  ErgoApp.shutdownSystem()(context.system)
                 case Failure(e) =>
                   log.warn(s"Can`t apply persistent modifier (id: ${pmod.encodedId}, contents: $pmod) to minimal state", e)
                   updateNodeView(updatedHistory = Some(newHistory))
@@ -583,37 +754,63 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       )
   }
 
+  private def isPreparedUtxoSnapshotState(state: State, history: ErgoHistory): Boolean =
+    ErgoNodeViewHolder.isPreparedUtxoSnapshotState(
+      state.isInstanceOf[UtxoState],
+      settings.nodeSettings.utxoSettings.utxoBootstrap,
+      history.isUtxoSnapshotApplied,
+      state.version,
+      state.rootDigest,
+      {
+        val snapshotHeight = history.minimalFullBlockHeight - 1
+        history.bestHeaderAtHeight(snapshotHeight)
+      })
+
+  private def resetUtxoSnapshotBootstrapBeforeGenesis(history: ErgoHistory): Try[Unit] =
+    if (history.isUtxoSnapshotApplied) {
+      log.warn("Resetting stale UTXO snapshot bootstrap metadata before restoring Genesis state")
+      history.resetUtxoSnapshotBootstrap()
+    } else Success(())
+
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
-    (stateIn.version, history.bestFullBlockOpt, stateIn) match {
-      case (ErgoState.genesisStateVersion, None, _) =>
-        log.info("State and history are both empty on startup")
-        Success(stateIn)
-      case (stateId, Some(block), _) if stateId == block.id =>
-        log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
-        Success(stateIn)
-      case (_, None, _) =>
-        log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
-        Success(recreatedState())
-      case (_, Some(bestFullBlock), _: DigestState) =>
-        log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
-        recoverDigestState(bestFullBlock, history).map(_.asInstanceOf[State])
-      case (stateId, Some(historyBestBlock), state) =>
-        val stateBestHeaderOpt = history.typedModifierById[Header](versionToId(stateId))
-        val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
-        log.info(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
-          s"apply ${newChain.length} modifiers")
-        val initState = rollbackId
-          .map(id => state.rollbackTo(idToVersion(id)).get)
-          .getOrElse(recreatedState())
-        val toApply = newChain.headers.map { h =>
-          history.getFullBlock(h)
-            .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
-        }
-        toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
-          log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")
-          val chainTipOpt = history.estimatedTip()
-          acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => self ! lm))
-        }
+    ErgoNodeViewHolder.validateUtxoSnapshotRecovery(
+      stateIn,
+      history,
+      settings.nodeSettings.utxoSettings.utxoBootstrap).flatMap { _ =>
+      (stateIn.version, history.bestFullBlockOpt, stateIn) match {
+        case (ErgoState.genesisStateVersion, None, _) =>
+          log.info("State and history are both empty on startup")
+          resetUtxoSnapshotBootstrapBeforeGenesis(history).map(_ => stateIn)
+        case (stateId, Some(block), _) if stateId == block.id =>
+          log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
+          Success(stateIn)
+        case (_, None, _) if isPreparedUtxoSnapshotState(stateIn, history) =>
+          log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
+          Success(stateIn)
+        case (_, None, _) =>
+          log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+          resetUtxoSnapshotBootstrapBeforeGenesis(history).map { _ =>
+            stateIn.closeStorage()
+            recreatedState()
+          }
+        case (_, Some(bestFullBlock), _: DigestState) =>
+          log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
+          recoverDigestState(bestFullBlock, history).map(_.asInstanceOf[State])
+        case (stateId, Some(historyBestBlock), state) =>
+          val stateBestHeaderOpt = history.typedModifierById[Header](versionToId(stateId))
+          val (rollbackId, newChain) = history.chainToHeader(stateBestHeaderOpt, historyBestBlock.header)
+          log.info(s"State and history are inconsistent. Going to rollback to ${rollbackId.map(Algos.encode)} and " +
+            s"apply ${newChain.length} modifiers")
+          ErgoNodeViewHolder.recoverStateChain(
+            state,
+            history,
+            rollbackId,
+            newChain,
+            recreateState = Try(recreatedState()))(
+            generate = lm => self ! lm,
+            beforeApply = m =>
+              log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}"))
+      }
     }
   }
 
@@ -697,6 +894,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (mempool) sender() ! ChangedMempool(nodeView._4.getReader)
   }
 
+  protected def walletViewRequests: Receive = {
+    case RequestCurrentWalletView(requestId, replyTo) =>
+      notifyWalletOfCurrentView(requestId, replyTo)
+  }
+
   private def handleHealthCheck: Receive = {
     case IsChainHealthy =>
       log.info(s"Check that chain is healthy, progress is $chainProgress")
@@ -712,6 +914,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       transactionsProcessing orElse
       getCurrentInfo orElse
       getNodeViewChanges orElse
+      walletViewRequests orElse
       processStateSnapshot orElse
       handleHealthCheck orElse {
         case a: Any => log.error("Strange input: " + a)
@@ -721,6 +924,155 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
+
+  private[nodeView] def recoverStateChain[S <: ErgoState[S]](
+      state: S,
+      history: ErgoHistory,
+      rollbackId: Option[ModifierId],
+      newChain: HeaderChain,
+      recreateState: => Try[S])
+      (generate: LocallyGeneratedModifier => Unit,
+       beforeApply: ErgoFullBlock => Unit = _ => ()): Try[S] = {
+    Try(newChain.headers.map { header =>
+      history.getFullBlock(header)
+        .getOrElse(throw new Error(s"Failed to get full block for header $header"))
+    }).flatMap { toApply =>
+      val initStateTry = rollbackId
+        .map(id => rollbackStateForChainSwitch(state, id))
+        .getOrElse(recreateState)
+      val chainTipOpt = history.estimatedTip()
+      initStateTry.flatMap { initState =>
+        toApply.foldLeft[Try[S]](Success(initState)) { case (acc, modifier) =>
+          acc.flatMap { currentState =>
+            beforeApply(modifier)
+            currentState.applyModifier(modifier, chainTipOpt)(generate)
+          }
+        }
+      }
+    }
+  }
+
+  private[nodeView] def rollbackStateForChainSwitch[S <: ErgoState[S]](
+      state: S,
+      branchPoint: ModifierId): Try[S] = {
+    val rollbackVersion = idToVersion(branchPoint)
+    Try(state.rollbackTo(rollbackVersion)).flatten.recoverWith { case error =>
+      val reason = Option(error.getMessage).getOrElse(error.getClass.getSimpleName)
+      Failure(CriticalSystemException(
+        s"State rollback to ${Algos.encode(branchPoint)} failed: $reason. " +
+          "A manual resync is required."))
+    }
+  }
+
+  private[nodeView] def validateUtxoSnapshotRecovery[S <: ErgoState[S]](
+      state: S,
+      history: ErgoHistory,
+      utxoBootstrap: Boolean): Try[Unit] = {
+    if (!state.isInstanceOf[UtxoState] || !utxoBootstrap || !history.isUtxoSnapshotApplied) {
+      Success(())
+    } else Try {
+      def fail(reason: String): Nothing =
+        throw CriticalSystemException(
+          s"UTXO snapshot state/history recovery preflight failed: $reason. A manual resync is required.")
+
+      def sameId(left: ModifierId, right: ModifierId): Boolean =
+        left == right
+
+      @tailrec
+      def ancestorAt(header: Header, targetHeight: Int): Option[Header] = {
+        if (header.height == targetHeight) {
+          Some(header)
+        } else if (header.height < targetHeight) {
+          None
+        } else {
+          history.typedModifierById[Header](header.parentId) match {
+            case Some(parent) if parent.height == header.height - 1 => ancestorAt(parent, targetHeight)
+            case _ => None
+          }
+        }
+      }
+
+      val firstFullBlockHeight = history.minimalFullBlockHeight
+      val snapshotAnchorHeight = firstFullBlockHeight - 1
+      if (snapshotAnchorHeight < GenesisHeight) {
+        fail(s"invalid snapshot anchor height $snapshotAnchorHeight")
+      }
+
+      val bestHeader = history.bestHeaderOpt.getOrElse(fail("best header is missing"))
+      val canonicalAnchor = history.bestHeaderAtHeight(snapshotAnchorHeight)
+        .getOrElse(fail(s"canonical snapshot anchor at height $snapshotAnchorHeight is missing"))
+      val stateHeader = history.typedModifierById[Header](versionToId(state.version))
+        .getOrElse(fail(s"state header ${Algos.encode(versionToId(state.version))} is missing"))
+
+      if (!java.util.Arrays.equals(state.rootDigest, stateHeader.stateRoot)) {
+        fail(s"state root does not match header ${stateHeader.encodedId}")
+      }
+
+      def requireCanonicalAnchor(header: Header, description: String): Unit = {
+        val reachesAnchor = ancestorAt(header, snapshotAnchorHeight)
+          .exists(h => sameId(h.id, canonicalAnchor.id))
+        if (!reachesAnchor) {
+          fail(s"$description does not descend from canonical snapshot anchor ${canonicalAnchor.encodedId}")
+        }
+      }
+
+      requireCanonicalAnchor(stateHeader, "state")
+
+      val bestFullHeaderOpt = history.bestFullBlockIdOpt.map { id =>
+        val header = history.typedModifierById[Header](id)
+          .getOrElse(fail(s"best full block header ${Algos.encode(id)} is missing"))
+        history.getFullBlock(header)
+          .getOrElse(fail(s"best full block ${Algos.encode(id)} is incomplete"))
+        header
+      }
+
+      bestFullHeaderOpt match {
+        case None if !sameId(stateHeader.id, canonicalAnchor.id) =>
+          fail("state has advanced beyond the snapshot anchor while best full block is missing")
+        case Some(bestFullHeader) =>
+          requireCanonicalAnchor(bestFullHeader, "best full block")
+
+          def requireRecoverableTransition(from: Header, to: Header, description: String): Unit = {
+            if (!sameId(from.id, to.id)) {
+              val commonId = history.chainToHeader(Some(from), to)._1
+                .getOrElse(fail(s"$description has no common ancestor"))
+              val commonHeight = history.heightOf(commonId)
+                .getOrElse(fail(s"$description common ancestor ${Algos.encode(commonId)} is missing"))
+              if (commonHeight < snapshotAnchorHeight) {
+                fail(s"$description forks below snapshot anchor height $snapshotAnchorHeight")
+              }
+              if (sameId(from.id, stateHeader.id) && !sameId(commonId, stateHeader.id) &&
+                  !state.rollbackVersions.exists(v => sameId(versionToId(v), commonId))) {
+                fail(s"$description requires unavailable rollback version ${Algos.encode(commonId)}")
+              }
+            }
+          }
+
+          requireRecoverableTransition(stateHeader, bestFullHeader, "state to best-full recovery")
+          requireRecoverableTransition(bestFullHeader, bestHeader, "best-full to best-header recovery")
+        case None =>
+      }
+    }
+  }
+
+  private[nodeView] def isPreparedUtxoSnapshotState(
+      stateIsUtxo: Boolean,
+      utxoBootstrap: => Boolean,
+      snapshotApplied: => Boolean,
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      snapshotHeaderOpt: => Option[Header]): Boolean =
+    stateIsUtxo &&
+      utxoBootstrap &&
+      snapshotApplied &&
+      snapshotHeaderOpt.exists(matchesPreparedUtxoSnapshotHeader(stateVersion, stateRoot, _))
+
+  private def matchesPreparedUtxoSnapshotHeader(
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      header: Header): Boolean =
+    stateVersion == idToVersion(header.id) &&
+      java.util.Arrays.equals(stateRoot, header.stateRoot)
 
   object ReceivableMessages {
     // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck

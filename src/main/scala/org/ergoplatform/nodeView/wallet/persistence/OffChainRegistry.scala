@@ -44,8 +44,9 @@ case class OffChainRegistry(height: Int,
   def updateOnTransaction(newBoxes: Seq[TrackedBox],
                           spentIds: Seq[EncodedBoxId],
                           scans: Seq[Scan]): OffChainRegistry = {
+    val spentIdSet = spentIds.toSet
     val unspentCertain = offChainBoxes.flatMap { x: TrackedBox =>
-      val spent = spentIds.contains(x.boxId)
+      val spent = spentIdSet.contains(EncodedBoxId @@@ x.boxId)
       if (spent) {
         if (x.scans.size > 1 || (x.scans.size == 1 && x.scans.head > Constants.PaymentsScanId)) {
           val leave = scans.exists(s => x.scans.contains(s.scanId) && !s.removeOffchain)
@@ -61,7 +62,7 @@ case class OffChainRegistry(height: Int,
         Some(x)
       }
     } ++ newBoxes
-    val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIds.contains(x.id))
+    val onChainBalancesUpdated = onChainBalances.filterNot(x => spentIdSet.contains(x.id))
     this.copy(
       offChainBoxes = unspentCertain.distinct,
       onChainBalances = onChainBalancesUpdated

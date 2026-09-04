@@ -142,41 +142,49 @@ trait ErgoHistory
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
 
-            if (!bestFullIsInvalidated) {
-              //Only headers chain involved
-              historyStorage.insert(
-                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
-                BlockSection.emptyArray
-              ).map { _ =>
-                this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+            ensureUtxoSnapshotBestHeaderTransition(
+              newBestHeaderOpt.map(h => h.id -> h.height),
+              s"fallback header after invalidating ${invalidatedHeader.encodedId}").flatMap { _ =>
+              val newBestHeaderRows = newBestHeaderOpt.toSeq.flatMap { h =>
+                (BestHeaderKey -> idToBytes(h.id)) +:
+                  bestBlockHeaderIdsRow(h, scoreOf(h.id).getOrElse(BigInt(0)))
               }
-            } else {
-              val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
-                .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
-                .flatMap(getFullBlock)
-                .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
+              if (!bestFullIsInvalidated) {
+                //Only headers chain involved
+                historyStorage.insert(
+                  validityRow ++ newBestHeaderRows,
+                  BlockSection.emptyArray
+                ).map { _ =>
+                  this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
+                }
+              } else {
+                val invalidatedChain: Seq[ErgoFullBlock] = bestFullBlockOpt.toSeq
+                  .flatMap(f => headerChainBack(fullBlockHeight + 1, f.header, h => !invalidatedIds.contains(h.id)).headers)
+                  .flatMap(getFullBlock)
+                  .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 
-              val genesisInvalidated = invalidatedChain.lengthCompare(1) == 0
-              val branchPointHeader = if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
+                val genesisInvalidated = invalidatedChain.lengthCompare(1) == 0
+                val branchPointHeader = if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
 
-              val validHeadersChain =
-                continuationHeaderChains(branchPointHeader,
-                  h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id))
-                  .maxBy(_.lastOption.flatMap(x => scoreOf(x.id)).getOrElse(BigInt(0)))
+                val validHeadersChain =
+                  continuationHeaderChains(branchPointHeader,
+                    h => getFullBlock(h).isDefined && !invalidatedIds.contains(h.id))
+                    .maxBy(_.lastOption.flatMap(x => scoreOf(x.id)).getOrElse(BigInt(0)))
 
-              val validChain = validHeadersChain.tail.flatMap(getFullBlock)
+                val validChain = validHeadersChain.tail.flatMap(getFullBlock)
 
-              val chainStatusRow = validChain.map(b =>
-                FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
-                invalidatedHeaders.map(h =>
-                  FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
+                val chainStatusRow = validChain.map(b =>
+                  FullBlockProcessor.chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
+                  invalidatedHeaders.map(h =>
+                    FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
-                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
-              val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
-                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
-                this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+                val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
+                  newBestHeaderRows
+                val toInsert = validityRow ++ changedLinks ++ chainStatusRow
+                historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
+                  val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
+                  this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
+                }
               }
             }
         }

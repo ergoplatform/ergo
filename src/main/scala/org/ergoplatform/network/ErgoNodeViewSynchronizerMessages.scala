@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import akka.actor.ActorRef
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.modifiers.NetworkObjectTypeId
@@ -11,6 +12,9 @@ import scorex.core.network.ConnectedPeer
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
+import scorex.crypto.hash.Digest32
+
+import java.util.UUID
 
 /**
   * Repository of messages processed ErgoNodeViewSynchronizer actor
@@ -48,6 +52,38 @@ object ErgoNodeViewSynchronizerMessages {
     case class ChangedVault(reader: ErgoWalletReader) extends NodeViewChange
 
     case class ChangedState(reader: ErgoStateReader) extends NodeViewChange
+
+    /**
+     * Event emitted after UTXO state has been reconstructed from a local UTXO set snapshot.
+     */
+    case class UtxoSnapshotAppliedToState(blockHeight: Height,
+                                           blockId: ModifierId,
+                                           stateReader: UtxoStateReader) extends NodeViewHolderEvent
+
+    /**
+      * Event emitted when a fully downloaded UTXO snapshot cannot be restored into state.
+      * The plan identity prevents a delayed failure from invalidating a replacement download.
+      */
+    case class UtxoSnapshotStateRestorationFailed(blockHeight: Height,
+                                                   blockId: ModifierId,
+                                                   snapshotId: Digest32,
+                                                   planCreatedTime: Long,
+                                                   error: Throwable) extends NodeViewHolderEvent
+
+    /**
+     * Request the current state/mempool startup handshake for a wallet actor.
+     * The request id is minted per wallet actor incarnation so a delayed response from an old
+     * incarnation cannot unlock the new one.
+     */
+    case class RequestCurrentWalletView(requestId: UUID,
+                                        replyTo: ActorRef) extends NodeViewHolderEvent
+
+    /** Atomic response to [[RequestCurrentWalletView]]. */
+    case class CurrentWalletView(requestId: UUID,
+                                 state: ErgoStateReader,
+                                 mempool: ErgoMemPoolReader,
+                                 appliedSnapshot: Option[UtxoSnapshotAppliedToState])
+      extends NodeViewHolderEvent
 
     /**
      * Event which is published when rollback happened (on finding a better chain)

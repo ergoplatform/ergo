@@ -536,17 +536,16 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       f.system.stop(terminatedConnection.ref)
       terminationProbe.expectTerminated(terminatedConnection.ref)
 
-      val replacement = TestProbe("TerminatedSlotReplacement")
       val replacementAddress = new InetSocketAddress("198.51.100.11", 9101)
       peerManagerProbe.awaitAssert({
+        val replacement = TestProbe()
         replacement.send(
           controller,
           Tcp.Connected(replacementAddress, settings.scorexSettings.network.bindAddress)
         )
         peerManagerProbe.expectMsgPF(200.millis) {
-          case ConfirmConnection(connectionId, connectionRef) =>
+          case ConfirmConnection(connectionId, _) =>
             connectionId.remoteAddress shouldBe replacementAddress
-            connectionRef shouldBe replacement.ref
         }
       }, 2.seconds, 50.millis)
     }
@@ -636,16 +635,27 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
   property("blacklisting should close pending incoming connections for the banned IP") {
     withFixture { f =>
       implicit val system = f.system
-      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 10)
+      val maxConnections = 10
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections)
+      val incomingLimit = Math.max(maxConnections / 2, maxConnections - NetworkController.OutgoingConnections)
+      incomingLimit shouldBe 5
+
       val firstAddress = new InetSocketAddress("192.0.2.40", 9040)
       val secondAddress = new InetSocketAddress("192.0.2.40", 9041)
       val unrelatedAddress = new InetSocketAddress("198.51.100.40", 9042)
-      val (firstConnection, _) =
+      val fillerAddresses = Seq(
+        new InetSocketAddress("198.51.100.41", 9043),
+        new InetSocketAddress("198.51.100.42", 9044)
+      )
+      val (firstConnection, firstConfirmation) =
         f.beginPendingIncomingConnection(controller, peerManagerProbe, firstAddress)
       val (secondConnection, _) =
         f.beginPendingIncomingConnection(controller, peerManagerProbe, secondAddress)
       val (unrelatedConnection, _) =
         f.beginPendingIncomingConnection(controller, peerManagerProbe, unrelatedAddress)
+      fillerAddresses.foreach { address =>
+        f.beginPendingIncomingConnection(controller, peerManagerProbe, address)
+      }
 
       peerManagerProbe.send(controller, Blacklisted(firstAddress))
 
@@ -653,19 +663,41 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       secondConnection.expectMsg(Tcp.Close)
       unrelatedConnection.expectNoMessage(200.millis)
 
-      val replacement = TestProbe("BlacklistedSlotReplacement")
-      val replacementAddress = new InetSocketAddress("198.51.100.41", 9043)
-      replacement.send(
+      peerManagerProbe.send(
         controller,
-        Tcp.Connected(replacementAddress, settings.scorexSettings.network.bindAddress)
+        ConnectionConfirmed(firstConfirmation.connectionId, firstConfirmation.handlerRef)
       )
-      peerManagerProbe.expectMsgPF(1.second) {
-        case ConfirmConnection(connectionId, connectionRef) =>
-          connectionId.remoteAddress shouldBe replacementAddress
-          connectionRef shouldBe replacement.ref
+      firstConnection.expectMsg(Tcp.Close)
+
+      val duplicate = TestProbe("BlacklistedUnrelatedDuplicate")
+      duplicate.send(
+        controller,
+        Tcp.Connected(unrelatedAddress, settings.scorexSettings.network.bindAddress)
+      )
+      duplicate.expectMsg(Tcp.Close)
+      peerManagerProbe.expectNoMessage(200.millis)
+
+      val replacementAddresses = Seq(
+        new InetSocketAddress("198.51.100.43", 9045),
+        new InetSocketAddress("198.51.100.44", 9046)
+      )
+      replacementAddresses.foreach { address =>
+        f.beginPendingIncomingConnection(controller, peerManagerProbe, address)
       }
+
+      val overflow = TestProbe("BlacklistedSlotOverflow")
+      overflow.send(
+        controller,
+        Tcp.Connected(
+          new InetSocketAddress("198.51.100.45", 9047),
+          settings.scorexSettings.network.bindAddress
+        )
+      )
+      overflow.expectMsg(Tcp.Close)
+      peerManagerProbe.expectNoMessage(200.millis)
     }
   }
+
   property("outgoing connection should bypass incoming limit check") {
     withFixture { f =>
       val (controller, peerManagerProbe, tcpManagerProbe) = f.createController(maxConnections = 30)

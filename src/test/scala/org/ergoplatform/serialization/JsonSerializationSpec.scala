@@ -2,14 +2,17 @@ package org.ergoplatform.serialization
 
 import io.circe.syntax._
 import io.circe.{Decoder, Encoder, Json}
+import org.ergoplatform.Pay2SAddress
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests._
-import org.ergoplatform.settings.ErgoSettingsReader
+import org.ergoplatform.settings.Constants.FalseTree
+import org.ergoplatform.settings.{Constants, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalatest.{EitherValues, Inspectors}
+import scorex.util.encode.Base16
 
 import scala.util.Random
 
@@ -88,6 +91,45 @@ class JsonSerializationSpec extends ErgoCorePropertyTest
           restoredValue shouldEqual requestValue
       }
     }
+  }
+
+  property("wallet request token ids should enforce the canonical length") {
+    val ergoSettings = ErgoSettingsReader.read()
+    implicit val paymentRequestDecoder: Decoder[PaymentRequest] = new PaymentRequestDecoder(ergoSettings)
+    implicit val burnTokensRequestDecoder: Decoder[BurnTokensRequest] = new BurnTokensRequestDecoder()
+    val address = Pay2SAddress(FalseTree)(ergoSettings.addressEncoder).toString
+
+    def boxesRequest(tokenId: String): Decoder.Result[BoxesRequest] =
+      Json.obj(
+        "targetBalance" -> 1L.asJson,
+        "targetAssets" -> Json.obj(tokenId -> 1L.asJson)
+      ).as[BoxesRequest]
+
+    def paymentRequest(tokenId: String): Decoder.Result[PaymentRequest] =
+      Json.obj(
+        "address" -> address.asJson,
+        "value" -> 1L.asJson,
+        "assets" -> Json.arr(Json.obj("tokenId" -> tokenId.asJson, "amount" -> 1L.asJson))
+      ).as[PaymentRequest]
+
+    def burnRequest(tokenId: String): Decoder.Result[BurnTokensRequest] =
+      Json.obj(
+        "assetsToBurn" -> Json.arr(Json.obj("tokenId" -> tokenId.asJson, "amount" -> 1L.asJson))
+      ).as[BurnTokensRequest]
+
+    val invalidTokenIds = Seq(1, 31, 33)
+      .map(length => Base16.encode(Array.fill(length)(length.toByte))) :+ "not-hex"
+
+    invalidTokenIds.foreach { tokenId =>
+      boxesRequest(tokenId).isLeft shouldBe true
+      paymentRequest(tokenId).isLeft shouldBe true
+      burnRequest(tokenId).isLeft shouldBe true
+    }
+
+    val validTokenId = Base16.encode(Array.fill(Constants.ModifierIdSize)(1.toByte))
+    boxesRequest(validTokenId).isRight shouldBe true
+    paymentRequest(validTokenId).isRight shouldBe true
+    burnRequest(validTokenId).isRight shouldBe true
   }
 
   property("AssetIssueRequest should be serialized to json") {

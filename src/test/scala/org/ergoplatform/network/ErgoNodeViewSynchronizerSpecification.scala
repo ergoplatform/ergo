@@ -21,7 +21,7 @@ import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
@@ -59,6 +59,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
   private def withFixture2(testCode: Synchronizer2Fixture => Any): Unit = {
     val fixture = new Synchronizer2Fixture
+    try {
+      testCode(fixture)
+    }
+    finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  private def withFixture2(desiredModifierQueueSize: Int)(testCode: Synchronizer2Fixture => Any): Unit = {
+    val fixture = new Synchronizer2Fixture(desiredModifierQueueSize)
     try {
       testCode(fixture)
     }
@@ -173,12 +183,17 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val (synchronizer, nodeViewHolder, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
   }
 
-  class Synchronizer2Fixture extends AkkaFixture {
+  class Synchronizer2Fixture(
+    desiredModifierQueueSize: Int = settings.scorexSettings.network.desiredInvObjects
+  ) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
-    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+    val deliveryTracker: DeliveryTracker = new DeliveryTracker(
+      settings.cacheSettings.network,
+      desiredModifierQueueSize
+    )
 
     // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
@@ -194,7 +209,17 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker)
     ))
 
-    val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+    val peerInfo = PeerInfo(
+      defaultPeerSpec.copy(features = Seq(
+        ModePeerFeature(
+          StateType.Utxo,
+          verifyingTransactions = true,
+          nipopowBootstrapped = None,
+          ModePeerFeature.AllBlocksKept
+        )
+      )),
+      System.currentTimeMillis()
+    )
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val peer: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
@@ -267,10 +292,38 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val modData = ModifiersData(Header.modifierTypeId, Map(olderChain.last.id -> olderChain.last.bytes))
       val modSpec = ModifiersSpec
       synchronizer ! Message(modSpec, Left(modSpec.toBytes(modData)), Some(peer))
+
       // desired state of submitting valid headers is Received
       eventually {
         deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: missing-parent recovery retains the cached child delivery state") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val childId = bytesToId(scorex.utils.Random.randomBytes(32))
+      val missingParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(1))
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      deliveryTracker.setRequested(Header.modifierTypeId, childId, peer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setReceived(childId, Header.modifierTypeId, peer)
+      synchronizerMockRef ! MissingParentHeaders(Seq(missingParentId))
+
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId && data.ids == Seq(missingParentId)
+          case _ => false
+        }
+      }
+
+      deliveryTracker.status(childId, Header.modifierTypeId, Seq.empty) shouldBe Received
     }
   }
 
@@ -554,42 +607,28 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should request parent header") {
+  property("NodeViewSynchronizer: missing-parent recovery caps and deduplicates parent requests") {
     withFixture2 { ctx =>
       import ctx._
 
       val hhistory = ErgoHistory.readOrGenerate(settings)(null)
-      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
-      baseChain.headers.foreach(hhistory.append)
-
-      val parentHeader = baseChain.last
-      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
-
-      // Set up sync tracker with an older peer
-      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
-
-      // Send ChangedHistory to set up historyReader in the synchronizer
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(1))
       synchronizerMockRef ! ChangedHistory(hhistory)
 
-      // Use a random parent ID that is NOT in the history so the synchronizer will request it
-      val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
-      val modifierId = childHeader.id
-      val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
-      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+      val parentIds = (0 to MissingParentHeaders.MaxParentIds)
+        .map(_ => bytesToId(scorex.utils.Random.randomBytes(32)))
+      synchronizerMockRef ! MissingParentHeaders(parentIds ++ parentIds.take(10))
 
-      // Should request the parent header from the older peer
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
             val invData = stn.message.data.get.asInstanceOf[InvData]
-            invData.typeId == Header.modifierTypeId && invData.ids.contains(unknownParentId)
+            invData.typeId == Header.modifierTypeId &&
+              invData.ids.size == MissingParentHeaders.MaxParentIds &&
+              invData.ids.distinct.size == invData.ids.size &&
+              invData.ids.forall(parentIds.contains)
           case _ => false
         }
-      }
-
-      // The modifier should be set to Unknown
-      eventually {
-        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
       }
     }
   }
@@ -616,68 +655,184 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should not request if parent already known") {
+  property("NodeViewSynchronizer: missing-parent recovery respects available header request capacity") {
+    withFixture2(desiredModifierQueueSize = 2) { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(1))
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      val initialHeaderCapacity = deliveryTracker.headersToDownload
+      val alreadyRequested = (1 until initialHeaderCapacity)
+        .map(i => bytesToId(Array.fill(32)(i.toByte)))
+      alreadyRequested.foreach { headerId =>
+        deliveryTracker.setRequested(Header.modifierTypeId, headerId, peer)(_ => Cancellable.alreadyCancelled)
+      }
+      deliveryTracker.headersToDownload shouldBe 1
+
+      val parentIds = Seq(101, 102).map(i => bytesToId(Array.fill(32)(i.toByte)))
+      synchronizerMockRef ! MissingParentHeaders(parentIds)
+
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId &&
+              data.ids.size == 1 &&
+              data.ids.forall(parentIds.contains)
+          case _ => false
+        }
+      }
+      deliveryTracker.headersToDownload shouldBe 0
+    }
+  }
+
+  property("NodeViewSynchronizer: cache cleanup releases an evicted parent before requesting it again") {
     withFixture2 { ctx =>
       import ctx._
 
       val hhistory = ErgoHistory.readOrGenerate(settings)(null)
-      val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
-      baseChain.headers.foreach(hhistory.append)
-
-      val parentHeader = baseChain.last
-      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
-
-      // Set up sync tracker with an older peer
-      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
-
-      // Send ChangedHistory to set up historyReader in the synchronizer
+      val missingParentId = bytesToId(Array.fill(32)(103.toByte))
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(1))
       synchronizerMockRef ! ChangedHistory(hhistory)
 
-      // Parent header IS in history, so no request should be made
-      val parentId = parentHeader.id
-      val modifierId = childHeader.id
-      val error = new ParentHeaderNotFoundError(parentId, modifierId, Header.modifierTypeId)
-      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+      deliveryTracker.setRequested(Header.modifierTypeId, missingParentId, peer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setReceived(missingParentId, Header.modifierTypeId, peer)
+      deliveryTracker.status(missingParentId, Header.modifierTypeId, Seq.empty) shouldBe Received
 
-      // Should NOT request the parent header since it's already in history
-      ncProbe.expectNoMessage(1.second)
+      synchronizerMockRef ! BlockSectionsProcessingCacheUpdate(
+        headersCacheSize = 1,
+        blockSectionsCacheSize = 0,
+        cleared = Header.modifierTypeId -> Seq(missingParentId),
+        missingParentIds = Seq(missingParentId)
+      )
 
-      // The modifier should still be set to Unknown
-      eventually {
-        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId && data.ids == Seq(missingParentId)
+          case _ => false
+        }
       }
     }
   }
 
-  property("NodeViewSynchronizer: RecoverableFailedModification with ParentHeaderNotFoundError should warn when no older peers") {
+  property("NodeViewSynchronizer: missing-parent recovery filters known and requested parents") {
     withFixture2 { ctx =>
       import ctx._
 
       val hhistory = ErgoHistory.readOrGenerate(settings)(null)
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
-
-      val parentHeader = baseChain.last
-      val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
-
-      // NO older peers set up - only the original peer as Younger
-      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Younger, Some(childHeader.height))
-
-      // Send ChangedHistory to set up historyReader in the synchronizer
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(baseChain.last.height + 1))
       synchronizerMockRef ! ChangedHistory(hhistory)
 
-      // Use a random parent ID that is NOT in the history
+      val knownParentId = baseChain.last.id
+      val requestedParentId = bytesToId(scorex.utils.Random.randomBytes(32))
       val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
-      val modifierId = childHeader.id
-      val error = new ParentHeaderNotFoundError(unknownParentId, modifierId, Header.modifierTypeId)
-      synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
+      deliveryTracker.setRequested(Header.modifierTypeId, requestedParentId, peer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! MissingParentHeaders(Seq(knownParentId, requestedParentId, unknownParentId))
 
-      // Should NOT send any network request since no older peers available
-      ncProbe.expectNoMessage(1.second)
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val invData = stn.message.data.get.asInstanceOf[InvData]
+            invData.typeId == Header.modifierTypeId && invData.ids == Seq(unknownParentId)
+          case _ => false
+        }
+      }
+    }
+  }
 
-      // The modifier should still be set to Unknown
+  property("NodeViewSynchronizer: direct missing-parent failure requests the parent and releases the uncached child") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val childId = bytesToId(scorex.utils.Random.randomBytes(32))
+      val missingParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(1))
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      deliveryTracker.setRequested(Header.modifierTypeId, childId, peer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setReceived(childId, Header.modifierTypeId, peer)
+      synchronizerMockRef ! RecoverableFailedModification(
+        Header.modifierTypeId,
+        childId,
+        new ParentHeaderNotFoundError(missingParentId, childId, Header.modifierTypeId)
+      )
+
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId && data.ids == Seq(missingParentId)
+          case _ => false
+        }
+      }
       eventually {
-        deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+        deliveryTracker.status(childId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: missing-parent recovery sends nothing without an older peer") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Younger, Some(1))
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      val unknownParentId = bytesToId(scorex.utils.Random.randomBytes(32))
+      synchronizerMockRef ! MissingParentHeaders(Seq(unknownParentId))
+
+      ncProbe.expectNoMessage(1.second)
+    }
+  }
+
+  property("NodeViewSynchronizer: missing-parent recovery uses only peers with complete header history") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizerMockRef ! ChangedHistory(hhistory)
+
+      def withMode(peer: ConnectedPeer, nipopowBootstrapped: Option[Int]): ConnectedPeer =
+        peer.copy(peerInfo = peer.peerInfo.map { info =>
+          info.copy(peerSpec = info.peerSpec.copy(features = Seq(
+            ModePeerFeature(StateType.Utxo, verifyingTransactions = true, nipopowBootstrapped, ModePeerFeature.AllBlocksKept)
+          )))
+        })
+
+      val nipopowPeer = withMode(peer, Some(ModePeerFeature.NiPoPoWDefaultFlag))
+      syncTracker.updateStatus(nipopowPeer, org.ergoplatform.consensus.Older, Some(1))
+      syncTracker.peersByStatus(org.ergoplatform.consensus.Older) should contain only nipopowPeer
+      deliveryTracker.headersToDownload should be > 0
+
+      val unavailableParentId = bytesToId(Array.fill(32)(104.toByte))
+      synchronizerMockRef ! MissingParentHeaders(Seq(unavailableParentId))
+      ncProbe.expectNoMessage(1.second)
+      deliveryTracker.status(unavailableParentId, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+
+      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
+      val fullHistoryPeer = withMode(peer.copy(connectionId = connectionIdGen.sample.get), None)
+      val missingParentId = bytesToId(Array.fill(32)(105.toByte))
+      syncTracker.updateStatus(fullHistoryPeer, org.ergoplatform.consensus.Older, Some(1))
+      synchronizerMockRef ! MissingParentHeaders(Seq(missingParentId))
+
+      ncProbe.fishForMessage(3 seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val data = stn.message.data.get.asInstanceOf[InvData]
+            data.typeId == Header.modifierTypeId &&
+              data.ids == Seq(missingParentId) &&
+              stn.sendingStrategy == SendToPeer(fullHistoryPeer)
+          case _ => false
+        }
       }
     }
   }

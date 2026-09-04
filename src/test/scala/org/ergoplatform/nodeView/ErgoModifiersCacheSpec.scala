@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.scalatest.OptionValues
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, bytesToId}
@@ -117,6 +118,181 @@ class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
       }
     }
     applyLoop()
+  }
+
+  property("stuck-header recovery rotates across independent missing parents") {
+    val modifiersCache = new ErgoModifiersCache(25)
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+
+    val firstBranch = genChain(2, history)
+    val secondBranch = (1 to 10).iterator
+      .map(_ => genChain(2, history))
+      .find(_.head.header.id != firstBranch.head.header.id)
+      .value
+    val orphanHeaders = Seq(firstBranch.last.header, secondBranch.last.header)
+
+    orphanHeaders.foreach(header => modifiersCache.put(header.id, header))
+
+    val expectedParents = orphanHeaders.map(_.parentId).toSet
+    val samePage = modifiersCache.findMissingParentIds(history, orphanHeaders, limit = orphanHeaders.size)
+    samePage.toSet shouldBe expectedParents
+
+    val firstReported = modifiersCache.findMissingParentIds(history, Seq.empty, limit = 1).head
+    val secondReported = modifiersCache.findMissingParentIds(history, Seq.empty, limit = 1).head
+
+    firstReported should not be secondReported
+    Set(firstReported, secondReported) shouldBe expectedParents
+  }
+
+  property("a newly discovered missing parent is not starved by a previously reported parent") {
+    val modifiersCache = new ErgoModifiersCache(25)
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+    val firstBranch = genChain(2, history)
+    val secondBranch = (1 to 10).iterator
+      .map(_ => genChain(2, history))
+      .find(_.head.header.id != firstBranch.head.header.id)
+      .value
+    val firstOrphan = firstBranch.last.header
+    val secondOrphan = secondBranch.last.header
+
+    modifiersCache.put(firstOrphan.id, firstOrphan)
+    modifiersCache.findMissingParentIds(history, Seq(firstOrphan), limit = 1) shouldBe
+      Seq(firstOrphan.parentId)
+
+    modifiersCache.put(secondOrphan.id, secondOrphan)
+    modifiersCache.findMissingParentIds(history, Seq(secondOrphan), limit = 1) shouldBe
+      Seq(secondOrphan.parentId)
+  }
+
+  property("stuck-header recovery reports only the external frontier of a cached chain") {
+    val modifiersCache = new ErgoModifiersCache(25)
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+    val chain = genChain(3, history)
+    val frontier = chain(1).header
+    val descendant = chain(2).header
+
+    Seq(frontier, descendant).foreach(header => modifiersCache.put(header.id, header))
+
+    val reported = modifiersCache.findMissingParentIds(history, Seq(frontier, descendant), limit = 25)
+    reported shouldBe Seq(chain.head.header.id)
+  }
+
+  property("stuck-header recovery reports one representative per missing parent") {
+    val modifiersCache = new ErgoModifiersCache(25)
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+    val parent = genChain(1, history).head.header
+    val firstChild = nextHeader(
+      Some(parent),
+      history.difficultyCalculator,
+      tsOpt = Some(parent.timestamp + 1),
+      useRealTs = false
+    )
+    val secondChild = nextHeader(
+      Some(parent),
+      history.difficultyCalculator,
+      tsOpt = Some(parent.timestamp + 2),
+      useRealTs = false
+    )
+
+    Seq(firstChild, secondChild).foreach(header => modifiersCache.put(header.id, header))
+
+    val reported = modifiersCache.findMissingParentIds(history, Seq(firstChild, secondChild), limit = 25)
+    reported shouldBe Seq(parent.id)
+  }
+
+  property("stuck-header recovery excludes non-parent recoverable errors") {
+    val modifiersCache = new ErgoModifiersCache(25)
+    val emptyHistory = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+    val parent = genChain(1, emptyHistory).head.header
+    val history = emptyHistory.append(parent).get._1
+    val futureHeader = nextHeader(
+      Some(parent),
+      history.difficultyCalculator,
+      tsOpt = Some(System.currentTimeMillis() + 60L * 60L * 1000L),
+      useRealTs = true
+    )
+    val failure = history.applicableTry(futureHeader).failed.toOption.value
+
+    failure.isInstanceOf[RecoverableModifierError] shouldBe true
+    failure.isInstanceOf[ParentHeaderNotFoundError] shouldBe false
+    modifiersCache.put(futureHeader.id, futureHeader)
+
+    modifiersCache.findMissingParentIds(history, Seq(futureHeader), limit = 25) shouldBe empty
+  }
+
+  property("missing-parent recovery suppresses cached parents and restores evicted frontiers") {
+    val modifiersCache = new ErgoModifiersCache(25)
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+    val chain = genChain(2, history)
+    val parent = chain.head.header
+    val child = chain.last.header
+
+    modifiersCache.put(child.id, child)
+    modifiersCache.findMissingParentIds(history, Seq(child), limit = 25) shouldBe Seq(parent.id)
+
+    modifiersCache.put(parent.id, parent)
+    modifiersCache.findMissingParentIds(history, Seq.empty, limit = 25) shouldBe empty
+
+    modifiersCache.remove(parent.id).value shouldBe parent
+    modifiersCache.findMissingParentIds(history, Seq.empty, limit = 25) shouldBe Seq(parent.id)
+
+    modifiersCache.remove(child.id).value shouldBe child
+    modifiersCache.findMissingParentIds(history, Seq.empty, limit = 25) shouldBe empty
+  }
+
+  property("missing-parent recovery excludes headers removed by overfull cleanup") {
+    val modifiersCache = new ErgoModifiersCache(1)
+    val history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      BlocksToKeep
+    )
+    val firstBranch = genChain(2, history)
+    val secondBranch = (1 to 10).iterator
+      .map(_ => genChain(2, history))
+      .find(_.head.header.id != firstBranch.head.header.id)
+      .value
+    val firstOrphan = firstBranch.last.header
+    val secondOrphan = secondBranch.last.header
+
+    modifiersCache.put(firstOrphan.id, firstOrphan)
+    modifiersCache.findMissingParentIds(history, Seq(firstOrphan), limit = 1) shouldBe Seq(firstOrphan.parentId)
+    modifiersCache.put(secondOrphan.id, secondOrphan)
+
+    modifiersCache.cleanOverfull() should contain only firstOrphan
+    modifiersCache.findMissingParentIds(history, Seq(firstOrphan, secondOrphan), limit = 25) shouldBe
+      Seq(secondOrphan.parentId)
   }
 
 }

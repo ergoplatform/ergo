@@ -267,6 +267,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ModificationOutcome])
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
+    context.system.eventStream.subscribe(self, classOf[MissingParentHeaders])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
 
@@ -694,6 +695,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       case _ =>
         log.warn("No peers available in requestDownload")
+    }
+  }
+
+  private def requestMissingParentHeaders(parentIds: Seq[ModifierId], historyReader: ErgoHistory): Unit = {
+    if (parentIds.nonEmpty) {
+      val olderPeers = HeadersDownloadFilter.filter(syncTracker.peersByStatus.getOrElse(Older, Seq.empty))
+      requestDownload(
+        maxModifiers = deliveryTracker.headersToDownload,
+        minHeadersPerBucket,
+        maxHeadersPerBucket
+      )(Option(olderPeers).filter(_.nonEmpty)) { howMany =>
+        val unknownParentIds = parentIds.distinct
+          .filter(parentId =>
+            deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown
+          )
+          .take(Math.min(howMany, MissingParentHeaders.MaxParentIds))
+        if (unknownParentIds.nonEmpty) {
+          Map(Header.modifierTypeId -> unknownParentIds)
+        } else {
+          Map.empty
+        }
+      }
     }
   }
 
@@ -1484,25 +1507,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
       deliveryTracker.setHeld(modId, modTypeId)
 
+    case MissingParentHeaders(parentIds) =>
+      requestMissingParentHeaders(parentIds, historyReader)
+
     case RecoverableFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Setting recoverable failed modifier $modId as Unknown", e)
       e match {
-        case phError: ParentHeaderNotFoundError =>
-          // For missing parent header, request the parent header from peers if not already known
-          val parentId = phError.parentId
-          if (deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
-            val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
-            if (olderPeers.nonEmpty) {
-              val randomPeer = olderPeers(scala.util.Random.nextInt(olderPeers.size))
-              requestBlockSection(Header.modifierTypeId, Seq(parentId), randomPeer)
-            } else {
-              logger.warn(s"No older peer available to download missing parent header $parentId for modifier $modId")
-            }
-          }
-          deliveryTracker.setUnknown(modId, modTypeId)
+        case error: ParentHeaderNotFoundError =>
+          // Unlike cached orphans, a modifier which reached this direct failure
+          // path is no longer retained, so it must become downloadable again.
+          self ! MissingParentHeaders(Seq(error.parentId))
         case _ =>
-          deliveryTracker.setUnknown(modId, modTypeId)
+          ()
       }
+      deliveryTracker.setUnknown(modId, modTypeId)
 
     case SyntacticallyFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Invalidating syntactically failed modifier $modId", e)
@@ -1526,7 +1544,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
       }
 
-    case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared) =>
+    case BlockSectionsProcessingCacheUpdate(headersCacheSize, blockSectionsCacheSize, cleared, missingParentIds) =>
       val HeadersCacheSizeToDownloadMore = 3184
       val BlockSectionsCacheSizeToDownloadMore = 96
 
@@ -1541,6 +1559,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // applied modifiers state was already changed at `SyntacticallySuccessfulModifier`
       val modTypeId = cleared._1
       cleared._2.foreach(mId => deliveryTracker.setUnknown(mId, modTypeId))
+      // Cleanup and recovery are handled in one actor turn so an evicted parent
+      // cannot still look Received when the recovery request is filtered.
+      requestMissingParentHeaders(missingParentIds, historyReader)
       modifiersCacheSize = blockSectionsCacheSize
       if (downloadMore) {
         requestMoreModifiers(historyReader)

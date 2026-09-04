@@ -8,6 +8,7 @@ import akka.pattern.StatusReply
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
+import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetReaders
@@ -30,7 +31,7 @@ import org.ergoplatform.wallet.{Constants => WalletConstants}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.util.{Random, Try}
+import scala.util.Try
 import scala.concurrent.duration._
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.settings.Constants.FalseTree
@@ -142,16 +143,100 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
-  it should "sign a transaction" in {
-    val digest = Random.nextBoolean()
-    val (tsr, r) = if (digest) {
-      (ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get, route)
-    } else {
-      (ErgoNodeTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get, utxoRoute)
+  it should "sign with matching external boxes and wallet-resolved boxes" in {
+    val external = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val resolved = ErgoNodeTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get
+      .copy(inputs = None)
+
+    Seq((external, route), (resolved, utxoRoute)).foreach { case (tsr, r) =>
+      Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
+      }
     }
-    Post(prefix + "/transaction/sign", tsr.asJson) ~> r ~> check {
+  }
+
+  it should "reject invalid external box bytes in sign request" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val request = tsr.asJson.mapObject { obj =>
+      obj.add("inputsRaw", (tsr.inputs.get :+ "zz").asJson)
+    }
+
+    Post(prefix + "/transaction/sign", request) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject external box bytes with trailing data in sign request" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val tailedInputs = tsr.inputs.get.updated(0, tsr.inputs.get.head + "00")
+    val request = tsr.asJson.mapObject(_.add("inputsRaw", tailedInputs.asJson))
+
+    Post(prefix + "/transaction/sign", request) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject a valid external box for another signed input" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val expectedInputs = tsr.inputs.get
+    val request = tsr.asJson.mapObject { obj =>
+      obj.add("inputsRaw", expectedInputs.updated(0, expectedInputs(1)).asJson)
+    }
+
+    Post(prefix + "/transaction/sign", request) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject invalid external box bytes in commitment request" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val request = GenerateCommitmentsRequest(
+      tsr.unsignedTx,
+      None,
+      Some(tsr.inputs.get :+ "zz"),
+      tsr.dataInputs
+    )
+
+    Post(prefix + "/generateCommitments", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject a valid external input box for another transaction input" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val expectedInputs = tsr.inputs.get
+    val request = GenerateCommitmentsRequest(
+      tsr.unsignedTx,
+      None,
+      Some(expectedInputs.updated(0, expectedInputs(1))),
+      tsr.dataInputs
+    )
+
+    Post(prefix + "/generateCommitments", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject invalid external box bytes in hint extraction request" in {
+    val tx = ErgoNodeTransactionGenerators.validErgoTransactionGen.sample.get._2
+    val request = HintExtractionRequest(tx, Seq.empty, Seq.empty, Some(Seq("zz")), None)
+
+    Post(prefix + "/extractHints", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject hint extraction when referenced boxes are unavailable" in {
+    val tx = ErgoNodeTransactionGenerators.validErgoTransactionGen.sample.get._2
+    val request = HintExtractionRequest(tx, Seq.empty, Seq.empty, None, None)
+
+    Post(prefix + "/extractHints", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+
+    Get(prefix + "/balances") ~> route ~> check {
       status shouldBe StatusCodes.OK
-      responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
     }
   }
 

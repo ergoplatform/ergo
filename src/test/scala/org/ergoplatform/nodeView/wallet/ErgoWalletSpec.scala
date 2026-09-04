@@ -128,6 +128,11 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
   private def publishCurrentMempool(implicit w: WalletFixture): Unit =
     w.actorSystem.eventStream.publish(ChangedMempool(getCurrentView.pool))
 
+  private def allowSnapshotHeightBlockInjection(implicit w: WalletFixture): Unit =
+    // Production snapshot bootstrap synchronizes headers before applying the snapshot.
+    // These wallet-focused tests then inject that snapshot-height block directly.
+    getHistory.setHeadersChainSynced()
+
   private def withProbeWalletActor[T](baseSettings: org.ergoplatform.settings.ErgoSettings,
                                       directory: File = Files.createTempDirectory("wallet-run-fence-").toFile,
                                       historyReader: ErgoHistoryReader = strictHistoryReader(),
@@ -707,6 +712,14 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       client.awaitAssert(requestCount.get() should be > 0, 5.seconds, 100.millis)
       client.send(actor, GetWalletStatus)
       client.expectMsgType[WalletStatus].error.get.toLowerCase should include("startup canonical alignment")
+
+      // Miner startup may race the correlated current-view handshake. Preserve the
+      // typed retry protocol instead of replying with a generic actor failure that
+      // ErgoMiner cannot associate with either pending wallet query.
+      client.send(actor, GetMiningPubKey)
+      client.expectMsg(MiningPubKeyResponse(None))
+      client.send(actor, GetFirstSecret)
+      client.expectMsgType[FirstSecretResponse].secret.isFailure shouldBe true
 
       // Ambient view events and a response for another actor incarnation must not unlock startup.
       client.send(actor, ChangedState(startupState))
@@ -6313,6 +6326,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       val run = await(wallet.walletActor ? UtxoSnapshotAppliedToState(
         genesisBlock.height, genesisBlock.id, getUtxoState))
         .asInstanceOf[Try[Option[UtxoSnapshotScanRun]]].get.get
+      allowSnapshotHeightBlockInjection
 
       await(wallet.walletActor ? GetOrInitUtxoSnapshotScanStatus(
         run,
@@ -6329,6 +6343,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
       Try(await(wallet.walletActor ? ReadBalances(ChainStatus.OnChain))).failed.get.getMessage should include("unresolved")
+      await(wallet.walletActor ? GetMiningPubKey) shouldBe MiningPubKeyResponse(None)
 
       applyBlock(genesisBlock) shouldBe 'success
 
@@ -6366,6 +6381,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         balances.walletBalance shouldBe returnBalance
         balances.height shouldBe nextBlock.height
       }
+      await(wallet.walletActor ? GetMiningPubKey) shouldBe
+        MiningPubKeyResponse(Some(address.pubkey))
     }
   }
 
@@ -6433,6 +6450,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       val run = await(wallet.walletActor ? UtxoSnapshotAppliedToState(
         snapshot.height, snapshot.id, getUtxoState))
         .asInstanceOf[Try[Option[UtxoSnapshotScanRun]]].get.get
+      allowSnapshotHeightBlockInjection
       val otherRun = run.copy(snapshotBlockId = otherBlockId)
       val activeStatus = snapshotStatus(
         run.snapshotHeight,

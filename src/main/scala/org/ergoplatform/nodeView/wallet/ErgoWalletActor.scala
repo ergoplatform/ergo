@@ -2635,6 +2635,9 @@ class ErgoWalletActor(settings: ErgoSettings,
     case GetFirstSecret =>
       sender() ! FirstSecretResponse(fail(activeQuarantineReason(state)))
 
+    case GetMiningPubKey =>
+      sender() ! MiningPubKeyResponse(None)
+
     case CollectWalletBoxes(_, _) =>
       sender() ! ReqBoxesResponse(fail(activeQuarantineReason(state)))
 

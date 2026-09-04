@@ -616,10 +616,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
   }
 
-  private def requestUtxoSetChunk(subtreeId: SubtreeId, peer: ConnectedPeer): Unit = {
+  private def requestUtxoSetChunk(subtreeId: SubtreeId,
+                                  peer: ConnectedPeer,
+                                  checksDone: Int = 0): Unit = {
     // as we download multiple chunks in parallel and they can be quite large, timeout increased
     val chunkDeliveryTimeout = 4 * deliveryTimeout
-    deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, ModifierId @@ Algos.encode(subtreeId), peer) { deliveryCheck =>
+    deliveryTracker.setRequested(
+      UtxoSnapshotChunkTypeId.value,
+      ModifierId @@ Algos.encode(subtreeId),
+      peer,
+      checksDone) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(chunkDeliveryTimeout, self, deliveryCheck)
     }
     val msg = Message(GetUtxoSnapshotChunkSpec, Right(subtreeId), None)
@@ -1275,7 +1281,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               newPeerOpt match {
-                case Some(newPeer) => requestUtxoSetChunk(Digest32 @@ Algos.decode(modifierId).get, newPeer)
+                case Some(newPeer) =>
+                  requestUtxoSetChunk(
+                    Digest32 @@ Algos.decode(modifierId).get,
+                    newPeer,
+                    checksDone)
                 case None => log.warn(s"No peer found to download UTXO set chunk $modifierId")
               }
              } else {

@@ -30,7 +30,7 @@ import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigma.crypto.CryptoFacade
 import sigma.interpreter.ProverResult
@@ -1032,6 +1032,7 @@ object CandidateGenerator extends ScorexLogging {
     var remainingTxs = transactions
     val accInput = MutableArray.empty[CostedTransaction]
     val accOrdering = MutableArray.empty[CostedTransaction]
+    val deferredOutputs = scala.collection.mutable.Set.empty[ModifierId]
     var lastFeeTx: Option[CostedTransaction] = None
     val invalidTxs = MutableArray.empty[ModifierId]
     var done = false
@@ -1046,7 +1047,19 @@ object CandidateGenerator extends ScorexLogging {
 
       remainingTxs.headOption match {
         case Some(tx) =>
-          if (!inputsNotSpent(tx, stateWithTxs) || doublespend(allCurrent, tx)) {
+          def dependsOn(outputIds: collection.Set[ModifierId]): Boolean =
+            tx.inputs.exists(i => outputIds.contains(bytesToId(i.boxId))) ||
+              tx.dataInputs.exists(i => outputIds.contains(bytesToId(i.boxId)))
+
+          def deferTx(): Unit = {
+            deferredOutputs ++= tx.outputs.map(b => bytesToId(b.id))
+            remainingTxs = remainingTxs.tail
+          }
+
+          if (dependsOn(deferredOutputs)) {
+            // Preserve descendants for a later candidate when their dependencies are available.
+            deferTx()
+          } else if (!inputsNotSpent(tx, stateWithTxs) || doublespend(allCurrent, tx)) {
             // Mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             // Do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
@@ -1066,6 +1079,14 @@ object CandidateGenerator extends ScorexLogging {
             def collectFeeAndCheckLimits(newTxs: Seq[CostedTransaction],
                                          inputTx: Boolean,
                                          costConsumed: Int): Boolean = {
+              val otherPartition = if (inputTx) currentOrdering else currentInput
+              val otherOutputs = otherPartition.flatMap(_.outputs).map(b => bytesToId(b.id)).toSet
+              if (dependsOn(otherOutputs)) {
+                // Each payload must be executable without the other candidate's new outputs.
+                // Deferral is a selection decision, not evidence that the transaction is invalid.
+                deferTx()
+                return true
+              }
               val newBoxes = newTxs.flatMap(_._1.outputs)
 
               collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {

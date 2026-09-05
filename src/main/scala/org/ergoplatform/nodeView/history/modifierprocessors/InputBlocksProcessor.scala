@@ -559,23 +559,17 @@ trait InputBlocksProcessor extends ScorexLogging {
 
         // Calculate which blocks need to be rolled back
         val rollbackInputBlocks = {
-          var commonIdx = -1  // Index of the common ancestor
-          (0 until currentFork.chain.length).foreach { idx =>
-            // Find the highest index that exists in both chains and is processed in the new chain
-            if (idx < newFork.chain.length &&
-                currentFork.chain(idx) == newFork.chain(idx) &&
-                idx <= newFork.processedIndex) {
-              commonIdx = idx
-            }
-          }
-          if(commonIdx == -1 || commonIdx == currentFork.processedIndex){
-            Seq.empty  // Nothing to roll back if common ancestor is at the same level or higher
-          } else {
-            // Extract the blocks that need to be rolled back (from common ancestor + 1 to processed tip)
-            val rolledBack = currentFork.chain.slice(commonIdx + 1, currentFork.processedIndex + 1)
+          val commonPrefixLength = currentFork.chain
+            .zip(newFork.chain)
+            .take(newFork.processedIndex + 1)
+            .takeWhile { case (currentId, newId) => currentId == newId }
+            .length
+          val rolledBack =
+            currentFork.chain.slice(commonPrefixLength, currentFork.processedIndex + 1)
+          if (rolledBack.nonEmpty) {
             log.info(s"Fork switch: rolling back ${rolledBack.length} input blocks from fork ${bestIndex}")
-            rolledBack
           }
+          rolledBack
         }
 
         // Process the next block in the new best chain

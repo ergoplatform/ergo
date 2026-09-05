@@ -532,19 +532,18 @@ trait InputBlocksProcessor extends ScorexLogging {
        *
        * A fork switch is needed when:
        * 1. The longest chain is different from the best chain
-       * 2. The depth of the current block in the longest chain is greater than the best chain depth
-       * 3. All blocks from the current processing point to the target depth have available transactions
+       * 2. The current block belongs to the longest chain
+       * 3. Its contiguous prefix with available transactions is deeper than the best chain depth
        */
       def switchNeeded(id: ModifierId): Boolean = {
-        val lf = forks(longestIndex)  // Get the longest fork
-        val d  = lf.depthOf(id)      // Get the depth of the current block in the longest fork
-        val needed = d > bestDepth && {  // Switch if longest fork is deeper than best fork
-          // Verify that all blocks from current processing point to target depth have transactions
-          (lf.processedIndex + 1 to d).forall { i =>
-            val id = lf.chain(i)
-            inputBlockTransactions.contains(id)  // Check if transactions are available
-          }
-        }
+        val lf = forks(longestIndex)
+        // A parent body may arrive after its children. Reconsider the entire
+        // available prefix rather than stopping at the newly delivered block.
+        val d = lf.processedIndex + lf.chain
+          .drop(lf.processedIndex + 1)
+          .takeWhile(inputBlockTransactions.contains)
+          .length
+        val needed = lf.depthOf(id) >= 0 && d > bestDepth
         if (needed) {
           log.info(s"Fork switch needed: longest fork depth $d > best fork depth ${bestDepth}")
         }

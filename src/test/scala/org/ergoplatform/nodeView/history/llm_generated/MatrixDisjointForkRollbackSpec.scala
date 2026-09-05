@@ -127,7 +127,17 @@ class MatrixDisjointForkRollbackSpec extends ErgoCorePropertyTest {
     history.bestInputBlocksChain() shouldBe Seq(winningTip.id, winningRoot.id)
   }
 
-  property("rollback output keeps wallet and mempool consumers consistent") {
+  Seq(
+    "root, middle, tip" -> Seq(0, 1, 2),
+    "tip, middle, root" -> Seq(2, 1, 0),
+    "tip, root, middle" -> Seq(2, 0, 1)
+  ).foreach { case (arrivalDescription, arrivalOrder) =>
+    property(s"rollback keeps consumers consistent when bodies arrive $arrivalDescription") {
+      checkRollbackConsumers(arrivalOrder)
+    }
+  }
+
+  private def checkRollbackConsumers(arrivalOrder: Seq[Int]): Unit = {
     val us = UtxoState.fromBoxHolder(
       BoxHolder(genesisBoxes),
       None,
@@ -163,16 +173,28 @@ class MatrixDisjointForkRollbackSpec extends ErgoCorePropertyTest {
     history.applyInputBlock(winningRoot) shouldBe None
     history.applyInputBlock(winningMiddle) shouldBe None
     history.applyInputBlock(winningTip) shouldBe None
-    history.applyInputBlockTransactions(winningRoot.id, Seq(winningRootTx), us) shouldBe
-      (Seq.empty -> Seq.empty)
-    history.applyInputBlockTransactions(winningMiddle.id, Seq(winningMiddleTx), us) shouldBe
-      (Seq.empty -> Seq.empty)
+    val winningBodies = Seq(
+      winningRoot.id -> Seq(winningRootTx),
+      winningMiddle.id -> Seq(winningMiddleTx),
+      winningTip.id -> Seq.empty[ErgoTransaction]
+    )
+    // Neither a missing ancestor body nor an available prefix tied with the
+    // selected fork may change the selected chain or emit consumer updates.
+    arrivalOrder.init.foreach { index =>
+      val (id, transactions) = winningBodies(index)
+      history.applyInputBlockTransactions(id, transactions, us) shouldBe
+        (Seq.empty -> Seq.empty)
+      history.bestInputBlocksChain() shouldBe Seq(abandonedTip.id, abandonedRoot.id)
+    }
 
+    val (lastId, lastTransactions) = winningBodies(arrivalOrder.last)
     val (forward, rollback) =
-      history.applyInputBlockTransactions(winningTip.id, Seq.empty, us)
+      history.applyInputBlockTransactions(lastId, lastTransactions, us)
 
     rollback shouldBe Seq(abandonedRoot.id, abandonedTip.id)
     forward shouldBe Seq(winningRoot.id, winningMiddle.id, winningTip.id)
+    history.bestInputBlocksChain() shouldBe
+      Seq(winningTip.id, winningMiddle.id, winningRoot.id)
 
     val allTransactions = Seq(
       abandonedRootTx,

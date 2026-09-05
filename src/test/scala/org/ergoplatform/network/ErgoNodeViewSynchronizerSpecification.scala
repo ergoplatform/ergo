@@ -1501,17 +1501,14 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Verify that localInputBlockChunks was populated
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(synchronizer)
-        .asInstanceOf[scala.collection.mutable.Map[
-          String,
-          ErgoNodeViewSynchronizer.InputBlockDiffData
-        ]]
+        .asInstanceOf[InputBlockPendingCache]
 
-      localInputBlockChunks.contains(inputBlockId) shouldBe true
-      val cachedData = localInputBlockChunks(inputBlockId)
+      localInputBlockChunks.get(inputBlockId).isDefined shouldBe true
+      val cachedData = localInputBlockChunks.get(inputBlockId).get
       cachedData.weakTxsIds shouldBe Seq(fakeWeakId)
       cachedData.txs shouldBe empty // no txs found in mempool
     }
@@ -1572,11 +1569,11 @@ class ErgoNodeViewSynchronizerSpecification
       // Pre-populate localInputBlockChunks with tx1 (local tx from mempool) but not tx2
       val testSynchronizer = testSynchronizerRef.underlyingActor
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(testSynchronizer)
-        .asInstanceOf[scala.collection.mutable.Map[ModifierId, InputBlockDiffData]]
+        .asInstanceOf[InputBlockPendingCache]
 
       localInputBlockChunks.put(
         inputBlockId,
@@ -1584,7 +1581,9 @@ class ErgoNodeViewSynchronizerSpecification
           System.currentTimeMillis(),
           Seq(tx1.weakId, tx2.weakId), // both weakIds expected
           Seq(tx1) // only tx1 is in local cache (tx2 comes from peer)
-        )
+        ),
+        peer.connectionId.remoteAddress.getHostString,
+        peer.handlerRef.toString
       )
 
       // Create peer transaction data containing tx2 (missing from local)
@@ -1592,6 +1591,8 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Call processInputBlockTransactions directly
       testSynchronizer.processInputBlockTransactions(peerTxsData, testHist, peer)
+      localInputBlockChunks.get(inputBlockId) shouldBe None
+      localInputBlockChunks.retainedWeight shouldBe 0L
 
       // Verify ProcessInputBlockTransactions was sent to viewHolderRef with merged tx array
       // Note: The probe also receives GetNodeViewChanges from synchronizer preStart, so we fish for the right message
@@ -1720,17 +1721,14 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Use reflection to access private field
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(synchronizerMock)
-        .asInstanceOf[scala.collection.mutable.Map[
-          ModifierId,
-          ErgoNodeViewSynchronizer.InputBlockDiffData
-        ]]
+        .asInstanceOf[InputBlockPendingCache]
 
-      localInputBlockChunks.put(oldSubBlockId1, oldData1)
-      localInputBlockChunks.put(oldSubBlockId2, oldData2)
+      localInputBlockChunks.put(oldSubBlockId1, oldData1, "peer", "connection")
+      localInputBlockChunks.put(oldSubBlockId2, oldData2, "peer", "connection")
 
       // Create recent entry (should NOT be cleaned up)
       val recentTime = System.currentTimeMillis()
@@ -1741,10 +1739,10 @@ class ErgoNodeViewSynchronizerSpecification
         Seq(tx1.weakId, tx2.weakId),
         Seq(tx1, tx2)
       )
-      localInputBlockChunks.put(recentSubBlockId, recentData)
+      localInputBlockChunks.put(recentSubBlockId, recentData, "peer", "connection")
 
-      // Verify all entries are present before cleanup
-      localInputBlockChunks.size shouldBe 3
+      // Admission prunes expired entries even before the scheduled cleanup.
+      localInputBlockChunks.size shouldBe 1
 
       // Trigger cleanup
       synchronizerMockRef ! ErgoNodeViewSynchronizer.CleanupLocalInputBlockChunks
@@ -1752,9 +1750,9 @@ class ErgoNodeViewSynchronizerSpecification
       // Verify old entries are removed and recent entry remains
       eventually {
         localInputBlockChunks.size shouldBe 1
-        localInputBlockChunks.contains(recentSubBlockId) shouldBe true
-        localInputBlockChunks.contains(oldSubBlockId1) shouldBe false
-        localInputBlockChunks.contains(oldSubBlockId2) shouldBe false
+        localInputBlockChunks.get(recentSubBlockId).isDefined shouldBe true
+        localInputBlockChunks.get(oldSubBlockId1) shouldBe None
+        localInputBlockChunks.get(oldSubBlockId2) shouldBe None
       }
     }
   }
@@ -1762,20 +1760,16 @@ class ErgoNodeViewSynchronizerSpecification
   property("NodeViewSynchronizer: cleanupLocalInputBlockChunks handles empty cache") {
     withFixture2 { ctx =>
       import ctx._
-      import scorex.util.ModifierId
 
       val synchronizerMock = synchronizerMockRef.underlyingActor
 
       // Access the localInputBlockChunks map via reflection
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(synchronizerMock)
-        .asInstanceOf[scala.collection.mutable.Map[
-          ModifierId,
-          ErgoNodeViewSynchronizer.InputBlockDiffData
-        ]]
+        .asInstanceOf[InputBlockPendingCache]
 
       // Ensure cache is empty
       localInputBlockChunks.clear()
@@ -3028,11 +3022,11 @@ class ErgoNodeViewSynchronizerSpecification
       // Pre-populate with tx1 weakId but a fake weakId that won't be found
       val fakeWeakId: Array[Byte] = Array.fill(32)(0xFF.toByte)
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(testSynchronizerRef.underlyingActor)
-        .asInstanceOf[scala.collection.mutable.Map[ModifierId, InputBlockDiffData]]
+        .asInstanceOf[InputBlockPendingCache]
 
       localInputBlockChunks.put(
         inputBlockId,
@@ -3040,7 +3034,9 @@ class ErgoNodeViewSynchronizerSpecification
           System.currentTimeMillis(),
           Seq(tx1.weakId, fakeWeakId), // fakeWeakId won't be found
           Seq(tx1)
-        )
+        ),
+        peer.connectionId.remoteAddress.getHostString,
+        peer.handlerRef.toString
       )
 
       // Peer sends tx1 only — fakeWeakId is missing

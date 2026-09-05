@@ -1,0 +1,95 @@
+name: Bootstrap pinned SigmaState
+description: Build the unavailable SigmaState snapshot from its exact source commit
+
+inputs:
+  scala-version:
+    description: Full Scala version used by the consuming Ergo job
+    required: true
+  ergo-build-file:
+    description: Ergo build file that declares the pinned SigmaState version
+    required: false
+    default: build.sbt
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK 8 for SigmaState
+      uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      with:
+        distribution: temurin
+        java-version: '8'
+
+    - name: Set up sbt
+      uses: sbt/setup-sbt@7b0c62920c0c6e456e829dcaad762cff5048167f # v1
+
+    - name: Build and publish SigmaState locally
+      shell: bash
+      env:
+        ERGO_BUILD_FILE: ${{ inputs.ergo-build-file }}
+        SIGMASTATE_REPOSITORY: https://github.com/ergoplatform/sigmastate-interpreter.git
+        SIGMASTATE_COMMIT: 368a860be033af94aa14895381f42099b3646db6
+        SIGMASTATE_VERSION: 6.0.5-22-368a860b-SNAPSHOT
+        SIGMASTATE_SCALA_VERSION: ${{ inputs.scala-version }}
+      run: |
+        set -euo pipefail
+
+        unset GITHUB_TOKEN SONATYPE_USERNAME SONATYPE_PASSWORD PGP_PASSPHRASE
+
+        ergo_build="${GITHUB_WORKSPACE}/${ERGO_BUILD_FILE}"
+        if [[ ! -f "${ergo_build}" ]]; then
+          echo "::error::Ergo build file not found: ${ERGO_BUILD_FILE}"
+          exit 1
+        fi
+
+        declared_version="$(sed -nE 's/^[[:space:]]*val[[:space:]]+sigmaStateVersion[[:space:]]*=[[:space:]]*"([^"]+)".*$/\1/p' "${ergo_build}")"
+        if [[ "${declared_version}" != "${SIGMASTATE_VERSION}" ]]; then
+          echo "::error::Ergo declares SigmaState ${declared_version:-<missing>}, but the bootstrap pins ${SIGMASTATE_VERSION}"
+          exit 1
+        fi
+
+        case "${SIGMASTATE_SCALA_VERSION}" in
+          2.11.12|2.12.20|2.13.16) ;;
+          *)
+            echo "::error::Unsupported Scala version: ${SIGMASTATE_SCALA_VERSION}"
+            exit 1
+            ;;
+        esac
+
+        sigma_dir="$(mktemp -d "${RUNNER_TEMP}/sigmastate.XXXXXX")"
+        git -C "${sigma_dir}" init
+        git -C "${sigma_dir}" remote add origin "${SIGMASTATE_REPOSITORY}"
+        git -C "${sigma_dir}" fetch --no-tags --depth=1 origin "${SIGMASTATE_COMMIT}"
+        git -C "${sigma_dir}" checkout --detach FETCH_HEAD
+
+        actual_commit="$(git -C "${sigma_dir}" rev-parse HEAD)"
+        if [[ "${actual_commit}" != "${SIGMASTATE_COMMIT}" ]]; then
+          echo "::error::SigmaState checkout mismatch: expected ${SIGMASTATE_COMMIT}, got ${actual_commit}"
+          exit 1
+        fi
+
+        (
+          cd "${sigma_dir}"
+          sbt -batch \
+            "++${SIGMASTATE_SCALA_VERSION}!" \
+            "set ThisBuild / version := \"${SIGMASTATE_VERSION}\"" \
+            "show ThisBuild / version" \
+            "show scalaVersion" \
+            publishLocal
+        )
+
+        scala_binary="${SIGMASTATE_SCALA_VERSION%.*}"
+        ivy_dir="${HOME}/.ivy2/local/org.scorexfoundation/sigma-state_${scala_binary}/${SIGMASTATE_VERSION}"
+        ivy_file="${ivy_dir}/ivys/ivy.xml"
+        main_jar="${ivy_dir}/jars/sigma-state_${scala_binary}.jar"
+        tests_jar="${ivy_dir}/jars/sigma-state_${scala_binary}-tests.jar"
+
+        if [[ ! -s "${ivy_file}" || ! -s "${main_jar}" || ! -s "${tests_jar}" ]]; then
+          echo "::error::SigmaState local publication is missing its Ivy descriptor or JARs"
+          exit 1
+        fi
+
+        if ! grep -Fq "revision=\"${SIGMASTATE_VERSION}\"" "${ivy_file}" || \
+           ! grep -Fq "name=\"scala-library\" rev=\"${SIGMASTATE_SCALA_VERSION}\"" "${ivy_file}"; then
+          echo "::error::SigmaState local publication does not match the requested version and Scala toolchain"
+          exit 1
+        fi

@@ -13,11 +13,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Set up JDK 17 for SigmaState
+    - name: Set up JDK 8 for SigmaState
       uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
       with:
         distribution: temurin
-        java-version: '17'
+        java-version: '8'
 
     - name: Set up sbt
       uses: sbt/setup-sbt@7b0c62920c0c6e456e829dcaad762cff5048167f # v1

@@ -1,6 +1,6 @@
 package org.ergoplatform.it
 
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
 import io.circe.{Decoder, Json}
 import io.circe.parser.parse
 import io.circe.syntax._
@@ -42,6 +42,8 @@ class MatrixLifecycleSpec extends AnyFlatSpec
   private var retainedTransaction: Option[ErgoTransaction] = None
   private var normalScenarioComplete = false
   private var forkScenarioComplete = false
+  private var settledRestartComplete = false
+  private var pendingRestartComplete = false
 
   private def await[A](f: Future[A]): A = Await.result(f, operationTimeout)
 
@@ -195,12 +197,25 @@ class MatrixLifecycleSpec extends AnyFlatSpec
       field[String](section, "headerId") shouldBe orderingId
       val ids = field[Vector[Json]](section, "transactions").map(field[String](_, "id"))
       txs.foreach { tx =>
-        ids should contain(tx.id)
+        ids.count(_ == tx.id) shouldBe 1
         val outputId = Base16.encode(tx.outputs.head.id)
         val confirmed = get(node, s"/utxo/byId/$outputId").as[ErgoBox].fold(throw _, identity)
         Base16.encode(confirmed.id) shouldBe outputId
       }
     }
+  }
+
+  private def restartReceiver(offline: Boolean = false): Node = {
+    runtime.stopAndRemoveNode(nodeList(2), secondsToWait = 30)
+    val extra: Docker.ExtraConfig = if (offline) (_, _) => Some(ConfigFactory.parseString("""
+      scorex.network.maxConnections = 0
+      scorex.network.knownPeers = []
+    """)) else Docker.noExtraConfig
+    val restarted = runtime.startDevNetNode(configs(2), extraConfig = extra,
+      specialVolumeOpt = Some(dataPaths(2) -> "/app")).get
+    nodeList = nodeList.updated(2, restarted)
+    await(restarted.waitForStartup)
+    restarted
   }
 
   override protected def beforeAll(): Unit = {
@@ -364,6 +379,91 @@ class MatrixLifecycleSpec extends AnyFlatSpec
     walletBalance(restarted) shouldBe balance
     mine(nodeList.head, input = false)
     settled()
+    settledRestartComplete = true
+  }
+
+  it should "recover an input-block payment after restarting before ordering" in {
+    assume(settledRestartComplete, "The preceding settled restart scenario must pass")
+    val producer = nodeList.head
+    val confirmedHeight = height(producer)
+    val source = spendable(producer).head
+    val tx = payment(producer, source, 5000000L)
+    submit(producer, tx)
+    val paymentBlock = mine(producer, input = true, txs = Seq(tx))
+    assertAppliedInput(paymentBlock, Seq(tx), nodeList)
+    val expectedBoxes = walletIds(nodeList(2))
+    val expectedBalance = walletBalance(nodeList(2))
+    nodeList.foreach(n => height(n) shouldBe confirmedHeight)
+
+    val restarted = restartReceiver()
+    connectPeer(restarted, nodeList(1))
+    settled()
+    // Input tips are announced separately from ordering-header synchronization.
+    // Resume valid input production to exercise ordinary missing-parent retrieval.
+    val resumedTip = mine(producer, input = true)
+    nodeList.foreach { n =>
+      until("pending chain recovered after restart")(inputTip(n))(_ == resumedTip)
+      until("pending wallet boxes recovered after restart")(walletIds(n))(_ == expectedBoxes)
+      walletBalance(n) shouldBe expectedBalance
+      mempool(n) should not contain tx.id
+      height(n) shouldBe confirmedHeight
+    }
+    val paymentIds = get(restarted, s"/blocks/$paymentBlock/inputBlockTransactionIds")
+      .as[Vector[String]].fold(throw _, identity)
+    paymentIds.count(_ == tx.id) shouldBe 1
+    val orderingId = mine(producer, input = false)
+    settled()
+    assertConfirmed(orderingId, Seq(tx))
+    nodeList.foreach { n =>
+      walletIds(n) should contain(Base16.encode(tx.outputs.head.id))
+      walletIds(n) should not contain Base16.encode(source.id)
+      mempool(n) should not contain tx.id
+      inputTip(n) shouldBe empty
+    }
+    nodeList.map(walletIds).distinct.size shouldBe 1
+    nodeList.map(walletBalance).distinct.size shouldBe 1
+    val nextOrderingId = mine(producer, input = false)
+    settled()
+    nodeList.foreach { n =>
+      val ids = field[Vector[Json]](get(n, s"/blocks/$nextOrderingId/transactions"), "transactions")
+        .map(field[String](_, "id"))
+      ids should not contain tx.id
+    }
+    pendingRestartComplete = true
+  }
+
+  it should "restore a nonempty confirmed checkpoint before connecting to peers" in {
+    assume(pendingRestartComplete, "The preceding pending restart scenario must pass")
+    val checkpoint = settled()
+    val confirmedHeight = height(nodeList(2))
+    val boxes = walletIds(nodeList(2))
+    boxes should not be empty
+    val balance = walletBalance(nodeList(2))
+    nodeList.foreach { n =>
+      until("empty mempool at offline checkpoint")(mempool(n))(_.isEmpty)
+      inputTip(n) shouldBe empty
+    }
+    val restarted = restartReceiver(offline = true)
+    get(restarted, "/peers/connected").asArray.get shouldBe empty
+    until("confirmed checkpoint restored locally") {
+      val info = get(restarted, "/info")
+      (field[Option[String]](info, "bestFullHeaderId").getOrElse(""),
+        field[Option[String]](info, "stateRoot").getOrElse(""))
+    }(_ == checkpoint)
+    until("wallet checkpoint restored locally") {
+      field[Int](get(restarted, "/wallet/status"), "walletHeight")
+    }(_ == confirmedHeight)
+    walletIds(restarted) shouldBe boxes
+    walletBalance(restarted) shouldBe balance
+    mempool(restarted) shouldBe empty
+    inputTip(restarted) shouldBe empty
+    get(restarted, "/peers/connected").asArray.get shouldBe empty
+
+    // Explicit outgoing connections are enabled even with automatic P2P disabled.
+    nodeList.take(2).foreach(connectPeer(restarted, _))
+    settled() shouldBe checkpoint
+    val next = mine(nodeList.head, input = false)
+    settled()._1 shouldBe next
   }
 
   override protected def afterAll(): Unit = {

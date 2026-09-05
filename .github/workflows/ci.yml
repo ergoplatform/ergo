@@ -30,11 +30,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
-        with:
-          java-version: ${{ matrix.java }}
-
       - name: Cache sbt
         uses: actions/cache@v4
         with:
@@ -46,6 +41,16 @@ jobs:
               ~/AppData/Local/Coursier/Cache/v1
               ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Build pinned SigmaState dependency
+        uses: ./.github/actions/bootstrap-sigmastate
+        with:
+          scala-version: ${{ matrix.scala }}
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: ${{ matrix.java }}
 
       - name: Runs wallet tests
         run: sbt ++${{ matrix.scala }} ergoWallet/test
@@ -73,11 +78,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
-        with:
-          java-version: ${{ matrix.java }}
-
       - name: Cache sbt
         uses: actions/cache@v4
         with:
@@ -89,6 +89,16 @@ jobs:
             ~/AppData/Local/Coursier/Cache/v1
             ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Build pinned SigmaState dependency
+        uses: ./.github/actions/bootstrap-sigmastate
+        with:
+          scala-version: ${{ matrix.scala }}
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: ${{ matrix.java }}
 
       - name: Runs ergo-core tests
         run: sbt ++${{ matrix.scala }} ergoCore/test
@@ -114,11 +124,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
-        with:
-          java-version: ${{ matrix.java }}
-
       - name: Cache sbt
         uses: actions/cache@v4
         with:
@@ -130,6 +135,16 @@ jobs:
               ~/AppData/Local/Coursier/Cache/v1
               ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Build pinned SigmaState dependency
+        uses: ./.github/actions/bootstrap-sigmastate
+        with:
+          scala-version: ${{ matrix.scala }}
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: ${{ matrix.java }}
 
       - name: Runs node tests
         run: sbt -Denv=test clean ++${{ matrix.scala }} test
@@ -149,11 +164,6 @@ jobs:
            path: it
            fetch-depth: 0
 
-       - name: Setup Java and Scala
-         uses: olafurpg/setup-scala@v10
-         with:
-           java-version: ${{ matrix.java }}
-
        - name: Cache sbt
          uses: actions/cache@v4
          with:
@@ -165,6 +175,17 @@ jobs:
              ~/AppData/Local/Coursier/Cache/v1
              ~/Library/Caches/Coursier/v1
            key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+       - name: Build pinned SigmaState dependency
+         uses: ./it/.github/actions/bootstrap-sigmastate
+         with:
+           scala-version: ${{ matrix.scala }}
+           ergo-build-file: it/build.sbt
+
+       - name: Setup Java and Scala
+         uses: olafurpg/setup-scala@v10
+         with:
+           java-version: ${{ matrix.java }}
 
        - name: Runs it node tests
          run: |

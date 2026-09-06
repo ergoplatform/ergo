@@ -156,7 +156,7 @@ object ErgoNodeViewSynchronizerMessages {
      * @param state   - up-to-date state to check transaction against
      * @param mempool - mempool to check
      */
-    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader)
+    case class RecheckMempool(state: UtxoStateReader, mempool: ErgoMemPoolReader, stateRevision: java.util.UUID)
 
     /**
      * Signal for a central node view holder component to initialize UTXO state from UTXO set snapshot

@@ -31,7 +31,7 @@ class SnapshotsDbSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("pruneSnapshots choosing snapshots correctly") {
+  property("pruneSnapshots preserves metadata when retained manifests are unavailable") {
     forAll(Gen.nonEmptyListOf(modifierIdGen)) { manifestIds =>
       val (si, db) = seededDatabase(manifestIds)
 
@@ -41,12 +41,10 @@ class SnapshotsDbSpecification extends ErgoCorePropertyTest {
 
       val after = db.readSnapshotsInfo
 
-      if (toStore >= manifestIds.size) {
-        after.availableManifests.size == manifestIds.size
+      if (toStore == 0) {
+        after.availableManifests shouldBe empty
       } else {
-        val storedKeys = si.availableManifests.keySet.toSeq.sorted.takeRight(toStore)
-        val stored = si.availableManifests.filterKeys(h => storedKeys.contains(h))
-        after.availableManifests.mapValues(bytesToId) shouldBe stored.mapValues(bytesToId)
+        after.availableManifests.mapValues(bytesToId) shouldBe si.availableManifests.mapValues(bytesToId)
       }
     }
   }

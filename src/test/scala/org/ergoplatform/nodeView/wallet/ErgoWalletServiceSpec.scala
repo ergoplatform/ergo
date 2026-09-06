@@ -275,6 +275,61 @@ class ErgoWalletServiceSpec
     }
   }
 
+  Seq(
+    ("replacement", Seq(6000000L, 6000000L, 20000000L), 2),
+    ("compression", Seq(2000000L, 10000000L), 1),
+    ("unchanged selection", Seq(20000000L, 6000000L), 0)
+  ).foreach { case (selection, values, selectedIndex) =>
+    Seq(true, false).foreach { explicitInputs =>
+      property(s"mint identity follows final $selection with explicit inputs $explicitInputs") {
+        withVersionedStore(2) { versionedStore =>
+          withStore { store =>
+            val boxes = values.zipWithIndex.map { case (value, index) => testBox(value, TrueTree, index) }
+            val tracked = boxes.map { box =>
+              TrackedBox(box.transactionId, box.index, None, None, None, box, Set(PaymentsScanId))
+            }
+            val wState = initialState(store, versionedStore).copy(
+              offChainRegistry = OffChainRegistry.empty.copy(offChainBoxes = tracked)
+            )
+            val encodedBoxes = if (explicitInputs) boxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box))) else Seq.empty
+            val dataBox = testBox(1000000L, TrueTree, 10)
+            val payment = PaymentRequest(pks.head, 2000000L, Array.empty, Map.empty)
+            val issue = AssetIssueRequest(pks.head, Some(8000000L), 7L, "mint-name", "mint-description", 4,
+              Some(Map[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]](
+                ErgoBox.R7 -> ByteArrayConstant(Array[Byte](1, 2)))))
+            val selector = new ReplaceCompactCollectBoxSelector(1, 1, None)
+            val (tx, inputs, dataInputs) = generateUnsignedTransaction(
+              wState, selector, Seq(payment, issue), encodedBoxes,
+              Seq(Base16.encode(ErgoBoxSerializer.toBytes(dataBox)))
+            ).get
+
+            inputs.map(_.id.toSeq) shouldBe Seq(boxes(selectedIndex).id.toSeq)
+            tx.inputs.map(_.boxId.toSeq) shouldBe inputs.map(_.id.toSeq)
+            val minted = tx.outputCandidates(1)
+            minted.additionalTokens.toArray.toSeq shouldBe Seq(inputs.head.id.toTokenId -> 7L)
+            minted.value shouldBe 8000000L
+            minted.ergoTree shouldBe pks.head.script
+            minted.creationHeight shouldBe wState.fullHeight
+            minted.additionalRegisters shouldBe Map(
+              ErgoBox.R4 -> ByteArrayConstant("mint-name".getBytes("UTF-8")),
+              ErgoBox.R5 -> ByteArrayConstant("mint-description".getBytes("UTF-8")),
+              ErgoBox.R6 -> ByteArrayConstant("4".getBytes("UTF-8")),
+              ErgoBox.R7 -> ByteArrayConstant(Array[Byte](1, 2))
+            )
+            tx.outputCandidates.head.value shouldBe payment.value
+            tx.outputCandidates.head.additionalTokens.toArray shouldBe empty
+            tx.outputCandidates.map(_.value).sum shouldBe inputs.map(_.value).sum
+            tx.outputCandidates.drop(2).flatMap(_.additionalTokens.toArray) shouldBe empty
+            dataInputs.map(_.id.toSeq) shouldBe Seq(dataBox.id.toSeq)
+            tx.dataInputs.map(_.boxId.toSeq) shouldBe Seq(dataBox.id.toSeq)
+            generateUnsignedTransaction(wState, selector, Seq(issue, issue), encodedBoxes, Seq.empty)
+              .failed.get.getMessage shouldBe "requirement failed: Too many asset issuance requests"
+          }
+        }
+      }
+    }
+  }
+
   property("asset issuance should be independent of burn request order") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>

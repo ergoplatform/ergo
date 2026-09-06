@@ -317,17 +317,14 @@ trait ErgoWalletSupport extends ScorexLogging {
     //filter out tokens on whitelist from wallet and merge the rest with burnTokens from requests
     val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes.toArray, burnTokensRequestMap)
 
-    //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
+    // Use a provisional mint id for sizing; selection may replace or remove the first candidate input.
     requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
       .flatMap { outputs =>
         require(outputs.forall(c => c.value >= BoxUtils.minimalErgoAmountSimulated(c, state.parameters)), "Minimal ERG value not met")
         require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
-        val assetIssueBox = outputs
-          .zip(requestsWithoutBurnTokens)
-          .filter(_._2.isInstanceOf[AssetIssueRequest])
-          .map(_._1)
-          .headOption
+        val assetIssueIndex = requestsWithoutBurnTokens.indexWhere(_.isInstanceOf[AssetIssueRequest])
+        val assetIssueBox = outputs.lift(assetIssueIndex)
 
         val targetBalance = outputs.map(_.value).sum
         val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
@@ -339,8 +336,18 @@ trait ErgoWalletSupport extends ScorexLogging {
         val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
         val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
+          // Mint identity must match the first input of the final unsigned transaction.
+          val finalOutputs = assetIssueBox.fold(outputs) { issueBox =>
+            outputs.updated(assetIssueIndex, new ErgoBoxCandidate(
+              issueBox.value,
+              issueBox.ergoTree,
+              issueBox.creationHeight,
+              Colls.fromItems(selectionResult.inputBoxes.head.box.id.toTokenId -> issueBox.additionalTokens(0)._2),
+              issueBox.additionalRegisters
+            ))
+          }
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+          prepareUnsignedTransaction(finalOutputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

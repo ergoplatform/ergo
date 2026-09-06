@@ -354,6 +354,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
     if (state.walletVars.proverOpt.isEmpty) {
       state.secretStorageOpt match {
         case Some(secretStorage) =>
+          val wasLocked = secretStorage.isLocked
           secretStorage.unlock(walletPass).flatMap { _ =>
             secretStorage.secret match {
               case None =>
@@ -361,6 +362,9 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
               case Some(masterKey) =>
                 processUnlock(state, masterKey, usePreEip3Derivation)
             }
+          }.recoverWith { case error =>
+            if (wasLocked) secretStorage.lock()
+            Failure(error)
           }
         case None =>
           Failure(new Exception("Wallet not initialized"))

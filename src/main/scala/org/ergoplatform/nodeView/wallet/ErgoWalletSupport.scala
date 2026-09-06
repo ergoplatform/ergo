@@ -160,19 +160,26 @@ trait ErgoWalletSupport extends ScorexLogging {
           }
         }
       } else {
-        if (pubKeys.size == 1 &&
+        val updateChangeAddress = if (pubKeys.size == 1 &&
               pubKeys.head.path == sdk.wallet.Constants.eip3DerivationPath.toPublicBranch &&
               state.storage.readChangeAddress.isEmpty) {
           val changeAddress = P2PKAddress(pubKeys.head.key)(addressEncoder)
           log.info(s"Update change address to $changeAddress")
           state.storage.updateChangeAddress(changeAddress)
+        } else {
+          Success(())
         }
-        // Add master key's public key to the storage to track payments to it when the wallet is locked
-        if (!state.storage.containsPublicKey(masterKey.path.toPublicBranch)) {
-          state.storage.addPublicKey(masterKey.publicKey)
+        updateChangeAddress.flatMap { _ =>
+          // Add master key's public key to the storage to track payments to it when the wallet is locked
+          if (!state.storage.containsPublicKey(masterKey.path.toPublicBranch)) {
+            state.storage.addPublicKey(masterKey.publicKey)
+          } else {
+            Success(())
+          }
+        }.map { _ =>
+          log.info("Wallet unlock finished using existing keys in storage")
+          updatePublicKeys(state, masterKey, pubKeys)
         }
-        log.info("Wallet unlock finished using existing keys in storage")
-        Try(updatePublicKeys(state, masterKey, pubKeys))
       }
     }
   }

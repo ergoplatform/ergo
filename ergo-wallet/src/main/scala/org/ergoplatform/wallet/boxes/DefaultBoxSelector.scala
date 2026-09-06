@@ -23,9 +23,11 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
   import DefaultBoxSelector._
 
   // helper function which returns count of assets in `initialMap` not fully spent in `subtractor`
-  private def diffCount(initialMap: mutable.Map[ModifierId, Long], subtractor: TokensMap): Int = {
+  private def diffCount(initialMap: mutable.Map[ModifierId, Long],
+                        subtractor: TokensMap,
+                        keepChangeToken: ModifierId => Boolean): Int = {
     initialMap.foldLeft(0){case (cnt, (tokenId, tokenAmt)) =>
-      if (tokenAmt - subtractor.getOrElse(tokenId, 0L) > 0) {
+      if (keepChangeToken(tokenId) && tokenAmt - subtractor.getOrElse(tokenId, 0L) > 0) {
         cnt + 1
       } else {
         cnt
@@ -36,7 +38,22 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           externalFilter: T => Boolean,
                                           targetBalance: Long,
-                                          targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                                          targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    selectDefault(inputBoxes, externalFilter, targetBalance, targetAssets, None)
+
+  override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                          externalFilter: T => Boolean,
+                                          targetBalance: Long,
+                                          targetAssets: TokensMap,
+                                          keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    selectDefault(inputBoxes, externalFilter, targetBalance, targetAssets, Some(keepChangeToken))
+
+  private def selectDefault[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                                externalFilter: T => Boolean,
+                                                targetBalance: Long,
+                                                targetAssets: TokensMap,
+                                                changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+    val keepChangeToken = changeTokenPolicy.getOrElse((_: ModifierId) => true)
     //mutable structures to collect results
     val res = mutable.Buffer[T]()
     var currentBalance = 0L
@@ -55,7 +72,7 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
       val diff = currentBalance - targetBalance
 
       // We estimate how many ERG needed for assets in change boxes
-      val assetsDiff = diffCount(currentAssets, targetAssets)
+      val assetsDiff = diffCount(currentAssets, targetAssets, keepChangeToken)
       val diffThreshold = if (assetsDiff <= 0) {
         0
       } else {
@@ -102,7 +119,12 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
           },
         assetsMet
       )) {
-        formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets).mapRight { changeBoxes =>
+        // Preserve legacy helper overrides when no policy was supplied.
+        val change = changeTokenPolicy match {
+          case Some(policy) => formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets, policy)
+          case None => formChangeBoxes(currentBalance, targetBalance, currentAssets, targetAssets)
+        }
+        change.mapRight { changeBoxes =>
           selectionResultWithEip27Output(res.toSeq, changeBoxes)
         }
       } else {
@@ -130,8 +152,23 @@ class DefaultBoxSelector(override val reemissionDataOpt: Option[ReemissionData])
   def formChangeBoxes(foundBalance: Long,
                       targetBalance: Long,
                       foundBoxAssets: mutable.Map[ModifierId, Long],
-                      targetBoxAssets: TokensMap): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+                      targetBoxAssets: TokensMap): Either[BoxSelectionError, Seq[ErgoBoxAssets]] =
+    formChangeBoxesImpl(foundBalance, targetBalance, foundBoxAssets, targetBoxAssets, _ => true)
+
+  def formChangeBoxes(foundBalance: Long,
+                      targetBalance: Long,
+                      foundBoxAssets: mutable.Map[ModifierId, Long],
+                      targetBoxAssets: TokensMap,
+                      keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, Seq[ErgoBoxAssets]] =
+    formChangeBoxesImpl(foundBalance, targetBalance, foundBoxAssets, targetBoxAssets, keepChangeToken)
+
+  private def formChangeBoxesImpl(foundBalance: Long,
+                                  targetBalance: Long,
+                                  foundBoxAssets: mutable.Map[ModifierId, Long],
+                                  targetBoxAssets: TokensMap,
+                                  keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     AssetUtils.subtractAssetsMut(foundBoxAssets, targetBoxAssets)
+    foundBoxAssets.retain { (tokenId, _) => keepChangeToken(tokenId) }
     val changeBoxesAssets: Seq[mutable.Map[ModifierId, Long]] = foundBoxAssets.grouped(MaxAssetsPerBox).toIndexedSeq
     val changeBalance = foundBalance - targetBalance
     //at least a minimum amount of ERG should be assigned per a created box

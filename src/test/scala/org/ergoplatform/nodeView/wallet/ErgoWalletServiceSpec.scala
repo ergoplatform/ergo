@@ -18,7 +18,7 @@ import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.validErgo
 import org.ergoplatform.utils.{ErgoCorePropertyTest, MempoolTestHelpers, WalletTestOps}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.wallet.boxes.BoxSelector.BoxSelectionResult
-import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
+import org.ergoplatform.wallet.boxes.{DefaultBoxSelector, ErgoBoxSerializer, ReplaceCompactCollectBoxSelector, TrackedBox}
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
@@ -365,6 +365,83 @@ class ErgoWalletServiceSpec
             .sum
           selectedExistingAmount - outputExistingAmount shouldBe burnAmount
           selectedInputs.map(_.value).sum shouldBe tx.outputCandidates.map(_.value).sum
+        }
+      }
+    }
+  }
+
+  property("burn policy preserves payments and burns only selected surplus") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val baseState = initialState(store, versionedStore)
+        val tokenId = newAssetIdStub
+        val payment = PaymentRequest(pks.head, 10000000L, Array(tokenId -> 4L), Map.empty)
+        val burns = Seq(
+          BurnTokensRequest(Array(tokenId -> 1L, tokenId -> 2L)),
+          BurnTokensRequest(Array(tokenId -> 2L))
+        )
+        val boxes = Seq(
+          testBox(7000000L, TrueTree, 1, Seq(tokenId -> 10L)),
+          testBox(7000000L, TrueTree, 2, Seq(tokenId -> 10L)),
+          testBox(7000000L, TrueTree, 3, Seq(tokenId -> 100L))
+        )
+        val encoded = boxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+        val policies = Seq(None, Some(Seq.empty[String]), Some(Seq(IdUtils.encodedTokenId(tokenId))))
+
+        policies.foreach { whitelist =>
+          val policySettings = settings.copy(walletSettings = settings.walletSettings.copy(tokensWhitelist = whitelist))
+          val state = baseState.copy(walletVars = baseState.walletVars.copy()(policySettings))
+          Seq(new DefaultBoxSelector(None), new ReplaceCompactCollectBoxSelector(10, 1, None)).foreach { selector =>
+            val (tx, selected, _) = generateUnsignedTransaction(
+              state, selector, payment +: burns, encoded, Seq.empty
+            ).get
+            selected shouldBe boxes.take(2)
+            tx.outputCandidates.head.additionalTokens.toArray should contain(tokenId -> 4L)
+            val outputAmount = tx.outputCandidates.flatMap(_.additionalTokens.toArray).map(_._2).sum
+            val automaticBurn = whitelist.contains(Seq.empty[String])
+            outputAmount shouldBe (if (automaticBurn) 4L else 15L)
+            tx.outputCandidates.map(_.value).sum shouldBe selected.map(_.value).sum
+          }
+        }
+      }
+    }
+  }
+
+  property("automatic burn permits an exact ERG payment without token change") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val baseState = initialState(store, versionedStore)
+        val policySettings = settings.copy(walletSettings = settings.walletSettings.copy(tokensWhitelist = Some(Seq.empty)))
+        val state = baseState.copy(walletVars = baseState.walletVars.copy()(policySettings))
+        val tokenId = newAssetIdStub
+        val input = testBox(10000000L, TrueTree, 1, Seq(tokenId -> 10L))
+        val payment = PaymentRequest(pks.head, input.value, Array(tokenId -> 4L), Map.empty)
+        val encoded = Seq(Base16.encode(ErgoBoxSerializer.toBytes(input)))
+        val (tx, selected, _) = generateUnsignedTransaction(
+          state, new ReplaceCompactCollectBoxSelector(10, 1, None), Seq(payment), encoded, Seq.empty
+        ).get
+        selected shouldBe Seq(input)
+        tx.outputCandidates should have size 1
+        tx.outputCandidates.head.value shouldBe input.value
+        tx.outputCandidates.head.additionalTokens.toArray should contain(tokenId -> 4L)
+      }
+    }
+  }
+
+  property("explicit burn quantities must each be positive") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val state = initialState(store, versionedStore)
+        val input = testBox(10000000L, TrueTree, 1, Seq(newAssetIdStub -> 10L))
+        val encoded = Seq(Base16.encode(ErgoBoxSerializer.toBytes(input)))
+        val payment = PaymentRequest(pks.head, 5000000L, Array.empty, Map.empty)
+        Seq(0L, -1L).foreach { amount =>
+          val burn = BurnTokensRequest(Array(newAssetIdStub -> amount, newAssetIdStub -> 2L))
+          val result = generateUnsignedTransaction(
+            state, new DefaultBoxSelector(None), Seq(payment, burn), encoded, Seq.empty
+          )
+          result.failed.get shouldBe a[IllegalArgumentException]
+          result.failed.get.getMessage should include("Non-positive burn asset value")
         }
       }
     }

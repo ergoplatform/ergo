@@ -63,6 +63,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
+  private var periodicTasks = Vector.empty[Cancellable]
 
   private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
@@ -98,6 +99,8 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   override def postStop(): Unit = {
+    periodicTasks.foreach(_.cancel())
+    periodicTasks = Vector.empty
     log.warn("Network controller stopped")
     super.postStop()
   }
@@ -106,9 +109,11 @@ class NetworkController(ergoSettings: ErgoSettings,
   private def bindingLogic: Receive = {
     case Bound(_) =>
       log.info("Successfully bound to the port " + networkSettings.bindAddress.getPort)
-      scheduleConnectionToPeer()
-      scheduleDroppingDeadConnections()
-      scheduleEvictRandomConnections()
+      if (periodicTasks.isEmpty) {
+        scheduleConnectionToPeer()
+        scheduleDroppingDeadConnections()
+        scheduleEvictRandomConnections()
+      }
 
     case CommandFailed(_: Bind) =>
       log.error("Network port " + networkSettings.bindAddress.getPort + " already in use!")
@@ -266,7 +271,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Schedule a periodic connection to a random known peer
     */
   private def scheduleConnectionToPeer(): Unit = {
-    context.system.scheduler.scheduleWithFixedDelay(5.seconds, 5.seconds) {
+    periodicTasks :+= context.system.scheduler.scheduleWithFixedDelay(5.seconds, 5.seconds) {
       () => if (connections.size < networkSettings.maxConnections) {
         log.debug(s"Looking for a new random connection")
         val randomPeerF = peerManagerRef ? RandomPeerExcluding(connections.values.flatMap(_.peerInfo).toSeq)
@@ -288,7 +293,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     */
   private def scheduleEvictRandomConnections(): Unit = {
    val evictionThreshold = 5
-   context.system.scheduler.scheduleWithFixedDelay(networkSettings.peerEvictionInterval, networkSettings.peerEvictionInterval) {
+   periodicTasks :+= context.system.scheduler.scheduleWithFixedDelay(networkSettings.peerEvictionInterval, networkSettings.peerEvictionInterval) {
      () =>
        val connectedPeers = connections.values.filter(_.peerInfo.nonEmpty).toSeq
        if (connectedPeers.length >= evictionThreshold) {
@@ -305,7 +310,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Schedule a periodic dropping of connections which seem to be inactive
     */
   private def scheduleDroppingDeadConnections(): Unit = {
-    context.system.scheduler.scheduleWithFixedDelay(60.seconds, 60.seconds) {
+    periodicTasks :+= context.system.scheduler.scheduleWithFixedDelay(60.seconds, 60.seconds) {
       () => {
         // Drop connections with peers if they seem to be inactive
         val now = time()

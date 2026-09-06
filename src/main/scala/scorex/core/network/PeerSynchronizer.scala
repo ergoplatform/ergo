@@ -1,7 +1,7 @@
 package scorex.core.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, DeathPactException, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorSystem, Cancellable, DeathPactException, OneForOneStrategy, Props}
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.network.PeerSpec
@@ -39,6 +39,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   }
 
   private val peersSpec = new PeersSpec(settings.maxPeerSpecObjects)
+  private var peerDiscoveryTask: Option[Cancellable] = None
 
   private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
@@ -53,7 +54,14 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
 
     val msg = Message[Unit](GetPeersSpec, Right(Unit), None)
     val stn = SendToNetwork(msg, SendToRandom)
-    context.system.scheduler.scheduleWithFixedDelay(2.seconds, settings.getPeersInterval, networkControllerRef, stn)
+    peerDiscoveryTask = Some(
+      context.system.scheduler.scheduleWithFixedDelay(2.seconds, settings.getPeersInterval, networkControllerRef, stn))
+  }
+
+  override def postStop(): Unit = {
+    peerDiscoveryTask.foreach(_.cancel())
+    peerDiscoveryTask = None
+    super.postStop()
   }
 
   override def receive: Receive = {

@@ -71,7 +71,7 @@ trait ToDownloadProcessor
             val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter { case (mtid, mid) => condition(mtid, mid) }
             // add new modifiers to download to accumulator
             val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
-            continuation(height + 1, newAcc, maxHeight)
+            if (height == maxHeight) newAcc else continuation(height + 1, newAcc, maxHeight)
           } else {
             acc
           }
@@ -84,8 +84,21 @@ trait ToDownloadProcessor
         // do not download full blocks if no headers-chain synced yet or SPV mode
         Map.empty
       case Some(fb) if farAwayFromBeingSynced(fb) =>
-        // when far away from blockchain tip
-        continuation(fb.height + 1, Map.empty, fb.height + FullBlocksToDownloadAhead)
+        // A different best headers-chain may need block sections below the old full-chain tip.
+        val commonAncestor = if (isInBestChain(fb.id)) {
+          None
+        } else {
+          val parentSteps = Math.max(0L, nodeSettings.keepVersions.toLong)
+          val limit = Math.min(fb.height.toLong, parentSteps + 1L).toInt
+          headerChainBack(limit, fb.header, h => isInBestChain(h.id)).headOption
+            .filter(h => isInBestChain(h.id))
+        }
+        val fromHeight = commonAncestor
+          .map(h => Math.max(minimalFullBlockHeight, h.height + 1))
+          .getOrElse(fb.height + 1)
+        // Extending the scan backward must preserve forward progress beyond the existing full-chain tip.
+        val maxHeight = Math.min(fb.height.toLong + FullBlocksToDownloadAhead, Int.MaxValue.toLong).toInt
+        continuation(fromHeight, Map.empty, maxHeight)
       case Some(fb) =>
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks

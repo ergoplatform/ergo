@@ -492,14 +492,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will contain the sampled headers followed by genesis
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+              headers.map(_.id) == (Seq(0, 16, 128, 512)
+                .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
           case _ => false
         }
       }
@@ -517,14 +519,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will contain the sampled headers followed by genesis
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+              headers.map(_.id) == (Seq(0, 16, 128, 512)
+                .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
           case _ => false
         }
       }
@@ -698,7 +702,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Ensure no peers are available for downloading headers
       // This should not crash even with empty peer candidates
-      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(Header.modifierTypeId, modifierId).get.requestId)
 
       // The modifier should still be in Requested state or transitioned appropriately
       eventually {
@@ -731,11 +736,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       syncTracker.updateStatus(equalPeer, org.ergoplatform.consensus.Equal, Some(header.height))
 
       // Set up delivery tracker with many checks done (> 5)
-      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
-      // Simulate many delivery checks by sending multiple CheckDelivery messages
-      (1 to 7).foreach { _ =>
-        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
-      }
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer, checksDone = 6)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(Header.modifierTypeId, modifierId).get.requestId)
 
       // Should eventually try the equal peer (we can verify by checking network messages)
       // The test passes if no crash occurs and status transitions appropriately
@@ -760,14 +763,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Use a non-header modifier type (e.g., BlockTransactions)
       val nonHeaderTypeId = org.ergoplatform.modifiers.history.BlockTransactions.modifierTypeId
 
-      // Set up delivery tracker with requested status
-      deliveryTracker.setRequested(nonHeaderTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
-
-      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      // Expire the active request at the retry limit.
       val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
-      (1 to maxDeliveryChecks + 2).foreach { _ =>
-        synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId)
-      }
+      deliveryTracker.setRequested(nonHeaderTypeId, modifierId, peer, maxDeliveryChecks - 1)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(nonHeaderTypeId, modifierId).get.requestId)
 
       // After max attempts, non-header modifier should be set to Unknown (not Invalid)
       eventually {
@@ -787,14 +787,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val header = baseChain.last
       val modifierId = header.id
 
-      // Set up delivery tracker with requested status for header
-      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
-
-      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      // Expire the active request at the retry limit.
       val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
-      (1 to maxDeliveryChecks + 2).foreach { _ =>
-        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
-      }
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer, maxDeliveryChecks - 1)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(Header.modifierTypeId, modifierId).get.requestId)
 
       // After max attempts, header should be marked as Invalid
       eventually {

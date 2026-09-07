@@ -75,7 +75,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
-  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+  private val syncInfoV2Cache = new SyncInfoV2Cache
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -315,14 +315,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /** Get V2 sync info from cache or load it from history and add to cache */
   private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
-    val headersHeight = history.headersHeight
-    syncInfoV2CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
-      .getOrElse {
-        val v2SyncInfo = history.syncInfoV2(full)
-        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
-        v2SyncInfo
-      }
+    syncInfoV2Cache.getOrElseUpdate(history.bestHeaderIdOpt, full)(history.syncInfoV2(full))
   }
 
   /**
@@ -1243,8 +1236,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * re-request modifier from a different random peer, if our node does not know a peer who have it
     */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
-    case CheckDelivery(peer, modifierTypeId, modifierId) =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
+    case CheckDelivery(peer, modifierTypeId, modifierId, requestId) =>
+      // Cancellation cannot retract an expiration already queued for an earlier request.
+      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested &&
+        deliveryTracker.getRequestedInfo(modifierTypeId, modifierId).exists(_.requestId == requestId)) {
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
         if (modifierTypeId == ErgoTransaction.modifierTypeId) {
@@ -1658,6 +1653,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
+  /** Single-entry cache owned by the synchronizer actor. */
+  private[network] final class SyncInfoV2Cache {
+    private var cached: Option[(Option[ModifierId], Boolean, ErgoSyncInfoV2)] = None
+
+    def getOrElseUpdate(bestHeaderId: Option[ModifierId], full: Boolean)
+                       (build: => ErgoSyncInfoV2): ErgoSyncInfoV2 = {
+      cached.collect {
+        case (tip, mode, info) if tip == bestHeaderId && mode == full => info
+      }.getOrElse {
+        val info = build
+        cached = Some((bestHeaderId, full, info))
+        info
+      }
+    }
+  }
 
   private def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

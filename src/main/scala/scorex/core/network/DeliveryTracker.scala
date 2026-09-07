@@ -13,6 +13,7 @@ import scorex.core.network.ModifiersStatus._
 import org.ergoplatform.utils._
 import scorex.util.{ModifierId, ScorexLogging}
 
+import java.util.UUID
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
@@ -65,6 +66,7 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
 
   def reset(): Unit = {
     log.info(s"Resetting state of DeliveryTracker...")
+    requested.valuesIterator.flatMap(_.valuesIterator).foreach(_.cancellable.cancel())
     requested.clear()
     received.clear()
     invalidModifierCache = emptyExpiringApproximateCache
@@ -123,9 +125,11 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
                   (schedule: CheckDelivery => Cancellable): Unit =
     tryWithLogging {
       checkStatusTransition(status(id, typeId, Seq.empty), Requested)
-      val cancellable = schedule(CheckDelivery(supplier, typeId, id))
+      val requestId = UUID.randomUUID()
+      val cancellable = schedule(CheckDelivery(supplier, typeId, id, requestId))
       val now = System.currentTimeMillis()
-      val requestedInfo = RequestedInfo(supplier, cancellable, checksDone, now)
+      val requestedInfo = RequestedInfo(supplier, cancellable, checksDone, now, requestId)
+      getRequestedInfo(typeId, id).foreach(_.cancellable.cancel())
       requested.adjust(typeId)(_.fold(Map(id -> requestedInfo))(_.updated(id, requestedInfo)))
     }
 
@@ -329,7 +333,11 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
 
 object DeliveryTracker {
 
-  case class RequestedInfo(peer: ConnectedPeer, cancellable: Cancellable, checks: Int, requestTime: Long)
+  case class RequestedInfo(peer: ConnectedPeer,
+                           cancellable: Cancellable,
+                           checks: Int,
+                           requestTime: Long,
+                           requestId: UUID)
 
   object RequestedInfo {
     import io.circe.syntax._

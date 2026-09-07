@@ -593,7 +593,8 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
 
     // Create a valid tx that pays to a FalseTree output.
-    val box = wusAfterGenesis.takeBoxes(1).head
+    // The holder also contains protected genesis/emission boxes, ordered by random output IDs.
+    val box = wusAfterGenesis.versionedBoxHolder.boxes.values.find(_.ergoTree == TrueTree).get
     val validTx = validTransactionFromBoxes(IndexedSeq(box), outputsProposition = FalseTree)
 
     val validBlock = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))

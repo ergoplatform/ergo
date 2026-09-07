@@ -1,23 +1,23 @@
 self.__precacheManifest = (self.__precacheManifest || []).concat([
   {
-    "revision": "1595f5215a59208a4159cc3df79416b8",
+    "revision": "a8536380352be0376d49af3f38ac97e8",
     "url": "/index.html"
   },
   {
-    "revision": "4f4f733742d655249a35",
+    "revision": "80039a75c35b69b76a39",
     "url": "/static/css/2.8e5c4313.chunk.css"
   },
   {
-    "revision": "6826698cbdec03cde05b",
-    "url": "/static/css/main.95603572.chunk.css"
+    "revision": "05972f2f81f326088540",
+    "url": "/static/css/main.d027a071.chunk.css"
   },
   {
-    "revision": "4f4f733742d655249a35",
-    "url": "/static/js/2.82289ad5.chunk.js"
+    "revision": "80039a75c35b69b76a39",
+    "url": "/static/js/2.4d17aaba.chunk.js"
   },
   {
-    "revision": "6826698cbdec03cde05b",
-    "url": "/static/js/main.4a62f34b.chunk.js"
+    "revision": "05972f2f81f326088540",
+    "url": "/static/js/main.f4216239.chunk.js"
   },
   {
     "revision": "130c5b8a74786bf3a1d1",
@@ -60,23 +60,23 @@ self.__precacheManifest = (self.__precacheManifest || []).concat([
     "url": "/static/media/Roboto-Thin.89e2666c.ttf"
   },
   {
-    "revision": "feae5a5c1b2c42e430af34a5b36c6b1e",
-    "url": "/static/media/close.feae5a5c.svg"
+    "revision": "53dc30761b3f838de3b19a6f1bec5ba2",
+    "url": "/static/media/close.53dc3076.svg"
   },
   {
-    "revision": "835ebda77cf41d034e78edad9b00c42d",
-    "url": "/static/media/copy.icon.835ebda7.svg"
+    "revision": "d3e20194b2403456502bac6bd21afdf7",
+    "url": "/static/media/copy.icon.d3e20194.svg"
   },
   {
-    "revision": "4dcfd639ca1e098551ac73e6a91268aa",
-    "url": "/static/media/logotype_white.4dcfd639.svg"
+    "revision": "1e2400b0482f58f54c718cf071423af6",
+    "url": "/static/media/logotype_white.1e2400b0.svg"
   },
   {
-    "revision": "e801de31062c843f7f7d5c1299468dbd",
-    "url": "/static/media/redo-arrow-symbol.e801de31.svg"
+    "revision": "89cf3270b3b0b51fd930771987c833f2",
+    "url": "/static/media/redo-arrow-symbol.89cf3270.svg"
   },
   {
-    "revision": "94c0849a3b83a9df3237b81d17daccd6",
-    "url": "/static/media/remove.94c0849a.svg"
+    "revision": "d741981302d05964b7235710a3a55c72",
+    "url": "/static/media/remove.d7419813.svg"
   }
 ]);

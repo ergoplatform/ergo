@@ -895,17 +895,18 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
     val testDir = s"${defaultSettings.directory}-ignore-cache-${System.currentTimeMillis()}"
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsForExplicitForcing: ErgoSettings =
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
-            .copy(blockCandidateGenerationInterval = 1.millis),
+            // Keep automatic refresh outside this test of explicit forcing.
+            .copy(blockCandidateGenerationInterval = 1.hour),
           chainSettings =
             ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
           directory = testDir
         )
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsWithShortRegeneration)
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsForExplicitForcing)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -913,10 +914,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        settingsWithShortRegeneration
+        settingsForExplicitForcing
       )
 
-    val powScheme = settingsWithShortRegeneration.chainSettings.powScheme
+    val powScheme = settingsForExplicitForcing.chainSettings.powScheme
 
     // First mine a block to establish chain (needed for avg mining time calculation)
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
@@ -927,16 +928,26 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .proveCandidate(initCandidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
       .get
     candidateGenerator.tell(initBlock.header.powSolution, testProbe.ref)
+    var ackSeen = false
+    var appliedSeen = false
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
-      case FullBlockApplied(header) if header.id != initBlock.header.parentId => true
+      case StatusReply.Success(()) =>
+        ackSeen = true
+        ackSeen && appliedSeen
+      case FullBlockApplied(header) if header.id == initBlock.header.id =>
+        appliedSeen = true
+        ackSeen && appliedSeen
       case _ => false
     }
 
     // Get first candidate after chain is established
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    val candidate1 = testProbe.expectMsgPF(candidateGenDelay) {
-      case StatusReply.Success(c: Candidate) => c
+    val candidate1 = eventually(timeout(candidateGenDelay), interval(50.millis)) {
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+      val candidate = testProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+      candidate.candidateBlock.parentOpt.map(_.id) shouldBe Some(initBlock.id)
+      candidate
     }
 
     // Request with forced = false should return cached candidate immediately

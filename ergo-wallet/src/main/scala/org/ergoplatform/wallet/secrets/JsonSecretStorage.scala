@@ -67,7 +67,8 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
             )
           )
           .flatMap { case (cipherText, salt, iv, tag, usePre1627KeyDerivation) => {
-              val res = crypto.AES.decrypt(cipherText, pass.getData(), salt, iv, tag)(encryptionSettings)
+              // Existing files retain their KDF parameters when the current configuration changes.
+              val res = crypto.AES.decrypt(cipherText, pass.getData(), salt, iv, tag)(encryptedSecret.cipherParams)
               res
                 .map(seed => unlockedSecret = Some(ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation.getOrElse(true))))
             }

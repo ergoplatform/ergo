@@ -37,9 +37,16 @@ class UtxoStateNodesSyncSpec extends AnyFlatSpec with IntegrationSuite {
       log.info(
         s"Headers at height ${initHeight + blocksQty - forkDepth}: ${headers.mkString(",")}"
       )
-      val headerIdsAtSameHeight = headers.flatten
-      val sample                = headerIdsAtSameHeight.head
-      headerIdsAtSameHeight should contain only sample
+      // `/blocks/at/{height}` returns *every* header id known at the given height, with the
+      // best-chain one first (see `HeadersProcessor.headerIdsAtHeight`). Nodes are in sync
+      // when their best-chain header at that height matches; a node may legitimately also
+      // know orphaned headers of a fork that was already resolved, so flattening all the
+      // returned ids makes the assertion fail on a perfectly synchronised network.
+      // Same convention as ForkResolutionSpec and DeepRollBackSpec, which compare `.head`.
+      headers.foreach(_ should not be empty)
+      val bestChainHeaderIds = headers.map(_.head)
+      val sample             = bestChainHeaderIds.head
+      bestChainHeaderIds should contain only sample
     }
     Await.result(result, 15.minutes)
   }

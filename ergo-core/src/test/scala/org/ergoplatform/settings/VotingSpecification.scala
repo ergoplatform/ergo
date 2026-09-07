@@ -212,7 +212,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
     // voting for the fork @ height == 3
     val h3 = h2.copy(height = 3)
 
-    val expectedParameters3 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 1, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters3 = expectedParameters2
     val esc3 = process(esc2, expectedParameters3, h3).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
     esc3.currentParameters.proposedUpdate shouldBe proposedUpdate
@@ -231,7 +231,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     // voting for the fork @ height == 5
     val h5 = h4.copy(height = 5)
-    val expectedParameters5 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters5 = expectedParameters4
     val esc5 = process(esc4, expectedParameters5, h5).get
     checkValidationSettings(esc5.validationSettings, emptyVSUpdate)
 
@@ -314,7 +314,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     // voting for the fork @ height == 3
     val h3 = h2.copy(height = 3)
-    val expectedParameters3 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 1, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters3 = expectedParameters2
     val esc3 = process(esc2, expectedParameters3, h3).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
 
@@ -327,7 +327,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     // no vote for the fork @ height == 5, so only soft-fork proposal has gathered 75% only
     val h5 = h4.copy(height = 5, votes = emptyVotes)
-    val expectedParameters5 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters5 = expectedParameters4
     val esc5 = process(esc4, expectedParameters5, h5).get
 
     // first epoch after the voting done, data should still be in the block

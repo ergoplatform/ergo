@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props}
 import akka.pattern.StatusReply
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.ErgoSettings
@@ -24,20 +24,23 @@ class ErgoMiningThread(
 
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val NonceStep = 1000
+  private var candidatePolling: Option[Cancellable] = None
 
   override def preStart(): Unit = {
     log.info(s"Starting miner thread: ${self.path.name}")
     // poll for new candidate periodically
-    context.system.scheduler.scheduleWithFixedDelay(
+    candidatePolling = Some(context.system.scheduler.scheduleWithFixedDelay(
       1.second,
       ergoSettings.nodeSettings.internalMinerPollingInterval,
       candidateGenerator,
       GenerateCandidate(Seq.empty, reply = true, forced = false)
-    )(context.dispatcher, self)
+    )(context.dispatcher, self))
   }
 
-  override def postStop(): Unit =
+  override def postStop(): Unit = {
+    candidatePolling.foreach(_.cancel())
     log.info(s"Stopping miner thread: ${self.path.name}")
+  }
 
   override def receive: Receive = {
     case StatusReply.Success(Candidate(candidateBlock, _, _)) =>

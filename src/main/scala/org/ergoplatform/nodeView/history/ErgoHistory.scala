@@ -203,24 +203,23 @@ trait ErgoHistory
   /**
     * Remove header, corresponding block parts, and corresponding indexes from storage and caches
     * @param headerId - header id
-    * @return
+    * @return Success after every removal, or the first removal failure
     */
-  def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = typedModifierById[Header](headerId)
-      val hRes = historyStorage.remove(
+  def forgetHeader(headerId: ModifierId): Try[Unit] = Try(typedModifierById[Header](headerId)).flatMap { hOpt =>
+    // Keep the header until its sections are removed so a retry can still discover their identifiers.
+    hOpt.toSeq.flatMap(requiredModifiersForHeader).foldLeft[Try[Unit]](Success(())) {
+      case (result, (_, mId)) => result.flatMap { _ =>
+        val removal = historyStorage.remove(Array(validityKey(mId)), Array(mId))
+        log.info(s"Result of removing modifier $mId: " + removal)
+        removal
+      }
+    }.flatMap { _ =>
+      val removal = historyStorage.remove(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
       )
-    log.info(s"Result of removing header $headerId: " + hRes)
-
-    hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        val mRes = historyStorage.remove(
-          indicesToRemove = Array(validityKey(mId)),
-          idsToRemove = Array(mId)
-        )
-        log.info(s"Result of removing modifier $mId: " + mRes)
-      }
+      log.info(s"Result of removing header $headerId: " + removal)
+      removal
     }
   }
 
@@ -239,30 +238,34 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  // check if there is possible database corruption when there is header after
-  // recognized blockchain tip marked as invalid
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
+  // Success(false) means no repair was needed; Success(true) means all removals completed.
+  // Failure preserves the first error; the height index is removed only after all headers are forgotten.
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Try[Boolean] = Try(history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
     if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
       log.warn("Found suspicious continuation, clearing it...")
-      afterHeaders.map { hId =>
-        history.forgetHeader(hId)
-      }
-      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
-      true
+      afterHeaders.foldLeft[Try[Unit]](Success(())) { (result, hId) =>
+        result.flatMap(_ => history.forgetHeader(hId))
+      }.flatMap { _ =>
+        history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
+      }.map(_ => true)
     } else {
-      false
+      Success(false)
     }
-  }
+  }).flatten
 
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
-  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    var db = HistoryStorage(ergoSettings)
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory =
+    readOrGenerate(ergoSettings, HistoryStorage(ergoSettings))
+
+  private[history] def readOrGenerate(ergoSettings: ErgoSettings,
+                                    storage: HistoryStorage)(implicit context: ActorContext): ErgoHistory = {
+    var db = storage
 
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema
@@ -292,7 +295,14 @@ object ErgoHistory extends ScorexLogging {
         }
     }
 
-    repairIfNeeded(history)
+    repairIfNeeded(history) match {
+      case Failure(error) =>
+        Try(history.closeStorage()).failed.foreach { closeError =>
+          if (closeError ne error) error.addSuppressed(closeError)
+        }
+        throw error
+      case Success(_) =>
+    }
 
     log.info("History database read")
     if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled

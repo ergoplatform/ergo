@@ -1475,25 +1475,24 @@ components:
           format: int32
 
     IndexedFullBlock:
-      description: Block with header and transactions
+      description: Block with header and indexed transactions
       type: object
       required:
         - header
-        - blockTransactions
-        - adProofs
-        - extension
+        - transactions
+        - height
         - size
       properties:
         header:
           $ref: '#/components/schemas/BlockHeader'
-        blockTransactions:
-          $ref: '#/components/schemas/IndexedBlockTransactions'
-        adProofs:
-          $ref: '#/components/schemas/BlockADProofs'
-        extension:
-          $ref: '#/components/schemas/Extension'
+        transactions:
+          $ref: '#/components/schemas/IndexedTransactions'
+        height:
+          description: Height of the block
+          type: integer
+          format: int32
         size:
-          description: Size in bytes
+          description: Size in bytes of the serialized block transactions section
           type: integer
           format: int32
 

@@ -89,7 +89,7 @@ class DigestState protected(override val version: VersionTag,
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val versionBytes = org.ergoplatform.core.versionToBytes(version)
-    Try(store.rollbackTo(versionBytes)).map { _ =>
+    Try(store.rollbackTo(versionBytes)).flatten.map { _ =>
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")

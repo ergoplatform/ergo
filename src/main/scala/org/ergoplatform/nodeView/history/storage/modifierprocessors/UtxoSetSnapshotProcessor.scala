@@ -224,6 +224,8 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
                       override val storage: VersionedLDBAVLStorage = ldbStorage
                     }
                 }
+            }.recoverWith { case error =>
+              Failure(new UtxoSetSnapshotProcessor.StateWriteFailure(error))
             }
           case Failure(e) =>
             log.warn("Can't reconstruct state context in createPersistentProver ", e)
@@ -236,4 +238,10 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     }
   }
 
+}
+
+object UtxoSetSnapshotProcessor {
+  /** The reconstruction entered the store-write phase; callers must not serve the previous state. */
+  final class StateWriteFailure(cause: Throwable)
+    extends RuntimeException("Snapshot reconstruction may have changed the state store", cause)
 }

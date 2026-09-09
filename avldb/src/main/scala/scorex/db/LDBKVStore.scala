@@ -1,9 +1,10 @@
 package scorex.db
 
-import org.iq80.leveldb.DB
+import org.iq80.leveldb.{DB, WriteOptions}
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 import spire.syntax.all.cfor
 
 
@@ -15,6 +16,31 @@ import spire.syntax.all.cfor
 class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
   /** Immutable empty array can be shared to avoid allocations. */
   private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
+
+  /** Atomic batch with an explicit durable write acknowledgement. Existing update semantics are unchanged. */
+  def updateDurable(toInsertKeys: Array[K], toInsertValues: Array[V], toRemove: Array[K]): Try[Unit] = {
+    Try {
+      require(toInsertKeys.length == toInsertValues.length)
+      val batch = db.createWriteBatch()
+      var failure: Throwable = null
+      try {
+        cfor(0)(_ < toInsertKeys.length, _ + 1) { i => batch.put(toInsertKeys(i), toInsertValues(i)) }
+        cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i)) }
+        db.write(batch, new WriteOptions().sync(true))
+        ()
+      } catch {
+        case error: Throwable =>
+          failure = error
+          throw error
+      } finally {
+        try batch.close() catch {
+          case NonFatal(cleanup) =>
+            if (failure == null) throw cleanup
+            else if (cleanup ne failure) failure.addSuppressed(cleanup)
+        }
+      }
+    }
+  }
 
   /**
     * Update this database atomically with a batch of insertion and removal operations

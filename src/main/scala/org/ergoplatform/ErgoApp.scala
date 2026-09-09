@@ -217,7 +217,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
   private val coordinatedShutdown = CoordinatedShutdown(actorSystem)
   coordinatedShutdown.addActorTerminationTask(
-    CoordinatedShutdown.PhaseBeforeServiceUnbind,
+    CoordinatedShutdown.PhaseServiceStop,
     s"closing-network",
     networkControllerRef,
     Some(ShutdownNetwork)
@@ -254,9 +254,11 @@ class ErgoApp(args: Args) extends ScorexLogging {
 
     val bindAddress = scorexSettings.restApi.bindAddress
 
-    Http()
-      .newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort)
-      .bindFlow(httpService.compositeRoute)
+    HttpServerLifecycle.start(httpService.compositeRoute) { route =>
+      Http()
+        .newServerAt(bindAddress.getAddress.getHostAddress, bindAddress.getPort)
+        .bindFlow(route)
+    }
   }
 }
 

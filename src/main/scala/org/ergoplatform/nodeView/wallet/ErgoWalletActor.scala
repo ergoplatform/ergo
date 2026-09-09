@@ -513,7 +513,7 @@ object ErgoWalletActor extends ScorexLogging {
       .withDispatcher(GlobalConstants.ApiDispatcher)
     val walletActorRef = actorSystem.actorOf(props)
     CoordinatedShutdown(actorSystem).addActorTerminationTask(
-      CoordinatedShutdown.PhaseBeforeServiceUnbind,
+      CoordinatedShutdown.PhaseServiceStop,
       s"closing-wallet",
       walletActorRef,
       Some(CloseWallet)

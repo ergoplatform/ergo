@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.modifiers.SnapshotsInfoTypeId
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
@@ -11,34 +12,15 @@ import org.ergoplatform.wallet.utils.FileUtils
 import scala.concurrent.duration._
 
 /**
-  * Reproduction of a restart deadlock during UTXO set snapshot bootstrapping.
-  *
-  * Scenario: a node bootstrapping via NiPoPoW proofs + UTXO set snapshot (nipopowBootstrap +
-  * utxoBootstrap) is restarted after the NiPoPoW proof headers were persisted but before the
-  * UTXO set snapshot application completed (e.g. killed in the middle of snapshot chunk
-  * downloading). After the restart the node never resumes bootstrapping:
-  *
-  * - `isHeadersChainSynced` is kept in memory only (FullBlockPruningProcessor.isHeadersChainSyncedVar)
-  *   and is set solely from `updateBestFullBlock` or `setHeadersChainSynced` (the latter is called
-  *   only right after a NiPoPoW proof is applied), so it is false after every restart
-  * - on restart the headers are read from the database, so no new NiPoPoW proof is requested
-  *   (ErgoNodeViewSynchronizer.sendSync asks for proofs only when `bestHeaderOpt` is empty)
-  * - the synchronizer asks for the UTXO set snapshot / block sections only when
-  *   `isHeadersChainSynced` is true (ErgoNodeViewSynchronizer.requestMoreModifiers), and
-  *   ToDownloadProcessor filters block-section invs out while the snapshot is not applied
-  *
-  * Result: headers are at tip, the state is at genesis, and the node loops sending sync
-  * messages forever. Observed on mainnet with a node restarted mid snapshot download.
-  *
-  * The property below simulates the restart by reopening the history database and asserts that
-  * the headers chain is considered synced after the restart, so that snapshot bootstrapping
-  * can resume. It fails before the fix.
+  * Close and reopen actual history stores inside one JVM, then inspect download planning.
+  * Headers are appended normally; these fixtures do not apply a NiPoPoW proof, restart a process,
+  * or establish production-network recovery.
   */
 class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUtils {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
-  private def utxoBootstrapSettings(dir: java.io.File): ErgoSettings = {
+  private def utxoBootstrapSettings(dir: java.io.File, nipopow: Boolean): ErgoSettings = {
     val txCostLimit = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings = NodeConfigurationSettings(
@@ -46,7 +28,7 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
       verifyTransactions = true,
       blocksToKeep = -1,
       UtxoSettings(utxoBootstrap = true, 0, 2),
-      NipopowSettings(nipopowBootstrap = true, 1),
+      NipopowSettings(nipopowBootstrap = nipopow, 1),
       mining = false,
       txCostLimit,
       txSizeLimit,
@@ -71,30 +53,56 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
       null, null, settings.cacheSettings)
   }
 
-  property("node restarted after nipopow headers persisted but before snapshot application resumes bootstrap") {
-    val dir = createTempDir
-    val historySettings = utxoBootstrapSettings(dir)
+  for (nipopow <- Seq(false, true)) {
+    property(s"reopened snapshot-bootstrap history resumes discovery with ordinary fresh-header reentry, nipopow=$nipopow") {
+      val dir = createTempDir
+      val historySettings = utxoBootstrapSettings(dir, nipopow)
+      var first: Option[ErgoHistory] = None
+      var reopened: Option[ErgoHistory] = None
+      try {
+        val history = ErgoHistory.readOrGenerate(historySettings)(null)
+        first = Some(history)
+        val stored = applyHeaderChain(history,
+          genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false))
+        val expectedTip = stored.bestHeaderOpt.get.id
+        val expectedHeight = stored.headersHeight
+        val floor = stored.minFullBlockAvailable
+        stored.bestFullBlockOpt shouldBe None
+        stored.isUtxoSnapshotApplied shouldBe false
+        stored.isHeadersChainSynced shouldBe false
 
-    // headers-only chain, result of a NiPoPoW proof application (no full blocks downloaded yet)
-    val history = ErgoHistory.readOrGenerate(historySettings)(null)
-    val headers = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
-    val updHistory = applyHeaderChain(history, headers)
+        // Release the first native store before acquiring the second wrapper over the same files.
+        stored.closeStorage()
+        first = None
+        val restarted = ErgoHistory.readOrGenerate(historySettings)(null)
+        reopened = Some(restarted)
+        restarted.headersHeight shouldBe expectedHeight
+        restarted.bestHeaderOpt.get.id shouldBe expectedTip
+        restarted.bestFullBlockOpt shouldBe None
+        restarted.isUtxoSnapshotApplied shouldBe false
+        restarted.minFullBlockAvailable shouldBe floor
+        // The existing configured startup predicate is distinct from ordinary header synchronization.
+        restarted.isHeadersChainSynced shouldBe nipopow
+        restarted.nextModifiersToDownload(1, (_, _) => true) shouldBe
+          (if (nipopow) Map(SnapshotsInfoTypeId.value -> Seq.empty) else Map.empty)
 
-    updHistory.bestFullBlockOpt shouldBe None
-    updHistory.isUtxoSnapshotApplied shouldBe false
-    updHistory.isHeadersChainSynced shouldBe false // set only via updateBestFullBlock / setHeadersChainSynced
-
-    // simulate node restart: reopen the same database
-    val restarted = ErgoHistory.readOrGenerate(historySettings)(null)
-
-    restarted.headersHeight shouldBe updHistory.headersHeight
-    restarted.bestFullBlockOpt shouldBe None
-    restarted.isUtxoSnapshotApplied shouldBe false
-
-    // without this the synchronizer never asks for the snapshot manifest / blocks
-    // (ErgoNodeViewSynchronizer.requestMoreModifiers -> sendSync loop) and bootstrap
-    // can never resume
-    restarted.isHeadersChainSynced shouldBe true
+        val fresh = nextHeader(restarted.bestHeaderOpt, restarted.difficultyCalculator,
+          tsOpt = Some(System.currentTimeMillis()), useRealTs = true)
+        val (updated, progress) = restarted.append(fresh).get
+        progress.toDownload shouldBe Seq.empty
+        updated.isHeadersChainSynced shouldBe true
+        updated.isUtxoSnapshotApplied shouldBe false
+        updated.bestFullBlockOpt shouldBe None
+        updated.minFullBlockAvailable shouldBe floor
+        updated.nextModifiersToDownload(1, (_, id) => !updated.contains(id)) shouldBe
+          Map(SnapshotsInfoTypeId.value -> Seq.empty)
+      } finally {
+        try reopened.foreach(_.closeStorage())
+        finally {
+          first.foreach(_.closeStorage())
+          deleteRecursive(dir)
+        }
+      }
+    }
   }
-
 }

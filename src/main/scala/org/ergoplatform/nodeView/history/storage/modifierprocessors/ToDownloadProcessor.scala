@@ -112,6 +112,10 @@ trait ToDownloadProcessor
       // A regime that do not download and verify transaction
       Nil
     } else if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) {
+      if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
+        // Enable snapshot discovery without advancing the full-block retention floor.
+        setHeadersChainSynced()
+      }
       // While bootstrapping from a UTXO set snapshot, do not download full block sections
       // until the snapshot has been applied. Block sections downloaded before the snapshot
       // would be stored as non-best and never applied to the freshly recreated state.

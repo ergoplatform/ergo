@@ -106,19 +106,25 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          // Marker of what we have pruned so far; read before the floor is advanced below. For
-          // nodes upgraded from the previous sliding-window logic it defaults to the old floor.
-          val prunedFrom = readPrunedHeight()
-          val lastKept = updateBestFullBlock(fullBlock.header) // new minimal full block height
-          // Do not prune block data the wallet has not scanned yet, so it can always catch up.
-          // `None` means the wallet imposes no constraint (mining-only / not-yet-initialized).
-          val pruneUntil = walletScannedHeight match {
-            case Some(walletHeight) => Math.min(lastKept, walletHeight + 1)
-            case None               => lastKept
-          }
-          if (pruneUntil > prunedFrom) {
-            pruneBlockDataAt((prunedFrom until pruneUntil).filter(_ >= 0))
-            writePrunedHeight(pruneUntil)
+          Try {
+            // Marker of what we have pruned so far; read before the floor is advanced below. For
+            // nodes upgraded from the previous sliding-window logic it defaults to the old floor.
+            val prunedFrom = readPrunedHeight()
+            // Preserve the fallback before advancing the floor, including when cleanup must retry.
+            if (historyStorage.getIndex(PrunedHeightKey).isEmpty) writePrunedHeight(prunedFrom)
+            val lastKept = updateBestFullBlock(fullBlock.header) // new minimal full block height
+            // Do not prune block data the wallet has not scanned yet, so it can always catch up.
+            // `None` means the wallet imposes no constraint (mining-only / not-yet-initialized).
+            val pruneUntil = walletScannedHeight match {
+              case Some(walletHeight) => Math.min(lastKept, walletHeight + 1)
+              case None               => lastKept
+            }
+            if (pruneUntil > prunedFrom) {
+              pruneBlockDataAt((prunedFrom until pruneUntil).filter(_ >= 0)).get
+              writePrunedHeight(pruneUntil)
+            }
+          }.failed.foreach { error =>
+            log.warn("Full block cleanup deferred; best full block is already recorded and cleanup will retry", error)
           }
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)

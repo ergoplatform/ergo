@@ -90,7 +90,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   override def writePrunedHeight(height: Height): Unit = {
     historyStorage.insert(
       indexesToInsert = Array(PrunedHeightKey -> Ints.toByteArray(height)),
-      objectsToInsert = BlockSection.emptyArray)
+      objectsToInsert = BlockSection.emptyArray).get
   }
 
   override def readPrunedHeight(): Height = {

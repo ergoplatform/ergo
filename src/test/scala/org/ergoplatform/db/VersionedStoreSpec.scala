@@ -34,7 +34,7 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       store.get(keyD) shouldBe None
       store.get(keyA).get.sameElements(valA) shouldBe true
 
-      store.lastVersionID shouldBe Some(v2)
+      store.lastVersionID.map(_.toVector) shouldBe Some(v2.toVector)
     }
   }
 

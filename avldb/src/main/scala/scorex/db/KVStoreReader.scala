@@ -2,7 +2,7 @@ package scorex.db
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import org.iq80.leveldb.{DB, ReadOptions}
+import org.iq80.leveldb.{DB, ReadOptions, Snapshot}
 
 import scala.collection.mutable
 
@@ -19,6 +19,17 @@ trait KVStoreReader extends AutoCloseable {
 
   protected val lock = new ReentrantReadWriteLock()
 
+  /** Called under the read lock before accessing a store which can require recovery. */
+  protected def ensureReadable(): Unit = ()
+
+  private def readableSnapshot(): Snapshot = {
+    lock.readLock().lock()
+    try {
+      ensureReadable()
+      db.getSnapshot
+    } finally lock.readLock().unlock()
+  }
+
   /**
     * Read database element by its key
     * @param key - key
@@ -27,6 +38,7 @@ trait KVStoreReader extends AutoCloseable {
   def get(key: K): Option[V] = {
     lock.readLock().lock()
     try {
+      ensureReadable()
       Option(db.get(key))
     } finally {
       lock.readLock().unlock()
@@ -41,7 +53,7 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
+    ro.snapshot(readableSnapshot())
     val iter = db.iterator(ro)
     try {
       iter.seekToFirst()
@@ -82,11 +94,15 @@ trait KVStoreReader extends AutoCloseable {
     * @return iterable over key-value pairs found in store
     */
   def get(keys: Iterable[K]): Iterable[(K, Option[V])] = {
-    val ret = scala.collection.mutable.ArrayBuffer.empty[(K, Option[V])]
-    keys.foreach { key =>
-      ret += key -> get(key)
-    }
-    ret
+    lock.readLock().lock()
+    try {
+      ensureReadable()
+      val ret = scala.collection.mutable.ArrayBuffer.empty[(K, Option[V])]
+      keys.foreach { key =>
+        ret += key -> get(key)
+      }
+      ret
+    } finally lock.readLock().unlock()
   }
 
   /**
@@ -97,7 +113,7 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(db.getSnapshot)
+    ro.snapshot(readableSnapshot())
     val iter = db.iterator(ro)
     try {
       iter.seek(start)

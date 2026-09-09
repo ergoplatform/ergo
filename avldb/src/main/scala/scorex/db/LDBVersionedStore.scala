@@ -1,340 +1,278 @@
 package scorex.db
 
 import java.io.File
-import scorex.db.LDBFactory.factory
-import org.iq80.leveldb._
-
 import java.nio.ByteBuffer
-import scala.collection.mutable.ArrayBuffer
 import java.util.concurrent.locks.ReentrantReadWriteLock
+
+import org.iq80.leveldb.{DB, Options, ReadOptions}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore.SnapshotReadInterface
+import scorex.db.LDBVersionedStoreJournal.{Change, Metadata, Plan, Version}
 import scorex.util.ScorexLogging
 
+import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
-
 /**
-  * Implementation of versioned storage on top of LevelDB.
+  * Versioned storage with a durable redo journal coordinating main data and undo history.
   *
-  * LevelDB implementation of versioned store is based on maintaining "compensating transaction" list,
-  * list of reverse operations needed to undo changes of applied transactions.
-  * This list is stored in separate LevelDB database (undo) and size of list is limited by the keepVersions parameter.
-  * If keepVersions == 0, then undo list is not maintained and rollback of the committed transactions is not possible.
+  * An ambiguous write result makes this instance unavailable. Close it and reopen the store,
+  * then rebuild its consumers: recovery may complete an operation whose caller received Failure.
+  * Backups must include ldb_main, ldb_undo and ldb_journal together. After journal adoption,
+  * writes by older binaries are unsupported even without pending recovery: they cannot update
+  * the committed journal metadata. Legacy data and undo record encodings are unchanged.
+  * Recovery guards cover the store API; direct access through the raw db handle bypasses them.
   *
-  * @param dir - folder to store data
-  * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
-  *
+  * @param dir folder containing the databases
+  * @param initialKeepVersions rollback depth for this instance; zero retains only the current version
   */
-class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
+class LDBVersionedStore private[db](protected val dir: File,
+                                  val initialKeepVersions: Int,
+                                  openDatabase: (File, String) => DB)
   extends KVStoreReader with ScorexLogging {
 
-  type VersionID = Array[Byte]
+  def this(dir: File, initialKeepVersions: Int) =
+    this(dir, initialKeepVersions, LDBVersionedStore.openDatabase)
 
-  type LSN = Long // logical serial number: type used to provide order of records in undo list
+  type VersionID = Array[Byte]
+  type LSN = Long
+
+  require(initialKeepVersions >= 0, "Negative keepVersions")
 
   private val last_version_key = Blake2b256("last_version")
-
   private var keepVersions: Int = initialKeepVersions
-
-  override val db: DB = createDB(dir, "ldb_main") // storage for main data
   override val lock = new ReentrantReadWriteLock()
+  private var recoveryFailure: Option[Throwable] = None
+  private var closed = false
 
-  private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
-  private var lsn: LSN = getLastLSN // last assigned logical serial number
-  private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
-
-  // mutable array of all the kept versions
-  private val versions: ArrayBuffer[VersionID] = getAllVersions
-  private var lastVersion: Option[VersionID] = versions.lastOption
-
-
-  //default write options, no sync!
-  private val writeOptions = new WriteOptions()
-
-  private def createDB(dir: File, storeName: String): DB = {
-    val op = new Options()
-    op.createIfMissing(true)
-    op.paranoidChecks(true)
-    factory.open(new File(dir, storeName), op)
-  }
-
-  /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
-  def setKeepVersions(newKeepVersions: Int): Int = {
-    lock.writeLock().lock()
-    val oldKeepVersions = keepVersions
+  private val databases = {
+    val opened = ArrayBuffer.empty[DB]
     try {
-      if (newKeepVersions < oldKeepVersions) {
-        cleanStart(newKeepVersions)
-      }
-      keepVersions = newKeepVersions
-    } finally {
-      lock.writeLock().unlock()
+      Seq("ldb_main", "ldb_undo", "ldb_journal").foreach { name => opened += openDatabase(dir, name) }
+      opened.toVector
+    } catch {
+      case t: Throwable =>
+        opened.reverse.foreach(database => closeAfterFailure(database, t))
+        throw t
     }
-    oldKeepVersions
+  }
+  override val db: DB = databases(0)
+  private val undo: DB = databases(1)
+  private val journal = new LDBVersionedStoreJournal(databases(2), db, undo)
+  private var metadata: Metadata = try journal.initialize(readLegacyMetadata()) catch {
+    case t: Throwable =>
+      databases.reverse.foreach(database => closeAfterFailure(database, t))
+      throw t
   }
 
-  def getKeepVersions: Int = keepVersions
+  private def closeAfterFailure(database: DB, failure: Throwable): Unit = try database.close() catch {
+    case NonFatal(closeError) => if (closeError ne failure) failure.addSuppressed(closeError)
+  }
 
-  /** returns value associated with the key or throws `NoSuchElementException` */
-  def apply(key: K): V = getOrElse(key, {
-    throw new NoSuchElementException()
-  })
-
-
-  /**
-    * Batch get with callback for result value.
-    *
-    * Finds all keys from given iterable.
-    * Results are passed to callable consumer.
-    *
-    * It uses latest (most recent) version available in store
-    *
-    * @param keys     keys to lookup
-    * @param consumer callback method to consume results
-    */
-  def get(keys: Iterable[K], consumer: (K, Option[V]) => Unit): Unit = {
-    for (key <- keys) {
-      val value = get(key)
-      consumer(key, value)
+  override protected def ensureReadable(): Unit = {
+    require(!closed, "Versioned store is closed")
+    recoveryFailure.foreach { cause =>
+      throw new IllegalStateException("Versioned store requires close and reopen before further access", cause)
     }
   }
 
-  def processAll(consumer: (K, V) => Unit): Unit = {
+  private def readLocked[T](body: => T): T = {
     lock.readLock().lock()
+    try {
+      ensureReadable()
+      body
+    } finally lock.readLock().unlock()
+  }
+
+  private def writeLocked[T](body: => T): T = {
+    lock.writeLock().lock()
+    try {
+      ensureReadable()
+      body
+    } finally lock.writeLock().unlock()
+  }
+
+  /** Return the previous threshold only after any required pruning has committed. */
+  def setKeepVersions(newKeepVersions: Int): Int = writeLocked {
+    require(newKeepVersions >= 0, "Negative keepVersions")
+    val previous = keepVersions
+    if (newKeepVersions < previous) commit(pruned(emptyPlan, newKeepVersions))
+    keepVersions = newKeepVersions
+    previous
+  }
+
+  def getKeepVersions: Int = readLocked(keepVersions)
+
+  def apply(key: K): V = getOrElse(key, throw new NoSuchElementException())
+
+  def get(keys: Iterable[K], consumer: (K, Option[V]) => Unit): Unit = {
+    readLocked(())
+    keys.foreach(key => consumer(key, get(key)))
+  }
+
+  def processAll(consumer: (K, V) => Unit): Unit = readLocked {
     val iterator = db.iterator()
     try {
       iterator.seekToFirst()
       while (iterator.hasNext) {
-        val n = iterator.next()
-        consumer(n.getKey, n.getValue)
+        val entry = iterator.next()
+        consumer(entry.getKey, entry.getValue)
       }
-    } finally {
-      iterator.close()
-      lock.readLock().unlock()
-    }
+    } finally iterator.close()
   }
 
-  private def newLSN(): Array[Byte] = {
-    lsn += 1
-    encodeLSN(lsn)
-  }
+  private def decodeLSN(bytes: Array[Byte]): LSN = ~ByteBuffer.wrap(bytes).getLong
 
-  /**
-    * Invert word to provide descending key order.
-    * Java implementation of LevelDB org.iq80.leveldb doesn't support iteration in backward direction.
-    */
-  private def decodeLSN(lsn: Array[Byte]): LSN = {
-    ~ByteBuffer.wrap(lsn).getLong
-  }
+  private def encodeLSN(lsn: LSN): Array[Byte] = ByteBuffer.allocate(8).putLong(~lsn).array()
 
-  private def encodeLSN(lsn: LSN): Array[Byte] = {
-    val buf = ByteBuffer.allocate(8)
-    buf.putLong(~lsn)
-    buf.array()
-  }
+  def lastVersionID: Option[VersionID] = readLocked(metadata.versions.lastOption.map(_.id.clone()))
 
-  private def getLastLSN: LSN = {
-    val iterator = undo.iterator
+  def versionIdExists(versionID: VersionID): Boolean =
+    readLocked(metadata.versions.exists(_.id.sameElements(versionID)))
+
+  /** Adoption preserves the legacy reader's available history; it cannot certify earlier writes. */
+  private def readLegacyMetadata(): Metadata = {
+    val descending = ArrayBuffer.empty[Version]
+    var lastLsn = 0L
+    val iterator = undo.iterator()
     try {
       iterator.seekToFirst()
-      if (iterator.hasNext) {
-        decodeLSN(iterator.peekNext().getKey)
-      } else {
-        0
+      while (iterator.hasNext) {
+        val entry = iterator.next()
+        val currentLsn = decodeLSN(entry.getKey)
+        val version = deserializeUndo(entry.getValue).versionID
+        if (lastLsn == 0L) lastLsn = currentLsn
+        if (descending.lastOption.exists(_.id.sameElements(version))) {
+          descending(descending.size - 1) = Version(version, currentLsn)
+        } else descending += Version(version, currentLsn)
       }
-    } finally {
-      iterator.close()
+    } finally iterator.close()
+    val versions = if (descending.nonEmpty) descending.reverse.toVector else {
+      Option(db.get(last_version_key)).map(id => Vector(Version(id, 0L))).getOrElse(Vector.empty)
     }
+    Metadata(0L, lastLsn, versions)
   }
 
-  def lastVersionID: Option[VersionID] = {
-    lastVersion
-  }
-
-  def versionIdExists(versionID: VersionID): Boolean = {
-    lock.readLock().lock()
-    try {
-      versions.exists(_.sameElements(versionID))
-    } finally {
-      lock.readLock().unlock()
-    }
-  }
-
-  private def getAllVersions: ArrayBuffer[VersionID] = {
-    val versions = ArrayBuffer.empty[VersionID]
-    var lastVersion: Option[VersionID] = None
-    var lastLsn: LSN = 0
-    // We iterate in LSN descending order
-    val iterator = undo.iterator()
-    iterator.seekToFirst()
-    while (iterator.hasNext) {
-      val entry = iterator.next
-      val currVersion = deserializeUndo(entry.getValue).versionID
-      lastLsn = decodeLSN(entry.getKey)
-      if (!lastVersion.exists(_.sameElements(currVersion))) {
-        versionLsn += lastLsn + 1 // this is first LSN of successor version
-        versions += currVersion
-        lastVersion = Some(currVersion)
-      }
-    }
-    iterator.close()
-    // As far as org.iq80.leveldb doesn't support iteration in reverse order, we have to iterate in the order
-    // of decreasing LSNs and then revert version list. For each version we store first (smallest) LSN.
-    versionLsn += lastLsn // first LSN of oldest version
-    versionLsn = versionLsn.reverse // LSNs should be in ascending order
-    versionLsn.remove(versionLsn.size - 1) // remove last element which corresponds to next assigned LSN
-
-    if (versions.nonEmpty) {
-      versions.reverse
-    } else {
-      val dbVersion = db.get(last_version_key)
-      if (dbVersion != null) {
-        versions += dbVersion
-        versionLsn += lastLsn
-      }
-      versions
-    }
-  }
-
-  /**
-    * Undo action. To implement recovery to the specified version, we store in the separate undo database
-    * sequence of undo operations corresponding to the updates done by the committed transactions.
-    */
   case class Undo(versionID: VersionID, key: Array[Byte], value: Array[Byte])
 
   private def serializeUndo(versionID: VersionID, key: Array[Byte], value: Array[Byte]): Array[Byte] = {
     val valueSize = if (value != null) value.length else 0
     val versionSize = versionID.length
     val keySize = key.length
+    require(versionSize <= 0xFF && keySize <= 0xFF)
     val packed = new Array[Byte](2 + versionSize + keySize + valueSize)
-    require(keySize <= 0xFF)
-    packed(0) = versionSize.asInstanceOf[Byte]
-    packed(1) = keySize.asInstanceOf[Byte]
+    packed(0) = versionSize.toByte
+    packed(1) = keySize.toByte
     Array.copy(versionID, 0, packed, 2, versionSize)
     Array.copy(key, 0, packed, 2 + versionSize, keySize)
-    if (value != null) {
-      Array.copy(value, 0, packed, 2 + versionSize + keySize, valueSize)
-    }
+    if (value != null) Array.copy(value, 0, packed, 2 + versionSize + keySize, valueSize)
     packed
   }
 
-  private def deserializeUndo(undo: Array[Byte]): Undo = {
-    val versionSize = undo(0) & 0xFF
-    val keySize = undo(1) & 0xFF
-    val valueSize = undo.length - versionSize - keySize - 2
-    val versionID = undo.slice(2, 2 + versionSize)
-    val key = undo.slice(2 + versionSize, 2 + versionSize + keySize)
-    val value = if (valueSize == 0){
-      null
-    } else{
-      undo.slice(2 + versionSize + keySize, undo.length)
-    }
+  private def deserializeUndo(bytes: Array[Byte]): Undo = {
+    val versionSize = bytes(0) & 0xFF
+    val keySize = bytes(1) & 0xFF
+    val valueSize = bytes.length - versionSize - keySize - 2
+    val versionID = bytes.slice(2, 2 + versionSize)
+    val key = bytes.slice(2 + versionSize, 2 + versionSize + keySize)
+    val value = if (valueSize == 0) null else bytes.slice(2 + versionSize + keySize, bytes.length)
     Undo(versionID, key, value)
   }
 
-  /**
-    * Write versioned batch update to the database, removing keys from the database and adding new key -> value pairs
-    */
-  def update(versionID: VersionID,
-             toRemove: TraversableOnce[Array[Byte]],
-             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
-    lock.writeLock().lock()
-    val lastLsn = lsn // remember current LSN value
-    val batch = db.createWriteBatch()
-    val undoBatch = undo.createWriteBatch()
+  private def emptyPlan: Plan = Plan(
+    metadata.copy(transaction = Math.addExact(metadata.transaction, 1L)), Vector.empty, Vector.empty)
+
+  /** The only publication point for a changed data/version/history state. */
+  private def commit(plan: Plan): Unit = {
+    val encoded = journal.encoded(plan)
     try {
-      toRemove.foreach(key => {
-        batch.delete(key)
-        if (keepVersions > 0) {
-          val value = db.get(key)
-          if (value != null) { // attempt to delete not existed key
-            undoBatch.put(newLSN(), serializeUndo(versionID, key, value))
-          }
-        }
-      })
-      for ((key, v) <- toUpdate) {
-        require(key.length != 0) // empty keys are not allowed
-        if (keepVersions > 0) {
-          val old = db.get(key)
-          undoBatch.put(newLSN(), serializeUndo(versionID, key, old))
-        }
-        batch.put(key, v)
-      }
-
-      if (keepVersions > 0) {
-        if (lsn == lastLsn) { // no records were written for this version: generate dummy record
-          undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
-        }
-        undo.write(undoBatch, writeOptions)
-        if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
-          versions += versionID
-          versionLsn += lastLsn + 1 // first LSN for this version
-          cleanStart(keepVersions)
-        }
-      } else {
-        //keepVersions = 0
-        if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
-          batch.put(last_version_key, versionID)
-          versions.clear()
-          versions += versionID
-          if (versionLsn.isEmpty) {
-            versionLsn += lastLsn
-          }
-        }
-      }
-
-      db.write(batch, writeOptions)
-      lastVersion = Some(versionID)
-    } finally {
-      // Make sure you close the batch to avoid resource leaks.
-      batch.close()
-      undoBatch.close()
-      lock.writeLock().unlock()
+      journal.prepare(encoded)
+      journal.applyParticipants(plan)
+      journal.complete(plan)
+      metadata = plan.result
+    } catch {
+      case t: Throwable =>
+        recoveryFailure = Some(t)
+        throw t
     }
   }
+
+  /** Write a recoverable batch. A Failure after a write attempt requires reopening this instance. */
+  def update(versionID: VersionID,
+             toRemove: TraversableOnce[Array[Byte]],
+             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try(writeLocked {
+    val version = versionID.clone()
+    val mainChanges = Vector.newBuilder[Change]
+    val undoChanges = Vector.newBuilder[Change]
+    var nextLsn = metadata.lsn
+    def recordUndo(key: Array[Byte], value: Array[Byte]): Unit = {
+      nextLsn = Math.addExact(nextLsn, 1L)
+      undoChanges += Change(encodeLSN(nextLsn), Some(serializeUndo(version, key, value)))
+    }
+    toRemove.foreach { input =>
+      val key = input.clone()
+      mainChanges += Change(key, None)
+      if (keepVersions > 0) Option(db.get(key)).foreach(value => recordUndo(key, value))
+    }
+    toUpdate.foreach { case (inputKey, inputValue) =>
+      val key = inputKey.clone()
+      val value = inputValue.clone()
+      require(key.nonEmpty, "Empty keys are not allowed")
+      if (keepVersions > 0) recordUndo(key, db.get(key))
+      mainChanges += Change(key, Some(value))
+    }
+
+    val sameVersion = metadata.versions.lastOption.exists(_.id.sameElements(version))
+    val nextVersions = if (keepVersions > 0) {
+      if (nextLsn == metadata.lsn) recordUndo(Array.emptyByteArray, null)
+      if (sameVersion) metadata.versions else metadata.versions :+ Version(version, metadata.lsn + 1L)
+    } else {
+      if (!sameVersion) mainChanges += Change(last_version_key, Some(version.clone()))
+      Vector(Version(version, nextLsn))
+    }
+    val result = Metadata(Math.addExact(metadata.transaction, 1L), nextLsn, nextVersions)
+    val plan = Plan(result, mainChanges.result(), undoChanges.result())
+    commit(if (keepVersions == 0 || !sameVersion) pruned(plan, keepVersions) else plan)
+  })
 
   def insert(versionID: VersionID, toInsert: Seq[(K, V)]): Try[Unit] = update(versionID, Seq.empty, toInsert)
 
   def remove(versionID: VersionID, toRemove: Seq[K]): Try[Unit] = update(versionID, toRemove, Seq.empty)
 
-
-  // Keep last "count"+1 versions and remove undo information for older versions
-  private def cleanStart(count: Int): Unit = {
-    val deteriorated = versions.size - count - 1
-    if (deteriorated >= 0) {
-      val fromLsn = versionLsn(0)
-      val tillLsn = if (deteriorated+1 < versions.size) versionLsn(deteriorated+1) else lsn+1
-      val batch = undo.createWriteBatch()
-      try {
-        for (lsn <- fromLsn until tillLsn) {
-          batch.delete(encodeLSN(lsn))
-        }
-        undo.write(batch, writeOptions)
-      } finally {
-        batch.close()
+  /** Retain count predecessors plus the current version, including the oldest rollback anchor. */
+  private def pruned(plan: Plan, count: Int): Plan = {
+    require(count >= 0, "Negative retention count")
+    val versions = plan.result.versions
+    if (versions.isEmpty || versions.size.toLong <= count.toLong) plan else {
+      val drop = math.max(0, versions.size - count - 1)
+      val cutoff = if (drop + 1 < versions.size) versions(drop + 1).firstLsn else plan.result.lsn + 1L
+      val deletes = Vector.newBuilder[Change]
+      if (cutoff > 0) {
+        val iterator = undo.iterator()
+        try {
+          iterator.seek(encodeLSN(cutoff - 1L))
+          while (iterator.hasNext) deletes += Change(iterator.next().getKey.clone(), None)
+        } finally iterator.close()
       }
+      plan.undo.foreach { change =>
+        if (decodeLSN(change.key) < cutoff) deletes += Change(change.key, None)
+      }
+      val main = if (count == 0) plan.main :+ Change(last_version_key, Some(versions.last.id.clone())) else plan.main
+      plan.copy(result = plan.result.copy(versions = versions.drop(drop)), main = main, undo = plan.undo ++ deletes.result())
+    }
+  }
 
-      versions.remove(0, deteriorated)
-      versionLsn.remove(0, deteriorated)
-      if (count == 0) {
-        db.put(last_version_key, versions(0))
+  def clean(count: Int): Unit = writeLocked {
+    commit(pruned(emptyPlan, count))
+    Seq(undo, db).foreach { database =>
+      Try(database.resumeCompactions()).failed.foreach { error =>
+        log.warn("History retention committed but compaction could not resume", error)
       }
     }
   }
 
-  def clean(count: Int): Unit = {
-    lock.writeLock().lock()
-    try {
-      cleanStart(count)
-    } finally {
-      lock.writeLock().unlock()
-    }
-    undo.resumeCompactions()
-    db.resumeCompactions()
-  }
-
-  def cleanStop(): Unit = {
+  def cleanStop(): Unit = writeLocked {
     undo.suspendCompactions()
     db.suspendCompactions()
   }
@@ -342,119 +280,96 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   override def close(): Unit = {
     lock.writeLock().lock()
     try {
-      undo.close()
-      db.close()
-    } finally {
-      lock.writeLock().unlock()
-    }
-  }
-
-  // Rollback to the specified version: undo all changes done after specified version
-  def rollbackTo(versionID: VersionID): Try[Unit] = Try {
-    lock.writeLock().lock()
-    try {
-      val versionIndex = versions.indexWhere(_.sameElements(versionID))
-      if (versionIndex >= 0) {
-        if (versionIndex != versions.size-1) {
-          val batch = db.createWriteBatch()
-          val undoBatch = undo.createWriteBatch()
-          var nUndoRecords: Long = 0
-          val iterator = undo.iterator()
-          var lastLsn: LSN = 0
-          try {
-            var undoing = true
-            iterator.seekToFirst()
-            while (undoing && iterator.hasNext) {
-              val entry = iterator.next()
-              val undo = deserializeUndo(entry.getValue)
-              if (undo.versionID.sameElements(versionID)) {
-                undoing = false
-                lastLsn = decodeLSN(entry.getKey)
-              } else {
-                undoBatch.delete(entry.getKey)
-                nUndoRecords += 1
-                if (undo.value == null) {
-                  if (undo.key.length != 0) { // dummy record
-                    batch.delete(undo.key)
-                  }
-                } else {
-                  batch.put(undo.key, undo.value)
-                }
-              }
-            }
-            db.write(batch, writeOptions)
-            undo.write(undoBatch, writeOptions)
-          } finally {
-            // Make sure you close the batch to avoid resource leaks.
-            iterator.close()
-            batch.close()
-            undoBatch.close()
+      if (!closed) {
+        closed = true
+        var failure: Throwable = null
+        databases.reverse.foreach { database =>
+          try database.close() catch {
+            case NonFatal(error) =>
+              if (failure == null) failure = error else if (failure ne error) failure.addSuppressed(error)
           }
-          val nVersions = versions.size
-          require((versionIndex + 1 == nVersions && nUndoRecords == 0) || (versionIndex + 1 < nVersions && lsn - versionLsn(versionIndex + 1) + 1 == nUndoRecords))
-          versions.remove(versionIndex + 1, nVersions - versionIndex - 1)
-          versionLsn.remove(versionIndex + 1, nVersions - versionIndex - 1)
-          lsn -= nUndoRecords // reuse deleted LSN to avoid holes in LSNs
-          require(lastLsn == 0 || lsn == lastLsn)
-          require(versions.last.sameElements(versionID))
-          lastVersion = Some(versionID)
-        } else {
-          require(lastVersion.get.sameElements(versionID))
         }
-      } else {
-        throw new NoSuchElementException("versionID not found, can not rollback")
+        if (failure != null) throw failure
       }
-    } finally {
-      lock.writeLock().unlock()
+    } finally lock.writeLock().unlock()
+  }
+
+  def rollbackTo(versionID: VersionID): Try[Unit] = Try(writeLocked {
+    val index = metadata.versions.indexWhere(_.id.sameElements(versionID))
+    if (index < 0) throw new NoSuchElementException("versionID not found, can not rollback")
+    if (index < metadata.versions.size - 1) {
+      val boundary = metadata.versions(index + 1).firstLsn
+      val mainChanges = Vector.newBuilder[Change]
+      val undoChanges = Vector.newBuilder[Change]
+      var count = 0L
+      val iterator = undo.iterator()
+      try {
+        iterator.seekToFirst()
+        while (iterator.hasNext && decodeLSN(iterator.peekNext().getKey) >= boundary) {
+          val entry = iterator.next()
+          val record = deserializeUndo(entry.getValue)
+          if (record.key.nonEmpty) mainChanges += Change(record.key, Option(record.value))
+          undoChanges += Change(entry.getKey.clone(), None)
+          count += 1L
+        }
+      } finally iterator.close()
+      require(count == metadata.lsn - boundary + 1L, "Incomplete retained rollback history")
+      val result = Metadata(Math.addExact(metadata.transaction, 1L), boundary - 1L, metadata.versions.take(index + 1))
+      // Keep the legacy fallback marker consistent when it exists; do not add it to ordinary main data.
+      if (db.get(last_version_key) != null) mainChanges += Change(last_version_key, Some(versionID.clone()))
+      commit(Plan(result, mainChanges.result(), undoChanges.result()))
     }
-  }
+  })
 
-  def rollbackVersions(): Iterable[VersionID] = {
-    versions.reverse
-  }
+  def rollbackVersions(): Iterable[VersionID] =
+    readLocked(metadata.versions.reverse.map(_.id.clone()))
 
-  /**
-    * Take database snapshot, process it, and then close the snapshot.
-    * Could be useful when it is needed to process current state of database without blocking database (and so threads
-    * possibly working with it).
-    *
-    * @param logic - processing logic which is getting access to `get` function to read from database snapshot
-    */
+  /** Process a committed snapshot; already acquired snapshots remain valid during later writes. */
   def processSnapshot[T](logic: SnapshotReadInterface => T): Try[T] = {
     val ro = new ReadOptions()
     try {
       lock.writeLock().lock()
-      ro.snapshot(db.getSnapshot)
-      lock.writeLock().unlock()
-
-      object readInterface extends SnapshotReadInterface {
-        def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+      val snapshot = try {
+        ensureReadable()
+        db.getSnapshot
+      } finally {
+        lock.writeLock().unlock()
       }
-      Success(logic(readInterface))
+      var processingFailure: Throwable = null
+      try {
+        ro.snapshot(snapshot)
+        object readInterface extends SnapshotReadInterface {
+          def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+        }
+        Success(logic(readInterface))
+      } catch {
+        case t: Throwable =>
+          processingFailure = t
+          throw t
+      } finally {
+        try {
+          snapshot.close()
+        } catch {
+          case NonFatal(t) if processingFailure != null =>
+            if (t ne processingFailure) processingFailure.addSuppressed(t)
+        }
+      }
     } catch {
-      case t: Throwable =>
+      case NonFatal(t) =>
         log.info("Error during snapshot processing: ", t)
         Failure(t)
-    } finally {
-      // Close the snapshot to avoid resource leaks
-      ro.snapshot().close()
     }
   }
-
 }
 
 object LDBVersionedStore {
-
-  /**
-    * Interface to read from versioned database snapshot which can be provided to clients in order to serve them with
-    * snapshot. Contains only reader function.
-    */
-  trait SnapshotReadInterface {
-    /**
-      * Read value by key. Client should care about key existence on its side. If key does not exist in database,
-      * an exception will be thrown.
-      */
-    def get(key: Array[Byte]): Array[Byte]
+  private[db] def openDatabase(dir: File, name: String): DB = {
+    val options = new Options().createIfMissing(true).paranoidChecks(true)
+    LDBFactory.factory.open(new File(dir, name), options)
   }
 
+  trait SnapshotReadInterface {
+    /** Returns the stored bytes, or null if the key is absent. */
+    def get(key: Array[Byte]): Array[Byte]
+  }
 }

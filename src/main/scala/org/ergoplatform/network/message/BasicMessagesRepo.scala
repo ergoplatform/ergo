@@ -5,7 +5,6 @@ import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import scorex.crypto.hash.Digest32
-import scorex.util.Extensions._
 import scorex.util.serialization.{Reader, Writer}
 import org.ergoplatform.sdk.wallet.Constants.ModifierIdLength
 
@@ -53,7 +52,7 @@ class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
   }
 
   override def parse(r: Reader): Seq[PeerSpec] = {
-    val length = r.getUInt().toIntExact
+    val length = r.getUIntExact()
     require(length <= peersLimit, s"Too many peers. $length exceeds limit $peersLimit")
     (0 until length).map { _ =>
       PeerSpecSerializer.parse(r)
@@ -101,7 +100,7 @@ object SnapshotsInfoSpec extends MessageSpecV1[SnapshotsInfo] {
   override def parse(r: Reader): SnapshotsInfo = {
     require(r.remaining <= SizeLimit, s"Too big SnapshotsInfo message: ${r.remaining} bytes found, $SizeLimit max expected.")
 
-    val length = r.getUInt().toIntExact
+    val length = r.getUIntExact()
     val manifests = (0 until length).map { _ =>
       val height = r.getInt()
       val manifest = Digest32 @@ r.getBytes(ModifierIdLength)
@@ -151,7 +150,7 @@ object ManifestSpec extends MessageSpecV1[Array[Byte]] {
   override def parse(r: Reader): Array[Byte] = {
     require(r.remaining <= SizeLimit, s"Too big Manifest message.")
 
-    val length = r.getUInt().toIntExact
+    val length = r.getUIntExact()
     r.getBytes(length)
   }
 
@@ -196,7 +195,7 @@ object UtxoSnapshotChunkSpec extends MessageSpecV1[Array[Byte]] {
   override def parse(r: Reader): Array[Byte] = {
     require(r.remaining <= SizeLimit, s"Too big UtxoSnapshotChunk message.")
 
-    val length = r.getUInt().toIntExact
+    val length = r.getUIntExact()
     r.getBytes(length)
   }
 

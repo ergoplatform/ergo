@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.CriticalSystemException
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
@@ -24,8 +25,14 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
-                         minFullHeight: Option[Int] = Some(GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
-    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+                         minFullHeight: Option[Int] = Some(GenesisHeight),
+                         utxoBootstrap: Boolean = false): (ErgoHistory, Seq[ErgoFullBlock]) = {
+    val inHistory = generateHistory(
+      verifyTransactions = true,
+      StateType.Digest,
+      PoPoWBootstrap = false,
+      BlocksToKeep,
+      utxoBootstrap = utxoBootstrap)
     minFullHeight.foreach { h =>
       inHistory.writeMinimalFullBlockHeight(h)
       inHistory.isHeadersChainSyncedVar = true
@@ -37,6 +44,17 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     } else {
       (inHistory, Seq.empty)
     }
+  }
+
+  private def genSnapshotHeaderHistory(
+      canonicalHeight: Int,
+      recoveryFloor: Int): (ErgoHistory, Seq[ErgoFullBlock]) = {
+    val history = genHistory(minFullHeight = None, utxoBootstrap = true)._1
+    val canonical = genChain(canonicalHeight, history)
+    val withHeaders = applyHeaderChain(history, HeaderChain(canonical.map(_.header)))
+    withHeaders.writeMinimalFullBlockHeight(recoveryFloor + 1)
+    withHeaders.isHeadersChainSyncedVar = true
+    (withHeaders, canonical)
   }
 
   property("Forks that include genesis block") {
@@ -60,6 +78,193 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestHeaderOpt.get shouldBe fork3.last.header
     history.bestFullBlockOpt.get.header.height shouldBe fork3.last.header.height
 
+  }
+
+  property("UTXO snapshot bootstrap rejects winning header forks below its snapshot anchor") {
+    val canonicalHeight = 4
+    val recoveryFloor = 2
+
+    Seq(recoveryFloor - 1).foreach { commonHeight =>
+      val (history, canonical) = genSnapshotHeaderHistory(canonicalHeight, recoveryFloor)
+      val blocksToWin = canonicalHeight - commonHeight + 1
+      val fork = genChain(blocksToWin, canonical(commonHeight - 1)).tail
+
+      fork.dropRight(1).foreach { block =>
+        history.append(block.header).isSuccess shouldBe true
+      }
+
+      val bestBefore = history.bestHeaderOpt.value
+      val bestIdsBefore = (GenesisHeight to canonicalHeight)
+        .map(height => height -> history.bestHeaderIdAtHeight(height)).toMap
+      val winningHeader = fork.last.header
+      val result = history.append(winningHeader)
+
+      result.isFailure shouldBe true
+      result.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+      history.bestHeaderOpt.value shouldBe bestBefore
+      (GenesisHeight to canonicalHeight).foreach { height =>
+        history.bestHeaderIdAtHeight(height) shouldBe bestIdsBefore(height)
+      }
+      history.contains(winningHeader) shouldBe false
+    }
+  }
+
+  property("UTXO snapshot bootstrap allows an anchor fork only before the first full block") {
+    val canonicalHeight = 4
+    val recoveryFloor = 2
+
+    def anchorFork(canonical: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
+      val blocksToWin = canonicalHeight - recoveryFloor + 1
+      genChain(blocksToWin, canonical(recoveryFloor - 1)).tail
+    }
+
+    val (beforeFullHistory, beforeFullCanonical) =
+      genSnapshotHeaderHistory(canonicalHeight, recoveryFloor)
+    val beforeFullFork = anchorFork(beforeFullCanonical)
+    beforeFullFork.foreach { block =>
+      beforeFullHistory.append(block.header).isSuccess shouldBe true
+    }
+    beforeFullHistory.bestHeaderOpt.value shouldBe beforeFullFork.last.header
+    beforeFullHistory.bestFullBlockOpt shouldBe None
+
+    val (afterFullHistory0, afterFullCanonical) =
+      genSnapshotHeaderHistory(canonicalHeight, recoveryFloor)
+    val afterFullHistory = applyBlock(afterFullHistory0, afterFullCanonical(recoveryFloor))
+    afterFullHistory.bestFullBlockOpt.value.header shouldBe afterFullCanonical(recoveryFloor).header
+    val afterFullFork = anchorFork(afterFullCanonical)
+    afterFullFork.dropRight(1).foreach { block =>
+      afterFullHistory.append(block.header).isSuccess shouldBe true
+    }
+
+    val bestBefore = afterFullHistory.bestHeaderOpt.value
+    val bestIdsBefore = (GenesisHeight to canonicalHeight)
+      .map(height => height -> afterFullHistory.bestHeaderIdAtHeight(height)).toMap
+    val winningHeader = afterFullFork.last.header
+    val result = afterFullHistory.append(winningHeader)
+
+    result.isFailure shouldBe true
+    result.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+    afterFullHistory.bestHeaderOpt.value shouldBe bestBefore
+    (GenesisHeight to canonicalHeight).foreach { height =>
+      afterFullHistory.bestHeaderIdAtHeight(height) shouldBe bestIdsBefore(height)
+    }
+    afterFullHistory.contains(winningHeader) shouldBe false
+  }
+
+  property("UTXO snapshot bootstrap still accepts direct extensions and forks above its recovery floor") {
+    val recoveryFloor = 2
+
+    val (firstHeaderHistory, snapshotCanonical) =
+      genSnapshotHeaderHistory(canonicalHeight = recoveryFloor, recoveryFloor)
+    val firstHeaderAfterSnapshot = genChain(1, snapshotCanonical.last).last.header
+    firstHeaderHistory.append(firstHeaderAfterSnapshot).isSuccess shouldBe true
+    firstHeaderHistory.bestHeaderOpt.value shouldBe firstHeaderAfterSnapshot
+
+    val (extensionHistory, extensionCanonical) = genSnapshotHeaderHistory(4, recoveryFloor)
+    val extension = genChain(1, extensionCanonical.last).last
+    extensionHistory.append(extension.header).isSuccess shouldBe true
+    extensionHistory.bestHeaderOpt.value shouldBe extension.header
+
+    val (forkHistory, forkCanonical) = genSnapshotHeaderHistory(4, recoveryFloor)
+    val fork = genChain(2, forkCanonical(recoveryFloor)).tail
+    fork.foreach { block =>
+      forkHistory.append(block.header).isSuccess shouldBe true
+    }
+    forkHistory.bestHeaderOpt.value shouldBe fork.last.header
+  }
+
+  property("UTXO snapshot bootstrap never initializes its full chain from a non-best header") {
+    val (history, canonical) = genSnapshotHeaderHistory(canonicalHeight = 3, recoveryFloor = 1)
+    val nonBestBlock = genChain(1, canonical.head).last
+
+    history.append(nonBestBlock.header).isSuccess shouldBe true
+    history.isInBestChain(nonBestBlock.header) shouldBe false
+    nonBestBlock.blockSections.foreach { section =>
+      history.append(section).isSuccess shouldBe true
+    }
+
+    history.bestFullBlockOpt shouldBe None
+  }
+
+  property("UTXO snapshot bootstrap allows an anchor invalidation fallback only before the first full block") {
+    val canonicalHeight = 4
+    val recoveryFloor = 2
+
+    def anchorFork(canonical: Seq[ErgoFullBlock]): Seq[ErgoFullBlock] = {
+      val blocksToTip = canonicalHeight - recoveryFloor
+      genChain(blocksToTip, canonical(recoveryFloor - 1)).tail
+    }
+
+    val (beforeFullHistory, beforeFullCanonical) =
+      genSnapshotHeaderHistory(canonicalHeight, recoveryFloor)
+    val beforeFullFork = anchorFork(beforeFullCanonical)
+    beforeFullFork.foreach { block =>
+      beforeFullHistory.append(block.header).isSuccess shouldBe true
+    }
+    beforeFullHistory.bestHeaderOpt.value shouldBe beforeFullCanonical.last.header
+
+    val beforeFullResult = beforeFullHistory.reportModifierIsInvalid(
+      beforeFullCanonical(recoveryFloor).header,
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
+
+    beforeFullResult.isSuccess shouldBe true
+    beforeFullHistory.bestHeaderOpt.value shouldBe beforeFullFork.last.header
+    beforeFullFork.foreach { block =>
+      beforeFullHistory.bestHeaderIdAtHeight(block.height) shouldBe Some(block.id)
+      beforeFullHistory.isInBestChain(block.header) shouldBe true
+    }
+    beforeFullHistory.isSemanticallyValid(beforeFullCanonical(recoveryFloor).id) shouldBe Invalid
+
+    val (afterFullHistory0, afterFullCanonical) =
+      genSnapshotHeaderHistory(canonicalHeight, recoveryFloor)
+    val afterFullHistory = applyBlock(afterFullHistory0, afterFullCanonical(recoveryFloor))
+    val afterFullFork = anchorFork(afterFullCanonical)
+    afterFullFork.foreach { block =>
+      afterFullHistory.append(block.header).isSuccess shouldBe true
+    }
+    val bestHeaderBefore = afterFullHistory.bestHeaderOpt.value
+    val bestFullBefore = afterFullHistory.bestFullBlockOpt.value
+    val bestIdsBefore = (GenesisHeight to canonicalHeight)
+      .map(height => height -> afterFullHistory.bestHeaderIdAtHeight(height)).toMap
+
+    val afterFullResult = afterFullHistory.reportModifierIsInvalid(
+      afterFullCanonical(recoveryFloor).header,
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
+
+    afterFullResult.isFailure shouldBe true
+    afterFullResult.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+    afterFullHistory.bestHeaderOpt.value shouldBe bestHeaderBefore
+    afterFullHistory.bestFullBlockOpt.value shouldBe bestFullBefore
+    (GenesisHeight to canonicalHeight).foreach { height =>
+      afterFullHistory.bestHeaderIdAtHeight(height) shouldBe bestIdsBefore(height)
+    }
+    afterFullHistory.isSemanticallyValid(afterFullCanonical(recoveryFloor).id) shouldBe Unknown
+  }
+
+  property("UTXO snapshot bootstrap rejects an invalidation fallback below its recovery floor") {
+    val recoveryFloor = 2
+    val (history, canonical) = genSnapshotHeaderHistory(canonicalHeight = 4, recoveryFloor)
+    val fallbackFork = genChain(3, canonical.head).tail
+
+    fallbackFork.foreach { block =>
+      history.append(block.header).isSuccess shouldBe true
+    }
+    history.bestHeaderOpt.value shouldBe canonical.last.header
+
+    val bestIdsBefore = (GenesisHeight to canonical.last.height)
+      .map(height => height -> history.bestHeaderIdAtHeight(height)).toMap
+    val invalidatedHeader = canonical(recoveryFloor - 1).header
+    val result = history.reportModifierIsInvalid(
+      invalidatedHeader,
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty))
+
+    result.isFailure shouldBe true
+    result.failed.get.isInstanceOf[CriticalSystemException] shouldBe true
+    history.bestHeaderOpt.value shouldBe canonical.last.header
+    (GenesisHeight to canonical.last.height).foreach { height =>
+      history.bestHeaderIdAtHeight(height) shouldBe bestIdsBefore(height)
+    }
+    history.isSemanticallyValid(invalidatedHeader.id) shouldBe Unknown
   }
 
 

@@ -163,11 +163,11 @@ class NetworkController(ergoSettings: ErgoSettings,
       peerManagerRef ! PeerManager.ReceivableMessages.Penalize(peerAddress, penaltyType)
 
     case Blacklisted(peerAddress) =>
-      connections.get(peerAddress).foreach { peer =>
-        connections = connections.filterNot { case (address, _) => // clear all connections related to banned peer ip
-          Option(peer.connectionId.remoteAddress.getAddress).exists(Option(address.getAddress).contains(_))
-        }
-        peer.handlerRef ! CloseConnection
+      Option(peerAddress.getAddress).foreach { blacklistedIp =>
+        val peersToClose = connections.valuesIterator.filter { peer =>
+          Option(peer.connectionId.remoteAddress.getAddress).contains(blacklistedIp)
+        }.toSeq
+        peersToClose.foreach(_.handlerRef ! CloseConnection)
       }
   }
 

@@ -6,7 +6,6 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.ModifierId
 import scorex.util.serialization.{Reader, Writer}
-import scorex.util.Extensions._
 import sigma.VersionContext
 
 /**
@@ -57,7 +56,7 @@ object WalletTransactionSerializer extends ErgoSerializer[WalletTransaction] {
       (0 until scansCount).map(_ => ScanId @@ r.getShort())
     }
 
-    val txBytesLen = r.getUInt().toIntExact
+    val txBytesLen = r.getUIntExact()
     // we use max supported script/tree to always parse everything there
     val tx = (VersionContext.withVersions(VersionContext.MaxSupportedScriptVersion, VersionContext.MaxSupportedScriptVersion) {
       ErgoTransactionSerializer.parseBytes(r.getBytes(txBytesLen))

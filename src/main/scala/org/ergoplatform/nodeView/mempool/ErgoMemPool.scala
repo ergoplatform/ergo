@@ -323,7 +323,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
         case _ => None
       }
 
-    loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
+    val recommendedFee = loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
+    math.max(recommendedFee, settings.nodeSettings.minimalFeeAmount)
   }
 
   /**
@@ -346,8 +347,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
     // Time since statistics measurement interval (needed to calculate average tx rate)
     val elapsed = System.currentTimeMillis() - stats.startMeasurement
-    if (stats.takenTxns != 0) {
-      elapsed * posInPool / stats.takenTxns
+    val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
+    if (stats.takenTxns > 0) {
+      cappedElapsed * posInPool / stats.takenTxns
     } else {
       0
     }

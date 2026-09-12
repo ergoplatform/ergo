@@ -153,6 +153,70 @@ class DigestState protected(override val version: VersionTag,
 
 object DigestState extends ScorexLogging with ScorexEncoding {
 
+  /** Read a verified snapshot checkpoint, including the AVL representation written by older nodes. */
+  private[nodeView] def readSnapshot(dir: File,
+                                    settings: ErgoSettings,
+                                    version: VersionTag,
+                                    rootHash: ADDigest,
+                                    stateContext: ErgoStateContext): Try[DigestState] = {
+    Try {
+      dir.mkdirs()
+      new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    }.flatMap { store =>
+      val versionBytes = org.ergoplatform.core.versionToBytes(version)
+      val result = Try {
+        require(stateContext.lastHeaders.headOption.exists { header =>
+          idToVersion(header.id) == version && header.stateRoot.sameElements(rootHash)
+        }, "Snapshot state must match its context header")
+        require(store.get(versionBytes).exists(_.sameElements(rootHash)),
+          "Stored snapshot root does not match canonical history")
+        require(store.get(ErgoStateReader.ContextKey).exists(_.sameElements(stateContext.bytes)),
+          "Stored snapshot context does not match canonical history")
+        store.lastVersionID.getOrElse(throw new IllegalStateException("Snapshot store has no version"))
+      }.flatMap { storedVersion =>
+        if (storedVersion.sameElements(rootHash)) {
+          fromSnapshot(version, rootHash, stateContext, store, settings)
+        } else if (storedVersion.sameElements(versionBytes)) {
+          for {
+            _ <- Try(store.clean(0))
+            _ <- store.update(versionBytes, Seq.empty, Seq.empty)
+            state <- Try(new DigestState(version, rootHash, store, settings))
+          } yield state
+        } else {
+          Failure(new IllegalStateException("Stored snapshot version does not match canonical history"))
+        }
+      }
+      result.failed.foreach { error =>
+        Try(store.close()).failed.foreach(error.addSuppressed)
+      }
+      result
+    }
+  }
+
+  /** Convert a reconstructed snapshot store to Digest's block-ID version namespace. */
+  private[nodeView] def fromSnapshot(version: VersionTag,
+                                    rootHash: ADDigest,
+                                    stateContext: ErgoStateContext,
+                                    store: LDBVersionedStore,
+                                    settings: ErgoSettings): Try[DigestState] = {
+    val versionBytes = org.ergoplatform.core.versionToBytes(version)
+    for {
+      _ <- Try {
+        require(stateContext.lastHeaders.headOption.exists { header =>
+          idToVersion(header.id) == version && header.stateRoot.sameElements(rootHash)
+        }, "Snapshot state must match its context header")
+        require(store.lastVersionID.exists(_.sameElements(rootHash)),
+          "Snapshot store must be at the reconstructed AVL root")
+      }
+      _ <- store.update(versionBytes, Seq.empty, metadata(version, rootHash, stateContext))
+      // AVL versions are root digests, whereas Digest rollback versions must be block IDs.
+      _ <- Try(store.clean(0))
+      // Retain an undo anchor so later block updates can roll back here after reopening.
+      _ <- store.update(versionBytes, Seq.empty, Seq.empty)
+      state <- Try(new DigestState(version, rootHash, store, settings))
+    } yield state
+  }
+
   /**
     * Creates [[DigestState]] with provided `ErgoStateContext` instance corresponding to some version` and `rootHash`.
     */

@@ -18,7 +18,7 @@ trait MempoolTestHelpers {
 
     override def weightedTransactionIds(limit: Int): Seq[OrderedTxPool.WeightedTxId] = ???
 
-    override def getAll: Seq[UnconfirmedTransaction] = ???
+    override def getAll: Seq[UnconfirmedTransaction] = txs
 
     override def getAllPrioritized: Seq[UnconfirmedTransaction] = txs
 

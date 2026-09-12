@@ -115,6 +115,16 @@ trait ToDownloadProcessor
       // While bootstrapping from a UTXO set snapshot, do not download full block sections
       // until the snapshot has been applied. Block sections downloaded before the snapshot
       // would be stored as non-best and never applied to the freshly recreated state.
+      // Headers-chain sync detection must still run here: otherwise, with nipopowBootstrap = false,
+      // `isHeadersChainSynced` is never set, `nextModifiersToDownload` stays empty and the
+      // snapshot is never requested. Only the in-memory flag may be set though: running
+      // `updateBestFullBlock` would persist minimalFullBlockHeight, and `isUtxoSnapshotApplied`
+      // is derived from it (readMinimalFullBlockHeight() > GenesisHeight), so with blocksToKeep >= 0
+      // it would flip to true with no snapshot applied and the snapshot would be skipped forever.
+      if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
+        setHeadersChainSynced()
+        log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+      }
       Nil
     } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.

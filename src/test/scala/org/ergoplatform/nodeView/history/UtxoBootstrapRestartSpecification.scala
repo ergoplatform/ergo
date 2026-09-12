@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.history
 
+import org.ergoplatform.modifiers.SnapshotsInfoTypeId
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
@@ -30,15 +31,19 @@ import scala.concurrent.duration._
   * Result: headers are at tip, the state is at genesis, and the node loops sending sync
   * messages forever. Observed on mainnet with a node restarted mid snapshot download.
   *
-  * The property below simulates the restart by reopening the history database and asserts that
-  * the headers chain is considered synced after the restart, so that snapshot bootstrapping
-  * can resume. It fails before the fix.
+  * The same recovery is needed for utxoBootstrap without NiPoPoW (nipopowBootstrap = false):
+  * the startup recovery in ErgoHistory.readOrGenerate must not require nipopowBootstrap, as
+  * persisted headers with no snapshot applied mean bootstrap was already underway in both modes.
+  *
+  * The property below simulates the restart by closing the history storage and reopening the
+  * database, and asserts that the headers chain is considered synced after the restart, so that
+  * snapshot bootstrapping can resume. It fails before the fix (for both bootstrap modes).
   */
 class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUtils {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
-  private def utxoBootstrapSettings(dir: java.io.File): ErgoSettings = {
+  private def utxoBootstrapSettings(dir: java.io.File, nipopowBootstrap: Boolean): ErgoSettings = {
     val txCostLimit = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings = NodeConfigurationSettings(
@@ -46,7 +51,7 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
       verifyTransactions = true,
       blocksToKeep = -1,
       UtxoSettings(utxoBootstrap = true, 0, 2),
-      NipopowSettings(nipopowBootstrap = true, 1),
+      NipopowSettings(nipopowBootstrap, 1),
       mining = false,
       txCostLimit,
       txSizeLimit,
@@ -72,10 +77,18 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
   }
 
   property("node restarted after nipopow headers persisted but before snapshot application resumes bootstrap") {
-    val dir = createTempDir
-    val historySettings = utxoBootstrapSettings(dir)
+    restartsResumeBootstrap(nipopowBootstrap = true)
+  }
 
-    // headers-only chain, result of a NiPoPoW proof application (no full blocks downloaded yet)
+  property("node restarted after headers persisted (no nipopow) but before snapshot application resumes bootstrap") {
+    restartsResumeBootstrap(nipopowBootstrap = false)
+  }
+
+  private def restartsResumeBootstrap(nipopowBootstrap: Boolean): Unit = {
+    val dir = createTempDir
+    val historySettings = utxoBootstrapSettings(dir, nipopowBootstrap)
+
+    // headers-only chain, result of header sync / a NiPoPoW proof application (no full blocks yet)
     val history = ErgoHistory.readOrGenerate(historySettings)(null)
     val headers = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
     val updHistory = applyHeaderChain(history, headers)
@@ -84,7 +97,10 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
     updHistory.isUtxoSnapshotApplied shouldBe false
     updHistory.isHeadersChainSynced shouldBe false // set only via updateBestFullBlock / setHeadersChainSynced
 
-    // simulate node restart: reopen the same database
+    // simulate node restart: close the storage and reopen the same database.
+    // Without the close, StoreRegistry hands back the already-open underlying DB and the
+    // "restart" is not a real cold reopen.
+    updHistory.historyStorage.close()
     val restarted = ErgoHistory.readOrGenerate(historySettings)(null)
 
     restarted.headersHeight shouldBe updHistory.headersHeight
@@ -95,6 +111,9 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
     // (ErgoNodeViewSynchronizer.requestMoreModifiers -> sendSync loop) and bootstrap
     // can never resume
     restarted.isHeadersChainSynced shouldBe true
+
+    // the synchronizer's next download request would be UTXO set snapshot information
+    restarted.nextModifiersToDownload(10, (_, _) => true).keySet should contain(SnapshotsInfoTypeId.value)
   }
 
 }

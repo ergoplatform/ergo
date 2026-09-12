@@ -1,5 +1,7 @@
 package org.ergoplatform.it2
 
+import java.io.File
+
 import com.typesafe.config.{Config, ConfigFactory}
 import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -15,9 +17,11 @@ class TestUtxoSnapshotBootstrapOnMainNetSpec
     with IntegrationSuite
     with OptionValues {
 
-  // Unlike TestOnMainNetSpec, no host volume is mounted: node data lives in the container's
-  // anonymous volume (/home/ergo/.ergo) and is discarded with the container, so every run
-  // performs a real bootstrap from an empty data dir.
+  // The node data dir is mounted from a host temp directory (not an anonymous container volume)
+  // so that the container can be killed and restarted with the same data directory, which is
+  // needed to exercise resuming UTXO set snapshot bootstrapping after a restart.
+  // A fresh (empty) host directory is created per run, so every run still performs a real
+  // bootstrap from scratch.
 
   val bootstrapConfig: Config = ConfigFactory.parseString(
     s"""
@@ -29,12 +33,20 @@ class TestUtxoSnapshotBootstrapOnMainNetSpec
     """.stripMargin
   )
 
+  val localVolume: String = s"$localDataDir/test-utxo-snapshot-bootstrap/data"
+  val remoteVolume: String = "/home/ergo/.ergo"
+  new File(localVolume).mkdirs()
+
   val nodeConfig: Config = bootstrapConfig
+    .withFallback(specialDataDirConfig(remoteVolume))
     .withFallback(nodeSeedConfigs.head)
     .withFallback(nonGeneratingPeerConfig)
-  val node: Node = docker.startMainNetNodeYesImSure(nodeConfig).get
 
-  it should "Bootstrap from a UTXO set snapshot via NiPoPoW proof on mainnet and fully sync" in {
+  val node: Node = docker
+    .startMainNetNodeYesImSure(nodeConfig, specialVolumeOpt = Some((localVolume, remoteVolume)))
+    .get
+
+  it should "Bootstrap from a UTXO set snapshot via NiPoPoW proof on mainnet, survive a restart during snapshot download and fully sync" in {
     // Phase 1: headers appear, proving the trusted NiPoPoW proof was applied
     val headersResult = Async.async {
       Async.await(node.waitFor[NodeInfo](
@@ -46,9 +58,33 @@ class TestUtxoSnapshotBootstrapOnMainNetSpec
     val nodeInfoAfterHeaders = Await.result(headersResult, 1.hour)
     log.info(s"Headers appeared, best header height: ${nodeInfoAfterHeaders.bestHeaderHeightOpt}")
 
-    // Phase 2: wait for a full sync (snapshot applied + full blocks downloaded)
+    // Phase 2: wait until the node is in the middle of UTXO set snapshot downloading, then kill it.
+    // No full blocks can exist before the snapshot is applied, so bestBlockHeightOpt stays empty
+    // during the whole snapshot phase, and on mainnet chunk download alone takes minutes - killing
+    // 90+ seconds after the headers appeared lands the restart in the middle of snapshot
+    // bootstrapping (partial chunk download observed).
+    val snapshotPhaseStart = System.currentTimeMillis()
+    val preKillInfo = Await.result(Async.async {
+      var info = nodeInfoAfterHeaders
+      while (info.bestBlockHeightOpt.isEmpty &&
+             System.currentTimeMillis() - snapshotPhaseStart < 90.seconds.toMillis) {
+        Thread.sleep(5.seconds.toMillis)
+        info = Async.await(node.waitFor[NodeInfo](_.info, _ => true, 1.minute))
+      }
+      info
+    }, 5.minutes)
+    preKillInfo.bestBlockHeightOpt shouldBe empty // still no full blocks: killed mid bootstrap
+    log.info(s"Killing node mid snapshot bootstrap, best header height: ${preKillInfo.bestHeaderHeightOpt}")
+    docker.forceStopNode(node.containerId)
+
+    // Phase 3: restart with the same data directory and require the snapshot bootstrap to
+    // complete afterwards (snapshot applied, then full blocks downloaded to the tip)
+    val restartedNode = docker
+      .startMainNetNodeYesImSure(nodeConfig, specialVolumeOpt = Some((localVolume, remoteVolume)))
+      .get
+
     val syncResult = Async.async {
-      Async.await(node.waitFor[NodeInfo](
+      Async.await(restartedNode.waitFor[NodeInfo](
         _.info,
         nodeInfo => nodeInfo.bestBlockHeightOpt.exists(nodeInfo.bestHeaderHeightOpt.contains),
         1.minute

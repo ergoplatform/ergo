@@ -42,13 +42,10 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
     history.bestFullBlockOpt shouldBe None
-    history.isHeadersChainSynced shouldBe false
 
-    // nothing to download before headers chain is considered synced
-    history.nextModifiersToDownload(1, (_, id) => !history.contains(id)) shouldBe
-      Map.empty
-
-    history.setHeadersChainSynced()
+    // generated headers have fresh (real) timestamps, so applying them drives the ordinary
+    // headers-synced transition in toDownload -> updateBestFullBlock: no setHeadersChainSynced
+    // call is needed for the snapshot request below to be issued
     history.isHeadersChainSynced shouldBe true
 
     // no full blocks applied, no snapshot plan yet => ask peers for UTXO set snapshots

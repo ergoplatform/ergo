@@ -32,6 +32,8 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
+  private var initializationOutcomeUnknown: Option[Throwable] = None
+
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
       case _: ActorKilledException =>
@@ -83,6 +85,24 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def loadedWallet(state: ErgoWalletState): Receive = {
+    case InitWallet(walletPass, mnemonicPassOpt) if initializationOutcomeUnknown.isDefined =>
+      walletPass.erase()
+      mnemonicPassOpt.foreach(_.erase())
+      sender() ! Failure(initializationOutcomeUnknown.get)
+
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, _) if initializationOutcomeUnknown.isDefined =>
+      mnemonic.erase()
+      mnemonicPassOpt.foreach(_.erase())
+      walletPass.erase()
+      sender() ! Failure(initializationOutcomeUnknown.get)
+
+    case UnlockWallet(walletPass) if initializationOutcomeUnknown.isDefined =>
+      walletPass.erase()
+      sender() ! Failure(initializationOutcomeUnknown.get)
+
+    case _: RescanWallet if initializationOutcomeUnknown.isDefined =>
+      sender() ! Failure(initializationOutcomeUnknown.get)
+
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
       ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
@@ -93,6 +113,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! Success(mnemonic)
         case Failure(t) =>
           walletPass.erase()
+          rememberInitializationFailure(state, t)
           val f = wrapLegalExc(t) // getting nicer message for illegal key size exception
           log.error(s"Wallet initialization is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -108,6 +129,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           sender() ! Success(())
         case Failure(t) =>
           walletPass.erase()
+          rememberInitializationFailure(state, t)
           val f = wrapLegalExc(t) //getting nicer message for illegal key size exception
           log.error(s"Wallet restoration is failed, details: ${f.exception.getMessage}")
           sender() ! f
@@ -115,7 +137,12 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // branch for key already being set
     case _: RestoreWallet | _: InitWallet =>
-      sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
+      val reason = if (state.generation.isDefined) {
+        "Wallet is already initialized; use a separate wallet data directory to initialize another wallet."
+      } else {
+        "Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."
+      }
+      sender() ! Failure(new Exception(reason))
 
     /* READERS */
     case ReadBalances(chainStatus) =>
@@ -359,7 +386,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val isUnlocked = state.walletVars.proverOpt.isDefined
       val changeAddress = state.getChangeAddress(ergoAddressEncoder)
       val height = state.getWalletHeight
-      val lastError = state.error
+      val lastError = initializationOutcomeUnknown.map(_.getMessage).orElse(state.error)
       val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
       sender() ! status
 
@@ -490,6 +517,13 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   override def receive: Receive = emptyWallet
+
+  private def rememberInitializationFailure(state: ErgoWalletState, error: Throwable): Unit = error match {
+    case _: WalletInitialization.OutcomeUnknown =>
+      initializationOutcomeUnknown = Some(error)
+      context.become(loadedWallet(state.copy(error = Some(error.getMessage))))
+    case _ =>
+  }
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
     if (e.getMessage.startsWith("Illegal key size")) {

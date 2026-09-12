@@ -28,7 +28,8 @@ case class ErgoWalletState(
     parameters: Parameters,
     maxInputsToUse: Int,
     error: Option[String] = None,
-    rescanInProgress: Boolean
+    rescanInProgress: Boolean,
+    generation: Option[WalletGeneration] = None
   ) extends ScorexLogging {
 
   /**
@@ -135,26 +136,6 @@ object ErgoWalletState {
     */
   val noWalletFilter: FilterFn = (_: TrackedBox) => true
 
-  def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
-    WalletRegistry.apply(ergoSettings).map { registry =>
-      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)
-      val offChainRegistry = OffChainRegistry.init(registry)
-      val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
-      val maxInputsToUse = ergoSettings.walletSettings.maxInputs
-      ErgoWalletState(
-        ergoStorage,
-        secretStorageOpt = None,
-        registry,
-        offChainRegistry,
-        outputsFilter = None,
-        walletVars,
-        stateReaderOpt = None,
-        mempoolReaderOpt = None,
-        utxoStateReaderOpt = None,
-        parameters,
-        maxInputsToUse,
-        rescanInProgress = false
-      )
-    }
-  }
+  def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] =
+    WalletInitialization.initial(ergoSettings, parameters)
 }

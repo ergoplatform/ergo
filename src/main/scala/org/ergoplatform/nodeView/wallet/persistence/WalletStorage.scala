@@ -250,8 +250,10 @@ object WalletStorage {
     */
   def storageFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/storage")
 
-  def readOrCreate(settings: ErgoSettings): WalletStorage = {
-    val db = LDBFactory.createKvDb(storageFolder(settings).getPath)
+  def readOrCreate(settings: ErgoSettings): WalletStorage = openAt(settings, storageFolder(settings))
+
+  private[wallet] def openAt(settings: ErgoSettings, folder: File): WalletStorage = {
+    val db = LDBFactory.createKvDb(folder.getPath)
     new WalletStorage(db, settings)
   }
 

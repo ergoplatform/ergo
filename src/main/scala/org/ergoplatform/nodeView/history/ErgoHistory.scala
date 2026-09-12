@@ -294,6 +294,20 @@ object ErgoHistory extends ScorexLogging {
 
     repairIfNeeded(history)
 
+    // If the node is restarted in the middle of UTXO set snapshot bootstrapping (headers are
+    // already persisted, but the snapshot was not applied yet), the headers chain is already
+    // complete - via a NiPoPoW proof or via ordinary header sync - so mark it synced. Otherwise
+    // the synchronizer never asks for the snapshot manifest / block sections
+    // (ErgoNodeViewSynchronizer.requestMoreModifiers) and bootstrapping can never resume.
+    // Only the in-memory flag is set; no heights are written here (isUtxoSnapshotApplied is
+    // derived from the persisted minimalFullBlockHeight, which must stay untouched until the
+    // snapshot is actually applied).
+    if (nodeSettings.utxoSettings.utxoBootstrap &&
+        history.bestHeaderOpt.isDefined &&
+        !history.isUtxoSnapshotApplied) {
+      history.setHeadersChainSynced()
+    }
+
     log.info("History database read")
     if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
       context.system.eventStream.publish(StartExtraIndexer(history))

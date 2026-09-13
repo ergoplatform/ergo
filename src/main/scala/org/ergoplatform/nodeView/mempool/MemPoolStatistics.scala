@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.saturatingAdd
 
 
 /**
@@ -39,7 +40,7 @@ case class MemPoolStatistics(startMeasurement: Long,
     val durationMinutes = ((currTime - wtx.created) / (60 * 1000)).toInt
     val newHist =
       if (durationMinutes < MemPoolStatistics.nHistogramBins) {
-        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, histogram(durationMinutes).totalFee + wtx.feePerFactor)
+        val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, saturatingAdd(histogram(durationMinutes).totalFee, wtx.feePerFactor))
         histogram.updated(durationMinutes, FeeHistogramBin(histx, hisfee))
       } else {
         histogram

@@ -369,6 +369,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
           applyFromCacheLoop(headersCache)
 
+          // Newly accepted headers may unblock sections received before their headers.
+          applyFromCacheLoop(modifiersCache)
+
           val cleared = headersCache.cleanOverfull()
           val upd = BlockSectionsProcessingCacheUpdate(
             headersCache.size,

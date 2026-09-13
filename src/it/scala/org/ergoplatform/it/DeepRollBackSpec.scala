@@ -2,7 +2,7 @@ package org.ergoplatform.it
 
 import java.io.File
 import java.util.concurrent.TimeoutException
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
 import io.circe.Json
 import org.ergoplatform.it.api.NodeApi.{NodeInfo, nodeInfoDecoder}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -48,6 +48,42 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
     .withFallback(allowLocalConfig)
 
   private val observations = new ConvergenceObservations
+  private val seedObservations = new ConvergenceObservations
+  @volatile private var lastSeedObservation = "Initial seed has not been sampled"
+
+  private def waitForSettledSeed(
+    nodeA: Node,
+    nodeB: Node,
+    timeout: FiniteDuration
+  ): Future[(NodeInfo, NodeInfo)] = {
+    def infoProbe(node: Node): seedObservations.Probe[NodeInfo] =
+      seedObservations.probe(node.singleGet("/info", _.setRequestTimeout(5000)).map { response =>
+        require(response.getStatusCode == 200, "Unexpected seed observation status")
+        node.ergoJsonAnswerAs[NodeInfo](response.getResponseBody)
+      })
+
+    val probeA = infoProbe(nodeA)
+    val probeB = infoProbe(nodeB)
+    def describe(result: Either[String, NodeInfo]): String = result.fold(
+      error => s"errorClass=$error",
+      info => s"headersHeight=${info.bestHeaderHeightOpt}; fullHeight=${info.bestBlockHeightOpt}; " +
+        s"headerId=${info.bestHeaderIdOpt.map(ConvergenceObservations.headerId)}; " +
+        s"fullId=${info.bestBlockIdOpt.map(ConvergenceObservations.headerId)}; mining=${info.isMining}")
+    seedObservations.until(timeout.fromNow, 1.second, 5.seconds) { budget =>
+      probeA.sample(budget).zip(probeB.sample(budget)).map { pair =>
+        lastSeedObservation = s"A=${describe(pair._1)}; B=${describe(pair._2)}"
+        log.info(s"Initial shared-chain readiness: $lastSeedObservation")
+        pair
+      }
+    } {
+      case (Right(a), Right(b)) =>
+        ConvergenceObservations.sameFullyAppliedNonMiningBlock(a, b, ErgoHistoryUtils.GenesisHeight)
+      case _ => false
+    }(
+      s"Initial chain did not settle with mining disabled and matching full/header tips; $lastSeedObservation"
+    ).map { case (a, b) => (a.toOption.get, b.toOption.get) }
+  }
+
   private case class NodeSnapshot(info: Option[NodeInfo])
   private val probes = scala.collection.mutable.Map.empty[
     Node, (observations.Probe[NodeInfo], observations.Probe[Int])]
@@ -139,31 +175,38 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       val genesisAGen = Async.await(minerAGen.headerIdsByHeight(ErgoHistoryUtils.GenesisHeight)).head
       val genesisBGen = Async.await(minerBGen.headerIdsByHeight(ErgoHistoryUtils.GenesisHeight)).head
 
-      val minerAGenBestHeight = Async.await(minerAGen.fullHeight)
-      val minerBGenBestHeight = Async.await(minerBGen.fullHeight)
-
-      log.info("heightA: " + minerAGenBestHeight)
-      log.info("heightB: " + minerBGenBestHeight)
-
       genesisAGen shouldBe genesisBGen
       Async.await(observeNodes("initial shared chain", minerAGen, minerBGen))
 
-      // 2. Stop all nodes
+      // Freeze the producer while B can still retrieve every header's full block.
       docker.stopNode(minerAGen.containerId)
+      val minerASeed: Node = docker.startDevNetNode(minerAConfigNonGen,
+        specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
+      val (seedA, seedB) = Async.await(waitForSettledSeed(minerASeed, minerBGen, 2.minutes))
+      val seedHeight = seedA.bestBlockHeightOpt.get
+      require(seedHeight < chainLength,
+        s"Initial shared chain already reached $seedHeight; isolated node B must mine to $chainLength")
+      log.info(s"Settled shared chain: heightA=$seedHeight, heightB=${seedB.bestBlockHeightOpt.get}")
+
+      // 2. Stop the restarted A and B only after both have the complete shared seed.
+      docker.stopNode(minerASeed.containerId)
       docker.stopNode(minerBGen.containerId)
 
-      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, isolatedPeersConfig,
+      val minerAIsolated: Node = docker.startDevNetNode(DeepRollBackSpec.isolatedMiningConfig.withFallback(minerAConfig), isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
 
       // 1. Let nodeA mine `chainLength + delta` blocks in isolation
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
 
-      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, isolatedPeersConfig,
+      val minerBIsolated: Node = docker.startDevNetNode(DeepRollBackSpec.isolatedMiningConfig.withFallback(minerBConfig), isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
       Async.await(observeNodes("isolated miners started", minerAIsolated, minerBIsolated))
 
       // 2. Let nodeB mine `chainLength` blocks in isolation
       Async.await(minerBIsolated.waitForHeight(chainLength, 100.millis))
+
+      Async.await(minerAIsolated.connectedPeers) shouldBe empty
+      Async.await(minerBIsolated.connectedPeers) shouldBe empty
 
       log.info("Mining phase done")
 
@@ -208,11 +251,19 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       Await.result(result, 20.minutes)
     } catch {
       case error: TimeoutException =>
+        log.error(s"Deep rollback timed out; last initial-seed observation: $lastSeedObservation")
         log.error(s"Deep rollback timed out; last observation: $lastObservation")
         throw error
     } finally {
+      seedObservations.close()
       observations.close()
     }
   }
 
+}
+
+object DeepRollBackSpec {
+  // The retained peer database survives restarts. Disable automatic outgoing connections
+  // and incoming admission during mining; final restarts use the ordinary node configs.
+  private[it] val isolatedMiningConfig: Config = ConfigFactory.parseString("scorex.network.maxConnections = 0")
 }

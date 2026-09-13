@@ -423,7 +423,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
       if (shouldDrop) {
         connectedPeer.handlerRef ! CloseConnection
-        peerManagerRef ! RemovePeer(peerAddress)
+        peerManagerRef ! RemovePeer(remoteAddress)
         connections -= connectedPeer.connectionId.remoteAddress
       } else {
         val newPeerInfo = peerInfo.copy(lastStoredActivityTime = time())

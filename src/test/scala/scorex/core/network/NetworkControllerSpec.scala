@@ -3,8 +3,10 @@ package scorex.core.network
 import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
+import akka.util.ByteString
+import org.ergoplatform.network.{Handshake, HandshakeSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.{PeerInfo, SessionIdPeerFeature}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.core.app.ScorexContext
@@ -19,11 +21,16 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
+  // Additional silence observation after expected messages, not a synchronization delay.
+  private val noUnexpectedMessageWindow = 200.millis
+
   private class ControllerFixture extends AkkaFixture {
     implicit val ec = system.dispatcher
     implicit val actorSystem = system
 
     val scorexContext: ScorexContext = ScorexContext(Seq.empty, None, None)
+
+    case class EstablishedConnection(connectionProbe: TestProbe, handlerRef: ActorRef)
 
     def createController(maxConnections: Int): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
       val peerManagerProbe = TestProbe("PeerManager")
@@ -56,6 +63,33 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       peerManagerProbe: TestProbe,
       remoteAddress: InetSocketAddress
     ): InetSocketAddress = {
+      beginIncomingConnection(controller, peerManagerProbe, remoteAddress)
+      remoteAddress
+    }
+
+    def establishIncomingConnectionWithHandler(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): EstablishedConnection = {
+      val connectionProbe = beginIncomingConnection(
+        controller,
+        peerManagerProbe,
+        remoteAddress
+      )
+
+      val handlerRef = connectionProbe.expectMsgType[Tcp.Register].handler
+      connectionProbe.expectMsg(Tcp.ResumeReading)
+      connectionProbe.expectMsgType[Tcp.Write]
+
+      EstablishedConnection(connectionProbe, handlerRef)
+    }
+
+    private def beginIncomingConnection(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): TestProbe = {
       val localAddress = settings.scorexSettings.network.bindAddress
       val connectionProbe = TestProbe("Connection")
 
@@ -66,7 +100,7 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
           controller ! ConnectionConfirmed(ConnectionId(remoteAddress, localAddress, Incoming), handlerRef)
       }
 
-      remoteAddress
+      connectionProbe
     }
 
     def establishOutgoingConnection(
@@ -268,6 +302,118 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
       connectionProbe.send(controller, Tcp.Connected(remoteAddress, localAddress))
       connectionProbe.expectMsg(Tcp.Close)
+    }
+  }
+
+  property("rejected handshake should remove only the transport peer") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
+
+      val victimAddress = new InetSocketAddress("192.168.1.1", 9001)
+      val attackerAddress = new InetSocketAddress("192.168.1.2", 9002)
+      f.establishIncomingConnection(controller, peerManagerProbe, victimAddress)
+      val attackerConnection = f.establishIncomingConnectionWithHandler(
+        controller,
+        peerManagerProbe,
+        attackerAddress
+      )
+
+      val attackerHandshake = Handshake(
+        defaultPeerSpec.copy(declaredAddress = Some(victimAddress)),
+        System.currentTimeMillis()
+      )
+      attackerConnection.connectionProbe.send(
+        attackerConnection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(attackerHandshake)))
+      )
+
+      attackerConnection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManagerProbe.expectMsg(RemovePeer(attackerAddress))
+      attackerConnection.connectionProbe.expectMsg(Tcp.Abort)
+      peerManagerProbe.expectNoMessage(noUnexpectedMessageWindow)
+
+      // Invariant guard: the established transport must survive rejection.
+      // The RemovePeer assertion above detects the incorrect cleanup operand.
+      val localAddress = settings.scorexSettings.network.bindAddress
+      val duplicateVictimProbe = TestProbe("DuplicateVictim")
+      duplicateVictimProbe.send(controller, Tcp.Connected(victimAddress, localAddress))
+      duplicateVictimProbe.expectMsg(Tcp.Close)
+
+      val attackerReconnectProbe = TestProbe("AttackerReconnect")
+      attackerReconnectProbe.send(controller, Tcp.Connected(attackerAddress, localAddress))
+      peerManagerProbe.expectMsgPF(1.second) {
+        case ConfirmConnection(connectionId, connectionRef) =>
+          connectionId.remoteAddress shouldBe attackerAddress
+          connectionRef shouldBe attackerReconnectProbe.ref
+      }
+    }
+  }
+
+  property("rejected handshake should preserve an established peer with a different declared identity") {
+    withFixture { f =>
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
+
+      val victimAddress = new InetSocketAddress("192.168.1.1", 9001)
+      val declaredIdentity = new InetSocketAddress("192.168.1.3", 9003)
+      val attackerAddress = new InetSocketAddress("192.168.1.2", 9002)
+      val victimConnection = f.establishIncomingConnectionWithHandler(controller, peerManagerProbe, victimAddress)
+      val victimSpec = defaultPeerSpec.copy(declaredAddress = Some(declaredIdentity))
+      victimConnection.connectionProbe.send(
+        victimConnection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(Handshake(victimSpec, System.currentTimeMillis()))))
+      )
+      victimConnection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManagerProbe.expectMsgPF() {
+        case AddOrUpdatePeer(peerInfo) => peerInfo.peerSpec shouldBe victimSpec
+      }
+
+      val attackerConnection = f.establishIncomingConnectionWithHandler(controller, peerManagerProbe, attackerAddress)
+      attackerConnection.connectionProbe.send(
+        attackerConnection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(Handshake(victimSpec, System.currentTimeMillis()))))
+      )
+      attackerConnection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManagerProbe.expectMsg(RemovePeer(attackerAddress))
+      attackerConnection.connectionProbe.expectMsg(Tcp.Abort)
+      peerManagerProbe.expectNoMessage(noUnexpectedMessageWindow)
+
+      // Invariant guard; this established connection was also preserved before the fix.
+      val observer = TestProbe("ConnectedPeers")(f.system)
+      observer.send(controller, NetworkController.ReceivableMessages.GetConnectedPeers)
+      val remaining = observer.expectMsgType[Iterable[ConnectedPeer]].toSeq
+      remaining.map(_.connectionId.remoteAddress) shouldBe Seq(victimAddress)
+      remaining.head.peerInfo.map(_.peerSpec) shouldBe Some(victimSpec)
+      victimConnection.connectionProbe.expectNoMessage(noUnexpectedMessageWindow)
+    }
+  }
+
+  property("foreign-network handshake should not remove an unconnected declared identity") {
+    withFixture { f =>
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
+      val remoteAddress = new InetSocketAddress("192.0.2.1", 40001)
+      val declaredAddress = new InetSocketAddress("192.0.2.2", 9030)
+      val connection = f.establishIncomingConnectionWithHandler(controller, peerManagerProbe, remoteAddress)
+      val foreignMagic = settings.scorexSettings.network.magicBytes.clone()
+      foreignMagic(0) = (foreignMagic(0) ^ 1).toByte
+      val foreignSpec = defaultPeerSpec.copy(
+        declaredAddress = Some(declaredAddress),
+        features = Seq(SessionIdPeerFeature(foreignMagic, 1L))
+      )
+
+      // No prior connection is needed: the serialized foreign-network feature causes rejection.
+      connection.connectionProbe.send(
+        connection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(Handshake(foreignSpec, System.currentTimeMillis()))))
+      )
+      connection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManagerProbe.expectMsg(RemovePeer(remoteAddress))
+      connection.connectionProbe.expectMsg(Tcp.Abort)
+      peerManagerProbe.expectNoMessage(noUnexpectedMessageWindow)
+
+      val observer = TestProbe("ConnectedPeers")(f.system)
+      observer.send(controller, NetworkController.ReceivableMessages.GetConnectedPeers)
+      observer.expectMsgType[Iterable[ConnectedPeer]] shouldBe empty
     }
   }
 

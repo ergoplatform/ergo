@@ -159,7 +159,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
           upcomingContext,
           Seq(head)
         )
-        ._1
+        ._2
       fromSmallMempool.size shouldBe 2
       fromSmallMempool.contains(head) shouldBe true
 
@@ -172,7 +172,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
           upcomingContext,
           txsWithFees
         )
-        ._1
+        ._2
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Int] = fromBigMempool.map { tx =>
@@ -265,7 +265,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         defaultMinerPk,
         emptyStateContext
       )
-      txs.length shouldBe 2
+      val feeBoxes = blockTxs.flatMap(_.outputs)
+      val chunkSize = CandidateGenerator.MaxFeeBoxesPerTransaction
+      txs.length shouldBe 1 + (feeBoxes.size + chunkSize - 1) / chunkSize
 
       val emissionTx = txs.head
       emissionTx.outputs.length shouldBe 2
@@ -274,12 +276,16 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         defaultMinerPk
       )
 
-      val feeTx = txs.last
-      feeTx.outputs.length shouldBe 1
-      feeTx.outputs.head.value shouldBe blockTxs.flatMap(_.outputs).map(_.value).sum
-      feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(
-        defaultMinerPk
-      )
+      val feeTxs = txs.tail
+      feeTxs.foreach { feeTx =>
+        feeTx.inputs.length should be <= chunkSize
+        feeTx.outputs.length shouldBe 1
+        feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
+      }
+      feeTxs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
+      val spent = feeTxs.flatMap(_.inputs).map(in => in.boxId.toSeq)
+      spent.distinct.size shouldBe spent.size
+      spent.toSet shouldBe feeBoxes.map(_.id.toSeq).toSet
     }
   }
 
@@ -320,7 +326,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     // Verify we collected some transactions
-    result._1.length should be > 0
+    result._1 shouldBe empty
+    result._2.length should be > 0
     // Invalid transactions should be tracked
     result._3.length should be >= 0
   }
@@ -429,6 +436,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     invalid shouldBe empty
+    inputCollected shouldBe empty
     (inputCollected ++ orderingCollected) should contain theSameElementsAs zeroFeeTxs
   }
 
@@ -505,11 +513,12 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     // At least tx3 should be included (non-conflicting)
-    result._1.exists(_.id sameElements tx3.id) shouldBe true
+    result._1 shouldBe empty
+    result._2.exists(_.id sameElements tx3.id) shouldBe true
     
     // At most 2 transactions should be included (one of tx1/tx2, plus tx3)
-    result._1.length should be <= 2
-    result._1.length should be >= 1
+    result._2.length should be <= 2
+    result._2.length should be >= 1
 
     // At least one of the conflicting txs should be in invalid list (result._3)
     // Both result._3 and tx.id are ModifierId (String type)
@@ -561,7 +570,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     // Valid transaction should be collected
-    result._1.exists(_.id sameElements validTx.id) shouldBe true
+    result._1 shouldBe empty
+    result._2.exists(_.id sameElements validTx.id) shouldBe true
     // Invalid transaction should be in the invalid list (result._3)
     result._3.contains(invalidTx.id) shouldBe true
   }
@@ -640,11 +650,12 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     // Should have collected some transactions but not all
-    result._1.length should be > 0
-    result._1.length should be < manyTxs.length
+    result._1 shouldBe empty
+    result._2.length should be > 0
+    result._2.length should be < manyTxs.length
 
     // Verify total cost doesn't exceed limit
-    val totalCost = result._1.map { tx =>
+    val totalCost = result._2.map { tx =>
       us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier), true).getOrElse(0)
     }.sum
 
@@ -690,11 +701,12 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     // Should have collected some transactions but not all
-    result._1.length should be > 0
-    result._1.length should be < manyTxs.length
+    result._1 shouldBe empty
+    result._2.length should be > 0
+    result._2.length should be < manyTxs.length
 
     // Verify total size doesn't exceed limit
-    val totalSize = result._1.map(_.size).sum
+    val totalSize = result._2.map(_.size).sum
     totalSize should be <= smallSizeLimit
   }
 
@@ -740,7 +752,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     // Should collect all valid transactions
-    validTxs.foreach(tx => result._1.exists(_.id sameElements tx.id) shouldEqual true)
+    result._1 shouldBe empty
+    validTxs.foreach(tx => result._2.exists(_.id sameElements tx.id) shouldEqual true)
 
     // At least one double-spend should be in invalid list (result._3)
     result._3.length should be >= 1

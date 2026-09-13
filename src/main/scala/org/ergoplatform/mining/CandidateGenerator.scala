@@ -933,12 +933,17 @@ object CandidateGenerator extends ScorexLogging {
   ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
     if (!candidates.hasNext) Seq.empty -> Seq.empty
     else {
-      val candidate = candidates.next()
-      val txs = candidate._1
-      (if (txs.isEmpty) Success(true) else candidateSizeWithinLimit(txs, blockVersion, maxBlockSize)) match {
-        case Success(true) => candidate
-        case result =>
-          log.warn(s"Cannot return transaction section ($result); restoring the previous accepted prefix")
+      Try(candidates.next()).flatMap { candidate =>
+        val txs = candidate._1
+        (if (txs.isEmpty) Success(true) else candidateSizeWithinLimit(txs, blockVersion, maxBlockSize))
+          .map(withinLimit => candidate -> withinLimit)
+      } match {
+        case Success((candidate, true)) => candidate
+        case Success((_, false)) =>
+          log.debug("Transaction section exceeds the size limit; restoring the previous accepted prefix")
+          checkedCandidate(candidates, blockVersion, maxBlockSize)
+        case Failure(e) =>
+          log.warn("Cannot reconstruct or measure transaction section; restoring the previous accepted prefix", e)
           checkedCandidate(candidates, blockVersion, maxBlockSize)
       }
     }
@@ -986,21 +991,29 @@ object CandidateGenerator extends ScorexLogging {
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
 
+    type FeeRecipe = () => ErgoTransaction
+    type CandidateSnapshot = (Seq[CostedTransaction], Option[FeeRecipe], Seq[ModifierId])
+
+    def feeRecipe(prefix: Seq[CostedTransaction]): FeeRecipe = () =>
+      collectFees(currentHeight, prefix.map(_._1), minerPk, upcomingContext)
+        .getOrElse(throw new IllegalStateException("Accepted prefix no longer produces its fee transaction"))
+
     @tailrec
     def loop(
               mempoolTxs: Iterable[ErgoTransaction],
               acc: Seq[CostedTransaction],
               accSize: Long,
               lastFeeTx: Option[CostedTransaction],
+              lastFeeRecipe: Option[FeeRecipe],
               invalidTxs: Seq[ModifierId],
-              previousCandidates: List[(Seq[CostedTransaction], Seq[ModifierId])]
+              previousCandidates: List[CandidateSnapshot]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
       val currentCosted = acc ++ lastFeeTx
       def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
       def finish: (Seq[ErgoTransaction], Seq[ModifierId]) =
-        checkedCandidate(((currentCosted -> invalidTxs) :: previousCandidates).iterator.map {
-          case (txs, invalid) => txs.map(_._1) -> invalid
+        checkedCandidate(Iterator(current -> invalidTxs) ++ previousCandidates.iterator.map {
+          case (txs, fee, invalid) => (txs.map(_._1) ++ fee.map(_())) -> invalid
         }, blockVersion, maxBlockSize)
 
       val stateWithTxs = us.withTransactions(current)
@@ -1011,7 +1024,7 @@ object CandidateGenerator extends ScorexLogging {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, accSize, lastFeeTx, invalidTxs :+ tx.id, previousCandidates)
+            loop(mempoolTxs.tail, acc, accSize, lastFeeTx, lastFeeRecipe, invalidTxs :+ tx.id, previousCandidates)
           } else {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
@@ -1040,8 +1053,8 @@ object CandidateGenerator extends ScorexLogging {
                             def sectionSize: Long = BlockTransactionsSerializer.sectionSize(blockVersion, blockTxs.size,
                               newSize + BlockTransactionsSerializer.transactionSize(feeTx, blockVersion))
                             if (correctLimits(blockTxs, maxBlockCost, maxBlockSize, sectionSize)) {
-                              loop(mempoolTxs.tail, newTxs, newSize, Some(feeTx -> cost), invalidTxs,
-                                (currentCosted -> invalidTxs) :: previousCandidates)
+                              loop(mempoolTxs.tail, newTxs, newSize, Some(feeTx -> cost), Some(feeRecipe(newTxs)), invalidTxs,
+                                (acc, lastFeeRecipe, invalidTxs) :: previousCandidates)
                             } else {
                               log.debug(s"Finishing block assembly on limits overflow, " +
                                         s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
@@ -1061,8 +1074,8 @@ object CandidateGenerator extends ScorexLogging {
                           BlockTransactionsSerializer.transactionSize(t._1, blockVersion)).getOrElse(0)
                         def sectionSize: Long = BlockTransactionsSerializer.sectionSize(blockVersion, blockTxs.size, blockPayloadSize)
                         if (correctLimits(blockTxs, maxBlockCost, maxBlockSize, sectionSize)) {
-                          loop(mempoolTxs.tail, blockTxs, blockPayloadSize, lastFeeTx, invalidTxs,
-                            (currentCosted -> invalidTxs) :: previousCandidates)
+                          loop(mempoolTxs.tail, blockTxs, blockPayloadSize, lastFeeTx, lastFeeRecipe, invalidTxs,
+                            (acc, lastFeeRecipe, invalidTxs) :: previousCandidates)
                         } else {
                           finish
                         }
@@ -1070,7 +1083,7 @@ object CandidateGenerator extends ScorexLogging {
                 }
               case Failure(e) =>
                 log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, accSize, lastFeeTx, invalidTxs :+ tx.id, previousCandidates)
+                loop(mempoolTxs.tail, acc, accSize, lastFeeTx, lastFeeRecipe, invalidTxs :+ tx.id, previousCandidates)
             }
           }
         case None => // mempool is empty
@@ -1078,8 +1091,9 @@ object CandidateGenerator extends ScorexLogging {
       }
     }
 
-    // Vector prefixes share their storage; retaining fallback snapshots must not retain quadratic copies.
-    val res = loop(transactions, Vector.empty, 0L, None, Seq.empty, Nil)
+    // Share accepted Vector prefixes and reconstruct historical fee transactions only during recovery.
+    // Retaining every growing fee transaction would keep quadratic numbers of fee inputs alive.
+    val res = loop(transactions, Vector.empty, 0L, None, None, Seq.empty, Nil)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

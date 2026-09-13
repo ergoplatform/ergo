@@ -101,7 +101,12 @@ object BlockTransactions extends ApiCodecs {
 
   val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactionsTypeId.value
 
-  /** Complete wire size, measured by the section writer in its existing block-version context. */
+  /**
+    * Complete wire size, measured by the section writer in its existing block-version context.
+    *
+    * @param txs nonempty transaction sequence, as required by [[BlockTransactions]]
+    * @throws AssertionError if `txs` is empty
+    */
   def sizeOf(txs: Seq[ErgoTransaction], blockVersion: Version): Int =
     BlockTransactions(Header.GenesisParentId, blockVersion, txs).bytes.length
 

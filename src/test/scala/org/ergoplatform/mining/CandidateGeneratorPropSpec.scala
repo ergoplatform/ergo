@@ -337,19 +337,52 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         txs.take(1), defaultMinerPk, context).get
       CandidateGenerator.checkedCandidate(Iterator(complete -> Seq.empty, prefix -> Seq.empty),
         1.toByte, limit - 1)._1 shouldBe empty
+
+      var reconstructed = 0
+      val retainedConflict = txs.head.id
+      def previousCandidates: Iterator[(Seq[ErgoTransaction], Seq[ModifierId])] =
+        Iterator[() => (Seq[ErgoTransaction], Seq[ModifierId])](
+          () => {
+            reconstructed += 1
+            throw new IllegalStateException("Previous fee reconstruction unavailable")
+          },
+          () => {
+            reconstructed += 1
+            prefix -> Seq(retainedConflict)
+          }
+        ).map(_())
+
+      val unchanged = CandidateGenerator.checkedCandidate(
+        Iterator(complete -> Seq(discardedConflict)) ++ previousCandidates, 1.toByte, Int.MaxValue)
+      unchanged shouldBe (complete -> Seq(discardedConflict))
+      reconstructed shouldBe 0
+
+      val recovered = CandidateGenerator.checkedCandidate(
+        Iterator(complete -> Seq(discardedConflict)) ++ previousCandidates, 1.toByte, limit)
+      reconstructed shouldBe 2
+      recovered._2 shouldBe Seq(retainedConflict)
+      BlockTransactions.sizeOf(recovered._1, 1.toByte) shouldBe limit
+      BlockTransactions(bytesToId(Array.fill(32)(0.toByte)), 1.toByte, recovered._1).bytes shouldBe
+        BlockTransactions(bytesToId(Array.fill(32)(0.toByte)), 1.toByte, prefix).bytes
+
+      reconstructed = 0
+      CandidateGenerator.checkedCandidate(previousCandidates, 1.toByte, limit - 1) shouldBe
+        (Seq.empty -> Seq.empty)
+      reconstructed shouldBe 2
     } finally us.store.close()
   }
 
   property("collection restores the prior fee prefix when incremental or final writing fails") {
-    for (incrementalFailure <- Seq(true, false)) {
+    for (incrementalFailure <- Seq(true, false); withFees <- Seq(false, true)) {
       val bh = boxesHolderGen.sample.get
       val base = createUtxoState(bh, parameters)
       var failSerialization = false
       try {
         val inputs = bh.boxes.values.filter(_.value >= BoxUtils.sufficientAmount(parameters) * 2).take(2).toIndexedSeq
         inputs.size shouldBe 2
-        val first = validTransactionFromBoxes(IndexedSeq(inputs.head), outputsProposition = feeProp)
-        val original = validTransactionFromBoxes(IndexedSeq(inputs.last), outputsProposition = feeProp)
+        val proposition = if (withFees) feeProp else sigma.ast.ErgoTree.fromSigmaBoolean(sigma.data.TrivialProp.TrueProp)
+        val first = validTransactionFromBoxes(IndexedSeq(inputs.head), outputsProposition = proposition)
+        val original = validTransactionFromBoxes(IndexedSeq(inputs.last), outputsProposition = proposition)
         val guardedOutputs = new IndexedSeq[ErgoBoxCandidate] {
           override def length: Int = original.outputCandidates.length
           override def apply(index: Int): ErgoBoxCandidate = {
@@ -382,8 +415,10 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         val (selected, eliminated) = CandidateGenerator.collectTxs(defaultMinerPk, Int.MaxValue, Int.MaxValue,
           state, context, Seq(first, last, missing))
         failSerialization shouldBe true
-        selected shouldBe Seq(first, CandidateGenerator.collectFees(base.stateContext.currentHeight,
-          Seq(first), defaultMinerPk, context).get)
+        val expectedFee = CandidateGenerator.collectFees(base.stateContext.currentHeight,
+          Seq(first), defaultMinerPk, context)
+        expectedFee.isDefined shouldBe withFees
+        selected shouldBe (Seq(first) ++ expectedFee)
         eliminated shouldBe empty
       } finally base.store.close()
     }

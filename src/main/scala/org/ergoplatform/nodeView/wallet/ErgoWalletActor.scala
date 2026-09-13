@@ -437,8 +437,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case AddBox(box: ErgoBox, scanIds: Set[ScanId]) =>
-      state.registry.updateScans(scanIds, box)
-      sender() ! AddBoxResponse(Success(())) // todo: what is the reasoning behind returning always success?
+      sender() ! AddBoxResponse(state.registry.updateScans(scanIds, box))
 
     case StopTracking(scanId: ScanId, boxId: BoxId) =>
       sender() ! StopTrackingResponse(state.registry.removeScan(boxId, scanId))

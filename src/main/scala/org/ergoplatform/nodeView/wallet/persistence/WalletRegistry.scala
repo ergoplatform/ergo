@@ -255,20 +255,35 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param scanResults - block scan data (outputs created and spent along with corresponding transactions)
     * @param blockId     - block identifier
     * @param blockHeight - block height
+    * @param maturedBoxes - preceding versions of mining rewards resolved in scanResults.outputs
     */
-  def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
+  def updateOnBlock(scanResults: ScanResults,
+                    blockId: ModifierId,
+                    blockHeight: Int,
+                    maturedBoxes: Seq[TrackedBox] = Seq.empty): Try[Unit] = {
 
+    // Resolve mining associations in the same checkpoint as this block's outputs and spends.
+    val maturityBag = removeBoxes(KeyValuePairsBag.empty, maturedBoxes)
     // first, put newly created outputs and related transactions into key-value bag
-    cache ++= scanResults.outputs.map(b => b.boxId -> b)
-    val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+    // An output may have been registered before its creating block was scanned.
+    val bag0 = scanResults.outputs.foldLeft(maturityBag) { (bag, output) =>
+      getBox(output.box.id).map(previous => removeBox(bag, previous)).getOrElse(bag)
+    }
+    val bag1 = putBoxes(bag0, scanResults.outputs)
     val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
     // process spent boxes
     val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
     val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
+    // A shared reward can already belong to payments; its assets are already in the digest.
+    val previouslyWalletBoxIds = maturedBoxes.filter(_.scans.contains(PaymentsScanId)).map(_.boxId).toSet
+    val receivedWalletBoxes = scanResults.outputs.filter { tb =>
+      tb.scans.contains(PaymentsScanId) && !previouslyWalletBoxIds.contains(tb.boxId)
+    }
+
     // and update wallet digest
-    updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
+    val result = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -279,7 +294,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
+      val receivedTokensAmt = receivedWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -301,7 +316,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
           }
         }
 
-      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
+      val receivedAmt = receivedWalletBoxes.map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
         Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
@@ -310,6 +325,10 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     }.flatMap { bag4 =>
       bag4.transact(store, idToBytes(blockId))
     }
+    // Reload affected boxes from storage after either outcome; never expose a prepared batch.
+    cache --= scanResults.outputs.map(_.boxId)
+    cache --= scanResults.inputsSpent.map(_.trackedBox.boxId)
+    result
   }
 
   def rollback(version: VersionTag): Try[Unit] = {
@@ -323,21 +342,24 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   private[persistence] def processSpentBoxes(bag: KeyValuePairsBag,
                                              spentBoxes: Seq[(ModifierId, TrackedBox)],
                                              spendingHeight: Int): KeyValuePairsBag = {
-    if (keepHistory) {
-      val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
-        getBox(tb.box.id).orElse {
-          bag.toInsert.find(_._1.sameElements(boxKey(tb))).flatMap { case (_, tbBytes) =>
-            TrackedBoxSerializer.parseBytesTry(tbBytes).toOption
-          } match {
-            case s@Some(_) => s
-            case None =>
-              log.warn(s"Output spent hasn't found in the wallet: ${Algos.encode(tb.box.id)}, " +
-                s"could be okay if it was created before wallet init")
-              None
-          }
-        }: Option[TrackedBox]
+    val outSpent: Seq[TrackedBox] = spentBoxes.flatMap { case (_, tb) =>
+      // The current block's output metadata takes precedence over an earlier registration.
+      bag.toInsert.find(_._1.sameElements(boxKey(tb))).flatMap { case (_, tbBytes) =>
+        TrackedBoxSerializer.parseBytesTry(tbBytes).toOption
+      }.orElse(getBox(tb.box.id)) match {
+        case s@Some(_) => s
+        case None =>
+          log.warn(s"Output spent hasn't found in the wallet: ${Algos.encode(tb.box.id)}, " +
+            s"could be okay if it was created before wallet init")
+          None
       }
+    }
+    val removalBoxes = spentBoxes.map { case (_, tb) =>
+      outSpent.find(_.boxId == tb.boxId).getOrElse(tb)
+    }
+    val bagBeforePut = removeBoxes(bag, removalBoxes)
 
+    if (keepHistory) {
       val updatedBoxes = outSpent.map { tb =>
         val spendingTxIdOpt = spentBoxes
           .find { case (_, x) => x.box.id.sameElements(tb.box.id) }
@@ -345,13 +367,9 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         tb.copy(spendingHeightOpt = Some(spendingHeight), spendingTxIdOpt = spendingTxIdOpt)
       }
 
-      cache --= spentBoxes.map(_._2.boxId)
-      val bagBeforePut = removeBoxes(bag, spentBoxes.map(_._2))
-      cache ++= updatedBoxes.map(b => b.boxId -> b)
       putBoxes(bagBeforePut, updatedBoxes)
     } else {
-      cache --= spentBoxes.map(_._2.boxId)
-      removeBoxes(bag, spentBoxes.map(_._2))
+      bagBeforePut
     }
   }
 
@@ -364,36 +382,41 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param box - box to be updated (new version)
     * @return
     */
-  def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = Try {
+  def updateScans(newScans: Set[ScanId], box: ErgoBox): Try[Unit] = {
+    val result = prepareScanUpdate(newScans, box).flatMap { bag =>
+      bag.transact(store, store.lastVersionID.getOrElse(scorex.util.Random.randomBytes(32)))
+    }
+    cache.remove(bytesToId(box.id))
+    result
+  }
+
+  private def prepareScanUpdate(newScans: Set[ScanId], box: ErgoBox): Try[KeyValuePairsBag] = Try {
     val bag0 = KeyValuePairsBag.empty
     val oldBox = getBox(box.id) // read old version from the database
     val oldScans = oldBox.map(_.scans).getOrElse(Set.empty)
 
-    val newBox = TrackedBox(box, box.creationHeight, newScans)
+    val newBox = oldBox.map(_.copy(scans = newScans))
+      .getOrElse(TrackedBox(box, box.creationHeight, newScans))
 
     val bag1 = (oldScans.isEmpty, newScans.isEmpty) match {
       case (false, false) =>
         // replace scans of the box by removing it along with indexes related to old scans,
         // and then adding the box with indexes related to the new scans
-        cache.update(oldBox.get.boxId, newBox)
         putBox(removeBox(bag0, oldBox.get), newBox)
       case (false, true) =>
         // if new scans are empty, remove the box along with indexes
-        cache.remove(oldBox.get.boxId)
         removeBox(bag0, oldBox.get)
       case (true, false) =>
         // if old scans are empty, add the box along with indexes
-        cache.put(newBox.boxId, newBox)
         putBox(bag0, newBox)
       case (true, true) =>
         //old and new scans are empty, can't do anything useful
         throw new Exception("Can't remove a box which does not exist")
     }
 
-    // Flag showing that box has been added to the payments app (p2pk-wallet) or removed from it
-    // If true, we need to update wallet digest
-    val digestChanged = (oldScans.contains(Constants.PaymentsScanId) || newScans.contains(Constants.PaymentsScanId)) &&
-                        !(oldScans.contains(Constants.PaymentsScanId) && newScans.contains(Constants.PaymentsScanId))
+    // Only unspent boxes contribute assets when their payment association changes.
+    val digestChanged = !newBox.isSpent &&
+      (oldScans.contains(Constants.PaymentsScanId) != newScans.contains(Constants.PaymentsScanId))
 
     val bag2 = if (digestChanged) {
       val digest = fetchDigest()
@@ -422,7 +445,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
       bag1
     }
 
-    bag2.transact(store, store.lastVersionID.getOrElse(scorex.util.Random.randomBytes(32)))
+    bag2
   }
 
   /**

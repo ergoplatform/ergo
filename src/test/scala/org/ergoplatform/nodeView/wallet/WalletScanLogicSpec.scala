@@ -8,10 +8,15 @@ import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletReg
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
+import org.ergoplatform.wallet.boxes.TrackedBox
+import org.ergoplatform.core.VersionTag
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
 import sigma.ast.{ByteArrayConstant, ErgoTree}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
+import scorex.util.bytesToId
+import sigma.Colls
+import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.util.Random
 
@@ -118,6 +123,123 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
       val lowDustLimit = Some(1L)
       val foundBoxes2 = extractWalletOutputs(trackedTransaction.tx, inclusionHeightOpt, walletVars, lowDustLimit)
       foundBoxes2.forall(_.value > 1) shouldBe true
+    }
+  }
+
+  private def withMiningReward(scans: Set[ScanId], keepSpent: Boolean = true)
+                             (check: (WalletRegistry, WalletVars, TrackedBox, VersionTag) => Unit): Unit = {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings.copy(keepSpentBoxes = keepSpent))
+      val walletVars = WalletVars(None, Seq.empty, Some(WalletCache(pubkeys, s)))(s)
+      val tokens = Colls.fromItems(Array.fill[Byte](32)(1).toTokenId -> 7L)
+      val output = new ErgoBoxCandidate(1000L, miningScripts.head, creationHeight = 1, additionalTokens = tokens)
+      val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, IndexedSeq(output))
+      val reward = TrackedBox(tx.id, 0, Some(1), None, None, tx.outputs.head, scans)
+      val previousId = bytesToId(versionId("before maturity"))
+      registry.updateOnBlock(WalletScanLogic.ScanResults(Seq(reward), Seq.empty, Seq.empty), previousId, 720).get
+      check(registry, walletVars, reward, VersionTag @@ previousId.toString)
+    }
+  }
+
+  private def scanMaturityBlock(registry: WalletRegistry, walletVars: WalletVars,
+                                transactions: Seq[ErgoTransaction] = Seq.empty): Unit = {
+    scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 721,
+      bytesToId(versionId("maturity block")), transactions, None, None, WalletProfile.User).get
+  }
+
+  property("mining maturity leaves an immature reward unchanged") {
+    withMiningReward(Set(Constants.MiningScanId)) { (registry, walletVars, reward, _) =>
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 720,
+        bytesToId(versionId("immature block")), Seq.empty, None, None, WalletProfile.User).get
+      registry.getBox(reward.box.id) shouldBe Some(reward)
+      registry.walletUnspentBoxes() shouldBe empty
+      registry.fetchDigest().walletBalance shouldBe 0L
+      registry.fetchDigest().walletAssetBalances shouldBe empty
+    }
+  }
+
+  Seq(false, true).foreach { shared =>
+    val originalScans = if (shared) Set(Constants.MiningScanId, scanId) else Set(Constants.MiningScanId)
+    val resolvedScans = originalScans - Constants.MiningScanId + Constants.PaymentsScanId
+
+    property(s"mining maturity preserves unspent reward associations and assets (shared=$shared)") {
+      withMiningReward(originalScans) { (registry, walletVars, reward, _) =>
+        scanMaturityBlock(registry, walletVars)
+        registry.getBox(reward.box.id) shouldBe Some(reward.copy(scans = resolvedScans))
+        registry.getBox(reward.box.id).get.scans shouldBe resolvedScans
+        registry.getBox(reward.box.id).get.inclusionHeightOpt shouldBe reward.inclusionHeightOpt
+        registry.unspentBoxes(Constants.MiningScanId) shouldBe empty
+        registry.boxesByInclusionHeight(Constants.MiningScanId, 0, 721) shouldBe empty
+        registry.walletUnspentBoxes().map(_.boxId) shouldBe Seq(reward.boxId)
+        if (shared) registry.unspentBoxes(scanId).map(_.boxId) shouldBe Seq(reward.boxId)
+        registry.fetchDigest().walletBalance shouldBe reward.value
+        registry.fetchDigest().walletAssetBalances.toMap shouldBe
+          Map(IdUtils.encodedTokenId(reward.box.additionalTokens(0)._1) -> 7L)
+      }
+    }
+
+    Seq(false, true).foreach { keepSpent =>
+      property(s"mining maturity recognizes current block spending (shared=$shared, history=$keepSpent)") {
+        withMiningReward(originalScans, keepSpent) { (registry, walletVars, reward, _) =>
+          val spendingTx = new ErgoTransaction(IndexedSeq(Input(reward.box.id, emptyProverResult)),
+            IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(reward.value, FalseTree, 721,
+              reward.box.additionalTokens)))
+          scanMaturityBlock(registry, walletVars, Seq(spendingTx))
+          registry.walletUnspentBoxes() shouldBe empty
+          registry.unspentBoxes(Constants.MiningScanId) shouldBe empty
+          registry.unspentBoxes(scanId) shouldBe empty
+          registry.fetchDigest().walletBalance shouldBe 0L
+          registry.fetchDigest().walletAssetBalances shouldBe empty
+          registry.getTx(spendingTx.id).get.scanIds.toSet shouldBe resolvedScans
+          val expected = if (keepSpent) Some(reward.copy(scans = resolvedScans,
+            spendingHeightOpt = Some(721), spendingTxIdOpt = Some(spendingTx.id))) else None
+          registry.getBox(reward.box.id) shouldBe expected
+          expected.foreach { tb =>
+            val stored = registry.getBox(reward.box.id).get
+            stored.scans shouldBe tb.scans
+            stored.inclusionHeightOpt shouldBe tb.inclusionHeightOpt
+            stored.spendingHeightOpt shouldBe tb.spendingHeightOpt
+            stored.spendingTxIdOpt shouldBe tb.spendingTxIdOpt
+          }
+          registry.walletSpentBoxes().map(_.boxId) shouldBe expected.toSeq.map(_.boxId)
+          if (shared) registry.spentBoxes(scanId).map(_.boxId) shouldBe expected.toSeq.map(_.boxId)
+        }
+      }
+    }
+
+    Seq(false, true).foreach { spent =>
+      property(s"mining maturity rollback restores preceding state (shared=$shared, spent=$spent)") {
+        withMiningReward(originalScans) { (registry, walletVars, reward, previousVersion) =>
+          val previousDigest = registry.fetchDigest()
+          val transactions = if (spent) Seq(new ErgoTransaction(
+            IndexedSeq(Input(reward.box.id, emptyProverResult)), IndexedSeq.empty,
+            IndexedSeq(new ErgoBoxCandidate(reward.value, FalseTree, 721, reward.box.additionalTokens))))
+          else Seq.empty
+          scanMaturityBlock(registry, walletVars, transactions)
+          registry.rollback(previousVersion).get
+          registry.getBox(reward.box.id) shouldBe Some(reward)
+          registry.getBox(reward.box.id).get.scans shouldBe originalScans
+          registry.getBox(reward.box.id).get.inclusionHeightOpt shouldBe reward.inclusionHeightOpt
+          registry.getBox(reward.box.id).get.spendingHeightOpt shouldBe None
+          registry.getBox(reward.box.id).get.spendingTxIdOpt shouldBe None
+          registry.unspentBoxes(Constants.MiningScanId) shouldBe Seq(reward)
+          registry.walletUnspentBoxes() shouldBe empty
+          registry.walletSpentBoxes() shouldBe empty
+          if (shared) registry.unspentBoxes(scanId) shouldBe Seq(reward)
+          registry.fetchDigest() shouldBe previousDigest
+          transactions.foreach(tx => registry.getTx(tx.id) shouldBe None)
+        }
+      }
+    }
+  }
+
+  property("mining maturity does not credit an existing payment association twice") {
+    withMiningReward(Set(Constants.MiningScanId, Constants.PaymentsScanId, scanId)) {
+      (registry, walletVars, reward, _) =>
+        val previousDigest = registry.fetchDigest()
+        scanMaturityBlock(registry, walletVars)
+        registry.fetchDigest() shouldBe previousDigest.copy(height = 721)
+        registry.getBox(reward.box.id).get.scans shouldBe Set(Constants.PaymentsScanId, scanId)
     }
   }
 

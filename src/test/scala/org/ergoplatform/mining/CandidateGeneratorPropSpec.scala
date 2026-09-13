@@ -1,17 +1,20 @@
 package org.ergoplatform.mining
 
-import org.ergoplatform.ErgoTreePredef
+import org.ergoplatform.{ErgoBoxCandidate, ErgoTreePredef}
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
-import org.ergoplatform.nodeView.state.ErgoStateContext
-import org.ergoplatform.settings.MonetarySettings
-import org.ergoplatform.utils.{BoxUtils, ErgoCorePropertyTest, RandomWrapper}
+import org.ergoplatform.nodeView.state.{ErgoStateContext, StateType, UtxoState}
+import org.ergoplatform.settings.{MonetarySettings, Parameters}
+import org.ergoplatform.utils.{BoxUtils, ErgoCorePropertyTest, HistoryTestHelpers, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.scalacheck.Gen
 import scorex.util.{ModifierId, bytesToId}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import sigma.data.ProveDlog
 
 import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -183,7 +186,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       }
 
       fromBigMempool.length should be > 2
-      fromBigMempool.map(_.size).sum should be < maxSize
+      BlockTransactions(h.id, h.version, fromBigMempool).bytes.length should be <= maxSize
       costs.sum should be < maxCost
       if (!withTokens) fromBigMempool.size should be < txsWithFees.size
     }
@@ -197,6 +200,228 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     // miner collects correct transactions from mempool even if they have tokens
     checkCollectTxs(Int.MaxValue, Int.MaxValue, withTokens = true)
 
+  }
+
+  property("transaction section size includes framing at the collection boundary") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    val input = bh.boxes.values.find(_.value >= BoxUtils.sufficientAmount(parameters) * 2).get
+    val headerId = bytesToId(Array.fill(32)(0.toByte))
+
+    for (version <- Seq[Byte](1, 2, 3, 4); withFees <- Seq(false, true)) {
+      val tx = validTransactionFromBoxes(
+        IndexedSeq(input),
+        outputsProposition = if (withFees) feeProp else sigma.ast.ErgoTree.fromSigmaBoolean(sigma.data.TrivialProp.TrueProp)
+      )
+      val context = us.stateContext.upcoming(
+        defaultMinerPk.value, 1L, settings.chainSettings.initialNBits,
+        Array.fill(3)(0.toByte), emptyVSUpdate, version
+      )
+      def collect(limit: Int): Seq[ErgoTransaction] = {
+        val (collected, invalid) = CandidateGenerator.collectTxs(
+          defaultMinerPk, Int.MaxValue, limit, us, context, Seq(tx)
+        )
+        invalid shouldBe empty
+        collected
+      }
+      val unconstrained = collect(Int.MaxValue)
+      unconstrained should contain(tx)
+      unconstrained.size shouldBe (if (withFees) 2 else 1)
+      val sectionSize = BlockTransactions(headerId, version, unconstrained).bytes.length
+      collect(sectionSize) shouldBe unconstrained
+      collect(sectionSize - 1) shouldBe empty
+    }
+  }
+
+  property("transaction section size is checked before normal and fallback work is returned") {
+    for (fallback <- Seq(false, true)) {
+      val base = createUtxoState(settings)._1
+      val history = HistoryTestHelpers.generateHistory(true, StateType.Utxo, false, -1)
+      var proofCalls = 0
+      val state = new UtxoState(base.persistentProver, base.version, base.store, settings) {
+        override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+          proofCalls += 1
+          if (fallback && proofCalls == 1) Failure(new IllegalStateException("Proof generation unavailable"))
+          else super.proofsForTransactions(txs)
+        }
+      }
+      try {
+        val emissionTx = CandidateGenerator.collectEmission(state, defaultMinerPk, emptyStateContext)
+        val (result, _) = CandidateGenerator.createCandidate(
+          defaultMinerPk, history, emptyVSUpdate, state, Seq.empty, emissionTx, Seq.empty, settings
+        ).get
+        proofCalls shouldBe (if (fallback) 2 else 1)
+        result.candidateBlock.transactions shouldBe emissionTx.toSeq
+        val section = BlockTransactions(bytesToId(Array.fill(32)(0.toByte)),
+          result.candidateBlock.version, result.candidateBlock.transactions)
+        val limit = section.bytes.length
+        CandidateGenerator.candidateSizeWithinLimit(result.candidateBlock.transactions,
+          result.candidateBlock.version, limit).get shouldBe true
+        CandidateGenerator.candidateSizeWithinLimit(result.candidateBlock.transactions,
+          result.candidateBlock.version, limit - 1).get shouldBe false
+      } finally {
+        history.closeStorage()
+        base.store.close()
+      }
+    }
+  }
+
+  for (fallback <- Seq(false, true)) {
+    val branch = if (fallback) "fallback" else "normal"
+    property(s"$branch candidate creation retains the size budget captured before proof generation") {
+      for (budgetReduction <- Seq(0, 1)) {
+        val base = createUtxoState(settings)._1
+        val history = HistoryTestHelpers.generateHistory(true, StateType.Utxo, false, -1)
+        val originalContext = base.stateContext
+        var testContext = originalContext
+        var proofCalls = 0
+        val state = new UtxoState(base.persistentProver, base.version, base.store, settings) {
+          override def stateContext: ErgoStateContext = testContext
+
+          override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = {
+            proofCalls += 1
+            if (fallback && proofCalls == 1) Failure(new IllegalStateException("Proof generation unavailable"))
+            else super.proofsForTransactions(txs).map { proof =>
+              // A later store observation must not replace the budget used to select this candidate.
+              val sectionSize = BlockTransactions(bytesToId(Array.fill(32)(0.toByte)), 1.toByte, txs).bytes.length
+              val params = originalContext.currentParameters
+              val finalParameters = new Parameters(params.height,
+                params.parametersTable.updated(Parameters.MaxBlockSizeIncrease, sectionSize - budgetReduction),
+                params.proposedUpdate)
+              testContext = new ErgoStateContext(originalContext.lastHeaders, originalContext.lastExtensionOpt,
+                originalContext.genesisStateDigest, finalParameters, originalContext.validationSettings,
+                originalContext.votingData)(originalContext.chainSettings)
+              proof
+            }
+          }
+        }
+        try {
+          val emissionTx = CandidateGenerator.collectEmission(state, defaultMinerPk, emptyStateContext)
+          val result = CandidateGenerator.createCandidate(
+            defaultMinerPk, history, emptyVSUpdate, state, Seq.empty, emissionTx, Seq.empty, settings
+          )
+          proofCalls shouldBe (if (fallback) 2 else 1)
+          result.get._1.candidateBlock.transactions shouldBe emissionTx.toSeq
+          BlockTransactions.sizeOf(result.get._1.candidateBlock.transactions, 1.toByte) should be <=
+            originalContext.currentParameters.maxBlockSize
+        } finally {
+          history.closeStorage()
+          base.store.close()
+        }
+      }
+    }
+  }
+
+  property("a final size discrepancy restores the accepted prefix with its matching fee transaction") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    try {
+      val inputs = bh.boxes.values.filter(_.value >= BoxUtils.sufficientAmount(parameters) * 2).take(2).toIndexedSeq
+      inputs.size shouldBe 2
+      val txs = inputs.map(input => validTransactionFromBoxes(IndexedSeq(input), outputsProposition = feeProp))
+      val context = us.stateContext.upcoming(defaultMinerPk.value, 1L, settings.chainSettings.initialNBits,
+        Array.fill(3)(0.toByte), emptyVSUpdate, 1.toByte)
+      def selected(input: Seq[ErgoTransaction]): Seq[ErgoTransaction] =
+        CandidateGenerator.collectTxs(defaultMinerPk, Int.MaxValue, Int.MaxValue, us, context, input)._1
+      val prefix = selected(txs.take(1))
+      val complete = selected(txs)
+      val limit = BlockTransactions.sizeOf(prefix, 1.toByte)
+      BlockTransactions.sizeOf(complete, 1.toByte) should be > limit
+      val discardedConflict = txs.last.id
+      val restoredResult = CandidateGenerator.checkedCandidate(
+        Iterator(complete -> Seq(discardedConflict), prefix -> Seq.empty), 1.toByte, limit)
+      val restored = restoredResult._1
+      restoredResult._2 shouldBe empty
+      restored shouldBe prefix
+      restored.last shouldBe CandidateGenerator.collectFees(us.stateContext.currentHeight,
+        txs.take(1), defaultMinerPk, context).get
+      CandidateGenerator.checkedCandidate(Iterator(complete -> Seq.empty, prefix -> Seq.empty),
+        1.toByte, limit - 1)._1 shouldBe empty
+
+      var reconstructed = 0
+      val retainedConflict = txs.head.id
+      def previousCandidates: Iterator[(Seq[ErgoTransaction], Seq[ModifierId])] =
+        Iterator[() => (Seq[ErgoTransaction], Seq[ModifierId])](
+          () => {
+            reconstructed += 1
+            throw new IllegalStateException("Previous fee reconstruction unavailable")
+          },
+          () => {
+            reconstructed += 1
+            prefix -> Seq(retainedConflict)
+          }
+        ).map(_())
+
+      val unchanged = CandidateGenerator.checkedCandidate(
+        Iterator(complete -> Seq(discardedConflict)) ++ previousCandidates, 1.toByte, Int.MaxValue)
+      unchanged shouldBe (complete -> Seq(discardedConflict))
+      reconstructed shouldBe 0
+
+      val recovered = CandidateGenerator.checkedCandidate(
+        Iterator(complete -> Seq(discardedConflict)) ++ previousCandidates, 1.toByte, limit)
+      reconstructed shouldBe 2
+      recovered._2 shouldBe Seq(retainedConflict)
+      BlockTransactions.sizeOf(recovered._1, 1.toByte) shouldBe limit
+      BlockTransactions(bytesToId(Array.fill(32)(0.toByte)), 1.toByte, recovered._1).bytes shouldBe
+        BlockTransactions(bytesToId(Array.fill(32)(0.toByte)), 1.toByte, prefix).bytes
+
+      reconstructed = 0
+      CandidateGenerator.checkedCandidate(previousCandidates, 1.toByte, limit - 1) shouldBe
+        (Seq.empty -> Seq.empty)
+      reconstructed shouldBe 2
+    } finally us.store.close()
+  }
+
+  property("collection restores the prior fee prefix when incremental or final writing fails") {
+    for (incrementalFailure <- Seq(true, false); withFees <- Seq(false, true)) {
+      val bh = boxesHolderGen.sample.get
+      val base = createUtxoState(bh, parameters)
+      var failSerialization = false
+      try {
+        val inputs = bh.boxes.values.filter(_.value >= BoxUtils.sufficientAmount(parameters) * 2).take(2).toIndexedSeq
+        inputs.size shouldBe 2
+        val proposition = if (withFees) feeProp else sigma.ast.ErgoTree.fromSigmaBoolean(sigma.data.TrivialProp.TrueProp)
+        val first = validTransactionFromBoxes(IndexedSeq(inputs.head), outputsProposition = proposition)
+        val original = validTransactionFromBoxes(IndexedSeq(inputs.last), outputsProposition = proposition)
+        val guardedOutputs = new IndexedSeq[ErgoBoxCandidate] {
+          override def length: Int = original.outputCandidates.length
+          override def apply(index: Int): ErgoBoxCandidate = {
+            if (failSerialization) throw new IllegalStateException("Final section writer unavailable")
+            original.outputCandidates(index)
+          }
+        }
+        val last = ErgoTransaction(original.inputs, original.dataInputs, guardedOutputs)
+        val missing = validErgoTransactionGen.sample.get._2
+        missing.inputs.foreach(input => base.boxById(input.boxId) shouldBe empty)
+        val state = new UtxoState(base.persistentProver, base.version, base.store, settings) {
+          override def withTransactions(txs: Seq[ErgoTransaction]): UtxoState = {
+            val withTxs = super.withTransactions(txs)
+            val result = new UtxoState(base.persistentProver, base.version, base.store, settings) {
+              override def boxById(id: ADKey): Option[org.ergoplatform.ErgoBox] = withTxs.boxById(id)
+              override def validateWithCost(tx: ErgoTransaction, context: ErgoStateContext,
+                                            costLimit: Int, interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
+                val validated = super.validateWithCost(tx, context, costLimit, interpreterOpt)
+                if (incrementalFailure && (tx eq last) && validated.isSuccess) failSerialization = true
+                validated
+              }
+            }
+            // Both incremental measurements completed. Fail only the final complete-section serialization.
+            if (!incrementalFailure && txs.exists(_ eq last)) failSerialization = true
+            result
+          }
+        }
+        val context = base.stateContext.upcoming(defaultMinerPk.value, 1L, settings.chainSettings.initialNBits,
+          Array.fill(3)(0.toByte), emptyVSUpdate, 1.toByte)
+        val (selected, eliminated) = CandidateGenerator.collectTxs(defaultMinerPk, Int.MaxValue, Int.MaxValue,
+          state, context, Seq(first, last, missing))
+        failSerialization shouldBe true
+        val expectedFee = CandidateGenerator.collectFees(base.stateContext.currentHeight,
+          Seq(first), defaultMinerPk, context)
+        expectedFee.isDefined shouldBe withFees
+        selected shouldBe (Seq(first) ++ expectedFee)
+        eliminated shouldBe empty
+      } finally base.store.close()
+    }
   }
 
   property("should not be able to spend recent fee boxes") {

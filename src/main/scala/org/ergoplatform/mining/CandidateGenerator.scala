@@ -616,6 +616,8 @@ object CandidateGenerator extends ScorexLogging {
         Math.max(System.currentTimeMillis(), bestHeaderOpt.map(_.timestamp + 1).getOrElse(0L))
 
       val stateContext = state.stateContext
+      val maxBlockSize = stateContext.currentParameters.maxBlockSize
+      val maxBlockCost = stateContext.currentParameters.maxBlockCost
 
       // Calculate required difficulty for the new block
       val nBits: Long = bestHeaderOpt
@@ -665,7 +667,7 @@ object CandidateGenerator extends ScorexLogging {
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
 
-      val upcomingContext = state.stateContext.upcoming(
+      val upcomingContext = stateContext.upcoming(
         minerPk.value,
         timestamp,
         nBits,
@@ -679,9 +681,9 @@ object CandidateGenerator extends ScorexLogging {
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
-      val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {
+      val safeGap = if (maxBlockCost < 1000000) {
         0
-      } else if (state.stateContext.currentParameters.maxBlockCost < 5000000) {
+      } else if (maxBlockCost < 5000000) {
         150000
       } else {
         500000
@@ -689,8 +691,8 @@ object CandidateGenerator extends ScorexLogging {
 
       val (txs, toEliminate) = collectTxs(
         minerPk,
-        state.stateContext.currentParameters.maxBlockCost - safeGap,
-        state.stateContext.currentParameters.maxBlockSize,
+        maxBlockCost - safeGap,
+        maxBlockSize,
         state,
         upcomingContext,
         emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
@@ -744,7 +746,10 @@ object CandidateGenerator extends ScorexLogging {
                 t
               )
               val fallbackTxs = Seq(emissionTx)
-              state.proofsForTransactions(fallbackTxs).map {
+              candidateSizeWithinLimit(fallbackTxs, version, maxBlockSize).flatMap {
+                case true => state.proofsForTransactions(fallbackTxs)
+                case false => Failure(new IllegalArgumentException("Emission transaction section exceeds the block size limit"))
+              }.map {
                 case (adProof, adDigest) =>
                   val candidate = CandidateBlock(
                     bestHeaderOpt,
@@ -917,15 +922,45 @@ object CandidateGenerator extends ScorexLogging {
     Seq(emissionTxOpt, feeTxOpt).flatten
   }
 
-  /**
-    * Helper function which decides whether transactions can fit into a block with given cost and size limits
-    */
-  def correctLimits(
+  private[mining] def candidateSizeWithinLimit(
+    txs: Seq[ErgoTransaction], blockVersion: Byte, maxBlockSize: Int
+  ): Try[Boolean] = Try(BlockTransactions.sizeOf(txs, blockVersion) <= maxBlockSize)
+
+  /** Check the actual writer once on the normal path; on failure restore an earlier prefix and its fee transaction. */
+  @tailrec
+  private[mining] def checkedCandidate(
+    candidates: Iterator[(Seq[ErgoTransaction], Seq[ModifierId])], blockVersion: Byte, maxBlockSize: Int
+  ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
+    if (!candidates.hasNext) Seq.empty -> Seq.empty
+    else {
+      Try(candidates.next()).flatMap { candidate =>
+        val txs = candidate._1
+        (if (txs.isEmpty) Success(true) else candidateSizeWithinLimit(txs, blockVersion, maxBlockSize))
+          .map(withinLimit => candidate -> withinLimit)
+      } match {
+        case Success((candidate, true)) => candidate
+        case Success((_, false)) =>
+          log.debug("Transaction section exceeds the size limit; restoring the previous accepted prefix")
+          checkedCandidate(candidates, blockVersion, maxBlockSize)
+        case Failure(e) =>
+          log.warn("Cannot reconstruct or measure transaction section; restoring the previous accepted prefix", e)
+          checkedCandidate(candidates, blockVersion, maxBlockSize)
+      }
+    }
+  }
+
+  /** Decide whether transactions fit the cost limit and the full serialized section size limit. */
+  private def correctLimits(
     blockTxs: Seq[CostedTransaction],
     maxBlockCost: Long,
-    maxBlockSize: Long
+    maxBlockSize: Long,
+    sectionSize: => Long
   ): Boolean = {
-    blockTxs.map(_._2).sum < maxBlockCost && blockTxs.map(_._1.size).sum < maxBlockSize
+    Try(blockTxs.map(_._2).sum < maxBlockCost && sectionSize <= maxBlockSize).recover {
+      case e =>
+        log.warn("Cannot measure tentative transaction section; retaining the accepted candidate", e)
+        false
+    }.get
   }
 
   /**
@@ -948,6 +983,7 @@ object CandidateGenerator extends ScorexLogging {
 
     val currentHeight = us.stateContext.currentHeight
     val nextHeight = upcomingContext.currentHeight
+    val blockVersion = upcomingContext.sigmaPreHeader.version
 
     log.info(
       s"Assembling a block candidate for block #$nextHeight from ${transactions.length} transactions available"
@@ -955,16 +991,30 @@ object CandidateGenerator extends ScorexLogging {
 
     val verifier: ErgoInterpreter = ErgoInterpreter(upcomingContext.currentParameters)
 
+    type FeeRecipe = () => ErgoTransaction
+    type CandidateSnapshot = (Seq[CostedTransaction], Option[FeeRecipe], Seq[ModifierId])
+
+    def feeRecipe(prefix: Seq[CostedTransaction]): FeeRecipe = () =>
+      collectFees(currentHeight, prefix.map(_._1), minerPk, upcomingContext)
+        .getOrElse(throw new IllegalStateException("Accepted prefix no longer produces its fee transaction"))
+
     @tailrec
     def loop(
               mempoolTxs: Iterable[ErgoTransaction],
               acc: Seq[CostedTransaction],
+              accSize: Long,
               lastFeeTx: Option[CostedTransaction],
-              invalidTxs: Seq[ModifierId]
+              lastFeeRecipe: Option[FeeRecipe],
+              invalidTxs: Seq[ModifierId],
+              previousCandidates: List[CandidateSnapshot]
             ): (Seq[ErgoTransaction], Seq[ModifierId]) = {
       // transactions from mempool and fee txs from the previous step
       val currentCosted = acc ++ lastFeeTx
       def current: Seq[ErgoTransaction] = currentCosted.map(_._1)
+      def finish: (Seq[ErgoTransaction], Seq[ModifierId]) =
+        checkedCandidate(Iterator(current -> invalidTxs) ++ previousCandidates.iterator.map {
+          case (txs, fee, invalid) => (txs.map(_._1) ++ fee.map(_())) -> invalid
+        }, blockVersion, maxBlockSize)
 
       val stateWithTxs = us.withTransactions(current)
 
@@ -974,7 +1024,7 @@ object CandidateGenerator extends ScorexLogging {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+            loop(mempoolTxs.tail, acc, accSize, lastFeeTx, lastFeeRecipe, invalidTxs :+ tx.id, previousCandidates)
           } else {
             // check validity and calculate transaction cost
             stateWithTxs.validateWithCost(
@@ -984,51 +1034,66 @@ object CandidateGenerator extends ScorexLogging {
               Some(verifier)
             ) match {
               case Success(costConsumed) =>
-                val newTxs = acc :+ (tx -> costConsumed)
-                val newBoxes = newTxs.flatMap(_._1.outputs)
+                Try(accSize + BlockTransactionsSerializer.transactionSize(tx, blockVersion)) match {
+                  case Failure(e) =>
+                    log.warn("Cannot measure tentative transaction; retaining the accepted candidate", e)
+                    finish
+                  case Success(newSize) =>
+                    val newTxs = acc :+ (tx -> costConsumed)
+                    val newBoxes = newTxs.flatMap(_._1.outputs)
 
-                collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
-                  case Some(feeTx) =>
-                    val boxesToSpend = feeTx.inputs.flatMap(i =>
-                      newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
-                    )
-                    feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
-                      case Success(cost) =>
-                        val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
-                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                          loop(mempoolTxs.tail, newTxs, Some(feeTx -> cost), invalidTxs)
-                        } else {
-                          log.debug(s"Finishing block assembly on limits overflow, " +
-                                    s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
-                          current -> invalidTxs
-                        }
-                      case Failure(e) =>
-                        log.warn(
-                          s"Fee collecting tx is invalid, not including it, " +
-                            s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                    collectFees(currentHeight, newTxs.map(_._1), minerPk, upcomingContext) match {
+                      case Some(feeTx) =>
+                        val boxesToSpend = feeTx.inputs.flatMap(i =>
+                          newBoxes.find(b => java.util.Arrays.equals(b.id, i.boxId))
                         )
-                        current -> invalidTxs
-                    }
-                  case None =>
-                    log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
-                    val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
-                    if (correctLimits(blockTxs, maxBlockCost, maxBlockSize)) {
-                      loop(mempoolTxs.tail, blockTxs, lastFeeTx, invalidTxs)
-                    } else {
-                      current -> invalidTxs
+                        feeTx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext)(verifier) match {
+                          case Success(cost) =>
+                            val blockTxs: Seq[CostedTransaction] = (feeTx -> cost) +: newTxs
+                            def sectionSize: Long = BlockTransactionsSerializer.sectionSize(blockVersion, blockTxs.size,
+                              newSize + BlockTransactionsSerializer.transactionSize(feeTx, blockVersion))
+                            if (correctLimits(blockTxs, maxBlockCost, maxBlockSize, sectionSize)) {
+                              loop(mempoolTxs.tail, newTxs, newSize, Some(feeTx -> cost), Some(feeRecipe(newTxs)), invalidTxs,
+                                (acc, lastFeeRecipe, invalidTxs) :: previousCandidates)
+                            } else {
+                              log.debug(s"Finishing block assembly on limits overflow, " +
+                                        s"cost is ${currentCosted.map(_._2).sum}, cost limit: $maxBlockCost")
+                              finish
+                            }
+                          case Failure(e) =>
+                            log.warn(
+                              s"Fee collecting tx is invalid, not including it, " +
+                                s"details: ${e.getMessage} from ${stateWithTxs.stateContext}"
+                            )
+                            finish
+                        }
+                      case None =>
+                        log.info(s"No fee proposition found in txs ${newTxs.map(_._1.id)} ")
+                        val blockTxs: Seq[CostedTransaction] = newTxs ++ lastFeeTx.toSeq
+                        lazy val blockPayloadSize = newSize + lastFeeTx.map(t =>
+                          BlockTransactionsSerializer.transactionSize(t._1, blockVersion)).getOrElse(0)
+                        def sectionSize: Long = BlockTransactionsSerializer.sectionSize(blockVersion, blockTxs.size, blockPayloadSize)
+                        if (correctLimits(blockTxs, maxBlockCost, maxBlockSize, sectionSize)) {
+                          loop(mempoolTxs.tail, blockTxs, blockPayloadSize, lastFeeTx, lastFeeRecipe, invalidTxs,
+                            (acc, lastFeeRecipe, invalidTxs) :: previousCandidates)
+                        } else {
+                          finish
+                        }
                     }
                 }
               case Failure(e) =>
                 log.info(s"Not included transaction ${tx.id} due to ${e.getMessage}: ", e)
-                loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+                loop(mempoolTxs.tail, acc, accSize, lastFeeTx, lastFeeRecipe, invalidTxs :+ tx.id, previousCandidates)
             }
           }
         case None => // mempool is empty
-          current -> invalidTxs
+          finish
       }
     }
 
-    val res = loop(transactions, Seq.empty, None, Seq.empty)
+    // Share accepted Vector prefixes and reconstruct historical fee transactions only during recovery.
+    // Retaining every growing fee transaction would keep quadratic numbers of fee inputs alive.
+    val res = loop(transactions, Vector.empty, 0L, None, None, Seq.empty, Nil)
     log.debug(
       s"Collected ${res._1.length} transactions for block #$currentHeight, " +
         s"invalid transaction ids (total:${res._2.length}) for block #$currentHeight : ${res._2}")

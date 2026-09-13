@@ -27,7 +27,8 @@ class BlocksApiRouteSpec
 
   val prefix = "/blocks"
 
-  val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
+  val protectedSettings = ApiTestAuth.settingsWithApiKey(settings)
+  val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, protectedSettings).route
 
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String    = Algos.encode(headerIdBytes)
@@ -47,7 +48,8 @@ class BlocksApiRouteSpec
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
     val blockJson: UniversalEntity =
       HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
-    Post(prefix, blockJson) ~> route ~> check {
+    Post(prefix, blockJson) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
+      route ~> check {
       status shouldBe StatusCodes.OK
     }
   }

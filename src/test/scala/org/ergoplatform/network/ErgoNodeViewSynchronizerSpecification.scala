@@ -6,8 +6,9 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
@@ -67,7 +68,27 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
+  private def isolatedNodeSettings(prototype: ErgoSettings): ErgoSettings = {
+    val directory = createTempDir
+    prototype.copy(directory = directory.getAbsolutePath,
+      walletSettings = prototype.walletSettings.copy(secretStorage =
+        prototype.walletSettings.secretStorage.copy(
+          secretDir = new java.io.File(directory, "keystore").getAbsolutePath)))
+  }
+
+  class NodeViewHolderMock(nodeSettings: ErgoSettings) extends ErgoNodeViewHolder[UtxoState](nodeSettings)
+
+  class InjectedReadersNodeViewHolder(nodeSettings: ErgoSettings,
+                                     injectedHistory: ErgoHistoryReader,
+                                     injectedMempool: ErgoMemPoolReader) extends NodeViewHolderMock(nodeSettings) {
+    // This fixture owns its history and mempool; startup replies must use those same readers.
+    override protected def getNodeViewChanges: Receive = {
+      case request: GetNodeViewChanges =>
+        if (request.history) sender() ! ChangedHistory(injectedHistory)
+        super.getNodeViewChanges(request.copy(history = false, mempool = false))
+        if (request.mempool) sender() ! ChangedMempool(injectedMempool)
+    }
+  }
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,
@@ -129,7 +150,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s = localStateGen.sample.get
-    val settings = ErgoSettingsReader.read()
+    val settings = isolatedNodeSettings(ErgoSettingsReader.read())
     val pool = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
@@ -138,9 +159,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // each test should always start with empty history
-    deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef = system.actorOf(Props(new InjectedReadersNodeViewHolder(settings, h, pool)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -174,15 +193,14 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   class Synchronizer2Fixture extends AkkaFixture {
+    val settings: ErgoSettings = isolatedNodeSettings(org.ergoplatform.utils.ErgoNodeTestConstants.settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // each test should always start with empty history
-    deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock(settings)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -492,14 +510,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will contain the sampled headers followed by genesis
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+              headers.map(_.id) == (Seq(0, 16, 128, 512)
+                .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
           case _ => false
         }
       }
@@ -510,6 +530,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture { ctx =>
       import ctx._
 
+      // Replay a late startup request before observing the peer response. The fixture's
+      // injected history and mempool must not be replaced by the holder's empty readers.
+      val startupReaders = TestProbe("StartupReaders")
+      startupReaders.send(nodeViewHolder,
+        GetNodeViewChanges(history = true, state = false, vault = false, mempool = true))
+      val changedHistory = startupReaders.expectMsgType[ChangedHistory](3.seconds)
+      val changedMempool = startupReaders.expectMsgType[ChangedMempool](3.seconds)
+      synchronizer ! changedHistory
+      synchronizer ! changedMempool
+
       val sync = ErgoSyncInfoV2(Seq(altchain.last))
 
       // Neighbour is sending
@@ -517,14 +547,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will contain the sampled headers followed by genesis
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+              headers.map(_.id) == (Seq(0, 16, 128, 512)
+                .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
           case _ => false
         }
       }

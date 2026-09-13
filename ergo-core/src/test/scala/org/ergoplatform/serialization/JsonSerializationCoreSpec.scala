@@ -13,6 +13,8 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import cats.syntax.either._
+import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.hash.Digest32
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
 import sigmastate.interpreter.SecretProven
 
@@ -82,6 +84,48 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       decoded.get.isLeft shouldBe true
       decoded.get.left.get.message.toLowerCase should include ("hex")
     }
+  }
+
+  property("fixed-size byte JSON decoders should reject non-canonical lengths and invalid hex") {
+    Seq(31, 33).foreach { size =>
+      val json = ("00" * size).asJson
+      json.as[ADKey].isLeft shouldBe true
+      json.as[Digest32].isLeft shouldBe true
+    }
+
+    Seq(32, 34).foreach { size =>
+      ("00" * size).asJson.as[ADDigest].isLeft shouldBe true
+    }
+
+    Seq("zz", "0").foreach { value =>
+      val json = value.asJson
+      json.as[ADKey].isLeft shouldBe true
+      json.as[ADDigest].isLeft shouldBe true
+      json.as[Digest32].isLeft shouldBe true
+    }
+  }
+
+  property("fixed-size byte JSON decoders should accept canonical lengths") {
+    val digest = ("00" * 32).asJson
+    val stateDigest = ("00" * 33).asJson
+
+    digest.as[ADKey].isRight shouldBe true
+    stateDigest.as[ADDigest].isRight shouldBe true
+    digest.as[Digest32].isRight shouldBe true
+  }
+
+  property("invalid dht secret group element bytes should fail decoding without throwing") {
+    val json = Json.obj(
+      "secret" -> "01".asJson,
+      "g" -> "00".asJson,
+      "h" -> "00".asJson,
+      "u" -> "00".asJson,
+      "v" -> "00".asJson
+    )
+
+    val decoded = Try(json.as[DhtSecretKey])
+    decoded.isSuccess shouldBe true
+    decoded.get.isLeft shouldBe true
   }
 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {

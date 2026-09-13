@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.ErgoTreePredef
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.ErgoStateContext
@@ -237,9 +238,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     val smallFeeTx = CandidateGenerator
       .collectFees(us.stateContext.currentHeight, Seq(smallTx), defaultMinerPk, upcomingContext)
       .get
-    val maxSize = smallTx.size + smallFeeTx.size + 1
+    val maxSize = BlockTransactions(h.id, h.version, Seq(smallTx, smallFeeTx)).bytes.length
 
-    largeTx.size + largeFeeTx.size should be >= maxSize
+    BlockTransactions(h.id, h.version, Seq(largeTx, largeFeeTx)).bytes.length should be > maxSize
 
     val (selected, eliminated) = CandidateGenerator.collectTxs(
       defaultMinerPk,
@@ -252,18 +253,18 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
 
     selected.map(_.id) should contain(smallTx.id)
     selected.map(_.id) should not contain largeTx.id
-    selected.map(_.size).sum should be < maxSize
+    BlockTransactions(h.id, h.version, selected).bytes.length should be <= maxSize
     eliminated shouldBe empty
 
     val (atSizeLimit, eliminatedAtSizeLimit) = CandidateGenerator.collectTxs(
       defaultMinerPk,
       Int.MaxValue,
-      smallTx.size + smallFeeTx.size,
+      maxSize,
       us,
       upcomingContext,
       Seq(smallTx)
     )
-    atSizeLimit shouldBe empty
+    atSizeLimit.map(_.id) should contain(smallTx.id)
     eliminatedAtSizeLimit shouldBe empty
   }
 
@@ -434,9 +435,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         upcomingContext
       )
       .get
-    val maxSize = accepted.size + independent.size + independentFeeTx.size + 1
+    val maxSize = BlockTransactions(h.id, h.version, Seq(accepted, independent, independentFeeTx)).bytes.length
 
-    accepted.size + parent.size should be >= maxSize
+    BlockTransactions(h.id, h.version, Seq(accepted, parent)).bytes.length should be > maxSize
 
     val (familySelected, familyEliminated) = CandidateGenerator.collectTxs(
       defaultMinerPk,
@@ -470,7 +471,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       child.id,
       grandchild.id
     )
-    selected.map(_.size).sum should be < maxSize
+    BlockTransactions(h.id, h.version, selected).bytes.length should be <= maxSize
     eliminated shouldBe Seq(conflicting.id)
   }
 

@@ -231,7 +231,8 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib2.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
     h.bestInputBlocksChain() shouldBe Seq(ib1.id) // no switching yet
 
-    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe (Seq(ib2.id, ib3.id) -> Seq.empty)
+    h.applyInputBlockTransactions(ib3.id, Seq.empty, us) shouldBe
+      (Seq(ib2.id, ib3.id) -> Seq(ib1.id))
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }
 
@@ -3054,7 +3055,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
     val result = h.applyInputBlockTransactions(ib3.id, Seq.empty, us)
     result._1 shouldBe Seq(ib2.id, ib3.id)
-    result._2 shouldBe Seq.empty
+    result._2 shouldBe Seq(ib1.id)
 
     h.bestInputBlocksChain() shouldBe Seq(ib3.id, ib2.id)
   }

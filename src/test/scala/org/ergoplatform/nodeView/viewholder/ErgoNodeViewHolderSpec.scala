@@ -81,7 +81,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     getBestHeaderOpt shouldBe Some(block.header)
   }
 
-  private val t3a = TestCase("do not apply block headers in invalid order") { fixture =>
+  private val t3a = TestCase("apply a cached child after its missing parent arrives") { fixture =>
     import fixture._
     val (us, bh) = createUtxoState(fixture.settings)
     val parentBlock = validFullBlock(None, us, bh)
@@ -90,20 +90,21 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe EmptyHistoryHeight
 
+    subscribeEvents(classOf[BlockSectionsProcessingCacheUpdate])
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
 
-    //sending child header without parent header
+    // Send the child first and verify that recovery identifies its exact missing parent.
     nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
-    expectNoMsg()
+    expectMsgType[BlockSectionsProcessingCacheUpdate].missingParentIds shouldBe Seq(parentBlock.header.id)
 
-    // sende correct header sequence
+    // Sending the parent once must apply both the parent and the already cached child.
     nodeViewHolderRef ! ModifiersFromRemote(List(parentBlock.header))
-    expectMsgType[SyntacticallySuccessfulModifier]
-
-    nodeViewHolderRef ! ModifiersFromRemote(List(block.header))
-    expectMsgType[SyntacticallySuccessfulModifier]
+    expectMsgType[SyntacticallySuccessfulModifier].modifierId shouldBe parentBlock.header.id
+    expectMsgType[SyntacticallySuccessfulModifier].modifierId shouldBe block.header.id
 
     getHistoryHeight shouldBe 2
+    getHeightOf(block.header.id) shouldBe Some(2)
+    getBestHeaderOpt shouldBe Some(block.header)
   }
 
   private val t4 = TestCase("apply valid block as genesis") { fixture =>

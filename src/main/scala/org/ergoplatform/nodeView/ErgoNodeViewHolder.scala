@@ -370,10 +370,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           applyFromCacheLoop(headersCache)
 
           val cleared = headersCache.cleanOverfull()
+
+          // Cached headers with missing parents do not reach pmodModify. Report a
+          // bounded, rotating page only after overfull entries have been evicted.
+          val parentIds = headersCache.findMissingParentIds(
+            history(),
+            sorted.collect { case header: Header => header },
+            limit = Math.min(mods.size, MissingParentHeaders.MaxParentIds)
+          )
+
           val upd = BlockSectionsProcessingCacheUpdate(
             headersCache.size,
             modifiersCache.size,
-            Header.modifierTypeId -> cleared.map(_.id)
+            Header.modifierTypeId -> cleared.map(_.id),
+            missingParentIds = parentIds
           )
           context.system.eventStream.publish(upd)
           log.debug(s"Cache size after: ${headersCache.size}")

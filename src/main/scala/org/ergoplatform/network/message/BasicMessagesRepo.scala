@@ -66,6 +66,8 @@ class PeersSpec(peersLimit: Int) extends MessageSpecV1[Seq[PeerSpec]] {
 object GetSnapshotsInfoSpec extends MessageSpecV1[Unit] {
   private val SizeLimit = 100
 
+  override protected def allowTrailingPayloadBytes: Boolean = true
+
   override val messageCode: MessageCode = 76: Byte
 
   override val messageName: String = "GetSnapshotsInfo"

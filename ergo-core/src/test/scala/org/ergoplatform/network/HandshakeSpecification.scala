@@ -8,10 +8,13 @@ import scorex.util.encode.Base16
 class HandshakeSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.network.DecodingUtils._
 
+  private val handshakeBytes = Base16.decode(
+    "bcd2919cee2e076572676f726566030306126572676f2d6d61696e6e65742d332e332e36000210040001000102067f000001ae46"
+  ).get
+
   property("handshake test vectors") {
     // bytes got from a real node
-    val hsBase16 = "bcd2919cee2e076572676f726566030306126572676f2d6d61696e6e65742d332e332e36000210040001000102067f000001ae46"
-    val hsBytes = Base16.decode(hsBase16).get
+    val hsBytes = handshakeBytes
 
     val agentName = "ergoref"
 
@@ -90,6 +93,10 @@ class HandshakeSpecification extends ErgoCorePropertyTest {
     val secondFeatureId = getUByte(bb)
 
     secondFeatureId shouldBe 2 // local address feature id
+  }
+
+  property("handshake parsing remains prefix-compatible with a raw TCP chunk") {
+    HandshakeSerializer.parseBytesTry(handshakeBytes ++ Array(0: Byte)).isSuccess shouldBe true
   }
 
 }

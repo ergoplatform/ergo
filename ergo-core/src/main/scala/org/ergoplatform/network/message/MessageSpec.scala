@@ -1,8 +1,12 @@
 package org.ergoplatform.network.message
 
+import java.nio.ByteBuffer
 import org.ergoplatform.network.Version
 import org.ergoplatform.network.message.MessageConstants._
 import org.ergoplatform.serialization.ErgoSerializer
+import scorex.util.serialization.VLQByteBufferReader
+
+import scala.util.Try
 
 /**
   * Base trait for app p2p messages in the network
@@ -24,6 +28,21 @@ trait MessageSpec[Content] extends ErgoSerializer[Content] {
     * Name of this message type. For debug purposes only.
     */
   val messageName: String
+
+  /**
+    * Whether this framed payload intentionally accepts extension bytes that its
+    * current parser does not understand.
+    */
+  protected def allowTrailingPayloadBytes: Boolean = false
+
+  final def parsePayloadBytesTry(bytes: Array[Byte]): Try[Content] = Try {
+    val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+    val result = parse(reader)
+    if (!allowTrailingPayloadBytes) {
+      require(reader.remaining == 0, s"Unexpected trailing bytes in $messageName message")
+    }
+    result
+  }
 
   override def toString: String = s"MessageSpec($messageCode: $messageName)"
 }

@@ -102,11 +102,10 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                  dataBoxes: IndexedSeq[ErgoBox],
                  stateContext: VersionedBlockchainStateContext,
                  txHints: TransactionHintsBag): Try[(IndexedSeq[Input], Long)] = {
-    if (unsignedTx.inputs.length != boxesToSpend.length) {
-      Failure(new Exception("Not enough boxes to spend"))
-    } else if (unsignedTx.dataInputs.length != dataBoxes.length) {
-      Failure(new Exception("Not enough data boxes"))
-    } else {
+    (for {
+      _ <- ErgoProvingInterpreter.validateBoxIds("Input", unsignedTx.inputs.map(_.boxId), boxesToSpend)
+      _ <- ErgoProvingInterpreter.validateBoxIds("Data input", unsignedTx.dataInputs.map(_.boxId), dataBoxes)
+    } yield ()).flatMap { _ =>
       ErgoBoxAssetExtractor.extractTotalAssetsAccessCost(boxesToSpend, unsignedTx.outputCandidates, params.tokenAccessCost)
         .flatMap { totalAssetsAccessCost =>
 
@@ -124,7 +123,6 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
             .zipWithIndex
             .foldLeft(Try(IndexedSeq[Input]() -> initialCost)) { case (inputsCostTry, (inputBox, boxIdx)) =>
               val unsignedInput = unsignedTx.inputs(boxIdx)
-              require(util.Arrays.equals(unsignedInput.boxId, inputBox.id))
 
               inputsCostTry.flatMap { case (ins, totalCost) =>
                 val context = new ErgoLikeContext(
@@ -190,8 +188,10 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
   def generateCommitmentsFor(unsignedTx: UnsignedErgoLikeTransaction,
                              boxesToSpend: IndexedSeq[ErgoBox],
                              dataBoxes: IndexedSeq[ErgoBox],
-                             stateContext: BlockchainStateContext): Try[TransactionHintsBag] = Try {
-    val inputCmts = unsignedTx.inputs.zipWithIndex.map { case (unsignedInput, inpIndex) =>
+                             stateContext: BlockchainStateContext): Try[TransactionHintsBag] = for {
+    _ <- ErgoProvingInterpreter.validateBoxIds("Input", unsignedTx.inputs.map(_.boxId), boxesToSpend)
+    _ <- ErgoProvingInterpreter.validateBoxIds("Data input", unsignedTx.dataInputs.map(_.boxId), dataBoxes)
+    inputCmts <- Try(unsignedTx.inputs.zipWithIndex.map { case (unsignedInput, inpIndex) =>
 
       val inputBox = boxesToSpend(inpIndex)
 
@@ -211,10 +211,8 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
       )
       val scriptToReduce = inputBox.ergoTree
       inpIndex -> generateCommitments(scriptToReduce, context)
-    }
-
-    TransactionHintsBag(inputCmts.toMap)
-  }
+    })
+  } yield TransactionHintsBag(inputCmts.toMap)
 
   /**
     * Extract hints from (supposedly, partially) signed transaction. Useful for distributed signing.
@@ -233,8 +231,9 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
                         stateContext: BlockchainStateContext,
                         realSecretsToExtract: Seq[SigmaBoolean],
                         simulatedSecretsToExtract: Seq[SigmaBoolean]): TransactionHintsBag = {
+    ErgoProvingInterpreter.validateBoxIds("Input", tx.inputs.map(_.boxId), boxesToSpend).get
+    ErgoProvingInterpreter.validateBoxIds("Data input", tx.dataInputs.map(_.boxId), dataBoxes).get
     val augmentedInputs = tx.inputs.zipWithIndex.zip(boxesToSpend)
-    require(augmentedInputs.forall { case ((input, _), box) => input.boxId.sameElements(box.id) }, "Wrong boxes")
 
     augmentedInputs.foldLeft(TransactionHintsBag.empty) { case (bag, ((input, idx), box)) =>
       val exp = box.ergoTree
@@ -260,6 +259,18 @@ class ErgoProvingInterpreter(val secretKeys: IndexedSeq[SecretKey],
 }
 
 object ErgoProvingInterpreter {
+
+  private[ergoplatform] def validateBoxIds(kind: String,
+                                           expectedIds: Seq[ErgoBox.BoxId],
+                                           boxes: Seq[ErgoBox]): Try[Unit] = Try {
+    require(
+      expectedIds.length == boxes.length,
+      s"$kind box count ${boxes.length} does not match transaction count ${expectedIds.length}"
+    )
+    expectedIds.zip(boxes).zipWithIndex.foreach { case ((expectedId, box), index) =>
+      require(util.Arrays.equals(expectedId, box.id), s"$kind box at index $index does not match transaction")
+    }
+  }
 
   def apply(secrets: IndexedSeq[SecretKey],
             params: BlockchainParameters): ErgoProvingInterpreter =

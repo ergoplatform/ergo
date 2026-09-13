@@ -65,7 +65,7 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
           )
         }
         val spec = specsMap
-          .getOrElse(msgCode, throw new Error(s"No message handler found for $msgCode"))
+          .getOrElse(msgCode, throw MaliciousBehaviorException(s"No message handler found for $msgCode"))
         val msgData = if (length > 0) {
           val checksum = it.getBytes(ChecksumLength)
           val data     = it.getBytes(length)

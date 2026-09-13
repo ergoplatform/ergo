@@ -178,7 +178,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
   }
 
   def getBlockHeaderByHeaderIdR: Route = (modifierId & pathPrefix("header") & get) { id =>
-    ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.header)))
+    ApiResponse(getHistory.map(_.typedModifierById[Header](id)))
   }
 
   def getBlockTransactionsByHeaderIdR: Route = (modifierId & pathPrefix("transactions") & get) { id =>

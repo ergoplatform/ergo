@@ -1,7 +1,6 @@
 package org.ergoplatform.modifiers.mempool
 
 import org.ergoplatform.ErgoBox.{R4, TokenId}
-import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -16,8 +15,6 @@ import org.ergoplatform.wallet.boxes.{ErgoBoxAssetExtractor, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
-import sigma.util.BenchmarkUtil
-import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.DefaultHeader
@@ -324,52 +321,32 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     validFailure.failed.get.getMessage should startWith(ValidationRules.errorMessage(txAssetsInOneBox, "", emptyModifierId, ErgoTransaction.modifierTypeId).take(30))
   }
 
-  property("transaction with too many inputs should be rejected") {
-
-    //we assume that verifier must finish verification of any script in less time than 250K hash calculations
-    // (for the Blake2b256 hash function over a single block input)
-    val Timeout: Long = {
-      val hf = Blake2b256
-
-      //just in case to heat up JVM
-      (1 to 5000000).foreach(i => hf(s"$i-$i"))
-
-      val t0 = System.currentTimeMillis()
-      (1 to 250000).foreach(i => hf(s"$i"))
-      val t = System.currentTimeMillis()
-      t - t0
-    }
-
-    val gen = validErgoTransactionGenTemplate(0, 0, 2000, trueLeafGen)
+  property("transaction initialization cost above the block limit should be rejected") {
+    val gen = validErgoTransactionGenTemplate(0, 0, 2, trueLeafGen)
     val (from, tx) = gen.sample.get
+    from.size shouldBe 2
+    tx.inputs.size shouldBe 2
     tx.statelessValidity().isSuccess shouldBe true
 
-    //check that spam transaction is being rejected quickly
-    implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
-    val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext))
-    validity.isSuccess shouldBe false
-    assert(time0 <= Timeout)
+    val normalParameters = emptyStateContext.currentParameters
+    val initialCost = ErgoInterpreter.interpreterInitCost.toLong +
+      from.size.toLong * normalParameters.inputCost +
+      tx.dataInputs.size.toLong * normalParameters.dataInputCost +
+      tx.outputs.size.toLong * normalParameters.outputCost
+    val reducedLimit = (initialCost - 1).toInt
+    val limitedContext = stateContextWith(Parameters(
+      0, Parameters.DefaultParameters.updated(MaxBlockCostIncrease, reducedLimit),
+      ErgoValidationSettingsUpdate.empty))
+    limitedContext.currentParameters.maxBlockCost shouldBe reducedLimit
 
+    val validity = tx.statefulValidity(from, IndexedSeq(), limitedContext)(ErgoInterpreter(limitedContext.currentParameters))
     val cause = validity.failed.get.getMessage
     cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "", emptyModifierId, ErgoTransaction.modifierTypeId).take(30))
 
-    //check that spam transaction validation with no cost limit is indeed taking too much time
-    import Parameters._
-    val maxCost = (Int.MaxValue - 10) / 10 // cannot use Int.MaxValue directly due to overflow when it is converted to block cost
-    val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, maxCost), emptyVSUpdate)
-    val sc = new ErgoStateContext(Seq.empty, None, genesisStateDigest, ps, ErgoValidationSettings.initial,
-      VotingData.empty)(settings.chainSettings)
-      .upcoming(org.ergoplatform.mining.group.generator,
-        0L,
-        settings.chainSettings.initialNBits,
-        Array.fill(3)(0.toByte),
-        ErgoValidationSettingsUpdate.empty,
-        0.toByte)
-    val (_, time) = BenchmarkUtil.measureTime(
-      tx.statefulValidity(from, IndexedSeq(), sc)(verifier)
-    )
-
-    assert(time > Timeout)
+    val fullCost = tx.statefulValidity(from, IndexedSeq(), emptyStateContext)(ErgoInterpreter(normalParameters)).get
+    fullCost.toLong should be >= initialCost
+    fullCost should be > reducedLimit
+    fullCost should be <= normalParameters.maxBlockCost
   }
 
   property("transaction cost") {

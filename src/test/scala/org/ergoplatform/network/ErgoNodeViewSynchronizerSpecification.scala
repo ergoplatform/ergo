@@ -1478,7 +1478,9 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Call processInputBlockTransactionIds directly on the underlying actor
       val synchronizer = synchronizerMockRef.underlyingActor
-      synchronizer.processInputBlockTransactionIds(txIds, mempool, peer)
+      synchronizer.requestInputBlockTransactionIds(
+        InputBlockAnnouncement(1.toByte, header, InputBlockFields.empty, None), peer)
+      synchronizer.processInputBlockTransactionIds(txIds, hist, mempool, peer)
 
       // Verify that InputBlockTransactionsRequest is sent to the peer (since tx is missing)
       val messages = ncProbe.receiveWhile(max = 3 seconds, idle = 300.millis) {
@@ -3120,8 +3122,11 @@ class ErgoNodeViewSynchronizerSpecification
       val inputBlockId: ModifierId = testChain.head.header.id
       val txIds                    = InputBlockTransactionIdsData(inputBlockId, Seq(tx.weakId))
 
+      testSynchronizerRef.underlyingActor.requestInputBlockTransactionIds(
+        InputBlockAnnouncement(1.toByte, testChain.head.header, InputBlockFields.empty, None), peer)
       testSynchronizerRef.underlyingActor.processInputBlockTransactionIds(
         txIds,
+        testHist,
         mempool,
         peer
       )

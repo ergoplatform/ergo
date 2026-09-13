@@ -78,7 +78,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
-  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+  private val syncInfoV2Cache = new SyncInfoV2Cache
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -339,14 +339,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /** Get V2 sync info from cache or load it from history and add to cache */
   private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
-    val headersHeight = history.headersHeight
-    syncInfoV2CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
-      .getOrElse {
-        val v2SyncInfo = history.syncInfoV2(full)
-        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
-        v2SyncInfo
-      }
+    syncInfoV2Cache.getOrElseUpdate(history.bestHeaderIdOpt, full)(history.syncInfoV2(full))
   }
 
   /**
@@ -1291,35 +1284,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * Key: input block id
    * Value: InputBlockDiffData containing creation time, weak transaction IDs, and cached transactions
    *
-   * Entries are automatically cleaned up after LocalInputBlockChunksTTL (10 minutes) to prevent memory exhaustion.
+   * Entry and retained-weight budgets apply globally and per remote address, in addition to expiry.
    */
-  private val localInputBlockChunks = mutable.Map[ModifierId, ErgoNodeViewSynchronizer.InputBlockDiffData]()
+  private val localInputBlockChunks = new InputBlockPendingCache(
+    InputBlockPendingCache.MaxEntries, InputBlockPendingCache.MaxPeerEntries,
+    InputBlockPendingCache.MaxWeight, InputBlockPendingCache.MaxPeerWeight,
+    ErgoNodeViewSynchronizer.LocalInputBlockChunksTTL.toMillis)
+
+  private def inputBlockPeerKey(remote: ConnectedPeer): String =
+    Option(remote.connectionId.remoteAddress.getAddress)
+      .fold(remote.connectionId.remoteAddress.getHostString)(_.getHostAddress)
 
   /**
-   * Cleanup old entries from localInputBlockChunks cache.
-   *
-   * This method removes entries that have been in the cache longer than LocalInputBlockChunksTTL.
-   * It should be called periodically to prevent memory exhaustion from stale entries.
-   *
-   * Algorithm:
-   * 1. Calculate the cutoff time (current time - TTL)
-   * 2. Filter out entries older than the cutoff time
-   * 3. Log the number of cleaned entries for monitoring
+   * Release expired entries even when no further reads or admissions occur.
    */
   private def cleanupLocalInputBlockChunks(): Unit = {
-    val now = System.currentTimeMillis()
-    val cutoffTime = now - ErgoNodeViewSynchronizer.LocalInputBlockChunksTTL.toMillis
-
-    val oldEntries = localInputBlockChunks.filter { case (_, data) =>
-      data.created < cutoffTime
-    }
-
-    if (oldEntries.nonEmpty) {
-      oldEntries.keys.foreach { id =>
-        localInputBlockChunks.remove(id)
-      }
-      log.debug(s"Cleaned up ${oldEntries.size} expired local input block chunk entries")
-    }
+    localInputBlockChunks.prune()
   }
 
   private def weakIdsDiff(mp: ErgoMemPoolReader,
@@ -1355,15 +1335,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                             onMissing: Seq[WeakId] => Unit): Unit = {
     val (diff, mempoolTxs) = weakIdsDiff(mp, wIds)
     if (diff.isEmpty) {
+      localInputBlockChunks.remove(subBlockId)
       onReady(mempoolTxs)
     } else {
       val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
-      localInputBlockChunks.put(subBlockId, ibdd)
-
-      val req = InputBlockTransactionsRequest(subBlockId, diff)
-      val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
-      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-      onMissing(diff)
+      if (localInputBlockChunks.put(subBlockId, ibdd, inputBlockPeerKey(remote), remote.handlerRef.toString)) {
+        val req = InputBlockTransactionsRequest(subBlockId, diff)
+        val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+        onMissing(diff)
+      } else {
+        log.debug(s"Deferring input block $subBlockId while pending synchronization budget is full")
+      }
     }
   }
 
@@ -1744,6 +1727,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
       if (allFound) {
+        localInputBlockChunks.remove(subBlockId)
         val res = InputBlockTransactionsData(subBlockId, resTxs)
         viewHolderRef ! ProcessInputBlockTransactions(res)
       } else {
@@ -1998,6 +1982,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      localInputBlockChunks.removeConnection(connectedPeer.handlerRef.toString)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -2262,6 +2247,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (historyReader.fullBlockHeight > 0) {
         log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
         deliveryTracker.reset()
+        localInputBlockChunks.clear()
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
@@ -2414,6 +2400,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
+  /** Single-entry cache owned by the synchronizer actor. */
+  private[network] final class SyncInfoV2Cache {
+    private var cached: Option[(Option[ModifierId], Boolean, ErgoSyncInfoV2)] = None
+
+    def getOrElseUpdate(bestHeaderId: Option[ModifierId], full: Boolean)
+                       (build: => ErgoSyncInfoV2): ErgoSyncInfoV2 = {
+      cached.collect {
+        case (tip, mode, info) if tip == bestHeaderId && mode == full => info
+      }.getOrElse {
+        val info = build
+        cached = Some((bestHeaderId, full, info))
+        info
+      }
+    }
+  }
 
   private def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

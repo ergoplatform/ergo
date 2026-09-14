@@ -472,6 +472,16 @@ components:
                 description: Size in bytes
                 type: integer
                 format: int32
+            cost:
+                description: >-
+                  Validation cost of the transaction, as measured when it entered the mempool.
+                  Null when the cost is not known to the node, i.e. when the node is running a
+                  digest state, or when the transaction was returned to the pool by a rollback
+                  and has not been re-validated yet.
+                type: integer
+                format: int32
+                nullable: true
+                example: 21456
 
     IndexedErgoTransaction:
       type: object

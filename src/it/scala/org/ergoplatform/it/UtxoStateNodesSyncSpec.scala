@@ -1,8 +1,9 @@
 package org.ergoplatform.it
 
 import com.typesafe.config.Config
+import io.circe.Json
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.ergoplatform.it.util.ConvergenceObservations
+import org.ergoplatform.it.util.{ConvergenceObservations, UtxoSyncFailureDiagnostics}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.duration._
@@ -75,7 +76,12 @@ class UtxoStateNodesSyncSpec extends AnyFlatSpec with IntegrationSuite {
     catch {
       case error: java.util.concurrent.TimeoutException =>
         log.error(s"UTXO synchronization timed out; recent observations: ${recent.mkString("; ")}")
-        throw error
+        UtxoSyncFailureDiagnostics.rethrowAfterCapture(error, nodes.map { node => () =>
+          node.singleGet("/info", _.setRequestTimeout(2000)).map { response =>
+            require(response.getStatusCode == 200, "Unexpected diagnostic status")
+            node.ergoJsonAnswerAs[Json](response.getResponseBody)
+          }
+        })(snapshot => log.error(s"UTXO post-failure diagnostics: $snapshot"))
     } finally observations.close()
   }
 

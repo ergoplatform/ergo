@@ -5,6 +5,7 @@ import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.core.versionToId
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
@@ -15,7 +16,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{Eliminat
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{StateType, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef, LocallyGeneratedModifier}
 import org.ergoplatform.settings.NetworkType.DevNet60
@@ -34,6 +35,8 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+
+import java.nio.file.{Files, Paths}
 
 import scala.concurrent.duration._
 
@@ -63,13 +66,67 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
   private val defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
 
-  it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
-    ActorSystem()
-  ) {
+  private def freshSettings(prototype: ErgoSettings): ErgoSettings = {
+    val root = Paths.get(prototype.directory).toAbsolutePath
+    val parent = Files.createDirectories(root.getParent)
+    val directory = Files.createTempDirectory(parent, s"${root.getFileName}-candidate-")
+    prototype.copy(directory = directory.toString)
+  }
+
+  private def withNodeTest(test: TestKit => Unit): Unit = {
+    val kit = new TestKit(ActorSystem())
+    try test(kit)
+    finally TestKit.shutdownActorSystem(kit.system)
+  }
+
+  private def awaitSetupBlock(testProbe: TestProbe, block: ErgoFullBlock): Unit = {
+    // The direct solution ACK and exact block-application event can arrive in either order.
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(()) =>
+        testProbe.expectMsgPF(candidateGenDelay) {
+          case FullBlockApplied(header) if header.id == block.id =>
+        }
+        true
+      case FullBlockApplied(header) if header.id == block.id =>
+        testProbe.expectMsg(StatusReply.Success(()))
+        true
+      case _ => false
+    }
+  }
+
+  private def setupReward(readersHolderRef: ActorRef,
+                          setupBlock: ErgoFullBlock,
+                          emissionBoxId: ErgoBox.BoxId): (Readers, ErgoBox) = {
+    // ReadersHolder receives the state update asynchronously after the application event.
+    eventually(timeout(candidateGenDelay), interval(100.millis)) {
+      val readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+      versionToId(readers.s.version) shouldBe setupBlock.id
+      val header = readers.h.typedModifierById[Header](setupBlock.id).value
+      val appliedBlock = readers.h.getFullBlock(header).value
+      val emissionTransactions = appliedBlock.transactions.filter(
+        _.inputs.exists(_.boxId.sameElements(emissionBoxId))
+      )
+      emissionTransactions should have size 1
+      val rewardScript = ErgoTreePredef
+        .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
+        .bytes
+      val rewards = emissionTransactions.head.outputs.filter(
+        _.propositionBytes.sameElements(rewardScript)
+      )
+      rewards should have size 1
+      val rewardBox = rewards.head
+      readers.s.asInstanceOf[UtxoStateReader].boxById(rewardBox.id).value shouldBe rewardBox
+      (readers, rewardBox)
+    }
+  }
+
+  it should "provider candidate to internal miner and verify and apply his solution" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -77,25 +134,24 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
-    ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
+    ErgoMiningThread(settings, candidateGenerator, defaultMinerSecret.w)
 
     // after applying solution from miner
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    system.terminate()
   }
 
-  it should "recover when locally mined block is invalidated by node view holder" in new TestKit(
-    ActorSystem()
-  ) {
+  it should "recover when locally mined block is invalidated by node view holder" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     val replyProbe = new TestProbe(system)
     // fake node view holder: solved block is never applied, so solvedBlock stays set
     val viewHolderProbe = new TestProbe(system)
 
     // real readers holder over real node view holder, needed for candidate generation
-    val realViewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef  = ErgoReadersHolderRef(realViewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -103,13 +159,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderProbe.ref,
-        defaultSettings
+        settings
       )
 
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
     val block = replyProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        defaultSettings.chainSettings.powScheme
+        settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
     }
@@ -141,21 +197,22 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
     val newBlock = replyProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        defaultSettings.chainSettings.powScheme
+        settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
     }
     candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
     replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
 
-    system.terminate()
   }
 
-  it should "let multiple miners compete" in new TestKit(ActorSystem()) {
+  it should "let multiple miners compete" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -163,12 +220,12 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
-    val m1 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
-    val m2 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
-    val m3 = ErgoMiningThread(defaultSettings, candidateGenerator, defaultMinerSecret.w)
+    val m1 = ErgoMiningThread(settings, candidateGenerator, defaultMinerSecret.w)
+    val m2 = ErgoMiningThread(settings, candidateGenerator, defaultMinerSecret.w)
+    val m3 = ErgoMiningThread(settings, candidateGenerator, defaultMinerSecret.w)
 
     // after applying solution from miner
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
@@ -189,16 +246,15 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       testProbe.expectMsgClass(50.millis, classOf[ErgoMiningThread.SolvedBlocksCount])
 
     List(m1Count, m2Count, m3Count).map(_.count).sum should be >= 3
-    system.terminate()
   }
 
-  it should "cache candidate until newly mined block is applied" in new TestKit(
-    ActorSystem()
-  ) {
+  it should "cache candidate until newly mined block is applied" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -206,7 +262,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
     expectNoMessage(1.second)
@@ -214,7 +270,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     val block = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        defaultSettings.chainSettings.powScheme
+        settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
     }
@@ -238,16 +294,14 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         true
     }
 
-    system.terminate()
   }
 
-  it should "regenerate candidate periodically" in new TestKit(
-    ActorSystem()
-  ) {
+  it should "regenerate candidate periodically" in withNodeTest { kit =>
+    import kit._
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsWithShortRegeneration: ErgoSettings = freshSettings(
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
@@ -255,6 +309,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           chainSettings =
             ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
         )
+    )
 
     val viewHolderRef: ActorRef =
       ErgoNodeViewRef(settingsWithShortRegeneration)
@@ -268,34 +323,24 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         settingsWithShortRegeneration
       )
 
-    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupEmissionBoxId = setupReaders.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.value.id
 
     // generate block to use reward as our tx input
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    testProbe.expectMsgPF(candidateGenDelay) {
+    val setupBlock = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = settingsWithShortRegeneration.chainSettings.powScheme
+        settingsWithShortRegeneration.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-        // we fish either for ack or SSM as the order is non-deterministic
-        testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
-            testProbe.expectMsgPF(candidateGenDelay) {
-              case FullBlockApplied(header) if header.id != block.header.parentId =>
-            }
-            true
-          case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
-            true
-        }
     }
+    candidateGenerator.tell(setupBlock.header.powSolution, testProbe.ref)
+    awaitSetupBlock(testProbe, setupBlock)
+    val (readers, rewardBox) = setupReward(readersHolderRef, setupBlock, setupEmissionBoxId)
 
     // build new transaction that uses miner's reward as input
     val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
-    val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
-    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
       .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
       .bytes
@@ -328,14 +373,14 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
             )
         }
     }
-    system.terminate()
   }
 
-  it should "accept solution for previous candidate after regeneration" in new TestKit(ActorSystem()) {
+  it should "accept solution for previous candidate after regeneration" in withNodeTest { kit =>
+    import kit._
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsWithShortRegeneration: ErgoSettings = freshSettings(
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
@@ -343,6 +388,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           chainSettings =
             ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
         )
+    )
 
     val viewHolderRef: ActorRef =
       ErgoNodeViewRef(settingsWithShortRegeneration)
@@ -356,36 +402,26 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         settingsWithShortRegeneration
       )
 
-    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupEmissionBoxId = setupReaders.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.value.id
 
     val powScheme = settingsWithShortRegeneration.chainSettings.powScheme
 
     // generate block to use reward as our tx input
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    testProbe.expectMsgPF(candidateGenDelay) {
+    val setupBlock = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = powScheme
+        powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-        // we fish either for ack or SSM as the order is non-deterministic
-        testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
-            testProbe.expectMsgPF(candidateGenDelay) {
-              case FullBlockApplied(header) if header.id != block.header.parentId =>
-            }
-            true
-          case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
-            true
-        }
     }
+    candidateGenerator.tell(setupBlock.header.powSolution, testProbe.ref)
+    awaitSetupBlock(testProbe, setupBlock)
+    val (readers, rewardBox) = setupReward(readersHolderRef, setupBlock, setupEmissionBoxId)
 
     // build new transaction that uses miner's reward as input
     val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
-    val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
-    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
       .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
       .bytes
@@ -439,15 +475,14 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
             true
         }
     }
-    system.terminate()
   }
 
-  it should "pool transactions should be removed from pool when block is mined" in new TestKit(
-    ActorSystem()
-  ) {
+  it should "pool transactions should be removed from pool when block is mined" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -455,43 +490,32 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
-    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupEmissionBoxId = setupReaders.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.value.id
 
-    val history: ErgoHistoryReader = readers.h
+    val history: ErgoHistoryReader = setupReaders.h
     val startBlock: Option[Header] = history.bestHeaderOpt
 
     // generate block to use reward as our tx input
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    testProbe.expectMsgPF(candidateGenDelay) {
+    val setupBlock = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
-        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-
-        // we fish either for ack or SSM as the order is non-deterministic
-        testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
-            testProbe.expectMsgPF(candidateGenDelay) {
-              case FullBlockApplied(header) if header.id != block.header.parentId =>
-            }
-            true
-          case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
-            true
-        }
     }
+    // let's pretend we are mining at least a bit so it is realistic
+    expectNoMessage(200.millis)
+    candidateGenerator.tell(setupBlock.header.powSolution, testProbe.ref)
+    awaitSetupBlock(testProbe, setupBlock)
+    val (readers, rewardBox) = setupReward(readersHolderRef, setupBlock, setupEmissionBoxId)
 
     // build new transaction that uses miner's reward as input
     val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("test".getBytes())).publicImage
-    val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
-    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
       .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
       .bytes
@@ -513,7 +537,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq(tx), reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val block = settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         testProbe.expectNoMessage(200.millis)
@@ -544,15 +568,14 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .filter(_.blockTransactions.transactions.map(_.id).contains(tx.id))
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)
     txs should have length 2 // 1 reward and one regular tx, no fee collection tx
-    system.terminate()
   }
 
-  it should "6.0 pool transactions should be added to 6.0 block" in new TestKit(
-    ActorSystem()
-  ) {
+  it should "6.0 pool transactions should be added to 6.0 block" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings60)
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings60)
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -560,42 +583,30 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings60
+        settings
       )
 
-    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupEmissionBoxId = setupReaders.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.value.id
 
-    val history: ErgoHistoryReader = readers.h
+    val history: ErgoHistoryReader = setupReaders.h
     val startBlock: Option[Header] = history.bestHeaderOpt
 
     // generate block to use reward as our tx input
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    testProbe.expectMsgPF(candidateGenDelay) {
+    val setupBlock = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        // let's pretend we are mining at least a bit so it is realistic
-        expectNoMessage(200.millis)
-        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-
-        // we fish either for ack or SSM as the order is non-deterministic
-        testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
-            testProbe.expectMsgPF(candidateGenDelay) {
-              case FullBlockApplied(header) if header.id != block.header.parentId =>
-            }
-            true
-          case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
-            true
-        }
     }
+    // let's pretend we are mining at least a bit so it is realistic
+    expectNoMessage(200.millis)
+    candidateGenerator.tell(setupBlock.header.powSolution, testProbe.ref)
+    awaitSetupBlock(testProbe, setupBlock)
+    val (readers, rewardBox) = setupReward(readersHolderRef, setupBlock, setupEmissionBoxId)
 
     // build new transaction that uses miner's reward as input
-    val newlyMinedBlock    = readers.h.bestFullBlockOpt.get
-
-    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     rewardBox.propositionBytes shouldBe ErgoTreePredef
       .rewardOutputScript(emission.settings.minerRewardDelay, defaultMinerPk)
       .bytes
@@ -628,7 +639,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq(tx, tx2), reply = true, forced = false), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = defaultSettings.chainSettings.powScheme
+        val block = settings.chainSettings.powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
         testProbe.expectNoMessage(200.millis)
@@ -662,17 +673,18 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     txs should have length 3 // 1 rewards and two regular txs, no fee collection
 
-    system.terminate()
   }
 
-  it should "use custom miner public key when provided via optPk" in new TestKit(ActorSystem()) {
+  it should "use custom miner public key when provided via optPk" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     import sigmastate.crypto.DLogProtocol.DLogProverInput
     import org.bouncycastle.util.BigIntegers
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -680,7 +692,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
     // Generate custom key pair
@@ -702,14 +714,15 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate.candidateBlock should not be null
     candidate.externalVersion.pk shouldBe customPk
     
-    system.terminate()
   }
 
-  it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
+  it should "use default minerPk when optPk is None" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -717,7 +730,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
     candidateGenerator.tell(
@@ -734,17 +747,18 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate.candidateBlock should not be null
     candidate.externalVersion.pk shouldBe defaultMinerSecret.publicImage
 
-    system.terminate()
   }
 
-  it should "generate different candidates for different optPk values" in new TestKit(ActorSystem()) {
+  it should "generate different candidates for different optPk values" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     import sigmastate.crypto.DLogProtocol.DLogProverInput
     import org.bouncycastle.util.BigIntegers
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -752,7 +766,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
     // Generate custom key pair
@@ -784,17 +798,18 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate2.externalVersion.pk shouldBe customPk
     candidate1.externalVersion.pk should not be candidate2.externalVersion.pk
 
-    system.terminate()
   }
 
-  it should "handle optPk with empty transactions" in new TestKit(ActorSystem()) {
+  it should "handle optPk with empty transactions" in withNodeTest { kit =>
+    import kit._
+    val settings = freshSettings(defaultSettings)
     import sigmastate.crypto.DLogProtocol.DLogProverInput
     import org.bouncycastle.util.BigIntegers
 
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -802,7 +817,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        defaultSettings
+        settings
       )
 
     // Generate custom key pair
@@ -823,95 +838,88 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate should not be null
     candidate.txsToInclude shouldBe empty
 
-    system.terminate()
   }
 
   it should "ignore cached candidate when forced = true" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
-    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+    val viewHolderProbe = new TestProbe(system)
 
     val testDir = s"${defaultSettings.directory}-ignore-cache-${System.currentTimeMillis()}"
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsForExplicitForcing: ErgoSettings =
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
-            .copy(blockCandidateGenerationInterval = 1.millis),
+            // Keep automatic refresh outside this test of explicit forcing.
+            .copy(blockCandidateGenerationInterval = 1.hour),
           chainSettings =
             ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
           directory = testDir
         )
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsWithShortRegeneration)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+    // Keep readers fixed: a later ChangedMempool event may legitimately regenerate the cache.
+    val (initialState, boxes) = createUtxoState(settingsForExplicitForcing)
+    val block = validFullBlock(None, initialState, boxes)
+    val state = initialState.applyModifier(block, None)(_ => ()).get
+    // Initialization computes mining-time averages from pairs of headers.
+    val history = historyWithBestFullBlock(Seq(block))
+    val readers = Readers(history, state, ErgoMemPool.empty(settingsForExplicitForcing), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
 
     val candidateGenerator: ActorRef =
       CandidateGenerator(
         defaultMinerSecret.publicImage,
         readersHolderRef,
-        viewHolderRef,
-        settingsWithShortRegeneration
+        viewHolderProbe.ref,
+        settingsForExplicitForcing
       )
 
-    val powScheme = settingsWithShortRegeneration.chainSettings.powScheme
+    try {
+      // Get first candidate from the coherent, already applied block snapshot.
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+      val candidate1 = testProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+      candidate1.candidateBlock.parentOpt.map(_.id) shouldBe Some(block.header.id)
 
-    // First mine a block to establish chain (needed for avg mining time calculation)
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    val initCandidate = testProbe.expectMsgPF(candidateGenDelay) {
-      case StatusReply.Success(c: Candidate) => c
+      // Request with forced = false should return cached candidate immediately.
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+      val candidate2 = testProbe.expectMsgPF(100.millis) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+      candidate2 should be theSameInstanceAs candidate1
+      candidate2.candidateBlock.timestamp shouldBe candidate1.candidateBlock.timestamp
+
+      // Request with forced = true should bypass cache and regenerate.
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+      val candidate3 = testProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+
+      // Identity proves regeneration even when the clock has not advanced.
+      candidate3 should not be theSameInstanceAs(candidate1)
+      candidate3.candidateBlock.parentOpt.map(_.id) shouldBe Some(block.header.id)
+      candidate3.candidateBlock.timestamp should be >= candidate1.candidateBlock.timestamp
+    } finally {
+      TestKit.shutdownActorSystem(system)
+      history.closeStorage()
+      state.closeStorage()
     }
-    val initBlock = powScheme
-      .proveCandidate(initCandidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-      .get
-    candidateGenerator.tell(initBlock.header.powSolution, testProbe.ref)
-    testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
-      case FullBlockApplied(header) if header.id != initBlock.header.parentId => true
-      case _ => false
-    }
-
-    // Get first candidate after chain is established
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    val candidate1 = testProbe.expectMsgPF(candidateGenDelay) {
-      case StatusReply.Success(c: Candidate) => c
-    }
-
-    // Request with forced = false should return cached candidate immediately
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    val candidate2 = testProbe.expectMsgPF(100.millis) {
-      case StatusReply.Success(c: Candidate) => c
-    }
-    // Should be the exact same cached candidate
-    candidate2.candidateBlock.timestamp shouldBe candidate1.candidateBlock.timestamp
-
-    // Request with forced = true should bypass cache and regenerate
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
-    val candidate3 = testProbe.fishForMessage(candidateGenDelay) {
-      case StatusReply.Success(_: Candidate) => true
-      case _: FullBlockApplied => false
-    } match {
-      case StatusReply.Success(c: Candidate) => c
-    }
-
-    // candidate3 should have timestamp >= candidate1 (regenerated, possibly same or newer)
-    candidate3.candidateBlock.timestamp should be >= candidate1.candidateBlock.timestamp
-
-    system.terminate()
   }
 
-  it should "preserve previous candidate when forced regeneration occurs" in new TestKit(ActorSystem()) {
+  it should "preserve previous candidate when forced regeneration occurs" in withNodeTest { kit =>
+    import kit._
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val testDir = s"${defaultSettings.directory}-preserve-candidate-${System.currentTimeMillis()}"
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsWithShortRegeneration: ErgoSettings = freshSettings(
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
             .copy(blockCandidateGenerationInterval = 1.millis),
           chainSettings =
-            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
-          directory = testDir
+            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
         )
+    )
 
     val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsWithShortRegeneration)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
@@ -978,24 +986,22 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(()) =>
     }
 
-    system.terminate()
   }
 
-  it should "handle multiple consecutive forced regenerations correctly" in new TestKit(ActorSystem()) {
+  it should "handle multiple consecutive forced regenerations correctly" in withNodeTest { kit =>
+    import kit._
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    // Use unique directory to avoid state conflicts
-    val testDir = s"${defaultSettings.directory}-multi-forced-${System.currentTimeMillis()}"
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsWithShortRegeneration: ErgoSettings = freshSettings(
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
             .copy(blockCandidateGenerationInterval = 1.millis),
           chainSettings =
-            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
-          directory = testDir
+            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
         )
+    )
 
     val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsWithShortRegeneration)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
@@ -1074,17 +1080,16 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case _ => false
     }
 
-    system.terminate()
   }
 
-  it should "return cached candidate immediately when forced = false" in new TestKit(ActorSystem()) {
+  it should "return cached candidate immediately when forced = false" in withNodeTest { kit =>
+    import kit._
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val testDir = s"${defaultSettings.directory}-cache-test-${System.currentTimeMillis()}"
-    val testSettings = defaultSettings.copy(directory = testDir)
+    val settings = freshSettings(defaultSettings)
 
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(testSettings)
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
@@ -1092,7 +1097,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         defaultMinerSecret.publicImage,
         readersHolderRef,
         viewHolderRef,
-        testSettings
+        settings
       )
 
     // Get first candidate
@@ -1115,23 +1120,22 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Should be very fast since all are cached (no regeneration)
     elapsed should be < 500L
 
-    system.terminate()
   }
 
-  it should "accept solution for previous candidate after forced regeneration triggered by mempool" in new TestKit(ActorSystem()) {
+  it should "accept solution for previous candidate after forced regeneration triggered by mempool" in withNodeTest { kit =>
+    import kit._
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val testDir = s"${defaultSettings.directory}-mempool-forced-${System.currentTimeMillis()}"
-    val settingsWithShortRegeneration: ErgoSettings =
+    val settingsWithShortRegeneration: ErgoSettings = freshSettings(
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
             .copy(blockCandidateGenerationInterval = 100.millis),
           chainSettings =
-            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
-          directory = testDir
+            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
         )
+    )
 
     val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsWithShortRegeneration)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
@@ -1144,28 +1148,21 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         settingsWithShortRegeneration
       )
 
-    val readers: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupReaders: Readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+    val setupEmissionBoxId = setupReaders.s.asInstanceOf[UtxoStateReader].emissionBoxOpt.value.id
     val powScheme = settingsWithShortRegeneration.chainSettings.powScheme
 
     // generate block to use reward as our tx input
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    testProbe.expectMsgPF(candidateGenDelay) {
+    val setupBlock = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = powScheme
+        powScheme
           .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
           .get
-        candidateGenerator.tell(block.header.powSolution, testProbe.ref)
-        testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
-            testProbe.expectMsgPF(candidateGenDelay) {
-              case FullBlockApplied(header) if header.id != block.header.parentId =>
-            }
-            true
-          case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
-            true
-        }
     }
+    candidateGenerator.tell(setupBlock.header.powSolution, testProbe.ref)
+    awaitSetupBlock(testProbe, setupBlock)
+    val (readers, rewardBox) = setupReward(readersHolderRef, setupBlock, setupEmissionBoxId)
 
     // Get candidate and solve it
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
@@ -1180,8 +1177,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Build new transaction to trigger mempool change
     val prop: ProveDlog =
       DLogProverInput(BigIntegers.fromUnsignedByteArray("forced-mempool-test".getBytes())).publicImage
-    val newlyMinedBlock = readers.h.bestFullBlockOpt.get
-    val rewardBox: ErgoBox = newlyMinedBlock.transactions.last.outputs.last
     val input = Input(rewardBox.id, emptyProverResult)
 
     val outputs = IndexedSeq(
@@ -1219,7 +1214,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case _ => false
     }
 
-    system.terminate()
   }
 
   private class FixedReadersHolder(readers: Readers) extends Actor {

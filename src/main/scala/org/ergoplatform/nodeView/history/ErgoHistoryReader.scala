@@ -403,8 +403,14 @@ trait ErgoHistoryReader
       }
 
       val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+      // Keep a shared starting point in full summaries when it is available locally.
+      val genesisAnchor = if (full) {
+        bestHeaderAtHeight(GenesisHeight).filterNot(genesis => headers.exists(_.id == genesis.id)).toSeq
+      } else {
+        Seq.empty
+      }
 
-      ErgoSyncInfoV2(headers)
+      ErgoSyncInfoV2(headers.toSeq ++ genesisAnchor)
     }
   }
 

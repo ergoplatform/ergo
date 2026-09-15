@@ -180,6 +180,50 @@ class VotingSpecification extends ErgoCorePropertyTest {
     esc41.currentParameters.storageFeeFactor shouldBe (kInit - Parameters.StorageFeeFactorStep)
   }
 
+  property("version 6 parameter matching should require calculated parameters") {
+    val versionBefore60 = (Header.Interpreter60Version - 1).toByte
+    val unknownParameter = 42.toByte
+
+    val pre60Extra = processParameters(versionBefore60, _.updated(unknownParameter, 100))
+    val exact60 = processParameters(Header.Interpreter60Version, identity)
+    val extra60 = processParameters(
+      Header.Interpreter60Version,
+      _.updated(unknownParameter, 100)
+    )
+    val missingKnown60 = processParameters(
+      Header.Interpreter60Version,
+      _ - StorageFeeFactorIncrease
+    )
+    val missingSubblocks60 = processParameters(
+      Header.Interpreter60Version,
+      _ - SubblocksPerBlockIncrease
+    )
+    val mismatchedKnown60 = processParameters(
+      Header.Interpreter60Version,
+      table => table.updated(StorageFeeFactorIncrease, table(StorageFeeFactorIncrease) + 1)
+    )
+
+    val results = Seq(
+      "pre-6 extra parameter rejected" -> pre60Extra.isFailure,
+      "version 6 exact parameters accepted" -> exact60.isSuccess,
+      "version 6 extra parameter accepted" -> extra60.isSuccess,
+      "version 6 missing known parameter rejected" -> missingKnown60.isFailure,
+      "version 6 missing subblocks parameter rejected" -> missingSubblocks60.isFailure,
+      "version 6 mismatched known parameter rejected" -> mismatchedKnown60.isFailure
+    )
+
+    results shouldBe results.map { case (description, _) => description -> true }
+    pre60Extra.failed.get.getMessage should include(
+      "At the beginning of the epoch, the extension should contain all the system parameters"
+    )
+    Seq(missingKnown60, missingSubblocks60).foreach { result =>
+      result.failed.get.getMessage should include("Parameters differ in size")
+    }
+    mismatchedKnown60.failed.get.getMessage should include(
+      s"Calculated and received parameters differ in parameter $StorageFeeFactorIncrease"
+    )
+  }
+
   /**
     * A test which is ensuring that approved soft-fork activates properly.
     * For the test, we have:
@@ -389,6 +433,54 @@ class VotingSpecification extends ErgoCorePropertyTest {
     }
     val extension = (upcoming.currentParameters.toExtensionCandidate ++ upcoming.validationSettings.toExtensionCandidate).toExtension(headerId)
     esc.process(header, Some(extension))
+  }
+
+  private def processParameters(
+    version: Byte,
+    receivedTable: Map[Byte, Int] => Map[Byte, Int]
+  ): Try[ErgoStateContext] = {
+    val currentParams = Parameters(
+      2,
+      DefaultParameters.updated(BlockVersion, version),
+      ErgoValidationSettingsUpdate.empty
+    )
+    val currentValidationSettings = if (version >= Header.Interpreter60Version) {
+      validationSettingsNoIl.updated(
+        ErgoValidationSettingsUpdate(Seq(ValidationRules.exMatchParameters), Seq.empty)
+      )
+    } else {
+      validationSettingsNoIl
+    }
+    val header = defaultHeaderGen.sample.get.copy(
+      height = 4,
+      votes = Array.fill(3)(NoParameter),
+      version = version
+    )
+    val (calculatedParams, validationSettingsUpdate) = currentParams.update(
+      header.height,
+      forkVote = false,
+      Seq.empty,
+      ErgoValidationSettingsUpdate.empty,
+      votingSettings
+    )
+    val calculatedValidationSettings = currentValidationSettings.updated(validationSettingsUpdate)
+    val receivedParams = Parameters(
+      calculatedParams.height,
+      receivedTable(calculatedParams.parametersTable),
+      calculatedParams.proposedUpdate
+    )
+    val extension = (receivedParams.toExtensionCandidate ++
+      calculatedValidationSettings.toExtensionCandidate).toExtension(headerId)
+    val stateContext = new ErgoStateContext(
+      Seq.empty,
+      None,
+      genesisStateDigest,
+      currentParams,
+      currentValidationSettings,
+      VotingData.empty
+    )(updSettings)
+
+    stateContext.process(header, Some(extension))
   }
 
 }

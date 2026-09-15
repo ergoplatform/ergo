@@ -12,6 +12,8 @@ case class CompositeHttpService(system: ActorSystem, routes: Seq[ApiRoute], sett
 
   implicit val actorSystem: ActorSystem = system
 
+  override protected def corsAllowedOrigin: Option[String] = settings.corsAllowedOrigin
+
   val swaggerService: SwaggerConfigRoute = new SwaggerConfigRoute(swaggerConf: String, settings: RESTApiSettings)
 
   val redirectToSwagger: Route = path("" | "/") {

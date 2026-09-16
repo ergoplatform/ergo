@@ -95,6 +95,16 @@ object ConvergenceObservations {
     headers.nonEmpty && headers.forall(_.headOption.exists(_.nonEmpty)) &&
       headers.map(_.head).distinct.size == 1
 
+  /** Both nodes report mining disabled and share a completely applied selected header tip. */
+  def sameFullyAppliedNonMiningBlock(infoA: NodeInfo, infoB: NodeInfo, minHeight: Int): Boolean =
+    infoA.isMining.contains(false) && infoB.isMining.contains(false) &&
+      sameBestBlock(infoA, infoB, minHeight) &&
+      infoA.bestBlockIdOpt.exists(_.nonEmpty) &&
+      infoA.bestHeaderHeightOpt == infoA.bestBlockHeightOpt &&
+      infoB.bestHeaderHeightOpt == infoB.bestBlockHeightOpt &&
+      infoA.bestHeaderIdOpt == infoA.bestBlockIdOpt &&
+      infoB.bestHeaderIdOpt == infoB.bestBlockIdOpt
+
   def headerId(value: String): String =
     if (value.matches("[0-9a-fA-F]{64}")) value else "invalid-header-id"
 }

@@ -31,7 +31,7 @@ case class InputBlockAnnouncement(version: Byte,
 
   def valid(powScheme: AutolykosPowScheme,
              parameters: Parameters,
-             expectedNBits: Option[Long] = None): Boolean = {
+             expectedNBits: Option[Long]): Boolean = {
     val powValid = powScheme.checkInputBlockPoW(header, parameters)
     val extValid = inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot)
     val nBitsValid = expectedNBits.forall(header.nBits == _)

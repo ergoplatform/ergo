@@ -15,13 +15,13 @@ import scala.concurrent.duration._
   * Reproduction of a restart deadlock during UTXO set snapshot bootstrapping.
   *
   * Scenario: a node bootstrapping via NiPoPoW proofs + UTXO set snapshot (nipopowBootstrap +
-  * utxoBootstrap) is restarted after the NiPoPoW proof headers were persisted but before the
-  * UTXO set snapshot application completed (e.g. killed in the middle of snapshot chunk
-  * downloading). After the restart the node never resumes bootstrapping:
+  * utxoBootstrap) is restarted after the headers were persisted but before the UTXO set snapshot
+  * application completed (e.g. killed in the middle of snapshot chunk downloading). After the
+  * restart the node never resumes bootstrapping:
   *
   * - `isHeadersChainSynced` is kept in memory only (FullBlockPruningProcessor.isHeadersChainSyncedVar)
-  *   and is set solely from `updateBestFullBlock` or `setHeadersChainSynced` (the latter is called
-  *   only right after a NiPoPoW proof is applied), so it is false after every restart
+  *   so it is false after every restart, even though the headers persisted before the restart
+  *   are still at the network tip
   * - on restart the headers are read from the database, so no new NiPoPoW proof is requested
   *   (ErgoNodeViewSynchronizer.sendSync asks for proofs only when `bestHeaderOpt` is empty)
   * - the synchronizer asks for the UTXO set snapshot / block sections only when
@@ -31,9 +31,11 @@ import scala.concurrent.duration._
   * Result: headers are at tip, the state is at genesis, and the node loops sending sync
   * messages forever. Observed on mainnet with a node restarted mid snapshot download.
   *
-  * The same recovery is needed for utxoBootstrap without NiPoPoW (nipopowBootstrap = false):
-  * the startup recovery in ErgoHistory.readOrGenerate must not require nipopowBootstrap, as
-  * persisted headers with no snapshot applied mean bootstrap was already underway in both modes.
+  * The startup recovery in ErgoHistory.readOrGenerate must mark the headers chain as synced when
+  * the persisted best header is fresh and no snapshot was applied. It must not require
+  * nipopowBootstrap (persisted headers with no snapshot applied mean bootstrap was already
+  * underway in both modes), and it must not fire for a stale or partial header chain - such a
+  * node transitions organically when the next fresh header arrives (ToDownloadProcessor).
   *
   * The property below simulates the restart by closing the history storage and reopening the
   * database, and asserts that the headers chain is considered synced after the restart, so that
@@ -88,22 +90,28 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
     val dir = createTempDir
     val historySettings = utxoBootstrapSettings(dir, nipopowBootstrap)
 
-    // headers-only chain, result of header sync / a NiPoPoW proof application (no full blocks yet)
+    // headers-only chain, result of header sync / a NiPoPoW proof application (no full blocks yet).
+    // Real (fresh) timestamps: this is the state of a node killed mid bootstrap - headers at tip.
     val history = ErgoHistory.readOrGenerate(historySettings)(null)
-    val headers = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val headers = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = true)
     val updHistory = applyHeaderChain(history, headers)
 
     updHistory.bestFullBlockOpt shouldBe None
     updHistory.isUtxoSnapshotApplied shouldBe false
-    updHistory.isHeadersChainSynced shouldBe false // set only via updateBestFullBlock / setHeadersChainSynced
+    // fresh headers drove the organic headers-synced transition via the append path
+    updHistory.isHeadersChainSynced shouldBe true
+
+    // capture the height before closing: reads after close are not guaranteed
+    // (a cache miss would reach LevelDB on a closed store)
+    val heightBeforeRestart = updHistory.headersHeight
 
     // simulate node restart: close the storage and reopen the same database.
     // Without the close, StoreRegistry hands back the already-open underlying DB and the
     // "restart" is not a real cold reopen.
-    updHistory.historyStorage.close()
+    updHistory.closeStorage()
     val restarted = ErgoHistory.readOrGenerate(historySettings)(null)
 
-    restarted.headersHeight shouldBe updHistory.headersHeight
+    restarted.headersHeight shouldBe heightBeforeRestart
     restarted.bestFullBlockOpt shouldBe None
     restarted.isUtxoSnapshotApplied shouldBe false
 

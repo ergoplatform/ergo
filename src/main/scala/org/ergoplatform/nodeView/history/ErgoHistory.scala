@@ -302,8 +302,13 @@ object ErgoHistory extends ScorexLogging {
     // Only the in-memory flag is set; no heights are written here (isUtxoSnapshotApplied is
     // derived from the persisted minimalFullBlockHeight, which must stay untouched until the
     // snapshot is actually applied).
+    // The persisted best header must be fresh: a stale or partial header chain does not
+    // establish that headers sync completed (such a node transitions organically when the
+    // next fresh header arrives, see ToDownloadProcessor). A header persisted during an
+    // interrupted bootstrap is at the network tip, so recovery after a mid-bootstrap restart
+    // is unaffected.
     if (nodeSettings.utxoSettings.utxoBootstrap &&
-        history.bestHeaderOpt.isDefined &&
+        history.bestHeaderOpt.exists(_.isNew(ergoSettings.chainSettings.blockInterval * nodeSettings.headerChainDiff)) &&
         !history.isUtxoSnapshotApplied) {
       history.setHeadersChainSynced()
     }

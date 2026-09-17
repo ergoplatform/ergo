@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.modifiers.SnapshotsInfoTypeId
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
@@ -8,7 +9,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.utils.HistoryTestHelpers.{BlocksInChain, BlocksToKeep}
+import org.ergoplatform.utils.HistoryTestHelpers.BlocksInChain
 import org.ergoplatform.utils.generators.ChainGenerator._
 import org.ergoplatform.wallet.utils.FileUtils
 
@@ -68,14 +69,33 @@ class UtxoBootstrapNoNipopowSyncSpecification extends ErgoCorePropertyTest with 
       null, null, settings.cacheSettings)
   }
 
+  /**
+    * Delivers a stale header chain (old timestamps) followed by one fresh tip header through
+    * the normal append path, mimicking the real network where headers arrive in order and only
+    * the tip is fresh. The stale part alone must not trigger the headers-synced transition;
+    * the fresh tip must.
+    */
+  private def applyStaleChainWithFreshTip(history: ErgoHistory): ErgoHistory = {
+    val staleHeaders = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val histAfterStale = applyHeaderChain(history, staleHeaders)
+    histAfterStale.isHeadersChainSynced shouldBe false
+
+    val freshTip = nextHeader(
+      prev = Some(staleHeaders.last),
+      control = histAfterStale.difficultyCalculator,
+      tsOpt = Some(System.currentTimeMillis()),
+      diffBitsOpt = None,
+      useRealTs = false
+    )
+    applyHeaderChain(histAfterStale, HeaderChain(Seq(freshTip)))
+  }
+
   property("utxo bootstrap without nipopow detects headers sync and requests snapshot info") {
     val dir = createTempDir
     val historySettings = utxoBootstrapNoNipopowSettings(dir)
 
     val history = ErgoHistory.readOrGenerate(historySettings)(null)
-    // headers with real (fresh) timestamps, delivered via the normal append path
-    val headers = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = true)
-    val updHistory = applyHeaderChain(history, headers)
+    val updHistory = applyStaleChainWithFreshTip(history)
 
     updHistory.bestFullBlockOpt shouldBe None
     updHistory.isUtxoSnapshotApplied shouldBe false
@@ -96,14 +116,19 @@ class UtxoBootstrapNoNipopowSyncSpecification extends ErgoCorePropertyTest with 
 
   property("headers sync transition must not poison isUtxoSnapshotApplied for pruned configs (blocksToKeep >= 0)") {
     val dir = createTempDir
-    val historySettings = utxoBootstrapNoNipopowSettings(dir, blocksToKeep = BlocksToKeep)
+    // blocksToKeep = 2 makes the assertion discriminate: the wrong fix (updateBestFullBlock,
+    // fired by the fresh tip at height BlocksInChain + 1) would persist
+    // BlocksInChain + 1 - blocksToKeep + 1 = 10 > GenesisHeight here, flipping
+    // isUtxoSnapshotApplied with no snapshot applied (with blocksToKeep >= BlocksInChain + 1
+    // the computed height collapses to GenesisHeight and the assertion would pass either way)
+    val historySettings = utxoBootstrapNoNipopowSettings(dir, blocksToKeep = 2)
 
     val history = ErgoHistory.readOrGenerate(historySettings)(null)
     history.minimalFullBlockHeight shouldBe GenesisHeight // nothing persisted yet
 
-    // fresh headers drive the ordinary headers-synced transition via the append path
-    val headers = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = true)
-    val updHistory = applyHeaderChain(history, headers)
+    // a stale chain followed by a fresh tip drives the ordinary headers-synced transition
+    // via the append path
+    val updHistory = applyStaleChainWithFreshTip(history)
     updHistory.isHeadersChainSynced shouldBe true
 
     // ...but the transition must not persist minimalFullBlockHeight: isUtxoSnapshotApplied is

@@ -121,21 +121,32 @@ trait ToDownloadProcessor
       // `updateBestFullBlock` would persist minimalFullBlockHeight, and `isUtxoSnapshotApplied`
       // is derived from it (readMinimalFullBlockHeight() > GenesisHeight), so with blocksToKeep >= 0
       // it would flip to true with no snapshot applied and the snapshot would be skipped forever.
-      if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
-        setHeadersChainSynced()
-        log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
-      }
+      markHeadersSyncedIfFresh(header)
       Nil
     } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
-      // Headers chain is synced after this header. Start downloading full blocks
-      updateBestFullBlock(header)
-      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
-      Nil
     } else {
+      // Headers chain is synced after this header. Start downloading full blocks
+      markHeadersSyncedIfFresh(header)
       Nil
+    }
+  }
+
+  /**
+    * Mark headers chain as synced when a fresh header arrives (from the network's perspective,
+    * the chain is at the tip then). When `updateBestBlock` is true the best full block pointer
+    * is persisted as well, which advances minimalFullBlockHeight; callers in the UTXO snapshot
+    * bootstrap path must not do that (see above).
+    */
+  private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
+    if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
+      if (updateBestBlock) {
+        updateBestFullBlock(header)
+      } else {
+        setHeadersChainSynced()
+      }
+      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
     }
   }
 

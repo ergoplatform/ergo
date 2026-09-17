@@ -891,7 +891,7 @@ class ErgoNodeViewSynchronizerSpecification
       // Verify the input block info is invalid (extension proof won't match header's extensionRoot)
       val powScheme = settings.chainSettings.powScheme
       val params    = wrappedState.stateContext.currentParameters
-      val isValid   = inputBlockInfo.valid(powScheme, params)
+      val isValid   = inputBlockInfo.valid(powScheme, params, None)
       isValid shouldBe false
 
       // Call processInputBlock directly on the underlying actor to bypass message routing
@@ -2449,7 +2449,7 @@ class ErgoNodeViewSynchronizerSpecification
       )
 
       // Validate via PoW scheme to confirm it's invalid
-      oba.valid(settings.chainSettings.powScheme) shouldBe false
+      oba.valid(settings.chainSettings.powScheme, None) shouldBe false
 
       // Send via message routing (processOrderingBlockAnnouncement is private)
       val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
@@ -2567,7 +2567,7 @@ class ErgoNodeViewSynchronizerSpecification
       val unknownIbId = bytesToId(Algos.hash("unknown-input-block".getBytes))
       val oba =
         buildValidOrderingBlockAnnouncement(hist.bestFullBlockOpt, Some(unknownIbId))
-      oba.valid(settings.chainSettings.powScheme) shouldBe true
+      oba.valid(settings.chainSettings.powScheme, None) shouldBe true
 
       // Send via message routing
       val msgBytes = OrderingBlockAnnouncementMessageSpec.toBytes(oba)
@@ -3367,7 +3367,8 @@ class ErgoNodeViewSynchronizerSpecification
       inputBlockInfo.header.height shouldBe (hist.fullBlockHeight + 1)
       inputBlockInfo.valid(
         settings.chainSettings.powScheme,
-        parameters
+        parameters,
+        None
       ) shouldBe true
 
       // Send only history and mempool to the synchronizer, no state (digest mode equivalent)
@@ -3623,7 +3624,8 @@ class ErgoNodeViewSynchronizerSpecification
       )
       invalidInputBlock.valid(
         settings.chainSettings.powScheme,
-        wrappedState.stateContext.currentParameters
+        wrappedState.stateContext.currentParameters,
+        None
       ) shouldBe false
 
       synchronizerMockRef.underlyingActor.processInputBlock(

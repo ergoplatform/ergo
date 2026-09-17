@@ -616,6 +616,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+    * Request a header from `peer` only, once. The request is tracked, so the header is accepted if `peer` delivers
+    * it before the delivery timeout. After the timeout the request is forgotten instead of checked: no other peer is
+    * asked for a header that only `peer` claimed to know, and no peer is penalized for not delivering it.
+    */
+  protected def requestHeaderFromSenderOnly(headerId: ModifierId, peer: ConnectedPeer): Unit = {
+    val hid = Header.modifierTypeId
+    log.debug(s"Requesting header $headerId from $peer only")
+    networkControllerRef ! SendToNetwork(Message(RequestModifierSpec, Right(InvData(hid, Seq(headerId))), None), SendToPeer(peer))
+    deliveryTracker.setRequested(hid, headerId, peer) { _ =>
+      val expiration = new SenderOnlyRequestExpired(hid, headerId)
+      expiration.timer = context.system.scheduler.scheduleOnce(deliveryTimeout, self, expiration)
+      expiration.timer
+    }
+  }
+
   /*
    * Private helper methods to request UTXO set snapshots metadata and related data (manifests, chunks) from peers
    */
@@ -1487,10 +1503,30 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       val powScheme = settings.chainSettings.powScheme
       val parentHeaderOpt = hr.modifierById(subBlockHeader.parentId).collect { case h: Header => h }
-      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
-        val expectedDiff = hr.requiredDifficultyAfter(parent)
-        import org.ergoplatform.mining.difficulty.DifficultySerializer
-        DifficultySerializer.encodeCompactBits(expectedDiff)
+      // Expected difficulty comes only from a known parent in the best chain, one block below the announced header
+      // (or from the configured initial difficulty at genesis height), never from the announced header itself
+      val expectedNBits: Option[Long] = if (subBlockHeader.isGenesis) {
+        if (hr.bestFullBlockIdOpt.isEmpty) Some(settings.chainSettings.initialNBits) else None
+      } else {
+        parentHeaderOpt
+          .filter(parent => subBlockHeader.height == parent.height + 1 && hr.isInBestChain(parent))
+          .map { parent =>
+            val expectedDiff = hr.requiredDifficultyAfter(parent)
+            import org.ergoplatform.mining.difficulty.DifficultySerializer
+            DifficultySerializer.encodeCompactBits(expectedDiff)
+          }
+      }
+      if (expectedNBits.isEmpty) {
+        // Policy point: input block whose parent is unknown, or known but not bound as above.
+        // Default: do not process it; if the parent header is unknown, request it from the sender only, once.
+        // Another policy (e.g. keeping the input block until its parent arrives) can replace this branch.
+        if (parentHeaderOpt.isEmpty && !subBlockHeader.isGenesis) {
+          if (deliveryTracker.status(subBlockHeader.parentId, Header.modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown) {
+            requestHeaderFromSenderOnly(subBlockHeader.parentId, remote)
+          }
+        }
+        log.info(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} is not bound to the best chain")
+        return
       }
       val valid = usrOpt
         .map(_.stateContext.currentParameters)
@@ -1812,10 +1848,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (!hr.contains(oba.header.id)) {
 
       val parentHeaderOpt = hr.modifierById(oba.header.parentId).collect { case h: Header => h }
-      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
-        val expectedDiff = hr.requiredDifficultyAfter(parent)
-        import org.ergoplatform.mining.difficulty.DifficultySerializer
-        DifficultySerializer.encodeCompactBits(expectedDiff)
+      // Expected difficulty comes only from a known parent in the best chain, one block below the announced header
+      // (or from the configured initial difficulty at genesis height), never from the announced header itself
+      val expectedNBits: Option[Long] = if (oba.header.isGenesis) {
+        if (hr.bestHeaderOpt.isEmpty) Some(settings.chainSettings.initialNBits) else None
+      } else {
+        parentHeaderOpt
+          .filter(parent => oba.header.height == parent.height + 1 && hr.isInBestChain(parent))
+          .map { parent =>
+            val expectedDiff = hr.requiredDifficultyAfter(parent)
+            import org.ergoplatform.mining.difficulty.DifficultySerializer
+            DifficultySerializer.encodeCompactBits(expectedDiff)
+          }
+      }
+
+      if (expectedNBits.isEmpty) {
+        // Policy point: announcement whose parent is unknown, or known but not bound as above.
+        // Default: do not store, relay or process it; if the parent header is unknown, request it from the sender only, once.
+        // Another policy (e.g. keeping the announcement until its parent arrives) can replace this branch.
+        if (parentHeaderOpt.isEmpty && !oba.header.isGenesis) {
+          if (deliveryTracker.status(oba.header.parentId, Header.modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown) {
+            requestHeaderFromSenderOnly(oba.header.parentId, remote)
+          }
+        }
+        log.info(s"Not processing ordering block announcement ${oba.header.id}: parent ${oba.header.parentId} is not bound to the best chain")
+        return
       }
 
       if (!oba.valid(settings.chainSettings.powScheme, expectedNBits)) {
@@ -1897,6 +1954,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * re-request modifier from a different random peer, if our node does not know a peer who have it
    */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
+    case expiration: SenderOnlyRequestExpired =>
+      // clear the request only if this expiration belongs to the current request attempt
+      val current = deliveryTracker.getRequestedInfo(expiration.modifierTypeId, expiration.modifierId)
+      if (current.exists(_.cancellable eq expiration.timer)) {
+        log.info(s"Peer ${current.get.peer} has not delivered ${expiration.modifierTypeId} : ${expiration.modifierId} on time, forgetting the request")
+        deliveryTracker.clearStatusForModifier(expiration.modifierId, expiration.modifierTypeId, ModifiersStatus.Requested)
+      }
+
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.

@@ -8,6 +8,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import scorex.core.network.ConnectedPeer
+import akka.actor.Cancellable
 import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
@@ -32,6 +33,19 @@ object ErgoNodeViewSynchronizerMessages {
     case class CheckDelivery(source: ConnectedPeer,
                              modifierTypeId: NetworkObjectTypeId.Value,
                              modifierId: ModifierId)
+
+    /**
+      * Expiration of a header request sent to one peer only (see `requestHeaderFromSenderOnly`): after the
+      * delivery timeout the request is forgotten, without asking another peer and without penalizing anyone.
+      *
+      * `timer` is the scheduled expiration itself, the `Cancellable` the delivery tracker stores for the request,
+      * so an expiration is matched to the request attempt that scheduled it: an expiration queued for an earlier
+      * attempt does not clear a newer request for the same header.
+      */
+    final class SenderOnlyRequestExpired(val modifierTypeId: NetworkObjectTypeId.Value, val modifierId: ModifierId) {
+      /** set right after scheduling, before the expiration can be handled; unset, it matches no request */
+      @volatile var timer: Cancellable = _
+    }
 
     trait PeerManagerEvent
 

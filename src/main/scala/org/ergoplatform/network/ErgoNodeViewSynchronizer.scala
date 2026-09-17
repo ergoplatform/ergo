@@ -616,6 +616,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /**
+    * Request a header from `peer` only, once. The request is tracked, so the header is accepted if `peer` delivers
+    * it before the delivery timeout. After the timeout the request is forgotten instead of checked: no other peer is
+    * asked for a header that only `peer` claimed to know, and no peer is penalized for not delivering it.
+    */
+  protected def requestHeaderFromSenderOnly(headerId: ModifierId, peer: ConnectedPeer): Unit = {
+    val hid = Header.modifierTypeId
+    log.debug(s"Requesting header $headerId from $peer only")
+    networkControllerRef ! SendToNetwork(Message(RequestModifierSpec, Right(InvData(hid, Seq(headerId))), None), SendToPeer(peer))
+    deliveryTracker.setRequested(hid, headerId, peer) { _ =>
+      val expiration = new SenderOnlyRequestExpired(hid, headerId)
+      expiration.timer = context.system.scheduler.scheduleOnce(deliveryTimeout, self, expiration)
+      expiration.timer
+    }
+  }
+
   /*
    * Private helper methods to request UTXO set snapshots metadata and related data (manifests, chunks) from peers
    */
@@ -1488,12 +1504,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
       if (expectedNBits.isEmpty) {
         // Policy point: input block whose parent is unknown, or known but not bound as above.
-        // Default: do not process it; if the parent header is unknown, request it from the sender (as for height + 2 below).
+        // Default: do not process it; if the parent header is unknown, request it from the sender only, once.
         // Another policy (e.g. keeping the input block until its parent arrives) can replace this branch.
         if (parentHeaderOpt.isEmpty && !subBlockHeader.isGenesis) {
-          val hid = Header.modifierTypeId
-          if (deliveryTracker.status(subBlockHeader.parentId, hid, Seq(hr)) == ModifiersStatus.Unknown) {
-            requestBlockSection(hid, Seq(subBlockHeader.parentId), remote)
+          if (deliveryTracker.status(subBlockHeader.parentId, Header.modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown) {
+            requestHeaderFromSenderOnly(subBlockHeader.parentId, remote)
           }
         }
         log.info(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} is not bound to the best chain")
@@ -1904,6 +1919,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * re-request modifier from a different random peer, if our node does not know a peer who have it
    */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
+    case expiration: SenderOnlyRequestExpired =>
+      // clear the request only if this expiration belongs to the current request attempt
+      val current = deliveryTracker.getRequestedInfo(expiration.modifierTypeId, expiration.modifierId)
+      if (current.exists(_.cancellable eq expiration.timer)) {
+        log.info(s"Peer ${current.get.peer} has not delivered ${expiration.modifierTypeId} : ${expiration.modifierId} on time, forgetting the request")
+        deliveryTracker.clearStatusForModifier(expiration.modifierId, expiration.modifierTypeId, ModifiersStatus.Requested)
+      }
+
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.

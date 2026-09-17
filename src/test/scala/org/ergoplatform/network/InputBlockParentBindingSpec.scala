@@ -33,7 +33,8 @@ import scala.concurrent.{Await, ExecutionContextExecutor}
   * An input block announcement is processed only if its parent header is known, is in the best chain, and is
   * exactly one block below the announced header (at genesis height, with no full blocks yet, the configured
   * initial difficulty is used). The expected difficulty is derived from that parent. Otherwise the announcement is
-  * not processed, and an unknown parent header is requested from the sender.
+  * not processed, and an unknown parent header is requested from the sender only, once: the request expires after
+  * the delivery timeout without asking another peer or penalizing anyone.
   *
   * The synchronizer under test validates proof-of-work with the real Autolykos scheme (the default test
   * configuration uses a fake scheme that accepts any header), while the local history is built with the
@@ -58,7 +59,9 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
     * @param initialDifficultyHex overrides the test chain's difficulty (the local chain keeps it)
     * @param applyLocalChain      whether the generated chain is applied to the local history
     */
-  class Fixture(initialDifficultyHex: Option[String] = None, applyLocalChain: Boolean = true) extends AkkaFixture {
+  class Fixture(initialDifficultyHex: Option[String] = None,
+                applyLocalChain: Boolean = true,
+                requestTimeout: FiniteDuration = 2.seconds) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 
     val historySettings: ErgoSettings = {
@@ -68,11 +71,11 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
 
     private val cs = historySettings.chainSettings
     val realPowScheme = new AutolykosPowScheme(cs.powScheme.k, cs.powScheme.n)
-    // a short delivery timeout, so that what happens after it can be observed
+    // Expiration tests use a short timeout; replay tests keep unrelated deadlines outside their window.
     val synchronizerSettings: ErgoSettings =
       historySettings.copy(chainSettings = cs.copy(powScheme = realPowScheme),
         scorexSettings = historySettings.scorexSettings.copy(
-          network = historySettings.scorexSettings.network.copy(deliveryTimeout = 2.seconds)))
+          network = historySettings.scorexSettings.network.copy(deliveryTimeout = requestTimeout)))
 
     val ncProbe = TestProbe("NetworkControllerProbe")
     val viewHolderProbe = TestProbe("ViewHolderProbe")
@@ -223,6 +226,130 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
 
       viewHolderGotInputBlock(f) shouldBe false
       networkMessages(f) shouldBe empty
+    }
+  }
+
+  property("an input announcement is accepted on replay after its parent joins the best header chain") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      val originalTip = f.hist.bestFullBlockOpt.get
+      val parent = nextBlock(Some(f.chain(1)), originalTip.blockTransactions.txs, defaultExtension)
+      parent.height shouldBe originalTip.height
+      f.hist.contains(parent.header) shouldBe false
+      val ib = announcement(f, parent.id, originalTip.height + 1, requiredNBitsAfter(f, parent.header))
+      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters,
+        Some(requiredNBitsAfter(f, parent.header))) shouldBe true
+
+      f.process(ib)
+
+      viewHolderGotInputBlock(f) shouldBe false
+      val initialMessages = networkMessages(f)
+      headerRequests(initialMessages) shouldBe Seq(Seq(parent.id) -> SendToPeer(f.peer))
+      penalized(initialMessages) shouldBe false
+
+      f.hist.append(parent.header).get
+      f.hist.isInBestChain(parent.header) shouldBe false
+      val nextHeader = nextBlock(Some(parent), originalTip.blockTransactions.txs, defaultExtension).header
+      f.hist.append(nextHeader).get
+      f.hist.isInBestChain(parent.header) shouldBe true
+      f.hist.bestFullBlockIdOpt shouldBe Some(originalTip.id)
+      ib.header.height shouldBe f.hist.fullBlockHeight + 1
+
+      f.process(ib)
+
+      f.viewHolderProbe.expectMsg(ProcessInputBlock(ib, f.peer))
+      val replayMessages = networkMessages(f)
+      penalized(replayMessages) shouldBe false
+      headerRequests(replayMessages) shouldBe empty
+    }
+  }
+
+  property("an input announcement is accepted on replay after its parent becomes the best full block in history") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      val originalTip = f.hist.bestFullBlockOpt.get
+      val parent = nextBlock(Some(originalTip), originalTip.blockTransactions.txs, defaultExtension)
+      f.hist.contains(parent.header) shouldBe false
+      val ib = announcement(f, parent.id, parent.height + 1, requiredNBitsAfter(f, parent.header))
+      ib.header.height shouldBe f.hist.fullBlockHeight + 2
+      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters,
+        Some(requiredNBitsAfter(f, parent.header))) shouldBe true
+
+      f.process(ib)
+
+      viewHolderGotInputBlock(f) shouldBe false
+      val initialMessages = networkMessages(f)
+      headerRequests(initialMessages) shouldBe Seq(Seq(parent.id) -> SendToPeer(f.peer))
+      penalized(initialMessages) shouldBe false
+
+      applyChain(f.hist, Seq(parent))
+      f.hist.bestFullBlockIdOpt shouldBe Some(parent.id)
+      f.hist.isInBestChain(parent.header) shouldBe true
+      ib.header.height shouldBe f.hist.fullBlockHeight + 1
+
+      f.process(ib)
+
+      f.viewHolderProbe.expectMsg(ProcessInputBlock(ib, f.peer))
+      val replayMessages = networkMessages(f)
+      penalized(replayMessages) shouldBe false
+      headerRequests(replayMessages) shouldBe empty
+    }
+  }
+
+  property("unknown-parent discovery expires without requesting the header from another peer") {
+    withFixture { f =>
+      val otherPeer = f.initialize()
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val tip = f.hist.bestFullBlockOpt.get.header
+      val ib = announcement(f, unknownParent, tip.height + 1, DifficultySerializer.encodeCompactBits(1))
+
+      f.process(ib)
+
+      // Observe two delivery deadlines, including a potential retry against the other peer.
+      val messages = f.ncProbe.receiveWhile(max = 5.seconds, idle = 5.seconds) { case m => m }
+      val requests = headerRequests(messages).filter(_._1.contains(unknownParent))
+      requests.map(_._2 == SendToPeer(f.peer)) shouldBe Seq(true)
+      messages.exists {
+        case p: PenalizePeer => p.address == otherPeer.connectionId.remoteAddress
+        case _ => false
+      } shouldBe false
+      f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, unknownParent) shouldBe None
+      f.deliveryTracker.status(unknownParent, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Unknown
+      viewHolderGotInputBlock(f) shouldBe false
+    }
+  }
+
+  property("an expiration from an earlier request attempt does not clear the current request for the header") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      f.initialize()
+      val tip = f.hist.bestFullBlockOpt.get
+      val sibling = nextBlock(Some(f.chain(1)), tip.blockTransactions.txs, defaultExtension).header
+      val ib = announcement(f, sibling.id, tip.header.height + 1, DifficultySerializer.encodeCompactBits(1))
+      f.process(ib)
+      headerRequests(networkMessages(f)) shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
+      val first = f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get
+
+      // the first request is cleared (as when its expiration is already queued) and the header is requested again
+      f.deliveryTracker.setUnknown(sibling.id, Header.modifierTypeId)
+      f.process(ib)
+      headerRequests(networkMessages(f)) shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
+      val current = f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get
+      current should not be theSameInstanceAs(first)
+
+      // the first attempt's expiration arrives now
+      val stale = new SenderOnlyRequestExpired(Header.modifierTypeId, sibling.id)
+      stale.timer = first.cancellable
+      f.synchronizer ! stale
+
+      networkMessages(f) shouldBe empty
+      f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get should be theSameInstanceAs current
+      f.deliveryTracker.status(sibling.id, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Requested
+
+      f.deliverHeader(sibling)
+
+      penalized(networkMessages(f)) shouldBe false
+      f.viewHolderProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.exists {
+        case ModifiersFromRemote(mods) => mods.exists(_.id == sibling.id)
+        case _ => false
+      } shouldBe true
     }
   }
 

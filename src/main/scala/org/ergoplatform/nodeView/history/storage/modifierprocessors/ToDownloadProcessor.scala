@@ -128,7 +128,7 @@ trait ToDownloadProcessor
       requiredModifiersForHeader(header)
     } else {
       // Headers chain is synced after this header. Start downloading full blocks
-      markHeadersSyncedIfFresh(header)
+      markHeadersSyncedIfFresh(header, updateBestBlock = true)
       Nil
     }
   }

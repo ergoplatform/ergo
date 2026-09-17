@@ -1850,12 +1850,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
       if (expectedNBits.isEmpty) {
         // Policy point: announcement whose parent is unknown, or known but not bound as above.
-        // Default: do not store, relay or process it; if the parent header is unknown, request it from the sender.
+        // Default: do not store, relay or process it; if the parent header is unknown, request it from the sender only, once.
         // Another policy (e.g. keeping the announcement until its parent arrives) can replace this branch.
         if (parentHeaderOpt.isEmpty && !oba.header.isGenesis) {
-          val hid = Header.modifierTypeId
-          if (deliveryTracker.status(oba.header.parentId, hid, Seq(hr)) == ModifiersStatus.Unknown) {
-            requestBlockSection(hid, Seq(oba.header.parentId), remote)
+          if (deliveryTracker.status(oba.header.parentId, Header.modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown) {
+            requestHeaderFromSenderOnly(oba.header.parentId, remote)
           }
         }
         log.info(s"Not processing ordering block announcement ${oba.header.id}: parent ${oba.header.parentId} is not bound to the best chain")

@@ -33,7 +33,8 @@ import scala.concurrent.{Await, ExecutionContextExecutor}
   * An ordering block announcement is stored, relayed and handed to the node view holder only if its parent
   * header is known, is in the best header chain, and is exactly one block below the announced header; the
   * expected difficulty is derived from that parent (at genesis height, with an empty header chain, the configured
-  * initial difficulty is used). If the parent header is unknown, it is requested from the sender.
+  * initial difficulty is used). If the parent header is unknown, it is requested from the sender only, once: the
+  * request expires after the delivery timeout without asking another peer or penalizing anyone.
   *
   * The synchronizer under test validates proof-of-work with the real Autolykos scheme (the default test
   * configuration uses a fake scheme that accepts any header), while the local history is built with the
@@ -57,8 +58,11 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
   /**
     * @param initialDifficultyHex overrides the test chain's difficulty (the local chain keeps it)
     * @param applyLocalChain      whether the generated chain is applied to the local history
+    * @param requestTimeout       delivery timeout of the synchronizer under test
     */
-  class Fixture(initialDifficultyHex: Option[String] = None, applyLocalChain: Boolean = true) extends AkkaFixture {
+  class Fixture(initialDifficultyHex: Option[String] = None,
+                applyLocalChain: Boolean = true,
+                requestTimeout: FiniteDuration = 2.seconds) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 
     val historySettings: ErgoSettings = {
@@ -68,11 +72,11 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
 
     private val cs = historySettings.chainSettings
     val realPowScheme = new AutolykosPowScheme(cs.powScheme.k, cs.powScheme.n)
-    // a short delivery timeout, so that what happens after it can be observed
+    // a short delivery timeout by default, so that what happens after it can be observed
     val synchronizerSettings: ErgoSettings =
       historySettings.copy(chainSettings = cs.copy(powScheme = realPowScheme),
         scorexSettings = historySettings.scorexSettings.copy(
-          network = historySettings.scorexSettings.network.copy(deliveryTimeout = 2.seconds)))
+          network = historySettings.scorexSettings.network.copy(deliveryTimeout = requestTimeout)))
 
     val ncProbe = TestProbe("NetworkControllerProbe")
     val viewHolderProbe = TestProbe("ViewHolderProbe")
@@ -208,6 +212,69 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
       val oba = announcement(f, sibling.id, tip.header.height + 1, DifficultySerializer.encodeCompactBits(1))
       f.send(oba)
       outcome(f, oba).headerRequests shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
+
+      f.deliverHeader(sibling)
+
+      f.ncProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }
+        .exists(_.isInstanceOf[PenalizePeer]) shouldBe false
+      f.viewHolderProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.exists {
+        case ModifiersFromRemote(mods) => mods.exists(_.id == sibling.id)
+        case _ => false
+      } shouldBe true
+    }
+  }
+
+  property("unknown-parent request expires without requesting the header from another peer or penalizing anyone") {
+    withFixture { f =>
+      val otherPeer = f.addOlderPeer()
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val oba = announcement(f, unknownParent, f.hist.fullBlockHeight + 1, DifficultySerializer.encodeCompactBits(1))
+
+      f.send(oba)
+
+      // observe two delivery deadlines, including a potential retry against the other peer
+      val messages = f.ncProbe.receiveWhile(max = 5.seconds, idle = 5.seconds) { case m => m }
+      val requests = messages.collect {
+        case s: SendToNetwork if s.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          s.message.data.get.asInstanceOf[InvData].ids.contains(unknownParent) => s.sendingStrategy
+      }
+      requests shouldBe Seq(SendToPeer(f.peer))
+      messages.exists {
+        case p: PenalizePeer => p.address == otherPeer.connectionId.remoteAddress
+        case _ => false
+      } shouldBe false
+      messages.exists(_.isInstanceOf[PenalizePeer]) shouldBe false
+      f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, unknownParent) shouldBe None
+      f.deliveryTracker.status(unknownParent, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Unknown
+      f.hist.getOrderingBlockAnnouncement(oba.header.id) shouldBe None
+    }
+  }
+
+  property("an expiration from an earlier request attempt does not clear the current request for the header") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      f.addOlderPeer()
+      val tip = f.hist.bestFullBlockOpt.get
+      val sibling = nextBlock(Some(f.chain(1)), tip.blockTransactions.txs, defaultExtension).header
+      val oba = announcement(f, sibling.id, tip.header.height + 1, DifficultySerializer.encodeCompactBits(1))
+      f.send(oba)
+      outcome(f, oba).headerRequests shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
+      val first = f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get
+
+      // the first request is cleared (as when its expiration is already queued) and the header is requested again
+      f.deliveryTracker.setUnknown(sibling.id, Header.modifierTypeId)
+      f.send(oba)
+      outcome(f, oba).headerRequests shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
+      val current = f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get
+      current should not be theSameInstanceAs(first)
+
+      // the first attempt's expiration arrives now
+      val stale = new SenderOnlyRequestExpired(Header.modifierTypeId, sibling.id)
+      stale.timer = first.cancellable
+      f.synchronizer ! stale
+
+      outcome(f, oba).headerRequests shouldBe empty
+      f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get should be theSameInstanceAs current
+      f.deliveryTracker.status(sibling.id, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Requested
 
       f.deliverHeader(sibling)
 

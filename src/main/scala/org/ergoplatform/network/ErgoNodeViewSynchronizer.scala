@@ -1834,10 +1834,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (!hr.contains(oba.header.id)) {
 
       val parentHeaderOpt = hr.modifierById(oba.header.parentId).collect { case h: Header => h }
-      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
-        val expectedDiff = hr.requiredDifficultyAfter(parent)
-        import org.ergoplatform.mining.difficulty.DifficultySerializer
-        DifficultySerializer.encodeCompactBits(expectedDiff)
+      // Expected difficulty comes only from a known parent in the best chain, one block below the announced header
+      // (or from the configured initial difficulty at genesis height), never from the announced header itself
+      val expectedNBits: Option[Long] = if (oba.header.isGenesis) {
+        if (hr.bestHeaderOpt.isEmpty) Some(settings.chainSettings.initialNBits) else None
+      } else {
+        parentHeaderOpt
+          .filter(parent => oba.header.height == parent.height + 1 && hr.isInBestChain(parent))
+          .map { parent =>
+            val expectedDiff = hr.requiredDifficultyAfter(parent)
+            import org.ergoplatform.mining.difficulty.DifficultySerializer
+            DifficultySerializer.encodeCompactBits(expectedDiff)
+          }
+      }
+
+      if (expectedNBits.isEmpty) {
+        // Policy point: announcement whose parent is unknown, or known but not bound as above.
+        // Default: do not store, relay or process it; if the parent header is unknown, request it from the sender.
+        // Another policy (e.g. keeping the announcement until its parent arrives) can replace this branch.
+        if (parentHeaderOpt.isEmpty && !oba.header.isGenesis) {
+          val hid = Header.modifierTypeId
+          if (deliveryTracker.status(oba.header.parentId, hid, Seq(hr)) == ModifiersStatus.Unknown) {
+            requestBlockSection(hid, Seq(oba.header.parentId), remote)
+          }
+        }
+        log.info(s"Not processing ordering block announcement ${oba.header.id}: parent ${oba.header.parentId} is not bound to the best chain")
+        return
       }
 
       if (!oba.valid(settings.chainSettings.powScheme, expectedNBits)) {

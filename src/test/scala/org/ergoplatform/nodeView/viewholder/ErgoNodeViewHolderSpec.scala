@@ -23,7 +23,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Acce
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
-import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -580,6 +580,44 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  private val t21 = TestCase("txScriptFailure carries failing transaction id") { fixture =>
+    import fixture._
+
+    val (us, bh) = createUtxoState(fixture.settings)
+    val wus = WrappedUtxoState(us, bh, fixture.settings)
+
+    val genesis = validFullBlock(None, wus)
+
+    // Apply genesis through the standard NVH route first.
+    applyBlock(genesis) shouldBe 'success
+    val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
+
+    // Create a valid tx that pays to a FalseTree output.
+    val box = wusAfterGenesis.takeBoxes(1).head
+    val validTx = validTransactionFromBoxes(IndexedSeq(box), outputsProposition = FalseTree)
+
+    val validBlock = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
+
+    // Apply valid block and advance wrapped state.
+    applyBlock(validBlock) shouldBe 'success
+    val wusAfterValidBlock = wusAfterGenesis.applyModifier(validBlock)(_ => ()).get
+
+    // Create a tx spending the FalseTree output; prover cannot sign it, so it has empty proofs.
+    val falseTreeBox = validTx.outputs.head
+    val invalidTx = validTransactionFromBoxes(IndexedSeq(falseTreeBox))
+
+    val invalidBlock = validFullBlock(Some(validBlock), wusAfterValidBlock, Seq(invalidTx))
+
+    subscribeEvents(classOf[SemanticallyFailedModification])
+
+    if (verifyTransactions) {
+      applyBlock(invalidBlock) shouldBe 'success
+
+      val semFailed = expectMsgType[SemanticallyFailedModification]
+      ErgoNodeViewHolder.extractFailedTxId(semFailed.error) shouldBe Some(invalidTx.id)
+    }
+  }
+
   val cases: List[TestCase] = List(t0, t1, t2, t3, t3a, t4, t5, t6, t7, t8, t9)
 
   NodeViewTestConfig.allConfigs.foreach { c =>
@@ -590,7 +628,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
-  val verifyingTxCases: List[TestCase] = List(t10, t11, t12, t13, t20)
+  val verifyingTxCases: List[TestCase] = List(t10, t11, t12, t13, t20, t21)
 
   NodeViewTestConfig.verifyTxConfigs.foreach { c =>
     verifyingTxCases.foreach { t =>

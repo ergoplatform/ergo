@@ -384,11 +384,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           case Some(txs) =>
             val updMp = memoryPool().put(txs.map(tx => UnconfirmedTransaction(tx, None)))
             updateNodeView(updatedMempool = Some(updMp))
-
-            val newVault = vault().rollbackInputBlock(id)
-            updateNodeView(updatedVault = Some(newVault))
           case None =>
         }
+      }
+
+      // Wallet diffs may depend on boxes created by earlier input blocks, so undo
+      // them newest-first. This must not depend on transaction-cache availability.
+      rollbackInputBlocks.reverse.foreach { id =>
+        val newVault = vault().rollbackInputBlock(id)
+        updateNodeView(updatedVault = Some(newVault))
       }
 
       // clear mempool from input block transactions

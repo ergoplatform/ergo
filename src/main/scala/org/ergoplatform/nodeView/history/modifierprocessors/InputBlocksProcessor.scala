@@ -532,19 +532,18 @@ trait InputBlocksProcessor extends ScorexLogging {
        *
        * A fork switch is needed when:
        * 1. The longest chain is different from the best chain
-       * 2. The depth of the current block in the longest chain is greater than the best chain depth
-       * 3. All blocks from the current processing point to the target depth have available transactions
+       * 2. The current block belongs to the longest chain
+       * 3. Its contiguous prefix with available transactions is deeper than the best chain depth
        */
       def switchNeeded(id: ModifierId): Boolean = {
-        val lf = forks(longestIndex)  // Get the longest fork
-        val d  = lf.depthOf(id)      // Get the depth of the current block in the longest fork
-        val needed = d > bestDepth && {  // Switch if longest fork is deeper than best fork
-          // Verify that all blocks from current processing point to target depth have transactions
-          (lf.processedIndex + 1 to d).forall { i =>
-            val id = lf.chain(i)
-            inputBlockTransactions.contains(id)  // Check if transactions are available
-          }
-        }
+        val lf = forks(longestIndex)
+        // A parent body may arrive after its children. Reconsider the entire
+        // available prefix rather than stopping at the newly delivered block.
+        val d = lf.processedIndex + lf.chain
+          .drop(lf.processedIndex + 1)
+          .takeWhile(inputBlockTransactions.contains)
+          .length
+        val needed = lf.depthOf(id) >= 0 && d > bestDepth
         if (needed) {
           log.info(s"Fork switch needed: longest fork depth $d > best fork depth ${bestDepth}")
         }
@@ -559,23 +558,17 @@ trait InputBlocksProcessor extends ScorexLogging {
 
         // Calculate which blocks need to be rolled back
         val rollbackInputBlocks = {
-          var commonIdx = -1  // Index of the common ancestor
-          (0 until currentFork.chain.length).foreach { idx =>
-            // Find the highest index that exists in both chains and is processed in the new chain
-            if (idx < newFork.chain.length &&
-                currentFork.chain(idx) == newFork.chain(idx) &&
-                idx <= newFork.processedIndex) {
-              commonIdx = idx
-            }
-          }
-          if(commonIdx == -1 || commonIdx == currentFork.processedIndex){
-            Seq.empty  // Nothing to roll back if common ancestor is at the same level or higher
-          } else {
-            // Extract the blocks that need to be rolled back (from common ancestor + 1 to processed tip)
-            val rolledBack = currentFork.chain.slice(commonIdx + 1, currentFork.processedIndex + 1)
+          val commonPrefixLength = currentFork.chain
+            .zip(newFork.chain)
+            .take(newFork.processedIndex + 1)
+            .takeWhile { case (currentId, newId) => currentId == newId }
+            .length
+          val rolledBack =
+            currentFork.chain.slice(commonPrefixLength, currentFork.processedIndex + 1)
+          if (rolledBack.nonEmpty) {
             log.info(s"Fork switch: rolling back ${rolledBack.length} input blocks from fork ${bestIndex}")
-            rolledBack
           }
+          rolledBack
         }
 
         // Process the next block in the new best chain

@@ -5,6 +5,7 @@ import akka.testkit.TestProbe
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedOrderingBlock}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
@@ -53,11 +54,30 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
       testCode(fixture)
     }
     finally {
-      Await.result(fixture.system.terminate(), Duration.Inf)
+      try Await.result(fixture.system.terminate(), Duration.Inf)
+      finally fixture.localHistory.closeStorage()
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
+  private def isolatedNodeSettings(prototype: ErgoSettings): ErgoSettings = {
+    val directory = createTempDir
+    prototype.copy(directory = directory.getAbsolutePath,
+      walletSettings = prototype.walletSettings.copy(secretStorage =
+        prototype.walletSettings.secretStorage.copy(
+          secretDir = new java.io.File(directory, "keystore").getAbsolutePath)))
+  }
+
+  class NodeViewHolderMock(nodeSettings: ErgoSettings,
+                           injectedHistory: ErgoHistory,
+                           injectedMempool: ErgoMemPool)
+    extends ErgoNodeViewHolder[UtxoState](nodeSettings) {
+    override protected def getNodeViewChanges: Receive = {
+      case request: GetNodeViewChanges =>
+        if (request.history) sender() ! ChangedHistory(injectedHistory)
+        super.getNodeViewChanges(request.copy(history = false, mempool = false))
+        if (request.mempool) sender() ! ChangedMempool(injectedMempool)
+    }
+  }
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,
@@ -75,9 +95,9 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 500.millis)
 
-  def nodeViewSynchronizer(implicit system: ActorSystem):
+  def nodeViewSynchronizer(history: ErgoHistory, mempool: ErgoMemPool, settings: ErgoSettings)
+                         (implicit system: ActorSystem):
   (ActorRef, ActorRef, ConnectedPeer, TestProbe, TestProbe, TestProbe, DeliveryTracker, ErgoSyncTracker) = {
-    val settings = ErgoSettingsReader.read()
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
@@ -85,9 +105,7 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // each test should always start with empty history
-    deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock(settings, history, mempool)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -110,7 +128,16 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
   }
 
   class SynchronizerFixture extends AkkaFixture {
-    val (synchronizer, nodeViewHolder, peer, pchProbe, ncProbe, eventListener, deliveryTracker, syncTracker) = nodeViewSynchronizer
+    val nodeSettings = isolatedNodeSettings(ErgoSettingsReader.read())
+    val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+    val fullChain = genChain(10, localHistory)
+    fullChain.foreach { block =>
+      localHistory.append(block.header).get
+      block.blockSections.foreach(section => localHistory.append(section).get)
+    }
+    val mempool = ErgoMemPool.empty(nodeSettings)
+    val (synchronizer, nodeViewHolder, peer, pchProbe, ncProbe, eventListener, deliveryTracker, syncTracker) =
+      nodeViewSynchronizer(localHistory, mempool, nodeSettings)
   }
 
   // ============================================================================
@@ -121,16 +148,8 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
     withFixture { fixture =>
       import fixture._
 
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
       synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizer ! ChangedMempool(mempool)
 
       // Register two peers: one Equal, one Younger
       val peerEqual = ConnectedPeer(
@@ -147,14 +166,29 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
       syncTracker.updateStatus(peerEqual, Equal, Some(10))
       syncTracker.updateStatus(peerYounger, Younger, Some(5))
 
+      // A late startup reply must preserve the fixture's selected history and mempool.
+      val startupReaders = TestProbe("StartupReaders")
+      startupReaders.send(nodeViewHolder,
+        GetNodeViewChanges(history = true, state = false, vault = false, mempool = true))
+      val changedHistory = startupReaders.expectMsgType[ChangedHistory](3.seconds)
+      val changedMempool = startupReaders.expectMsgType[ChangedMempool](3.seconds)
+      startupReaders.send(synchronizer, changedHistory)
+      startupReaders.send(synchronizer, changedMempool)
+
       // Create and send ordering block
       val wrappedState = wrappedUtxoStateGen.sample.get
       val currentBlock = validFullBlock(fullChain.lastOption, wrappedState)
-      synchronizer ! LocallyGeneratedOrderingBlock(currentBlock, Seq.empty)
+      startupReaders.send(synchronizer, LocallyGeneratedOrderingBlock(currentBlock, Seq.empty))
 
       // Verify ordering block announcement sent only to Equal peer
+      var announcement: Option[SendToNetwork] = None
       eventually(timeout(5.seconds)) {
-        val msg = ncProbe.expectMsgClass(3.seconds, classOf[SendToNetwork])
+        // The announcement is emitted once; retries must recheck its original recipients.
+        val msg = announcement.getOrElse {
+          val received = ncProbe.expectMsgClass(3.seconds, classOf[SendToNetwork])
+          announcement = Some(received)
+          received
+        }
         msg.message.spec.messageCode shouldBe OrderingBlockAnnouncementMessageSpec.messageCode
         msg.sendingStrategy match {
           case SendToPeers(peers) =>
@@ -170,16 +204,8 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
     withFixture { fixture =>
       import fixture._
 
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
       synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizer ! ChangedMempool(mempool)
 
       // Register peer on fork
       val peerFork = ConnectedPeer(
@@ -211,16 +237,8 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
     withFixture { fixture =>
       import fixture._
 
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
       synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizer ! ChangedMempool(mempool)
 
       // Register only Younger peer (not eligible for ordering block announcements)
       val peerYounger = ConnectedPeer(
@@ -260,16 +278,8 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
     withFixture { fixture =>
       import fixture._
 
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
       synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizer ! ChangedMempool(mempool)
 
       // Subscribe to FullBlockApplied events
       system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
@@ -300,16 +310,8 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
     withFixture { fixture =>
       import fixture._
 
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
       synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizer ! ChangedMempool(mempool)
 
       // Subscribe to FullBlockApplied
       system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])

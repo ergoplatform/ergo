@@ -16,7 +16,8 @@ import org.ergoplatform.nodeView.history.{
   ErgoSyncInfoMessageSpec,
   ErgoSyncInfoV2
 }
-import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
@@ -78,7 +79,27 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
-  class NodeViewHolderMock(settings: ErgoSettings) extends ErgoNodeViewHolder[UtxoState](settings)
+  private def isolatedNodeSettings(prototype: ErgoSettings): ErgoSettings = {
+    val directory = createTempDir
+    prototype.copy(directory = directory.getAbsolutePath,
+      walletSettings = prototype.walletSettings.copy(secretStorage =
+        prototype.walletSettings.secretStorage.copy(
+          secretDir = new java.io.File(directory, "keystore").getAbsolutePath)))
+  }
+
+  class NodeViewHolderMock(nodeSettings: ErgoSettings) extends ErgoNodeViewHolder[UtxoState](nodeSettings)
+
+  class InjectedReadersNodeViewHolder(nodeSettings: ErgoSettings,
+                                     injectedHistory: ErgoHistoryReader,
+                                     injectedMempool: ErgoMemPoolReader) extends NodeViewHolderMock(nodeSettings) {
+    // This fixture owns its history and mempool; startup replies must use those same readers.
+    override protected def getNodeViewChanges: Receive = {
+      case request: GetNodeViewChanges =>
+        if (request.history) sender() ! ChangedHistory(injectedHistory)
+        super.getNodeViewChanges(request.copy(history = false, mempool = false))
+        if (request.mempool) sender() ! ChangedMempool(injectedMempool)
+    }
+  }
 
   class SynchronizerMock(
     networkControllerRef: ActorRef,
@@ -165,7 +186,7 @@ class ErgoNodeViewSynchronizerSpecification
     val h = localHistoryGen.sample.get
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
     val s                                     = localStateGen.sample.get
-    val settings                              = ErgoSettingsReader.read()
+    val settings                              = isolatedNodeSettings(ErgoSettingsReader.read())
     val pool                                  = ErgoMemPool.empty(settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe                               = TestProbe("NetworkControllerProbe")
@@ -174,9 +195,7 @@ class ErgoNodeViewSynchronizerSpecification
     val syncTracker                           = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker      = DeliveryTracker.empty(settings)
 
-    // each test should always start with empty history
-    deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock(settings)))
+    val nodeViewHolderMockRef = system.actorOf(Props(new InjectedReadersNodeViewHolder(settings, h, pool)))
 
     val synchronizerMockRef = system.actorOf(
       Props(
@@ -238,22 +257,13 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   class Synchronizer2Fixture extends AkkaFixture {
+    val settings: ErgoSettings = isolatedNodeSettings(org.ergoplatform.utils.ErgoNodeTestConstants.settings)
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe                               = TestProbe("NetworkControllerProbe")
     val pchProbe                              = TestProbe("PeerHandlerProbe")
 
-    // Use a unique data directory per fixture to avoid LevelDB corruption from
-    // concurrent or sequential tests reusing the same on-disk history.
-    val settings: ErgoSettings = {
-      val baseSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings
-      baseSettings.copy(directory = createTempDir.getAbsolutePath)
-    }
-
     val syncTracker                           = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker      = DeliveryTracker.empty(settings)
-
-    // each test should always start with empty history
-    deleteRecursive(ErgoHistory.historyDir(settings))
 
     import akka.testkit.TestActorRef
 
@@ -720,7 +730,7 @@ class ErgoNodeViewSynchronizerSpecification
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will contain the sampled headers followed by genesis
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) {
         case m =>
@@ -728,7 +738,9 @@ class ErgoNodeViewSynchronizerSpecification
             case stn: SendToNetwork =>
               val msg     = stn.message
               val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-              msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+              msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+                headers.map(_.id) == (Seq(0, 16, 128, 512)
+                  .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
             case _ => false
           }
       }
@@ -739,6 +751,16 @@ class ErgoNodeViewSynchronizerSpecification
     withFixture { ctx =>
       import ctx._
 
+      // Replay a late startup request before observing the peer response. The fixture's
+      // injected history and mempool must not be replaced by the holder's empty readers.
+      val startupReaders = TestProbe("StartupReaders")
+      startupReaders.send(nodeViewHolder,
+        GetNodeViewChanges(history = true, state = false, vault = false, mempool = true))
+      val changedHistory = startupReaders.expectMsgType[ChangedHistory](3.seconds)
+      val changedMempool = startupReaders.expectMsgType[ChangedMempool](3.seconds)
+      synchronizer ! changedHistory
+      synchronizer ! changedMempool
+
       val sync = ErgoSyncInfoV2(Seq(altchain.last))
 
       // Neighbour is sending
@@ -746,7 +768,7 @@ class ErgoNodeViewSynchronizerSpecification
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will contain the sampled headers followed by genesis
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) {
         case m =>
@@ -754,7 +776,9 @@ class ErgoNodeViewSynchronizerSpecification
             case stn: SendToNetwork =>
               val msg     = stn.message
               val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-              msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+              msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+                headers.map(_.id) == (Seq(0, 16, 128, 512)
+                  .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
             case _ => false
           }
       }
@@ -1501,17 +1525,14 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Verify that localInputBlockChunks was populated
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(synchronizer)
-        .asInstanceOf[scala.collection.mutable.Map[
-          String,
-          ErgoNodeViewSynchronizer.InputBlockDiffData
-        ]]
+        .asInstanceOf[InputBlockPendingCache]
 
-      localInputBlockChunks.contains(inputBlockId) shouldBe true
-      val cachedData = localInputBlockChunks(inputBlockId)
+      localInputBlockChunks.get(inputBlockId).isDefined shouldBe true
+      val cachedData = localInputBlockChunks.get(inputBlockId).get
       cachedData.weakTxsIds shouldBe Seq(fakeWeakId)
       cachedData.txs shouldBe empty // no txs found in mempool
     }
@@ -1572,11 +1593,11 @@ class ErgoNodeViewSynchronizerSpecification
       // Pre-populate localInputBlockChunks with tx1 (local tx from mempool) but not tx2
       val testSynchronizer = testSynchronizerRef.underlyingActor
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(testSynchronizer)
-        .asInstanceOf[scala.collection.mutable.Map[ModifierId, InputBlockDiffData]]
+        .asInstanceOf[InputBlockPendingCache]
 
       localInputBlockChunks.put(
         inputBlockId,
@@ -1584,7 +1605,9 @@ class ErgoNodeViewSynchronizerSpecification
           System.currentTimeMillis(),
           Seq(tx1.weakId, tx2.weakId), // both weakIds expected
           Seq(tx1) // only tx1 is in local cache (tx2 comes from peer)
-        )
+        ),
+        peer.connectionId.remoteAddress.getHostString,
+        peer.handlerRef.toString
       )
 
       // Create peer transaction data containing tx2 (missing from local)
@@ -1592,6 +1615,8 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Call processInputBlockTransactions directly
       testSynchronizer.processInputBlockTransactions(peerTxsData, testHist, peer)
+      localInputBlockChunks.get(inputBlockId) shouldBe None
+      localInputBlockChunks.retainedWeight shouldBe 0L
 
       // Verify ProcessInputBlockTransactions was sent to viewHolderRef with merged tx array
       // Note: The probe also receives GetNodeViewChanges from synchronizer preStart, so we fish for the right message
@@ -1720,17 +1745,14 @@ class ErgoNodeViewSynchronizerSpecification
 
       // Use reflection to access private field
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(synchronizerMock)
-        .asInstanceOf[scala.collection.mutable.Map[
-          ModifierId,
-          ErgoNodeViewSynchronizer.InputBlockDiffData
-        ]]
+        .asInstanceOf[InputBlockPendingCache]
 
-      localInputBlockChunks.put(oldSubBlockId1, oldData1)
-      localInputBlockChunks.put(oldSubBlockId2, oldData2)
+      localInputBlockChunks.put(oldSubBlockId1, oldData1, "peer", "connection")
+      localInputBlockChunks.put(oldSubBlockId2, oldData2, "peer", "connection")
 
       // Create recent entry (should NOT be cleaned up)
       val recentTime = System.currentTimeMillis()
@@ -1741,10 +1763,10 @@ class ErgoNodeViewSynchronizerSpecification
         Seq(tx1.weakId, tx2.weakId),
         Seq(tx1, tx2)
       )
-      localInputBlockChunks.put(recentSubBlockId, recentData)
+      localInputBlockChunks.put(recentSubBlockId, recentData, "peer", "connection")
 
-      // Verify all entries are present before cleanup
-      localInputBlockChunks.size shouldBe 3
+      // Admission prunes expired entries even before the scheduled cleanup.
+      localInputBlockChunks.size shouldBe 1
 
       // Trigger cleanup
       synchronizerMockRef ! ErgoNodeViewSynchronizer.CleanupLocalInputBlockChunks
@@ -1752,9 +1774,9 @@ class ErgoNodeViewSynchronizerSpecification
       // Verify old entries are removed and recent entry remains
       eventually {
         localInputBlockChunks.size shouldBe 1
-        localInputBlockChunks.contains(recentSubBlockId) shouldBe true
-        localInputBlockChunks.contains(oldSubBlockId1) shouldBe false
-        localInputBlockChunks.contains(oldSubBlockId2) shouldBe false
+        localInputBlockChunks.get(recentSubBlockId).isDefined shouldBe true
+        localInputBlockChunks.get(oldSubBlockId1) shouldBe None
+        localInputBlockChunks.get(oldSubBlockId2) shouldBe None
       }
     }
   }
@@ -1762,20 +1784,16 @@ class ErgoNodeViewSynchronizerSpecification
   property("NodeViewSynchronizer: cleanupLocalInputBlockChunks handles empty cache") {
     withFixture2 { ctx =>
       import ctx._
-      import scorex.util.ModifierId
 
       val synchronizerMock = synchronizerMockRef.underlyingActor
 
       // Access the localInputBlockChunks map via reflection
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(synchronizerMock)
-        .asInstanceOf[scala.collection.mutable.Map[
-          ModifierId,
-          ErgoNodeViewSynchronizer.InputBlockDiffData
-        ]]
+        .asInstanceOf[InputBlockPendingCache]
 
       // Ensure cache is empty
       localInputBlockChunks.clear()
@@ -3028,11 +3046,11 @@ class ErgoNodeViewSynchronizerSpecification
       // Pre-populate with tx1 weakId but a fake weakId that won't be found
       val fakeWeakId: Array[Byte] = Array.fill(32)(0xFF.toByte)
       val localInputBlockChunksField =
-        classOf[ErgoNodeViewSynchronizer].getDeclaredField("localInputBlockChunks")
+        classOf[ErgoNodeViewSynchronizer].getDeclaredFields.find(_.getName.endsWith("localInputBlockChunks")).get
       localInputBlockChunksField.setAccessible(true)
       val localInputBlockChunks = localInputBlockChunksField
         .get(testSynchronizerRef.underlyingActor)
-        .asInstanceOf[scala.collection.mutable.Map[ModifierId, InputBlockDiffData]]
+        .asInstanceOf[InputBlockPendingCache]
 
       localInputBlockChunks.put(
         inputBlockId,
@@ -3040,7 +3058,9 @@ class ErgoNodeViewSynchronizerSpecification
           System.currentTimeMillis(),
           Seq(tx1.weakId, fakeWeakId), // fakeWeakId won't be found
           Seq(tx1)
-        )
+        ),
+        peer.connectionId.remoteAddress.getHostString,
+        peer.handlerRef.toString
       )
 
       // Peer sends tx1 only — fakeWeakId is missing

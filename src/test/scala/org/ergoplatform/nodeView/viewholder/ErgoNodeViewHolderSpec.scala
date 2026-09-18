@@ -1279,7 +1279,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
-  private val t41 = TestCase("ProcessInputBlock uses pre-existing transactions from history") { fixture =>
+  private val t41 = TestCase("ProcessInputBlock requires unknown transactions to be resent after announcement") { fixture =>
     import fixture._
     if (stateType == Utxo && verifyTransactions) {
       val (us, bh) = createUtxoState(fixture.settings)
@@ -1288,7 +1288,13 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       val (_, bh2) = createUtxoState(fixture.settings)
       val nextBlock = validFullBlock(Some(genesis), WrappedUtxoState(us, bh2, fixture.settings))
-      val inputBlock = InputBlockAnnouncement(1, nextBlock.header, emptyInputBlockFields, None)
+      val extension = InputBlockFields.toExtensionFields(None, Algos.emptyMerkleTreeRoot, Algos.emptyMerkleTreeRoot)
+      val proof = extension.proofForInputBlockData.get
+      val header = nextBlock.header.copy(extensionRoot = extension.digest)
+      val fields = new InputBlockFields(None, Algos.emptyMerkleTreeRoot, Algos.emptyMerkleTreeRoot, proof)
+      val inputBlock = InputBlockAnnouncement(1, header, fields, None)
+      proof.indices.nonEmpty shouldBe true
+      proof.valid(header.extensionRoot) shouldBe true
 
       val dummyPeer = ConnectedPeer(
         scorex.core.network.ConnectionId(
@@ -1300,16 +1306,23 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         None
       )
 
-      // Pre-seed transactions by sending ProcessInputBlockTransactions first
+      // Unknown bodies must not populate history caches or publish acceptance.
       subscribeEvents(classOf[NewBestInputBlock])
       val txData = InputBlockTransactionsData(inputBlock.id, Seq.empty)
       nodeViewHolderRef ! ProcessInputBlockTransactions(txData)
-
-      // No input block record exists yet, so no NewBestInputBlock should be published
+      val beforeAnnouncement = getCurrentView
+      beforeAnnouncement.history.getInputBlock(inputBlock.id) shouldBe None
+      beforeAnnouncement.history.getInputBlockTransactions(inputBlock.id) shouldBe None
       testProbe.expectNoMessage(1.second)
 
-      // Now send ProcessInputBlock - it should find pre-existing transactions and publish NewBestInputBlock
+      // An announcement alone must not resurrect the rejected bodies.
       nodeViewHolderRef ! ProcessInputBlock(inputBlock, dummyPeer)
+      val afterAnnouncement = getCurrentView
+      afterAnnouncement.history.getInputBlock(inputBlock.id) shouldBe Some(inputBlock)
+      afterAnnouncement.history.getInputBlockTransactions(inputBlock.id) shouldBe None
+      testProbe.expectNoMessage(1.second)
+
+      nodeViewHolderRef ! ProcessInputBlockTransactions(txData)
 
       val newBestMsg = testProbe.fishForMessage(5.seconds) {
         case n: NewBestInputBlock => n.idOpt.contains(inputBlock.id)

@@ -1,9 +1,15 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.settings.Algos
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils._
+import org.ergoplatform.utils.fixtures.WalletFixture
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
 import org.scalatest.concurrent.Eventually
+import scorex.crypto.authds.LeafData
 import scorex.util.ModifierId
 
 import scala.concurrent.duration._
@@ -18,9 +24,28 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
 
   private var inputBlockCounter = 0
 
-  private def nextInputBlockId(): ModifierId = {
+  private def registerInputBlock(transactions: Seq[ErgoTransaction])(implicit w: WalletFixture): ModifierId = {
     inputBlockCounter += 1
-    ModifierId @@ s"test-input-block-$inputBlockCounter"
+    val history = getHistory
+    val parent = history.bestFullBlockOpt.get.header
+    val digest = Algos.merkleTreeRoot(transactions.map(tx => LeafData @@ tx.serializedId))
+    val extension = InputBlockFields.toExtensionFields(None, digest, Algos.emptyMerkleTreeRoot)
+    val proof = extension.proofForInputBlockData.get
+    val header = parent.copy(
+      parentId = parent.id,
+      height = parent.height + 1,
+      timestamp = parent.timestamp + inputBlockCounter,
+      extensionRoot = extension.digest
+    )
+    val fields = new InputBlockFields(None, digest, Algos.emptyMerkleTreeRoot, proof)
+    val announcement = InputBlockAnnouncement(1, header, fields, None)
+
+    proof.indices.nonEmpty shouldBe true
+    proof.valid(header.extensionRoot) shouldBe true
+    history.getInputBlock(announcement.id) shouldBe None
+    history.applyInputBlock(announcement) shouldBe None
+    history.getInputBlock(announcement.id) shouldBe Some(announcement)
+    announcement.id
   }
 
   // ============================================================================
@@ -46,7 +71,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan the transaction as a locally generated input block
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -81,7 +106,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Apply first transaction as an input block (making outputs spendable)
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx1))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx1), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -126,7 +151,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan the transaction as an input block
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -166,7 +191,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan both transactions as input block
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx1, tx2))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx1, tx2), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -207,7 +232,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -247,7 +272,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -281,7 +306,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         val req = Seq(PaymentRequest(addresses.head, sumToSpend, Array.empty, Map.empty))
         await(wallet.generateTransaction(req)).get
       }
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx1))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx1), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -325,7 +350,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan as input block
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -364,7 +389,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Verify transaction outputs are tracked after scan
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -395,7 +420,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId = nextInputBlockId()
+      val inputBlockId = registerInputBlock(Seq(tx))
       getHistory.applyInputBlockTransactions(inputBlockId, Seq(tx), getUtxoState)
       wallet.scanInputBlock(inputBlockId)
 
@@ -435,7 +460,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       }
 
       // Scan first input block
-      val inputBlockId1 = nextInputBlockId()
+      val inputBlockId1 = registerInputBlock(Seq(tx1))
       getHistory.applyInputBlockTransactions(inputBlockId1, Seq(tx1), getUtxoState)
       wallet.scanInputBlock(inputBlockId1)
 
@@ -446,7 +471,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId2 = nextInputBlockId()
+      val inputBlockId2 = registerInputBlock(Seq(tx2))
       getHistory.applyInputBlockTransactions(inputBlockId2, Seq(tx2), getUtxoState)
       wallet.scanInputBlock(inputBlockId2)
 
@@ -457,7 +482,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId3 = nextInputBlockId()
+      val inputBlockId3 = registerInputBlock(Seq(tx3))
       getHistory.applyInputBlockTransactions(inputBlockId3, Seq(tx3), getUtxoState)
       wallet.scanInputBlock(inputBlockId3)
 
@@ -513,7 +538,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId1 = nextInputBlockId()
+      val inputBlockId1 = registerInputBlock(Seq(tx1))
       getHistory.applyInputBlockTransactions(inputBlockId1, Seq(tx1), getUtxoState)
       wallet.scanInputBlock(inputBlockId1)
 
@@ -527,7 +552,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId2 = nextInputBlockId()
+      val inputBlockId2 = registerInputBlock(Seq(tx2))
       getHistory.applyInputBlockTransactions(inputBlockId2, Seq(tx2), getUtxoState)
       wallet.scanInputBlock(inputBlockId2)
 
@@ -538,7 +563,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId3 = nextInputBlockId()
+      val inputBlockId3 = registerInputBlock(Seq(tx3))
       getHistory.applyInputBlockTransactions(inputBlockId3, Seq(tx3), getUtxoState)
       wallet.scanInputBlock(inputBlockId3)
 
@@ -591,7 +616,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId1 = nextInputBlockId()
+      val inputBlockId1 = registerInputBlock(Seq(tx1))
       getHistory.applyInputBlockTransactions(inputBlockId1, Seq(tx1), getUtxoState)
       wallet.scanInputBlock(inputBlockId1)
 
@@ -621,7 +646,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId2 = nextInputBlockId()
+      val inputBlockId2 = registerInputBlock(Seq(tx2))
       getHistory.applyInputBlockTransactions(inputBlockId2, Seq(tx2), getUtxoState)
       wallet.scanInputBlock(inputBlockId2)
 
@@ -671,7 +696,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId1 = nextInputBlockId()
+      val inputBlockId1 = registerInputBlock(Seq(tx1))
       getHistory.applyInputBlockTransactions(inputBlockId1, Seq(tx1), getUtxoState)
       wallet.scanInputBlock(inputBlockId1)
 
@@ -682,7 +707,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId2 = nextInputBlockId()
+      val inputBlockId2 = registerInputBlock(Seq(tx2))
       getHistory.applyInputBlockTransactions(inputBlockId2, Seq(tx2), getUtxoState)
       wallet.scanInputBlock(inputBlockId2)
 
@@ -711,7 +736,7 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
         await(wallet.generateTransaction(req)).get
       }
 
-      val inputBlockId3 = nextInputBlockId()
+      val inputBlockId3 = registerInputBlock(Seq(tx3))
       getHistory.applyInputBlockTransactions(inputBlockId3, Seq(tx3), getUtxoState)
       wallet.scanInputBlock(inputBlockId3)
 

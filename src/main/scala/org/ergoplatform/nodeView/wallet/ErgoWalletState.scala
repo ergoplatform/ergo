@@ -83,9 +83,16 @@ case class ErgoWalletState(
 
   def getChangeAddress(addrEncoder: ErgoAddressEncoder): Option[P2PKAddress] = {
     walletVars.proverOpt.map { prover =>
-      storage.readChangeAddress.getOrElse {
-        log.debug("Change address not specified. Using root address from wallet.")
-        P2PKAddress(prover.hdPubKeys.head.key)(addrEncoder)
+      val rootAddress = P2PKAddress(prover.hdPubKeys.head.key)(addrEncoder)
+      storage.readChangeAddress match {
+        case Some(address) if walletVars.ownsAddress(address) =>
+          address
+        case Some(_) =>
+          log.warn("Ignoring persisted change address that is not owned by the wallet")
+          rootAddress
+        case None =>
+          log.debug("Change address not specified. Using root address from wallet.")
+          rootAddress
       }
     }
   }

@@ -11,6 +11,7 @@ import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId, To
 import org.ergoplatform.http.api.{ApiCodecs, TransactionsApiRoute}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.RESTApiSettings
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
@@ -71,6 +72,21 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
     val readers2 = system.actorOf(Props(new UtxoReadersStub2))
     TransactionsApiRoute(readers2, nodeViewRef, settings).route
+  }
+
+  val txCost = 21456
+
+  // Pool holding exactly `tx`, with a known validation cost, so `cost` is deterministic.
+  val costedRoute: Route = {
+    val mp = ErgoMemPool.empty(settings).put(UnconfirmedTransaction(tx, None).withCost(txCost))
+    class CostedReadersStub extends Actor {
+      def receive: PartialFunction[Any, Unit] = {
+        case GetReaders => sender() ! Readers(history, utxoState, mp, wallet)
+        case GetDataFromHistory(f) => sender() ! f(history)
+      }
+    }
+    val readers = system.actorOf(Props(new CostedReadersStub))
+    TransactionsApiRoute(readers, nodeViewRef, settings).route
   }
 
   it should "post transaction" in {
@@ -316,6 +332,58 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     val searchedRegs = Map.empty[NonMandatoryRegisterId, EvaluatedValue[_ <: SType]].asJson
     Post(prefix + s"/unconfirmed/outputs/byRegisters", searchedRegs) ~> chainedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "report validation cost of unconfirmed tx by id" in {
+    Get(prefix + s"/unconfirmed/byTransactionId/${tx.id}") ~> costedRoute ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("cost").as[Int] shouldEqual Right(txCost)
+    }
+  }
+
+  it should "report validation cost in the unconfirmed tx list" in {
+    Get(prefix + "/unconfirmed") ~> costedRoute ~> check {
+      status shouldBe StatusCodes.OK
+      val costs = responseAs[List[Json]].map(_.hcursor.downField("cost").as[Int])
+      costs shouldEqual List(Right(txCost))
+    }
+  }
+
+  it should "report the same validation cost from the list and by-id endpoints" in {
+    val listed = Get(prefix + "/unconfirmed") ~> costedRoute ~> check {
+      responseAs[List[Json]].map(_.hcursor.downField("cost").as[Int])
+    }
+    val byId = Get(prefix + s"/unconfirmed/byTransactionId/${tx.id}") ~> costedRoute ~> check {
+      responseAs[Json].hcursor.downField("cost").as[Int]
+    }
+    listed shouldEqual List(byId)
+  }
+
+  it should "report validation cost when searching unconfirmed txs by ergoTree" in {
+    val searchedTree = tx.outputs.head.ergoTree.bytesHex
+    Post(prefix + s"/unconfirmed/byErgoTree", searchedTree) ~> costedRoute ~> check {
+      status shouldBe StatusCodes.OK
+      val costs = responseAs[List[Json]].map(_.hcursor.downField("cost").as[Int])
+      costs shouldEqual List(Right(txCost))
+    }
+  }
+
+  it should "report null validation cost when the node did not measure it" in {
+    // Stubs' mempool holds transactions put without a cost, as happens in digest state
+    // or for transactions returned to the pool by a rollback.
+    Get(prefix + s"/unconfirmed/byTransactionId/${txs.head.id}") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val cursor = responseAs[Json].hcursor
+      cursor.keys.map(_.toList).getOrElse(Nil) should contain("cost")
+      cursor.downField("cost").focus shouldEqual Some(Json.Null)
+    }
+  }
+
+  it should "keep reporting size alongside cost" in {
+    Get(prefix + s"/unconfirmed/byTransactionId/${tx.id}") ~> costedRoute ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("size").as[Int] shouldEqual Right(tx.size)
     }
   }
 

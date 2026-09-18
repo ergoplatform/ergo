@@ -31,6 +31,7 @@ import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.exceptions.SoftFieldAccessException
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
+import java.lang.reflect.InvocationTargetException
 import java.util
 import scala.annotation.nowarn
 import scala.collection.mutable
@@ -152,8 +153,8 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
     val costTry = verifier.verify(box.ergoTree, ctx, proof, messageToSign)
     val (isCostValid, scriptCost: Long) =
       costTry match {
-        case Failure(t) if t.isInstanceOf[SoftFieldAccessException] =>
-          return Invalid(Seq(new SoftFieldsAccessError(t.asInstanceOf[SoftFieldAccessException], id)))
+        case Failure(ErgoTransaction.SoftFieldFailure(cause)) =>
+          return Invalid(Seq(new SoftFieldsAccessError(cause, id)))
         case Failure(t) =>
           log.warn(s"Tx verification failed: ${t.getMessage}", t)
           log.warn(s"Tx $id verification context: " +
@@ -492,6 +493,20 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 }
 
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
+
+  private object SoftFieldFailure {
+    def unapply(error: Throwable): Option[SoftFieldAccessException] = {
+      @scala.annotation.tailrec
+      def unwrap(current: Throwable, remaining: Int): Option[SoftFieldAccessException] = current match {
+        case cause: SoftFieldAccessException => Some(cause)
+        case wrapper: InvocationTargetException if remaining > 0 =>
+          unwrap(wrapper.getTargetException, remaining - 1)
+        case _ => None
+      }
+      // Only reflection wrappers are transparent; unrelated failures keep their normal rejection path.
+      unwrap(error, 16)
+    }
+  }
 
   /**
     * 6 bytes long transaction id, not cryptographically strong, used in p2p protocol only

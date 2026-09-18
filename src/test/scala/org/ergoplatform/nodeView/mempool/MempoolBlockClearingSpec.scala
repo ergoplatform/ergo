@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.{ErgoBox, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
@@ -79,24 +79,22 @@ class MempoolBlockClearingSpec extends AnyFlatSpec
   private def emptyInputBlockFields: InputBlockFields = InputBlockFields.empty
 
   it should "remove transactions from mempool when block containing them is applied" in {
-    // Setup initial state with genesis block
-    val (us, bh) = createUtxoState(settings)
-    val genesis = validFullBlock(None, us, bh)
-    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
-
-    // Create valid transactions from available boxes and add them to mempool
-    val boxes = wus.takeBoxes(3)
-    val limit = 10000
-    val txs = validTransactionsFromBoxes(limit, boxes, new RandomWrapper)._1
-    info(s"Generated ${txs.length} transactions")
-    txs.length should be >= 1
+    val boxes = Seq(testBox1, testBox2, testBox3)
+    val state = UtxoState.fromBoxHolder(BoxHolder(boxes), None, createTempDir, settings, parameters)
+    val txs = boxes.map { box =>
+      ErgoTransaction(IndexedSeq(Input(box.id, ProverResult.empty)), IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(box.value, box.ergoTree, box.creationHeight)))
+    }
+    txs.length shouldBe 3
     val unconfirmedTxs = txs.map(tx => UnconfirmedTransaction(tx, None))
     var pool = ErgoMemPool.empty(settings)
 
     // Add all transactions to mempool
     unconfirmedTxs.foreach { utx =>
-      val (_newPool, outcome) = pool.process(utx, wus)
-      outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+      val (_newPool, outcome) = pool.process(utx, state)
+      withClue(s"Admission of ${utx.transaction.id}: $outcome: ") {
+        outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+      }
       pool = _newPool
     }
 

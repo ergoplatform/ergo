@@ -31,12 +31,14 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 
 /**
-  * Pins the invariants of the mempool policy prefilter for the invalid token-preserving
-  * re-emission shape (`ErgoMemPool.preservesReemissionTokens`).
+  * Pins the invariants of the mempool policy prefilter rejecting transactions that carry the
+  * re-emission token in their outputs (`ErgoMemPool.outputsContainReemissionToken`).
   *
-  * These are also the first tests in the repository to exercise the `verifyReemissionSpending`
-  * shape at all - see the suite-level comment on invariant (d1) for why the emission transaction
-  * is covered at predicate level rather than end to end.
+  * Consensus only allows the token in outputs for emission box spends, which the miner assembles
+  * directly into a block - so no relayed transaction may carry it. These are also the first tests
+  * in the repository to exercise the `verifyReemissionSpending` shape at all - see the suite-level
+  * comment on invariant (d1) for why the emission transaction is covered at predicate level rather
+  * than end to end.
   */
 class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
   with Matchers
@@ -53,8 +55,9 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
 
   /**
     * The end-to-end fixture state is built straight from a `BoxHolder`, so it sits at
-    * `EmptyHistoryHeight`. Conjunct (1) of the predicate is a strict `>`, so activation must be
-    * strictly below that for the filter to be reachable at all.
+    * `EmptyHistoryHeight`. The prefilter has no height conjunct (pre-activation the token id is
+    * unmintable, so no output can carry it anyway), the activation value below is only kept so the
+    * fixture stays realistic for the full validation that runs after the prefilter abstains.
     */
   private val FixtureHeight: Int = ErgoHistoryUtils.EmptyHistoryHeight
   private val FixtureActivationHeight: Int = FixtureHeight - 1
@@ -77,9 +80,6 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
 
   private def tokenOf(s: ErgoSettings, amount: Long = 5L): (Digest32Coll, Long) =
     (Digest32Coll @@ s.chainSettings.reemission.reemissionTokenId.toColl) -> amount
-
-  private def emissionNftOf(s: ErgoSettings): (Digest32Coll, Long) =
-    (Digest32Coll @@ s.chainSettings.reemission.emissionNftId.toColl) -> 1L
 
   private def box(value: Long,
                   tree: ErgoTree,
@@ -136,7 +136,7 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     f.pool.process(UnconfirmedTransaction(tx, None), f.state)
 
   private val PrefilterReason =
-    "Mempool policy declines a token-preserving re-emission spend on the non-emission path"
+    "Mempool policy declines a transaction carrying the re-emission token in outputs"
 
   private def declinedByPrefilter(outcome: ProcessingOutcome): Boolean = outcome match {
     case d: ProcessingOutcome.Declined => Option(d.e.getMessage).exists(_.contains(PrefilterReason))
@@ -200,37 +200,23 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     val ctx = stateContext(UnitHeight, blockVersion = 1, s)
     val token = tokenOf(s)
 
-    // Emission transaction: input far above the 100K ERG bar, outputs legitimately carrying
-    // both the emission NFT and the re-emission token. Kept at predicate level deliberately -
-    // synthesising a *valid* emission transaction end to end would test the fixture, not the filter.
-    // Note the abstention here comes from the >100K conjunct alone: the predicate has no emission
-    // NFT logic at all, so the NFT on this fixture is decorative and only makes the shape realistic.
-    val emissionIn = box(200000L * CoinsInOneErgo, Constants.TrueTree, Seq(emissionNftOf(s), token), 0)
-    val emissionOut = candidate(200000L * CoinsInOneErgo, Constants.TrueTree, Seq(emissionNftOf(s), token))
-    pool.preservesReemissionTokens(Seq(emissionIn), Seq(emissionOut), ctx) shouldBe false
+    // Ordinary transaction carrying no re-emission token anywhere.
+    val plainOut = candidate(BoxValue, Constants.TrueTree, Seq.empty)
+    pool.outputsContainReemissionToken(Seq(plainOut), ctx) shouldBe false
 
-    // Exactly 100K ERG: the source bar is a strict `>`, so this is a non-emission input and the
-    // filter is expected to fire - asserted in (g). Here we only pin the mixed case below.
+    // Outputs that drop the token (spent from a token-bearing input elsewhere): the conformant
+    // pay-to-re-emission / token-dropping shapes, and the #2438 claim shape, all abstain - the
+    // predicate looks at outputs only.
+    val droppingOut = candidate(BoxValue, Constants.TrueTree, Seq.empty)
+    pool.outputsContainReemissionToken(Seq(droppingOut), ctx) shouldBe false
 
-    // Mixed transaction: one input above the bar alongside a small token-bearing one.
-    val smallIn = box(BoxValue, Constants.TrueTree, Seq(token), 1)
-    val outWithToken = candidate(BoxValue, Constants.TrueTree, Seq(token))
-    pool.preservesReemissionTokens(Seq(emissionIn, smallIn), Seq(outWithToken), ctx) shouldBe false
-
-    // Activation-height boundary: conjunct (1) is a strict `>`.
-    val atActivation = stateContext(UnitActivationHeight, blockVersion = 1, s)
-    pool.preservesReemissionTokens(Seq(smallIn), Seq(outWithToken), atActivation) shouldBe false
-
-    // Chain without EIP-27 configured: empty token id makes the predicate structurally inert.
+    // Chain without EIP-27 configured: empty token id makes the predicate structurally inert,
+    // even for a transaction whose outputs do carry the synthetic token bytes.
     val noEip27 = withReemission(bytesToId(Array.emptyByteArray), checkRules = true, UnitActivationHeight)
     val inertPool = ErgoMemPool.empty(noEip27)
     val inertCtx = stateContext(UnitHeight, blockVersion = 1, noEip27)
-    inertPool.preservesReemissionTokens(Seq(smallIn), Seq(outWithToken), inertCtx) shouldBe false
-
-    // Ordinary transaction carrying no re-emission token at all.
-    val plainIn = box(BoxValue, Constants.TrueTree, Seq.empty, 2)
-    val plainOut = candidate(BoxValue, Constants.TrueTree, Seq.empty)
-    pool.preservesReemissionTokens(Seq(plainIn), Seq(plainOut), ctx) shouldBe false
+    val outWithToken = candidate(BoxValue, Constants.TrueTree, Seq(token))
+    inertPool.outputsContainReemissionToken(Seq(outWithToken), inertCtx) shouldBe false
   }
 
   // ------------------------------------------------------------------ (d2)
@@ -307,48 +293,43 @@ class ErgoMemPoolReemissionPrefilterSpec extends AnyFlatSpec
     val pool = ErgoMemPool.empty(s)
     val ctx = stateContext(UnitHeight, blockVersion = 1, s)
 
-    // Token-bearing input under the bar, token dropped from the recreated output: conjunct (4)
-    // is false, so the filter abstains and this stays composable with #2438.
-    val in = box(BoxValue, Constants.TrueTree, Seq(tokenOf(s)), 0)
+    // Token-bearing input under the bar, token dropped from the recreated output: no output
+    // carries the token, so the filter abstains and this stays composable with #2438.
     val recreated = candidate(BoxValue - CoinsInOneErgo, Constants.TrueTree, Seq.empty)
     val burnPayment = candidate(CoinsInOneErgo, Constants.TrueTree, Seq.empty)
 
-    pool.preservesReemissionTokens(Seq(in), Seq(recreated, burnPayment), ctx) shouldBe false
+    pool.outputsContainReemissionToken(Seq(recreated, burnPayment), ctx) shouldBe false
   }
 
   // ------------------------------------------------------------------ (g)
 
-  it should "(g) pin the four boundary regressions" in {
+  it should "(g) pin the firing boundaries" in {
     val s = withReemission(ReemissionToken, checkRules = true, UnitActivationHeight)
     val pool = ErgoMemPool.empty(s)
     val ctx = stateContext(UnitHeight, blockVersion = 1, s)
     val token = tokenOf(s)
     val outWithToken = candidate(BoxValue, Constants.TrueTree, Seq(token))
 
-    // (i) Exactly 100K ERG: ErgoTransaction.scala:255 tests a strict `>`, so such a box falls to
-    // the non-emission branch at :305 and sets reemissionSpending. The filter must FIRE here.
-    // Pinning the direction is the point: flipping either comparison to `>=` during a later
-    // tidy-up would desynchronise the filter from the source, and this assertion catches it.
-    val exactly100K = box(100000L * CoinsInOneErgo, Constants.TrueTree, Seq(token), 0)
-    pool.preservesReemissionTokens(Seq(exactly100K), Seq(outWithToken), ctx) shouldBe true
-
-    // (ii) Mixed transaction abstains, per conjunct (2)'s !exists formulation.
-    val aboveBar = box(100000L * CoinsInOneErgo + 1, Constants.TrueTree, Seq(token), 1)
-    val underBar = box(BoxValue, Constants.TrueTree, Seq(token), 2)
-    pool.preservesReemissionTokens(Seq(aboveBar, underBar), Seq(outWithToken), ctx) shouldBe false
-
-    // (iii) currentHeight == activationHeight abstains, per conjunct (1)'s strict `>`.
+    // (i) No height boundary: the predicate fires at and below the activation height as well.
+    // Pre-activation the token id is unmintable (it only comes into existence via the activation
+    // injection), so no relayed transaction can carry it - the height guard was dropped as
+    // redundant, and these assertions pin that it stays dropped.
     val atActivation = stateContext(UnitActivationHeight, blockVersion = 1, s)
-    pool.preservesReemissionTokens(Seq(underBar), Seq(outWithToken), atActivation) shouldBe false
-    // ... and fires one block later, confirming the boundary is where it is claimed to be.
-    val afterActivation = stateContext(UnitActivationHeight + 1, blockVersion = 1, s)
-    pool.preservesReemissionTokens(Seq(underBar), Seq(outWithToken), afterActivation) shouldBe true
+    pool.outputsContainReemissionToken(Seq(outWithToken), atActivation) shouldBe true
+    val beforeActivation = stateContext(UnitActivationHeight - 1, blockVersion = 1, s)
+    pool.outputsContainReemissionToken(Seq(outWithToken), beforeActivation) shouldBe true
 
-    // (iv) Empty reemissionTokenId leaves the predicate inert, per conjunct (0).
+    // (ii) The token in any output position fires, alone or among token-free companions.
+    val plainOut = candidate(BoxValue, Constants.TrueTree, Seq.empty)
+    pool.outputsContainReemissionToken(Seq(outWithToken), ctx) shouldBe true
+    pool.outputsContainReemissionToken(Seq(outWithToken, plainOut), ctx) shouldBe true
+    pool.outputsContainReemissionToken(Seq(plainOut, outWithToken), ctx) shouldBe true
+
+    // (iii) Empty reemissionTokenId leaves the predicate inert.
     val noEip27 = withReemission(bytesToId(Array.emptyByteArray), checkRules = true, UnitActivationHeight)
     val inertPool = ErgoMemPool.empty(noEip27)
     val inertCtx = stateContext(UnitHeight, blockVersion = 1, noEip27)
-    inertPool.preservesReemissionTokens(Seq(underBar), Seq(outWithToken), inertCtx) shouldBe false
+    inertPool.outputsContainReemissionToken(Seq(outWithToken), inertCtx) shouldBe false
   }
 
   // ------------------------------------------------------------------ (h)

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.mempool
 
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
@@ -224,22 +224,18 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   }
 
   /**
-    * Mempool policy check: does the transaction spend a re-emission-token-bearing box on the
-    * non-emission path while preserving the token into an output? Such a transaction cannot be
-    * included by any conforming mainnet miner (`checkReemissionRules` is force-enabled for mainnet
-    * miners), so it is not worth running its input scripts.
+    * Mempool policy check: does the transaction carry the re-emission token in any of its outputs?
+    * The only transactions allowed by consensus to have the token in outputs are emission box
+    * spends (recreated emission box and miner rewards output), and those are assembled by the
+    * miner directly into a block, never relayed through the mempool. Any mempool transaction with
+    * the token in outputs can not be included by a conforming miner (`checkReemissionRules` is
+    * force-enabled for mainnet miners), so it is not worth running its input scripts.
     * Deliberately independent of `checkReemissionRules`, which is off by default for non-mining nodes.
     */
-  private[mempool] def preservesReemissionTokens(boxesToSpend: Seq[ErgoBox],
-                                                 outputCandidates: Seq[ErgoBoxCandidate],
-                                                 ctx: ErgoStateContext): Boolean = {
-    val rs = ctx.chainSettings.reemission
-    val reemissionTokenId = rs.reemissionTokenId
-    reemissionTokenId.nonEmpty &&
-      ctx.currentHeight > rs.activationHeight &&
-      !boxesToSpend.exists(_.value > 100000 * CoinsInOneErgo) &&
-      boxesToSpend.exists(_.tokens.contains(reemissionTokenId)) &&
-      outputCandidates.exists(_.tokens.contains(reemissionTokenId))
+  private[mempool] def outputsContainReemissionToken(outputCandidates: Seq[ErgoBoxCandidate],
+                                                     ctx: ErgoStateContext): Boolean = {
+    val reemissionTokenId = ctx.chainSettings.reemission.reemissionTokenId
+    reemissionTokenId.nonEmpty && outputCandidates.exists(_.tokens.contains(reemissionTokenId))
   }
 
   def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
@@ -272,9 +268,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               val resolvedInputs = tx.inputIds.map(utxoWithPool.boxById)
               if (resolvedInputs.forall(_.isDefined)) {
 
-                if (preservesReemissionTokens(resolvedInputs.flatten, tx.outputCandidates, utxo.stateContext)) {
+                if (outputsContainReemissionToken(tx.outputCandidates, utxo.stateContext)) {
                   val exc = new Exception(
-                    "Mempool policy declines a token-preserving re-emission spend on the non-emission path")
+                    "Mempool policy declines a transaction carrying the re-emission token in outputs")
                   // The pool is rebuilt directly, rather than via `this.invalidate`, because that
                   // helper runs `updateStatsOnRemoval`, which resets statistics for a transaction
                   // that was never in the pool - which is exactly the case here.

@@ -10,17 +10,17 @@ import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.FullBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FailedTransaction, FullBlockApplied}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NetworkType}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingBlockFound, OrderingSolutionFound}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
@@ -44,6 +44,23 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
+  private val actorSystems = scala.collection.mutable.ArrayBuffer.empty[ActorSystem]
+
+  private def newActorSystem(): ActorSystem = {
+    val system = ActorSystem()
+    actorSystems += system
+    system
+  }
+
+  override protected def withFixture(test: NoArgTest): org.scalatest.Outcome = {
+    try super.withFixture(test)
+    finally {
+      val systemsToStop = actorSystems.toVector
+      actorSystems.clear()
+      systemsToStop.foreach(system => TestKit.shutdownActorSystem(system))
+    }
+  }
+
   private def getWorkMessage(minerRef: ActorRef, mandatoryTransactions: Seq[ErgoTransaction]): WorkMessage =
     await(minerRef.askWithStatus(GenerateCandidate(mandatoryTransactions, reply = true, forced = false, optPk = None)).mapTo[Candidate].map(_.externalVersion))
 
@@ -57,10 +74,10 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
       offlineGeneration = true,
       verifyTransactions = true)
     val chainSettings = empty.chainSettings.copy(blockInterval = 2.seconds)
-    empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
+    empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings, networkType = NetworkType.Tests)
   }
 
-  it should "not include too costly transactions" in new TestKit(ActorSystem()) {
+  it should "not include too costly transactions" in new TestKit(newActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -95,15 +112,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     val unsignedTx = new UnsignedErgoTransaction(IndexedSeq(input), IndexedSeq(), outputs)
     val tx = defaultProver.sign(unsignedTx, IndexedSeq(boxToSpend), IndexedSeq(), r.s.stateContext).get
     nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(tx), None))
-    expectNoMessage(1 seconds)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
-
-    //check that tx is included into UTXO set
-    val state = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
-    tx.outputs.foreach(o => state.boxById(o.id).get shouldBe o)
+    val state = eventually(timeout(newBlockDelay), interval(100.millis)) {
+      val readers = await((readersHolderRef ? GetReaders).mapTo[Readers])
+      readers.m.size shouldBe 0
+      val appliedState = readers.s.asInstanceOf[UtxoState]
+      tx.outputs.foreach(o => appliedState.boxById(o.id) shouldBe Some(o))
+      appliedState
+    }
 
     // try to spend all the boxes with complex scripts
     val costlyInputs = tx.outputs.map(o => Input(o.id, emptyProverResult))
@@ -121,15 +136,17 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
       ).get
     txCost shouldBe 439080
 
+    val rejectionProbe = new TestProbe(system)
+    system.eventStream.subscribe(rejectionProbe.ref, classOf[FailedTransaction])
+
     // send costly transaction to the mempool
     nodeViewHolderRef ! LocallyGeneratedTransaction(UnconfirmedTransaction(ErgoTransaction(costlyTx), None))
 
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    rejectionProbe.expectMsgPF(newBlockDelay) {
+      case FailedTransaction(rejected, _) => rejected.id shouldBe costlyTx.id
+    }
 
-    // costly tx was removed from mempool
-    expectNoMessage(1 second)
+    // costly tx was rejected before mempool admission
     await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
     // costly tx was not included
     val state2 = await((readersHolderRef ? GetReaders).mapTo[Readers]).s.asInstanceOf[UtxoState]
@@ -137,7 +154,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     costlyTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
-  it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
+  it should "not freeze while mempool is full" in new TestKit(newActorSystem()) {
     // generate amount of transactions, twice more than can fit in one block
     val desiredSize: Int = Math.ceil((parameters.maxBlockCost / ErgoInterpreter.interpreterInitCost) * 1.2).toInt
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -214,7 +231,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     }
   }
 
-  it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
+  it should "include only one transaction from 2 spending the same box" in new TestKit(newActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -262,12 +279,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     minerRef.tell(GenerateCandidate(Seq(tx2), reply = true, forced = false, optPk = None), testProbe.ref)
     testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) =>
-        val block = extractFullBlockFromProveResult(
-          defaultSettings.chainSettings.powScheme
-            .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters)
-        )
+        val block = defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters) match {
+          case OrderingBlockFound(fullBlock) => fullBlock
+          case other => fail(s"Expected an ordering block solution, got $other")
+        }
         testProbe.expectNoMessage(200.millis)
-        minerRef.tell(block.header.powSolution, testProbe.ref)
+        minerRef.tell(OrderingSolutionFound(block.header.powSolution), testProbe.ref)
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
@@ -292,7 +310,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     system.terminate()
   }
 
-  it should "prepare external candidate" in new TestKit(ActorSystem()) {
+  it should "prepare external candidate" in new TestKit(newActorSystem()) {
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
@@ -313,7 +331,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     system.terminate()
   }
 
-  it should "include mandatory transactions" in new TestKit(ActorSystem()) {
+  it should "include mandatory transactions" in new TestKit(newActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)

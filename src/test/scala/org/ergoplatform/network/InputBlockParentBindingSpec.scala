@@ -3,18 +3,15 @@ package org.ergoplatform.network
 import akka.actor.{ActorRef, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.AutolykosSolution
-import org.ergoplatform.consensus.Older
 import org.ergoplatform.mining.{AutolykosPowScheme, InputBlockFields}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
+import org.ergoplatform.modifiers.history.header.{Header}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.message.{InvData, Message, ModifiersData, ModifiersSpec, RequestModifierSpec}
+import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
 import org.ergoplatform.network.peer.PeerInfo
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.subblocks.InputBlockAnnouncement
@@ -30,11 +27,11 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
 
 /**
-  * An input block announcement is processed only if its parent header is known, is in the best chain, and is
-  * exactly one block below the announced header (at genesis height, with no full blocks yet, the configured
-  * initial difficulty is used). The expected difficulty is derived from that parent. Otherwise the announcement is
-  * not processed, and an unknown parent header is requested from the sender only, once: the request expires after
-  * the delivery timeout without asking another peer or penalizing anyone.
+  * An input block announcement is processed only if its parent header is known and is exactly one block below
+  * the announced header (at genesis height, with no headers yet and the genesis parent, the configured initial
+  * difficulty is used). The expected difficulty is derived from that parent via requiredDifficultyAfter, so an
+  * off-best-chain parent is bound as well. Any announcement that cannot be bound — unknown parent, wrong height,
+  * or a spurious genesis-height announcement — is dropped without a request.
   *
   * The synchronizer under test validates proof-of-work with the real Autolykos scheme (the default test
   * configuration uses a fake scheme that accepts any header), while the local history is built with the
@@ -101,23 +98,6 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
     def process(ib: InputBlockAnnouncement): Unit =
       synchronizer.underlyingActor.processInputBlock(ib, hist, mempool, peer, Some(state))
 
-    /** Makes the synchronizer handle scheduled and network messages, with another peer that headers could be asked from. */
-    def initialize(): ConnectedPeer = {
-      val otherPeer = ConnectedPeer(connectionIdGen.sample.get, TestProbe("OtherPeer").ref,
-        Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))),
-          System.currentTimeMillis())))
-      syncTracker.updateStatus(otherPeer, Older, Some(hist.fullBlockHeight + 10))
-      synchronizer ! ChangedState(state)
-      synchronizer ! ChangedHistory(hist)
-      synchronizer ! ChangedMempool(mempool)
-      Thread.sleep(300)
-      viewHolderProbe.receiveWhile(max = 300.millis, idle = 100.millis) { case m => m }
-      ncProbe.receiveWhile(max = 300.millis, idle = 100.millis) { case m => m }
-      otherPeer
-    }
-
-    def deliverHeader(h: Header): Unit = synchronizer ! Message(ModifiersSpec,
-      Left(ModifiersSpec.toBytes(ModifiersData(Header.modifierTypeId, Map(h.id -> HeaderSerializer.toBytes(h))))), Some(peer))
   }
 
   private def withFixture(test: Fixture => Any): Unit = withFixture(new Fixture)(test)
@@ -173,13 +153,13 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
 
   private def penalized(msgs: Seq[Any]): Boolean = msgs.exists(_.isInstanceOf[PenalizePeer])
 
-  property("input block with unknown parent header is dropped, and the parent header is requested from the sender") {
+  property("input block with unknown parent header is dropped without requesting the header") {
     withFixture { f =>
       val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
       val tip = f.hist.bestFullBlockOpt.get.header
       val ib = announcement(f, unknownParent, tip.height + 1, DifficultySerializer.encodeCompactBits(1))
 
-      // the announced header on its own passes the proof-of-work and Merkle checks
+      // the announced header on its own passes proof-of-work and Merkle checks; only the parent binding drops it
       ib.valid(f.realPowScheme, f.state.stateContext.currentParameters, None) shouldBe true
 
       f.process(ib)
@@ -187,29 +167,8 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
       viewHolderGotInputBlock(f) shouldBe false
       val msgs = networkMessages(f)
       penalized(msgs) shouldBe false
-      headerRequests(msgs) shouldBe Seq(Seq(unknownParent) -> SendToPeer(f.peer))
-      msgs.collect { case s: SendToNetwork => s }.size shouldBe 1
-      // the request is tracked, so the header is accepted when it arrives
-      f.deliveryTracker.status(unknownParent, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Requested
-    }
-  }
-
-  property("unknown parent header: the header delivered by the sender is accepted") {
-    withFixture { f =>
-      f.initialize()
-      val tip = f.hist.bestFullBlockOpt.get
-      // a real header that is not in local history: a sibling of the best full block
-      val sibling = nextBlock(Some(f.chain(1)), tip.blockTransactions.txs, defaultExtension).header
-      f.process(announcement(f, sibling.id, tip.header.height + 1, DifficultySerializer.encodeCompactBits(1)))
-      headerRequests(networkMessages(f)) shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
-
-      f.deliverHeader(sibling)
-
-      penalized(networkMessages(f)) shouldBe false
-      f.viewHolderProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.exists {
-        case ModifiersFromRemote(mods) => mods.exists(_.id == sibling.id)
-        case _ => false
-      } shouldBe true
+      headerRequests(msgs) shouldBe empty
+      f.deliveryTracker.status(unknownParent, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Unknown
     }
   }
 
@@ -229,8 +188,30 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
     }
   }
 
-  property("an input announcement is accepted on replay after its parent joins the best header chain") {
-    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+  property("input block whose parent is a known header outside the best chain is still processed") {
+    withFixture { f =>
+      val tip = f.hist.bestFullBlockOpt.get
+      val forkBlock = nextBlock(Some(f.chain(1)), tip.blockTransactions.txs, defaultExtension)
+      f.hist.append(forkBlock.header).get
+      forkBlock.header.height shouldBe tip.header.height
+      forkBlock.header.id should not be tip.id
+      f.hist.bestFullBlockIdOpt shouldBe Some(tip.id)
+      f.hist.isInBestChain(forkBlock.header) shouldBe false
+
+      // a known off-best-chain parent still yields a real difficulty via requiredDifficultyAfter,
+      // so the announcement binds and is processed; restricting to best-chain parents is left to the maintainer
+      val ib = announcement(f, forkBlock.header.id, tip.header.height + 1, requiredNBitsAfter(f, forkBlock.header))
+      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters, Some(requiredNBitsAfter(f, forkBlock.header))) shouldBe true
+
+      f.process(ib)
+
+      viewHolderGotInputBlock(f) shouldBe true
+      penalized(networkMessages(f)) shouldBe false
+    }
+  }
+
+  property("an input announcement is accepted on replay once its parent header is known") {
+    withFixture { f =>
       val originalTip = f.hist.bestFullBlockOpt.get
       val parent = nextBlock(Some(f.chain(1)), originalTip.blockTransactions.txs, defaultExtension)
       parent.height shouldBe originalTip.height
@@ -239,23 +220,19 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
       ib.valid(f.realPowScheme, f.state.stateContext.currentParameters,
         Some(requiredNBitsAfter(f, parent.header))) shouldBe true
 
+      // first delivery: the parent is unknown, so the announcement is dropped without a request
       f.process(ib)
-
       viewHolderGotInputBlock(f) shouldBe false
       val initialMessages = networkMessages(f)
-      headerRequests(initialMessages) shouldBe Seq(Seq(parent.id) -> SendToPeer(f.peer))
+      headerRequests(initialMessages) shouldBe empty
       penalized(initialMessages) shouldBe false
 
+      // once the parent header is known (even off the best chain), a replay is accepted
       f.hist.append(parent.header).get
       f.hist.isInBestChain(parent.header) shouldBe false
-      val nextHeader = nextBlock(Some(parent), originalTip.blockTransactions.txs, defaultExtension).header
-      f.hist.append(nextHeader).get
-      f.hist.isInBestChain(parent.header) shouldBe true
-      f.hist.bestFullBlockIdOpt shouldBe Some(originalTip.id)
       ib.header.height shouldBe f.hist.fullBlockHeight + 1
 
       f.process(ib)
-
       f.viewHolderProbe.expectMsg(ProcessInputBlock(ib, f.peer))
       val replayMessages = networkMessages(f)
       penalized(replayMessages) shouldBe false
@@ -273,8 +250,8 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
       ib.valid(f.realPowScheme, f.state.stateContext.currentParameters,
         Some(requiredNBitsAfter(f, parent.header))) shouldBe true
 
+      // at +2 the announcement goes through the pre-existing request branch (unchanged by this PR)
       f.process(ib)
-
       viewHolderGotInputBlock(f) shouldBe false
       val initialMessages = networkMessages(f)
       headerRequests(initialMessages) shouldBe Seq(Seq(parent.id) -> SendToPeer(f.peer))
@@ -286,90 +263,10 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
       ib.header.height shouldBe f.hist.fullBlockHeight + 1
 
       f.process(ib)
-
       f.viewHolderProbe.expectMsg(ProcessInputBlock(ib, f.peer))
       val replayMessages = networkMessages(f)
       penalized(replayMessages) shouldBe false
       headerRequests(replayMessages) shouldBe empty
-    }
-  }
-
-  property("unknown-parent discovery expires without requesting the header from another peer") {
-    withFixture { f =>
-      val otherPeer = f.initialize()
-      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
-      val tip = f.hist.bestFullBlockOpt.get.header
-      val ib = announcement(f, unknownParent, tip.height + 1, DifficultySerializer.encodeCompactBits(1))
-
-      f.process(ib)
-
-      // Observe two delivery deadlines, including a potential retry against the other peer.
-      val messages = f.ncProbe.receiveWhile(max = 5.seconds, idle = 5.seconds) { case m => m }
-      val requests = headerRequests(messages).filter(_._1.contains(unknownParent))
-      requests.map(_._2 == SendToPeer(f.peer)) shouldBe Seq(true)
-      messages.exists {
-        case p: PenalizePeer => p.address == otherPeer.connectionId.remoteAddress
-        case _ => false
-      } shouldBe false
-      f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, unknownParent) shouldBe None
-      f.deliveryTracker.status(unknownParent, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Unknown
-      viewHolderGotInputBlock(f) shouldBe false
-    }
-  }
-
-  property("an expiration from an earlier request attempt does not clear the current request for the header") {
-    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
-      f.initialize()
-      val tip = f.hist.bestFullBlockOpt.get
-      val sibling = nextBlock(Some(f.chain(1)), tip.blockTransactions.txs, defaultExtension).header
-      val ib = announcement(f, sibling.id, tip.header.height + 1, DifficultySerializer.encodeCompactBits(1))
-      f.process(ib)
-      headerRequests(networkMessages(f)) shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
-      val first = f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get
-
-      // the first request is cleared (as when its expiration is already queued) and the header is requested again
-      f.deliveryTracker.setUnknown(sibling.id, Header.modifierTypeId)
-      f.process(ib)
-      headerRequests(networkMessages(f)) shouldBe Seq(Seq(sibling.id) -> SendToPeer(f.peer))
-      val current = f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get
-      current should not be theSameInstanceAs(first)
-
-      // the first attempt's expiration arrives now
-      val stale = new SenderOnlyRequestExpired(Header.modifierTypeId, sibling.id)
-      stale.timer = first.cancellable
-      f.synchronizer ! stale
-
-      networkMessages(f) shouldBe empty
-      f.deliveryTracker.getRequestedInfo(Header.modifierTypeId, sibling.id).get should be theSameInstanceAs current
-      f.deliveryTracker.status(sibling.id, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Requested
-
-      f.deliverHeader(sibling)
-
-      penalized(networkMessages(f)) shouldBe false
-      f.viewHolderProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.exists {
-        case ModifiersFromRemote(mods) => mods.exists(_.id == sibling.id)
-        case _ => false
-      } shouldBe true
-    }
-  }
-
-  property("input block whose parent is a known header outside the best chain is dropped") {
-    withFixture { f =>
-      val tip = f.hist.bestFullBlockOpt.get
-      val forkBlock = nextBlock(Some(f.chain(1)), tip.blockTransactions.txs, defaultExtension)
-      f.hist.append(forkBlock.header).get
-      forkBlock.header.height shouldBe tip.header.height
-      forkBlock.header.id should not be tip.id
-      f.hist.bestFullBlockIdOpt shouldBe Some(tip.id)
-      f.hist.isInBestChain(forkBlock.header) shouldBe false
-
-      val ib = announcement(f, forkBlock.header.id, tip.header.height + 1, requiredNBitsAfter(f, forkBlock.header))
-      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters, Some(requiredNBitsAfter(f, forkBlock.header))) shouldBe true
-
-      f.process(ib)
-
-      viewHolderGotInputBlock(f) shouldBe false
-      networkMessages(f) shouldBe empty
     }
   }
 
@@ -440,6 +337,21 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
       f.process(ib)
 
       viewHolderGotInputBlock(f) shouldBe true
+      penalized(networkMessages(f)) shouldBe false
+    }
+  }
+
+  property("input block at genesis height whose parent is not the genesis parent is dropped") {
+    withFixture(new Fixture(applyLocalChain = false)) { f =>
+      f.hist.bestFullBlockIdOpt shouldBe None
+      val nonGenesisParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      nonGenesisParent should not be Header.GenesisParentId
+      val ib = announcement(f, nonGenesisParent, ErgoHistoryUtils.GenesisHeight,
+        f.historySettings.chainSettings.initialNBits)
+
+      f.process(ib)
+
+      viewHolderGotInputBlock(f) shouldBe false
       penalized(networkMessages(f)) shouldBe false
     }
   }

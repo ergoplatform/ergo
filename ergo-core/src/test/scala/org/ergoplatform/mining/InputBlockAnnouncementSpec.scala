@@ -1,14 +1,16 @@
 package org.ergoplatform.mining
 
 import com.google.common.primitives.Ints
-import org.ergoplatform.{InputSolutionFound, OrderingSolutionFound}
+import org.ergoplatform.{AutolykosSolution, InputSolutionFound, OrderingSolutionFound}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.settings.{Algos, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.authds.merkle.BatchMerkleProof
+import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.util.{bytesToId, idToBytes}
 
@@ -512,6 +514,51 @@ class InputBlockAnnouncementSpec extends ErgoCorePropertyTest {
       val tamperedProof = tamperedFields.proofForInputBlockData.get
       tamperedProof.valid(extensionRoot) shouldBe false
     }
+  }
+
+  property("InputBlockAnnouncement.valid() should reject fields not bound to the extension proof") {
+    val prevInputBlockId = Some(Array.fill(32)(0x01.toByte))
+    val transactionsDigest = Digest32 @@ Array.fill(32)(0x02.toByte)
+    val prevTransactionsDigest = Digest32 @@ Array.fill(32)(0x03.toByte)
+    val extCandidate = InputBlockFields.toExtensionFields(
+      prevInputBlockId, transactionsDigest, prevTransactionsDigest)
+    val merkleProof = extCandidate.proofForInputBlockData.get
+    val nBits = DifficultySerializer.encodeCompactBits(1)
+
+    // The real input-block target covers every 256-bit hit at this difficulty.
+    // A fixed nonce therefore exercises validation without a fallible nonce search.
+    (powScheme.getB(nBits) * defaultParams.subBlocksPerBlock) should be >= (BigInt(1) << 256)
+    val header = Header(
+      version = 2,
+      parentId = bytesToId(Array.fill(32)(0x04.toByte)),
+      ADProofsRoot = Digest32 @@ Array.fill(32)(0x05.toByte),
+      stateRoot = ADDigest @@ Array.fill(33)(0x06.toByte),
+      transactionsRoot = Digest32 @@ Array.fill(32)(0x07.toByte),
+      timestamp = 1L,
+      nBits = nBits,
+      height = 1,
+      extensionRoot = extCandidate.digest,
+      powSolution = new AutolykosSolution(AutolykosSolution.pkForV2,
+        AutolykosSolution.wForV2, Array.fill(8)(0.toByte), AutolykosSolution.dForV2),
+      votes = Array.fill(3)(0.toByte),
+      unparsedBytes = Array.emptyByteArray
+    )
+    val fields = new InputBlockFields(
+      prevInputBlockId, transactionsDigest, prevTransactionsDigest, merkleProof)
+    val announcement = InputBlockAnnouncement(
+      InputBlockAnnouncement.initialMessageVersion, header, fields, None)
+
+    powScheme.checkInputBlockPoW(header, defaultParams) shouldBe true
+    merkleProof.valid(header.extensionRoot) shouldBe true
+    announcement.valid(powScheme, defaultParams, Some(nBits)) shouldBe true
+
+    val tamperedDigest = Digest32 @@ transactionsDigest.map(b => (b ^ 0xFF).toByte)
+    val tamperedFields = new InputBlockFields(
+      prevInputBlockId, tamperedDigest, prevTransactionsDigest, merkleProof)
+    val tampered = announcement.copy(inputBlockFields = tamperedFields)
+
+    tampered.inputBlockFields.inputBlockFieldsProof.valid(header.extensionRoot) shouldBe true
+    tampered.valid(powScheme, defaultParams, Some(nBits)) shouldBe false
   }
 
   /**

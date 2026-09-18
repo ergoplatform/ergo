@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
-import com.google.common.primitives.Ints
+import cats.syntax.either._
+import com.google.common.primitives.{Ints, Longs}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
@@ -8,15 +9,18 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
-import org.ergoplatform.OrderingSolutionFound
+import org.ergoplatform.{InputSolutionFound, OrderingSolutionFound}
 
 class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
 
+  // This specification searches for ordering headers, without stopping at input-block hits.
+  private val orderingOnlyParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+    .withNumOfSubblocksPerBlock(1)
+
   property("generated solution should be valid") {
     val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
-    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
     forAll(invalidHeaderGen,
             Gen.choose(100, 120),
             Gen.choose[Byte](1, 2)) { (inHeader, difficulty, ver) =>
@@ -28,7 +32,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
       val b = pow.getB(h.nBits)
       val hbs = Ints.toByteArray(h.height)
       val N = pow.calcN(h)
-      pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000, defaultParams) match {
+      pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000, orderingOnlyParams) match {
         case OrderingSolutionFound(as) =>
           val nh = h.copy(powSolution = as)
           pow.validate(nh) shouldBe 'success
@@ -40,7 +44,7 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
 
             val invalidHeader2 = Iterator.iterate(0L)(_ + 1000L).take(50)
               .flatMap { startNonce =>
-                pow.checkNonces(ver, hbs, msg2, sk, x, b, N, startNonce, startNonce + 1000, defaultParams) match {
+                pow.checkNonces(ver, hbs, msg2, sk, x, b, N, startNonce, startNonce + 1000, orderingOnlyParams) match {
                   case OrderingSolutionFound(as2) => Some(h.copy(powSolution = as2))
                   case _                          => None
                 }
@@ -51,6 +55,29 @@ class AutolykosPowSchemeSpec extends ErgoCorePropertyTest {
           }
         case _ =>
       }
+    }
+  }
+
+  property("ordering-only search continues past an input-block hit in the same nonce window") {
+    val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
+    val msg = Array.fill[Byte](32)(0)
+    val height = Ints.toByteArray(1)
+    val target = pow.getB(DifficultySerializer.encodeCompactBits(100))
+    val n = pow.calcN(2, 1)
+    val inputParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+
+    val input = pow.checkNonces(2, height, msg, BigInt(1), BigInt(2), target, n, 0, 1000, inputParams) match {
+      case InputSolutionFound(solution) => solution
+      case other => fail(s"Expected an input-block hit before the ordering solution, got $other")
+    }
+    input.d should be > target
+    input.d should be <= (target * inputParams.subBlocksPerBlock)
+
+    pow.checkNonces(2, height, msg, BigInt(1), BigInt(2), target, n, 0, 1000, orderingOnlyParams) match {
+      case OrderingSolutionFound(solution) =>
+        solution.d should be <= target
+        Longs.fromByteArray(solution.n) should be > Longs.fromByteArray(input.n)
+      case other => fail(s"Expected an ordering solution in the same nonce window, got $other")
     }
   }
 

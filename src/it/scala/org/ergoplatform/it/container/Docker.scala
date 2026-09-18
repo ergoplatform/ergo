@@ -2,6 +2,7 @@ package org.ergoplatform.it.container
 
 import java.io.{File, FileOutputStream}
 import java.net.InetAddress
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -37,7 +38,10 @@ import scala.util.{Failure, Random, Try}
 class Docker(
   suiteConfig: Config                = ConfigFactory.empty,
   tag: String                        = "ergo_integration_test",
-  localDataVolumeOpt: Option[String] = None
+  localDataVolumeOpt: Option[String] = None,
+  publishedPortHost: String          = "0.0.0.0",
+  nodeImage: String                  = Docker.ErgoImageLatest,
+  useConfigFile: Boolean             = false
 )(implicit ec: ExecutionContext)
   extends AutoCloseable
   with ScorexLogging {
@@ -166,7 +170,8 @@ class Docker(
         hostNetworkPort      = extractHostPort(ports, networkPort),
         containerNetworkPort = networkPort,
         containerApiPort     = restApiPort,
-        apiIpAddress         = containerInfo.getNetworkSettings.getIpAddress,
+        apiIpAddress         = if (publishedPortHost == "127.0.0.1") ""
+                               else containerInfo.getNetworkSettings.getIpAddress,
         networkIpAddress     = attachedNetwork.getIpAddress,
         containerId          = containerId
       )
@@ -270,8 +275,8 @@ class Docker(
     val restApiPort = settings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
     val portBindings = List(
-      new PortBinding(new Ports.Binding("0.0.0.0", null), new ExposedPort(restApiPort)),
-      new PortBinding(new Ports.Binding("0.0.0.0", null), new ExposedPort(networkPort))
+      new PortBinding(new Ports.Binding(publishedPortHost, null), new ExposedPort(restApiPort)),
+      new PortBinding(new Ports.Binding(publishedPortHost, null), new ExposedPort(networkPort))
     )
 
     val oneGB: Long = 1024 * 1024 * 1024
@@ -291,7 +296,22 @@ class Docker(
       .withPortBindings(portBindings.asJava)
       .withMemory(memoryLimit)
 
-    val configCommandLine = renderProperties(asProperties(nodeConfig))
+    val containerConfigPath = if (useConfigFile) {
+      val (localVolume, remoteVolume) = specialVolumeOpt.getOrElse {
+        throw new IllegalArgumentException("Config-file mode requires a node data bind mount")
+      }
+      val fileName = s"integration-node-$uuidShort.conf"
+      val configPath = Paths.get(localVolume).resolve(fileName)
+      Files.createDirectories(configPath.getParent)
+      val rendered = nodeConfig.root().render(
+        ConfigRenderOptions.defaults().setOriginComments(false).setComments(false)
+      )
+      Files.write(configPath, rendered.getBytes(StandardCharsets.UTF_8))
+      s"${remoteVolume.stripSuffix("/")}/$fileName"
+    } else {
+      s"/opt/ergo/${networkType.verboseName}Template.conf"
+    }
+    val configCommandLine = if (useConfigFile) "" else renderProperties(asProperties(nodeConfig))
 
     val networkTypeCmdOption = networkType match {
       case MainNet => "--mainnet"
@@ -309,8 +329,8 @@ class Docker(
     val shellCmd = "echo Options: $OPTS; java $OPTS -Dlibrary.leveldbjni.path=/opt/ergo -jar " +
       s"$miscCmdOptions /opt/ergo/ergo.jar $networkTypeCmdOption -c /opt/ergo/${networkType.verboseName}Template.conf"
 
-    client
-      .createContainerCmd(ErgoImageLatest)
+    val container = client
+      .createContainerCmd(nodeImage)
       .withExposedPorts(
         List(ExposedPort.tcp(restApiPort), ExposedPort.tcp(networkPort)).asJava
       )
@@ -318,7 +338,14 @@ class Docker(
       .withHostName(networkName)
       .withIpv4Address(ip)
       .withEnv(s"OPTS=$configCommandLine")
-      .withEntrypoint("sh", "-c", shellCmd)
+    if (useConfigFile) {
+      val javaArgs = Seq("java") ++ Option(miscCmdOptions).filter(_.nonEmpty) ++
+        Seq("-Dlibrary.leveldbjni.path=/opt/ergo", "-jar", "/opt/ergo/ergo.jar") ++
+        Option(networkTypeCmdOption).filter(_.nonEmpty) ++ Seq("-c", containerConfigPath)
+      container.withEntrypoint(javaArgs: _*)
+    } else {
+      container.withEntrypoint("sh", "-c", shellCmd)
+    }
   }
 
   private def createNetwork(maxRetry: Int): Network =
@@ -403,6 +430,15 @@ class Docker(
     nodeRepository.find(_.containerId == containerId).foreach(_.close())
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.removeContainerCmd(containerId).withForce(true).exec()
+  }
+
+  def stopAndRemoveNode(node: Node, secondsToWait: Int = 5): Unit = {
+    require(nodeRepository.exists(_.containerId == node.containerId), "Node must belong to this suite")
+    client.stopContainerCmd(node.containerId).withTimeout(secondsToWait).exec()
+    saveLogs(node.containerId, tag)
+    client.removeContainerCmd(node.containerId).exec()
+    node.close()
+    nodeRepository = nodeRepository.filterNot(_.containerId == node.containerId)
   }
 
   def removeFromMountedVolume(

@@ -174,6 +174,35 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
     )
   }
 
+  property("requested ordering announcement with an unknown parent is delivered without a non-delivery penalty") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val oba = announcement(f, unknownParent, f.hist.fullBlockHeight + 1,
+        DifficultySerializer.encodeCompactBits(1))
+      oba.valid(f.realPowScheme, None) shouldBe true
+      val inv = InvData(OrderingBlockAnnouncementTypeId.value, Seq(oba.header.id))
+      f.synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(f.peer))
+      val requests = f.ncProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.collect {
+        case SendToNetwork(msg, _) if msg.spec.messageCode == RequestModifierSpec.messageCode =>
+          msg.data.get.asInstanceOf[InvData]
+      }
+      requests should contain(inv)
+      f.deliveryTracker.status(oba.header.id, OrderingBlockAnnouncementTypeId.value, Seq.empty) shouldBe ModifiersStatus.Requested
+      val attempt = f.deliveryTracker.getRequestedInfo(OrderingBlockAnnouncementTypeId.value, oba.header.id).get
+
+      f.send(oba)
+      outcome(f, oba) shouldBe Outcome(stored = false, relayed = false, handedOff = false, penalized = false,
+        headerRequests = Seq.empty)
+      val statusAfterDelivery = f.deliveryTracker.status(oba.header.id, OrderingBlockAnnouncementTypeId.value, Seq.empty)
+      val timerCancelledAfterDelivery = attempt.cancellable.isCancelled
+      f.synchronizer ! CheckDelivery(f.peer, OrderingBlockAnnouncementTypeId.value, oba.header.id)
+      val penaltyAfterDelivery = outcome(f, oba).penalized
+
+      (statusAfterDelivery, timerCancelledAfterDelivery, penaltyAfterDelivery) shouldBe
+        ((ModifiersStatus.Unknown, true, false))
+    }
+  }
+
   property("ordering block announcement with unknown parent header is dropped without requesting the header") {
     withFixture { f =>
       val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
@@ -312,6 +341,24 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
 
       val o = outcome(f, oba)
       (o.stored, o.relayed, o.penalized) shouldBe ((true, true, false))
+    }
+  }
+
+  property("ordering block announcement at genesis height is dropped when headers exist but no full block has been applied") {
+    withFixture(new Fixture(applyLocalChain = false)) { f =>
+      f.hist.append(f.chain.head.header).get
+      f.hist.bestHeaderOpt.isDefined shouldBe true
+      f.hist.bestFullBlockIdOpt shouldBe None
+      f.hist.fullBlockHeight shouldBe 0
+      val initial = f.historySettings.chainSettings.initialNBits
+      val oba = announcement(f, Header.GenesisParentId, ErgoHistoryUtils.GenesisHeight, initial)
+      f.hist.contains(oba.header) shouldBe false
+      oba.valid(f.realPowScheme, Some(initial)) shouldBe true
+
+      f.send(oba)
+
+      outcome(f, oba) shouldBe Outcome(stored = false, relayed = false, handedOff = false, penalized = false,
+        headerRequests = Seq.empty)
     }
   }
 

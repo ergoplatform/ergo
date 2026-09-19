@@ -5,10 +5,11 @@ import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.{AutolykosPowScheme, InputBlockFields}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, InputBlockTypeId}
 import org.ergoplatform.modifiers.history.header.{Header}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
+import org.ergoplatform.network.message.{InvData, InvSpec, Message, RequestModifierSpec}
+import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -152,6 +153,39 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
   }
 
   private def penalized(msgs: Seq[Any]): Boolean = msgs.exists(_.isInstanceOf[PenalizePeer])
+
+  property("requested input block with an unknown parent is delivered without a non-delivery penalty") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      f.synchronizer ! ChangedState(f.state)
+      f.synchronizer ! ChangedHistory(f.hist)
+      f.synchronizer ! ChangedMempool(f.mempool)
+      networkMessages(f)
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val ib = announcement(f, unknownParent, f.hist.fullBlockHeight + 1,
+        DifficultySerializer.encodeCompactBits(1))
+      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters, None) shouldBe true
+      val inv = InvData(InputBlockTypeId.value, Seq(ib.id))
+      f.synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(f.peer))
+      val requests = networkMessages(f).collect {
+        case SendToNetwork(msg, _) if msg.spec.messageCode == RequestModifierSpec.messageCode =>
+          msg.data.get.asInstanceOf[InvData]
+      }
+      requests should contain(inv)
+      f.deliveryTracker.status(ib.id, InputBlockTypeId.value, Seq.empty) shouldBe ModifiersStatus.Requested
+      val attempt = f.deliveryTracker.getRequestedInfo(InputBlockTypeId.value, ib.id).get
+
+      f.synchronizer ! Message(InputBlockMessageSpec, Left(InputBlockMessageSpec.toBytes(ib)), Some(f.peer))
+      viewHolderGotInputBlock(f) shouldBe false
+      networkMessages(f) shouldBe empty
+      val statusAfterDelivery = f.deliveryTracker.status(ib.id, InputBlockTypeId.value, Seq.empty)
+      val timerCancelledAfterDelivery = attempt.cancellable.isCancelled
+      f.synchronizer ! CheckDelivery(f.peer, InputBlockTypeId.value, ib.id)
+      val penaltyAfterDelivery = penalized(networkMessages(f))
+
+      (statusAfterDelivery, timerCancelledAfterDelivery, penaltyAfterDelivery) shouldBe
+        ((ModifiersStatus.Unknown, true, false))
+    }
+  }
 
   property("input block with unknown parent header is dropped without requesting the header") {
     withFixture { f =>
@@ -338,6 +372,26 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
 
       viewHolderGotInputBlock(f) shouldBe true
       penalized(networkMessages(f)) shouldBe false
+    }
+  }
+
+  property("input block at genesis height is dropped when headers exist but no full block has been applied") {
+    withFixture(new Fixture(applyLocalChain = false)) { f =>
+      f.hist.append(f.chain.head.header).get
+      f.hist.bestHeaderOpt.isDefined shouldBe true
+      f.hist.bestFullBlockIdOpt shouldBe None
+      f.hist.fullBlockHeight shouldBe 0
+      val initial = f.historySettings.chainSettings.initialNBits
+      val ib = announcement(f, Header.GenesisParentId, ErgoHistoryUtils.GenesisHeight, initial)
+      f.hist.contains(ib.header) shouldBe false
+      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters, Some(initial)) shouldBe true
+
+      f.process(ib)
+
+      viewHolderGotInputBlock(f) shouldBe false
+      val msgs = networkMessages(f)
+      penalized(msgs) shouldBe false
+      headerRequests(msgs) shouldBe empty
     }
   }
 

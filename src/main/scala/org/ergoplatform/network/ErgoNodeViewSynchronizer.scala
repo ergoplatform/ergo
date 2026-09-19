@@ -1396,6 +1396,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * A requested announcement that is then validly dropped (e.g. its parent does not bind an
+    * expected difficulty) must not be left `Requested`: a subsequent `CheckDelivery` would
+    * penalize the peer that actually delivered it, and the pending entry would block requesting
+    * or replaying the announcement later. Clear it back to `Unknown` (re-requestable) on such a
+    * benign-drop exit, but only when this peer is the one we requested it from -- an unsolicited
+    * response from another peer must not erase the real supplier's pending request. Mirrors the
+    * `getRequestedInfo(..) if ri.peer == remote` guard used on the snapshot download paths.
+    */
+  private def clearRequestedIfFromSupplier(modifierId: ModifierId,
+                                           modifierTypeId: NetworkObjectTypeId.Value,
+                                           remote: ConnectedPeer): Unit = {
+    deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
+      case Some(info) if info.peer == remote =>
+        deliveryTracker.setUnknown(modifierId, modifierTypeId)
+      case _ => ()
+    }
+  }
+
+  /**
    * Request an input block from a peer by its ID.
    *
    * This method sends a request to the specified peer to download an input block with the given ID.
@@ -1510,6 +1529,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // Unbindable: the parent is unknown, is not exactly one block below, or this is a
         // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
         log.debug(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} does not bind an expected difficulty")
+        clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         return
       }
       val valid = usrOpt
@@ -1856,6 +1876,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // Unbindable: the parent is unknown, is not exactly one block below, or this is a
         // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
         log.debug(s"Not processing ordering block announcement ${oba.header.id}: parent ${oba.header.parentId} does not bind an expected difficulty")
+        clearRequestedIfFromSupplier(oba.header.id, OrderingBlockAnnouncementTypeId.value, remote)
         return
       }
 

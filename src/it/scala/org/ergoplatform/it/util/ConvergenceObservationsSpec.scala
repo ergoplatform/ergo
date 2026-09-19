@@ -39,7 +39,56 @@ class ConvergenceObservationsSpec extends AnyFlatSpec with Matchers {
     ConvergenceObservations.sameBestBlock(info, info.copy(bestBlockIdOpt = None), 50) shouldBe false
   }
 
-  it should "resample the entire group until its current selections agree" in withObserver { observer =>
+  "Fully applied block agreement" should "accept a complete shared tip at the minimum height" in {
+    val info = NodeInfo(Some("tip"), Some("tip"), Some(12), Some(12), None, Some(false))
+    ConvergenceObservations.sameFullyAppliedNonMiningBlock(info, info, 12) shouldBe true
+    ConvergenceObservations.sameFullyAppliedNonMiningBlock(info, info, 13) shouldBe false
+  }
+
+  it should "reject a shared 21-header 12-full-block seed despite full-block agreement" in {
+    val lagging = NodeInfo(Some("header21"), Some("block12"), Some(21), Some(12), None, Some(false))
+    ConvergenceObservations.sameBestBlock(lagging, lagging, 1) shouldBe true
+    ConvergenceObservations.sameFullyAppliedNonMiningBlock(lagging, lagging, 1) shouldBe false
+  }
+
+  private val completeSeed = NodeInfo(Some("tip"), Some("tip"), Some(12), Some(12), None, Some(false))
+
+  Seq[(String, NodeInfo => NodeInfo)](
+    "missing header height" -> ((info: NodeInfo) => info.copy(bestHeaderHeightOpt = None)),
+    "missing full-block height" -> ((info: NodeInfo) => info.copy(bestBlockHeightOpt = None)),
+    "missing header ID" -> ((info: NodeInfo) => info.copy(bestHeaderIdOpt = None)),
+    "missing full-block ID" -> ((info: NodeInfo) => info.copy(bestBlockIdOpt = None)),
+    "different header ID" -> ((info: NodeInfo) => info.copy(bestHeaderIdOpt = Some("other"))),
+    "different full-block ID" -> ((info: NodeInfo) => info.copy(bestBlockIdOpt = Some("other"))),
+    "different header height" -> ((info: NodeInfo) => info.copy(bestHeaderHeightOpt = Some(21))),
+    "unknown mining status" -> ((info: NodeInfo) => info.copy(isMining = None)),
+    "active mining" -> ((info: NodeInfo) => info.copy(isMining = Some(true)))
+  ).foreach { case (fault, change) =>
+    Seq("A", "B").foreach { side =>
+      it should s"reject $fault on node $side independently" in {
+        val (a, b) = if (side == "A") (change(completeSeed), completeSeed)
+                     else (completeSeed, change(completeSeed))
+        ConvergenceObservations.sameFullyAppliedNonMiningBlock(a, b, 1) shouldBe false
+      }
+    }
+  }
+
+  it should "reject two empty tip identifiers" in {
+    val empty = completeSeed.copy(bestHeaderIdOpt = Some(""), bestBlockIdOpt = Some(""))
+    ConvergenceObservations.sameFullyAppliedNonMiningBlock(empty, empty, 1) shouldBe false
+  }
+
+  it should "reject different complete tips at the same height" in {
+    val other = completeSeed.copy(bestHeaderIdOpt = Some("other"), bestBlockIdOpt = Some("other"))
+    ConvergenceObservations.sameFullyAppliedNonMiningBlock(completeSeed, other, 1) shouldBe false
+  }
+
+  it should "reject different complete heights independently of matching IDs" in {
+    val other = completeSeed.copy(bestHeaderHeightOpt = Some(13), bestBlockHeightOpt = Some(13))
+    ConvergenceObservations.sameFullyAppliedNonMiningBlock(completeSeed, other, 1) shouldBe false
+  }
+
+  "Full block agreement" should "resample the entire group until its current selections agree" in withObserver { observer =>
     val samples = new AtomicInteger()
     val result = observer.until(2.seconds.fromNow, 1.millis, 100.millis) { _ =>
       val headers = if (samples.incrementAndGet() == 1) Seq(Seq("a", "b"), Seq("b", "a"))

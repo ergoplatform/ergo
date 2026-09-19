@@ -45,6 +45,16 @@ trait ErgoMemPoolReader extends NodeViewComponent with ContainsModifiers[ErgoTra
   def modifierById(modifierId: ModifierId): Option[ErgoTransaction]
 
   /**
+    * Returns the pooled transaction along with the data the pool keeps for it
+    * (validation cost, timestamps, source peer), unlike `modifierById` which returns
+    * the transaction only.
+    *
+    * @param modifierId - transaction id
+    * @return unconfirmed transaction wrapper, or None if the pool does not hold it
+    */
+  def unconfirmedById(modifierId: ModifierId): Option[UnconfirmedTransaction]
+
+  /**
     * Returns transaction ids with weights. Weight depends on a fee a transaction is paying.
     * Resulting transactions are sorted by weight in descending order.
     *

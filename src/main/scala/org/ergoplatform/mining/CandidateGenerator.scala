@@ -24,6 +24,7 @@ import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Pa
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
 import scorex.util.{ModifierId, ScorexLogging}
@@ -687,7 +688,7 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      val (txs, toEliminate) = collectTxs(
+      def collectPoolTxs: (Seq[ErgoTransaction], Seq[ModifierId]) = collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,
         state.stateContext.currentParameters.maxBlockSize,
@@ -695,6 +696,8 @@ object CandidateGenerator extends ScorexLogging {
         upcomingContext,
         emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
       )
+
+      val (txs, toEliminate) = collectPoolTxs
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
@@ -712,63 +715,53 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
+      def mkCandidate(blockTxs: Seq[ErgoTransaction],
+                      adProof: SerializedAdProof,
+                      adDigest: ADDigest,
+                      eliminate: EliminateTransactions): (Candidate, EliminateTransactions) = {
+        val candidate = CandidateBlock(
+          bestHeaderOpt, version, nBits, adDigest,
+          adProof, blockTxs, timestamp, extensionCandidate, votes
+        )
+        val ext = deriveWorkMessage(candidate)
+        log.info(
+          s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
+          s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
+        )
+        Candidate(candidate, ext, prioritizedTransactions) -> eliminate
+      }
+
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
-          val candidate = CandidateBlock(
-            bestHeaderOpt,
-            version,
-            nBits,
-            adDigest,
-            adProof,
-            txs,
-            timestamp,
-            extensionCandidate,
-            votes
-          )
-          val ext = deriveWorkMessage(candidate)
-          log.info(
-            s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
-          )
-          Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
-          )
+          Success(mkCandidate(txs, adProof, adDigest, eliminateTransactions))
         case Failure(t: Throwable) =>
-          // We can not produce a block for some reason, so print out an error
-          // and collect only emission transaction if it exists.
-          // We consider that emission transaction is always valid.
-          emissionTxOpt match {
-            case Some(emissionTx) =>
-              log.error(
-                "Failed to produce proofs for transactions, but emission box is found: ",
-                t
+          // A likely reason of the failure is a state update (new block applied) between
+          // collectTxs and proofsForTransactions. Re-collect transactions against the current
+          // state and retry once before falling back to an emission-only candidate.
+          val (retryTxs, retryToEliminate) = collectPoolTxs
+          val retryEliminate = EliminateTransactions((toEliminate ++ retryToEliminate).distinct)
+          state.proofsForTransactions(retryTxs) match {
+            case Success((adProof, adDigest)) =>
+              log.warn(
+                s"Proof generation failed once (${t.getMessage}), " +
+                s"recovered on retry with ${retryTxs.size} transactions"
               )
-              val fallbackTxs = Seq(emissionTx)
-              state.proofsForTransactions(fallbackTxs).map {
-                case (adProof, adDigest) =>
-                  val candidate = CandidateBlock(
-                    bestHeaderOpt,
-                    version,
-                    nBits,
-                    adDigest,
-                    adProof,
-                    fallbackTxs,
-                    timestamp,
-                    extensionCandidate,
-                    votes
-                  )
-                  Candidate(
-                    candidate,
-                    deriveWorkMessage(candidate),
-                    prioritizedTransactions
-                  ) -> eliminateTransactions
+              Success(mkCandidate(retryTxs, adProof, adDigest, retryEliminate))
+            case Failure(ex: Throwable) =>
+              // We can not produce a block for some reason, so print out an error
+              // and collect only emission transaction if it exists.
+              // We consider that emission transaction is always valid.
+              emissionTxOpt match {
+                case Some(emissionTx) =>
+                  log.error("Failed to produce proofs for transactions, but emission box is found: ", ex)
+                  state.proofsForTransactions(Seq(emissionTx)).map {
+                    case (adProof, adDigest) =>
+                      mkCandidate(Seq(emissionTx), adProof, adDigest, retryEliminate)
+                  }
+                case None =>
+                  log.error("Failed to produce proofs for transactions and no emission box available: ", ex)
+                  Failure(ex)
               }
-            case None =>
-              log.error(
-                "Failed to produce proofs for transactions and no emission box available: ",
-                t
-              )
-              Failure(t)
           }
       }
     }.flatten

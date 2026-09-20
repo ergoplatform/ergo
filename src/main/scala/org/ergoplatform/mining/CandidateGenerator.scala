@@ -759,7 +759,7 @@ object CandidateGenerator extends ScorexLogging {
                   state.proofsForTransactions(Seq(emissionTx)).map {
                     case (adProof, adDigest) =>
                       // Both collections produced failed proofs; their rejections may be stale.
-                      mkCandidate(Seq(emissionTx), adProof, adDigest, EliminateTransactions(retryEliminate))
+                      mkCandidate(Seq(emissionTx), adProof, adDigest, EliminateTransactions(Seq.empty))
                   }
                 case None =>
                   log.error("Failed to produce proofs for transactions and no emission box available: ", ex)

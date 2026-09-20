@@ -96,6 +96,17 @@ trait ErgoWalletService {
   def lockWallet(state: ErgoWalletState): ErgoWalletState
 
   /**
+    * Update the address used for wallet change outputs.
+    * @param state current wallet state
+    * @param address new change address
+    * @return Success when the address was persisted
+    */
+  def updateChangeAddress(
+    state: ErgoWalletState,
+    address: P2PKAddress
+  ): Try[Unit]
+
+  /**
     * Close it, recursively delete registryFolder from filesystem if present and create new registry
     * @param state current wallet state
     * @param settings settings read from config file
@@ -265,6 +276,18 @@ trait ErgoWalletService {
 
 }
 
+object ErgoWalletService {
+
+  sealed abstract class ChangeAddressValidationException(message: String)
+    extends IllegalArgumentException(message)
+
+  final class WalletLockedForChangeAddress
+    extends ChangeAddressValidationException("Wallet is locked")
+
+  final class ChangeAddressNotOwned
+    extends ChangeAddressValidationException("Change address is not owned by the wallet")
+}
+
 class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends ErgoWalletService with ErgoWalletSupport with FileUtils {
 
 
@@ -374,6 +397,20 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def lockWallet(state: ErgoWalletState): ErgoWalletState = {
     state.secretStorageOpt.foreach(_.lock())
     state.copy(walletVars = state.walletVars.resetProver())
+  }
+
+  override def updateChangeAddress(
+    state: ErgoWalletState,
+    address: P2PKAddress
+  ): Try[Unit] = {
+    state.walletVars.proverOpt match {
+      case None =>
+        Failure(new ErgoWalletService.WalletLockedForChangeAddress)
+      case Some(_) if !state.walletVars.ownsAddress(address) =>
+        Failure(new ErgoWalletService.ChangeAddressNotOwned)
+      case Some(_) =>
+        state.storage.updateChangeAddress(address)
+    }
   }
 
   override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {

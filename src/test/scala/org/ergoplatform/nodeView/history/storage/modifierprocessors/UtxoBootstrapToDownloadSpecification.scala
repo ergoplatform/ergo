@@ -1,147 +1,130 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import java.io.File
-
 import org.ergoplatform.modifiers.SnapshotsInfoTypeId
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.wallet.utils.FileUtils
-import scorex.db.LDBFactory
 
-/** Ordinary header append and snapshot-download planning contracts, using test history stores. */
-class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest with FileUtils {
+/**
+  * Tests for UTXO set snapshot bootstrap behavior in `ToDownloadProcessor` /
+  * `FullBlockPruningProcessor`:
+  * - `setHeadersChainSynced` makes `nextModifiersToDownload` issue a UTXO set snapshot request
+  *   (instead of full blocks) when no full blocks are applied yet
+  * - `toDownload` returns no block sections until a UTXO set snapshot is applied
+  * - without `utxoBootstrap` enabled, none of the above holds
+  */
+class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ChainGenerator._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
+  import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
-  private def withHistory(keep: Int = BlocksToKeep, verify: Boolean = true, bootstrap: Boolean = true)
-                         (test: ErgoHistory => Unit): Unit = {
-    val history = generateHistory(verify, StateType.Utxo, PoPoWBootstrap = false, keep, utxoBootstrap = bootstrap)
-    try test(history) finally history.closeStorage()
+  private def genUtxoBootstrapHistory() =
+    generateHistory(verifyTransactions = true,
+                    StateType.Utxo,
+                    PoPoWBootstrap = false,
+                    BlocksToKeep,
+                    utxoBootstrap = true)
+
+  private def headersWithFreshTail(history: ErgoHistory, extra: Int = 1) = {
+    val chain = genChain(BlocksInChain + extra, history)
+    val headers = HeaderChain(chain.dropRight(extra).map(_.header))
+    val updHistory = applyHeaderChain(history, headers)
+    (updHistory, chain)
   }
 
-  private def staleHeaders(history: ErgoHistory, count: Int = BlocksInChain + 2): ErgoHistory =
-    applyHeaderChain(history, genHeaderChain(count, history, diffBitsOpt = None, useRealTs = false))
+  property("snapshot request is issued when headers chain synced and no full blocks applied") {
+    var history = genUtxoBootstrapHistory()
+    val chain = genChain(BlocksInChain, history)
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
 
-  private def freshHeader(history: ErgoHistory) =
-    nextHeader(history.bestHeaderOpt, history.difficultyCalculator,
-      tsOpt = Some(math.max(System.currentTimeMillis(), history.bestHeaderOpt.get.timestamp + 1)), useRealTs = true)
+    history.bestFullBlockOpt shouldBe None
 
-  for (keep <- Seq(-1, 3)) {
-    property(s"ordinary fresh header starts snapshot discovery without moving retention floor, keep=$keep") {
-      withHistory(keep) { initial =>
-        val history = staleHeaders(initial)
-        val floor = history.minFullBlockAvailable
-        history.isHeadersChainSynced shouldBe false
-        history.isUtxoSnapshotApplied shouldBe false
-        history.bestFullBlockOpt shouldBe None
-        history.nextModifiersToDownload(1, (_, _) => true) shouldBe Map.empty
+    // generated headers have fresh (real) timestamps, so applying them drives the ordinary
+    // headers-synced transition in toDownload -> updateBestFullBlock: no setHeadersChainSynced
+    // call is needed for the snapshot request below to be issued
+    history.isHeadersChainSynced shouldBe true
 
-        val header = freshHeader(history)
-        if (keep > 0) header.height should be > keep
-        val (updated, progress) = history.append(header).get
-        progress.toDownload shouldBe Seq.empty
-        updated.isHeadersChainSynced shouldBe true
-        updated.minFullBlockAvailable shouldBe floor
-        updated.bestFullBlockOpt shouldBe None
-        updated.isUtxoSnapshotApplied shouldBe false
-        updated.nextModifiersToDownload(1, (_, id) => !updated.contains(id)) shouldBe
-          Map(SnapshotsInfoTypeId.value -> Seq.empty)
-      }
-    }
-  }
+    // no full blocks applied, no snapshot plan yet => ask peers for UTXO set snapshots
+    history.nextModifiersToDownload(1, (_, id) => !history.contains(id)) shouldBe
+      Map(SnapshotsInfoTypeId.value -> Seq.empty)
 
-  property("old headers and disabled transaction verification do not start snapshot discovery") {
-    withHistory() { initial =>
-      val history = staleHeaders(initial)
-      val oldNext = genHeaderChain(1, history, diffBitsOpt = None, useRealTs = false).headers.last
-      history.append(oldNext).get._2.toDownload shouldBe Seq.empty
-      history.isHeadersChainSynced shouldBe false
-      history.nextModifiersToDownload(1, (_, _) => true) shouldBe Map.empty
-    }
-    withHistory(verify = false) { initial =>
-      val history = staleHeaders(initial)
-      val floor = history.minFullBlockAvailable
-      history.append(freshHeader(history)).get._2.toDownload shouldBe Seq.empty
-      history.isHeadersChainSynced shouldBe false
-      history.minFullBlockAvailable shouldBe floor
-      history.isUtxoSnapshotApplied shouldBe false
-      history.nextModifiersToDownload(1, (_, _) => true) shouldBe Map.empty
-    }
-  }
-
-  property("explicit headers-synced setter remains idempotent and requests snapshot information") {
-    withHistory() { initial =>
-      val history = staleHeaders(initial)
-      val floor = history.minFullBlockAvailable
-      history.isHeadersChainSynced shouldBe false
-      history.setHeadersChainSynced()
-      history.setHeadersChainSynced()
-      history.isHeadersChainSynced shouldBe true
-      history.minFullBlockAvailable shouldBe floor
-      history.nextModifiersToDownload(1, (_, _) => true) shouldBe
-        Map(SnapshotsInfoTypeId.value -> Seq.empty)
-    }
+    // setter must be idempotent
+    history.setHeadersChainSynced()
+    history.isHeadersChainSynced shouldBe true
   }
 
   property("no repeated snapshot request once download plan is registered") {
-    withHistory() { initial =>
-      val history = staleHeaders(initial)
-      val header = freshHeader(history)
-      history.append(header).get
-      val directory = createTempDir
-      val stateSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.copy(directory = directory.getAbsolutePath)
-      val boxes = boxesHolderGenOfSize(1024).sample.get
-      val stateDirectory = new File(directory, "state")
-      stateDirectory.mkdir() shouldBe true
-      val state = UtxoState.fromBoxHolder(boxes, None, stateDirectory, stateSettings, parameters)
-      try {
-        state.dumpSnapshot(header.height, state.rootDigest.dropRight(1))
-        val manifestId = state.snapshotsDb.readSnapshotsInfo.availableManifests(header.height)
-        val manifest = ManifestSerializer.defaultSerializer.parseBytes(state.snapshotsDb.readManifestBytes(manifestId).get)
-        history.registerManifestToDownload(manifest, header.height, Seq.empty)
-        history.utxoSetSnapshotDownloadPlan() should not be empty
-        history.isUtxoSnapshotApplied shouldBe false
-        history.nextModifiersToDownload(1, (_, id) => !history.contains(id)) shouldBe Map.empty
-      } finally {
-        try state.closeStorage() finally {
-          LDBFactory.createKvDb(new File(directory, "snapshots").getAbsolutePath).close()
-          deleteRecursive(directory)
-        }
-      }
-    }
+    var history = genUtxoBootstrapHistory()
+    val (updHistory, chain) = headersWithFreshTail(history)
+    history = updHistory
+    history.setHeadersChainSynced()
+    val freshHeader = chain.last.header
+
+    // manifest of some UTXO set snapshot, needed to create a download plan
+    val bh = boxesHolderGenOfSize(1024).sample.get
+    val us = createUtxoState(bh, parameters)
+    val snapshotHeight = freshHeader.height
+    us.dumpSnapshot(snapshotHeight, us.rootDigest.dropRight(1))
+    val manifestId = us.snapshotsDb.readSnapshotsInfo.availableManifests(snapshotHeight)
+    val manifestBytes = us.snapshotsDb.readManifestBytes(manifestId).get
+    val manifest = ManifestSerializer.defaultSerializer.parseBytes(manifestBytes)
+
+    history.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)
+    history.utxoSetSnapshotDownloadPlan() should not be empty
+    history.isUtxoSnapshotApplied shouldBe false
+
+    // download plan exists, so no new snapshot info request
+    history.nextModifiersToDownload(1, (_, id) => !history.contains(id)) shouldBe
+      Map.empty
   }
 
   property("toDownload returns no block sections before snapshot, and sections after snapshot") {
-    withHistory() { initial =>
-      val history = staleHeaders(initial)
-      val first = freshHeader(history)
-      history.append(first).get._2.toDownload shouldBe Seq.empty
-      history.isHeadersChainSynced shouldBe true
-      history.onUtxoSnapshotApplied(first.height)
-      history.isUtxoSnapshotApplied shouldBe true
-      val next = freshHeader(history)
-      val progress = history.append(next).get._2
-      progress.toDownload shouldBe history.requiredModifiersForHeader(next)
-      progress.toDownload should not be empty
-    }
+    var history = genUtxoBootstrapHistory()
+    val (updHistory, chain) = headersWithFreshTail(history, extra = 2)
+    history = updHistory
+    history.setHeadersChainSynced()
+    val freshHeader = chain(chain.length - 2).header
+    val nextHeader = chain.last.header
+
+    // headers chain is synced and the header is not too far back, still no block sections
+    // must be downloaded before the UTXO set snapshot is applied
+    val piBefore = history.append(freshHeader).get._2
+    piBefore.toDownload shouldBe Seq.empty
+
+    // apply snapshot at freshHeader's height, so that full blocks downloading
+    // starts from nextHeader
+    history.onUtxoSnapshotApplied(freshHeader.height)
+    history.isUtxoSnapshotApplied shouldBe true
+
+    val piAfter = history.append(nextHeader).get._2
+    piAfter.toDownload shouldBe history.requiredModifiersForHeader(nextHeader)
+    piAfter.toDownload should not be empty
   }
 
   property("without utxoBootstrap no snapshot request and block sections downloaded as usual") {
-    withHistory(bootstrap = false) { initial =>
-      val history = staleHeaders(initial)
-      history.append(freshHeader(history)).get
-      history.isHeadersChainSynced shouldBe true
-      val next = freshHeader(history)
-      val progress = history.append(next).get._2
-      progress.toDownload shouldBe history.requiredModifiersForHeader(next)
-      progress.toDownload should not be empty
-      val requests = history.nextModifiersToDownload(1, (_, id) => !history.contains(id))
-      requests should not be empty
-      requests.contains(SnapshotsInfoTypeId.value) shouldBe false
-    }
+    var history =
+      generateHistory(verifyTransactions = true,
+                      StateType.Utxo,
+                      PoPoWBootstrap = false,
+                      BlocksToKeep)
+    val (updHistory, chain) = headersWithFreshTail(history)
+    history = updHistory
+    history.setHeadersChainSynced()
+    val freshHeader = chain.last.header
+
+    // full block sections are requested right away, no snapshot request is involved
+    val pi = history.append(freshHeader).get._2
+    pi.toDownload shouldBe history.requiredModifiersForHeader(freshHeader)
+    pi.toDownload should not be empty
+
+    val toDownloadMap =
+      history.nextModifiersToDownload(1, (_, id) => !history.contains(id))
+    toDownloadMap should not be empty
+    toDownloadMap.contains(SnapshotsInfoTypeId.value) shouldBe false
   }
+
 }

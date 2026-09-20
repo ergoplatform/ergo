@@ -125,10 +125,11 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
     }
 
     def coordinatedState(returnToOriginal: Boolean, rollbackDuringCollection: Boolean = false,
-                         failRetryProof: Boolean = false): UtxoState =
+                         failRetryProof: Boolean = false, rollbackDuringRetryCollection: Boolean = false): UtxoState =
       new UtxoState(state.persistentProver, state.version, state.store, settings) {
         private var first = true
         private var failNextRetry = failRetryProof
+        private var retryCollectionRolledBack = false
         private var progress: Option[ProgressInfo[BlockSection]] = None
 
         private def rollBackFork(): Unit = {
@@ -145,14 +146,25 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
           if (first && rollbackDuringCollection && progress.isEmpty && afterEmission) {
             rollBackFork()
           }
+          if (!first && rollbackDuringRetryCollection && !retryCollectionRolledBack && afterEmission) {
+            state = state.rollbackTo(idToVersion(root.id)).get
+            state.boxById(input.id) shouldBe None
+            retryCollectionRolledBack = true
+          }
           super.withTransactions(transactions)
         }
 
         override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] = {
           if (!first && failNextRetry) {
             failNextRetry = false
-            txs.map(_.id) should contain(transaction.id)
-            state = state.rollbackTo(idToVersion(root.id)).get
+            if (rollbackDuringRetryCollection) {
+              retryCollectionRolledBack shouldBe true
+              txs.map(_.id) should contain(emissionTransaction.id)
+              txs.map(_.id) should not contain transaction.id
+            } else {
+              txs.map(_.id) should contain(transaction.id)
+              state = state.rollbackTo(idToVersion(root.id)).get
+            }
             state.boxById(input.id) shouldBe None
             val retryResult = super.proofsForTransactions(txs)
             retryResult.isFailure shouldBe true
@@ -210,11 +222,20 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
       if (emissionOnly) block.transactions shouldBe Seq(emissionTransaction)
       else block.transactions.map(_.id) should contain(transaction.id)
       eliminate.ids should not contain transaction.id
+      // These fixtures use distinct transaction IDs and no competing spends.
       block.transactions.map(_.id).toSet.intersect(eliminate.ids.toSet) shouldBe empty
-      eliminate.ids should contain(invalidTransaction.id)
+      if (emissionOnly) eliminate.ids shouldBe empty
+      else eliminate.ids should contain(invalidTransaction.id)
       val retainedPool = eliminate.ids.foldLeft(pool)((current, id) => current.invalidate(id))
       retainedPool.getAllPrioritized.map(_.id) should contain(transaction.id)
-      retainedPool.getAllPrioritized.map(_.id) should not contain invalidTransaction.id
+      retainedPool.isInvalidated(transaction.id) shouldBe false
+      if (emissionOnly) {
+        retainedPool.getAllPrioritized.map(_.id) should contain(invalidTransaction.id)
+        retainedPool.isInvalidated(invalidTransaction.id) shouldBe false
+      } else {
+        retainedPool.getAllPrioritized.map(_.id) should not contain invalidTransaction.id
+        retainedPool.isInvalidated(invalidTransaction.id) shouldBe true
+      }
       state.applyModifier(materialize(candidate), None)(_ => ()).isSuccess shouldBe true
     }
 
@@ -276,6 +297,19 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
     try {
       val reader = fixture.coordinatedState(
         returnToOriginal = true, rollbackDuringCollection = true, failRetryProof = true
+      )
+      val result = fixture.assemble(reader).get.get
+      fixture.genuineProofFailures shouldBe 2
+      fixture.genuineBlockFailures shouldBe 1
+      fixture.verifyCandidate(result, emissionOnly = true)
+    } finally fixture.close()
+  }
+
+  it should "discard stale retry rejections when the retry collection also overlaps a rollback" in {
+    val fixture = new Fixture
+    try {
+      val reader = fixture.coordinatedState(
+        returnToOriginal = true, failRetryProof = true, rollbackDuringRetryCollection = true
       )
       val result = fixture.assemble(reader).get.get
       fixture.genuineProofFailures shouldBe 2

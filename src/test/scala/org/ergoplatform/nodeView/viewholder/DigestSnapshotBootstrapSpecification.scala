@@ -140,8 +140,9 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
     val sourceSettings = parsedSettings(new File(root, "source"), StateType.Utxo)
     var session: Option[Session] = None
     try {
-      val (genesis, boxes) = ErgoState.generateGenesisUtxoState(
-        new File(sourceSettings.directory, "state"), sourceSettings, Some(parameters))
+      val sourceDir = new File(sourceSettings.directory, "state")
+      Files.createDirectories(sourceDir.toPath)
+      val (genesis, boxes) = ErgoState.generateGenesisUtxoState(sourceDir, sourceSettings, Some(parameters))
       var source = WrappedUtxoState(genesis, boxes, sourceSettings)
       var parent: Option[ErgoFullBlock] = None
       val now = System.currentTimeMillis() - 2000L

@@ -41,6 +41,15 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
 
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
+  // Session-local evidence of installed state context; the retention floor also represents pruning.
+  private var preparedSnapshotHeight: Option[Height] = None
+
+  def isSnapshotStatePrepared(height: Height): Boolean = preparedSnapshotHeight.contains(height)
+
+  def markSnapshotStatePrepared(height: Height): Unit = {
+    preparedSnapshotHeight = Some(height)
+  }
+
   /**
     * @return if UTXO set snapshot was applied during this session (stored in memory only).
     *         This flag is needed to prevent double application of UTXO set snapshot.
@@ -74,6 +83,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
 
     // set height of first full block to be downloaded
     writeMinimalFullBlockHeight(height + 1)
+    markSnapshotStatePrepared(height)
   }
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {

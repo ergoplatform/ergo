@@ -634,7 +634,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         })
         stateContext <- ErgoStateReader.reconstructStateContextBeforeEpoch(history, height, settings)
         state <- DigestState.readSnapshot(stateDir(settings), settings, idToVersion(header.id),
-          header.stateRoot, stateContext)
+          header.stateRoot, stateContext, allowGenesis = true)
       } yield state
       restored match {
         case Success(state) => state.asInstanceOf[State]
@@ -659,9 +659,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Success(stateIn)
       case (_, None, _) if isPreparedUtxoSnapshotState(stateIn, history) =>
         log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
+        history.markSnapshotStatePrepared(history.minimalFullBlockHeight - 1)
         Success(stateIn)
       case (_, None, _: DigestState) if isPreparedDigestSnapshotState(stateIn, history) =>
         log.info(s"Prepared Digest snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
+        history.markSnapshotStatePrepared(history.minimalFullBlockHeight - 1)
         Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")

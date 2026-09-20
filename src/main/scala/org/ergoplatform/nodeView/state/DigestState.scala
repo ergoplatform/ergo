@@ -153,39 +153,51 @@ class DigestState protected(override val version: VersionTag,
 
 object DigestState extends ScorexLogging with ScorexEncoding {
 
-  /** Read a verified snapshot checkpoint, including the AVL representation written by older nodes. */
+  /** Read a verified snapshot checkpoint, or an intact genesis store when ordinary pruning may explain the floor. */
   private[nodeView] def readSnapshot(dir: File,
                                     settings: ErgoSettings,
                                     version: VersionTag,
                                     rootHash: ADDigest,
-                                    stateContext: ErgoStateContext): Try[DigestState] = {
+                                    stateContext: ErgoStateContext,
+                                    allowGenesis: Boolean = false): Try[DigestState] = {
     Try {
       dir.mkdirs()
       new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     }.flatMap { store =>
       val versionBytes = org.ergoplatform.core.versionToBytes(version)
       val result = Try {
-        require(stateContext.lastHeaders.headOption.exists { header =>
-          idToVersion(header.id) == version && header.stateRoot.sameElements(rootHash)
-        }, "Snapshot state must match its context header")
-        require(store.get(versionBytes).exists(_.sameElements(rootHash)),
-          "Stored snapshot root does not match canonical history")
-        require(store.get(ErgoStateReader.ContextKey).exists(_.sameElements(stateContext.bytes)),
-          "Stored snapshot context does not match canonical history")
-        store.lastVersionID.getOrElse(throw new IllegalStateException("Snapshot store has no version"))
-      }.flatMap { storedVersion =>
-        if (storedVersion.sameElements(rootHash)) {
-          fromSnapshot(version, rootHash, stateContext, store, settings)
-        } else if (storedVersion.sameElements(versionBytes)) {
-          for {
-            _ <- Try(store.clean(0))
-            _ <- store.update(versionBytes, Seq.empty, Seq.empty)
-            state <- Try(new DigestState(version, rootHash, store, settings))
-          } yield state
-        } else {
-          Failure(new IllegalStateException("Stored snapshot version does not match canonical history"))
+        val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
+        val isOrdinaryGenesis = allowGenesis &&
+          store.lastVersionID.exists(_.sameElements(genesisVersion)) &&
+          store.get(genesisVersion).exists(_.sameElements(settings.chainSettings.genesisStateDigest)) &&
+          store.get(ErgoStateReader.ContextKey).exists(_.sameElements(
+            ErgoStateContext.empty(settings.chainSettings, settings.launchParameters).bytes))
+        if (isOrdinaryGenesis) {
+          // Raw persisted context is required: storageStateContext silently substitutes empty context on corruption.
+          Success(new DigestState(ErgoState.genesisStateVersion, settings.chainSettings.genesisStateDigest, store, settings))
+        } else Try {
+          require(stateContext.lastHeaders.headOption.exists { header =>
+            idToVersion(header.id) == version && header.stateRoot.sameElements(rootHash)
+          }, "Snapshot state must match its context header")
+          require(store.get(versionBytes).exists(_.sameElements(rootHash)),
+            "Stored snapshot root does not match canonical history")
+          require(store.get(ErgoStateReader.ContextKey).exists(_.sameElements(stateContext.bytes)),
+            "Stored snapshot context does not match canonical history")
+          store.lastVersionID.getOrElse(throw new IllegalStateException("Snapshot store has no version"))
+        }.flatMap { storedVersion =>
+          if (storedVersion.sameElements(rootHash)) {
+            fromSnapshot(version, rootHash, stateContext, store, settings)
+          } else if (storedVersion.sameElements(versionBytes)) {
+            for {
+              _ <- Try(store.clean(0))
+              _ <- store.update(versionBytes, Seq.empty, Seq.empty)
+              state <- Try(new DigestState(version, rootHash, store, settings))
+            } yield state
+          } else {
+            Failure(new IllegalStateException("Stored snapshot version does not match canonical history"))
+          }
         }
-      }
+      }.flatten
       result.failed.foreach { error =>
         Try(store.close()).failed.foreach(error.addSuppressed)
       }

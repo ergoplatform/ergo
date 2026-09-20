@@ -68,7 +68,8 @@ trait FullBlockProcessor extends HeadersProcessor {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), newBestChain)
       if isValidFirstFullBlock(fullBlock.header) =>
 
-      val headersToApply = if (nodeSettings.utxoSettings.utxoBootstrap && isUtxoSnapshotApplied) {
+      val headersToApply = if (nodeSettings.utxoSettings.utxoBootstrap &&
+        isSnapshotStatePrepared(fullBlock.header.height - 1)) {
         // Snapshot reconstruction has already installed the preceding headers in the state context.
         Seq.empty
       } else {

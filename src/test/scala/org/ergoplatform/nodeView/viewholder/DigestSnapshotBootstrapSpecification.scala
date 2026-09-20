@@ -16,12 +16,14 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.serialization.ManifestSerializer
-import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{Algos, ErgoAlgos, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestContext, NodeViewTestOps}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.validFullBlock
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.db.{LDBFactory, LDBVersionedStore, StoreRegistry}
+import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.hash.Digest32
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -79,26 +81,43 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
           |""".stripMargin).withFallback(ConfigFactory.load()))
     } else ActorSystem()
     override val testProbe: TestProbe = TestProbe()(actorSystem)
+
+    private def faultStore(initialState: ErgoState[_], injected: AtomicBoolean): LDBVersionedStore = {
+      initialState.closeStorage()
+      new LDBVersionedStore(new File(settings.directory, "state"),
+        initialKeepVersions = settings.nodeSettings.keepVersions) {
+        override def update(versionID: Array[Byte],
+                            toRemove: TraversableOnce[Array[Byte]],
+                            toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = {
+          super.update(versionID, toRemove, toUpdate).flatMap { _ =>
+            if (versionID.length == 33 && injected.compareAndSet(false, true)) {
+              Failure(new IOException("injected failure after AVL reconstruction write"))
+            } else Success(())
+          }
+        }
+      }
+    }
+
     override val nodeViewHolderRef: ActorRef = failAfterAvlWrite match {
       case None => ErgoNodeViewRef(settings)(actorSystem)
-      case Some(injected) => actorSystem.actorOf(Props(new ErgoNodeViewHolder[DigestState](settings) {
+      case Some(injected) if settings.nodeSettings.stateType == StateType.Digest =>
+        actorSystem.actorOf(Props(new ErgoNodeViewHolder[DigestState](settings) {
         override protected def genesisState = {
           val (history, initialState, wallet, pool) = super.genesisState
-          initialState.closeStorage()
-          val faultStore = new LDBVersionedStore(new File(settings.directory, "state"),
-            initialKeepVersions = settings.nodeSettings.keepVersions) {
-            override def update(versionID: Array[Byte],
-                                toRemove: TraversableOnce[Array[Byte]],
-                                toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = {
-              super.update(versionID, toRemove, toUpdate).flatMap { _ =>
-                if (versionID.length == 33 && injected.compareAndSet(false, true)) {
-                  Failure(new IOException("injected failure after AVL reconstruction write"))
-                } else Success(())
-              }
-            }
-          }
-          val faultState = new DigestState(initialState.version, initialState.rootDigest, faultStore, settings) {}
+          val store = faultStore(initialState, injected)
+          val faultState = new DigestState(initialState.version, initialState.rootDigest, store, settings) {}
           (history, faultState, wallet, pool)
+        }
+      }))
+      case Some(injected) => actorSystem.actorOf(Props(new ErgoNodeViewHolder[UtxoState](settings) {
+        override protected def genesisState = {
+          val (history, initialState, wallet, pool) = super.genesisState
+          val store = faultStore(initialState, injected)
+          val prover = new PersistentBatchAVLProver[Digest32, ErgoAlgos.HF] {
+            override val storage: VersionedLDBAVLStorage = new VersionedLDBAVLStorage(store)
+            override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = storage.restorePrunedProver().get
+          }
+          (history, new UtxoState(prover, initialState.version, store, settings), wallet, pool)
         }
       }))
     }
@@ -111,11 +130,70 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
     }
   }
 
+  property("ordinary pruned Digest state survives enabling snapshot bootstrap before the first full block") {
+    val root = Files.createTempDirectory("pruned-digest-bootstrap-").toFile
+    val configured = parsedSettings(new File(root, "node"), StateType.Digest)
+    val pruned = configured.copy(nodeSettings = configured.nodeSettings.copy(
+      blocksToKeep = 10, utxoSettings = configured.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+    val flipped = pruned.copy(nodeSettings = pruned.nodeSettings.copy(
+      utxoSettings = pruned.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val sourceSettings = parsedSettings(new File(root, "source"), StateType.Utxo)
+    var session: Option[Session] = None
+    try {
+      val (genesis, boxes) = ErgoState.generateGenesisUtxoState(
+        new File(sourceSettings.directory, "state"), sourceSettings, Some(parameters))
+      var source = WrappedUtxoState(genesis, boxes, sourceSettings)
+      var parent: Option[ErgoFullBlock] = None
+      val now = System.currentTimeMillis() - 2000L
+      val staleTime = now - (pruned.chainSettings.blockInterval * pruned.nodeSettings.headerChainDiff).toMillis - 60000L
+      val blocks = (1 to 46).map { height =>
+        val timestamp = if (height < 45) staleTime + height * 1000L else now + (height - 45) * 1000L
+        val block = validFullBlock(parent, source, timestamp)
+        source = source.applyModifier(block)(_ => ()).get
+        parent = Some(block)
+        block
+      }
+      val first = new Session(pruned, selfShutdown = true)
+      session = Some(first)
+      blocks.take(44).foreach(block => applyHeader(block.header)(first).get)
+      getHistory(first).isHeadersChainSynced shouldBe false
+      getHistory(first).minimalFullBlockHeight shouldBe 1
+      // The production header path advances the pruning floor, without a direct updateBestFullBlock call.
+      applyHeader(blocks(44).header)(first).get
+      getHistory(first).isHeadersChainSynced shouldBe true
+      getHistory(first).minimalFullBlockHeight shouldBe 20
+      getHistory(first).bestFullBlockOpt shouldBe None
+      getCurrentView(first).state.version shouldBe ErgoState.genesisStateVersion
+      first.stop()
+      session = None
+
+      val control = new Session(pruned, selfShutdown = true)
+      session = Some(control)
+      getCurrentView(control).state.version shouldBe ErgoState.genesisStateVersion
+      control.stop()
+      session = None
+
+      val reopened = new Session(flipped, selfShutdown = true)
+      session = Some(reopened)
+      getCurrentView(reopened).state.version shouldBe ErgoState.genesisStateVersion
+      getHistory(reopened).minimalFullBlockHeight shouldBe 20
+      applyHeader(blocks(45).header)(reopened).get
+      // Ordinary pruning still needs the preceding headers to initialize Digest context.
+      applyPayload(blocks(19))(reopened).get
+      getCurrentView(reopened).state.version shouldBe idToVersion(blocks(19).id)
+      getCurrentView(reopened).state.rootDigest.toSeq shouldBe blocks(19).header.stateRoot.toSeq
+    } finally {
+      session.foreach(_.stop())
+      closeOwnedStores(root)
+      deleteRecursive(root)
+    }
+  }
+
   Seq((StateType.Utxo, false, false, false), (StateType.Digest, false, false, false),
     (StateType.Digest, true, false, false), (StateType.Digest, false, true, false),
-    (StateType.Digest, false, false, true)).foreach { case (mode, invalidAnchor, legacyFormat, postWriteFailure) =>
+    (StateType.Digest, false, false, true), (StateType.Utxo, false, false, true)).foreach { case (mode, invalidAnchor, legacyFormat, postWriteFailure) =>
     val testName = if (invalidAnchor) "failed Digest snapshot preparation shuts down without marking or publishing state"
-    else if (postWriteFailure) "failed AVL snapshot reconstruction shuts down after a real write without publishing state"
+    else if (postWriteFailure) s"failed AVL snapshot reconstruction shuts down after a real write without publishing state in ${mode.stateTypeName} mode"
     else if (legacyFormat) "convert a legacy UTXO-format snapshot checkpoint on Digest reopen and retain rollback"
     else s"preserve real snapshot root and version after store reopen in ${mode.stateTypeName} mode"
     property(testName) {
@@ -210,6 +288,9 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
         getHistory(first).minimalFullBlockHeight shouldBe 20
         getHistory(first).bestFullBlockOpt shouldBe None
 
+        getHistory(first).isSnapshotStatePrepared(snapshotHeader.height) shouldBe true
+        getHistory(first).isSnapshotStatePrepared(snapshotHeader.height + 1) shouldBe false
+
         first.stop()
         session = None
         val reopened = new Session(nodeSettings)
@@ -224,6 +305,7 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
           reopenedView.history.bestFullBlockOpt shouldBe None
           reopenedView.history.isUtxoSnapshotApplied shouldBe true
           reopenedView.history.minimalFullBlockHeight shouldBe 20
+          reopenedView.history.isSnapshotStatePrepared(snapshotHeader.height) shouldBe true
           Algos.encode(reopenedView.state.rootDigest) shouldBe Algos.encode(snapshotHeader.stateRoot)
           reopenedView.state.version shouldBe idToVersion(snapshotHeader.id)
           reopenedView.state.getClass.getName shouldBe expectedStateClass.getName

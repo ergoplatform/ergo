@@ -94,7 +94,7 @@ class DigestSnapshotStateSpecification extends ErgoCorePropertyTest with FileUti
 
         // Repeated verified reopening must retain the checkpoint's undo anchor.
         (1 to 2).foreach { _ =>
-          val state = DigestState.readSnapshot(dir, localSettings, version, header.stateRoot, context).get
+          val state = DigestState.readSnapshot(dir, localSettings, version, header.stateRoot, context, allowGenesis = true).get
           try {
             state.version shouldBe version
             state.rootDigest.toSeq shouldBe header.stateRoot.toSeq
@@ -152,12 +152,50 @@ class DigestSnapshotStateSpecification extends ErgoCorePropertyTest with FileUti
         store.close()
 
         // Missing/corrupt metadata must not enter DigestState.create's genesis fallback.
-        DigestState.readSnapshot(dir, localSettings, version, header.stateRoot, context).isFailure shouldBe true
+        DigestState.readSnapshot(dir, localSettings, version, header.stateRoot, context, allowGenesis = true).isFailure shouldBe true
         val inspected = new LDBVersionedStore(dir, initialKeepVersions = 10)
         try {
           keys.map(key => inspected.get(key).map(_.toSeq)) shouldBe valuesBefore
           inspected.rollbackVersions().map(_.toSeq).toSeq shouldBe versionsBefore
           inspected.lastVersionID.map(_.toSeq) shouldBe lastBefore
+        } finally inspected.close()
+      }
+    }
+  }
+
+  Seq("none", "wrong version", "wrong root", "missing root", "wrong raw context", "missing context").foreach { fault =>
+    property(s"ordinary genesis startup classification requires intact stored evidence: $fault") {
+      val header = defaultHeaderGen.sample.get
+      withStore { (store, dir, localSettings) =>
+        val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
+        val genesisRoot = localSettings.chainSettings.genesisStateDigest
+        val genesisContext = ErgoStateContext.empty(localSettings.chainSettings, localSettings.launchParameters)
+        val storedVersion = if (fault == "wrong version") changed(genesisVersion) else genesisVersion
+        val rows = Seq(
+          genesisVersion -> (if (fault == "wrong root") changed(genesisRoot) else genesisRoot),
+          ErgoStateReader.ContextKey -> (if (fault == "wrong raw context") Array[Byte](0) else genesisContext.bytes)
+        ).filterNot { case (key, _) =>
+          (fault == "missing root" && key.sameElements(genesisVersion)) ||
+            (fault == "missing context" && key.sameElements(ErgoStateReader.ContextKey))
+        }
+        store.update(storedVersion, Seq.empty, rows).get
+        val keys = Seq(genesisVersion, ErgoStateReader.ContextKey)
+        val before = keys.map(key => store.get(key).map(_.toSeq))
+        store.close()
+        val restored = DigestState.readSnapshot(dir, localSettings, idToVersion(header.id),
+          header.stateRoot, contextFor(header), allowGenesis = true)
+        if (fault == "none") {
+          val state = restored.get
+          try {
+            state.version shouldBe ErgoState.genesisStateVersion
+            state.rootDigest.toSeq shouldBe genesisRoot.toSeq
+            state.stateContext.bytes.toSeq shouldBe genesisContext.bytes.toSeq
+          } finally state.close()
+        } else restored.isFailure shouldBe true
+        val inspected = new LDBVersionedStore(dir, initialKeepVersions = 10)
+        try {
+          keys.map(key => inspected.get(key).map(_.toSeq)) shouldBe before
+          inspected.lastVersionID.map(_.toSeq) shouldBe Some(storedVersion.toSeq)
         } finally inspected.close()
       }
     }

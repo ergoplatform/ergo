@@ -320,6 +320,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (history().isEmpty) {
         history().applyPopowProof(proof)
         if (!history().isEmpty) {
+          // When UTXO set snapshot bootstrap is enabled, mark headers chain as synced right after
+          // a trusted NiPoPoW proof is applied. This allows the node to start requesting UTXO set
+          // snapshots immediately, instead of waiting for normal header sync to reach the tip.
+          if (settings.nodeSettings.utxoSettings.utxoBootstrap) {
+            history().setHeadersChainSynced()
+          }
           updateNodeView(updatedHistory = Some(history()))
         }
       }
@@ -590,6 +596,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       )
   }
 
+  private def isPreparedUtxoSnapshotState(state: State, history: ErgoHistory): Boolean =
+    ErgoNodeViewHolder.isPreparedUtxoSnapshotState(
+      state.isInstanceOf[UtxoState],
+      settings.nodeSettings.utxoSettings.utxoBootstrap,
+      history.isUtxoSnapshotApplied,
+      state.version,
+      state.rootDigest,
+      {
+        val snapshotHeight = history.minimalFullBlockHeight - 1
+        history.bestHeaderAtHeight(snapshotHeight)
+      })
+
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (ErgoState.genesisStateVersion, None, _) =>
@@ -598,8 +616,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         Success(stateIn)
+      case (_, None, _) if isPreparedUtxoSnapshotState(stateIn, history) =>
+        log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
+        Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+        stateIn.closeStorage()
         Success(recreatedState())
       case (_, Some(bestFullBlock), _: DigestState) =>
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
@@ -729,6 +751,25 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
+
+  private[nodeView] def isPreparedUtxoSnapshotState(
+      stateIsUtxo: Boolean,
+      utxoBootstrap: => Boolean,
+      snapshotApplied: => Boolean,
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      snapshotHeaderOpt: => Option[Header]): Boolean =
+    stateIsUtxo &&
+      utxoBootstrap &&
+      snapshotApplied &&
+      snapshotHeaderOpt.exists(matchesPreparedUtxoSnapshotHeader(stateVersion, stateRoot, _))
+
+  private def matchesPreparedUtxoSnapshotHeader(
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      header: Header): Boolean =
+    stateVersion == idToVersion(header.id) &&
+      java.util.Arrays.equals(stateRoot, header.stateRoot)
 
   object ReceivableMessages {
     // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck

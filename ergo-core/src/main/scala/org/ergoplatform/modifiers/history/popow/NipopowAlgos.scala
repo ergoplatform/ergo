@@ -177,7 +177,14 @@ object NipopowAlgos {
 
   private val Ln2: Double = math.log(2)
 
-  /** log2(BigInt), without overflowing when `x` exceeds Double's representable range. */
+  /** log2(BigInt), without overflowing when `x` exceeds Double's representable range.
+    *
+    * Not bit-reproducible across runtimes: `math.log` is specified to within 1 ulp, so a
+    * `maxLevelOf` input within a few hundred ulps of a level boundary can truncate to a
+    * different level on a different JDK or CPU architecture. No header to date is
+    * affected; see #2556 before touching this, and #1380 for the fork that would make it
+    * exact.
+    */
   private[history] def log2(x: BigInt): Double =
     if (x.signum == 0) Double.NegativeInfinity
     else if (x.signum < 0) Double.NaN

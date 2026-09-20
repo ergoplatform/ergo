@@ -739,7 +739,9 @@ object CandidateGenerator extends ScorexLogging {
           // collectTxs and proofsForTransactions. Re-collect transactions against the current
           // state and retry once before falling back to an emission-only candidate.
           val (retryTxs, retryToEliminate) = collectPoolTxs
-          val retryEliminate = EliminateTransactions((toEliminate ++ retryToEliminate).distinct)
+          // The first pass may have rejected transactions against a transient state.
+          // Keep only the classifications from the latest collection attempt.
+          val retryEliminate = EliminateTransactions(retryToEliminate)
           state.proofsForTransactions(retryTxs) match {
             case Success((adProof, adDigest)) =>
               log.warn(
@@ -756,7 +758,8 @@ object CandidateGenerator extends ScorexLogging {
                   log.error("Failed to produce proofs for transactions, but emission box is found: ", ex)
                   state.proofsForTransactions(Seq(emissionTx)).map {
                     case (adProof, adDigest) =>
-                      mkCandidate(Seq(emissionTx), adProof, adDigest, retryEliminate)
+                      // Both collections produced failed proofs; their rejections may be stale.
+                      mkCandidate(Seq(emissionTx), adProof, adDigest, EliminateTransactions(Seq.empty))
                   }
                 case None =>
                   log.error("Failed to produce proofs for transactions and no emission box available: ", ex)

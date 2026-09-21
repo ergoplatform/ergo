@@ -58,6 +58,16 @@ object ErgoNodeViewSynchronizerMessages {
 
     case object RollbackFailed extends NodeViewHolderEvent
 
+    /**
+     * Bounded recovery frontier for headers retained in the node-view cache
+     * while their direct parents are absent locally.
+     */
+    case class MissingParentHeaders(parentIds: Seq[ModifierId]) extends NodeViewHolderEvent
+
+    object MissingParentHeaders {
+      val MaxParentIds: Int = 400
+    }
+
     // hierarchy of events regarding modifiers application outcome
     trait ModificationOutcome extends NodeViewHolderEvent
 
@@ -145,10 +155,12 @@ object ErgoNodeViewSynchronizerMessages {
      * @param headersCacheSize       - headers cache size after processing
      * @param blockSectionsCacheSize - block sections cache size after processing
      * @param cleared                - blocks removed from cache being overfull
+     * @param missingParentIds       - missing header parents discovered after cleanup
      */
     case class BlockSectionsProcessingCacheUpdate(headersCacheSize: Int,
                                                   blockSectionsCacheSize: Int,
-                                                  cleared: (NetworkObjectTypeId.Value, Seq[ModifierId]))
+                                                  cleared: (NetworkObjectTypeId.Value, Seq[ModifierId]),
+                                                  missingParentIds: Seq[ModifierId] = Seq.empty)
 
     /**
      * Command to re-check mempool to clean transactions become invalid while sitting in the mempool up

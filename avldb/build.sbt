@@ -15,7 +15,7 @@ val Versions = new {
   val scalameter = (scalaVersion: String) =>
     if (scalaVersion == scala213) "0.21"
     else "0.19"
-  
+
   val scalacheck = (scalaVersion: String) =>
     if (scalaVersion == scala211) "1.14.3"
     else "1.18.1"

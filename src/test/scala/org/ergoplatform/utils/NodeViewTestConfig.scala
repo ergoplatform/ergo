@@ -3,12 +3,13 @@ package org.ergoplatform.utils
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NipopowSettings}
+import org.ergoplatform.wallet.utils.FileUtils
 
 
 case class NodeViewTestConfig(stateType: StateType,
                               verifyTransactions: Boolean,
                               popowBootstrap: Boolean,
-                              utxoBootstrap: Boolean = false) {
+                              utxoBootstrap: Boolean = false) extends FileUtils {
 
   def toSettings: ErgoSettings = {
     val defaultSettings = ErgoSettingsReader.read()

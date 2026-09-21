@@ -1,10 +1,11 @@
 package scorex.db
 
-import org.iq80.leveldb.DB
+import org.rocksdb.{WriteBatch, WriteOptions}
+import scorex.db.RocksDBFactory.RegisteredDB
 import scorex.util.ScorexLogging
+import spire.syntax.all.cfor
 
 import scala.util.{Failure, Success, Try}
-import spire.syntax.all.cfor
 
 
 /**
@@ -12,9 +13,12 @@ import spire.syntax.all.cfor
   *
   * Both keys and values are var-sized byte arrays.
   */
-class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging {
+class RocksDBKVStore(protected val db: RegisteredDB) extends KVStoreReader with ScorexLogging {
   /** Immutable empty array can be shared to avoid allocations. */
   private val emptyArrayOfByteArray = Array.empty[Array[Byte]]
+
+  /** default write options, snyc enabled */
+  private val wo: WriteOptions = new WriteOptions().setSync(true)
 
   /**
     * Update this database atomically with a batch of insertion and removal operations
@@ -25,12 +29,12 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     * @return - error if it happens, or success status
     */
   def update(toInsertKeys: Array[K], toInsertValues: Array[V], toRemove: Array[K]): Try[Unit] = {
-    val batch = db.createWriteBatch()
+    val batch = new WriteBatch()
     try {
       require(toInsertKeys.length == toInsertValues.length)
       cfor(0)(_ < toInsertKeys.length, _ + 1) { i => batch.put(toInsertKeys(i), toInsertValues(i))}
       cfor(0)(_ < toRemove.length, _ + 1) { i => batch.delete(toRemove(i))}
-      db.write(batch)
+      db.write(wo, batch)
       Success(())
     } catch {
       case t: Throwable => Failure(t)
@@ -66,26 +70,6 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     */
   def remove(keys: Array[K]): Try[Unit] = {
     update(emptyArrayOfByteArray, emptyArrayOfByteArray, keys)
-  }
-
-  /**
-    * Get last key within some range (inclusive) by used comparator.
-    * Could be useful for applications with sequential ids.
-    * The method iterates over all the keys so could be slow if there are many keys in the range.
-    */
-  def lastKeyInRange(first: Array[Byte], last: Array[Byte]): Option[K] = {
-    import util.control.Breaks._
-
-    val i = db.iterator()
-    var res: Option[K] = None
-    i.seek(first)
-    breakable {
-      while (i.hasNext) {
-        val key = i.next().getKey
-        if (ByteArrayUtils.compare(key, last) <= 0) res = Some(key) else break()
-      }
-    }
-    res
   }
 
 }

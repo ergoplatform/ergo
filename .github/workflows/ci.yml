@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.13.18, 2.12.20, 2.11.12]
-        java: [adopt@1.8]
+        java: ['8']
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
@@ -30,10 +30,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+      - name: Setup Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
+          distribution: temurin
           java-version: ${{ matrix.java }}
+          overwrite-settings: false
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
+        with:
+          sbt-runner-version: '1.11.1'
+          disk-cache: false
 
       - name: Cache sbt
         uses: actions/cache@v4
@@ -65,7 +73,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.13.18, 2.12.20, 2.11.12]
-        java: [adopt@1.8]
+        java: ['8']
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
@@ -73,10 +81,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+      - name: Setup Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
+          distribution: temurin
           java-version: ${{ matrix.java }}
+          overwrite-settings: false
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
+        with:
+          sbt-runner-version: '1.11.1'
+          disk-cache: false
 
       - name: Cache sbt
         uses: actions/cache@v4
@@ -106,7 +122,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.20]
-        java: [adopt@1.8]
+        java: ['8']
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
@@ -114,10 +130,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+      - name: Setup Java
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
+          distribution: temurin
           java-version: ${{ matrix.java }}
+          overwrite-settings: false
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
+        with:
+          sbt-runner-version: '1.11.1'
+          disk-cache: false
 
       - name: Cache sbt
         uses: actions/cache@v4
@@ -140,7 +164,7 @@ jobs:
        matrix:
          os: [ ubuntu-latest ]
          scala: [ 2.12.20 ]
-         java: [ adopt@1.8 ]
+         java: [ '8' ]
      runs-on: ${{ matrix.os }}
      steps:
        - name: Checkout current branch (full)
@@ -149,10 +173,18 @@ jobs:
            path: it
            fetch-depth: 0
 
-       - name: Setup Java and Scala
-         uses: olafurpg/setup-scala@v10
+       - name: Setup Java
+         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
          with:
+           distribution: temurin
            java-version: ${{ matrix.java }}
+           overwrite-settings: false
+
+       - name: Setup sbt
+         uses: sbt/setup-sbt@c7d2d6258b4bd0d3ec5129e6b3453199d3c79729 # v1.5.8
+         with:
+           sbt-runner-version: '1.11.1'
+           disk-cache: false
 
        - name: Cache sbt
          uses: actions/cache@v4

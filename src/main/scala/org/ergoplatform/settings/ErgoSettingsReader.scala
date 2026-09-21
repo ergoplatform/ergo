@@ -3,6 +3,9 @@ package org.ergoplatform.settings
 import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
 import ch.qos.logback.classic.{Level, LoggerContext}
+import ch.qos.logback.classic.filter.ThresholdFilter
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.Appender
 import org.slf4j.{Logger, LoggerFactory}
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import net.ceedubs.ficus.Ficus._
@@ -39,7 +42,7 @@ object ErgoSettingsReader extends ScorexLogging
     val scorexSettings = config.as[ScorexSettings](scorexConfigPath)
     val votingTargets = VotingTargets.fromConfig(config)
 
-    overrideLogLevel(scorexSettings.logging.level)
+    overrideLogLevel(scorexSettings.logging.level, scorexSettings.logging.stdoutLevel)
 
     if (nodeSettings.stateType == Digest && nodeSettings.mining) {
       log.error("Malformed configuration file was provided! Mining is not possible with digest state. Aborting!")
@@ -207,13 +210,29 @@ object ErgoSettingsReader extends ScorexLogging
   /**
    * Override the log level at runtime with values provided in config/user provided config.
    */
-  private def overrideLogLevel(level: String): Unit = level match {
-    case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
-      log.info(s"Log level set to $level")
-      val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
-      val root          = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
-      root.setLevel(Level.toLevel(level))
-    case _ => log.warn("No log level configuration provided")
+  private def overrideLogLevel(level: String, stdoutLevelOpt: Option[String]): Unit = {
+    val loggerContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
+    val root          = loggerContext.getLogger(Logger.ROOT_LOGGER_NAME)
+
+    level match {
+      case "TRACE" | "ERROR" | "INFO" | "WARN" | "DEBUG" =>
+        log.info(s"Log level set to $level")
+        root.setLevel(Level.toLevel(level))
+      case _ => log.warn("No log level configuration provided")
+    }
+
+    stdoutLevelOpt.foreach { stdoutLevel =>
+      val appender = root.getAppender("STDOUT").asInstanceOf[Appender[ILoggingEvent]]
+      if (appender != null) {
+        appender.clearAllFilters()
+        val filter = new ThresholdFilter()
+        filter.setLevel(stdoutLevel)
+        filter.setContext(loggerContext)
+        filter.start()
+        appender.addFilter(filter)
+        log.info(s"Stdout log level set to $stdoutLevel")
+      }
+    }
   }
 }
 

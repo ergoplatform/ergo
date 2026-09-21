@@ -10,7 +10,7 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, NewBlockMined, SemanticallyFailedModification}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -76,6 +76,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     def reject(header: Header): Unit =
       rejectedHeaderIds.put(header.id, ())
+
+    def allow(header: Header): Unit =
+      rejectedHeaderIds.remove(header.id)
 
     override def validate(header: Header): Try[Unit] = {
       validateCalls.incrementAndGet()
@@ -369,60 +372,145 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
-  it should "validate previous candidate solution only once after regeneration" in new TestKit(
+  it should "reject an invalid first solution without restarting or discarding the candidate" in new TestKit(
     ActorSystem()
   ) {
-    val testProbe = new TestProbe(system)
+    val replyProbe = new TestProbe(system)
     val viewHolderProbe = new TestProbe(system)
-
-    val countingPowScheme = new CountingFakePowScheme(
+    val announcementProbe = new TestProbe(system)
+    system.eventStream.subscribe(announcementProbe.ref, classOf[NewBlockMined])
+    val powScheme = new CountingFakePowScheme(
       defaultSettings.chainSettings.powScheme.k,
       defaultSettings.chainSettings.powScheme.n
     )
-    val settingsWithCountingPow = defaultSettings.copy(
-      chainSettings = defaultSettings.chainSettings.copy(powScheme = countingPowScheme)
+    val testSettings = defaultSettings.copy(
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = powScheme),
+      directory = s"${defaultSettings.directory}-invalid-first-${System.nanoTime()}"
     )
+    val realViewHolder = ErgoNodeViewRef(testSettings)
+    val readers = ErgoReadersHolderRef(realViewHolder)
+    val generator = CandidateGenerator(
+      defaultMinerSecret.publicImage, readers, viewHolderProbe.ref, testSettings
+    )
+    try {
+      generator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+      val candidate = replyProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+      val block = powScheme.proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000).get
+      powScheme.reject(block.header)
+      val callsBefore = powScheme.callsFor(block.header)
 
-    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settingsWithCountingPow)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+      generator.tell(block.header.powSolution, replyProbe.ref)
+      replyProbe.expectMsgPF(blockValidationDelay) {
+        case StatusReply.Error(error) =>
+          error.getMessage should include("no previous candidate available")
+          error.getMessage should include("Rejected by test PoW scheme")
+          error.getCause should not be null
+          error.getCause.getMessage shouldBe "Rejected by test PoW scheme"
+      }
+      powScheme.callsFor(block.header) - callsBefore shouldBe 1
+      viewHolderProbe.expectNoMessage(100.millis)
+      announcementProbe.expectNoMessage(100.millis)
 
-    val candidateGenerator: ActorRef =
-      CandidateGenerator(
-        defaultMinerSecret.publicImage,
-        readersHolderRef,
-        viewHolderProbe.ref,
-        settingsWithCountingPow
+      generator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+      val cached = replyProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+      cached should be theSameInstanceAs candidate
+
+      powScheme.allow(block.header)
+      generator.tell(block.header.powSolution, replyProbe.ref)
+      replyProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
+      powScheme.callsFor(block.header) - callsBefore shouldBe 2
+      announcementProbe.expectMsg(NewBlockMined(block.header))
+      viewHolderProbe.expectMsg(LocallyGeneratedModifier(block.header))
+      block.mandatoryBlockSections.foreach { section =>
+        viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))
+      }
+    } finally {
+      TestKit.shutdownActorSystem(system)
+    }
+  }
+
+  Seq(false, true).foreach { rejectPrevious =>
+    it should s"validate each candidate solution only once after regeneration (rejectPrevious=$rejectPrevious)" in new TestKit(
+      ActorSystem()
+    ) {
+      val testProbe = new TestProbe(system)
+      val viewHolderProbe = new TestProbe(system)
+      val announcementProbe = new TestProbe(system)
+      system.eventStream.subscribe(announcementProbe.ref, classOf[NewBlockMined])
+
+      val countingPowScheme = new CountingFakePowScheme(
+        defaultSettings.chainSettings.powScheme.k,
+        defaultSettings.chainSettings.powScheme.n
+      )
+      val settingsWithCountingPow = defaultSettings.copy(
+        chainSettings = defaultSettings.chainSettings.copy(powScheme = countingPowScheme)
       )
 
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+      val viewHolderRef: ActorRef    = ErgoNodeViewRef(settingsWithCountingPow)
+      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
-    val previousBlock = testProbe.expectMsgPF(candidateGenDelay) {
-      case StatusReply.Success(candidate: Candidate) =>
-        settingsWithCountingPow.chainSettings.powScheme
-          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-          .get
+      val candidateGenerator: ActorRef =
+        CandidateGenerator(
+          defaultMinerSecret.publicImage,
+          readersHolderRef,
+          viewHolderProbe.ref,
+          settingsWithCountingPow
+        )
+
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+
+      val previousBlock = testProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(candidate: Candidate) =>
+          settingsWithCountingPow.chainSettings.powScheme
+            .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+            .get
+      }
+
+      expectNoMessage(10.millis)
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+
+      val currentCandidate = testProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(candidate: Candidate) => candidate
+      }
+      val currentBlockWithPreviousSolution =
+        CandidateGenerator.completeBlock(currentCandidate.candidateBlock, previousBlock.header.powSolution)
+      currentBlockWithPreviousSolution.header.id shouldNot be(previousBlock.header.id)
+      countingPowScheme.reject(currentBlockWithPreviousSolution.header)
+      if (rejectPrevious) countingPowScheme.reject(previousBlock.header)
+
+      val currentHeaderCallsBefore = countingPowScheme.callsFor(currentBlockWithPreviousSolution.header)
+      val previousHeaderCallsBefore = countingPowScheme.callsFor(previousBlock.header)
+
+      candidateGenerator.tell(previousBlock.header.powSolution, testProbe.ref)
+      if (rejectPrevious) {
+        testProbe.expectMsgPF(blockValidationDelay) {
+          case StatusReply.Error(error) =>
+            error.getMessage shouldBe "Invalid block mined: Rejected by test PoW scheme"
+        }
+        viewHolderProbe.expectNoMessage(100.millis)
+        announcementProbe.expectNoMessage(100.millis)
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+        val regenerated = testProbe.expectMsgPF(candidateGenDelay) {
+          case StatusReply.Success(candidate: Candidate) => candidate
+        }
+        (regenerated eq currentCandidate) shouldBe false
+      } else {
+        testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
+        announcementProbe.expectMsg(NewBlockMined(previousBlock.header))
+        viewHolderProbe.expectMsg(LocallyGeneratedModifier(previousBlock.header))
+        previousBlock.mandatoryBlockSections.foreach { section =>
+          viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))
+        }
+      }
+
+      countingPowScheme.callsFor(currentBlockWithPreviousSolution.header) - currentHeaderCallsBefore shouldBe 1
+      countingPowScheme.callsFor(previousBlock.header) - previousHeaderCallsBefore shouldBe 1
+      system.terminate()
     }
-
-    expectNoMessage(10.millis)
-    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
-
-    val currentCandidate = testProbe.expectMsgPF(candidateGenDelay) {
-      case StatusReply.Success(candidate: Candidate) => candidate
-    }
-    val currentBlockWithPreviousSolution =
-      CandidateGenerator.completeBlock(currentCandidate.candidateBlock, previousBlock.header.powSolution)
-    currentBlockWithPreviousSolution.header.id shouldNot be(previousBlock.header.id)
-    countingPowScheme.reject(currentBlockWithPreviousSolution.header)
-
-    val currentHeaderCallsBefore = countingPowScheme.callsFor(currentBlockWithPreviousSolution.header)
-    val previousHeaderCallsBefore = countingPowScheme.callsFor(previousBlock.header)
-
-    candidateGenerator.tell(previousBlock.header.powSolution, testProbe.ref)
-    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-
-    countingPowScheme.callsFor(currentBlockWithPreviousSolution.header) - currentHeaderCallsBefore shouldBe 1
-    countingPowScheme.callsFor(previousBlock.header) - previousHeaderCallsBefore shouldBe 1
-    system.terminate()
   }
 
   it should "regenerate candidate periodically" in new TestKit(

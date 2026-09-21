@@ -6,6 +6,8 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
 
 import java.net.{InetSocketAddress, URI}
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import scala.concurrent.duration._
 
 class ErgoSettingsSpecification extends ErgoCorePropertyTest {
@@ -14,6 +16,93 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
+
+  private def withDirectoryConfig(test: (String, String, String) => Unit): Unit = {
+    val directory = Files.createTempDirectory("ergo-settings-")
+    val config = Files.createTempFile("ergo-settings-", ".conf")
+    val path = directory.toString.replace('\\', '/')
+    val secretPath = "ergo.wallet.secretStorage.secretDir"
+    val propertyNames = Seq("ergo.directory", secretPath, "config.file")
+    val previous = propertyNames.map(name => name -> Option(System.getProperty(name)))
+    try {
+      propertyNames.foreach(System.clearProperty)
+      Files.write(config, s"""ergo.directory = "$path"""".getBytes(StandardCharsets.UTF_8))
+      ConfigFactory.invalidateCaches()
+      test(config.toString, path, secretPath)
+    } finally {
+      previous.foreach { case (name, value) =>
+        value.fold(System.clearProperty(name))(System.setProperty(name, _))
+      }
+      ConfigFactory.invalidateCaches()
+      Files.deleteIfExists(config)
+      Files.deleteIfExists(directory)
+    }
+  }
+
+  property("secretDir should preserve a system override when the user supplies only a directory") {
+    withDirectoryConfig { (config, directory, secretPath) =>
+      val explicit = directory + "/explicit-keystore"
+      System.setProperty(secretPath, explicit)
+      ConfigFactory.invalidateCaches()
+      ErgoSettingsReader.read(Args(Some(config))).walletSettings.secretStorage.secretDir shouldBe explicit
+    }
+  }
+
+  property("secretDir should derive its default from the effective system directory") {
+    withDirectoryConfig { (config, directory, _) =>
+      val effective = directory + "/effective"
+      System.setProperty("ergo.directory", effective)
+      ConfigFactory.invalidateCaches()
+      val settings = ErgoSettingsReader.read(Args(Some(config)))
+      settings.directory shouldBe effective
+      settings.walletSettings.secretStorage.secretDir shouldBe effective + "/wallet/keystore"
+    }
+  }
+
+  property("secretDir should derive its default from the user directory") {
+    withDirectoryConfig { (config, directory, _) =>
+      ErgoSettingsReader.read(Args(Some(config))).walletSettings.secretStorage.secretDir shouldBe
+        directory + "/wallet/keystore"
+    }
+  }
+
+  property("secretDir should preserve an explicit user value above the application default") {
+    withDirectoryConfig { (config, directory, secretPath) =>
+      Files.write(java.nio.file.Paths.get(config),
+        s"""ergo.directory = "$directory"
+           |$secretPath = "$directory"""".stripMargin.getBytes(StandardCharsets.UTF_8))
+      ErgoSettingsReader.read(Args(Some(config))).walletSettings.secretStorage.secretDir shouldBe directory
+    }
+  }
+
+  property("secretDir should preserve system priority over an explicit user value") {
+    withDirectoryConfig { (config, directory, secretPath) =>
+      Files.write(java.nio.file.Paths.get(config),
+        s"""ergo.directory = "$directory"
+           |$secretPath = "$directory"""".stripMargin.getBytes(StandardCharsets.UTF_8))
+      val explicit = directory + "/explicit-keystore"
+      System.setProperty(secretPath, explicit)
+      ConfigFactory.invalidateCaches()
+      ErgoSettingsReader.read(Args(Some(config))).walletSettings.secretStorage.secretDir shouldBe explicit
+    }
+  }
+
+  property("secretDir should preserve an explicit application value when the user supplies only a directory") {
+    withDirectoryConfig { (config, directory, secretPath) =>
+      val application = Files.createTempFile("ergo-application-", ".conf")
+      try {
+        val explicit = directory + "/application-keystore"
+        Files.write(application,
+          s"""include classpath("application.conf")
+             |$secretPath = "$explicit"""".stripMargin.getBytes(StandardCharsets.UTF_8))
+        System.setProperty("config.file", application.toString)
+        ConfigFactory.invalidateCaches()
+        ErgoSettingsReader.read(Args(Some(config))).walletSettings.secretStorage.secretDir shouldBe explicit
+      } finally {
+        Files.deleteIfExists(application)
+      }
+    }
+  }
 
   property("should keep data user home  by default") {
     val settings = ErgoSettingsReader.read()

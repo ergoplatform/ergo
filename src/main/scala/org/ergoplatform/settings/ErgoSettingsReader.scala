@@ -4,7 +4,7 @@ import java.io.{File, FileOutputStream}
 import java.nio.channels.Channels
 import ch.qos.logback.classic.{Level, LoggerContext}
 import org.slf4j.{Logger, LoggerFactory}
-import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
+import com.typesafe.config.{Config, ConfigFactory}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import org.ergoplatform.nodeView.state.StateType.Digest
@@ -82,7 +82,8 @@ object ErgoSettingsReader extends ScorexLogging
       require(new File(s"$secretDirName").canRead, s"Folder $secretDirName does not exist or not readable")
     }
 
-    val fullConfig = ConfigFactory
+    // Resolve path substitutions only after all configuration layers have been merged.
+    ConfigFactory
       .defaultOverrides()
       .withFallback(cfg)
       .withFallback(firstFallBack)
@@ -90,16 +91,6 @@ object ErgoSettingsReader extends ScorexLogging
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
 
-    // If user provided only ergo.directory but not ergo.wallet.secretStorage.secretDir in his config,
-    // set ergo.wallet.secretStorage.secretDir like in reference.conf (so ergo.directory + "/wallet/keystore")
-    // Otherwise, a user may have an issue, especially with Powershell it seems from reports.
-    userDirOpt.map { userDir =>
-      if(walletKeystoreDirOpt.isEmpty) {
-        fullConfig.withValue(keystorePath, ConfigValueFactory.fromAnyRef(userDir + "/wallet/keystore"))
-      } else {
-        fullConfig
-      }
-    }.getOrElse(fullConfig)
   }
 
   private def readConfig(args: Args): Config = {

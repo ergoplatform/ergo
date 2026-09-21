@@ -741,6 +741,7 @@ object CandidateGenerator extends ScorexLogging {
           val (retryTxs, retryToEliminate) = collectPoolTxs
           // The first pass may have rejected transactions against a transient state.
           // Keep only the classifications from the latest collection attempt.
+          log.error("Retrying candidate generation after failed proofs")
           val retryEliminate = EliminateTransactions(retryToEliminate)
           state.proofsForTransactions(retryTxs) match {
             case Success((adProof, adDigest)) =>

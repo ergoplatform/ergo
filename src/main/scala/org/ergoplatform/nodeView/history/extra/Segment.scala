@@ -233,6 +233,10 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
     * @param unconfirmed            - whether to include unconfirmed boxes
     * @param spentBoxesIdsInMempool - Set of box IDs that are spent in the mempool (to be excluded if necessary)
     * @return array of unspent boxes
+    *
+    * Pagination applies after filtering the combined sequence. Unconfirmed boxes
+    * precede confirmed boxes in DESC and follow them in ASC; their mempool order
+    * is preserved. Confirmed boxes follow their numeric index order.
     */
   def retrieveUtxos(history: ErgoHistoryReader,
                     mempool: ErgoMemPoolReader,
@@ -241,37 +245,31 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
                     sortDir: Direction,
                     unconfirmed: Boolean,
                     spentBoxesIdsInMempool: Set[ModifierId]): Seq[IndexedErgoBox] = {
-    val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
-    val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
+    if (limit <= 0) return Seq.empty
+
+    val confirmedNumbers: Iterator[Long] = sortDir match {
       case DESC =>
-        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
-        var segment: Int = boxSegmentCount
-        while (data.length < (limit + offset) && segment > 0) {
-          segment -= 1
-          history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id)) ++=: data
+        boxes.reverseIterator ++ (0 until boxSegmentCount).reverseIterator.flatMap { segment =>
+          history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes.reverseIterator
         }
-        data.reverse.slice(offset, offset + limit)
       case ASC =>
-        var segment: Int = 0
-        while (data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
-          segment += 1
-        }
-        if (data.length < (limit + offset))
-          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
-        data.slice(offset, offset + limit)
+        (0 until boxSegmentCount).iterator.flatMap { segment =>
+          history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes.iterator
+        } ++ boxes.iterator
     }
-    if (unconfirmed) {
+    val confirmedBoxes = confirmedNumbers.filter(_ > 0)
+      .map(n => NumericBoxIndex.getBoxByNumber(history, n).get)
+      .filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+    val unconfirmedBoxes = if (unconfirmed) {
       val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
-      val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, None, _, 0)).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
-      sortDir match {
-        case DESC => unconfirmedBoxes ++ confirmedBoxes
-        case ASC => confirmedBoxes ++ unconfirmedBoxes
-      }
-    } else
-      confirmedBoxes
+      mempoolBoxes.iterator.map(new IndexedErgoBox(0, None, None, None, _, 0))
+        .filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+    } else Iterator.empty
+    val combined = sortDir match {
+      case DESC => unconfirmedBoxes ++ confirmedBoxes
+      case ASC => confirmedBoxes ++ unconfirmedBoxes
+    }
+    combined.drop(offset).take(limit).toVector
   }
 
   /**

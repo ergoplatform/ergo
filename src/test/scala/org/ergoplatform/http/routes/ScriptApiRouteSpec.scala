@@ -1,6 +1,7 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -13,6 +14,7 @@ import org.ergoplatform.http.api.ScriptApiRoute
 import org.ergoplatform.settings.Constants.TrueTree
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant
@@ -33,14 +35,18 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScriptApiRoute(digestReadersRef, settings).route
 
+  private val apiKey = "test-api-key"
+  private val apiKeyHeader = RawHeader("api_key", apiKey)
+  private val wrongApiKeyHeader = RawHeader("api_key", "wrong-api-key")
   val settingsWithAuth: ErgoSettings = settings.copy(
     scorexSettings = settings.scorexSettings.copy(
       restApi = settings.scorexSettings.restApi.copy(
-        apiKeyHash = Some("e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10")
+        apiKeyHash = Some(Base16.encode(Blake2b256(apiKey)))
       )
     )
   )
   val routeWithAuth: Route = ScriptApiRoute(digestReadersRef, settingsWithAuth).route
+  private val sealedRouteWithAuth: Route = Route.seal(routeWithAuth)
 
   val scriptSource: String =
     """
@@ -72,6 +78,38 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     }
     val json = io.circe.parser.parse(req)
     Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
+  }
+
+  it should "reject script execution without an API key when auth is enabled" in {
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val req = scala.io.Source.fromInputStream(stream).getLines().mkString("\n")
+
+    Post(prefix + "/executeWithContext", io.circe.parser.parse(req)) ~> sealedRouteWithAuth ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+  }
+
+  it should "reject script execution with the wrong API key" in {
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val req = scala.io.Source.fromInputStream(stream).getLines().mkString("\n")
+
+    Post(prefix + "/executeWithContext", io.circe.parser.parse(req)).withHeaders(wrongApiKeyHeader) ~>
+      sealedRouteWithAuth ~> check {
+        status shouldBe StatusCodes.Forbidden
+      }
+  }
+
+  it should "execute script with context with the correct API key" in {
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val req = scala.io.Source.fromInputStream(stream).getLines().mkString("\n")
+
+    Post(prefix + "/executeWithContext", io.circe.parser.parse(req)).withHeaders(apiKeyHeader) ~>
+      sealedRouteWithAuth ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[Json].hcursor.downField("value").downField("op").as[Int] shouldBe Right(-45)
+        responseAs[Json].hcursor.downField("value").downField("condition").as[Boolean] shouldBe Right(true)
+        responseAs[Json].hcursor.downField("cost").as[Int] shouldBe Right(6)
+      }
   }
 
   it should "generate valid P2SAddress form source" in {

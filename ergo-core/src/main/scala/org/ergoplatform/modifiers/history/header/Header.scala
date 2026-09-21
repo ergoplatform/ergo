@@ -147,14 +147,37 @@ object Header extends ApiCodecs {
     */
   val Interpreter60Version: Byte = 4
 
+  /**
+    * Derives the script version from a given block version.
+    * The script version is calculated as (block version - 1) to maintain compatibility
+    * with the protocol's versioning scheme where script versions lag behind block versions.
+    *
+    * @param blockVersion the block version byte
+    * @return the corresponding script version byte
+    */
   def scriptFromBlockVersion(blockVersion: Byte): Byte = {
     (blockVersion - 1).toByte
   }
 
-  def scriptAndTreeFromBlockVersions(blockVersion: Byte): VersionContext = {
+  /**
+    * Derives a VersionContext from a given block version.
+    * The VersionContext is constructed with script version calculated as (block version - 1)
+    * to maintain compatibility with the protocol's versioning scheme where script versions
+    * lag behind block versions. Both current and activated script versions are set to the same value.
+    *
+    * @param blockVersion the block version byte
+    * @return VersionContext with script versions derived from the block version
+    */
+  def versionContextFromBlockVersions(blockVersion: Byte): VersionContext = {
     VersionContext((blockVersion - 1).toByte, (blockVersion - 1).toByte)
   }
 
+  /**
+    * Converts an Ergo blockchain Header to a sigma.Header (CHeader) for use in ErgoScript contracts
+    *
+    * @param header the Ergo blockchain header to convert
+    * @return a sigma.Header instance containing the converted header data
+    */
   def toSigma(header: Header): sigma.Header =
     CHeader(
       version = header.version,

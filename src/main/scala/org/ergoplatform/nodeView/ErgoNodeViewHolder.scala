@@ -194,7 +194,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       val branchingPoint = progressInfo.branchPoint.get //todo: .get
       if (state.version != branchingPoint) {
         state.rollbackTo(idToVersion(branchingPoint)) -> trimChainSuffix(suffixApplied, branchingPoint)
-      } else Success(state) -> IndexedSeq.empty
+      } else Success(state) -> suffixApplied
     } else Success(state) -> suffixApplied
 
     stateToApplyTry match {

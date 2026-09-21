@@ -1,15 +1,17 @@
 package org.ergoplatform.wallet.boxes
 
 import org.ergoplatform.ErgoBox.TokenId
-import org.ergoplatform.ErgoLikeTransaction
+import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder, ErgoLikeTransaction}
+import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.Constants.PaymentsScanId
 import org.ergoplatform.wallet.boxes.DefaultBoxSelector.{NotEnoughErgsError, NotEnoughTokensError}
+import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult, UnsupportedChangeTokenPolicy}
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.hash.Blake2b256
-import scorex.util.bytesToId
+import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers._
 import sigmastate.utils.Extensions._
@@ -19,6 +21,7 @@ import sigma.ast.syntax.SigmaPropValue
 import sigma.data.SigmaConstants.MaxBoxSize
 
 import scala.util.Random
+import scala.collection.mutable
 
 class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues {
   import BoxSelector.MinBoxValue
@@ -35,6 +38,126 @@ class DefaultBoxSelectorSpec extends AnyPropSpec with Matchers with EitherValues
   }
 
   private val selector = new DefaultBoxSelector(None)
+
+  property("legacy selection dispatches to the original change helper override") {
+    class LegacySelector extends DefaultBoxSelector(None) {
+      var changeCalls = 0
+      var policyCalls = 0
+
+      override def formChangeBoxes(foundBalance: Long,
+                                   targetBalance: Long,
+                                   foundBoxAssets: mutable.Map[ModifierId, Long],
+                                   targetBoxAssets: TokensMap): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+        changeCalls += 1
+        super.formChangeBoxes(foundBalance, targetBalance, foundBoxAssets, targetBoxAssets)
+      }
+
+      override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                               filterFn: T => Boolean,
+                                               targetBalance: Long,
+                                               targetAssets: TokensMap,
+                                               keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+        policyCalls += 1
+        super.select(inputBoxes, filterFn, targetBalance, targetAssets, keepChangeToken)
+      }
+    }
+
+    val legacy = new LegacySelector
+    val input = ErgoBoxAssetsHolder(10000000L)
+    val result = legacy.select(Iterator(input), 5000000L, Map.empty).right.value
+    result.changeBoxes.map(_.value).sum shouldBe 5000000L
+    legacy.changeCalls shouldBe 1
+    legacy.policyCalls shouldBe 0
+  }
+
+  property("legacy custom selectors explicitly reject unsupported change policies") {
+    val custom = new BoxSelector {
+      override val reemissionDataOpt: Option[ReemissionData] = None
+
+      override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                               filterFn: T => Boolean,
+                                               targetBalance: Long,
+                                               targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] =
+        selector.select(inputBoxes, filterFn, targetBalance, targetAssets)
+    }
+    val input = ErgoBoxAssetsHolder(10000000L)
+    custom.select(Iterator(input), 5000000L, Map.empty).right.value.inputBoxes shouldBe Seq(input)
+    custom.select(Iterator(input), (_: ErgoBoxAssetsHolder) => true, 5000000L, Map.empty, _ => false)
+      .left.value shouldBe UnsupportedChangeTokenPolicy()
+  }
+
+  property("change token policy preserves EIP-27 and selected input accounting") {
+    val tokens = genTokens(3).map(_._1.toModifierId)
+    val reemission = ReemissionData(tokens(0), tokens(1))
+    val ordinary = tokens(2)
+    val input = ErgoBoxAssetsHolder(
+      10000000L, Map(reemission.reemissionTokenId -> 2000000L, ordinary -> 10L)
+    )
+    Seq(
+      new DefaultBoxSelector(Some(reemission)),
+      new ReplaceCompactCollectBoxSelector(10, 1, Some(reemission))
+    ).foreach { policySelector =>
+      val selected = policySelector.select(
+        Iterator(input), (_: ErgoBoxAssetsHolder) => true,
+        8000000L, Map(ordinary -> 4L), _ => false
+      ).right.value
+      selected.inputBoxes shouldBe Seq(input)
+      selected.changeBoxes shouldBe empty
+      selected.payToReemissionBox.get.value shouldBe 2000000L
+    }
+  }
+
+  property("change token policy is applied after dust collection") {
+    val token = genTokens(1).head._1.toModifierId
+    val first = ErgoBoxAssetsHolder(10000000L, Map(token -> 10L))
+    val dust = ErgoBoxAssetsHolder(2000000L, Map(token -> 3L))
+    val unused = ErgoBoxAssetsHolder(20000000L, Map(token -> 100L))
+    val policySelector = new ReplaceCompactCollectBoxSelector(10, 2, None)
+    val selected = policySelector.select(
+      Iterator(first, dust, unused), (_: ErgoBoxAssetsHolder) => true,
+      8000000L, Map(token -> 4L), _ => false
+    ).right.value
+    selected.inputBoxes shouldBe Seq(first, dust)
+    selected.changeBoxes.map(_.value).sum shouldBe 4000000L
+    selected.changeBoxes.flatMap(_.tokens) shouldBe empty
+  }
+
+  property("change token policy survives replacement and compaction") {
+    val token = genTokens(1).head._1.toModifierId
+    def assets(value: Long) = ErgoBoxAssetsHolder(value, Map(token -> 10L))
+    val policySelector = new ReplaceCompactCollectBoxSelector(2, 1, None)
+    val inputs = Seq(assets(2000000L), assets(3000000L), assets(4000000L))
+    val replacement = assets(10000000L)
+    val replaced = policySelector.select(
+      (inputs :+ replacement).iterator, (_: ErgoBoxAssetsHolder) => true,
+      8000000L, Map.empty, _ => false
+    ).right.value
+    replaced.inputBoxes shouldBe Seq(replacement)
+    replaced.changeBoxes.map(_.value).sum shouldBe 2000000L
+    replaced.changeBoxes.flatMap(_.tokens) shouldBe empty
+
+    val compactInputs = Seq(assets(2000000L), assets(3000000L), assets(10000000L))
+    val compacted = policySelector.select(
+      compactInputs.iterator, (_: ErgoBoxAssetsHolder) => true, 10000000L, Map.empty, _ => false
+    ).right.value
+    compacted.inputBoxes shouldBe compactInputs.takeRight(1)
+    compacted.changeBoxes shouldBe empty
+  }
+
+  property("change token policy preserves whitelisted surplus and requires all target assets") {
+    val tokens = genTokens(2).map(_._1.toModifierId)
+    val input = ErgoBoxAssetsHolder(10000000L, Map(tokens(0) -> 10L, tokens(1) -> 20L))
+    val result = selector.select(
+      Iterator(input), (_: ErgoBoxAssetsHolder) => true,
+      5000000L, Map(tokens(0) -> 4L, tokens(1) -> 3L), _ == tokens(1)
+    ).right.value
+    result.changeBoxes.map(_.value).sum shouldBe 5000000L
+    result.changeBoxes.flatMap(_.tokens).toMap shouldBe Map(tokens(1) -> 17L)
+    selector.select(
+      Iterator(input), (_: ErgoBoxAssetsHolder) => true,
+      5000000L, Map(tokens(0) -> 11L), _ => false
+    ).left.value shouldBe a[NotEnoughTokensError]
+  }
 
   property("returns error when it is impossible to select coins") {
     val box = testBox(1, TrueTree, creationHeight = StartHeight)

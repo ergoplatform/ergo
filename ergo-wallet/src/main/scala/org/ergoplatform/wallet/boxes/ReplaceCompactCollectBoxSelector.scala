@@ -47,14 +47,35 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
   override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
                                           filterFn: T => Boolean,
                                           targetBalance: Long,
-                                          targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                                          targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    selectCompact(inputBoxes, filterFn, targetBalance, targetAssets, None)
+
+  override def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                          filterFn: T => Boolean,
+                                          targetBalance: Long,
+                                          targetAssets: TokensMap,
+                                          keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    selectCompact(inputBoxes, filterFn, targetBalance, targetAssets, Some(keepChangeToken))
+
+  private def selectCompact[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                                filterFn: T => Boolean,
+                                                targetBalance: Long,
+                                                targetAssets: TokensMap,
+                                                changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     // First picking up boxes in given order (1,2,3,4,...) by using DefaultBoxSelector
-    super.select(inputBoxes, filterFn, targetBalance, targetAssets).flatMapRight { initialSelection =>
+    val initial = changeTokenPolicy match {
+      case Some(policy) => super.select(inputBoxes, filterFn, targetBalance, targetAssets, policy)
+      case None => super.select(inputBoxes, filterFn, targetBalance, targetAssets)
+    }
+    initial.flatMapRight { initialSelection =>
       val tail = inputBoxes.take(maxInputs * BoxSelector.ScanDepthFactor).filter(filterFn).toSeq
       // if number of inputs exceeds the limit, the selector is sorting remaining boxes(actually, only 10*maximum
       // boxes) by value in descending order and replaces small-value boxes in the inputs by big-value from the tail (1,2,3,4 => 10)
       (if (initialSelection.inputBoxes.length > maxInputs) {
-        replace(initialSelection, tail, targetBalance, targetAssets)
+        changeTokenPolicy match {
+          case Some(policy) => replace(initialSelection, tail, targetBalance, targetAssets, policy)
+          case None => replace(initialSelection, tail, targetBalance, targetAssets)
+        }
       } else {
         Right(initialSelection)
       }).flatMapRight { afterReplacement =>
@@ -62,7 +83,10 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
         // E.g. if inputs are (100, 200, 1, 2, 1000), target value is 1300 and maximum number of inputs is 3,
         // the selector kicks out (1, 2)
         if (afterReplacement.inputBoxes.length > maxInputs) {
-          compress(afterReplacement, targetBalance, targetAssets)
+          changeTokenPolicy match {
+            case Some(policy) => compress(afterReplacement, targetBalance, targetAssets, policy)
+            case None => compress(afterReplacement, targetBalance, targetAssets)
+          }
         } else {
           Right(afterReplacement)
         }
@@ -72,7 +96,10 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
         if (afterCompaction.inputBoxes.length > maxInputs) {
           Left(MaxInputsExceededError(s"${afterCompaction.inputBoxes.length} boxes exceed max inputs in transaction ($maxInputs)"))
         } else if (afterCompaction.inputBoxes.length < optimalInputs) {
-          collectDust(afterCompaction, tail, targetBalance, targetAssets)
+          changeTokenPolicy match {
+            case Some(policy) => collectDust(afterCompaction, tail, targetBalance, targetAssets, policy)
+            case None => collectDust(afterCompaction, tail, targetBalance, targetAssets)
+          }
         } else {
           Right(afterCompaction)
         }
@@ -82,30 +109,82 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
 
   protected[boxes] def calcChange[T <: ErgoBoxAssets](boxes: Seq[T],
                                                       targetBalance: Long,
-                                                      targetAssets: TokensMap
-                                                     ): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+                                                      targetAssets: TokensMap): Either[BoxSelectionError, Seq[ErgoBoxAssets]] =
+    calcChangeImpl(boxes, targetBalance, targetAssets, None)
+
+  protected[boxes] def calcChange[T <: ErgoBoxAssets](boxes: Seq[T],
+                                                      targetBalance: Long,
+                                                      targetAssets: TokensMap,
+                                                      keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, Seq[ErgoBoxAssets]] =
+    calcChangeImpl(boxes, targetBalance, targetAssets, Some(keepChangeToken))
+
+  private def calcChangeImpl[T <: ErgoBoxAssets](boxes: Seq[T],
+                                                targetBalance: Long,
+                                                targetAssets: TokensMap,
+                                                changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
     val compactedBalance = boxes.foldLeft(0L) { case (sum, b) => sum + BoxSelector.valueOf(b, reemissionDataOpt) }
     val compactedAssets = mutable.Map[ModifierId, Long]()
     AssetUtils.mergeAssetsMut(compactedAssets, boxes.map(_.tokens): _*)
-    super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
+    changeTokenPolicy match {
+      case Some(policy) => super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets, policy)
+      case None => super.formChangeBoxes(compactedBalance, targetBalance, compactedAssets, targetAssets)
+    }
+  }
+
+  // Use the original override points for legacy recalculation and the new ones for policy-aware calls.
+  private def calculateChange[T <: ErgoBoxAssets](boxes: Seq[T],
+                                                  targetBalance: Long,
+                                                  targetAssets: TokensMap,
+                                                  changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, Seq[ErgoBoxAssets]] = {
+    changeTokenPolicy match {
+      case Some(policy) => calcChange(boxes, targetBalance, targetAssets, policy)
+      case None => calcChange(boxes, targetBalance, targetAssets)
+    }
   }
 
   protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
                                                        tail: Seq[T],
                                                        targetBalance: Long,
-                                                       targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                                                       targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    collectDustImpl(bsr, tail, targetBalance, targetAssets, None)
+
+  protected[boxes] def collectDust[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                                                       tail: Seq[T],
+                                                       targetBalance: Long,
+                                                       targetAssets: TokensMap,
+                                                       keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    collectDustImpl(bsr, tail, targetBalance, targetAssets, Some(keepChangeToken))
+
+  private def collectDustImpl[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                                                 tail: Seq[T],
+                                                 targetBalance: Long,
+                                                 targetAssets: TokensMap,
+                                                 changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val diff = optimalInputs - bsr.inputBoxes.length
 
     // it is okay to not to consider reemission tokens here probably, so sorting is done by _.value just, not valueOf()
     val dust = tail.sortBy(_.value).take(diff).filter(b => !bsr.inputBoxes.contains(b))
 
     val boxes = bsr.inputBoxes ++ dust
-    calcChange(boxes, targetBalance, targetAssets).mapRight(changeBoxes => selectionResultWithEip27Output(boxes, changeBoxes))
+    calculateChange(boxes, targetBalance, targetAssets, changeTokenPolicy)
+      .mapRight(changeBoxes => selectionResultWithEip27Output(boxes, changeBoxes))
   }
 
   protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
                                                     targetBalance: Long,
-                                                    targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                                                    targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    compressImpl(bsr, targetBalance, targetAssets, None)
+
+  protected[boxes] def compress[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                                                    targetBalance: Long,
+                                                    targetAssets: TokensMap,
+                                                    keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    compressImpl(bsr, targetBalance, targetAssets, Some(keepChangeToken))
+
+  private def compressImpl[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                                              targetBalance: Long,
+                                              targetAssets: TokensMap,
+                                              changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val boxes = bsr.inputBoxes
     val diff = boxes.foldLeft(0L) { case (sum, b) => sum + BoxSelector.valueOf(b, reemissionDataOpt) } - targetBalance
 
@@ -121,7 +200,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
         thrownValue <= diff
       }
       val compactedBoxes = boxes.filter(b => !thrownBoxes.contains(b))
-      calcChange(compactedBoxes, targetBalance, targetAssets)
+      calculateChange(compactedBoxes, targetBalance, targetAssets, changeTokenPolicy)
         .mapRight(changeBoxes => selectionResultWithEip27Output(compactedBoxes, changeBoxes))
     } else {
       Right(bsr)
@@ -131,7 +210,21 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
   protected[boxes] def replace[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
                                                    tail: Seq[T],
                                                    targetBalance: Long,
-                                                   targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] = {
+                                                   targetAssets: TokensMap): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    replaceImpl(bsr, tail, targetBalance, targetAssets, None)
+
+  protected[boxes] def replace[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                                                   tail: Seq[T],
+                                                   targetBalance: Long,
+                                                   targetAssets: TokensMap,
+                                                   keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    replaceImpl(bsr, tail, targetBalance, targetAssets, Some(keepChangeToken))
+
+  private def replaceImpl[T <: ErgoBoxAssets](bsr: BoxSelectionResult[T],
+                                             tail: Seq[T],
+                                             targetBalance: Long,
+                                             targetAssets: TokensMap,
+                                             changeTokenPolicy: Option[ModifierId => Boolean]): Either[BoxSelectionError, BoxSelectionResult[T]] = {
     val bigBoxes = tail.sortBy(b => -BoxSelector.valueOf(b, reemissionDataOpt))
     val boxesToThrowAway = bsr.inputBoxes.filter(!_.tokens.keySet.exists(tid => targetAssets.keySet.contains(tid)))
     val sorted = boxesToThrowAway.sortBy(b => BoxSelector.valueOf(b, reemissionDataOpt))
@@ -163,7 +256,7 @@ class ReplaceCompactCollectBoxSelector(maxInputs: Int,
     replaceStep(bigBoxes, sorted)
     if (boxesToAdd.nonEmpty) {
       val compactedBoxes = bsr.inputBoxes.filter(b => !boxesToDrop.contains(b)) ++ boxesToAdd
-      calcChange(compactedBoxes, targetBalance, targetAssets)
+      calculateChange(compactedBoxes, targetBalance, targetAssets, changeTokenPolicy)
         .mapRight(changeBoxes => selectionResultWithEip27Output(compactedBoxes, changeBoxes))
     } else {
       Right(bsr)

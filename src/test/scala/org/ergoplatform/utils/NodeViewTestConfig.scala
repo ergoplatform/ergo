@@ -8,7 +8,8 @@ import org.ergoplatform.wallet.utils.FileUtils
 
 case class NodeViewTestConfig(stateType: StateType,
                               verifyTransactions: Boolean,
-                              popowBootstrap: Boolean) extends FileUtils {
+                              popowBootstrap: Boolean,
+                              utxoBootstrap: Boolean = false) {
 
   def toSettings: ErgoSettings = {
     val defaultSettings = ErgoSettingsReader.read()
@@ -19,13 +20,15 @@ case class NodeViewTestConfig(stateType: StateType,
       nodeSettings = defaultSettings.nodeSettings.copy(
         stateType = stateType,
         verifyTransactions = verifyTransactions,
-        nipopowSettings = NipopowSettings(popowBootstrap, 1)
+        nipopowSettings = NipopowSettings(popowBootstrap, 1),
+        utxoSettings = defaultSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = utxoBootstrap)
       )
     )
   }
 
   override def toString: String = {
-    s"State: $stateType, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $popowBootstrap"
+    s"State: $stateType, Verify Transactions: $verifyTransactions, PoPoW Bootstrap: $popowBootstrap, " +
+      s"UTXO Bootstrap: $utxoBootstrap"
   }
 }
 

@@ -273,6 +273,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               if (resolvedInputs.forall(_.isDefined)) {
 
                 if (outputsContainReemissionToken(tx.outputCandidates, utxo.stateContext)) {
+                  log.info(s"Mempool rejecting transaction with reemission token: ${tx.id}")
                   val exc = new Exception(
                     "Mempool policy declines a transaction carrying the re-emission token in outputs")
                   // The pool is rebuilt directly, rather than via `this.invalidate`, because that

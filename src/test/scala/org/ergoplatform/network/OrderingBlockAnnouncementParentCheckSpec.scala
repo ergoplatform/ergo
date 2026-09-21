@@ -89,6 +89,10 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
     val peer: ConnectedPeer = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref,
       Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis())))
 
+    // a second peer, which nothing is ever requested from
+    val otherPeer: ConnectedPeer = ConnectedPeer(connectionIdGen.sample.get, TestProbe("OtherPeerHandlerProbe").ref,
+      Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis())))
+
     val hist: ErgoHistory = ErgoHistory.readOrGenerate(historySettings)(null)
     val chain: Seq[ErgoFullBlock] = genChain(3, hist, nBits = historySettings.chainSettings.initialNBits)
     if (applyLocalChain) applyChain(hist, chain)
@@ -200,6 +204,35 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
 
       (statusAfterDelivery, timerCancelledAfterDelivery, penaltyAfterDelivery) shouldBe
         ((ModifiersStatus.Unknown, true, false))
+    }
+  }
+
+  property("requested ordering announcement with an unknown parent delivered by another peer leaves the supplier's request pending") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val oba = announcement(f, unknownParent, f.hist.fullBlockHeight + 1,
+        DifficultySerializer.encodeCompactBits(1))
+      oba.valid(f.realPowScheme, None) shouldBe true
+      val inv = InvData(OrderingBlockAnnouncementTypeId.value, Seq(oba.header.id))
+      f.synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(f.peer))
+      val requests = f.ncProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.collect {
+        case SendToNetwork(msg, _) if msg.spec.messageCode == RequestModifierSpec.messageCode =>
+          msg.data.get.asInstanceOf[InvData]
+      }
+      requests should contain(inv)
+      val attempt = f.deliveryTracker.getRequestedInfo(OrderingBlockAnnouncementTypeId.value, oba.header.id).get
+      attempt.peer shouldBe f.peer
+      f.otherPeer should not be f.peer
+
+      // the announcement arrives from a peer it was not requested from
+      f.synchronizer ! Message(OrderingBlockAnnouncementMessageSpec,
+        Left(OrderingBlockAnnouncementMessageSpec.toBytes(oba)), Some(f.otherPeer))
+      outcome(f, oba) shouldBe Outcome(stored = false, relayed = false, handedOff = false, penalized = false,
+        headerRequests = Seq.empty)
+
+      f.deliveryTracker.status(oba.header.id, OrderingBlockAnnouncementTypeId.value, Seq.empty) shouldBe ModifiersStatus.Requested
+      f.deliveryTracker.getRequestedInfo(OrderingBlockAnnouncementTypeId.value, oba.header.id) shouldBe Some(attempt)
+      attempt.cancellable.isCancelled shouldBe false
     }
   }
 

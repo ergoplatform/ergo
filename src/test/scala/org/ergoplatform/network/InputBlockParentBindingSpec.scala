@@ -88,6 +88,10 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
     val peer: ConnectedPeer = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref,
       Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis())))
 
+    // a second peer, which nothing is ever requested from
+    val otherPeer: ConnectedPeer = ConnectedPeer(connectionIdGen.sample.get, TestProbe("OtherPeerHandlerProbe").ref,
+      Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis())))
+
     val hist: ErgoHistory = ErgoHistory.readOrGenerate(historySettings)(null)
     val chain: Seq[ErgoFullBlock] = genChain(3, hist, nBits = historySettings.chainSettings.initialNBits)
     if (applyLocalChain) applyChain(hist, chain)
@@ -184,6 +188,38 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
 
       (statusAfterDelivery, timerCancelledAfterDelivery, penaltyAfterDelivery) shouldBe
         ((ModifiersStatus.Unknown, true, false))
+    }
+  }
+
+  property("requested input block with an unknown parent delivered by another peer leaves the supplier's request pending") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      f.synchronizer ! ChangedState(f.state)
+      f.synchronizer ! ChangedHistory(f.hist)
+      f.synchronizer ! ChangedMempool(f.mempool)
+      networkMessages(f)
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val ib = announcement(f, unknownParent, f.hist.fullBlockHeight + 1,
+        DifficultySerializer.encodeCompactBits(1))
+      ib.valid(f.realPowScheme, f.state.stateContext.currentParameters, None) shouldBe true
+      val inv = InvData(InputBlockTypeId.value, Seq(ib.id))
+      f.synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(f.peer))
+      val requests = networkMessages(f).collect {
+        case SendToNetwork(msg, _) if msg.spec.messageCode == RequestModifierSpec.messageCode =>
+          msg.data.get.asInstanceOf[InvData]
+      }
+      requests should contain(inv)
+      val attempt = f.deliveryTracker.getRequestedInfo(InputBlockTypeId.value, ib.id).get
+      attempt.peer shouldBe f.peer
+      f.otherPeer should not be f.peer
+
+      // the announcement arrives from a peer it was not requested from
+      f.synchronizer ! Message(InputBlockMessageSpec, Left(InputBlockMessageSpec.toBytes(ib)), Some(f.otherPeer))
+      viewHolderGotInputBlock(f) shouldBe false
+      penalized(networkMessages(f)) shouldBe false
+
+      f.deliveryTracker.status(ib.id, InputBlockTypeId.value, Seq.empty) shouldBe ModifiersStatus.Requested
+      f.deliveryTracker.getRequestedInfo(InputBlockTypeId.value, ib.id) shouldBe Some(attempt)
+      attempt.cancellable.isCancelled shouldBe false
     }
   }
 

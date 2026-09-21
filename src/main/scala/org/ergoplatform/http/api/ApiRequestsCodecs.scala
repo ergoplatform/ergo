@@ -107,4 +107,19 @@ trait ApiRequestsCodecs extends ApiCodecs {
     } yield GenerateCommitmentsRequest(tx, secretsOpt, inputs, dataInputs)
   }
 
+  implicit val signMessageRequestDecoder: Decoder[org.ergoplatform.nodeView.wallet.requests.SignMessageRequest] = { cursor =>
+    for {
+      message <- cursor.downField("message").as[String]
+      address <- cursor.downField("address").as[Option[String]]
+    } yield org.ergoplatform.nodeView.wallet.requests.SignMessageRequest(message, address)
+  }
+
+  implicit val verifySignatureRequestDecoder: Decoder[org.ergoplatform.nodeView.wallet.requests.VerifySignatureRequest] = { cursor =>
+    for {
+      message <- cursor.downField("message").as[String]
+      signature <- cursor.downField("signature").as[String]
+      publicKey <- cursor.downField("publicKey").as[String]
+    } yield org.ergoplatform.nodeView.wallet.requests.VerifySignatureRequest(message, signature, publicKey)
+  }
+
 }

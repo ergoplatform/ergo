@@ -120,6 +120,28 @@ class BlocksApiRouteSpec
     }
   }
 
+  it should "accept the maximum number of block header ids" in {
+    val absentHeaderId = "0000000000000000000000000000000000000000000000000000000000000000"
+
+    Post(prefix + "/headerIds", Seq.fill(16384)(absentHeaderId).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Seq[ErgoFullBlock]] shouldBe empty
+    }
+  }
+
+  it should "reject block header id batches above the maximum" in {
+    val absentHeaderId = "0000000000000000000000000000000000000000000000000000000000000000"
+
+    Post(prefix + "/headerIds", Seq.fill(16385)(absentHeaderId).asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[Json].hcursor
+      response.get[Int]("error") shouldBe Right(StatusCodes.BadRequest.intValue)
+      response.get[String]("reason") shouldBe Right("bad.request")
+      response.get[String]("detail") shouldBe
+        Right("No more than 16384 headers can be requested")
+    }
+  }
+
   it should "get header by header id" in {
     Get(prefix + "/" + headerIdString + "/header") ~> route ~> check {
       status shouldBe StatusCodes.OK

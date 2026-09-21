@@ -166,7 +166,7 @@ object ValidationRules {
     bsHeadersChainSynced -> RuleStatus(im => recoverable(s"Headers-chain is not synchronized yet. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsTooOld -> RuleStatus(im => fatal(s"Block section should correspond to a block header that is not pruned yet. ${im.error}", im.modifierId, im.modifierTypeId),
+    bsTooOld -> RuleStatus(im => recoverable(s"Block section should correspond to a block header that is not pruned yet. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ADProofs], classOf[Extension], classOf[BlockTransactions]),
       mayBeDisabled = false),
     bsBlockTransactionsSize -> RuleStatus(im => fatal(s"Size of block transactions section should not exceed <maxBlockSize>. ${im.error}", im.modifierId, im.modifierTypeId),

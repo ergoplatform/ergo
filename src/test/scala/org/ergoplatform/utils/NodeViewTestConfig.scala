@@ -9,7 +9,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 case class NodeViewTestConfig(stateType: StateType,
                               verifyTransactions: Boolean,
                               popowBootstrap: Boolean,
-                              utxoBootstrap: Boolean = false) {
+                              utxoBootstrap: Boolean = false) extends FileUtils {
 
   def toSettings: ErgoSettings = {
     val defaultSettings = ErgoSettingsReader.read()

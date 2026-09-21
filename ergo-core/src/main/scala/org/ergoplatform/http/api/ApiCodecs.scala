@@ -13,14 +13,14 @@ import org.ergoplatform.mining.{groupElemFromBytes, groupElemToBytes}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Difficulty
 import org.ergoplatform.sdk.wallet.secrets.{DhtSecretKey, DlogSecretKey}
-import org.ergoplatform.settings.{Algos, ErgoAlgos}
+import org.ergoplatform.settings.{Algos, Constants, ErgoAlgos}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.validation.ValidationResult
 import scorex.crypto.authds.merkle.MerkleProof
-import scorex.crypto.authds.{LeafData, Side}
-import scorex.crypto.hash.Digest
+import scorex.crypto.authds.{ADDigest, ADKey, LeafData, Side}
+import scorex.crypto.hash.{Digest, Digest32}
 import scorex.util.encode.Base16
 import sigmastate._
 import sigmastate.crypto.DLogProtocol.{DLogProverInput, FirstDLogProverMessage}
@@ -39,6 +39,29 @@ import scala.util.{Failure, Success, Try}
 
 
 trait ApiCodecs extends JsonCodecs {
+
+  private def fixedSizeBytesDecoder[T](typeName: String, expectedSize: Int)(wrap: Array[Byte] => T): Decoder[T] =
+    Decoder.instance { cursor =>
+      cursor.as[String].flatMap { str =>
+        Algos.decode(str) match {
+          case Success(bytes) if bytes.length == expectedSize =>
+            Right(wrap(bytes))
+          case Success(_) =>
+            Left(DecodingFailure(s"$typeName should be $expectedSize bytes", cursor.history))
+          case Failure(e) =>
+            Left(DecodingFailure.fromThrowable(e, cursor.history))
+        }
+      }
+    }
+
+  override implicit val adKeyDecoder: Decoder[ADKey] =
+    fixedSizeBytesDecoder("ADKey", Constants.ModifierIdSize)(ADKey @@ _)
+
+  override implicit val adDigestDecoder: Decoder[ADDigest] =
+    fixedSizeBytesDecoder("ADDigest", Constants.ModifierIdSize + 1)(ADDigest @@ _)
+
+  override implicit val digest32Decoder: Decoder[Digest32] =
+    fixedSizeBytesDecoder("Digest32", Constants.ModifierIdSize)(Digest32 @@ _)
 
   def fromValidation[T](validationResult: ValidationResult[T])
                        (implicit cursor: ACursor): Either[DecodingFailure, T] = {
@@ -81,7 +104,8 @@ trait ApiCodecs extends JsonCodecs {
     for {
       str <- cursor.as[String]
       bytes <- fromTry(Algos.decode(str))
-    } yield groupElemFromBytes(bytes)
+      point <- fromTry(Try(groupElemFromBytes(bytes)))
+    } yield point
   }
 
   implicit val ecPointEncoder: Encoder[EcPointType] = Encoder.instance({ point: EcPointType =>

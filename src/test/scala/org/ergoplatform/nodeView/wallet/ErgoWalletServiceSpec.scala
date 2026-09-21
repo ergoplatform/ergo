@@ -5,9 +5,13 @@ import org.ergoplatform._
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
+  ChangeAddressNotOwned,
+  WalletLockedForChangeAddress
+}
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.ScanResults
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
-import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, PaymentRequest}
+import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedSecretKey}
@@ -28,10 +32,12 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigmastate.crypto.DLogProtocol.DLogProverInput
+import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
 
 import scala.collection.compat.immutable.ArraySeq
-import scala.util.Random
+import scala.util.{Random, Success}
 
 class ErgoWalletServiceSpec
   extends ErgoCorePropertyTest
@@ -274,6 +280,101 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("asset issuance should be independent of burn request order") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+        val existingAssetAmount = 10L
+        val burnAmount = 3L
+        val issueAmount = 7L
+        val inputBoxes = boxesAvailable(
+          makeGenesisBlock(pks.head.pubkey, Seq(newAssetIdStub -> existingAssetAmount)),
+          pks.head.pubkey
+        )
+        val existingTokenId = inputBoxes.flatMap(_.additionalTokens.toArray).head._1
+        val encodedBoxes = inputBoxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+        val burnRequest = BurnTokensRequest(Array(existingTokenId -> burnAmount))
+        val paymentRequest = PaymentRequest(pks.head, 1000000L, Array.empty, Map.empty)
+        val issueRequest = AssetIssueRequest(
+          address = pks.head,
+          valueOpt = Some(10000000L),
+          amount = issueAmount,
+          name = "test-name",
+          description = "test-description",
+          decimals = 4,
+          registers = Option.empty
+        )
+        val boxSelector = new ReplaceCompactCollectBoxSelector(
+          settings.walletSettings.maxInputs,
+          settings.walletSettings.optimalInputs,
+          None
+        )
+
+        val requestOrders = Seq(
+          Seq(burnRequest, issueRequest),
+          Seq(issueRequest, burnRequest)
+        ) ++ Seq(burnRequest, issueRequest, paymentRequest).permutations.toSeq
+
+        requestOrders.foreach { requests =>
+          val result = generateUnsignedTransaction(
+            wState,
+            boxSelector,
+            requests,
+            inputsRaw = encodedBoxes,
+            dataInputsRaw = Seq.empty
+          )
+          val requestOrder = requests.map(_.getClass.getSimpleName).mkString(", ")
+          withClue(s"request order: $requestOrder; failure: ${result.failed.map(_.getMessage).toOption}") {
+            result.isSuccess shouldBe true
+          }
+
+          val (tx, selectedInputs, _) = result.get
+          val issuedTokenId = selectedInputs.head.id.toTokenId
+          val issueOutputs = tx.outputCandidates.filter(
+            _.additionalTokens.toArray.exists { case (tokenId, _) => tokenId == issuedTokenId }
+          )
+          issueOutputs should have size 1
+          issueOutputs.head.value shouldBe issueRequest.valueOpt.get
+          issueOutputs.head.ergoTree shouldBe pks.head.script
+          issueOutputs.head.additionalTokens.toArray should contain(issuedTokenId -> issueAmount)
+          issueOutputs.head.additionalRegisters shouldBe Map(
+            ErgoBox.R4 -> ByteArrayConstant("test-name".getBytes("UTF-8")),
+            ErgoBox.R5 -> ByteArrayConstant("test-description".getBytes("UTF-8")),
+            ErgoBox.R6 -> ByteArrayConstant("4".getBytes("UTF-8"))
+          )
+
+          if (requests.contains(paymentRequest)) {
+            val paymentOutputs = tx.outputCandidates.filter(_.value == paymentRequest.value)
+            paymentOutputs should have size 1
+            paymentOutputs.head.ergoTree shouldBe pks.head.script
+            paymentOutputs.head.additionalTokens.toArray shouldBe empty
+            paymentOutputs.head.additionalRegisters shouldBe empty
+          }
+
+          selectedInputs
+            .flatMap(_.additionalTokens.toArray)
+            .collect { case (tokenId, amount) if tokenId == issuedTokenId => amount }
+            .sum shouldBe 0L
+          tx.outputCandidates
+            .flatMap(_.additionalTokens.toArray)
+            .collect { case (tokenId, amount) if tokenId == issuedTokenId => amount }
+            .sum shouldBe issueAmount
+
+          val selectedExistingAmount = selectedInputs
+            .flatMap(_.additionalTokens.toArray)
+            .collect { case (tokenId, amount) if tokenId == existingTokenId => amount }
+            .sum
+          val outputExistingAmount = tx.outputCandidates
+            .flatMap(_.additionalTokens.toArray)
+            .collect { case (tokenId, amount) if tokenId == existingTokenId => amount }
+            .sum
+          selectedExistingAmount - outputExistingAmount shouldBe burnAmount
+          selectedInputs.map(_.value).sum shouldBe tx.outputCandidates.map(_.value).sum
+        }
+      }
+    }
+  }
+
   property("it should process unlock using preEip3Derivation") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
@@ -324,6 +425,94 @@ class ErgoWalletServiceSpec
         finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
         finalUnlockedState.storage.readAllKeys().size shouldBe 1
         finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+      }
+    }
+  }
+
+  property("change address update should require an unlocked wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val ownedAddress = unlockedState.walletVars.publicKeyAddresses.head
+        val lockedState = walletService.lockWallet(unlockedState)
+
+        val result = walletService.updateChangeAddress(lockedState, ownedAddress)
+
+        result.isFailure shouldBe true
+        result.failed.get shouldBe a[WalletLockedForChangeAddress]
+        result.failed.get.getMessage should include("locked")
+        lockedState.storage.readChangeAddress shouldBe empty
+      }
+    }
+  }
+
+  property("change address update should reject an address not owned by the wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val unownedAddress = P2PKAddress(
+          DLogProverInput.random().publicImage
+        )(settings.addressEncoder)
+
+        val result = walletService.updateChangeAddress(unlockedState, unownedAddress)
+
+        result.isFailure shouldBe true
+        result.failed.get shouldBe a[ChangeAddressNotOwned]
+        result.failed.get.getMessage should include("not owned")
+        unlockedState.storage.readChangeAddress shouldBe empty
+      }
+    }
+  }
+
+  property("change address update should accept an address owned by an unlocked wallet") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val ownedAddress = unlockedState.walletVars.publicKeyAddresses.head
+
+        walletService.updateChangeAddress(
+          unlockedState,
+          ownedAddress
+        ) shouldBe Success(())
+        unlockedState.storage.readChangeAddress shouldBe Some(ownedAddress)
+      }
+    }
+  }
+
+  property("change address lookup should ignore a persisted unowned address") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val unlockedState = processUnlock(
+          initialState(store, versionedStore),
+          masterKey,
+          usePreEip3Derivation = true
+        ).get
+        val unownedAddress = P2PKAddress(
+          DLogProverInput.random().publicImage
+        )(settings.addressEncoder)
+        val rootAddress = P2PKAddress(
+          unlockedState.walletVars.proverOpt.get.hdPubKeys.head.key
+        )(settings.addressEncoder)
+
+        unlockedState.storage.updateChangeAddress(unownedAddress).get
+
+        unlockedState.getChangeAddress(settings.addressEncoder) shouldBe Some(rootAddress)
+        unlockedState.storage.readChangeAddress shouldBe Some(unownedAddress)
       }
     }
   }

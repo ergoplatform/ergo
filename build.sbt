@@ -6,7 +6,7 @@ logLevel := Level.Debug
 // this values should be in sync with ergo-wallet/build.sbt
 val scala211 = "2.11.12"
 val scala212 = "2.12.20"
-val scala213 = "2.13.16"
+val scala213 = "2.13.18"
 
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",

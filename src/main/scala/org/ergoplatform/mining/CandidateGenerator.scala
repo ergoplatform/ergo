@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -26,7 +26,7 @@ import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{AutolykosSolution, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound}
-import scorex.crypto.authds.LeafData
+import scorex.crypto.authds.{ADDigest, LeafData, SerializedAdProof}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -768,72 +768,96 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
+      def mkCandidate(blockTxs: Seq[ErgoTransaction],
+                      adProof: SerializedAdProof,
+                      adDigest: ADDigest,
+                      eliminate: EliminateTransactions,
+                      candExtension: ExtensionCandidate,
+                      candInputBlockFields: InputBlockFields,
+                      candInputBlockTransactions: Seq[ErgoTransaction],
+                      candOrderingTxs: Seq[ErgoTransaction]): (Candidate, EliminateTransactions) = {
+        val candidate = CandidateBlock(
+          bestHeaderOpt,
+          version,
+          nBits,
+          adDigest,
+          adProof,
+          blockTxs,
+          timestamp,
+          candExtension,
+          votes,
+          candInputBlockFields,
+          candInputBlockTransactions,
+          candOrderingTxs
+        )
+        val ext = deriveWorkMessage(candidate)
+        log.info(
+          s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
+          s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
+        )
+        Candidate(candidate, ext, prioritizedTransactions, upcomingContext.currentParameters) -> eliminate
+      }
+
       val txs = previousOrderingBlockTransactions ++ orderingTxs
 
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
-          val candidate = CandidateBlock(
-            bestHeaderOpt,
-            version,
-            nBits,
-            adDigest,
-            adProof,
-            txs,
-            timestamp,
-            extensionCandidate,
-            votes,
-            inputBlockFields,
-            inputBlockTransactions,
-            orderingTxs
-          )
-          val ext = deriveWorkMessage(candidate)
-          log.info(
-            s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
-          )
-          Success(
-            Candidate(candidate, ext, prioritizedTransactions, upcomingContext.currentParameters) -> eliminateTransactions
-          )
+          Success(mkCandidate(txs, adProof, adDigest, eliminateTransactions,
+            extensionCandidate, inputBlockFields, inputBlockTransactions, orderingTxs))
         case Failure(t: Throwable) =>
-          // We can not produce a block for some reason, so print out an error
-          // and collect only emission transaction if it exists.
-          // We consider that emission transaction is always valid.
-          emissionTxOpt match {
-            case Some(emissionTx) =>
-              log.error(
-                "Failed to produce proofs for transactions, but emission box is found: ",
-                t
+          // A likely reason of the failure is a state update (new block applied) between
+          // collectTxs and proofsForTransactions. Re-collect transactions against the current
+          // state and retry once before falling back to an emission-only candidate.
+          val (retryPreInputBlockTransactions, retryOrderingTxs, retryToEliminate) = collectTxs(
+            minerPk,
+            state.stateContext.currentParameters.maxBlockCost - safeGap,
+            state.stateContext.currentParameters.maxBlockSize,
+            state,
+            upcomingContext,
+            newTransactionCandidates
+          )
+          val retryTxs = previousOrderingBlockTransactions ++ retryOrderingTxs
+          // The first pass may have rejected transactions against a transient state.
+          // Keep only the classifications from the latest collection attempt.
+          log.error("Retrying candidate generation after failed proofs")
+          val retryEliminate = EliminateTransactions(retryToEliminate)
+          state.proofsForTransactions(retryTxs) match {
+            case Success((adProof, adDigest)) =>
+              log.warn(
+                s"Proof generation failed once (${t.getMessage}), " +
+                s"recovered on retry with ${retryTxs.size} transactions"
               )
-              val fallbackTxs = Seq(emissionTx)
-              state.proofsForTransactions(fallbackTxs).map {
-                case (adProof, adDigest) =>
-                  val candidate = CandidateBlock(
-                    bestHeaderOpt,
-                    version,
-                    nBits,
-                    adDigest,
-                    adProof,
-                    fallbackTxs,
-                    timestamp,
-                    extensionCandidate,
-                    votes,
-                    inputBlockFields = InputBlockFields.empty, // todo: recheck, likely should be not empty
-                    inputBlockTransactions = inputBlockTransactions,
-                    fallbackTxs
-                  )
-                  Candidate(
-                    candidate,
-                    deriveWorkMessage(candidate),
-                    prioritizedTransactions,
-                    upcomingContext.currentParameters
-                  ) -> eliminateTransactions
+              // Rebuild input-block related extension fields for the re-collected transactions,
+              // as the retried collection may differ from the first pass
+              val retryInputBlockTransactions = retryPreInputBlockTransactions.filterNot(tx => previousOrderingBlockTransactionIds.contains(tx.id))
+              val retryInputBlockTxsDigest = Algos.merkleTreeRoot(retryInputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
+              val retryExtensionCandidate = preExtensionCandidate ++
+                InputBlockFields.toExtensionFields(parentInputBlockIdOpt, retryInputBlockTxsDigest, retryInputBlockTxsDigest)
+              retryExtensionCandidate.proofForInputBlockData match {
+                case Some(retryInputBlockFieldsProof) =>
+                  val retryInputBlockFields = new InputBlockFields(parentInputBlockIdOpt, retryInputBlockTxsDigest, previousInputBlocksTransactionsDigest, retryInputBlockFieldsProof)
+                  Success(mkCandidate(retryTxs, adProof, adDigest, retryEliminate,
+                    retryExtensionCandidate, retryInputBlockFields, retryInputBlockTransactions, retryOrderingTxs))
+                case None =>
+                  Failure(new IllegalArgumentException("Input block fields proof not available in extension candidate"))
               }
-            case None =>
-              log.error(
-                "Failed to produce proofs for transactions and no emission box available: ",
-                t
-              )
-              Failure(t)
+            case Failure(ex: Throwable) =>
+              // We can not produce a block for some reason, so print out an error
+              // and collect only emission transaction if it exists.
+              // We consider that emission transaction is always valid.
+              emissionTxOpt match {
+                case Some(emissionTx) =>
+                  log.error("Failed to produce proofs for transactions, but emission box is found: ", ex)
+                  state.proofsForTransactions(Seq(emissionTx)).map {
+                    case (adProof, adDigest) =>
+                      // Both collections produced failed proofs; their rejections may be stale.
+                      mkCandidate(Seq(emissionTx), adProof, adDigest, EliminateTransactions(Seq.empty),
+                        extensionCandidate, InputBlockFields.empty, inputBlockTransactions, Seq(emissionTx))
+                  }
+                case None =>
+                  log.error("Failed to produce proofs for transactions and no emission box available: ", ex)
+                  Failure(ex)
+              }
           }
       }
     }.flatten

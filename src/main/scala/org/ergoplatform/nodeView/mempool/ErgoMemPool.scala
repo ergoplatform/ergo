@@ -1,10 +1,11 @@
 package org.ergoplatform.nodeView.mempool
 
+import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState}
 import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
@@ -47,7 +48,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
   override def size: Int = pool.size
 
   override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = {
-    pool.get(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
+    unconfirmedById(modifierId).map(unconfirmedTx => unconfirmedTx.transaction)
+  }
+
+  override def unconfirmedById(modifierId: ModifierId): Option[UnconfirmedTransaction] = {
+    pool.get(modifierId)
   }
 
   override def transactionByWeakId(wId: WeakId): Option[ErgoTransaction] = {
@@ -240,6 +245,21 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
+  /**
+    * Mempool policy check: does the transaction carry the re-emission token in any of its outputs?
+    * The only transactions allowed by consensus to have the token in outputs are emission box
+    * spends (recreated emission box and miner rewards output), and those are assembled by the
+    * miner directly into a block, never relayed through the mempool. Any mempool transaction with
+    * the token in outputs can not be included by a conforming miner (`checkReemissionRules` is
+    * force-enabled for mainnet miners), so it is not worth running its input scripts.
+    * Deliberately independent of `checkReemissionRules`, which is off by default for non-mining nodes.
+    */
+  private[mempool] def outputsContainReemissionToken(outputCandidates: Seq[ErgoBoxCandidate],
+                                                     ctx: ErgoStateContext): Boolean = {
+    val reemissionTokenId = ctx.chainSettings.reemission.reemissionTokenId
+    reemissionTokenId.nonEmpty && outputCandidates.exists(_.tokens.contains(reemissionTokenId))
+  }
+
   def process(unconfirmedTx: UnconfirmedTransaction,
               state: ErgoState[_],
               inputBlockTransactions: Seq[ErgoTransaction] = Seq.empty): (ErgoMemPool, ProcessingOutcome) = {
@@ -271,6 +291,17 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               // while inputs spent by input-block transactions are treated as already spent
               val utxoWithPool = utxo.withMempoolAndInputBlocks(this, inputBlockTransactions)
               if (tx.inputIds.forall(inputBoxId => utxoWithPool.boxById(inputBoxId).isDefined)) {
+
+                if (outputsContainReemissionToken(tx.outputCandidates, utxo.stateContext)) {
+                  log.info(s"Mempool rejecting transaction with reemission token: ${tx.id}")
+                  val exc = new Exception(
+                    "Mempool policy declines a transaction carrying the re-emission token in outputs")
+                  // The pool is rebuilt directly, rather than via `this.invalidate`, because that
+                  // helper runs `updateStatsOnRemoval`, which resets statistics for a transaction
+                  // that was never in the pool - which is exactly the case here.
+                  return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
+                    new ProcessingOutcome.Declined(exc, validationStartTime))
+                }
 
                 // added in 6.0 to check now versioned serializers
                 // as having unparseable outputs is okay per protocol rules, but in some cases in 6.0
@@ -345,7 +376,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
         case _ => None
       }
 
-    loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
+    val recommendedFee = loop(waitMinutes = 0).getOrElse(settings.nodeSettings.minimalFeeAmount)
+    math.max(recommendedFee, settings.nodeSettings.minimalFeeAmount)
   }
 
   /**
@@ -368,8 +400,9 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 
     // Time since statistics measurement interval (needed to calculate average tx rate)
     val elapsed = System.currentTimeMillis() - stats.startMeasurement
-    if (stats.takenTxns != 0) {
-      elapsed * posInPool / stats.takenTxns
+    val cappedElapsed = math.max(0L, math.min(elapsed, MemPoolStatistics.measurementIntervalMsec.toLong))
+    if (stats.takenTxns > 0) {
+      cappedElapsed * posInPool / stats.takenTxns
     } else {
       0
     }

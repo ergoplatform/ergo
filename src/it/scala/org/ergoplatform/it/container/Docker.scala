@@ -67,7 +67,6 @@ class Docker(
   private val client: DockerClient =
     DockerClientImpl.getInstance(configStandart, httpDockerClient)
   private var nodeRepository                    = Seq.empty[Node]
-  private var apiCheckerOpt: Option[ApiChecker] = None
   private val isStopped                         = new AtomicBoolean(false)
 
   // This should be called after client is ready but before network created.
@@ -119,19 +118,6 @@ class Docker(
   }
 
   def waitContainer(id: String): WaitContainerResultCallback = client.waitContainerCmd(id).start()
-
-  def startOpenApiChecker(checkerInfo: ApiCheckerConfig): Try[ApiChecker] = Try {
-    val ip: String          = ipForNode(999, networkSeed)
-    val containerId: String = buildApiCheckerContainerCmd(checkerInfo, ip).exec().getId
-    connectToNetwork(containerId, ip)
-    client.startContainerCmd(containerId).exec()
-
-    log.info(s"Started ApiChecker: $containerId")
-
-    val checker: ApiChecker = ApiChecker(containerId, checkerInfo)
-    apiCheckerOpt = Some(checker)
-    checker
-  }
 
   private def startNode(
     networkType: NetworkType,
@@ -234,30 +220,6 @@ class Docker(
       .withFallback(defaultConfigTemplate(networkType))
     log.info(actualConfig.toString)
     actualConfig
-  }
-
-  private def buildApiCheckerContainerCmd(
-    checkerInfo: ApiCheckerConfig,
-    ip: String
-  ): CreateContainerCmd = {
-    val hostConfig: HostConfig = new HostConfig()
-      .withBinds(
-        new Bind(checkerInfo.specFilePath, new Volume("/opt/ergo/openapi.yaml")),
-        new Bind(checkerInfo.paramsFilePath, new Volume("/opt/ergo/parameters.yaml"))
-      )
-
-    client
-      .createContainerCmd(ApiCheckerImageStable)
-      .withCmd(
-        "openapi.yaml",
-        "--api",
-        s"http://${checkerInfo.apiAddressToCheck}",
-        "--parameters",
-        "parameters.yaml"
-      )
-      .withHostConfig(hostConfig)
-      .withHostName(networkName)
-      .withIpv4Address(ip)
   }
 
   private def buildPeerContainerCmd(
@@ -456,11 +418,6 @@ class Docker(
 
       saveNodeLogs()
 
-      apiCheckerOpt.foreach { checker =>
-        saveLogs(checker.containerId, "openapi-checker")
-        client.removeContainerCmd(checker.containerId).withForce(true).exec()
-      }
-
       nodeRepository foreach { node =>
         client.removeContainerCmd(node.containerId).withForce(true).exec()
       }
@@ -565,9 +522,7 @@ class Docker(
 
 object Docker extends IntegrationTestConstants {
 
-  val ErgoImageLatest: String       = "org.ergoplatform/ergo"
-  val ApiCheckerImageLatest: String = "andyceo/openapi-checker"
-  val ApiCheckerImageStable: String = "andyceo/openapi-checker:0.1.0-openapi-core-0.5.0" // not present in docker anymore
+  val ErgoImageLatest: String = "org.ergoplatform/ergo"
 
   val dockerImageLabel          = "ergo-integration-tests"
   val networkNamePrefix: String = "ergo-itest-"

@@ -304,6 +304,8 @@ trait ErgoWalletSupport extends ScorexLogging {
     }
 
     require(inputBoxes.nonEmpty, "There must be at least one input box")
+    val inputBalance = TransactionBuilder.sumLongExact(inputBoxes.map(_.box.value))
+    require(inputBalance >= 0, s"Input balance must be non-negative, got $inputBalance")
 
     //filter burnTokens requests
     val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
@@ -329,7 +331,7 @@ trait ErgoWalletSupport extends ScorexLogging {
           .map(_._1)
           .headOption
 
-        val targetBalance = outputs.map(_.value).sum
+        val targetBalance = TransactionBuilder.sumLongExact(outputs.map(_.value))
         val targetAssets = TransactionBuilder.collectOutputTokens(outputs.filterNot(bx => assetIssueBox.contains(bx)))
 
         //add burnTokens to target assets so that they are excluded from the change outputs

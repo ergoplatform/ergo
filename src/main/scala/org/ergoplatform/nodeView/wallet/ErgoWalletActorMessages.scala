@@ -172,8 +172,11 @@ object ErgoWalletActorMessages {
    * @param unspentOnly         - return only unspent boxes
    * @param considerUnconfirmed - consider mempool (filter our unspent boxes spent in the pool if unspent = true, add
    *                            boxes created in the pool for both values of unspentOnly).
+   * @param minHeight           - min inclusion height of boxes to read from the database
+   * @param maxHeight           - max inclusion height of boxes to read from the database, -1 for unbounded
    */
-  final case class GetWalletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean)
+  final case class GetWalletBoxes(unspentOnly: Boolean, considerUnconfirmed: Boolean,
+                                  minHeight: Int = 0, maxHeight: Int = -1)
 
   /**
    * Get boxes by requested params

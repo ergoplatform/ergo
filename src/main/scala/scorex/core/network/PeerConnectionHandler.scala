@@ -10,6 +10,7 @@ import scorex.core.app.ScorexContext
 import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
 import scorex.core.network.PeerConnectionHandler.ReceivableMessages
 import org.ergoplatform.network.message.MessageSerializer
+import org.ergoplatform.network.message.MessageSerializer.UnknownMessageCodeException
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import org.ergoplatform.settings.ScorexSettings
 import scorex.util.ScorexLogging
@@ -202,6 +203,10 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
             chunksBuffer = chunksBuffer.drop(message.messageLength)
             process()
           case Success(None) =>
+          case Failure(UnknownMessageCodeException(code, messageLength)) =>
+            log.debug(s"Skipping unsupported message code $code from $connectionId")
+            chunksBuffer = chunksBuffer.drop(messageLength)
+            process()
           case Failure(e) =>
             e match {
               //peer is doing bad things, ban it

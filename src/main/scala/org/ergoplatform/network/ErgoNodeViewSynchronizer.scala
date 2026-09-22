@@ -382,6 +382,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val v2SyncInfo = getV2SyncInfo(history, full = true)
         networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
       }
+      sendProcessedInputTip(history, peers)
+    }
+  }
+
+  /** Share the processed input tip during ordinary sync, including when production is idle. */
+  private def sendProcessedInputTip(history: ErgoHistory, peers: Seq[ConnectedPeer]): Unit = {
+    val localHeight = history.fullBlockHeight
+    val recipients = peers.filter { peer =>
+      localHeight > 0 &&
+        SubBlocksFilter.condition(peer) &&
+        peer.mode.exists(_.stateType == StateType.Utxo) &&
+        syncTracker.statuses.get(peer).exists { status =>
+          status.status != Unknown && status.status != Nonsense && status.height > 0 &&
+            math.abs(status.height.toLong - localHeight.toLong) <= 2
+        }
+    }
+    if (recipients.nonEmpty) {
+      // The announced tip may still await transactions. Only replay the processed prefix.
+      history.bestInputBlocksChain().headOption.flatMap(history.getInputBlock).foreach { tip =>
+        val announcement = if (tip.weakTxIds.getOrElse(Seq.empty).size <= 3) tip
+          else tip.copy(weakTxIds = None)
+        val message = Message(InputBlockMessageSpec, Right(announcement), None)
+        recipients.foreach { peer =>
+          networkControllerRef ! SendToNetwork(message, SendToPeer(peer))
+        }
+      }
     }
   }
 
@@ -469,6 +495,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (syncSendNeeded) {
       val ownSyncInfo = getV1SyncInfo(hr)
       sendSyncToPeer(remote, ownSyncInfo)
+      sendProcessedInputTip(hr, Seq(remote))
     }
   }
 
@@ -515,6 +542,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (syncSendNeeded) {
       val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
+      sendProcessedInputTip(hr, Seq(remote))
     }
   }
 

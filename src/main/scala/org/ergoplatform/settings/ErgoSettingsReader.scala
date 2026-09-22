@@ -55,7 +55,8 @@ object ErgoSettingsReader extends ScorexLogging
         scorexSettings,
         walletSettings,
         cacheSettings,
-        votingTargets
+        votingTargets,
+        config.withFallback(ConfigFactory.defaultReference()).as[MatrixSettings]("matrix")
       ),
       desiredNetworkTypeOpt
     )

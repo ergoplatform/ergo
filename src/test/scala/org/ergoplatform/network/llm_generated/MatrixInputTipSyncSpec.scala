@@ -3,14 +3,15 @@ package org.ergoplatform.network.llm_generated
 import akka.actor.{ActorRef, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
-import org.ergoplatform.consensus.{Equal, Nonsense, PeerChainStatus, Unknown}
+import org.ergoplatform.consensus.{Equal, Fork, Older, Unknown, Younger}
 import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModePeerFeature, Version}
 import org.ergoplatform.network.message.Message
 import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
 import org.ergoplatform.network.peer.PeerInfo
-import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec}
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.subblocks.InputBlockAnnouncement
@@ -19,8 +20,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
-import scorex.testkit.utils.AkkaFixture
 import scorex.crypto.authds.LeafData
+import scorex.testkit.utils.AkkaFixture
 import scorex.util.{bytesToId, idToBytes}
 import sigma.Colls
 import sigma.ast.ErgoTree
@@ -30,12 +31,12 @@ import sigma.interpreter.ProverResult
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
-/** Replay is exercised through ordinary sync entry points, without locally mined block events. */
+/** Replay is scoped to the first V2 response which establishes an equal peer at the local full-block height. */
 class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
-  import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
-  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ChainGenerator._
+  import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
 
   private class Synchronizer(nc: ActorRef, vh: ActorRef, cfg: ErgoSettings,
                              val statuses: ErgoSyncTracker)(implicit ec: ExecutionContext)
@@ -44,6 +45,8 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     def outbound(history: ErgoHistory): Unit = sendSync(history)
     def inboundV2(history: ErgoHistory, peer: ConnectedPeer): Unit =
       processSyncV2(history, history.syncInfoV2(full = true), peer)
+    def inboundV2(history: ErgoHistory, info: ErgoSyncInfoV2, peer: ConnectedPeer): Unit =
+      processSyncV2(history, info, peer)
     def inboundV1(history: ErgoHistory, peer: ConnectedPeer): Unit =
       processSyncV1(history, history.syncInfoV1, peer)
   }
@@ -60,13 +63,15 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     }
     var state: UtxoState = _
     var history: ErgoHistory = _
+    var orderingChain: Seq[ErgoFullBlock] = Seq.empty
     val tracker: ErgoSyncTracker = ErgoSyncTracker(cfg.scorexSettings.network)
     var sync: Synchronizer = _
 
     def initialize(): Unit = {
       state = UtxoState.fromBoxHolder(BoxHolder(boxes), None, createTempDir, cfg, parameters)
       history = ErgoHistory.readOrGenerate(cfg)(null)
-      applyChain(history, genChain(height = initialHeight, history = history, stateOpt = Some(state)))
+      orderingChain = genChain(height = initialHeight, history = history, stateOpt = Some(state))
+      history = applyChain(history, orderingChain)
       history.fullBlockHeight shouldBe initialHeight
       val ref: TestActorRef[Synchronizer] = TestActorRef(Props(new Synchronizer(nc.ref, vh.ref, cfg, tracker)))
       sync = ref.underlyingActor
@@ -104,9 +109,7 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
       tip
     }
 
-    def eligible(peer: ConnectedPeer, offset: Int = 0, status: PeerChainStatus = Equal): Unit = {
-      tracker.updateStatus(peer, status, Some(history.fullBlockHeight + offset))
-      // A normal periodic sync opportunity, without wall-clock sleeping.
+    def markOutdated(peer: ConnectedPeer): Unit = {
       val old = tracker.statuses(peer)
       tracker.statuses.update(peer, old.copy(lastSyncSentTime = Some(System.currentTimeMillis() - 61000L)))
     }
@@ -130,7 +133,8 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     def requireReplay(messages: Seq[SendToNetwork], tip: InputBlockAnnouncement, remote: ConnectedPeer): Unit = {
       val replays = announcements(messages)
       replays should have size 1
-      InputBlockAnnouncement.serializer.toBytes(replays.head._1) shouldBe InputBlockAnnouncement.serializer.toBytes(tip)
+      InputBlockAnnouncement.serializer.toBytes(replays.head._1) shouldBe
+        InputBlockAnnouncement.serializer.toBytes(tip)
       replays.head._2.sendingStrategy shouldBe SendToPeer(remote)
     }
   }
@@ -142,8 +146,7 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     try {
       fixture.initialize()
       test(fixture)
-    }
-    finally {
+    } finally {
       try Await.result(fixture.system.terminate(), 10.seconds)
       finally {
         try {
@@ -155,211 +158,124 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     }
   }
 
-  property("an Unknown peer learns the equal V2 height and receives the already processed tip") {
+  property("the first Unknown-to-Equal V2 response after a local sync send replays the processed tip") {
     withFixture { f =>
       val tip = f.processedTip()
       val peer = f.peer()
       f.tracker.updateStatus(peer, Unknown, None)
+
+      f.sync.outbound(f.history)
+      val outbound = f.messages()
+      f.requireSync(outbound)
+      f.announcements(outbound) shouldBe empty
+      f.tracker.notSyncedOrOutdated(peer) shouldBe false
+
       f.sync.inboundV2(f.history, peer)
+      f.tracker.getStatus(peer) shouldBe Some(Equal)
+      f.tracker.fullInfo().find(_.peer == peer).map(_.height) shouldBe Some(f.history.fullBlockHeight)
+      val response = f.messages()
+      f.requireSync(response)
+      f.requireReplay(response, tip, peer)
+    }
+  }
+
+  property("periodic sync sends no input-tip announcement to an eligible outdated peer") {
+    withFixture { f =>
+      f.processedTip()
+      val peer = f.peer()
+      f.tracker.updateStatus(peer, Equal, Some(f.history.fullBlockHeight))
+      f.markOutdated(peer)
+      f.sync.outbound(f.history)
+      val messages = f.messages()
+      f.requireSync(messages)
+      f.announcements(messages) shouldBe empty
+    }
+  }
+
+  property("V1 sends no input-tip announcement even after V2 established the peer height") {
+    withFixture { f =>
+      val tip = f.processedTip()
+      val peer = f.peer()
+      f.sync.inboundV2(f.history, peer)
+      f.requireReplay(f.messages(), tip, peer)
+      f.markOutdated(peer)
+
+      f.sync.inboundV1(f.history, peer)
       f.tracker.getStatus(peer) shouldBe Some(Equal)
       f.tracker.fullInfo().find(_.peer == peer).map(_.height) shouldBe Some(f.history.fullBlockHeight)
       val messages = f.messages()
       f.requireSync(messages)
-      f.requireReplay(messages, tip, peer)
+      f.announcements(messages) shouldBe empty
     }
   }
 
-  property("outbound periodic sync replays the tip even though it refreshes the send timestamp") {
+  property("an already Equal peer with a recent V2 response gets no unsolicited replay") {
     withFixture { f =>
       val tip = f.processedTip()
       val peer = f.peer()
-      f.eligible(peer)
-      f.sync.outbound(f.history)
-      f.tracker.notSyncedOrOutdated(peer) shouldBe false
-      val messages = f.messages()
-      f.requireSync(messages)
-      f.requireReplay(messages, tip, peer)
-      // Equal simultaneous sync responses need no reply; discovery must already have happened above.
+      f.sync.inboundV2(f.history, peer)
+      f.requireReplay(f.messages(), tip, peer)
+
       f.sync.inboundV2(f.history, peer)
       f.messages() shouldBe empty
     }
   }
 
-  property("an announced but unprocessed child does not replace the replayed processed tip") {
+  property("a pending child does not replace the processed prefix in a V2 reconnect reply") {
     withFixture { f =>
       val tip = f.processedTip()
       val child = f.announcement(Some(tip))
       f.history.applyInputBlock(child) shouldBe None
-      f.history.getInputBlock(child.id).isDefined shouldBe true
       f.history.bestBlocks._2.map(_.id) shouldBe Some(child.id)
       f.history.bestInputBlocksChain() shouldBe Seq(tip.id)
+
       val peer = f.peer()
-      f.eligible(peer)
-      f.sync.outbound(f.history)
+      f.sync.inboundV2(f.history, peer)
       f.requireReplay(f.messages(), tip, peer)
     }
   }
 
-  property("an empty processed input chain preserves normal sync without an announcement") {
+  property("an empty processed input chain preserves the V2 sync response without replay") {
     withFixture { f =>
       val unprocessed = f.announcement()
-      f.history.applyInputBlock(unprocessed)
-      f.history.bestBlocks._2 shouldBe None
+      f.history.applyInputBlock(unprocessed) shouldBe None
       f.history.bestInputBlocksChain() shouldBe empty
+
       val peer = f.peer()
-      f.eligible(peer)
-      f.sync.outbound(f.history)
+      f.sync.inboundV2(f.history, peer)
       val messages = f.messages()
       f.requireSync(messages)
       f.announcements(messages) shouldBe empty
-    }
-  }
-
-  property("V1 can reuse an established V2 height for a sync response replay") {
-    withFixture { f =>
-      val tip = f.processedTip()
-      val peer = f.peer()
-      f.eligible(peer)
-      f.sync.inboundV1(f.history, peer)
-      val messages = f.messages()
-      f.requireSync(messages)
-      f.requireReplay(messages, tip, peer)
-    }
-  }
-
-  property("fresh V1 sync without an established height does not replay an input tip") {
-    withFixture { f =>
-      f.processedTip()
-      val peer = f.peer()
-      f.sync.inboundV1(f.history, peer)
-      val messages = f.messages()
-      f.requireSync(messages)
-      f.announcements(messages) shouldBe empty
-    }
-  }
-
-  for (offset <- Seq(-3, -2, 2, 3)) {
-    property(s"outbound tip replay observes the two-block height window at offset $offset") {
-      withFixture { f =>
-        val tip = f.processedTip()
-        val peer = f.peer()
-        f.eligible(peer, offset)
-        f.sync.outbound(f.history)
-        val messages = f.messages()
-        f.requireSync(messages)
-        if (math.abs(offset) <= 2) f.requireReplay(messages, tip, peer)
-        else f.announcements(messages) shouldBe empty
-      }
-    }
-  }
-
-  for ((label, version, mode) <- Seq(
-    ("older version", Version(6, 4, 0), Some(StateType.Utxo)),
-    ("digest mode", Version.SubblocksVersion, Some(StateType.Digest)),
-    ("absent mode", Version.SubblocksVersion, None))) {
-    property(s"outbound ordinary sync does not send an input tip to $label") {
-      withFixture { f =>
-        f.processedTip()
-        val peer = f.peer(version, mode)
-        f.eligible(peer)
-        f.sync.outbound(f.history)
-        val messages = f.messages()
-        f.requireSync(messages)
-        f.announcements(messages) shouldBe empty
-      }
-    }
-  }
-
-  for (status <- Seq(Unknown, Nonsense)) {
-    property(s"outbound ordinary sync does not replay a tip for unusable status $status") {
-      withFixture { f =>
-        f.processedTip()
-        val peer = f.peer()
-        f.eligible(peer, status = status)
-        f.sync.outbound(f.history)
-        val messages = f.messages()
-        f.requireSync(messages)
-        f.announcements(messages) shouldBe empty
-      }
     }
   }
 
   for (count <- Seq(3, 4)) {
-    property(s"sync replay preserves the existing weak-ID payload rule for $count processed transactions") {
+    property(s"V2 reconnect replay preserves the weak-ID payload rule for $count processed transactions") {
       withFixture { f =>
         val transactions = f.transactions(count)
-        transactions.size shouldBe count
         val tip = f.processedTip(transactions)
         tip.weakTxIds.map(_.size) shouldBe Some(count)
-        f.history.getInputBlockTransactions(tip.id).map(_.map(_.id)) shouldBe Some(transactions.map(_.id))
+
         val peer = f.peer()
-        f.eligible(peer)
-        f.sync.outbound(f.history)
+        f.sync.inboundV2(f.history, peer)
         val expected = if (count <= 3) tip else tip.copy(weakTxIds = None)
         f.requireReplay(f.messages(), expected, peer)
-        // Replay must not rewrite the stored announcement used by later body retrieval.
         f.history.getInputBlock(tip.id).get.weakTxIds.map(_.map(_.toSeq)) shouldBe
           tip.weakTxIds.map(_.map(_.toSeq))
       }
     }
   }
 
-  property("zero peer height is not established eligibility even within the two-block window") {
-    withFixtureAtHeight(2) { f =>
-      f.processedTip()
-      val peer = f.peer()
-      f.eligible(peer, offset = -2)
-      f.tracker.fullInfo().find(_.peer == peer).map(_.height) shouldBe Some(0)
-      f.sync.outbound(f.history)
-      val messages = f.messages()
-      f.requireSync(messages)
-      f.announcements(messages) shouldBe empty
-    }
-  }
-
-  property("without a local full ordering block ordinary sync has no input tip to replay") {
-    withFixtureAtHeight(0) { f =>
-      f.history.bestInputBlocksChain() shouldBe empty
-      val peer = f.peer()
-      f.eligible(peer, offset = 1)
-      f.sync.outbound(f.history)
-      val messages = f.messages()
-      f.requireSync(messages)
-      f.announcements(messages) shouldBe empty
-    }
-  }
-
-  property("outbound sync replays only to its selected eligible destinations") {
-    withFixture { f =>
-      val tip = f.processedTip()
-      val first = f.peer()
-      val second = f.peer()
-      val digest = f.peer(mode = Some(StateType.Digest))
-      val recentlySynced = f.peer()
-      Seq(first, second, digest, recentlySynced).foreach(f.eligible(_))
-      f.tracker.updateLastSyncSentTime(recentlySynced)
-      f.sync.outbound(f.history)
-      val messages = f.messages()
-      f.requireSync(messages)
-      val announcements = f.announcements(messages)
-      announcements should have size 2
-      announcements.map(_._2.sendingStrategy).toSet shouldBe Set(SendToPeer(first), SendToPeer(second))
-      announcements.foreach { case (announcement, _) =>
-        InputBlockAnnouncement.serializer.toBytes(announcement) shouldBe InputBlockAnnouncement.serializer.toBytes(tip)
-      }
-    }
-  }
-
   for ((label, version, mode) <- Seq(
-    ("older version", Version(6, 4, 0), Some(StateType.Utxo)),
+    ("older protocol", Version(6, 4, 0), Some(StateType.Utxo)),
     ("digest mode", Version.SubblocksVersion, Some(StateType.Digest)),
-    ("absent mode", Version.SubblocksVersion, None)); useV2 <- Seq(false, true)) {
-    property(s"V${if (useV2) 2 else 1} response retains ordinary sync but excludes $label from tip replay") {
+    ("absent mode", Version.SubblocksVersion, None))) {
+    property(s"an Equal V2 response excludes $label from input-tip replay") {
       withFixture { f =>
         f.processedTip()
         val peer = f.peer(version, mode)
-        f.eligible(peer)
-        if (useV2) f.sync.inboundV2(f.history, peer) else f.sync.inboundV1(f.history, peer)
+        f.sync.inboundV2(f.history, peer)
+        f.tracker.getStatus(peer) shouldBe Some(Equal)
         val messages = f.messages()
         f.requireSync(messages)
         f.announcements(messages) shouldBe empty
@@ -367,18 +283,56 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     }
   }
 
-  for (offset <- Seq(-3, -2, 2, 3)) {
-    property(s"V1 response uses the established peer height at offset $offset") {
-      withFixture { f =>
-        val tip = f.processedTip()
+  property("V2 responses from Younger, Older, and Fork peers do not replay an input tip") {
+    withFixture { f =>
+      f.processedTip()
+      val youngerInfo = ErgoSyncInfoV2(Seq(f.orderingChain.dropRight(1).last.header))
+      val olderInfo = ErgoSyncInfoV2(Seq(
+        genChain(height = 1, history = f.history, stateOpt = Some(f.state)).last.header))
+      val common = f.orderingChain.dropRight(1).last
+      val localTip = f.orderingChain.last.header
+      val forkTip = Iterator.continually(genChain(1, common).last.header)
+        .find(_.id != localTip.id).get
+      val forkInfo = ErgoSyncInfoV2(Seq(forkTip, common.header))
+
+      Seq(
+        (Younger, youngerInfo),
+        (Older, olderInfo),
+        (Fork, forkInfo)
+      ).foreach { case (expectedStatus, info) =>
+        f.history.compare(info) shouldBe expectedStatus
         val peer = f.peer()
-        f.eligible(peer, offset)
-        f.sync.inboundV1(f.history, peer)
-        val messages = f.messages()
-        f.requireSync(messages)
-        if (math.abs(offset) <= 2) f.requireReplay(messages, tip, peer)
-        else f.announcements(messages) shouldBe empty
+        f.sync.inboundV2(f.history, info, peer)
+        f.tracker.getStatus(peer) shouldBe Some(expectedStatus)
+        f.announcements(f.messages()) shouldBe empty
       }
+    }
+  }
+
+  property("Equal header height ahead of local full-block height does not qualify for replay") {
+    withFixture { f =>
+      f.processedTip()
+      val next = genChain(height = 1, history = f.history, stateOpt = Some(f.state)).last
+      f.history = f.history.append(next.header).get._1
+      f.history.headersHeight shouldBe f.history.fullBlockHeight + 1
+      val peer = f.peer()
+
+      f.sync.inboundV2(f.history, peer)
+      f.tracker.getStatus(peer) shouldBe Some(Equal)
+      f.tracker.fullInfo().find(_.peer == peer).map(_.height) shouldBe Some(f.history.headersHeight)
+      val messages = f.messages()
+      f.requireSync(messages)
+      f.announcements(messages) shouldBe empty
+    }
+  }
+
+  property("zero local full-block height cannot qualify for V2 replay") {
+    withFixtureAtHeight(0) { f =>
+      f.history.bestInputBlocksChain() shouldBe empty
+      val peer = f.peer()
+      f.sync.inboundV2(f.history, peer)
+      f.tracker.getStatus(peer) shouldBe Some(Equal)
+      f.messages() shouldBe empty
     }
   }
 }

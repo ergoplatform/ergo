@@ -33,9 +33,12 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
 
   private val timeout: FiniteDuration = 5.seconds
 
-  Seq(false, true).foreach { missingBody =>
-    property(if (missingBody) "download the full body when the parent input chain body is missing"
-      else "reconstruct the parent's input chain before ordering transactions without downloading") {
+  Seq(
+    (false, false, "reconstruct the parent's input chain before ordering transactions without downloading"),
+    (true, false, "download the full body when the parent input chain body is missing"),
+    (false, true, "a parent tree that is non-empty but LONGER than the committed chain falls back")
+  ).foreach { case (missingBody, longerChain, description) =>
+    property(description) {
       val fixture = new NodeViewFixture(
         NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings,
         parameters)
@@ -106,6 +109,32 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
         } else {
           followerHistory.getCollectedInputBlocksTransactions(parent.id).get shouldBe empty
         }
+        if (longerChain) {
+          // Extend only the follower after the miner has committed the shorter chain.
+          val extraInput = inputTx.outputs.head
+          val extraTx = ErgoTransaction(
+            IndexedSeq(Input(extraInput.id, emptyProverResult)), IndexedSeq.empty,
+            IndexedSeq(new ErgoBoxCandidate(extraInput.value, Constants.TrueTree,
+              parent.height, extraInput.additionalTokens)))
+          extraTx.statelessValidity().get
+          val fields = InputBlockFields.empty
+          val extraFields = new InputBlockFields(
+            Some(inputHeader.serializedId), fields.transactionsDigest,
+            fields.prevTransactionsDigest, fields.inputBlockFieldsProof)
+          val extraHeader = inputHeader.copy(timestamp = inputHeader.timestamp + 1)
+          val extraBlock = InputBlockAnnouncement(1, extraHeader, extraFields, None)
+          extraHeader.parentId shouldBe parent.id
+          extraBlock.prevInputBlockId shouldBe Some(inputBlock.id)
+          followerHistory.applyInputBlock(extraBlock) shouldBe None
+          followerHistory.applyInputBlockTransactions(extraBlock.id, Seq(extraTx), getCurrentState)
+            ._1 should contain(extraBlock.id)
+          val followerTxs = followerHistory.getCollectedInputBlocksTransactions(parent.id).get
+          followerTxs.map(_.id) shouldBe (inputTxs :+ extraTx).map(_.id)
+          followerTxs.size shouldBe inputTxs.size + 1
+          BlockTransactions.transactionsRoot(
+            followerTxs ++ candidate.orderingBlockTransactions, block.header.version).toSeq should not be
+            block.header.transactionsRoot.toSeq
+        }
         followerHistory.getCollectedInputBlocksTransactions(block.id) shouldBe None
         // Header synchronization independently schedules missing sections. Preload the
         // header before observing announcement reconstruction, without supplying a body.
@@ -126,7 +155,7 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
         processing.send(nodeViewHolderRef, GetDataFromCurrentView[ErgoState[_], Boolean](_ => true))
         processing.expectMsg(timeout, true)
 
-        if (missingBody) {
+        if (missingBody || longerChain) {
           downloads.expectMsgType[DownloadRequest](timeout).modifiersToFetch shouldBe
             Map(BlockTransactions.modifierTypeId -> Seq(block.header.transactionsId))
           getHistory.typedModifierById[BlockTransactions](block.header.transactionsId) shouldBe None

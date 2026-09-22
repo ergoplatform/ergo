@@ -1396,6 +1396,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * A requested announcement that is then validly dropped (e.g. its parent does not bind an
+    * expected difficulty) must not be left `Requested`: a subsequent `CheckDelivery` would
+    * penalize the peer that actually delivered it, and the pending entry would block requesting
+    * or replaying the announcement later. Clear it back to `Unknown` (re-requestable) on such a
+    * benign-drop exit, but only when this peer is the one we requested it from -- an unsolicited
+    * response from another peer must not erase the real supplier's pending request. Mirrors the
+    * `getRequestedInfo(..) if ri.peer == remote` guard used on the snapshot download paths.
+    */
+  private def clearRequestedIfFromSupplier(modifierId: ModifierId,
+                                           modifierTypeId: NetworkObjectTypeId.Value,
+                                           remote: ConnectedPeer): Unit = {
+    deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
+      case Some(info) if info.peer == remote =>
+        deliveryTracker.setUnknown(modifierId, modifierTypeId)
+      case _ => ()
+    }
+  }
+
+  /**
    * Request an input block from a peer by its ID.
    *
    * This method sends a request to the specified peer to download an input block with the given ID.
@@ -1487,10 +1506,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (subBlockHeader.height == hr.fullBlockHeight + 1) {
       val powScheme = settings.chainSettings.powScheme
       val parentHeaderOpt = hr.modifierById(subBlockHeader.parentId).collect { case h: Header => h }
-      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
-        val expectedDiff = hr.requiredDifficultyAfter(parent)
-        import org.ergoplatform.mining.difficulty.DifficultySerializer
-        DifficultySerializer.encodeCompactBits(expectedDiff)
+      // Expected difficulty is derived from the known parent one block below the announced header
+      // (or the configured initial difficulty at genesis), never from the announced header's own nBits.
+      // A known parent that is not on the best chain still yields a real difficulty via
+      // requiredDifficultyAfter (which falls back to headerChainBack), so it is bound here as well;
+      // whether to additionally restrict processing to best-chain parents is a separate policy, not
+      // applied here.
+      val expectedNBits: Option[Long] = if (subBlockHeader.isGenesis) {
+        if (hr.bestHeaderOpt.isEmpty && subBlockHeader.parentId == Header.GenesisParentId) {
+          Some(settings.chainSettings.initialNBits)
+        } else None
+      } else {
+        parentHeaderOpt
+          .filter(parent => subBlockHeader.height == parent.height + 1)
+          .map { parent =>
+            val expectedDiff = hr.requiredDifficultyAfter(parent)
+            import org.ergoplatform.mining.difficulty.DifficultySerializer
+            DifficultySerializer.encodeCompactBits(expectedDiff)
+          }
+      }
+      if (expectedNBits.isEmpty) {
+        // Unbindable: the parent is unknown, is not exactly one block below, or this is a
+        // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
+        log.debug(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} does not bind an expected difficulty")
+        clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
+        return
       }
       val valid = usrOpt
         .map(_.stateContext.currentParameters)
@@ -1812,10 +1852,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (!hr.contains(oba.header.id)) {
 
       val parentHeaderOpt = hr.modifierById(oba.header.parentId).collect { case h: Header => h }
-      val expectedNBits: Option[Long] = parentHeaderOpt.map { parent =>
-        val expectedDiff = hr.requiredDifficultyAfter(parent)
-        import org.ergoplatform.mining.difficulty.DifficultySerializer
-        DifficultySerializer.encodeCompactBits(expectedDiff)
+      // Expected difficulty is derived from the known parent one block below the announced header
+      // (or the configured initial difficulty at genesis), never from the announced header's own nBits.
+      // A known parent that is not on the best chain still yields a real difficulty via
+      // requiredDifficultyAfter (which falls back to headerChainBack), so it is bound here as well;
+      // whether to additionally restrict processing to best-chain parents is a separate policy, not
+      // applied here.
+      val expectedNBits: Option[Long] = if (oba.header.isGenesis) {
+        if (hr.bestHeaderOpt.isEmpty && oba.header.parentId == Header.GenesisParentId) {
+          Some(settings.chainSettings.initialNBits)
+        } else None
+      } else {
+        parentHeaderOpt
+          .filter(parent => oba.header.height == parent.height + 1)
+          .map { parent =>
+            val expectedDiff = hr.requiredDifficultyAfter(parent)
+            import org.ergoplatform.mining.difficulty.DifficultySerializer
+            DifficultySerializer.encodeCompactBits(expectedDiff)
+          }
+      }
+
+      if (expectedNBits.isEmpty) {
+        // Unbindable: the parent is unknown, is not exactly one block below, or this is a
+        // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
+        log.debug(s"Not processing ordering block announcement ${oba.header.id}: parent ${oba.header.parentId} does not bind an expected difficulty")
+        clearRequestedIfFromSupplier(oba.header.id, OrderingBlockAnnouncementTypeId.value, remote)
+        return
       }
 
       if (!oba.valid(settings.chainSettings.powScheme, expectedNBits)) {

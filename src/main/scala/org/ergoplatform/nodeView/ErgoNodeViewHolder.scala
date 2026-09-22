@@ -449,10 +449,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         if (allTransactionsDownloaded) {
           val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ mempoolTransactions
           history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
-          val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+          val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(parentId).getOrElse(Seq.empty)
 
-          // todo: check if ordering block transactions should come first
-          val txs = orderingBlockTransactions ++ inputBlocksTransactions
+          // Match the miner commitment: the parent's input chain precedes ordering transactions.
+          val txs = inputBlocksTransactions ++ orderingBlockTransactions
 
           log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
             s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +

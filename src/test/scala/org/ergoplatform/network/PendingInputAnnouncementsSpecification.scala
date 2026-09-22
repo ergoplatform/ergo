@@ -26,7 +26,6 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoCoreTestConstants.{emptyStateContext, parameters}
   import org.ergoplatform.utils.generators.ChainGenerator.genChain
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators.connectionIdGen
-  import org.ergoplatform.wallet.utils.FileUtils
 
   private val blocks = genChain(3)
   private def announcement(n: Int, height: Int = 2): InputBlockAnnouncement =
@@ -46,8 +45,14 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     def size: Int = call("size").asInstanceOf[Int]
     def byteSize: Long = call("byteSize").asInstanceOf[Long]
     def evictions: Long = call("evictions").asInstanceOf[Long]
+    def drops: Long = call("drops").asInstanceOf[Long]
     def take(tip: Header): Seq[(InputBlockAnnouncement, ConnectedPeer)] =
       call("take", tip).asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]
+    def takeKnown(tip: Header, known: ModifierId => Boolean): Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
+      val method = cls.getMethods.find(m => m.getName == "take" && m.getParameterCount == 3)
+      method.map(_.invoke(value, tip, Int.box(64), known)
+        .asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]).getOrElse(take(tip))
+    }
   }
 
   private def proxy[T](cls: Class[T])(f: (Method, Array[AnyRef]) => Any): T =
@@ -98,14 +103,14 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("(d) announcement id deduplicates across peers without refreshing expiry") {
+  property("(d) identical serialized announcements deduplicate without refreshing expiry") {
     withPeers { (p, q) =>
       var now = 0L
       val s = new Store(3, 100000, 2, () => now)
       val a = announcement(1)
       s.add(a, p) shouldBe true
       now = 900
-      s.add(a.copy(weakTxIds = Some(Seq.empty)), q) shouldBe false
+      s.add(a, q) shouldBe false
       s.size shouldBe 1
       now = 1001
       s.take(blocks.head.header) shouldBe empty
@@ -114,26 +119,213 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("(e) behind-tip and reorged-away parents are removed, future parents stay") {
+  property("(e) I5 stale and reorged-away +1/+2 parents drop; known best-chain +2 stays") {
     withPeers { (p, _) =>
       val s = new Store(10, 100000, 10, () => 0L)
       s.add(announcement(1, 1), p)
       s.add(announcement(2).copy(header = announcement(2).header.copy(
         parentId = blocks.last.id)), p)
-      s.add(announcement(3, 3), p)
-      s.take(blocks.head.header) shouldBe empty
+      val current = announcement(3, 3).copy(header = announcement(3, 3).header.copy(
+        parentId = blocks(1).id))
+      val forked = announcement(4, 3).copy(header = announcement(4, 3).header.copy(
+        parentId = blocks.last.id))
+      val unknown = announcement(5, 3)
+      s.add(current, p)
+      s.add(forked, p)
+      s.add(unknown, p)
+      s.takeKnown(blocks.head.header, _ == blocks(1).id) shouldBe empty
       s.size shouldBe 1
-      s.take(blocks.last.header) shouldBe empty
+      s.take(blocks(1).header).map(_._1.id) shouldBe Seq(current.id)
       s.size shouldBe 0
       s.byteSize shouldBe 0
     }
   }
 
-  private def replayScenario(epoch: Boolean, earlyBody: Boolean): Unit = {
+  property("M8 TTL uses elapsed monotonic milliseconds, including a negative clock origin") {
+    withPeers { (p, q) =>
+      var elapsed = -5000L
+      val s = new Store(3, 100000, 2, () => elapsed)
+      val a = announcement(8)
+      s.add(a, p) shouldBe true
+      elapsed += 999
+      s.add(a, q) shouldBe false
+      s.size shouldBe 1
+      elapsed += 1
+      s.take(blocks.head.header) shouldBe empty
+      s.byteSize shouldBe 0L
+    }
+  }
+
+  property("I3 eight saturated hosts cannot evict the newly admitted honest host") {
+    withPeers { (p, _) =>
+      val s = new Store(256, 1000000, 32, () => 0L)
+      def host(n: Int): ConnectedPeer = p.copy(connectionId = p.connectionId.copy(
+        remoteAddress = new java.net.InetSocketAddress(s"10.0.0.$n", 9000)))
+      val attackers = (1 to 8).map(host)
+      var serial = 0
+      attackers.foreach { peer =>
+        (1 to 32).foreach { _ =>
+          serial += 1
+          s.add(announcement(serial), peer) shouldBe true
+        }
+      }
+      val honest = announcement(100000)
+      s.add(honest, host(9)) shouldBe true
+      // Keep replenishing attacker hosts: FIFO eventually ejects the honest singleton.
+      (1 to 1024).foreach { _ =>
+        attackers.foreach { peer =>
+          serial += 1
+          s.add(announcement(serial), peer)
+        }
+      }
+      s.size shouldBe 256
+      s.evictions should be > 1L
+      s.take(blocks.head.header).map(_._1.id) should contain (honest.id)
+    }
+  }
+
+  private def disposalScenario(evict: Boolean, checkClock: Boolean = false,
+                               checkStats: Boolean = false): Unit = {
+    implicit val system: ActorSystem = ActorSystem("pending-disposal-test")
+    implicit val ec = system.dispatcher
+    val cfg = settings.copy(directory = java.nio.file.Files.createTempDirectory(
+      new java.io.File("target").toPath, "pending-r1-").toFile.getAbsolutePath,
+      matrix = settings.matrix.copy(pendingAnnouncements =
+        settings.matrix.pendingAnnouncements.copy(maxEntries = 1, perPeer = 1)))
+    val history = ErgoHistory.readOrGenerate(cfg)(null)
+    try {
+      val nc = TestProbe()
+      val peer = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref, None)
+      val other = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref, None)
+      val stats = TestActorRef(new org.ergoplatform.local.ErgoStatsCollector(
+        TestProbe().ref, nc.ref, ErgoSyncTracker(cfg.scorexSettings.network), cfg))
+      val tracker = DeliveryTracker.empty(cfg)
+      val pool = ErgoMemPool.empty(cfg)
+      val ref = TestActorRef(new ErgoNodeViewSynchronizer(nc.ref, TestProbe().ref,
+        ErgoSyncInfoMessageSpec, cfg, ErgoSyncTracker(cfg.scorexSettings.network), tracker))
+      if (checkClock) {
+        val before = System.nanoTime() / 1000000L
+        val clock = ref.underlyingActor.getClass.getMethods.find(
+          _.getName == "pendingAnnouncementsNow").get
+        val observed = clock.invoke(ref.underlyingActor).asInstanceOf[Long]
+        val after = System.nanoTime() / 1000000L
+        observed should be >= before
+        observed should be <= after
+      }
+      ref ! ChangedHistory(history)
+      ref ! ChangedMempool(pool)
+      val first = announcement(101, history.fullBlockHeight + 2)
+      val second = announcement(102, history.fullBlockHeight + 2)
+      val target = if (evict) first else second
+      val typeId = org.ergoplatform.modifiers.InputBlockTypeId.value
+      def inv(): Unit = {
+        val data = InvData(typeId, Seq(target.id))
+        ref ! org.ergoplatform.network.message.Message(
+          org.ergoplatform.network.message.InvSpec,
+          Left(org.ergoplatform.network.message.InvSpec.toBytes(data)), Some(peer))
+      }
+      inv()
+      nc.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec == RequestModifierSpec =>
+          stn.message.data.get.asInstanceOf[InvData].ids.contains(target.id)
+        case _ => false
+      }
+      val state = proxy(classOf[UtxoStateReader]) { (m, _) =>
+        if (m.getName == "stateContext") emptyStateContext else throw new AssertionError(m.getName)
+      }
+      ref.underlyingActor.processInputBlock(first, history, pool, peer, Some(state))
+      ref.underlyingActor.processInputBlock(second, history, pool,
+        if (evict) other else peer, Some(state))
+      if (checkStats) {
+        val probe = TestProbe()
+        probe.send(stats, org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo)
+        val info = probe.expectMsgType[org.ergoplatform.local.ErgoStatsCollector.NodeInfo]
+        val json = org.ergoplatform.local.ErgoStatsCollector.NodeInfo.jsonEncoder(info)
+          .hcursor.downField("pendingInputAnnouncements")
+        json.get[Int]("size") shouldBe Right(1)
+        json.get[Long]("bytes").right.get should be > 0L
+        json.get[Long]("evictions") shouldBe Right(if (evict) 1L else 0L)
+        json.get[Long]("drops") shouldBe Right(if (evict) 0L else 1L)
+      }
+      tracker.status(target.id, typeId, Seq.empty) shouldBe
+        scorex.core.network.ModifiersStatus.Unknown
+      inv()
+      nc.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec == RequestModifierSpec =>
+          stn.message.data.get.asInstanceOf[InvData].ids.contains(target.id)
+        case _ => false
+      }
+      tracker.status(target.id, typeId, Seq.empty) shouldBe
+        scorex.core.network.ModifiersStatus.Requested
+    } finally {
+      Await.result(system.terminate(), 10.seconds)
+      history.closeStorage()
+    }
+  }
+
+  property("M11 node info exposes live pending size bytes evictions and drops") {
+    disposalScenario(evict = false, checkStats = true)
+    disposalScenario(evict = true, checkStats = true)
+  }
+
+  property("M11 drop and eviction warnings are rate limited without losing counters") {
+    withPeers { (p, q) =>
+      val logger = org.slf4j.LoggerFactory.getLogger(classOf[PendingInputAnnouncements])
+        .asInstanceOf[ch.qos.logback.classic.Logger]
+      val oldLevel = logger.getLevel
+      val appender = new ch.qos.logback.core.read.ListAppender[ch.qos.logback.classic.spi.ILoggingEvent]
+      appender.start()
+      logger.addAppender(appender)
+      logger.setLevel(ch.qos.logback.classic.Level.WARN)
+      try {
+        var now = 0L
+        val s = new Store(2, 100000, 10, () => now)
+        val a = announcement(10)
+        s.add(a, p) shouldBe true
+        (1 to 10).foreach(_ => s.add(a, p) shouldBe false)
+        appender.list.size() shouldBe 1
+        s.drops shouldBe 10L
+        appender.list.get(0).getFormattedMessage should include ("duplicate")
+        // Remaining entries arrive at 1 ms, so they have not expired at 1000 ms.
+        now = 1L
+        s.add(announcement(11), q) shouldBe true
+        s.add(announcement(12), p) shouldBe true
+        appender.list.size() shouldBe 1
+        s.evictions shouldBe 1L
+        now = 1000L
+        s.add(announcement(13), q) shouldBe true
+        appender.list.size() shouldBe 2
+        appender.list.get(1).getFormattedMessage should include ("eviction")
+        appender.list.get(1).getLevel shouldBe ch.qos.logback.classic.Level.WARN
+        s.evictions shouldBe 2L
+      } finally {
+        logger.detachAppender(appender)
+        logger.setLevel(oldLevel)
+        appender.stop()
+      }
+    }
+  }
+
+  property("M8 synchronizer clock seam is backed by System.nanoTime") {
+    disposalScenario(evict = false, checkClock = true)
+  }
+
+  property("C1 full store drops delivery and later inventory requests it again") {
+    disposalScenario(evict = false)
+  }
+
+  property("C1 evicted accepted delivery becomes requestable again") {
+    disposalScenario(evict = true)
+  }
+
+  private def replayScenario(epoch: Boolean, earlyBody: Boolean,
+                             poisoned: Boolean = false, batchSize: Int = 1): Unit = {
     implicit val system: ActorSystem = ActorSystem("pending-replay-test")
     implicit val ec = system.dispatcher
-    val files = new FileUtils {}
-    val cfg = settings.copy(directory = files.createTempDir.getAbsolutePath)
+    val cfg = settings.copy(directory = java.nio.file.Files.createTempDirectory(
+      new java.io.File("target").toPath, "pending-r1-").toFile.getAbsolutePath,
+      matrix = settings.matrix.copy(pendingAnnouncements =
+        settings.matrix.pendingAnnouncements.copy(perPeer = math.max(32, batchSize))))
     val realHistory = ErgoHistory.readOrGenerate(cfg)(null)
     try {
       val nc = TestProbe()
@@ -169,13 +361,20 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
           expectedDiff
         case _ => m.invoke(realHistory, args: _*)
       }}
+      var validations = Vector.empty[(Parameters, Option[Long])]
+      var receiveTurns = Vector.empty[(String, Int)]
       val ref = TestActorRef(new ErgoNodeViewSynchronizer(nc.ref, vh.ref,
         ErgoSyncInfoMessageSpec, cfg, ErgoSyncTracker(cfg.scorexSettings.network),
-        DeliveryTracker.empty(cfg)))
+        DeliveryTracker.empty(cfg)) {
+        override def aroundReceive(receive: akka.actor.Actor.Receive, msg: Any): Unit = {
+          val before = validations.size
+          super.aroundReceive(receive, msg)
+          receiveTurns :+= msg.getClass.getSimpleName -> (validations.size - before)
+        }
+      })
       ref ! ChangedHistory(hr)
       ref ! ChangedMempool(pool)
       ref ! ChangedState(state(tip, parameters))
-      var validations = Vector.empty[(Parameters, Option[Long])]
       val a = new InputBlockAnnouncement(1,
         blocks(1).header.copy(height = height + 1, parentId = parent.id, nBits = expectedBits),
         InputBlockFields.empty, None) {
@@ -184,7 +383,35 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
           (ps eq nextParameters) && bits.contains(expectedBits)
         }
       }
+      val attacker = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref, None)
+      var garbageChecks = 0
+      if (poisoned) {
+        val fields = InputBlockFields.empty
+        val garbageFields = new InputBlockFields(None,
+          scorex.crypto.hash.Digest32 @@ Array.fill[Byte](32)(42),
+          fields.prevTransactionsDigest, fields.inputBlockFieldsProof)
+        val garbage = new InputBlockAnnouncement(1, a.header, garbageFields, None) {
+          override def valid(pow: AutolykosPowScheme, ps: Parameters, bits: Option[Long]): Boolean = {
+            garbageChecks += 1
+            false
+          }
+        }
+        ref.underlyingActor.processInputBlock(garbage, hr, pool, attacker,
+          Some(state(tip, parameters)))
+        system.stop(attacker.handlerRef)
+        ref ! org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer(attacker)
+      }
       ref.underlyingActor.processInputBlock(a, hr, pool, peer, Some(state(tip, parameters)))
+      (1 until batchSize).foreach { n =>
+        val extra = new InputBlockAnnouncement(1, a.header.copy(timestamp = n.toLong),
+          InputBlockFields.empty, None) {
+          override def valid(pow: AutolykosPowScheme, ps: Parameters, bits: Option[Long]): Boolean = {
+            validations :+= ps -> bits
+            (ps eq nextParameters) && bits.contains(expectedBits)
+          }
+        }
+        ref.underlyingActor.processInputBlock(extra, hr, pool, peer, Some(state(tip, parameters)))
+      }
       realHistory.getInputBlock(a.id) shouldBe None
       validations shouldBe empty
       nc.fishForMessage(3.seconds) {
@@ -207,8 +434,26 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         case ProcessInputBlock(info, _) => info.id == a.id
         case _ => false
       }.asInstanceOf[ProcessInputBlock]
-      validations shouldBe Vector(nextParameters -> Some(expectedBits))
-      difficultyReads shouldBe 1
+      validations shouldBe Vector.fill(batchSize)(nextParameters -> Some(expectedBits))
+      if (batchSize > 1) {
+        val work = receiveTurns.filter(_._2 > 0)
+        work.head._2 should be <= 64
+        all(work.map(_._2)) should be <= 64
+        work.tail.map(_._1).distinct shouldBe Vector("ReplayPendingInputAnnouncements$")
+        work.map(_._2).sum shouldBe batchSize
+      }
+      difficultyReads shouldBe (batchSize + (if (poisoned) 1 else 0))
+      if (poisoned) {
+        garbageChecks shouldBe 1
+        nc.fishForMessage(3.seconds) {
+          case p: scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer =>
+            p shouldBe scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer(
+              attacker.connectionId.remoteAddress,
+              org.ergoplatform.network.peer.PenaltyType.MisbehaviorPenalty)
+            true
+          case _ => false
+        }
+      }
       if (earlyBody) {
         // Exercise the existing NodeViewHolder handler, which resumes cached bodies.
         var resumed = false
@@ -228,10 +473,28 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         resumed shouldBe true
       }
       ref ! ChangedState(state(parent, nextParameters))
-      validations.size shouldBe 1
+      validations.size shouldBe batchSize
     } finally {
       Await.result(system.terminate(), 10.seconds)
       realHistory.closeStorage()
+    }
+  }
+
+  property("I4 256 same-parent announcements replay in bounded actor receives") {
+    replayScenario(epoch = false, earlyBody = false, batchSize = 256)
+  }
+
+  property("I2 garbage fields sharing a header cannot suppress honest replay or steal attribution") {
+    replayScenario(epoch = false, earlyBody = false, poisoned = true)
+  }
+
+  property("I2 weak transaction ids are included in serialized deduplication") {
+    withPeers { (p, q) =>
+      val s = new Store(3, 100000, 2, () => 0L)
+      val a = announcement(7)
+      s.add(a, p) shouldBe true
+      s.add(a.copy(weakTxIds = Some(Seq.empty)), q) shouldBe true
+      s.size shouldBe 2
     }
   }
 

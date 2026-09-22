@@ -1448,11 +1448,33 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
 
+  // Monotonic milliseconds; overridable so retention can be tested without sleeping.
+  private[network] def pendingAnnouncementsNow(): Long = System.nanoTime() / 1000000L
+
   private val pendingInputAnnouncements = {
     val caps = settings.matrix.pendingAnnouncements
-    new PendingInputAnnouncements(caps.maxEntries, caps.maxBytes, caps.perPeer,
-      2.minutes.toMillis, () => System.currentTimeMillis())
+    val pending = new PendingInputAnnouncements(caps.maxEntries, caps.maxBytes, caps.perPeer,
+      caps.ttlMs, () => pendingAnnouncementsNow())
+    pending.onDiscard = { (announcement, peer) =>
+      // Accepted pending deliveries are Received; disposal must release those too.
+      val typeId = InputBlockTypeId.value
+      if (deliveryTracker.getSource(announcement.id, typeId).contains(peer)) {
+        deliveryTracker.setUnknown(announcement.id, typeId)
+      }
+    }
+    pending.onChange = () => context.system.eventStream.publish(pending.fullInfo)
+    pending
   }
+
+  private def clearPendingRequestedFromSupplier(id: ModifierId,
+                                               remote: ConnectedPeer): Unit = {
+    val typeId = InputBlockTypeId.value
+    deliveryTracker.getRequestedInfo(typeId, id).filter(_.peer == remote).foreach { _ =>
+      deliveryTracker.setUnknown(id, typeId)
+    }
+  }
+
+  private var pendingReplayScheduled = false
 
   private def replayPendingInputAnnouncements(hr: ErgoHistoryReader,
                                               mp: ErgoMemPoolReader,
@@ -1462,8 +1484,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     usr.flatMap(_.stateContext.lastHeaderOpt).filter { tip =>
       hr.bestFullBlockIdOpt.contains(tip.id)
     }.foreach { tip =>
-      pendingInputAnnouncements.take(tip).foreach { case (announcement, peer) =>
+      val ready = pendingInputAnnouncements.take(
+        tip,
+        settings.matrix.pendingAnnouncements.replayPerParent,
+        id => hr.modifierById(id).exists(_.isInstanceOf[Header]) && hr.isInBestChain(id)
+      )
+      ready.foreach { case (announcement, peer) =>
         processInputBlock(announcement, hr, mp, peer, usr)
+      }
+      if (pendingInputAnnouncements.hasReady(tip) && !pendingReplayScheduled) {
+        pendingReplayScheduled = true
+        self ! ReplayPendingInputAnnouncements
       }
     }
   }
@@ -1608,9 +1639,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val orderingId = inputBlockInfo.header.parentId
 
-        pendingInputAnnouncements.add(inputBlockInfo, remote)
-        // A held (or capacity-dropped) delivery must not time out against its supplier.
-        setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
+        if (pendingInputAnnouncements.add(inputBlockInfo, remote)) {
+          setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
+        } else {
+          clearPendingRequestedFromSupplier(subBlockId, remote)
+        }
 
         // todo: make it debug before release
         log.info(s"On processing $subBlockId, downloading its parent and unknown ordering block $orderingId from $remote")
@@ -2313,6 +2346,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug(s"Invalidating semantically failed modifier $modId", e)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
+    case ReplayPendingInputAnnouncements =>
+      pendingReplayScheduled = false
+      replayPendingInputAnnouncements(historyReader, mempoolReader, utxoStateReaderOpt)
+
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
       replayPendingInputAnnouncements(newHistoryReader, mempoolReader, utxoStateReaderOpt)
       context.become(initialized(newHistoryReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
@@ -2474,6 +2511,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       checkDelivery(hr) orElse {
       case CleanupLocalInputBlockChunks =>
         pendingInputAnnouncements.expire()
+        context.system.eventStream.publish(pendingInputAnnouncements.fullInfo)
         cleanupLocalInputBlockChunks()
       case a: Any => log.error("Strange input: " + a)
     }

@@ -3,20 +3,26 @@ package scorex.core.network
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
+import ch.qos.logback.classic.{Level, Logger}
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import org.ergoplatform.network.message.MessageConstants.MaxMessageSize
-import org.ergoplatform.network.message.{GetPeersSpec, Message}
+import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSerializer}
 import org.ergoplatform.network.peer.PenaltyType
 import org.ergoplatform.network.{Handshake, HandshakeSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.{defaultPeerSpec, settings}
+import org.slf4j.LoggerFactory
 import scorex.core.app.ScorexContext
 import scorex.crypto.hash.Blake2b256
 import scorex.testkit.utils.AkkaFixture
 
 import java.net.InetSocketAddress
 import java.nio.ByteOrder
+import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, DurationInt}
+import scala.util.{Failure, Try}
 
 class UnknownMessageCodeReceptionSpec extends ErgoCorePropertyTest {
   private val UnknownCode: Byte = 127.toByte
@@ -178,6 +184,74 @@ class UnknownMessageCodeReceptionSpec extends ErgoCorePropertyTest {
     withConnectedHandler(localPort = 9177) { fixture =>
       receive(fixture, frame(GetPeersSpec.messageCode))
       expectGetPeers(fixture)
+      expectNoPenalty(fixture)
+    }
+  }
+
+  property("unknown codes log once per connection and code at INFO with the peer version") {
+    val logger = LoggerFactory.getLogger(classOf[PeerConnectionHandler]).asInstanceOf[Logger]
+    val previousLevel = logger.getLevel
+    val appender = new ListAppender[ILoggingEvent]
+    appender.start()
+    logger.addAppender(appender)
+    logger.setLevel(Level.INFO)
+    try {
+      def unknownEvents: Seq[ILoggingEvent] = appender.list.asScala.filter { event =>
+        val message = event.getFormattedMessage
+        message.contains("Skipping unsupported message code") &&
+          (message.contains(":9191") || message.contains(":9193"))
+      }.toVector
+
+      withConnectedHandler(localPort = 9190) { fixture =>
+        val unknown = frame(UnknownCode, Array[Byte](1, 2, 3))
+        receive(fixture, unknown.take(5))
+        unknownEvents shouldBe empty
+        receive(fixture, unknown.drop(5) ++ frame(UnknownCode) ++ frame(126.toByte))
+        receive(fixture, frame(UnknownCode) ++ frame(126.toByte) ++ frame(GetPeersSpec.messageCode))
+        expectGetPeers(fixture)
+        expectNoPenalty(fixture)
+      }
+      withConnectedHandler(localPort = 9192) { fixture =>
+        receive(fixture, frame(UnknownCode) ++ frame(UnknownCode) ++ frame(GetPeersSpec.messageCode))
+        expectGetPeers(fixture)
+        expectNoPenalty(fixture)
+      }
+
+      val events = unknownEvents
+      events.size shouldBe 3
+      events.count(_.getFormattedMessage.contains(s"code $UnknownCode ")) shouldBe 2
+      events.count(_.getFormattedMessage.contains("code 126 ")) shouldBe 1
+      events.foreach { event =>
+        event.getLevel shouldBe Level.INFO
+        event.getFormattedMessage should include(s"protocol version ${defaultPeerSpec.protocolVersion}")
+      }
+    } finally {
+      logger.detachAppender(appender)
+      appender.stop()
+      logger.setLevel(previousLevel)
+    }
+  }
+
+  property("unexpected parser failures close the connection without penalizing the peer") {
+    withConnectedHandler(localPort = 9194) { fixture =>
+      // Ordinary wire inputs cannot reach this failure branch; inject only the parser dependency in this test.
+      val serializerFields = classOf[PeerConnectionHandler].getDeclaredFields
+        .filter(_.getType == classOf[MessageSerializer])
+      serializerFields.length shouldBe 1
+      val field = serializerFields.head
+      field.setAccessible(true)
+      val failingSerializer = new MessageSerializer(Seq(GetPeersSpec), settings.scorexSettings.network.magicBytes) {
+        override def deserialize(bytes: ByteString, source: Option[ConnectedPeer]): Try[Option[Message[_]]] =
+          Failure(new IllegalStateException("injected parser failure"))
+      }
+      field.set(fixture.handler.underlyingActor, failingSerializer)
+      field.setAccessible(false)
+
+      receive(fixture, frame(GetPeersSpec.messageCode))
+      fixture.connection.fishForMessage(1.second) {
+        case Tcp.Abort => true
+        case Tcp.ResumeReading => false
+      }
       expectNoPenalty(fixture)
     }
   }

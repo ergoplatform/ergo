@@ -47,6 +47,8 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
   private var chunksBuffer: ByteString = CompactByteString.empty
 
+  private var loggedUnknownMessageCodes: Set[Byte] = Set.empty
+
   private var outMessagesBuffer: TreeMap[Long, ByteString] = TreeMap.empty
 
   private var outMessagesCounter: Long = 0
@@ -204,7 +206,11 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
             process()
           case Success(None) =>
           case Failure(UnknownMessageCodeException(code, messageLength)) =>
-            log.debug(s"Skipping unsupported message code $code from $connectionId")
+            if (!loggedUnknownMessageCodes.contains(code)) {
+              val peerVersion = selfPeer.flatMap(_.peerInfo).map(_.peerSpec.protocolVersion.toString).getOrElse("unknown")
+              log.info(s"Skipping unsupported message code $code from $connectionId, protocol version $peerVersion")
+              loggedUnknownMessageCodes += code
+            }
             chunksBuffer = chunksBuffer.drop(messageLength)
             process()
           case Failure(e) =>
@@ -216,7 +222,8 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
                 networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
               //non-malicious corruptions
               case _ =>
-                log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}")
+                log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}, closing connection")
+                self ! CloseConnection
             }
         }
       }

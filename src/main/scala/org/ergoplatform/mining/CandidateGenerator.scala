@@ -242,6 +242,10 @@ class CandidateGenerator(
         }
       }
 
+    // completeBlock serializes the nonce before PoW validation can reject it.
+    case solution: AutolykosSolution if solution.n.length != 8 =>
+      sender() ! StatusReply.error("Invalid solution nonce length: expected 8 bytes")
+
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject node pk if it is not externally set (in Autolykos 2)
@@ -251,21 +255,21 @@ class CandidateGenerator(
         } else {
           preSolution
         }
-      val newBlockOpt = state.cachedCandidate
-        .map(candidate => completeBlock(candidate.candidateBlock, solution))
-        .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-        .orElse {
-          log.info(
-            s"Using previous candidate as a solution: ${state.cachedPreviousCandidate}"
-          )
-          state.cachedPreviousCandidate.map(candidate =>
-            completeBlock(candidate.candidateBlock, solution)
-          )
+      val currentBlock = completeBlock(state.cachedCandidate.get.candidateBlock, solution)
+      val validatedCandidate: Either[Throwable, (ErgoFullBlock, Try[Unit])] =
+        ergoSettings.chainSettings.powScheme.validate(currentBlock.header) match {
+          case success @ Success(_) => Right(currentBlock -> success)
+          case Failure(exception) =>
+            state.cachedPreviousCandidate.map { candidate =>
+              val previousBlock = completeBlock(candidate.candidateBlock, solution)
+              log.info(s"Trying previous candidate header ${previousBlock.header.id}")
+              previousBlock -> ergoSettings.chainSettings.powScheme.validate(previousBlock.header)
+            }.toRight(exception)
         }
-      val result: StatusReply[Unit] = newBlockOpt match {
-        case Some(newBlock) =>
+      val result: StatusReply[Unit] = validatedCandidate match {
+        case Right((newBlock, validation)) =>
           log.info(s"New block mined, header: ${newBlock.header}")
-          ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
+          validation match {
             case Success(_) =>
               sendToNodeView(newBlock)
               context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
@@ -281,11 +285,12 @@ class CandidateGenerator(
                 new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
               )
           }
-        case None =>
-          StatusReply.error(
-            "Invalid solution for current candidate and no previous candidate available"
-          )
-        }
+        case Left(exception) =>
+          StatusReply.error(new Exception(
+            s"Invalid solution for current candidate and no previous candidate available: ${exception.getMessage}",
+            exception
+          ))
+      }
       log.info(s"Processed solution $solution with the result $result")
       sender() ! result
 

@@ -44,8 +44,10 @@ a block which is more difficult to find than an ordinary, for example, for a (le
 superblock is also a valid block (every superblock is passing block PoW test).
 
 We propose to name full blocks in Ergo as *ordering blocks* from now, and use input-blocks (or sub-blocks) to carry most
-of transactions. For starters, we set *t = T/64* (the divisor will be revisited later) and define input-block *ib* generation 
-condition as *H(ib) < t*, then a miner can generate on average 63 input blocks plus an ordering block 
+of transactions. We set *t = T × subBlocksPerBlock* and define input-block *ib* generation
+condition as *H(ib) < t*. Target is inversely proportional to difficulty, so multiplying the target by
+*subBlocksPerBlock* is equivalent to dividing the difficulty by *subBlocksPerBlock*.
+For starters, with *subBlocksPerBlock = 64*, a miner can generate on average 63 input blocks plus an ordering block
 per orderring block generation period. Please note that, unlike superblocks, input blocks are not passing ordering-block PoW check, 
 but an ordering block is passing input block check.
 

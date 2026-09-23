@@ -1630,6 +1630,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        // Replay detaches pending announcements, so invalid deliveries must be released here.
+        val typeId = InputBlockTypeId.value
+        if (deliveryTracker.getSource(subBlockId, typeId).contains(remote)) {
+          deliveryTracker.setUnknown(subBlockId, typeId)
+        }
         penalizeMisbehavingPeer(remote)
       }
     } else {

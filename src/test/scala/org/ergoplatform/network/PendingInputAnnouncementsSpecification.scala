@@ -69,7 +69,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     } finally Await.result(system.terminate(), 10.seconds)
   }
 
-  property("(b) global entry and byte caps evict oldest and count evictions") {
+  property("global entry and byte caps evict oldest and count evictions") {
     withPeers { (p, q) =>
       val a = announcement(1)
       val b = announcement(2)
@@ -92,7 +92,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("(c) per-peer admission cannot evict another peer's entries") {
+  property("per-peer admission cannot evict another peer's entries") {
     withPeers { (p, q) =>
       val s = new Store(3, 100000, 1, () => 0L)
       s.add(announcement(1), p) shouldBe true
@@ -103,7 +103,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("(d) identical serialized announcements deduplicate without refreshing expiry") {
+  property("identical serialized announcements deduplicate without refreshing expiry") {
     withPeers { (p, q) =>
       var now = 0L
       val s = new Store(3, 100000, 2, () => now)
@@ -119,7 +119,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("(e) I5 stale and reorged-away +1/+2 parents drop; known best-chain +2 stays") {
+  property("stale and reorged-away +1/+2 parents drop; known best-chain +2 stays") {
     withPeers { (p, _) =>
       val s = new Store(10, 100000, 10, () => 0L)
       s.add(announcement(1, 1), p)
@@ -141,7 +141,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("M8 TTL uses elapsed monotonic milliseconds, including a negative clock origin") {
+  property("TTL uses elapsed monotonic milliseconds, including a negative clock origin") {
     withPeers { (p, q) =>
       var elapsed = -5000L
       val s = new Store(3, 100000, 2, () => elapsed)
@@ -156,7 +156,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("I3 saturated hosts cannot evict the newly admitted honest host") {
+  property("saturated hosts cannot evict the newly admitted honest host") {
     withPeers { (p, _) =>
       val caps = settings.matrix.pendingAnnouncements
       val s = new Store(caps.maxEntries, caps.maxBytes, caps.perPeer, () => 0L)
@@ -266,12 +266,12 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("M11 node info exposes live pending size bytes evictions and drops") {
+  property("node info exposes live pending size bytes evictions and drops") {
     disposalScenario(evict = false, checkStats = true)
     disposalScenario(evict = true, checkStats = true)
   }
 
-  property("M11 drop and eviction warnings are rate limited without losing counters") {
+  property("drop and eviction warnings are rate limited without losing counters") {
     withPeers { (p, q) =>
       val logger = org.slf4j.LoggerFactory.getLogger(classOf[PendingInputAnnouncements])
         .asInstanceOf[ch.qos.logback.classic.Logger]
@@ -309,20 +309,21 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("M8 synchronizer clock seam is backed by System.nanoTime") {
+  property("synchronizer clock seam is backed by System.nanoTime") {
     disposalScenario(evict = false, checkClock = true)
   }
 
-  property("C1 full store drops delivery and later inventory requests it again") {
+  property("full store drops delivery and later inventory requests it again") {
     disposalScenario(evict = false)
   }
 
-  property("C1 evicted accepted delivery becomes requestable again") {
+  property("evicted accepted delivery becomes requestable again") {
     disposalScenario(evict = true)
   }
 
   private def replayScenario(epoch: Boolean, earlyBody: Boolean,
-                             poisoned: Boolean = false, batchSize: Int = 1): Unit = {
+                             poisoned: Boolean = false, batchSize: Int = 1,
+                             invalidOnly: Boolean = false, otherSupplier: Boolean = false): Unit = {
     implicit val system: ActorSystem = ActorSystem("pending-replay-test")
     implicit val ec = system.dispatcher
     val cfg = settings.copy(directory = java.nio.file.Files.createTempDirectory(
@@ -367,9 +368,10 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       }}
       var validations = Vector.empty[(Parameters, Option[Long])]
       var receiveTurns = Vector.empty[(String, Int)]
+      val tracker = DeliveryTracker.empty(cfg)
       val ref = TestActorRef(new ErgoNodeViewSynchronizer(nc.ref, vh.ref,
         ErgoSyncInfoMessageSpec, cfg, ErgoSyncTracker(cfg.scorexSettings.network),
-        DeliveryTracker.empty(cfg)) {
+        tracker) {
         override def aroundReceive(receive: akka.actor.Actor.Receive, msg: Any): Unit = {
           val before = validations.size
           super.aroundReceive(receive, msg)
@@ -384,7 +386,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         InputBlockFields.empty, None) {
         override def valid(pow: AutolykosPowScheme, ps: Parameters, bits: Option[Long]): Boolean = {
           validations :+= ps -> bits
-          (ps eq nextParameters) && bits.contains(expectedBits)
+          !invalidOnly && (ps eq nextParameters) && bits.contains(expectedBits)
         }
       }
       val attacker = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref, None)
@@ -405,13 +407,34 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         system.stop(attacker.handlerRef)
         ref ! org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer(attacker)
       }
+      val typeId = org.ergoplatform.modifiers.InputBlockTypeId.value
+      def requestInventory(): Unit = {
+        val data = InvData(typeId, Seq(a.id))
+        ref ! org.ergoplatform.network.message.Message(
+          org.ergoplatform.network.message.InvSpec,
+          Left(org.ergoplatform.network.message.InvSpec.toBytes(data)), Some(peer))
+        nc.fishForMessage(3.seconds) {
+          case stn: SendToNetwork if stn.message.spec == RequestModifierSpec =>
+            stn.message.data.get.asInstanceOf[InvData].ids.contains(a.id)
+          case _ => false
+        }
+      }
+      if (invalidOnly) requestInventory()
       ref.underlyingActor.processInputBlock(a, hr, pool, peer, Some(state(tip, parameters)))
+      if (invalidOnly) {
+        tracker.status(a.id, typeId, Seq.empty) shouldBe
+          scorex.core.network.ModifiersStatus.Received
+        if (otherSupplier) {
+          tracker.setUnknown(a.id, typeId)
+          tracker.setReceivedDirectly(a.id, typeId, attacker)
+        }
+      }
       (1 until batchSize).foreach { n =>
         val extra = new InputBlockAnnouncement(1, a.header.copy(timestamp = n.toLong),
           InputBlockFields.empty, None) {
           override def valid(pow: AutolykosPowScheme, ps: Parameters, bits: Option[Long]): Boolean = {
             validations :+= ps -> bits
-            (ps eq nextParameters) && bits.contains(expectedBits)
+            !invalidOnly && (ps eq nextParameters) && bits.contains(expectedBits)
           }
         }
         ref.underlyingActor.processInputBlock(extra, hr, pool, peer, Some(state(tip, parameters)))
@@ -434,6 +457,21 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       ref ! ChangedHistory(hr)
       validations shouldBe empty // history alone must not use pre-epoch parameters
       ref ! ChangedState(state(parent, nextParameters))
+      if (invalidOnly) {
+        validations shouldBe Vector(nextParameters -> Some(expectedBits))
+        if (otherSupplier) {
+          tracker.status(a.id, typeId, Seq.empty) shouldBe
+            scorex.core.network.ModifiersStatus.Received
+          tracker.getSource(a.id, typeId) shouldBe Some(attacker)
+        } else {
+          tracker.status(a.id, typeId, Seq.empty) shouldBe
+            scorex.core.network.ModifiersStatus.Unknown
+          requestInventory()
+          tracker.status(a.id, typeId, Seq.empty) shouldBe
+            scorex.core.network.ModifiersStatus.Requested
+        }
+        return
+      }
       val processed = vh.fishForMessage(3.seconds) {
         case ProcessInputBlock(info, _) => info.id == a.id
         case _ => false
@@ -484,15 +522,23 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("I4 256 same-parent announcements replay in bounded actor receives") {
+  property("failed replay releases the requested announcement for a later inventory") {
+    replayScenario(epoch = false, earlyBody = false, invalidOnly = true)
+  }
+
+  property("failed replay preserves a received copy from another supplier") {
+    replayScenario(epoch = false, earlyBody = false, invalidOnly = true, otherSupplier = true)
+  }
+
+  property("256 same-parent announcements replay in bounded actor receives") {
     replayScenario(epoch = false, earlyBody = false, batchSize = 256)
   }
 
-  property("I2 garbage fields sharing a header cannot suppress honest replay or steal attribution") {
+  property("garbage fields sharing a header cannot suppress honest replay or steal attribution") {
     replayScenario(epoch = false, earlyBody = false, poisoned = true)
   }
 
-  property("I2 weak transaction ids are included in serialized deduplication") {
+  property("weak transaction ids are included in serialized deduplication") {
     withPeers { (p, q) =>
       val s = new Store(3, 100000, 2, () => 0L)
       val a = announcement(7)
@@ -502,13 +548,13 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("(a) +2 holds and downloads parent, then uses the normal +1 validation path") {
+  property("+2 holds and downloads parent, then uses the normal +1 validation path") {
     replayScenario(epoch = false, earlyBody = false)
   }
-  property("(a) replay waits for epoch-boundary parameters and derives difficulty from parent") {
+  property("replay waits for epoch-boundary parameters and derives difficulty from parent") {
     replayScenario(epoch = true, earlyBody = false)
   }
-  property("(f) early body skipped for unknown announcement resumes after validated replay") {
+  property("early body skipped for unknown announcement resumes after validated replay") {
     replayScenario(epoch = false, earlyBody = true)
   }
 }

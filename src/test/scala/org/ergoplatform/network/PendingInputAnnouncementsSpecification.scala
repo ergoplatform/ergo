@@ -156,21 +156,24 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("I3 eight saturated hosts cannot evict the newly admitted honest host") {
+  property("I3 saturated hosts cannot evict the newly admitted honest host") {
     withPeers { (p, _) =>
-      val s = new Store(256, 1000000, 32, () => 0L)
+      val caps = settings.matrix.pendingAnnouncements
+      val s = new Store(caps.maxEntries, caps.maxBytes, caps.perPeer, () => 0L)
       def host(n: Int): ConnectedPeer = p.copy(connectionId = p.connectionId.copy(
         remoteAddress = new java.net.InetSocketAddress(s"10.0.0.$n", 9000)))
-      val attackers = (1 to 8).map(host)
+      val attackerCount = caps.maxEntries / caps.perPeer
+      attackerCount shouldBe 2
+      val attackers = (1 to attackerCount).map(host)
       var serial = 0
       attackers.foreach { peer =>
-        (1 to 32).foreach { _ =>
+        (1 to caps.perPeer).foreach { _ =>
           serial += 1
           s.add(announcement(serial), peer) shouldBe true
         }
       }
       val honest = announcement(100000)
-      s.add(honest, host(9)) shouldBe true
+      s.add(honest, host(attackerCount + 1)) shouldBe true
       // Keep replenishing attacker hosts: FIFO eventually ejects the honest singleton.
       (1 to 1024).foreach { _ =>
         attackers.foreach { peer =>
@@ -178,7 +181,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
           s.add(announcement(serial), peer)
         }
       }
-      s.size shouldBe 256
+      s.size shouldBe caps.maxEntries
       s.evictions should be > 1L
       s.take(blocks.head.header).map(_._1.id) should contain (honest.id)
     }
@@ -325,7 +328,8 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     val cfg = settings.copy(directory = java.nio.file.Files.createTempDirectory(
       new java.io.File("target").toPath, "pending-r1-").toFile.getAbsolutePath,
       matrix = settings.matrix.copy(pendingAnnouncements =
-        settings.matrix.pendingAnnouncements.copy(perPeer = math.max(32, batchSize))))
+        settings.matrix.pendingAnnouncements.copy(
+          perPeer = math.max(settings.matrix.pendingAnnouncements.perPeer, batchSize))))
     val realHistory = ErgoHistory.readOrGenerate(cfg)(null)
     try {
       val nc = TestProbe()

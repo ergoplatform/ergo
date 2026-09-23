@@ -21,7 +21,10 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     val caps = ErgoSettingsReader.read(Args(Some(path), None)).matrix.pendingAnnouncements
     caps.maxEntries shouldBe 256
     caps.maxBytes shouldBe 4194304L
-    caps.perPeer shouldBe 32
+    caps.perPeer shouldBe 128
+    caps.perPeer shouldBe 2 * Parameters.SubsPerBlockDefault
+    PendingAnnouncementsSettings().perPeer shouldBe caps.perPeer
+    PendingAnnouncementsSettings.DefaultPerPeer shouldBe caps.perPeer
     caps.replayPerParent shouldBe 64
     caps.getClass.getMethod("ttlMs").invoke(caps) shouldBe Long.box(120000L)
     ConfigFactory.defaultReference().getLong("matrix.pendingAnnouncements.ttlMs") shouldBe 120000L

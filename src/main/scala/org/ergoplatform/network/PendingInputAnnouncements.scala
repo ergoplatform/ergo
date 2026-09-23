@@ -14,6 +14,11 @@ import scala.collection.mutable
   * object/index overhead. Nothing here is a validated input-block record.
   * A held announcement failing on replay penalises its ORIGINAL sender,
   * which may have disconnected by the time the ordering parent is applied.
+  * Replay starts immediately on ordering apply, in arrival order, once history
+  * and state agree on the applied tip; bounded batches continue via self-messages.
+  * TODO(F13-restart): proof-F13's short early-chain restart showed higher lag
+  * than stock. Hypothesis: the replay burst immediately after apply near genesis;
+  * the longer funded run decides whether this needs a scheduling change.
   */
 final class PendingInputAnnouncements(maxEntries: Int,
                                       maxBytes: Long,

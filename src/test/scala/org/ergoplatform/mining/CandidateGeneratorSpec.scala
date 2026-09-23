@@ -15,7 +15,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{Eliminat
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef, LocallyGeneratedModifier}
 import org.ergoplatform.settings.NetworkType.DevNet60
@@ -34,8 +34,10 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 
 import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -135,6 +137,70 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       new MalformedModifierError("tx failed", failedTxId, ErgoTransaction.modifierTypeId)
     system.eventStream.publish(
       SemanticallyFailedModification(BlockTransactions.modifierTypeId, block.blockTransactions.id, error)
+    )
+
+    // mining resumes: a new candidate is generated and new solutions are accepted again
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+    val newBlock = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+    }
+    candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+
+    system.terminate()
+  }
+
+  it should "recover when locally mined block is invalidated by full block id" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    // fake node view holder: solved block is never applied, so solvedBlock stays set
+    val viewHolderProbe = new TestProbe(system)
+
+    // real readers holder over real node view holder, needed for candidate generation
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef  = ErgoReadersHolderRef(realViewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        defaultSettings
+      )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+    val block = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        defaultSettings.chainSettings.powScheme
+          .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+          .get
+    }
+
+    candidateGenerator.tell(block.header.powSolution, replyProbe.ref)
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+
+    // block sections were sent to the (fake) node view holder
+    viewHolderProbe.expectMsg(LocallyGeneratedModifier(block.header))
+    block.mandatoryBlockSections.foreach { section =>
+      viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))
+    }
+
+    // mining is stalled: new solutions are rejected while solvedBlock is set
+    candidateGenerator.tell(block.header.powSolution, replyProbe.ref)
+    replyProbe.expectMsgPF(blockValidationDelay) {
+      case r: StatusReply[_] if r.isError =>
+    }
+
+    // node view holder invalidates the block using full-block typeId and block id
+    val failedTxId = block.blockTransactions.txs.head.id
+    val error =
+      new MalformedModifierError("tx failed", failedTxId, ErgoTransaction.modifierTypeId)
+    system.eventStream.publish(
+      SemanticallyFailedModification(ErgoFullBlock.modifierTypeId, block.id, error)
     )
 
     // mining resumes: a new candidate is generated and new solutions are accepted again
@@ -1365,6 +1431,135 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), senderProbe.ref)
     senderProbe.expectNoMessage(2.seconds)
     viewHolderProbe.expectNoMessage(500.millis)
+
+    system.terminate()
+  }
+
+  it should "recover with a filled candidate when proof generation fails once" in new TestKit(
+    ActorSystem()
+  ) {
+    val testDir = s"${defaultSettings.directory}-proof-retry-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, bh2) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val history2 = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+
+    val (txs3, _) = validTransactionsFromBoxHolder(bh2, rnd)
+    txs3 should not be empty
+
+    // simulate the race: state is updated between transaction collection and proof generation,
+    // so the first proofsForTransactions call fails
+    var proofsFailed = false
+    val failingOnceState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] =
+        if (!proofsFailed) {
+          proofsFailed = true
+          Failure(new Exception("Simulating state update during candidate assembly"))
+        } else {
+          super.proofsForTransactions(txs)
+        }
+    }
+
+    val readers = Readers(history2, failingOnceState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    candidateGenerator.tell(GenerateCandidate(txs3, reply = true, forced = true), senderProbe.ref)
+    val candidate = senderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // proof generation failed on the first attempt, but the retry succeeded with the pool txs
+    proofsFailed shouldBe true
+    candidate.candidateBlock.transactions.map(_.id) should contain allElementsOf txs3.map(_.id)
+
+    system.terminate()
+  }
+
+  it should "fall back to emission-only candidate when proof generation keeps failing" in new TestKit(
+    ActorSystem()
+  ) {
+    val testDir = s"${defaultSettings.directory}-proof-fallback-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, bh2) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val history2 = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+
+    val (txs3, _) = validTransactionsFromBoxHolder(bh2, rnd)
+    txs3 should not be empty
+
+    val alwaysFailingState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] =
+        if (txs.lengthCompare(1) > 0) {
+          Failure(new Exception("Simulating persistent proof generation failure"))
+        } else {
+          super.proofsForTransactions(txs)
+        }
+    }
+
+    val readers = Readers(history2, alwaysFailingState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    candidateGenerator.tell(GenerateCandidate(txs3, reply = true, forced = true), senderProbe.ref)
+    val candidate = senderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // both attempts failed, so only the emission transaction is included
+    candidate.candidateBlock.transactions should have length 1
 
     system.terminate()
   }

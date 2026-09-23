@@ -75,6 +75,8 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
       Int.MaxValue
     }
 
+  def hasValidPow(header: Header): Boolean = powScheme.validate(header).isSuccess
+
   /**
     * Computes best score of a given chain.
     * The score value depends on number of µ-superblocks in the given chain.
@@ -96,6 +98,8 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     * end function
     */
   def bestArg(chain: Seq[Header])(m: Int): Int = {
+    require(m >= 1, s"$m < 1")
+
     @scala.annotation.tailrec
     def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
       if (level == 0) {
@@ -130,7 +134,6 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     val k = params.k
     val m = params.m
 
-    require(params.k >= 1, s"$k < 1")
     require(chain.lengthCompare(k + m) >= 0, s"Can not prove chain of size < ${k + m}")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
 

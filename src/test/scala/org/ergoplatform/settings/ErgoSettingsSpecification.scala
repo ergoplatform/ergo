@@ -15,7 +15,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
-  property("I6 M7 M8 matrix defaults resolve when the user JSON has no matrix block") {
+  property("matrix defaults resolve when the user JSON has no matrix block") {
     val path = "src/test/resources/settings.json"
     ConfigFactory.parseFile(new java.io.File(path)).hasPath("matrix") shouldBe false
     val caps = ErgoSettingsReader.read(Args(Some(path), None)).matrix.pendingAnnouncements
@@ -30,7 +30,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     ConfigFactory.defaultReference().getLong("matrix.pendingAnnouncements.ttlMs") shouldBe 120000L
   }
 
-  property("M7 configured TTL and replay budget override defaults and reject nonpositive values") {
+  property("configured TTL and replay budget override defaults and reject nonpositive values") {
     val base = ConfigFactory.load()
     def config(ttl: Long, replay: Int) = ConfigFactory.parseString(
       s"matrix.pendingAnnouncements { ttlMs = $ttl, replayPerParent = $replay }")

@@ -24,6 +24,7 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   with ScorexEncoding {
 
   private val SeedSize = 32
+  private val MaxSeedSize = 1024
   private val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
   override val settings: RESTApiSettings = ergoSettings.scorexSettings.restApi
@@ -54,7 +55,13 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
   }
 
   def length: Route = (get & path("seed" / IntNumber)) { length =>
-    ApiResponse(seed(length))
+    if (length <= 0) {
+      BadRequest("Seed length should be positive")
+    } else if (length > MaxSeedSize) {
+      BadRequest(s"Seed length should not exceed $MaxSeedSize bytes")
+    } else {
+      ApiResponse(seed(length))
+    }
   }
 
   def hashBlake2b: Route = {

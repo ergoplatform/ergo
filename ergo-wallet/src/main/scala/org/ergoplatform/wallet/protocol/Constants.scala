@@ -21,4 +21,18 @@ object Constants {
   val StorageContractCost: Long = 50
 
   val StorageIndexVarId: Byte = Byte.MaxValue
+
+  /**
+    * Block (protocol) version from which the storage-rent repairs apply
+    * (matches `Header.Interpreter70Version` on the node side):
+    *
+    *  - the storage fee is computed in 64-bit arithmetic instead of the
+    *    historical wrapping `Int` multiplication, and
+    *  - EIP-27 re-emission tokens carried by an expired box are dropped
+    *    from the recreated box, with 1 nanoErg per token released from the
+    *    recreation floor to pay the burn obligation.
+    *
+    * See `ErgoInterpreter.checkExpiredBox`.
+    */
+  val StorageRentRepairsBlockVersion: Byte = 5
 }

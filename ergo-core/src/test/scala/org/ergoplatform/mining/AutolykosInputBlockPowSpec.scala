@@ -21,6 +21,50 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
   private val powScheme = new AutolykosPowScheme(32, 26)
   private val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
+  private def assertClassification(hit: BigInt, b: BigInt, multiplier: Int): Unit = {
+    val orderingAccepted = hit < b
+    val inputAccepted = hit < b * multiplier
+    val verdict = powScheme.classifyHit(hit, b, multiplier)
+
+    withClue(s"hit=$hit, target=$b, multiplier=$multiplier: ") {
+      (verdict == AutolykosPowScheme.OrderingHit) shouldBe orderingAccepted
+      (verdict != AutolykosPowScheme.NoHit) shouldBe inputAccepted
+      (verdict == AutolykosPowScheme.InputHit) shouldBe
+        (inputAccepted && !orderingAccepted)
+    }
+  }
+
+  for {
+    multiplier <- Seq(1, 2, 30, 64)
+    boundary <- Seq("ordering", "input")
+    offset <- Seq(-1, 0, 1)
+  } {
+    property(s"prover classification should agree with validation at the $boundary " +
+      s"target with offset $offset and multiplier $multiplier") {
+      val b = BigInt(100)
+      val target = if (boundary == "ordering") b else b * multiplier
+      assertClassification(target + offset, b, multiplier)
+    }
+  }
+
+  private val referenceInputTarget =
+    BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335616")
+  private val referenceHits = Seq(
+    BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335615"),
+    referenceInputTarget,
+    BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335617")
+  )
+
+  referenceHits.zipWithIndex.foreach { case (hit, index) =>
+    property(s"prover classification should match reference input target vector $index") {
+      val nBits = 33810432L
+      val multiplier = 64
+      val b = powScheme.getB(nBits)
+      b * multiplier shouldBe referenceInputTarget
+      assertClassification(hit, b, multiplier)
+    }
+  }
+
   /**
    * Tests that checkInputBlockPoW accepts valid input block solutions.
    * Input block hits are in range [orderingTarget, inputTarget) where inputTarget = orderingTarget * subsPerBlock.

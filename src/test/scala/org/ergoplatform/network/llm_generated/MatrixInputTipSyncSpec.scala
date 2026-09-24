@@ -8,10 +8,12 @@ import org.ergoplatform.mining.InputBlockFields
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.{ErgoNodeViewSynchronizer, ErgoSyncTracker, ModePeerFeature, Version}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool, DisconnectedPeer, HandshakedPeer}
 import org.ergoplatform.network.message.Message
 import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfo, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.subblocks.InputBlockAnnouncement
@@ -49,6 +51,8 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
       processSyncV2(history, info, peer)
     def inboundV1(history: ErgoHistory, peer: ConnectedPeer): Unit =
       processSyncV1(history, history.syncInfoV1, peer)
+    def handshaked(peer: ConnectedPeer): Unit = peerManagerEvents(HandshakedPeer(peer))
+    def disconnected(peer: ConnectedPeer): Unit = peerManagerEvents(DisconnectedPeer(peer))
   }
 
   private class Fixture(initialHeight: Int) extends AkkaFixture {
@@ -74,6 +78,8 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
       history = applyChain(history, orderingChain)
       history.fullBlockHeight shouldBe initialHeight
       val ref: TestActorRef[Synchronizer] = TestActorRef(Props(new Synchronizer(nc.ref, vh.ref, cfg, tracker)))
+      ref ! ChangedHistory(history)
+      ref ! ChangedMempool(ErgoMemPool.empty(cfg))
       sync = ref.underlyingActor
     }
 
@@ -221,6 +227,56 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
     }
   }
 
+  property("an expired sync timestamp does not replay the processed tip on the same connection") {
+    withFixture { f =>
+      val tip = f.processedTip()
+      val peer = f.peer()
+      f.sync.inboundV2(f.history, peer)
+      f.requireReplay(f.messages(), tip, peer)
+
+      f.markOutdated(peer)
+      f.sync.inboundV2(f.history, peer)
+      val response = f.messages()
+      f.requireSync(response)
+      f.announcements(response) shouldBe empty
+    }
+  }
+
+  property("disconnect then reconnect at the same address permits one new replay") {
+    withFixture { f =>
+      val tip = f.processedTip()
+      val firstConnection = f.peer()
+      f.sync.handshaked(firstConnection)
+      f.sync.inboundV2(f.history, firstConnection)
+      f.requireReplay(f.messages(), tip, firstConnection)
+      f.sync.inputTipReplayConnectionCount shouldBe 1
+
+      f.sync.disconnected(firstConnection)
+      f.sync.inputTipReplayConnectionCount shouldBe 0
+      val nextConnection = firstConnection.copy(handlerRef = TestProbe()(f.system).ref)
+      nextConnection shouldBe firstConnection // ConnectedPeer equality uses the remote address.
+      f.sync.handshaked(nextConnection)
+      f.sync.inboundV2(f.history, nextConnection)
+      f.requireReplay(f.messages(), tip, nextConnection)
+      f.sync.inputTipReplayConnectionCount shouldBe 1
+    }
+  }
+
+  property("terminating a replayed peer handler clears it without a disconnect event") {
+    withFixture { f =>
+      val tip = f.processedTip()
+      val peer = f.peer()
+      f.sync.inboundV2(f.history, peer)
+      f.requireReplay(f.messages(), tip, peer)
+      f.sync.inputTipReplayConnectionCount shouldBe 1
+
+      f.system.stop(peer.handlerRef)
+      f.nc.awaitAssert {
+        f.sync.inputTipReplayConnectionCount shouldBe 0
+      }
+    }
+  }
+
   property("a pending child does not replace the processed prefix in a V2 reconnect reply") {
     withFixture { f =>
       val tip = f.processedTip()
@@ -246,6 +302,16 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
       val messages = f.messages()
       f.requireSync(messages)
       f.announcements(messages) shouldBe empty
+
+      f.history.applyInputBlockTransactions(unprocessed.id, Seq.empty, f.state)._1 shouldBe
+        Seq(unprocessed.id)
+      f.history.bestInputBlocksChain() shouldBe Seq(unprocessed.id)
+      val tip = unprocessed
+      f.markOutdated(peer)
+      f.sync.inboundV2(f.history, peer)
+      val laterResponse = f.messages()
+      f.requireSync(laterResponse)
+      f.requireReplay(laterResponse, tip, peer)
     }
   }
 

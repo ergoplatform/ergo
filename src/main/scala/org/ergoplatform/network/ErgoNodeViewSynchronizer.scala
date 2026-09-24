@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.Terminated
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
@@ -79,6 +80,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+
+  // A peer handler identifies a connection; ConnectedPeer equality only compares remote addresses.
+  private val processedInputTipReplayedTo = mutable.Set[ActorRef]()
+
+  private[network] def inputTipReplayConnectionCount: Int = processedInputTipReplayedTo.size
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -398,13 +404,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       syncTracker.statuses.get(peer).exists { status =>
         status.status == Equal && status.height == localHeight
       }
-    if (eligible) {
+    if (eligible && !processedInputTipReplayedTo.contains(peer.handlerRef)) {
       // The announced tip may still await transactions. Only replay the processed prefix.
       history.bestInputBlocksChain().headOption.flatMap(history.getInputBlock).foreach { tip =>
         val announcement = if (tip.weakTxIds.getOrElse(Seq.empty).size <= 3) tip
         else tip.copy(weakTxIds = None)
         val message = Message(InputBlockMessageSpec, Right(announcement), None)
         networkControllerRef ! SendToNetwork(message, SendToPeer(peer))
+        processedInputTipReplayedTo += peer.handlerRef
+        context.watch(peer.handlerRef)
       }
     }
   }
@@ -2098,7 +2106,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       syncTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(connectedPeer) =>
+      processedInputTipReplayedTo -= connectedPeer.handlerRef
+      context.unwatch(connectedPeer.handlerRef)
       syncTracker.clearStatus(connectedPeer)
+
+    case Terminated(handler) =>
+      // A rejected handshake can remove its connection before DisconnectedPeer is published.
+      processedInputTipReplayedTo -= handler
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {

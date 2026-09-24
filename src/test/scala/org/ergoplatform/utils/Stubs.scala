@@ -260,7 +260,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       case ReadScans =>
         sender() ! ReadScansResponse(apps.values.toSeq)
 
-      case GenerateTransaction(_, _, _, _) =>
+      case GenerateTransaction(_, _, _, _, _) =>
         val input = inputGen.sample.value
         val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
         sender() ! Success(tx)

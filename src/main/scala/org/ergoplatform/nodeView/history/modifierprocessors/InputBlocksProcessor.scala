@@ -1204,6 +1204,28 @@ trait InputBlocksProcessor extends ScorexLogging {
   }
 
   /**
+    * Bodies in chain order from the first input block after `orderingId` through `tipId`,
+    * on whichever fork contains it. Stops before the first body not fully held in cache.
+    * Returns empty if the tip is not on any chain in the ordering block's tree.
+    */
+  def inputChainBodiesUpTo(orderingId: ModifierId, tipId: ModifierId): Seq[Seq[ErgoTransaction]] = {
+    val path = inputBlockTrees.get(orderingId).toSeq.flatMap(_.forks)
+      .collectFirst {
+        case fork if fork.chain.contains(tipId) =>
+          fork.chain.take(fork.chain.indexOf(tipId) + 1)
+      }.getOrElse(Seq.empty)
+    path.iterator.map(heldBody).takeWhile(_.isDefined).map(_.get).toVector
+  }
+
+  // A cache miss means the body is not held, rather than a shorter transaction list.
+  private def heldBody(id: ModifierId): Option[Seq[ErgoTransaction]] = {
+    inputBlockTransactions.get(id).flatMap { ids =>
+      val txs = ids.flatMap(tid => Option(transactionsCache.getIfPresent(tid)))
+      if (txs.length == ids.length) Some(txs) else None
+    }
+  }
+
+  /**
     * Gets all transactions from the best input block chain since the current best ordering block.
     *
     * This method retrieves all transactions that have been collected in the best input block chain

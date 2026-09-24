@@ -4,6 +4,7 @@ import akka.testkit.TestProbe
 import org.ergoplatform.mining.{CandidateGenerator, InputBlockFields}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ProcessOrderingBlock
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
@@ -22,6 +23,7 @@ import org.ergoplatform.utils.generators.ValidBlocksGenerators.{
   createUtxoState, validFullBlock, validTransactionsFromBoxHolder
 }
 import org.ergoplatform.{ErgoBoxCandidate, Input, OrderingBlockFound}
+import scorex.util.bytesToId
 
 import scala.concurrent.Await
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
@@ -34,10 +36,16 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
   private val timeout: FiniteDuration = 5.seconds
 
   Seq(
-    (false, false, "reconstruct the parent's input chain before ordering transactions without downloading"),
-    (true, false, "download the full body when the parent input chain body is missing"),
-    (false, true, "a parent tree that is non-empty but LONGER than the committed chain falls back")
-  ).foreach { case (missingBody, longerChain, description) =>
+    ("normal", "reconstruct the parent's input chain before ordering transactions without downloading"),
+    ("missing", "download the full body when the parent input chain body is missing"),
+    ("longer", "rebuild the committed prefix when the follower's input chain has outrun it"),
+    ("absent", "rebuild a block that commits no input chain while the follower holds one"),
+    ("fallback", "rebuild a block whose extension names an input block but which commits none (emission-only fallback)"),
+    ("unprocessed", "rebuild when the miner named an input block it had not yet processed"),
+    ("fork", "rebuild from a named input block on a fork the follower does not rank best")
+  ).foreach { case (scenario, description) =>
+    val missingBody = scenario == "missing"
+    val longerChain = scenario == "longer"
     property(description) {
       val fixture = new NodeViewFixture(
         NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings,
@@ -75,18 +83,70 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
         // Use the same real input-tree fixture as CandidateRetryReorgSpec.
         val inputHeader = genHeaderChain(1, minerHistory, diffBitsOpt = None, useRealTs = false).last
         val inputBlock = InputBlockAnnouncement(1, inputHeader, InputBlockFields.empty, None)
-        minerHistory.applyInputBlock(inputBlock) shouldBe None
-        minerHistory.applyInputBlockTransactions(inputBlock.id, Seq(inputTx), state)._1 should
-          contain(inputBlock.id)
-        val candidate = CandidateGenerator.generateCandidate(
+        val extraInput = inputTx.outputs.head
+        val extraTx = ErgoTransaction(
+          IndexedSeq(Input(extraInput.id, emptyProverResult)), IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(extraInput.value, Constants.TrueTree,
+            parent.height, extraInput.additionalTokens)))
+        val forkValue = extraInput.value / 2
+        val forkTx = ErgoTransaction(
+          IndexedSeq(Input(extraInput.id, emptyProverResult)), IndexedSeq.empty,
+          IndexedSeq(
+            new ErgoBoxCandidate(forkValue, Constants.TrueTree,
+              parent.height, extraInput.additionalTokens),
+            new ErgoBoxCandidate(extraInput.value - forkValue, Constants.TrueTree, parent.height)))
+        def extraBlock(offset: Long): InputBlockAnnouncement = {
+          val fields = InputBlockFields.empty
+          val extraFields = new InputBlockFields(
+            Some(inputHeader.serializedId), fields.transactionsDigest,
+            fields.prevTransactionsDigest, fields.inputBlockFieldsProof)
+          InputBlockAnnouncement(1, inputHeader.copy(timestamp = inputHeader.timestamp + offset),
+            extraFields, None)
+        }
+        val nextInputBlock = extraBlock(1)
+        val forkInputBlock = extraBlock(2)
+        if (scenario != "absent") {
+          minerHistory.applyInputBlock(inputBlock) shouldBe None
+          minerHistory.applyInputBlockTransactions(inputBlock.id, Seq(inputTx), state)._1 should
+            contain(inputBlock.id)
+        }
+        if (scenario == "unprocessed") {
+          minerHistory.applyInputBlock(nextInputBlock) shouldBe None
+        }
+        if (scenario == "fork") {
+          minerHistory.applyInputBlock(forkInputBlock) shouldBe None
+          minerHistory.applyInputBlockTransactions(forkInputBlock.id, Seq(forkTx), state)._1 should
+            contain(forkInputBlock.id)
+        }
+        val normalCandidate = CandidateGenerator.generateCandidate(
           minerHistory, state, ErgoMemPool.empty(fixture.settings),
           defaultMinerSecret.publicImage, Seq.empty, None, fixture.settings).get.get._1.candidateBlock
-        val inputTxs = minerHistory.getCollectedInputBlocksTransactions(parent.id).get
-        inputTxs.map(_.id) shouldBe Seq(inputTx.id)
+        val inputTxs = minerHistory.getCollectedInputBlocksTransactions(parent.id).getOrElse(Seq.empty)
+        inputTxs.map(_.id) shouldBe (scenario match {
+          case "absent" => Seq.empty
+          case "fork" => Seq(inputTx.id, forkTx.id)
+          case _ => Seq(inputTx.id)
+        })
+        val candidate = if (scenario == "fallback") {
+          val ordering = CandidateGenerator.collectEmission(
+            state, defaultMinerSecret.publicImage, state.stateContext).toSeq
+          ordering should not be empty
+          val (proof, digest) = state.proofsForTransactions(ordering).get
+          normalCandidate.copy(transactions = ordering, orderingBlockTransactions = ordering,
+            adProofBytes = proof, stateRoot = digest)
+        } else normalCandidate
+        val namedTip = candidate.extension.fields
+          .find(_._1.sameElements(Extension.PrevInputBlockIdKey)).map(kv => bytesToId(kv._2))
+        namedTip shouldBe (scenario match {
+          case "absent" => None
+          case "unprocessed" => Some(nextInputBlock.id)
+          case "fork" => Some(forkInputBlock.id)
+          case _ => Some(inputBlock.id)
+        })
         candidate.orderingBlockTransactions should not be empty
+        val committedInputTxs = if (scenario == "fallback") Seq.empty else inputTxs
         candidate.transactions.map(_.id) shouldBe
-          (inputTxs ++ candidate.orderingBlockTransactions).map(_.id)
-        candidate.transactions.size should be > 1
+          (committedInputTxs ++ candidate.orderingBlockTransactions).map(_.id)
         val block = powScheme.proveBlock(
           candidate.parentOpt, candidate.version, candidate.nBits, candidate.stateRoot,
           candidate.adProofBytes, candidate.transactions, candidate.timestamp, candidate.extension,
@@ -95,9 +155,11 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
           case other => fail(s"Expected a mined ordering block, got $other")
         }
         // Ensure reversing these nonempty groups really changes the committed root.
-        BlockTransactions.transactionsRoot(
-          candidate.orderingBlockTransactions ++ inputTxs, block.header.version).toSeq should not be
-          block.header.transactionsRoot.toSeq
+        if (committedInputTxs.nonEmpty) {
+          BlockTransactions.transactionsRoot(
+            candidate.orderingBlockTransactions ++ committedInputTxs, block.header.version).toSeq should not be
+            block.header.transactionsRoot.toSeq
+        }
 
         val followerHistory = getHistory
         followerHistory.applyInputBlock(inputBlock) shouldBe None
@@ -105,32 +167,23 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
           followerHistory.applyInputBlockTransactions(inputBlock.id, Seq(inputTx), getCurrentState)
             ._1 should contain(inputBlock.id)
           followerHistory.getCollectedInputBlocksTransactions(parent.id).get.map(_.id) shouldBe
-            inputTxs.map(_.id)
+            Seq(inputTx.id)
         } else {
           followerHistory.getCollectedInputBlocksTransactions(parent.id).get shouldBe empty
         }
-        if (longerChain) {
-          // Extend only the follower after the miner has committed the shorter chain.
-          val extraInput = inputTx.outputs.head
-          val extraTx = ErgoTransaction(
-            IndexedSeq(Input(extraInput.id, emptyProverResult)), IndexedSeq.empty,
-            IndexedSeq(new ErgoBoxCandidate(extraInput.value, Constants.TrueTree,
-              parent.height, extraInput.additionalTokens)))
-          extraTx.statelessValidity().get
-          val fields = InputBlockFields.empty
-          val extraFields = new InputBlockFields(
-            Some(inputHeader.serializedId), fields.transactionsDigest,
-            fields.prevTransactionsDigest, fields.inputBlockFieldsProof)
-          val extraHeader = inputHeader.copy(timestamp = inputHeader.timestamp + 1)
-          val extraBlock = InputBlockAnnouncement(1, extraHeader, extraFields, None)
-          extraHeader.parentId shouldBe parent.id
-          extraBlock.prevInputBlockId shouldBe Some(inputBlock.id)
-          followerHistory.applyInputBlock(extraBlock) shouldBe None
-          followerHistory.applyInputBlockTransactions(extraBlock.id, Seq(extraTx), getCurrentState)
-            ._1 should contain(extraBlock.id)
+        if (longerChain || scenario == "unprocessed" || scenario == "fork") {
+          // The follower processes the competing or newer tip before the announcement.
+          followerHistory.applyInputBlock(nextInputBlock) shouldBe None
+          followerHistory.applyInputBlockTransactions(nextInputBlock.id, Seq(extraTx), getCurrentState)
+            ._1 should contain(nextInputBlock.id)
+          if (scenario == "fork") {
+            followerHistory.applyInputBlock(forkInputBlock) shouldBe None
+            followerHistory.applyInputBlockTransactions(forkInputBlock.id, Seq(forkTx), getCurrentState)
+            followerHistory.getInputBlockTransactions(forkInputBlock.id).get.map(_.id) shouldBe
+              Seq(forkTx.id)
+          }
           val followerTxs = followerHistory.getCollectedInputBlocksTransactions(parent.id).get
-          followerTxs.map(_.id) shouldBe (inputTxs :+ extraTx).map(_.id)
-          followerTxs.size shouldBe inputTxs.size + 1
+          followerTxs.map(_.id) shouldBe Seq(inputTx.id, extraTx.id)
           BlockTransactions.transactionsRoot(
             followerTxs ++ candidate.orderingBlockTransactions, block.header.version).toSeq should not be
             block.header.transactionsRoot.toSeq
@@ -155,7 +208,7 @@ class OrderingBlockReconstructionSpec extends ErgoCorePropertyTest with NodeView
         processing.send(nodeViewHolderRef, GetDataFromCurrentView[ErgoState[_], Boolean](_ => true))
         processing.expectMsg(timeout, true)
 
-        if (missingBody || longerChain) {
+        if (missingBody) {
           downloads.expectMsgType[DownloadRequest](timeout).modifiersToFetch shouldBe
             Map(BlockTransactions.modifierTypeId -> Seq(block.header.transactionsId))
           getHistory.typedModifierById[BlockTransactions](block.header.transactionsId) shouldBe None

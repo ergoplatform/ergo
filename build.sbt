@@ -378,3 +378,26 @@ def javacReleaseOption = {
 ThisBuild / dynverSonatypeSnapshots := true
 // use "-" instead of default "+"
 ThisBuild / dynverSeparator := "-"
+
+// Coverage settings
+coverageHighlighting := true
+coverageFailOnMinimum := true
+coverageMinimumStmtTotal := 70
+coverageMinimumBranchTotal := 60
+coverageMinimumStmtPerPackage := 60
+coverageMinimumBranchPerPackage := 50
+coverageMinimumStmtPerFile := 50
+coverageMinimumBranchPerFile := 40
+
+// Exclude generated code and specific packages from coverage
+coverageExcludedPackages := Seq(
+  "org.ergoplatform.api.swagger.*",
+  "org.ergoplatform.http.routes.swagger.*",
+  "org.ergoplatform.nodeView.panel.*",
+  "org.ergoplatform.tools.*"
+).mkString(";")
+
+// Generate coverage reports for all modules
+addCommandAlias("coverAll", ";clean;coverage;test;coverageReport;coverageAggregate")
+addCommandAlias("coverCore", ";clean;coverage;ergoCore/test;coverageReport")
+addCommandAlias("coverWallet", ";clean;coverage;ergoWallet/test;coverageReport")

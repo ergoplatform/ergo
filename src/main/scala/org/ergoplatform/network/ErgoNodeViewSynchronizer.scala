@@ -1612,10 +1612,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
       }
     case (_: UtxoSnapshotChunkSpec.type, serializedChunk: Array[Byte], remote) =>
-      usrOpt match {
-        case Some(_) => processUtxoSnapshotChunk(serializedChunk, hr, remote)
-        case None => log.warn(s"Asked for snapshot when UTXO set is not supported, remote: $remote")
-      }
+      processUtxoSnapshotChunk(serializedChunk, hr, remote)
     case (_: GetNipopowProofSpec.type, data: NipopowProofData, remote) =>
       sendNipopowProof(data, hr, remote)
     case (_: NipopowProofSpec.type , proofBytes: Array[Byte], remote) =>

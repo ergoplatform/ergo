@@ -4,6 +4,7 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.UtxoState.SubtreeId
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.core.VersionTag
@@ -96,6 +97,81 @@ class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
     bh.sortedBoxes.foreach { box =>
       restoredState.boxById(box.id).isDefined shouldBe true
     }
+  }
+
+  /**
+    * Registers a manifest of a fresh snapshot in a fresh processor (with its own chunk storage), stores chunk bytes
+    * chosen by `storedBytes` (None = chunk is not stored) under the expected chunk ids, and restores the state.
+    */
+  private def restoreWith(storedBytes: (UtxoState, IndexedSeq[SubtreeId], Int) => Option[Array[Byte]]) = {
+    val bh = boxesHolderGenOfSize(32 * 1024).sample.get
+    val us = createUtxoState(bh, parameters)
+    val snapshotHeight = epochLength - 1
+
+    us.dumpSnapshot(snapshotHeight, us.rootDigest.dropRight(1))
+    val manifestId = us.snapshotsDb.readSnapshotsInfo.availableManifests.apply(snapshotHeight)
+    val manifest = ManifestSerializer.defaultSerializer.parseBytes(us.snapshotsDb.readManifestBytes(manifestId).get)
+    val subtreeIds = manifest.subtreesIds.toIndexedSeq
+    subtreeIds.size should be > 2
+
+    val processor = new UtxoSetSnapshotProcessor {
+      var minimalFullBlockHeightVar = GenesisHeight
+      override protected val settings: ErgoSettings = s.copy(directory = createTempDir.getAbsolutePath, chainSettings =
+        s.chainSettings.copy(voting = s.chainSettings.voting.copy(votingLength = epochLength)))
+      override protected val historyStorage: HistoryStorage = HistoryStorage(settings)
+      override def readMinimalFullBlockHeight() = minimalFullBlockHeightVar
+      override def writeMinimalFullBlockHeight(height: Int): Unit = {
+        minimalFullBlockHeightVar = height
+      }
+    }
+    processor.registerManifestToDownload(manifest, snapshotHeight, Seq.empty)
+    processor.getChunkIdsToDownload(subtreeIds.size).size shouldBe subtreeIds.size
+    subtreeIds.indices.foreach { idx =>
+      storedBytes(us, subtreeIds, idx).foreach(bytes => processor.registerDownloadedChunk(subtreeIds(idx), bytes))
+    }
+
+    val blockId = ModifierId @@ Algos.encode(Array.fill(32)(Random.nextInt(100).toByte))
+    val store = new LDBVersionedStore(createTempDir, initialKeepVersions = 100)
+    (bh, store, processor.createPersistentProver(store, history, snapshotHeight, blockId))
+  }
+
+  private def chunkBytes(us: UtxoState, id: SubtreeId): Array[Byte] = us.snapshotsDb.readSubtreeBytes(id).get
+
+  private def shouldFailIncomplete(restored: scala.util.Try[_], store: LDBVersionedStore, reason: String) = {
+    restored.isFailure shouldBe true
+    val error = restored.failed.get
+    error shouldBe a[UtxoSetSnapshotProcessor.StateWriteFailure]
+    error.getCause shouldBe a[IllegalStateException]
+    error.getCause.getMessage should include(reason)
+    store.lastVersionID shouldBe None
+  }
+
+  property("createPersistentProver - complete snapshot is restored") {
+    val (bh, _, restored) = restoreWith((us, ids, idx) => Some(chunkBytes(us, ids(idx))))
+    val restoredProver = restored.get
+    bh.sortedBoxes.foreach { box =>
+      restoredProver.unauthenticatedLookup(box.id).isDefined shouldBe true
+    }
+    restoredProver.checkTree(postProof = false)
+  }
+
+  property("createPersistentProver - fails on a chunk missing on read-back") {
+    val (_, store, restored) = restoreWith((us, ids, idx) => if (idx == 1) None else Some(chunkBytes(us, ids(idx))))
+    shouldFailIncomplete(restored, store, "chunk #1")
+    restored.failed.get.getCause.getMessage should include("is missing")
+  }
+
+  property("createPersistentProver - fails on an unparseable stored chunk") {
+    val (_, store, restored) = restoreWith((us, ids, idx) => Some(if (idx == 1) Array[Byte](1, 2, 3) else chunkBytes(us, ids(idx))))
+    shouldFailIncomplete(restored, store, "chunk #1")
+    restored.failed.get.getCause.getMessage should include("can not be parsed")
+  }
+
+  property("createPersistentProver - fails on a valid chunk stored under another chunk's id") {
+    // chunk count is as in the manifest and every stored chunk is parseable; only chunk identities differ
+    val (_, store, restored) = restoreWith((us, ids, idx) => Some(chunkBytes(us, ids(if (idx == 1) 2 else idx))))
+    shouldFailIncomplete(restored, store, "chunk #1")
+    restored.failed.get.getCause.getMessage should include("read back as")
   }
 
 }

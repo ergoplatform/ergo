@@ -41,6 +41,15 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
 
   private var _cachedDownloadPlan: Option[UtxoSetSnapshotDownloadPlan] = None
 
+  // Session-local evidence of installed state context; the retention floor also represents pruning.
+  private var preparedSnapshotHeight: Option[Height] = None
+
+  def isSnapshotStatePrepared(height: Height): Boolean = preparedSnapshotHeight.contains(height)
+
+  def markSnapshotStatePrepared(height: Height): Unit = {
+    preparedSnapshotHeight = Some(height)
+  }
+
   /**
     * @return if UTXO set snapshot was applied during this session (stored in memory only).
     *         This flag is needed to prevent double application of UTXO set snapshot.
@@ -74,6 +83,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
 
     // set height of first full block to be downloaded
     writeMinimalFullBlockHeight(height + 1)
+    markSnapshotStatePrepared(height)
   }
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
@@ -196,6 +206,29 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   }
 
   /**
+    * Strict read-back of the chunks the manifest declares, in manifest order, for state restoration.
+    * Unlike `downloadedChunksIterator()`, a chunk which is missing, unparseable, or stored under another
+    * chunk's index fails the iteration instead of being skipped. Reads exactly one stored chunk per
+    * manifest subtree id, when requested.
+    */
+  private def manifestChunksIterator(manifest: BatchAVLProverManifest[Digest32]): Iterator[BatchAVLProverSubtree[Digest32]] = {
+    manifest.subtreesIds.iterator.zipWithIndex.map { case (expectedId, idx) =>
+      def incomplete(reason: String, cause: Throwable = null) = new IllegalStateException(
+        s"Incomplete UTXO set snapshot: chunk #$idx (${Algos.encode(expectedId)}) $reason", cause)
+
+      historyStorage.get(chunkIdFromIndex(idx)) match {
+        case Some(bs) =>
+          SubtreeSerializer.parseBytesTry(bs) match {
+            case Success(subtree) if subtree.verify(expectedId) => subtree
+            case Success(subtree) => throw incomplete(s"read back as ${Algos.encode(subtree.id)}")
+            case Failure(e) => throw incomplete("can not be parsed", e)
+          }
+        case None => throw incomplete("is missing")
+      }
+    }
+  }
+
+  /**
     * Create disk-persistent authenticated AVL+ tree prover
     * @param stateStore - disk database where AVL+ tree will be after restoration
     * @param historyReader - history readed to get headers to restore state context
@@ -214,7 +247,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
         ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
           case Success(esc) =>
             val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
-            VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
+            VersionedLDBAVLStorage.recreate(manifest, manifestChunksIterator(manifest), additionalData = metadata.toIterator, stateStore).flatMap {
               ldbStorage =>
                 log.info("Finished UTXO set snapshot transfer into state database")
                 ldbStorage.restorePrunedProver().map {
@@ -224,6 +257,8 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
                       override val storage: VersionedLDBAVLStorage = ldbStorage
                     }
                 }
+            }.recoverWith { case error =>
+              Failure(new UtxoSetSnapshotProcessor.StateWriteFailure(error))
             }
           case Failure(e) =>
             log.warn("Can't reconstruct state context in createPersistentProver ", e)
@@ -236,4 +271,10 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     }
   }
 
+}
+
+object UtxoSetSnapshotProcessor {
+  /** The reconstruction entered the store-write phase; callers must not serve the previous state. */
+  final class StateWriteFailure(cause: Throwable)
+    extends RuntimeException("Snapshot reconstruction may have changed the state store", cause)
 }

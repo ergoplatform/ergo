@@ -68,7 +68,13 @@ trait FullBlockProcessor extends HeadersProcessor {
     case ToProcess(fullBlock, newModRow, Some(newBestBlockHeader), newBestChain)
       if isValidFirstFullBlock(fullBlock.header) =>
 
-      val headers = headerChainBack(10, fullBlock.header, h => h.height == 1)
+      val headersToApply = if (nodeSettings.utxoSettings.utxoBootstrap &&
+        isSnapshotStatePrepared(fullBlock.header.height - 1)) {
+        // Snapshot reconstruction has already installed the preceding headers in the state context.
+        Seq.empty
+      } else {
+        headerChainBack(10, fullBlock.header, h => h.height == 1).headers.dropRight(1)
+      }
       val toApply = fullBlock +: newBestChain.tail
         .map(id => typedModifierById[Header](id).flatMap(getFullBlock))
         .takeWhile(_.isDefined)
@@ -76,7 +82,7 @@ trait FullBlockProcessor extends HeadersProcessor {
       logStatus(Seq(), toApply, fullBlock, None)
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes).map { _ =>
-        ProgressInfo(None, Seq.empty, headers.headers.dropRight(1) ++ toApply, Seq.empty)
+        ProgressInfo(None, Seq.empty, headersToApply ++ toApply, Seq.empty)
       }
   }
 

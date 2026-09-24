@@ -1,13 +1,22 @@
 package org.ergoplatform.nodeView.state
 
+import com.google.common.primitives.Ints
+import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
+import scorex.crypto.authds.{ADKey, ADValue}
+import scorex.crypto.authds.avltree.batch.Insert
+import scorex.crypto.authds.avltree.batch.helpers.TestHelper
 import scorex.crypto.hash.Digest32
+import scorex.db.LDBFactory
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.util.Random
 
-class SnapshotsDbSpecification extends ErgoCorePropertyTest {
+class SnapshotsDbSpecification extends ErgoCorePropertyTest with TestHelper {
+  override protected val KL: Int = 32
+  override protected val VL: Int = 8
+
     import org.ergoplatform.utils.generators.CoreObjectGenerators._
     import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
@@ -45,6 +54,46 @@ class SnapshotsDbSpecification extends ErgoCorePropertyTest {
         after.availableManifests shouldBe empty
       } else {
         after.availableManifests.mapValues(bytesToId) shouldBe si.availableManifests.mapValues(bytesToId)
+      }
+    }
+  }
+
+  property("pruneSnapshots retains the greatest heights with readable manifests") {
+    val inputs = for {
+      count <- Gen.choose(5, 12)
+      heights <- Gen.pick(count, 1 to 10000)
+      toStore <- Gen.choose(0, count + 2)
+    } yield (heights.reverse, toStore)
+
+    forAll(inputs) { case (heights, toStore) =>
+      val source = createVersionedStore()
+      val destination = LDBFactory.createKvDb(createTempDir.getAbsolutePath)
+      try {
+        val prover = createPersistentProver(createVersionedStorage(source))
+        val db = new SnapshotsDb(destination)
+        heights.foreach { height =>
+          val key = ADKey @@ (Array.fill(28)(0: Byte) ++ Ints.toByteArray(height))
+          prover.performOneOperation(Insert(key, ADValue @@ Array.fill(8)(1: Byte))).get
+          prover.generateProofAndUpdateStorage()
+          db.writeSnapshot(prover.storage.asInstanceOf[STORAGE], height,
+            prover.digest.dropRight(1)).get
+        }
+        val before = db.readSnapshotsInfo.availableManifests
+        before.size shouldBe heights.size
+        before.values.foreach { id =>
+          ManifestSerializer.defaultSerializer.parseBytesTry(db.readManifestBytes(id).get).isSuccess shouldBe true
+        }
+        val expected = before.toSeq.sortBy(_._1).takeRight(toStore).toMap
+
+        db.pruneSnapshots(toStore)
+
+        db.readSnapshotsInfo.availableManifests.mapValues(bytesToId) shouldBe expected.mapValues(bytesToId)
+        before.foreach { case (height, id) =>
+          db.readManifestBytes(id).isDefined shouldBe expected.contains(height)
+        }
+      } finally {
+        try destination.close()
+        finally source.close()
       }
     }
   }

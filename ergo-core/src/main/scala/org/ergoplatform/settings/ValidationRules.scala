@@ -210,7 +210,7 @@ object ValidationRules {
     exParseParameters -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain correctly packed parameters. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
-    exMatchParameters -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain all the system parameters. ${im.error}", im.modifierId, im.modifierTypeId),
+    exMatchParameters -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain all the system parameters, and only them. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
     exBlockVersion -> RuleStatus(im => fatal(s"Versions in header and parameters section should be equal. ${im.error}", im.modifierId, im.modifierTypeId),
@@ -220,6 +220,9 @@ object ValidationRules {
       Seq(classOf[Extension]),
       mayBeDisabled = true),
     exMatchValidationSettings -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain all the validation settings. ${im.error}", im.modifierId, im.modifierTypeId),
+      Seq(classOf[Extension]),
+      mayBeDisabled = true),
+    exMatchParameters60 -> RuleStatus(im => fatal(s"At the beginning of the epoch, the extension should contain all the system parameters (and possibly more). ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[Extension]),
       mayBeDisabled = true),
     exSize -> RuleStatus(im => fatal(s"Size of extension section should not exceed ${Constants.MaxExtensionSize}. ${im.error}", im.modifierId, im.modifierTypeId),
@@ -306,15 +309,6 @@ object ValidationRules {
   // full block application
   val fbOperationFailed: Short = 500
   val fbDigestIncorrect: Short = 501
-
-
-  def errorMessage(id: Short, details: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): String = {
-    ValidationRules.rulesSpec(id)
-      .invalidMod(InvalidModifier(details, modifierId, modifierTypeId))
-      .errors
-      .last
-      .message
-  }
 
   private def recoverable(errorMessage: String, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value): Invalid =
     ModifierValidator.error(errorMessage, modifierId, modifierTypeId)

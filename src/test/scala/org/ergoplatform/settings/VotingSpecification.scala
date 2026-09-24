@@ -1,6 +1,6 @@
 package org.ergoplatform.settings
 
-import sigmastate.utils.Helpers._ // needed for Scala 2.11
+
 
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
@@ -123,8 +123,6 @@ class VotingSpecification extends ErgoCorePropertyTest {
     esc2.appendHeader(h2).toEither.toOption.isDefined shouldBe true
 
     // proposing a vote for decreasing param is not allowed
-    val votes2 = Array(StorageFeeFactorDecrease, NoParameter, NoParameter)
-    val h22 = defaultHeaderGen.sample.get.copy(height = 2, votes = votes2, version = 0: Byte)
     esc2.appendHeader(h2).toEither.toOption.isDefined shouldBe true
   }
 

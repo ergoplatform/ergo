@@ -334,7 +334,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         val s = new Store(2, 100000, 10, () => now)
         val a = announcement(10)
         s.add(a, p) shouldBe true
-        (1 to 10).foreach(_ => s.add(a, p) shouldBe false)
+        (1 to 10).foreach(_ => s.add(a, q) shouldBe false)
         appender.list.size() shouldBe 1
         s.drops shouldBe 10L
         appender.list.get(0).getFormattedMessage should include ("duplicate")
@@ -608,7 +608,28 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     replayScenario(epoch = false, earlyBody = false, poisoned = true)
   }
 
-  property("weak transaction ids are included in serialized deduplication") {
+  property("a host's second variant of a header is refused and counted") {
+    withPeers { (p, _) =>
+      val s = new Store(3, 100000, 2, () => 0L)
+      val a = announcement(7)
+      s.add(a, p) shouldBe true
+      s.add(a.copy(weakTxIds = Some(Seq.empty)), p) shouldBe false
+      s.size shouldBe 1
+      s.drops shouldBe 1L
+    }
+  }
+
+  property("an identical same-host re-send is a duplicate even at the host limit") {
+    withPeers { (p, _) =>
+      val s = new PendingInputAnnouncements(3, 100000, 1, 1000, () => 0L)
+      val a = announcement(7)
+      s.add(a, p) shouldBe true
+      s.add(a, p) shouldBe false
+      s.size shouldBe 1
+    }
+  }
+
+  property("another host's variant of the same header is held separately") {
     withPeers { (p, q) =>
       val s = new Store(3, 100000, 2, () => 0L)
       val a = announcement(7)

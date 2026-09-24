@@ -95,13 +95,20 @@ final class PendingInputAnnouncements(maxEntries: Int,
     expire()
     // Count by host, so reconnecting with a new source port does not reset admission.
     val host = peer.connectionId.remoteAddress.getHostString
-    val serialized = InputBlockAnnouncement.serializer.toBytes(announcement)
+    val hostEntries = entries.valuesIterator.filter(
+      _.peer.connectionId.remoteAddress.getHostString == host).toVector
+    // Only a same-host/header re-send pays for serialization before the host limit.
+    lazy val serialized = InputBlockAnnouncement.serializer.toBytes(announcement)
+    val heldHeader = hostEntries.find(_.announcement.id == announcement.id)
+    if (heldHeader.exists(entry =>
+      InputBlockAnnouncement.serializer.toBytes(entry.announcement).sameElements(serialized))) {
+      return reject("duplicate serialized announcement")
+    }
+    if (hostEntries.size >= perPeer) return reject("per-peer capacity limit")
+    if (heldHeader.isDefined) return reject("per-host header variant limit")
     val key = bytesToId(Blake2b256.hash(serialized))
     if (entries.contains(key)) {
       reject("duplicate serialized announcement")
-    } else if (entries.valuesIterator.count(
-      _.peer.connectionId.remoteAddress.getHostString == host) >= perPeer) {
-      reject("per-peer capacity limit")
     } else {
       val bytes = serialized.length.toLong
       if (bytes > maxBytes) {

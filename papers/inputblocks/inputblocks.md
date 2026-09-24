@@ -71,6 +71,8 @@ options by:
 
 * setting transactions Merkle tree root of the block header to transactions seen in all the previous input blocks since the last ordering 
 block, plus all the second-class transactions miner has since the last ordering block (including since last input block).
+  Under this root the transactions are ordered as follows: the input blocks' transactions come first,
+  one input block after another starting from the earliest and each in its own order, followed by the second-class transactions.
      
 * setting 3 new fields in extension field of a block:
    - setting a new field E1 to a digest (Merkle tree root) of new first-class transactions since last input-block

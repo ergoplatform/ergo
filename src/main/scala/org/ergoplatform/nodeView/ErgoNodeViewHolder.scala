@@ -461,7 +461,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           val prefixLengths = (bodies.length +: 0 +: (bodies.length - 1 to 1 by -1)).distinct
           val blockDigest = header.transactionsRoot
           val matched = prefixLengths.iterator.map { n =>
-            // Match the miner commitment: input-chain transactions precede ordering transactions.
+            // Committed order, as the miner assembles it in CandidateGenerator.createCandidate
+            // (`val txs = previousOrderingBlockTransactions ++ orderingTxs`) and as
+            // papers/inputblocks/inputblocks.md states: input-chain transactions, then ordering transactions.
             n -> (bodies.take(n).flatten ++ orderingBlockTransactions)
           }.find { case (_, txs) =>
             // The transactions-root check is the only acceptance gate.

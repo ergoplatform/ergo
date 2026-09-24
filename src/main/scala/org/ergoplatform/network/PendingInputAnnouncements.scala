@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import akka.actor.ActorRef
 import io.circe.{Encoder, Json}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.subblocks.InputBlockAnnouncement
@@ -13,7 +14,7 @@ import scala.collection.mutable
   * Byte accounting covers serialized announcement payloads; the entry cap bounds
   * object/index overhead. Nothing here is a validated input-block record.
   * A held announcement failing on replay penalises its ORIGINAL sender,
-  * which may have disconnected by the time the ordering parent is applied.
+  * while connection-scoped disposal removes entries when that sender disconnects.
   * Replay starts immediately on ordering apply, in arrival order, once history
   * and state agree on the applied tip; bounded batches continue via self-messages.
   * TODO(restart lag): short, unfunded early-chain devnet restarts showed higher
@@ -27,6 +28,8 @@ final class PendingInputAnnouncements(maxEntries: Int,
                                       ttlMillis: Long,
                                       now: () => Long) extends ScorexLogging {
   require(maxEntries > 0 && maxBytes > 0 && perPeer > 0 && ttlMillis > 0)
+
+  import PendingInputAnnouncements.peerHostKey
 
   private case class Entry(announcement: InputBlockAnnouncement,
                            peer: ConnectedPeer,
@@ -91,12 +94,18 @@ final class PendingInputAnnouncements(maxEntries: Int,
     }.toVector.foreach(id => remove(id))
   }
 
+  def removeConnection(handler: ActorRef): Unit = {
+    entries.iterator.collect {
+      case (id, entry) if entry.peer.handlerRef == handler => id
+    }.toVector.foreach(id => remove(id))
+  }
+
   def add(announcement: InputBlockAnnouncement, peer: ConnectedPeer): Boolean = {
     expire()
     // Count by host, so reconnecting with a new source port does not reset admission.
-    val host = peer.connectionId.remoteAddress.getHostString
+    val host = peerHostKey(peer)
     val hostEntries = entries.valuesIterator.filter(
-      _.peer.connectionId.remoteAddress.getHostString == host).toVector
+      entry => peerHostKey(entry.peer) == host).toVector
     // Only a same-host/header re-send pays for serialization before the host limit.
     lazy val serialized = InputBlockAnnouncement.serializer.toBytes(announcement)
     val heldHeader = hostEntries.find(_.announcement.id == announcement.id)
@@ -116,18 +125,18 @@ final class PendingInputAnnouncements(maxEntries: Int,
       } else {
         while (entries.size >= maxEntries || usedBytes > maxBytes - bytes) {
           val occupancy = entries.valuesIterator.toSeq.groupBy(
-            _.peer.connectionId.remoteAddress.getHostString).map { case (h, es) => h -> es.size }
+            entry => peerHostKey(entry.peer)).map { case (h, es) => h -> es.size }
           val activePeers = (occupancy.keySet + host).size
           val fairShare = maxEntries / math.max(1, activePeers)
           val incomingCount = occupancy.getOrElse(host, 0) + 1
           val candidates = entries.iterator.filter { case (_, entry) =>
-            val count = occupancy(entry.peer.connectionId.remoteAddress.getHostString)
+            val count = occupancy(peerHostKey(entry.peer))
             incomingCount <= fairShare || count >= fairShare
           }.toVector
           if (candidates.isEmpty) return reject("capacity fairness limit")
           // Prefer the largest occupancy, then the incoming host, then oldest arrival.
           val victim = candidates.maxBy { case (_, entry) =>
-            val h = entry.peer.connectionId.remoteAddress.getHostString
+            val h = peerHostKey(entry.peer)
             (occupancy(h), if (h == host) 1 else 0)
           }._1
           remove(victim, evicted = true)
@@ -190,6 +199,11 @@ final class PendingInputAnnouncements(maxEntries: Int,
 }
 
 object PendingInputAnnouncements {
+  private[network] def peerHostKey(peer: ConnectedPeer): String = {
+    val addr = peer.connectionId.remoteAddress
+    Option(addr.getAddress).fold(addr.getHostString)(_.getHostAddress)
+  }
+
   /** Immutable snapshot published by the owning synchronizer for /info. */
   case class Stats(size: Int = 0, bytes: Long = 0L,
                    evictions: Long = 0L, drops: Long = 0L)

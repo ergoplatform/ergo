@@ -2135,6 +2135,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      pendingInputAnnouncements.removeConnection(connectedPeer.handlerRef)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {

@@ -237,7 +237,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
   }
 
   private def disposalScenario(evict: Boolean, checkClock: Boolean = false,
-                               checkStats: Boolean = false): Unit = {
+                               checkStats: Boolean = false, disconnect: Boolean = false): Unit = {
     implicit val system: ActorSystem = ActorSystem("pending-disposal-test")
     implicit val ec = system.dispatcher
     val cfg = settings.copy(directory = java.nio.file.Files.createTempDirectory(
@@ -268,7 +268,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       ref ! ChangedMempool(pool)
       val first = announcement(101, history.fullBlockHeight + 2)
       val second = announcement(102, history.fullBlockHeight + 2)
-      val target = if (evict) first else second
+      val target = if (evict || disconnect) first else second
       val typeId = org.ergoplatform.modifiers.InputBlockTypeId.value
       def inv(): Unit = {
         val data = InvData(typeId, Seq(target.id))
@@ -286,8 +286,21 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         if (m.getName == "stateContext") emptyStateContext else throw new AssertionError(m.getName)
       }
       ref.underlyingActor.processInputBlock(first, history, pool, peer, Some(state))
-      ref.underlyingActor.processInputBlock(second, history, pool,
-        if (evict) other else peer, Some(state))
+      if (disconnect) {
+        tracker.status(target.id, typeId, Seq.empty) shouldBe
+          scorex.core.network.ModifiersStatus.Received
+        ref ! org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer(peer)
+      } else {
+        ref.underlyingActor.processInputBlock(second, history, pool,
+          if (evict) other else peer, Some(state))
+      }
+      if (disconnect) {
+        val probe = TestProbe()
+        probe.send(stats, org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo)
+        val info = probe.expectMsgType[org.ergoplatform.local.ErgoStatsCollector.NodeInfo]
+        org.ergoplatform.local.ErgoStatsCollector.NodeInfo.jsonEncoder(info).hcursor
+          .downField("pendingInputAnnouncements").get[Int]("size") shouldBe Right(0)
+      }
       if (checkStats) {
         val probe = TestProbe()
         probe.send(stats, org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo)
@@ -356,6 +369,37 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         appender.stop()
       }
     }
+  }
+
+  property("a hostname-configured and an IP connection to the same address share one host quota") {
+    withPeers { (p, q) =>
+      val s = new Store(3, 100000, 1, () => 0L)
+      val configured = p.copy(connectionId = p.connectionId.copy(
+        remoteAddress = new java.net.InetSocketAddress(
+          java.net.InetAddress.getByAddress("configured-peer", Array[Byte](127, 0, 0, 1)), 9000)))
+      val inbound = q.copy(connectionId = q.connectionId.copy(
+        remoteAddress = new java.net.InetSocketAddress(
+          java.net.InetAddress.getByAddress(Array[Byte](127, 0, 0, 1)), 9001)))
+      s.add(announcement(30), configured) shouldBe true
+      s.add(announcement(31), inbound) shouldBe false
+      s.size shouldBe 1
+    }
+  }
+
+  property("disconnect removes only the matching handler even when peer addresses are equal") {
+    withPeers { (p, q) =>
+      val s = new PendingInputAnnouncements(3, 100000, 3, 1000, () => 0L)
+      val reconnected = p.copy(handlerRef = q.handlerRef)
+      reconnected shouldBe p
+      s.add(announcement(32), p) shouldBe true
+      s.add(announcement(33), reconnected) shouldBe true
+      s.removeConnection(p.handlerRef)
+      s.take(blocks.head.header).map(_._1.id) shouldBe Seq(announcement(33).id)
+    }
+  }
+
+  property("a disconnected sender's held announcements are dropped and their deliveries released") {
+    disposalScenario(evict = false, disconnect = true)
   }
 
   property("synchronizer clock seam is backed by System.nanoTime") {
@@ -456,8 +500,6 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         }
         ref.underlyingActor.processInputBlock(garbage, hr, pool, attacker,
           Some(state(tip, parameters)))
-        system.stop(attacker.handlerRef)
-        ref ! org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer(attacker)
       }
       val typeId = org.ergoplatform.modifiers.InputBlockTypeId.value
       def requestInventory(): Unit = {

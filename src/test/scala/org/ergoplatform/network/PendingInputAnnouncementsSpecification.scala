@@ -48,9 +48,9 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     def drops: Long = call("drops").asInstanceOf[Long]
     def take(tip: Header): Seq[(InputBlockAnnouncement, ConnectedPeer)] =
       call("take", tip).asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]
-    def takeKnown(tip: Header, known: ModifierId => Boolean): Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
-      val method = cls.getMethods.find(m => m.getName == "take" && m.getParameterCount == 3)
-      method.map(_.invoke(value, tip, Int.box(64), known)
+    def takeKnown(tip: Header, known: ModifierId => Option[Header]): Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
+      val method = cls.getMethods.find(m => m.getName == "take" && m.getParameterCount == 4)
+      method.map(_.invoke(value, tip, Int.box(64), known, ((_: Header) => false))
         .asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]).getOrElse(take(tip))
     }
   }
@@ -119,7 +119,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("stale and reorged-away +1/+2 parents drop; known best-chain +2 stays") {
+  property("stale +1 parents and known +2 parents that do not extend the tip drop; unknown +2 parents wait for TTL") {
     withPeers { (p, _) =>
       val s = new Store(10, 100000, 10, () => 0L)
       s.add(announcement(1, 1), p)
@@ -133,11 +133,60 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       s.add(current, p)
       s.add(forked, p)
       s.add(unknown, p)
-      s.takeKnown(blocks.head.header, _ == blocks(1).id) shouldBe empty
-      s.size shouldBe 1
+      s.takeKnown(blocks.head.header, Map(blocks(1).id -> blocks(1).header,
+        blocks.last.id -> blocks.last.header).get) shouldBe empty
+      s.size shouldBe 2
       s.take(blocks(1).header).map(_._1.id) shouldBe Seq(current.id)
       s.size shouldBe 0
       s.byteSize shouldBe 0
+    }
+  }
+
+  property("an unknown +2 parent survives repeated takes and leaves only by TTL") {
+    withPeers { (p, _) =>
+      var now = 0L
+      val s = new Store(10, 100000, 10, () => now)
+      s.add(announcement(20, 3), p) shouldBe true
+      (1 to 3).foreach { _ =>
+        s.takeKnown(blocks.head.header, _ => None) shouldBe empty
+        s.size shouldBe 1
+        now += 300
+      }
+      now = 1000
+      s.take(blocks.head.header) shouldBe empty
+      s.size shouldBe 0
+      s.drops shouldBe 1L
+    }
+  }
+
+  property("a +2 root under a known sibling that extends the tip is held until the tip moves") {
+    withPeers { (p, _) =>
+      val s = new Store(10, 100000, 10, () => 0L)
+      val sibling = blocks(1).header.copy(timestamp = 7654L)
+      val root = announcement(21, 3).copy(header = announcement(21, 3).header.copy(
+        parentId = sibling.id))
+      s.add(root, p) shouldBe true
+      s.takeKnown(blocks.head.header, Map(sibling.id -> sibling).get) shouldBe empty
+      s.size shouldBe 1
+      s.take(sibling).map(_._1.id) shouldBe Seq(root.id)
+    }
+  }
+
+  property("a winning +2 parent survives while the applied tip is on the losing fork") {
+    withPeers { (p, _) =>
+      val tip = blocks.head.header
+      val parent = blocks(1).header.copy(parentId = blocks.last.id)
+      val root = announcement(22, tip.height + 2).copy(
+        header = announcement(22, tip.height + 2).header.copy(parentId = parent.id))
+      val s = new PendingInputAnnouncements(10, 100000, 10, 1000, () => 0L)
+      s.add(root, p) shouldBe true
+      s.take(tip, 64, Map(parent.id -> parent).get, _ == parent) shouldBe empty
+      s.size shouldBe 1
+      s.take(parent).map(_._1.id) shouldBe Seq(root.id)
+      s.add(root, p) shouldBe true
+      s.take(tip, 64, Map(parent.id -> parent).get, _ => false) shouldBe empty
+      s.size shouldBe 0
+
     }
   }
 
@@ -323,7 +372,8 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
 
   private def replayScenario(epoch: Boolean, earlyBody: Boolean,
                              poisoned: Boolean = false, batchSize: Int = 1,
-                             invalidOnly: Boolean = false, otherSupplier: Boolean = false): Unit = {
+                             invalidOnly: Boolean = false, otherSupplier: Boolean = false, historyBeforeParent: Boolean = false,
+                             knownBeforeApply: Boolean = false, reorg: Boolean = false): Unit = {
     implicit val system: ActorSystem = ActorSystem("pending-replay-test")
     implicit val ec = system.dispatcher
     val cfg = settings.copy(directory = java.nio.file.Files.createTempDirectory(
@@ -338,8 +388,9 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       val peer = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref, None)
       val pool = ErgoMemPool.empty(cfg)
       val height = if (epoch) cfg.chainSettings.voting.votingLength else 1
-      val parent = blocks.head.header.copy(height = height)
-      var tip = parent.copy(height = height - 1)
+      var tip = blocks.head.header.copy(height = height - 1)
+      val parent = blocks.head.header.copy(height = height,
+        parentId = if (reorg) blocks.last.id else tip.id)
       var parentAvailable = false
       var difficultyReads = 0
       val expectedDiff = BigInt(100)
@@ -356,9 +407,10 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         }
       }
       val hr = proxy(classOf[ErgoHistory]) { (m, args) => m.getName match {
+        case "isInBestChain" => Boolean.box(args.head == parent || args.head == parent.id)
         case "fullBlockHeight" => Int.box(tip.height)
         case "bestFullBlockIdOpt" => Some(tip.id)
-        case "modifierById" if args.head == parent.id =>
+        case "modifierById" | "typedModifierById" if args.head == parent.id =>
           if (parentAvailable) Some(parent) else None
         case "requiredDifficultyAfter" =>
           args.head shouldBe parent
@@ -451,6 +503,12 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
           (Seq.empty -> Seq.empty)
         realHistory.getInputBlockTransactions(a.id) shouldBe Some(Seq.empty)
       }
+      if (historyBeforeParent) ref ! ChangedHistory(hr)
+      if (knownBeforeApply) {
+        parentAvailable = true
+        ref ! ChangedHistory(hr)
+        validations shouldBe empty
+      }
       tip = parent
       parentAvailable = true
       ref ! RemoteBlockApplied(parent, Seq.empty)
@@ -520,6 +578,18 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       Await.result(system.terminate(), 10.seconds)
       realHistory.closeStorage()
     }
+  }
+
+  property("+2 root survives history changes before its parent header arrives") {
+    replayScenario(epoch = false, earlyBody = false, historyBeforeParent = true)
+  }
+
+  property("a known parent header waits for its block to apply before replay") {
+    replayScenario(epoch = false, earlyBody = false, knownBeforeApply = true)
+  }
+
+  property("a winning parent header survives history changes before the reorg applies") {
+    replayScenario(epoch = false, earlyBody = false, knownBeforeApply = true, reorg = true)
   }
 
   property("failed replay releases the requested announcement for a later inventory") {

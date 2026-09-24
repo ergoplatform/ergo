@@ -1487,7 +1487,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val ready = pendingInputAnnouncements.take(
         tip,
         settings.matrix.pendingAnnouncements.replayPerParent,
-        id => hr.modifierById(id).exists(_.isInstanceOf[Header]) && hr.isInBestChain(id)
+        id => hr.typedModifierById[Header](id),
+        p => hr.isInBestChain(p)
       )
       ready.foreach { case (announcement, peer) =>
         processInputBlock(announcement, hr, mp, peer, usr)

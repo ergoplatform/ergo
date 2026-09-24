@@ -141,29 +141,36 @@ final class PendingInputAnnouncements(maxEntries: Int,
 
   /** Detach ready announcements in arrival order after stale/fork cleanup.
     * Call only once history and state agree on the applied full-block tip.
-    * Without a best-chain lookup, +2 parents are treated as unknown and dropped.
+    * Without a parent lookup, +2 parents are unknown and wait for TTL.
     */
   def take(tip: Header): Seq[(InputBlockAnnouncement, ConnectedPeer)] = take(tip, Int.MaxValue)
 
   def take(tip: Header, limit: Int): Seq[(InputBlockAnnouncement, ConnectedPeer)] =
-    take(tip, limit, _ => false)
+    take(tip, limit, _ => None)
 
   /** At most `limit` entries leave the store for validation in one actor receive.
-    * Rollbacks discard entries outside the +2 window; +2 entries also require a
-    * known header on the current best chain, as checked by the caller.
+    * Rollbacks discard entries outside the +2 window. A known +2 parent must be
+    * at tip.height + 1 and either extend the applied tip or be on the best header
+    * chain (the applied tip may still be on a losing fork). Unknown parents wait for TTL.
     */
   def take(tip: Header,
            limit: Int,
-           knownBestChainParent: ModifierId => Boolean)
+           parentHeader: ModifierId => Option[Header],
+           onBestHeaderChain: Header => Boolean = _ => false)
           : Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
     expire()
+    val staleParents = parents.keysIterator.filter { id =>
+      parentHeader(id).exists { p =>
+        p.height != tip.height + 1 || (p.parentId != tip.id && !onBestHeaderChain(p))
+      }
+    }.toSet
     entries.iterator.collect {
       case (id, entry) if entry.announcement.header.height <= tip.height ||
         entry.announcement.header.height > tip.height + 2 ||
         (entry.announcement.header.height == tip.height + 1 &&
           entry.announcement.header.parentId != tip.id) ||
         (entry.announcement.header.height == tip.height + 2 &&
-          !knownBestChainParent(entry.announcement.header.parentId)) => id
+          staleParents(entry.announcement.header.parentId)) => id
     }.toVector.foreach(id => remove(id))
     val ready = parents.get(tip.id).toVector.flatMap(_.toVector)
       .filter(id => entries(id).announcement.header.height == tip.height + 1).take(limit)

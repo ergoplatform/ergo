@@ -153,6 +153,37 @@ class DigestState protected(override val version: VersionTag,
 
 object DigestState extends ScorexLogging with ScorexEncoding {
 
+  private def isOrdinaryGenesisStore(store: LDBVersionedStore, settings: ErgoSettings): Boolean = {
+    val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
+    store.lastVersionID.exists(_.sameElements(genesisVersion)) &&
+      store.get(genesisVersion).exists(_.sameElements(settings.chainSettings.genesisStateDigest)) &&
+      store.get(ErgoStateReader.ContextKey).exists(_.sameElements(
+        ErgoStateContext.empty(settings.chainSettings, settings.launchParameters).bytes))
+  }
+
+  /** Read intact persisted genesis before attempting snapshot-only context reconstruction.
+    * A non-genesis store is closed and left unchanged for strict snapshot recovery.
+    */
+  private[nodeView] def readOrdinaryGenesis(dir: File, settings: ErgoSettings): Try[Option[DigestState]] = {
+    Try {
+      dir.mkdirs()
+      new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    }.flatMap { store =>
+      val result = Try {
+        if (isOrdinaryGenesisStore(store, settings)) {
+          Some(new DigestState(ErgoState.genesisStateVersion, settings.chainSettings.genesisStateDigest, store, settings))
+        } else {
+          store.close()
+          None
+        }
+      }
+      result.failed.foreach { error =>
+        Try(store.close()).failed.foreach(error.addSuppressed)
+      }
+      result
+    }
+  }
+
   /** Read a verified snapshot checkpoint, or an intact genesis store when ordinary pruning may explain the floor. */
   private[nodeView] def readSnapshot(dir: File,
                                     settings: ErgoSettings,
@@ -166,12 +197,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     }.flatMap { store =>
       val versionBytes = org.ergoplatform.core.versionToBytes(version)
       val result = Try {
-        val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
-        val isOrdinaryGenesis = allowGenesis &&
-          store.lastVersionID.exists(_.sameElements(genesisVersion)) &&
-          store.get(genesisVersion).exists(_.sameElements(settings.chainSettings.genesisStateDigest)) &&
-          store.get(ErgoStateReader.ContextKey).exists(_.sameElements(
-            ErgoStateContext.empty(settings.chainSettings, settings.launchParameters).bytes))
+        val isOrdinaryGenesis = allowGenesis && isOrdinaryGenesisStore(store, settings)
         if (isOrdinaryGenesis) {
           // Raw persisted context is required: storageStateContext silently substitutes empty context on corruption.
           Success(new DigestState(ErgoState.genesisStateVersion, settings.chainSettings.genesisStateDigest, store, settings))

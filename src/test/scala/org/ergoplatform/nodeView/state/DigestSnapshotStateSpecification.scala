@@ -94,6 +94,7 @@ class DigestSnapshotStateSpecification extends ErgoCorePropertyTest with FileUti
 
         // Repeated verified reopening must retain the checkpoint's undo anchor.
         (1 to 2).foreach { _ =>
+          DigestState.readOrdinaryGenesis(dir, localSettings).get shouldBe None
           val state = DigestState.readSnapshot(dir, localSettings, version, header.stateRoot, context, allowGenesis = true).get
           try {
             state.version shouldBe version
@@ -182,6 +183,15 @@ class DigestSnapshotStateSpecification extends ErgoCorePropertyTest with FileUti
         val keys = Seq(genesisVersion, ErgoStateReader.ContextKey)
         val before = keys.map(key => store.get(key).map(_.toSeq))
         store.close()
+        val ordinary = DigestState.readOrdinaryGenesis(dir, localSettings).get
+        if (fault == "none") {
+          val state = ordinary.get
+          try {
+            state.version shouldBe ErgoState.genesisStateVersion
+            state.rootDigest.toSeq shouldBe genesisRoot.toSeq
+            state.stateContext.bytes.toSeq shouldBe genesisContext.bytes.toSeq
+          } finally state.close()
+        } else ordinary shouldBe None
         val restored = DigestState.readSnapshot(dir, localSettings, idToVersion(header.id),
           header.stateRoot, contextFor(header), allowGenesis = true)
         if (fault == "none") {

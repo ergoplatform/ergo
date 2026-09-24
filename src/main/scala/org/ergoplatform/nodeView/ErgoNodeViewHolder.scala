@@ -635,14 +635,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         settings.nodeSettings.utxoSettings.utxoBootstrap &&
         history.isUtxoSnapshotApplied && history.bestFullBlockOpt.isEmpty) {
       val height = history.minimalFullBlockHeight - 1
-      val restored = for {
-        header <- Try(history.bestHeaderAtHeight(height).getOrElse {
-          throw new IllegalStateException("Applied snapshot has no canonical header")
-        })
-        stateContext <- ErgoStateReader.reconstructStateContextBeforeEpoch(history, height, settings)
-        state <- DigestState.readSnapshot(stateDir(settings), settings, idToVersion(header.id),
-          header.stateRoot, stateContext, allowGenesis = true)
-      } yield state
+      // Ordinary pruning may set a floor below the first epoch, where snapshot context cannot be reconstructed.
+      val restored = DigestState.readOrdinaryGenesis(stateDir(settings), settings).flatMap {
+        case Some(genesis) => Success(genesis)
+        case None => for {
+          header <- Try(history.bestHeaderAtHeight(height).getOrElse {
+            throw new IllegalStateException("Applied snapshot has no canonical header")
+          })
+          stateContext <- ErgoStateReader.reconstructStateContextBeforeEpoch(history, height, settings)
+          state <- DigestState.readSnapshot(stateDir(settings), settings, idToVersion(header.id),
+            header.stateRoot, stateContext)
+        } yield state
+      }
       restored match {
         case Success(state) => state.asInstanceOf[State]
         case Failure(error) =>

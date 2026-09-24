@@ -130,11 +130,17 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
     }
   }
 
-  property("ordinary pruned Digest state survives enabling snapshot bootstrap before the first full block") {
+  Seq((10, 20, 20), (30, 16, 17)).foreach { case (blocksToKeep, expectedFloor, nextFloor) =>
+    property(s"ordinary pruned Digest state survives enabling snapshot bootstrap before the first full block (floor $expectedFloor)") {
+      checkOrdinaryPrunedRestart(blocksToKeep, expectedFloor, nextFloor)
+    }
+  }
+
+  private def checkOrdinaryPrunedRestart(blocksToKeep: Int, expectedFloor: Int, nextFloor: Int): Unit = {
     val root = Files.createTempDirectory("pruned-digest-bootstrap-").toFile
     val configured = parsedSettings(new File(root, "node"), StateType.Digest)
     val pruned = configured.copy(nodeSettings = configured.nodeSettings.copy(
-      blocksToKeep = 10, utxoSettings = configured.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+      blocksToKeep = blocksToKeep, utxoSettings = configured.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
     val flipped = pruned.copy(nodeSettings = pruned.nodeSettings.copy(
       utxoSettings = pruned.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
     val sourceSettings = parsedSettings(new File(root, "source"), StateType.Utxo)
@@ -162,7 +168,7 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
       // The production header path advances the pruning floor, without a direct updateBestFullBlock call.
       applyHeader(blocks(44).header)(first).get
       getHistory(first).isHeadersChainSynced shouldBe true
-      getHistory(first).minimalFullBlockHeight shouldBe 20
+      getHistory(first).minimalFullBlockHeight shouldBe expectedFloor
       getHistory(first).bestFullBlockOpt shouldBe None
       getCurrentView(first).state.version shouldBe ErgoState.genesisStateVersion
       first.stop()
@@ -177,12 +183,14 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
       val reopened = new Session(flipped, selfShutdown = true)
       session = Some(reopened)
       getCurrentView(reopened).state.version shouldBe ErgoState.genesisStateVersion
-      getHistory(reopened).minimalFullBlockHeight shouldBe 20
+      getHistory(reopened).minimalFullBlockHeight shouldBe expectedFloor
       applyHeader(blocks(45).header)(reopened).get
+      getHistory(reopened).minimalFullBlockHeight shouldBe nextFloor
       // Ordinary pruning still needs the preceding headers to initialize Digest context.
-      applyPayload(blocks(19))(reopened).get
-      getCurrentView(reopened).state.version shouldBe idToVersion(blocks(19).id)
-      getCurrentView(reopened).state.rootDigest.toSeq shouldBe blocks(19).header.stateRoot.toSeq
+      val firstFullBlock = blocks(nextFloor - 1)
+      applyPayload(firstFullBlock)(reopened).get
+      getCurrentView(reopened).state.version shouldBe idToVersion(firstFullBlock.id)
+      getCurrentView(reopened).state.rootDigest.toSeq shouldBe firstFullBlock.header.stateRoot.toSeq
     } finally {
       session.foreach(_.stop())
       closeOwnedStores(root)

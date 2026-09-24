@@ -29,7 +29,10 @@ final class PendingInputAnnouncements(maxEntries: Int,
                                       now: () => Long) extends ScorexLogging {
   require(maxEntries > 0 && maxBytes > 0 && perPeer > 0 && ttlMillis > 0)
 
-  import PendingInputAnnouncements.peerHostKey
+  import PendingInputAnnouncements.{
+    Disconnected, DropReason, Duplicate, Evicted, Expired, HostLimit, Oversize,
+    RemovalReason, Replayed, StaleParent, VariantLimit, peerHostKey
+  }
 
   private case class Entry(announcement: InputBlockAnnouncement,
                            peer: ConnectedPeer,
@@ -64,9 +67,9 @@ final class PendingInputAnnouncements(maxEntries: Int,
     onChange()
   }
 
-  private def countDrop(reason: String): Unit = {
-    dropCounts = dropCounts.updated(reason, dropCounts(reason) + 1)
-    log.debug(s"Pending input announcement dropped: $reason")
+  private def countDrop(reason: DropReason): Unit = {
+    dropCounts = dropCounts.updated(reason.name, dropCounts(reason.name) + 1)
+    log.debug(s"Pending input announcement dropped: ${reason.name}")
   }
 
   private def warnLimited(reason: String): Unit = {
@@ -78,21 +81,21 @@ final class PendingInputAnnouncements(maxEntries: Int,
     }
   }
 
-  private def reject(reason: String): Boolean = {
+  private def reject(reason: DropReason): Boolean = {
     countDrop(reason)
     onChange()
     false
   }
 
-  private def remove(id: ModifierId, discarded: Boolean = true,
-                     evicted: Boolean = false, reason: String = "staleParent"): Unit = entries.remove(id).foreach { entry =>
-    if (discarded) {
-      if (evicted) {
+  private def remove(id: ModifierId, reason: RemovalReason): Unit = entries.remove(id).foreach { entry =>
+    reason match {
+      case Evicted =>
         evictionCount += 1
         warnLimited("capacity eviction")
-      } else countDrop(reason)
-      onDiscard(entry.announcement, entry.peer)
+      case Replayed => ()
+      case drop: DropReason => countDrop(drop)
     }
+    if (reason != Replayed) onDiscard(entry.announcement, entry.peer)
     usedBytes -= entry.bytes
     val parentId = entry.announcement.header.parentId
     parents.get(parentId).foreach { ids =>
@@ -106,13 +109,13 @@ final class PendingInputAnnouncements(maxEntries: Int,
     val time = now()
     entries.iterator.collect {
       case (id, entry) if time - entry.arrived >= ttlMillis => id
-    }.toVector.foreach(id => remove(id, reason = "expired"))
+    }.toVector.foreach(id => remove(id, Expired))
   }
 
   def removeConnection(handler: ActorRef): Unit = {
     entries.iterator.collect {
       case (id, entry) if entry.peer.handlerRef == handler => id
-    }.toVector.foreach(id => remove(id, reason = "disconnected"))
+    }.toVector.foreach(id => remove(id, Disconnected))
   }
 
   def add(announcement: InputBlockAnnouncement, peer: ConnectedPeer): Boolean = {
@@ -126,17 +129,17 @@ final class PendingInputAnnouncements(maxEntries: Int,
     val heldHeader = hostEntries.find(_.announcement.id == announcement.id)
     if (heldHeader.exists(entry =>
       InputBlockAnnouncement.serializer.toBytes(entry.announcement).sameElements(serialized))) {
-      return reject("duplicate")
+      return reject(Duplicate)
     }
-    if (hostEntries.size >= perPeer) return reject("hostLimit")
-    if (heldHeader.isDefined) return reject("variantLimit")
+    if (hostEntries.size >= perPeer) return reject(HostLimit)
+    if (heldHeader.isDefined) return reject(VariantLimit)
     val key = bytesToId(Blake2b256.hash(serialized))
     if (entries.contains(key)) {
-      reject("duplicate")
+      reject(Duplicate)
     } else {
       val bytes = serialized.length.toLong
       if (bytes > maxBytes) {
-        reject("oversize")
+        reject(Oversize)
       } else {
         while (entries.size >= maxEntries || usedBytes > maxBytes - bytes) {
           val occupancy = entries.valuesIterator.toSeq.groupBy(
@@ -155,7 +158,7 @@ final class PendingInputAnnouncements(maxEntries: Int,
             val h = peerHostKey(entry.peer)
             (occupancy(h), if (h == host) 1 else 0)
           }._1
-          remove(victim, evicted = true)
+          remove(victim, Evicted)
         }
         entries.put(key, Entry(announcement, peer, bytes, now()))
         parents.getOrElseUpdate(announcement.header.parentId,
@@ -192,7 +195,11 @@ final class PendingInputAnnouncements(maxEntries: Int,
            onBestHeaderChain: Header => Boolean = _ => false)
           : Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
     expire()
-    val staleParents = parents.keysIterator.filter { id =>
+    val futureParents = entries.valuesIterator.collect {
+      case entry if entry.announcement.header.height == tip.height + 2 =>
+        entry.announcement.header.parentId
+    }.toSet
+    val staleParents = futureParents.filter { id =>
       parentHeader(id).exists { p =>
         p.height != tip.height + 1 || (p.parentId != tip.id && !onBestHeaderChain(p))
       }
@@ -204,13 +211,13 @@ final class PendingInputAnnouncements(maxEntries: Int,
           entry.announcement.header.parentId != tip.id) ||
         (entry.announcement.header.height == tip.height + 2 &&
           staleParents(entry.announcement.header.parentId)) => id
-    }.toVector.foreach(id => remove(id))
+    }.toVector.foreach(id => remove(id, StaleParent))
     val ready = parents.get(tip.id).toVector.flatMap(_.toVector)
       .filter(id => entries(id).announcement.header.height == tip.height + 1).take(limit)
     ready.map { id =>
       val entry = entries(id)
       replayedCount += 1
-      remove(id, discarded = false)
+      remove(id, Replayed)
       entry.announcement -> entry.peer
     }
   }
@@ -222,9 +229,21 @@ object PendingInputAnnouncements {
     Option(addr.getAddress).fold(addr.getHostString)(_.getHostAddress)
   }
 
+  private sealed trait RemovalReason
+  private sealed abstract class DropReason(val name: String) extends RemovalReason
+  private case object Duplicate extends DropReason("duplicate")
+  private case object HostLimit extends DropReason("hostLimit")
+  private case object VariantLimit extends DropReason("variantLimit")
+  private case object Oversize extends DropReason("oversize")
+  private case object Expired extends DropReason("expired")
+  private case object StaleParent extends DropReason("staleParent")
+  private case object Disconnected extends DropReason("disconnected")
+  private case object Evicted extends RemovalReason
+  private case object Replayed extends RemovalReason
+
   private val emptyDrops: Map[String, Long] = Seq(
-    "duplicate", "hostLimit", "variantLimit", "oversize", "expired",
-    "staleParent", "disconnected").map(_ -> 0L).toMap
+    Duplicate, HostLimit, VariantLimit, Oversize, Expired, StaleParent, Disconnected)
+    .map(reason => reason.name -> 0L).toMap
 
   /** Immutable snapshot published by the owning synchronizer for /info. */
   case class Stats(size: Int = 0, bytes: Long = 0L,

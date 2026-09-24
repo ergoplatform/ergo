@@ -15,6 +15,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.util.ModifierId
@@ -27,33 +28,13 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.ChainGenerator.genChain
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators.connectionIdGen
 
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 100)
+
   private val blocks = genChain(3)
   private def announcement(n: Int, height: Int = 2): InputBlockAnnouncement =
     InputBlockAnnouncement(1, blocks(1).header.copy(height = height, timestamp = n.toLong),
       InputBlockFields.empty, None)
-
-  // Reflection lets these behavioral tests run (and fail) against the unpatched base.
-  private class Store(entries: Int, bytes: Long, perPeer: Int, clock: () => Long) {
-    private val cls = Class.forName("org.ergoplatform.network.PendingInputAnnouncements")
-    private val value = cls.getConstructors.head.newInstance(
-      Int.box(entries), Long.box(bytes), Int.box(perPeer), Long.box(1000), clock)
-    private def call(name: String, args: AnyRef*): Any =
-      cls.getMethods.find(m => m.getName == name && m.getParameterCount == args.size).get
-        .invoke(value, args: _*)
-    def add(a: InputBlockAnnouncement, p: ConnectedPeer): Boolean =
-      call("add", a, p).asInstanceOf[Boolean]
-    def size: Int = call("size").asInstanceOf[Int]
-    def byteSize: Long = call("byteSize").asInstanceOf[Long]
-    def evictions: Long = call("evictions").asInstanceOf[Long]
-    def drops: Map[String, Long] = call("drops").asInstanceOf[Map[String, Long]]
-    def take(tip: Header): Seq[(InputBlockAnnouncement, ConnectedPeer)] =
-      call("take", tip).asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]
-    def takeKnown(tip: Header, known: ModifierId => Option[Header]): Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
-      val method = cls.getMethods.find(m => m.getName == "take" && m.getParameterCount == 4)
-      method.map(_.invoke(value, tip, Int.box(64), known, ((_: Header) => false))
-        .asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]).getOrElse(take(tip))
-    }
-  }
 
   private def proxy[T](cls: Class[T])(f: (Method, Array[AnyRef]) => Any): T =
     cls.cast(Proxy.newProxyInstance(cls.getClassLoader, Array(cls), new InvocationHandler {
@@ -75,8 +56,8 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       val b = announcement(2)
       val c = announcement(3)
       val bytes = InputBlockAnnouncement.serializer.toBytes(a).length.toLong
-      Seq(new Store(2, bytes * 10, 10, () => 0L),
-        new Store(10, bytes * 2, 10, () => 0L)).foreach { s =>
+      Seq(new PendingInputAnnouncements(2, bytes * 10, 10, 1000, () => 0L),
+        new PendingInputAnnouncements(10, bytes * 2, 10, 1000, () => 0L)).foreach { s =>
         s.add(a, p) shouldBe true
         s.add(b, q) shouldBe true
         s.add(c, p) shouldBe true
@@ -86,7 +67,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         s.take(blocks.head.header).map(_._1.id) shouldBe Seq(b.id, c.id)
         s.byteSize shouldBe 0
       }
-      val tiny = new Store(2, bytes - 1, 2, () => 0L)
+      val tiny = new PendingInputAnnouncements(2, bytes - 1, 2, 1000, () => 0L)
       tiny.add(a, p) shouldBe false
       tiny.size shouldBe 0
     }
@@ -94,7 +75,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
 
   property("per-peer admission cannot evict another peer's entries") {
     withPeers { (p, q) =>
-      val s = new Store(3, 100000, 1, () => 0L)
+      val s = new PendingInputAnnouncements(3, 100000, 1, 1000, () => 0L)
       s.add(announcement(1), p) shouldBe true
       s.add(announcement(2), p) shouldBe false
       s.add(announcement(3), q) shouldBe true
@@ -106,7 +87,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
   property("identical serialized announcements deduplicate without refreshing expiry") {
     withPeers { (p, q) =>
       var now = 0L
-      val s = new Store(3, 100000, 2, () => now)
+      val s = new PendingInputAnnouncements(3, 100000, 2, 1000, () => now)
       val a = announcement(1)
       s.add(a, p) shouldBe true
       now = 900
@@ -119,12 +100,16 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("stale +1 parents and known +2 parents that do not extend the tip drop; unknown +2 parents wait for TTL") {
+  property("stale +1 and nonviable known +2 parents drop; unknown +2 parents wait for TTL") {
     withPeers { (p, _) =>
-      val s = new Store(10, 100000, 10, () => 0L)
-      s.add(announcement(1, 1), p)
-      s.add(announcement(2).copy(header = announcement(2).header.copy(
-        parentId = blocks.last.id)), p)
+      val s = new PendingInputAnnouncements(10, 100000, 10, 1000, () => 0L)
+      var discarded = Set.empty[ModifierId]
+      s.onDiscard = (a, _) => discarded += a.id
+      val stale = announcement(1, 1)
+      val oldParent = announcement(2).copy(header = announcement(2).header.copy(
+        parentId = blocks.last.id))
+      s.add(stale, p)
+      s.add(oldParent, p)
       val current = announcement(3, 3).copy(header = announcement(3, 3).header.copy(
         parentId = blocks(1).id))
       val forked = announcement(4, 3).copy(header = announcement(4, 3).header.copy(
@@ -133,9 +118,10 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       s.add(current, p)
       s.add(forked, p)
       s.add(unknown, p)
-      s.takeKnown(blocks.head.header, Map(blocks(1).id -> blocks(1).header,
+      s.take(blocks.head.header, 64, Map(blocks(1).id -> blocks(1).header,
         blocks.last.id -> blocks.last.header).get) shouldBe empty
       s.size shouldBe 2
+      discarded shouldBe Set(stale.id, oldParent.id, forked.id)
       s.take(blocks(1).header).map(_._1.id) shouldBe Seq(current.id)
       s.size shouldBe 0
       s.byteSize shouldBe 0
@@ -145,10 +131,10 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
   property("an unknown +2 parent survives repeated takes and leaves only by TTL") {
     withPeers { (p, _) =>
       var now = 0L
-      val s = new Store(10, 100000, 10, () => now)
+      val s = new PendingInputAnnouncements(10, 100000, 10, 1000, () => now)
       s.add(announcement(20, 3), p) shouldBe true
       (1 to 3).foreach { _ =>
-        s.takeKnown(blocks.head.header, _ => None) shouldBe empty
+        s.take(blocks.head.header, 64, _ => None) shouldBe empty
         s.size shouldBe 1
         now += 300
       }
@@ -161,12 +147,12 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
 
   property("a +2 root under a known sibling that extends the tip is held until the tip moves") {
     withPeers { (p, _) =>
-      val s = new Store(10, 100000, 10, () => 0L)
+      val s = new PendingInputAnnouncements(10, 100000, 10, 1000, () => 0L)
       val sibling = blocks(1).header.copy(timestamp = 7654L)
       val root = announcement(21, 3).copy(header = announcement(21, 3).header.copy(
         parentId = sibling.id))
       s.add(root, p) shouldBe true
-      s.takeKnown(blocks.head.header, Map(sibling.id -> sibling).get) shouldBe empty
+      s.take(blocks.head.header, 64, Map(sibling.id -> sibling).get) shouldBe empty
       s.size shouldBe 1
       s.take(sibling).map(_._1.id) shouldBe Seq(root.id)
     }
@@ -193,7 +179,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
   property("TTL uses elapsed monotonic milliseconds, including a negative clock origin") {
     withPeers { (p, q) =>
       var elapsed = -5000L
-      val s = new Store(3, 100000, 2, () => elapsed)
+      val s = new PendingInputAnnouncements(3, 100000, 2, 1000, () => elapsed)
       val a = announcement(8)
       s.add(a, p) shouldBe true
       elapsed += 999
@@ -205,10 +191,10 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("saturated hosts cannot evict the newly admitted honest host") {
+  property("with default caps, two saturated hosts cannot evict two honest hosts' roots") {
     withPeers { (p, _) =>
       val caps = settings.matrix.pendingAnnouncements
-      val s = new Store(caps.maxEntries, caps.maxBytes, caps.perPeer, () => 0L)
+      val s = new PendingInputAnnouncements(caps.maxEntries, caps.maxBytes, caps.perPeer, 1000, () => 0L)
       def host(n: Int): ConnectedPeer = p.copy(connectionId = p.connectionId.copy(
         remoteAddress = new java.net.InetSocketAddress(s"10.0.0.$n", 9000)))
       val attackerCount = caps.maxEntries / caps.perPeer
@@ -221,9 +207,11 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
           s.add(announcement(serial), peer) shouldBe true
         }
       }
-      val honest = announcement(100000)
-      s.add(honest, host(attackerCount + 1)) shouldBe true
-      // Keep replenishing attacker hosts: FIFO eventually ejects the honest singleton.
+      val honest = (1 to 10).map(n => announcement(100000 + n))
+      honest.zipWithIndex.foreach { case (root, n) =>
+        s.add(root, host(attackerCount + 1 + n / 5)) shouldBe true
+      }
+      // Continued attacker traffic must preserve both honest hosts' roots.
       (1 to 1024).foreach { _ =>
         attackers.foreach { peer =>
           serial += 1
@@ -232,8 +220,80 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       }
       s.size shouldBe caps.maxEntries
       s.evictions should be > 1L
-      s.take(blocks.head.header).map(_._1.id) should contain (honest.id)
+      s.take(blocks.head.header).map(_._1.id) should contain allElementsOf honest.map(_.id)
     }
+  }
+
+  property("random add, clock, take and disconnect sequences never exceed the entry, byte or per-host caps") {
+    implicit val system: ActorSystem = ActorSystem("pending-random-test")
+    try {
+      val peers = (1 to 4).map { n =>
+        val connection = connectionIdGen.sample.get.copy(
+          remoteAddress = new java.net.InetSocketAddress(s"10.0.0.$n", 9000))
+        ConnectedPeer(connection, TestProbe().ref, None)
+      }
+      val operations = Gen.listOfN(80, for {
+        op <- Gen.frequency(6 -> 0, 1 -> 1, 1 -> 2, 1 -> 3)
+        host <- Gen.choose(0, 3)
+        id <- Gen.choose(1, 12)
+        payloadSize <- Gen.choose(0, 12)
+      } yield (op, host, id, payloadSize))
+      forAll(Gen.choose(1, 12), Gen.choose(1, 8), Gen.choose(1, 8), operations) {
+        (entryCap, byteUnits, hostCap, steps) =>
+          var now = 0L
+          var operation = 0
+          var held = Vector.empty[(InputBlockAnnouncement, ConnectedPeer, Long)]
+          val byteCap = InputBlockAnnouncement.serializer.toBytes(announcement(1)).length.toLong * byteUnits
+          val s = new PendingInputAnnouncements(entryCap, byteCap, hostCap, 1000, () => now)
+          def bytes(a: InputBlockAnnouncement): Long =
+            InputBlockAnnouncement.serializer.toBytes(a).length.toLong
+          def occupancy: Map[String, Int] = held.groupBy(e =>
+            PendingInputAnnouncements.peerHostKey(e._2)).map { case (host, es) => host -> es.size }
+          s.onDiscard = { (a, peer) =>
+            val arrived = held.find(e => e._1 eq a).get._3
+            if (operation == 0 && now - arrived < 1000) {
+              val counts = occupancy
+              counts(PendingInputAnnouncements.peerHostKey(peer)) shouldBe counts.values.max
+            }
+            held = held.filterNot(e => e._1 eq a)
+          }
+          def drain(): Unit = {
+            val before = s.byteSize
+            val ready = s.take(blocks.head.header)
+            ready.map(_._1.id) shouldBe held.map(_._1.id)
+            ready.map(e => bytes(e._1)).sum shouldBe before
+            held = Vector.empty
+            s.size shouldBe 0
+            s.byteSize shouldBe 0L
+          }
+          steps.foreach { case (op, host, id, payloadSize) =>
+            operation = op
+            op match {
+              case 0 =>
+                val a = announcement(id).copy(weakTxIds = Some(
+                  Seq.fill(payloadSize)(Array.fill[Byte](6)(id.toByte))))
+                if (s.add(a, peers(host))) held :+= ((a, peers(host), now))
+              case 1 =>
+                now += id * 100L
+                s.expire()
+              case 2 => drain()
+              case 3 => s.removeConnection(peers(host).handlerRef)
+            }
+            s.size shouldBe held.size
+            s.size should be <= entryCap
+            s.byteSize should be <= byteCap
+            s.byteSize shouldBe held.map(e => bytes(e._1)).sum
+            all(occupancy.values.toSeq) should be <= hostCap
+            val slots = held.map(e => PendingInputAnnouncements.peerHostKey(e._2) -> e._1.id)
+            slots.distinct.size shouldBe slots.size
+            val stats = s.fullInfo
+            // Rejections never enter the store; only these drops remove admitted entries.
+            stats.admitted shouldBe stats.size.toLong + stats.replayed + stats.evictions +
+              Seq("expired", "staleParent", "disconnected").map(stats.drops).sum
+          }
+          drain()
+      }
+    } finally Await.result(system.terminate(), 10.seconds)
   }
 
   private def disposalScenario(evict: Boolean, checkClock: Boolean = false,
@@ -257,9 +317,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         ErgoSyncInfoMessageSpec, cfg, ErgoSyncTracker(cfg.scorexSettings.network), tracker))
       if (checkClock) {
         val before = System.nanoTime() / 1000000L
-        val clock = ref.underlyingActor.getClass.getMethods.find(
-          _.getName == "pendingAnnouncementsNow").get
-        val observed = clock.invoke(ref.underlyingActor).asInstanceOf[Long]
+        val observed = ref.underlyingActor.pendingAnnouncementsNow()
         val after = System.nanoTime() / 1000000L
         observed should be >= before
         observed should be <= after
@@ -385,7 +443,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
 
   property("a hostname-configured and an IP connection to the same address share one host quota") {
     withPeers { (p, q) =>
-      val s = new Store(3, 100000, 1, () => 0L)
+      val s = new PendingInputAnnouncements(3, 100000, 1, 1000, () => 0L)
       val configured = p.copy(connectionId = p.connectionId.copy(
         remoteAddress = new java.net.InetSocketAddress(
           java.net.InetAddress.getByAddress("configured-peer", Array[Byte](127, 0, 0, 1)), 9000)))
@@ -679,7 +737,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
 
   property("a host's second variant of a header is refused and counted") {
     withPeers { (p, _) =>
-      val s = new Store(3, 100000, 2, () => 0L)
+      val s = new PendingInputAnnouncements(3, 100000, 2, 1000, () => 0L)
       val a = announcement(7)
       s.add(a, p) shouldBe true
       s.add(a.copy(weakTxIds = Some(Seq.empty)), p) shouldBe false
@@ -703,7 +761,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
 
   property("another host's variant of the same header is held separately") {
     withPeers { (p, q) =>
-      val s = new Store(3, 100000, 2, () => 0L)
+      val s = new PendingInputAnnouncements(3, 100000, 2, 1000, () => 0L)
       val a = announcement(7)
       s.add(a, p) shouldBe true
       s.add(a.copy(weakTxIds = Some(Seq.empty)), q) shouldBe true

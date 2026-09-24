@@ -15,7 +15,7 @@ case class ErgoSettings(directory: String,
                         walletSettings: WalletSettings,
                         cacheSettings: CacheSettings,
                         votingTargets: VotingTargets = VotingTargets.empty,
-                        matrix: MatrixSettings = MatrixSettings()) {
+                        matrix: MatrixSettings) {
 
   val addressEncoder: ErgoAddressEncoder = ErgoAddressEncoder(chainSettings.addressPrefix)
 

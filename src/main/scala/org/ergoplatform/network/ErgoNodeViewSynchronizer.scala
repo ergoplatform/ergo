@@ -1414,6 +1414,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def clearDeliveryIfFromSupplier(id: ModifierId,
+                                          typeId: NetworkObjectTypeId.Value,
+                                          peer: ConnectedPeer): Unit = {
+    if (deliveryTracker.getSource(id, typeId).contains(peer)) {
+      deliveryTracker.setUnknown(id, typeId)
+    }
+  }
+
   /**
    * Request an input block from a peer by its ID.
    *
@@ -1457,21 +1465,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       caps.ttlMs, () => pendingAnnouncementsNow())
     pending.onDiscard = { (announcement, peer) =>
       // Accepted pending deliveries are Received; disposal must release those too.
-      val typeId = InputBlockTypeId.value
-      if (deliveryTracker.getSource(announcement.id, typeId).contains(peer)) {
-        deliveryTracker.setUnknown(announcement.id, typeId)
-      }
+      clearDeliveryIfFromSupplier(announcement.id, InputBlockTypeId.value, peer)
     }
     pending.onChange = () => context.system.eventStream.publish(pending.fullInfo)
     pending
-  }
-
-  private def clearPendingRequestedFromSupplier(id: ModifierId,
-                                               remote: ConnectedPeer): Unit = {
-    val typeId = InputBlockTypeId.value
-    deliveryTracker.getRequestedInfo(typeId, id).filter(_.peer == remote).foreach { _ =>
-      deliveryTracker.setUnknown(id, typeId)
-    }
   }
 
   private var pendingReplayScheduled = false
@@ -1638,10 +1635,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
         // Replay detaches pending announcements, so invalid deliveries must be released here.
-        val typeId = InputBlockTypeId.value
-        if (deliveryTracker.getSource(subBlockId, typeId).contains(remote)) {
-          deliveryTracker.setUnknown(subBlockId, typeId)
-        }
+        clearDeliveryIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         penalizeMisbehavingPeer(remote)
       }
     } else {
@@ -1654,7 +1648,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (pendingInputAnnouncements.add(inputBlockInfo, remote)) {
           setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
         } else {
-          clearPendingRequestedFromSupplier(subBlockId, remote)
+          clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         }
 
         // todo: make it debug before release

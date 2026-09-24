@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import org.ergoplatform.nodeView.ErgoContext
@@ -34,6 +34,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.{ErgoNodeTransactionGenerators => NodeTransactionGenerators}
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
@@ -151,6 +152,34 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     forAll(validErgoTransactionGen) { case (from, tx) =>
       tx.statelessValidity().isSuccess shouldBe true
       tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe true
+    }
+  }
+
+  property("duplicated data inputs") {
+    val dataBoxesGen = Gen.nonEmptyListOf(NodeTransactionGenerators.ergoBoxGenNoProp)
+      .map(_.toIndexedSeq)
+    forAll(validErgoTransactionGen, dataBoxesGen) { case ((from, tx), dataBoxes) =>
+      val dataInputs = dataBoxes.map(b => DataInput(b.id))
+
+      // transaction with unique data inputs is valid
+      val txWithDataInputs = ErgoTransaction(tx.inputs, dataInputs, tx.outputCandidates)
+      txWithDataInputs.statelessValidity().isSuccess shouldBe true
+      txWithDataInputs.statefulValidity(from, dataBoxes, emptyStateContext).isSuccess shouldBe true
+
+      // transaction with duplicated data inputs is rejected by stateless validation
+      val txWithDuplicatedDataInputs = ErgoTransaction(tx.inputs, dataInputs ++ dataInputs, tx.outputCandidates)
+      txWithDuplicatedDataInputs.statelessValidity().isSuccess shouldBe false
+      val expectedDataInputsMsg = ValidationRules.errorMessage(
+        ValidationRules.txDataInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
+      txWithDuplicatedDataInputs.statelessValidity().failed.get.getMessage should
+        include(expectedDataInputsMsg.take(30))
+
+      // duplicated ordinary inputs are also rejected by stateless validation
+      val txWithDuplicatedInputs = tx.copy(inputs = tx.inputs ++ tx.inputs)
+      txWithDuplicatedInputs.statelessValidity().isSuccess shouldBe false
+      val expectedInputsMsg = ValidationRules.errorMessage(
+        ValidationRules.txInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
+      txWithDuplicatedInputs.statelessValidity().failed.get.getMessage should include(expectedInputsMsg.take(30))
     }
   }
 

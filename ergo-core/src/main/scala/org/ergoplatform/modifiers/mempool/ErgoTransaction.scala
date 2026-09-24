@@ -98,6 +98,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), InvalidModifier(s"$id: ${outputCandidates.map(_.value)}", id, modifierTypeId))
       .validateNoFailure(txOutputSum, outputsSumTry, id, modifierTypeId)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, InvalidModifier(s"$id: ${inputs.distinct.size} == ${inputs.size}", id, modifierTypeId))
+      .validate(txDataInputsUnique, dataInputs.distinct.size == dataInputs.size, InvalidModifier(s"$id: ${dataInputs.distinct.size} == ${dataInputs.size}", id, modifierTypeId))
   }
 
   /**

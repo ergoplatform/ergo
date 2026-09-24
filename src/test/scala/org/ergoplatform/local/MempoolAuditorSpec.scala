@@ -13,6 +13,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.{ErgoTestHelpers, MempoolTestHelpers, NodeViewTestOps, RandomWrapper}
+import org.ergoplatform.network.message.InvData
 import org.scalatest.flatspec.AnyFlatSpec
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import sigma.ast.ErgoTree
@@ -123,4 +124,57 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
       case _: RecheckedTransactions => false
     }.isInstanceOf[SendToNetwork] shouldBe true
   }
+
+  it should "rebroadcast a pooled child together with its in-pool parent, parent first" in {
+
+    val (us0, bh0) = createUtxoState(settingsToTest)
+    val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
+    val b1 = validFullBlock(None, us0, txs0)
+
+    val us = us0.applyModifier(b1, None)(_ => ()).get
+
+    val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
+    val parent = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1.head
+    val child = validTransactionsFromBoxes(200000, parent.outputs, new RandomWrapper)._1.head
+    child.inputs.exists(in => parent.outputs.exists(_.id sameElements in.boxId)) shouldBe true
+
+    implicit val system = ActorSystem()
+    val probe = TestProbe()
+
+    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
+
+    // rebroadcastCount = 1 and FakeMempool.random takes from the front: only the child is sampled; its input is
+    // in neither the state nor the selection, so without its parent it is not announced at all
+    val pool = new FakeMempool(Seq(UnconfirmedTransaction(child, None), UnconfirmedTransaction(parent, None)))
+    auditor ! RecheckMempool(us, pool)
+
+    val announced = probe.receiveWhile(max = 5.seconds, idle = 2.seconds) {
+      case SendToNetwork(msg, _) => msg.input.toOption.toSeq.flatMap {
+        case inv: InvData => inv.ids
+        case _ => Seq.empty
+      }
+      case _ => Seq.empty
+    }.flatten
+
+    announced shouldBe Seq(parent.id, child.id)
+  }
+
+  it should "add in-pool ancestors root first and keep a selection without in-pool parents as it is" in {
+    val (_, bh0) = createUtxoState(settingsToTest)
+    val bxs = bh0.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
+    val grand = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1.head
+    val parent = validTransactionsFromBoxes(200000, grand.outputs, new RandomWrapper)._1.head
+    val child = validTransactionsFromBoxes(200000, parent.outputs, new RandomWrapper)._1.head
+    val g = UnconfirmedTransaction(grand, None)
+    val p = UnconfirmedTransaction(parent, None)
+    val c = UnconfirmedTransaction(child, None)
+    val pool = Seq(c, p, g)
+
+    MempoolAuditor.withAncestorsParentsFirst(Seq(c), pool).map(_.id) shouldBe Seq(g.id, p.id, c.id)
+    MempoolAuditor.withAncestorsParentsFirst(Seq(p, c), pool).map(_.id) shouldBe Seq(g.id, p.id, c.id)
+    // no in-pool parent among the pool: unchanged
+    MempoolAuditor.withAncestorsParentsFirst(Seq(g), Seq(g)).map(_.id) shouldBe Seq(g.id)
+    MempoolAuditor.withAncestorsParentsFirst(Seq(c, g), Seq(c, g)).map(_.id) shouldBe Seq(c.id, g.id)
+  }
+
 }

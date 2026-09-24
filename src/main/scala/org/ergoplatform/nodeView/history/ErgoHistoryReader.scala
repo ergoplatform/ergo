@@ -8,10 +8,9 @@ import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
+import org.ergoplatform.nodeView.history.modifierprocessors.{BlockSectionProcessor, HeadersProcessor, InputBlocksProcessor}
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
-import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.MalformedModifierError
 import scorex.util.{ModifierId, ScorexLogging}
 
@@ -27,10 +26,10 @@ trait ErgoHistoryReader
     with ContainsModifiers[BlockSection]
     with HeadersProcessor
     with BlockSectionProcessor
-    with ScorexLogging
-    with ScorexEncoding {
+    with InputBlocksProcessor
+    with ScorexLogging {
 
-  type ModifierIds = Seq[(NetworkObjectTypeId.Value, ModifierId)]
+  private type ModifierIds = Seq[(NetworkObjectTypeId.Value, ModifierId)]
 
   protected[history] val historyStorage: HistoryStorage
 
@@ -41,7 +40,7 @@ trait ErgoHistoryReader
   private val Valid = 1.toByte
   private val Invalid = 0.toByte
 
-  override val historyReader = this
+  override val historyReader: ErgoHistoryReader = this
 
   /**
     * True if there's no history, even genesis block

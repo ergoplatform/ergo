@@ -9,7 +9,7 @@ import org.scalatest.propspec.AnyPropSpec
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
-import org.ergoplatform.nodeView.LocallyGeneratedModifier
+import org.ergoplatform.nodeView.LocallyGeneratedBlockSection
 import org.ergoplatform.nodeView.state.ErgoState
 import scorex.testkit.generators
 import scorex.testkit.utils.AkkaFixture
@@ -74,7 +74,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallySuccessfulModifier])
       p.send(node, GetDataFromCurrentView[ST, BlockSection] { v => totallyValidModifiers(v.history, v.state, 2).head })
       val mod = p.expectMsgClass(classOf[BlockSection])
-      p.send(node, LocallyGeneratedModifier(mod))
+      p.send(node, LocallyGeneratedBlockSection(mod))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
     }
   }
@@ -86,7 +86,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
 
       system.eventStream.subscribe(eventListener.ref, classOf[SyntacticallyFailedModification])
       val invalid = syntacticallyInvalidModifier(h)
-      p.send(node, LocallyGeneratedModifier(invalid))
+      p.send(node, LocallyGeneratedBlockSection(invalid))
       eventListener.expectMsgType[SyntacticallyFailedModification]
     }
   }
@@ -100,7 +100,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
       p.send(node, GetDataFromCurrentView[ST, BlockSection] { v => totallyValidModifiers(v.history, v.state, 2).head })
       val mod = p.expectMsgClass(classOf[BlockSection])
-      p.send(node, LocallyGeneratedModifier(mod))
+      p.send(node, LocallyGeneratedBlockSection(mod))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
       eventListener.expectMsgType[FullBlockApplied]
     }
@@ -115,7 +115,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       system.eventStream.subscribe(eventListener.ref, classOf[SemanticallyFailedModification])
       p.send(node, GetDataFromCurrentView[ST, BlockSection] { v => semanticallyInvalidModifier(v.state) })
       val invalid = p.expectMsgClass(classOf[BlockSection])
-      p.send(node, LocallyGeneratedModifier(invalid))
+      p.send(node, LocallyGeneratedBlockSection(invalid))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
       eventListener.expectMsgType[SemanticallyFailedModification]
     }
@@ -130,7 +130,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
       p.send(node, GetDataFromCurrentView[ST, BlockSection] { v => totallyValidModifiers(v.history, v.state, 2).head })
       val mod = p.expectMsgClass(classOf[BlockSection])
-      p.send(node, LocallyGeneratedModifier(mod))
+      p.send(node, LocallyGeneratedBlockSection(mod))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
       eventListener.expectMsgType[FullBlockApplied]
     }
@@ -173,7 +173,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       val mods = p.expectMsgClass(classOf[Seq[BlockSection]])
 
       mods.foreach { mod =>
-        p.send(node, LocallyGeneratedModifier(mod))
+        p.send(node, LocallyGeneratedBlockSection(mod))
       }
 
       (1 to mods.size).foreach(_ => eventListener.expectMsgType[SyntacticallySuccessfulModifier])
@@ -190,11 +190,11 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
 
       val invalid = syntacticallyInvalidModifier(h)
 
-      p.send(node, LocallyGeneratedModifier(invalid))
+      p.send(node, LocallyGeneratedBlockSection(invalid))
 
       eventListener.expectMsgType[SyntacticallyFailedModification]
 
-      p.send(node, LocallyGeneratedModifier(mod))
+      p.send(node, LocallyGeneratedBlockSection(mod))
 
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
 
@@ -219,7 +219,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       p.send(node, GetDataFromCurrentView[ST, Seq[BlockSection]] { v => totallyValidModifiers(v.history, v.state, 2) })
       val initMods = p.expectMsgClass(waitDuration, classOf[Seq[BlockSection]])
       initMods.foreach { mod =>
-        p.send(node, LocallyGeneratedModifier(mod))
+        p.send(node, LocallyGeneratedBlockSection(mod))
         eventListener.expectMsgType[SyntacticallySuccessfulModifier]
       }
 
@@ -233,8 +233,8 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       })
       val fork2Mod = p.expectMsgClass(waitDuration, classOf[BlockSection])
 
-      p.send(node, LocallyGeneratedModifier(fork1Mod))
-      p.send(node, LocallyGeneratedModifier(fork2Mod))
+      p.send(node, LocallyGeneratedBlockSection(fork1Mod))
+      p.send(node, LocallyGeneratedBlockSection(fork2Mod))
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
       eventListener.expectMsgType[SyntacticallySuccessfulModifier]
 
@@ -268,7 +268,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
         totallyValidModifiers(v.history, v.state, opCountBeforeFork)
       })
       val plainMods = p.expectMsgClass(waitDuration, classOf[Seq[BlockSection]])
-      plainMods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
+      plainMods.foreach { mod => p.send(node, LocallyGeneratedBlockSection(mod)) }
 
       p.send(node, GetDataFromCurrentView[ST, Seq[BlockSection]] { v =>
         val mods = totallyValidModifiers(v.history, v.state, fork1OpCount)
@@ -282,8 +282,8 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       })
       val fork2Mods = p.expectMsgClass(waitDuration, classOf[Seq[BlockSection]])
 
-      fork1Mods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
-      fork2Mods.foreach { mod => p.send(node, LocallyGeneratedModifier(mod)) }
+      fork1Mods.foreach { mod => p.send(node, LocallyGeneratedBlockSection(mod)) }
+      fork2Mods.foreach { mod => p.send(node, LocallyGeneratedBlockSection(mod)) }
 
       p.send(node, GetDataFromCurrentView[ST, Boolean] { v =>
         v.history.bestFullBlockIdOpt.orElse(v.history.bestHeaderIdOpt).contains(fork2Mods.last.id)
@@ -303,7 +303,7 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
       withView(node) { v =>
         totallyValidModifiers(v.history, v.state, opCountBeforeFork)
       }.foreach {
-        mod => node ! LocallyGeneratedModifier(mod)
+        mod => node ! LocallyGeneratedBlockSection(mod)
       }
       // generate the first fork with valid blocks
       val fork1Mods = withView(node) { v =>
@@ -319,9 +319,9 @@ trait NodeViewHolderTests[ST <: ErgoState[ST]]
             generators.Valid, generators.Valid, generators.Valid, generators.Valid, generators.Valid, generators.Valid))
       }
       // apply the first fork with valid blocks
-      fork1Mods.foreach { mod => node ! LocallyGeneratedModifier(mod) }
+      fork1Mods.foreach { mod => node ! LocallyGeneratedBlockSection(mod) }
       // apply the second fork with invalid block
-      fork2Mods.foreach { mod => node ! LocallyGeneratedModifier(mod) }
+      fork2Mods.foreach { mod => node ! LocallyGeneratedBlockSection(mod) }
       // verify that open surface consist of last block of the first chain,
       // or first block of the second chain, or both, but no any other option
       withView(node) { v =>

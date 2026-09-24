@@ -1,6 +1,5 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.Header
@@ -268,9 +267,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Unknown
 
 
-      val progressInfo = ProgressInfo[PM](Option(fullBlock.header.parentId), Seq(fullBlock), Seq.empty, Seq.empty)
-      history.reportModifierIsInvalid(fullBlock.header, progressInfo)
-
+      history.reportModifierIsInvalid(fullBlock.header)
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.adProofs.value.id) shouldBe Invalid
       history.isSemanticallyValid(fullBlock.blockTransactions.id) shouldBe Invalid
@@ -287,8 +284,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
-    val progressInfo = ProgressInfo[PM](Some(inChain.last.parentId), fork2, Seq.empty, Seq.empty)
-    history.reportModifierIsInvalid(inChain.last.header, progressInfo)
+    history.reportModifierIsInvalid(inChain.last.header)
 
     fork1.foreach { fullBlock =>
       history.isSemanticallyValid(fullBlock.header.id) shouldBe Invalid
@@ -315,8 +311,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
 
     history.bestHeaderOpt.value shouldBe fork1.last.header
 
-    val progressInfo = ProgressInfo[PM](Some(common.parentId), fork1, Seq.empty, Seq.empty)
-    history.reportModifierIsInvalid(fork1.head.header, progressInfo)
+    history.reportModifierIsInvalid(fork1.head.header)
 
     history.bestHeaderOpt.value shouldBe fork2.last.header
     history.bestFullBlockOpt.value shouldBe fork2.last
@@ -330,8 +325,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
 
     val invalidChain = chain.takeRight(2)
 
-    val progressInfo = ProgressInfo[PM](Some(invalidChain.head.parentId), invalidChain, Seq.empty, Seq.empty)
-    val report = history.reportModifierIsInvalid(invalidChain.head.header, progressInfo).get
+    val report = history.reportModifierIsInvalid(invalidChain.head.header).get
     history = report._1
     val processInfo = report._2
     processInfo.toApply.isEmpty shouldBe true
@@ -353,8 +347,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
       history.contains(parentHeader.transactionsId) shouldBe true
       history.contains(parentHeader.ADProofsId) shouldBe true
 
-      val progressInfo = ProgressInfo[PM](Some(parentHeader.id), Seq(fullBlock), Seq.empty, Seq.empty)
-      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions, progressInfo).get
+      val (repHistory, _) = history.reportModifierIsInvalid(fullBlock.blockTransactions).get
       repHistory.bestFullBlockOpt.value.header shouldBe history.bestHeaderOpt.value
       repHistory.bestHeaderOpt.value shouldBe parentHeader
     }

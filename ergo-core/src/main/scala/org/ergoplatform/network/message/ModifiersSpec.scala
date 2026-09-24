@@ -10,7 +10,7 @@ import scala.collection.immutable
 /**
  * The `Modifier` message is a reply to a `RequestModifier` message which requested these modifiers.
  */
-object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
+object ModifiersSpec extends MessageSpecInitial[ModifiersData] with ScorexLogging {
 
   val maxMessageSize: Int = 2048576
 

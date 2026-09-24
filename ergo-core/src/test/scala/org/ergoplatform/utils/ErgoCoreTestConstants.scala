@@ -24,6 +24,8 @@ import sigma.crypto.EcPointType
 import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+import org.ergoplatform.nodeView.state.{ErgoStateContext, UpcomingStateContext}
+import scorex.util.encode.Base16
 
 import java.io.File
 
@@ -57,7 +59,7 @@ object ErgoCoreTestConstants extends ScorexLogging {
   lazy val powScheme: AutolykosPowScheme = chainSettings.powScheme.ensuring(_.isInstanceOf[DefaultFakePowScheme])
   val emptyVSUpdate = ErgoValidationSettingsUpdate.empty
 
-  val EmptyStateRoot: ADDigest = ADDigest @@ Array.fill(HashLength + 1)(0.toByte)
+  val EmptyStateRoot: ADDigest = ADDigest @@  Base16.decode("4ec61f485b98eb87153f7c57db4f5ecd75556fddbc403b41acf8441fde8e160900").get
   val EmptyDigest32: Digest32 = Digest32 @@ Array.fill(HashLength)(0.toByte)
   val defaultDifficultyControl = new DifficultyAdjustment(chainSettings)
   val defaultExtension: ExtensionCandidate = ExtensionCandidate(Seq(Array(0: Byte, 8: Byte) -> EmptyDigest32))

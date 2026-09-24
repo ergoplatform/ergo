@@ -6,6 +6,7 @@ import org.ergoplatform.mining._
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.ErgoTestHelpers
 import scorex.crypto.hash.{Blake2b256, Blake2b512, CryptographicHash, Digest}
 
@@ -58,7 +59,6 @@ object MinerBench extends App with ErgoTestHelpers {
     println(s"Calculation time of $Steps numberic hashes over ${data.length} bytes")
     println(s"Blake2b256: ${st2 - st} ms")
     println(s"Blake2b512: ${st4 - st3} ms")
-
   }
 
   def validationBench() {
@@ -70,13 +70,20 @@ object MinerBench extends App with ErgoTestHelpers {
     val nBits = DifficultySerializer.encodeCompactBits(difficulty)
     val h = inHeader.copy(nBits = nBits)
 
-    val candidate = new CandidateBlock(None, Header.InitialVersion, nBits: Long, h.stateRoot,
+    val candidate = CandidateBlock(None, Header.InitialVersion, nBits: Long, h.stateRoot,
       fb.adProofs.get.proofBytes,
       fb.blockTransactions.txs,
       System.currentTimeMillis(),
       ExtensionCandidate(Seq.empty),
-      Array())
-    val newHeader = pow.proveCandidate(candidate, sk).get.header
+      Array(),
+      InputBlockFields.empty,
+      Seq.empty,
+      Seq.empty
+    )
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
+    val newHeader = extractHeaderFromProveResult(
+      pow.proveCandidate(candidate, sk, Long.MinValue, Long.MaxValue, defaultParams)
+    )
 
     val Steps = 10000
 

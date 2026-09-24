@@ -1,6 +1,6 @@
 package org.ergoplatform.utils.generators
 
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, OrderingBlockFound}
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.{LoggingUtil, RandomLike, RandomWrapper}
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.matchers.should.Matchers
@@ -213,9 +213,11 @@ object ValidBlocksGenerators
         nipopowAlgos.interlinksToExtension(interlinks) ++
         utxoState.stateContext.validationSettings.toExtensionCandidate
     val votes = Array.fill(3)(0: Byte)
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
     powScheme.proveBlock(parentOpt.map(_.header), Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest, adProofBytes,
-      transactions, time, extension, votes, defaultMinerSecretNumber).get
+      transactions, time, extension, votes, defaultMinerSecretNumber, Long.MinValue, Long.MaxValue, defaultParams).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   /**
@@ -237,9 +239,11 @@ object ValidBlocksGenerators
     val interlinksExtension = nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(parentOpt, parentExtensionOpt))
     val extension: ExtensionCandidate = parameters.toExtensionCandidate ++ interlinksExtension
     val votes = Array.fill(3)(0: Byte)
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
     powScheme.proveBlock(parentOpt, Header.InitialVersion, settings.chainSettings.initialNBits, updStateDigest,
-      adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber).get
+      adProofBytes, transactions, time, extension, votes, defaultMinerSecretNumber, Long.MinValue, Long.MaxValue, defaultParams).asInstanceOf[OrderingBlockFound]  // todo: fix
+      .fb
   }
 
   private def checkPayload(transactions: Seq[ErgoTransaction], us: UtxoState): Unit = {

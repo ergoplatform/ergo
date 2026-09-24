@@ -2,6 +2,7 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props, Stash}
 import akka.pattern.StatusReply
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.CandidateGenerator.GenerateCandidate
 import org.ergoplatform.nodeView.state.DigestState
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
@@ -50,6 +51,11 @@ class ErgoMiner(
           self ! QueryWalletPublicKey
       }
     }
+  }
+
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted ergo miner restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
   }
 
   /** Initializes miner state with secrets and candidate generator */

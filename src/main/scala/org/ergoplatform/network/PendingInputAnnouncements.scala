@@ -45,15 +45,29 @@ final class PendingInputAnnouncements(maxEntries: Int,
   private val parents = mutable.Map.empty[ModifierId, mutable.LinkedHashSet[ModifierId]]
   private var usedBytes = 0L
   private var evictionCount = 0L
-  private var dropCount = 0L
+  private var dropCounts = PendingInputAnnouncements.emptyDrops
+  private var admittedCount = 0L
+  private var replayedCount = 0L
+  private var replayNotForwardedCount = 0L
   private var lastWarning: Option[Long] = None
 
   def size: Int = entries.size
   def byteSize: Long = usedBytes
   def evictions: Long = evictionCount
-  def drops: Long = dropCount
+  def drops: Map[String, Long] = dropCounts
   def fullInfo: PendingInputAnnouncements.Stats =
-    PendingInputAnnouncements.Stats(size, byteSize, evictions, drops)
+    PendingInputAnnouncements.Stats(size, byteSize, admittedCount, replayedCount,
+      replayNotForwardedCount, evictions, drops)
+
+  def noteReplayNotForwarded(): Unit = {
+    replayNotForwardedCount += 1
+    onChange()
+  }
+
+  private def countDrop(reason: String): Unit = {
+    dropCounts = dropCounts.updated(reason, dropCounts(reason) + 1)
+    log.debug(s"Pending input announcement dropped: $reason")
+  }
 
   private def warnLimited(reason: String): Unit = {
     val time = now()
@@ -65,17 +79,18 @@ final class PendingInputAnnouncements(maxEntries: Int,
   }
 
   private def reject(reason: String): Boolean = {
-    dropCount += 1
-    warnLimited(s"dropped: $reason")
+    countDrop(reason)
     onChange()
     false
   }
 
   private def remove(id: ModifierId, discarded: Boolean = true,
-                     evicted: Boolean = false): Unit = entries.remove(id).foreach { entry =>
+                     evicted: Boolean = false, reason: String = "staleParent"): Unit = entries.remove(id).foreach { entry =>
     if (discarded) {
-      if (evicted) evictionCount += 1 else dropCount += 1
-      warnLimited(if (evicted) "capacity eviction" else "dropped: expired or stale parent")
+      if (evicted) {
+        evictionCount += 1
+        warnLimited("capacity eviction")
+      } else countDrop(reason)
       onDiscard(entry.announcement, entry.peer)
     }
     usedBytes -= entry.bytes
@@ -91,13 +106,13 @@ final class PendingInputAnnouncements(maxEntries: Int,
     val time = now()
     entries.iterator.collect {
       case (id, entry) if time - entry.arrived >= ttlMillis => id
-    }.toVector.foreach(id => remove(id))
+    }.toVector.foreach(id => remove(id, reason = "expired"))
   }
 
   def removeConnection(handler: ActorRef): Unit = {
     entries.iterator.collect {
       case (id, entry) if entry.peer.handlerRef == handler => id
-    }.toVector.foreach(id => remove(id))
+    }.toVector.foreach(id => remove(id, reason = "disconnected"))
   }
 
   def add(announcement: InputBlockAnnouncement, peer: ConnectedPeer): Boolean = {
@@ -111,17 +126,17 @@ final class PendingInputAnnouncements(maxEntries: Int,
     val heldHeader = hostEntries.find(_.announcement.id == announcement.id)
     if (heldHeader.exists(entry =>
       InputBlockAnnouncement.serializer.toBytes(entry.announcement).sameElements(serialized))) {
-      return reject("duplicate serialized announcement")
+      return reject("duplicate")
     }
-    if (hostEntries.size >= perPeer) return reject("per-peer capacity limit")
-    if (heldHeader.isDefined) return reject("per-host header variant limit")
+    if (hostEntries.size >= perPeer) return reject("hostLimit")
+    if (heldHeader.isDefined) return reject("variantLimit")
     val key = bytesToId(Blake2b256.hash(serialized))
     if (entries.contains(key)) {
-      reject("duplicate serialized announcement")
+      reject("duplicate")
     } else {
       val bytes = serialized.length.toLong
       if (bytes > maxBytes) {
-        reject("oversize payload")
+        reject("oversize")
       } else {
         while (entries.size >= maxEntries || usedBytes > maxBytes - bytes) {
           val occupancy = entries.valuesIterator.toSeq.groupBy(
@@ -133,7 +148,8 @@ final class PendingInputAnnouncements(maxEntries: Int,
             val count = occupancy(peerHostKey(entry.peer))
             incomingCount <= fairShare || count >= fairShare
           }.toVector
-          if (candidates.isEmpty) return reject("capacity fairness limit")
+          // Non-empty: either every entry qualifies, or the incoming host holds at
+          // least fairShare entries. Oversize rejection prevents an empty-store loop.
           // Prefer the largest occupancy, then the incoming host, then oldest arrival.
           val victim = candidates.maxBy { case (_, entry) =>
             val h = peerHostKey(entry.peer)
@@ -145,6 +161,7 @@ final class PendingInputAnnouncements(maxEntries: Int,
         parents.getOrElseUpdate(announcement.header.parentId,
           mutable.LinkedHashSet.empty[ModifierId]) += key
         usedBytes += bytes
+        admittedCount += 1
         onChange()
         true
       }
@@ -192,6 +209,7 @@ final class PendingInputAnnouncements(maxEntries: Int,
       .filter(id => entries(id).announcement.header.height == tip.height + 1).take(limit)
     ready.map { id =>
       val entry = entries(id)
+      replayedCount += 1
       remove(id, discarded = false)
       entry.announcement -> entry.peer
     }
@@ -204,16 +222,26 @@ object PendingInputAnnouncements {
     Option(addr.getAddress).fold(addr.getHostString)(_.getHostAddress)
   }
 
+  private val emptyDrops: Map[String, Long] = Seq(
+    "duplicate", "hostLimit", "variantLimit", "oversize", "expired",
+    "staleParent", "disconnected").map(_ -> 0L).toMap
+
   /** Immutable snapshot published by the owning synchronizer for /info. */
   case class Stats(size: Int = 0, bytes: Long = 0L,
-                   evictions: Long = 0L, drops: Long = 0L)
+                   admitted: Long = 0L, replayed: Long = 0L, replayNotForwarded: Long = 0L,
+                   evictions: Long = 0L, drops: Map[String, Long] = emptyDrops)
 
   object Stats {
     implicit val jsonEncoder: Encoder[Stats] = (stats: Stats) => Json.obj(
       "size" -> Json.fromInt(stats.size),
       "bytes" -> Json.fromLong(stats.bytes),
+      "admitted" -> Json.fromLong(stats.admitted),
+      "replayed" -> Json.fromLong(stats.replayed),
+      "replayNotForwarded" -> Json.fromLong(stats.replayNotForwarded),
       "evictions" -> Json.fromLong(stats.evictions),
-      "drops" -> Json.fromLong(stats.drops)
+      "drops" -> Json.obj(stats.drops.toSeq.map { case (reason, count) =>
+        reason -> Json.fromLong(count)
+      }: _*)
     )
   }
 }

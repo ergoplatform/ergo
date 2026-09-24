@@ -45,7 +45,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     def size: Int = call("size").asInstanceOf[Int]
     def byteSize: Long = call("byteSize").asInstanceOf[Long]
     def evictions: Long = call("evictions").asInstanceOf[Long]
-    def drops: Long = call("drops").asInstanceOf[Long]
+    def drops: Map[String, Long] = call("drops").asInstanceOf[Map[String, Long]]
     def take(tip: Header): Seq[(InputBlockAnnouncement, ConnectedPeer)] =
       call("take", tip).asInstanceOf[Seq[(InputBlockAnnouncement, ConnectedPeer)]]
     def takeKnown(tip: Header, known: ModifierId => Option[Header]): Seq[(InputBlockAnnouncement, ConnectedPeer)] = {
@@ -155,7 +155,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       now = 1000
       s.take(blocks.head.header) shouldBe empty
       s.size shouldBe 0
-      s.drops shouldBe 1L
+      s.drops("expired") shouldBe 1L
     }
   }
 
@@ -298,8 +298,10 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         val probe = TestProbe()
         probe.send(stats, org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo)
         val info = probe.expectMsgType[org.ergoplatform.local.ErgoStatsCollector.NodeInfo]
-        org.ergoplatform.local.ErgoStatsCollector.NodeInfo.jsonEncoder(info).hcursor
-          .downField("pendingInputAnnouncements").get[Int]("size") shouldBe Right(0)
+        val json = org.ergoplatform.local.ErgoStatsCollector.NodeInfo.jsonEncoder(info).hcursor
+          .downField("pendingInputAnnouncements")
+        json.get[Int]("size") shouldBe Right(0)
+        json.downField("drops").get[Long]("disconnected") shouldBe Right(1L)
       }
       if (checkStats) {
         val probe = TestProbe()
@@ -310,7 +312,15 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         json.get[Int]("size") shouldBe Right(1)
         json.get[Long]("bytes").right.get should be > 0L
         json.get[Long]("evictions") shouldBe Right(if (evict) 1L else 0L)
-        json.get[Long]("drops") shouldBe Right(if (evict) 0L else 1L)
+        json.get[Long]("admitted") shouldBe Right(if (evict) 2L else 1L)
+        json.get[Long]("replayed") shouldBe Right(0L)
+        json.get[Long]("replayNotForwarded") shouldBe Right(0L)
+        val drops = json.downField("drops")
+        drops.get[Long]("hostLimit") shouldBe Right(if (evict) 0L else 1L)
+        Seq("duplicate", "variantLimit", "oversize", "expired",
+          "staleParent", "disconnected").foreach { reason =>
+          drops.get[Long](reason) shouldBe Right(0L)
+        }
       }
       tracker.status(target.id, typeId, Seq.empty) shouldBe
         scorex.core.network.ModifiersStatus.Unknown
@@ -333,7 +343,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     disposalScenario(evict = true, checkStats = true)
   }
 
-  property("drop and eviction warnings are rate limited without losing counters") {
+  property("duplicates are counted without a warning; evictions warn at most once per second") {
     withPeers { (p, q) =>
       val logger = org.slf4j.LoggerFactory.getLogger(classOf[PendingInputAnnouncements])
         .asInstanceOf[ch.qos.logback.classic.Logger]
@@ -344,14 +354,13 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       logger.setLevel(ch.qos.logback.classic.Level.WARN)
       try {
         var now = 0L
-        val s = new Store(2, 100000, 10, () => now)
+        val s = new PendingInputAnnouncements(2, 100000, 10, 10000, () => now)
         val a = announcement(10)
         s.add(a, p) shouldBe true
-        (1 to 10).foreach(_ => s.add(a, q) shouldBe false)
-        appender.list.size() shouldBe 1
-        s.drops shouldBe 10L
-        appender.list.get(0).getFormattedMessage should include ("duplicate")
-        // Remaining entries arrive at 1 ms, so they have not expired at 1000 ms.
+        (1 to 10).foreach(_ => s.add(a, p) shouldBe false)
+        appender.list.size() shouldBe 0
+        s.drops("duplicate") shouldBe 10L
+        // Capacity events share a warning budget; duplicates do not consume it.
         now = 1L
         s.add(announcement(11), q) shouldBe true
         s.add(announcement(12), p) shouldBe true
@@ -359,10 +368,13 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         s.evictions shouldBe 1L
         now = 1000L
         s.add(announcement(13), q) shouldBe true
+        appender.list.size() shouldBe 1
+        now = 1001L
+        s.add(announcement(14), p) shouldBe true
         appender.list.size() shouldBe 2
         appender.list.get(1).getFormattedMessage should include ("eviction")
         appender.list.get(1).getLevel shouldBe ch.qos.logback.classic.Level.WARN
-        s.evictions shouldBe 2L
+        s.evictions shouldBe 3L
       } finally {
         logger.detachAppender(appender)
         logger.setLevel(oldLevel)
@@ -429,6 +441,8 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     try {
       val nc = TestProbe()
       val vh = TestProbe()
+      val stats = TestActorRef(new org.ergoplatform.local.ErgoStatsCollector(
+        TestProbe().ref, nc.ref, ErgoSyncTracker(cfg.scorexSettings.network), cfg))
       val peer = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref, None)
       val pool = ErgoMemPool.empty(cfg)
       val height = if (epoch) cfg.chainSettings.voting.votingLength else 1
@@ -557,6 +571,13 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       ref ! ChangedHistory(hr)
       validations shouldBe empty // history alone must not use pre-epoch parameters
       ref ! ChangedState(state(parent, nextParameters))
+      val statsProbe = TestProbe()
+      statsProbe.send(stats, org.ergoplatform.local.ErgoStatsCollector.GetNodeInfo)
+      val info = statsProbe.expectMsgType[org.ergoplatform.local.ErgoStatsCollector.NodeInfo]
+      val json = org.ergoplatform.local.ErgoStatsCollector.NodeInfo.jsonEncoder(info).hcursor
+        .downField("pendingInputAnnouncements")
+      json.get[Long]("replayed") shouldBe Right((batchSize + (if (poisoned) 1 else 0)).toLong)
+      json.get[Long]("replayNotForwarded") shouldBe Right(if (invalidOnly || poisoned) 1L else 0L)
       if (invalidOnly) {
         validations shouldBe Vector(nextParameters -> Some(expectedBits))
         if (otherSupplier) {
@@ -581,7 +602,8 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         val work = receiveTurns.filter(_._2 > 0)
         work.head._2 should be <= 64
         all(work.map(_._2)) should be <= 64
-        work.tail.map(_._1).distinct shouldBe Vector("ReplayPendingInputAnnouncements$")
+        work.tail.map(_._1).distinct shouldBe
+          (if (batchSize > 64) Vector("ReplayPendingInputAnnouncements$") else Vector.empty)
         work.map(_._2).sum shouldBe batchSize
       }
       difficultyReads shouldBe (batchSize + (if (poisoned) 1 else 0))
@@ -634,6 +656,11 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     replayScenario(epoch = false, earlyBody = false, knownBeforeApply = true, reorg = true)
   }
 
+  property("replay counts replayed and not-forwarded announcements") {
+    replayScenario(epoch = false, earlyBody = false, batchSize = 3)
+    replayScenario(epoch = false, earlyBody = false, invalidOnly = true)
+  }
+
   property("failed replay releases the requested announcement for a later inventory") {
     replayScenario(epoch = false, earlyBody = false, invalidOnly = true)
   }
@@ -657,7 +684,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       s.add(a, p) shouldBe true
       s.add(a.copy(weakTxIds = Some(Seq.empty)), p) shouldBe false
       s.size shouldBe 1
-      s.drops shouldBe 1L
+      s.drops("variantLimit") shouldBe 1L
     }
   }
 
@@ -668,6 +695,9 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       s.add(a, p) shouldBe true
       s.add(a, p) shouldBe false
       s.size shouldBe 1
+      s.drops("duplicate") shouldBe 1L
+      s.drops("hostLimit") shouldBe 0L
+      s.drops("variantLimit") shouldBe 0L
     }
   }
 

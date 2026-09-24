@@ -1491,7 +1491,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         p => hr.isInBestChain(p)
       )
       ready.foreach { case (announcement, peer) =>
-        processInputBlock(announcement, hr, mp, peer, usr)
+        if (!processInputBlock(announcement, hr, mp, peer, usr)) {
+          pendingInputAnnouncements.noteReplayNotForwarded()
+        }
       }
       if (pendingInputAnnouncements.hasReady(tip) && !pendingReplayScheduled) {
         pendingReplayScheduled = true
@@ -1527,7 +1529,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         hr: ErgoHistoryReader,
                         mp: ErgoMemPoolReader,
                         remote: ConnectedPeer,
-                        usrOpt: Option[UtxoStateReader]): Unit = {
+                        usrOpt: Option[UtxoStateReader]): Boolean = {
+    var forwarded = false
 
     // Input blocks are only useful when nearly synced (within 2 blocks)
     // If we're far behind, ignore them and continue with normal header/block sync
@@ -1535,14 +1538,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         inputBlockInfo.header.height < hr.fullBlockHeight - 2) {
       //todo: change to .debug before release
       log.info(s"Ignoring input block at height ${inputBlockInfo.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
-      return
+      return false
     }
 
     // Input blocks should only be processed by UTXO mode nodes
     // Digest mode nodes cannot validate input blocks properly (validation is skipped when usrOpt is empty)
     if (usrOpt.isEmpty) {
       log.warn(s"Received input block but local node is in digest mode - input blocks cannot be validated in digest mode, ignoring")
-      return
+      return false
     }
 
     val subBlockHeader = inputBlockInfo.header
@@ -1551,7 +1554,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Skip already known input blocks
     if (hr.getInputBlock(subBlockId).isDefined) {
       log.debug(s"Input block $subBlockId already known, ignoring")
-      return
+      return false
     }
 
     // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
@@ -1582,7 +1585,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
         log.debug(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} does not bind an expected difficulty")
         clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
-        return
+        return false
       }
       val valid = usrOpt
         .map(_.stateContext.currentParameters)
@@ -1604,6 +1607,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 log.info(s"Diff is empty $subBlockId , processing immediately")
 
                 // write sub-block and transactions to db
+                forwarded = true
                 viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
                 val transactionsData = InputBlockTransactionsData(inputBlockInfo.id, mempoolTxs)
                 viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
@@ -1613,6 +1617,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 log.info(s"Diff is abt ${diff.length} transactions, asking them from $remote")
 
                 // write sub-block to db
+                forwarded = true
                 viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
               }
             )
@@ -1621,6 +1626,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // input block coming with no transaction ids announced
 
             // write sub-block to db
+            forwarded = true
             viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
 
             // todo: make it debug before release
@@ -1663,6 +1669,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // just ignore the subblock
       }
     }
+    forwarded
   }
 
   /**

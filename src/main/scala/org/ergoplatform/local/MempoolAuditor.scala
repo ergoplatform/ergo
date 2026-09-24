@@ -12,8 +12,9 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.RecheckMempool
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.network.message.{InvData, InvSpec, Message}
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 /**
@@ -95,7 +96,8 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   private def rebroadcastTransactions(): Unit = {
     log.debug("Rebroadcasting transactions")
     poolReaderOpt.foreach { pr =>
-      val toBroadcast = pr.random(settings.nodeSettings.rebroadcastCount).toSeq
+      val toBroadcast = MempoolAuditor.withAncestorsParentsFirst(
+        pr.random(settings.nodeSettings.rebroadcastCount).toSeq, pr.getAllPrioritized)
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
           val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
@@ -120,6 +122,51 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
 object MempoolAuditor {
 
   case object CleanupDone
+
+  /**
+    * How deep the ancestor walk in `withAncestorsParentsFirst` follows in-pool parents (the same bound the pool puts
+    * on `updateFamily`).
+    */
+  private[local] val MaxAncestorDepth = 500
+
+  /**
+    * Adds the in-pool ancestors of the selected transactions and orders the result parents first. The rebroadcast
+    * selection is a window of the pool, and a pooled transaction whose inputs are neither in the state nor in the
+    * selection is not announced; its children, whose inputs the selection does hold, would then be announced
+    * without it. A peer declines a transaction whose inputs it does not have yet and does not request it again for
+    * a while, so those children stay out of the peer's pool (e.g. a chain of wallet payments returned to the pool
+    * by a rollback). Selections with no in-pool parent are returned unchanged.
+    */
+  private[local] def withAncestorsParentsFirst(selected: Seq[UnconfirmedTransaction],
+                                               pool: Seq[UnconfirmedTransaction]): Seq[UnconfirmedTransaction] = {
+    val creatorOf: Map[ModifierId, UnconfirmedTransaction] =
+      pool.flatMap(utx => utx.transaction.outputs.map(out => bytesToId(out.id) -> utx)).toMap
+    def parentsOf(utx: UnconfirmedTransaction): Iterator[UnconfirmedTransaction] =
+      utx.transaction.inputIds.flatMap(boxId => creatorOf.get(bytesToId(boxId))).distinct.iterator
+    val ordered = mutable.LinkedHashMap[ModifierId, UnconfirmedTransaction]()
+    // iterative post-order walk: a transaction is emitted after its in-pool parents, down to MaxAncestorDepth
+    selected.foreach { root =>
+      if (!ordered.contains(root.id)) {
+        var stack: List[(UnconfirmedTransaction, Int, Iterator[UnconfirmedTransaction])] = List((root, 0, parentsOf(root)))
+        val onStack = mutable.Set[ModifierId](root.id)
+        while (stack.nonEmpty) {
+          val (utx, depth, parents) = stack.head
+          if (depth < MaxAncestorDepth && parents.hasNext) {
+            val parent = parents.next()
+            if (!ordered.contains(parent.id) && !onStack.contains(parent.id)) {
+              onStack += parent.id
+              stack = (parent, depth + 1, parentsOf(parent)) :: stack
+            }
+          } else {
+            stack = stack.tail
+            onStack -= utx.id
+            ordered.put(utx.id, utx)
+          }
+        }
+      }
+    }
+    ordered.values.toSeq
+  }
 
 }
 

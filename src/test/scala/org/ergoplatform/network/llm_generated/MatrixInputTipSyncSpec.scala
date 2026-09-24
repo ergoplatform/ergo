@@ -33,7 +33,7 @@ import sigma.interpreter.ProverResult
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 
-/** Replay is scoped to the first V2 response which establishes an equal peer at the local full-block height. */
+/** Replay occurs at most once per connection during one synchronizer lifetime. */
 class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
   import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -142,6 +142,10 @@ class MatrixInputTipSyncSpec extends AnyPropSpec with Matchers with FileUtils {
       InputBlockAnnouncement.serializer.toBytes(replays.head._1) shouldBe
         InputBlockAnnouncement.serializer.toBytes(tip)
       replays.head._2.sendingStrategy shouldBe SendToPeer(remote)
+      replays.head._2.sendingStrategy match {
+        case SendToPeer(actual) => actual.handlerRef shouldBe remote.handlerRef
+        case other => fail(s"Expected a single-peer replay, got $other")
+      }
     }
   }
 

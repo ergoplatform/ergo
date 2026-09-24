@@ -82,6 +82,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
   // A peer handler identifies a connection; ConnectedPeer equality only compares remote addresses.
+  // This marker lasts for this synchronizer instance; restarting it permits another replay.
   private val processedInputTipReplayedTo = mutable.Set[ActorRef]()
 
   private[network] def inputTipReplayConnectionCount: Int = processedInputTipReplayedTo.size

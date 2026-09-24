@@ -16,9 +16,10 @@ import scala.collection.mutable
   * which may have disconnected by the time the ordering parent is applied.
   * Replay starts immediately on ordering apply, in arrival order, once history
   * and state agree on the applied tip; bounded batches continue via self-messages.
-  * TODO(F13-restart): proof-F13's short early-chain restart showed higher lag
-  * than stock. Hypothesis: the replay burst immediately after apply near genesis;
-  * the longer funded run decides whether this needs a scheduling change.
+  * TODO(restart lag): short, unfunded early-chain devnet restarts showed higher
+  * input-tip lag than stock. Hypothesis: the replay burst immediately after apply
+  * near genesis. A longer funded restart did not reproduce it; the cause is not
+  * isolated, so replay scheduling is unchanged.
   */
 final class PendingInputAnnouncements(maxEntries: Int,
                                       maxBytes: Long,

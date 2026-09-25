@@ -519,7 +519,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  val newMemPool = if (almostSynced) {
+                  // a chain switch returns the rolled-back transactions to the pool however far behind the headers it is
+                  val newMemPool = if (almostSynced || progressInfo.chainSwitchingNeeded) {
                     updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
                   } else {
                     memoryPool()

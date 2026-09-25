@@ -190,7 +190,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     ApiResponse(getFullBlockByHeaderId(id).map(_.map(_.blockTransactions)))
   }
 
-  def getFullBlockByHeaderIdR: Route = (modifierId & get) { id =>
+  def getFullBlockByHeaderIdR: Route = (modifierId & pathEndOrSingleSlash & get) { id =>
     ApiResponse(getFullBlockByHeaderId(id))
   }
 

@@ -1414,6 +1414,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def clearDeliveryIfFromSupplier(id: ModifierId,
+                                          typeId: NetworkObjectTypeId.Value,
+                                          peer: ConnectedPeer): Unit = {
+    if (deliveryTracker.getSource(id, typeId).contains(peer)) {
+      deliveryTracker.setUnknown(id, typeId)
+    }
+  }
+
   /**
    * Request an input block from a peer by its ID.
    *
@@ -1448,6 +1456,49 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
 
+  // Monotonic milliseconds; overridable so retention can be tested without sleeping.
+  private[network] def pendingAnnouncementsNow(): Long = System.nanoTime() / 1000000L
+
+  private val pendingInputAnnouncements = {
+    val caps = settings.matrix.pendingAnnouncements
+    val pending = new PendingInputAnnouncements(caps.maxEntries, caps.maxBytes, caps.perPeer,
+      caps.ttlMs, () => pendingAnnouncementsNow())
+    pending.onDiscard = { (announcement, peer) =>
+      // Accepted pending deliveries are Received; disposal must release those too.
+      clearDeliveryIfFromSupplier(announcement.id, InputBlockTypeId.value, peer)
+    }
+    pending.onChange = () => context.system.eventStream.publish(pending.fullInfo)
+    pending
+  }
+
+  private var pendingReplayScheduled = false
+
+  private def replayPendingInputAnnouncements(hr: ErgoHistoryReader,
+                                              mp: ErgoMemPoolReader,
+                                              usr: Option[UtxoStateReader]): Unit = {
+    // BlockApplied is published before ChangedState. In particular at an epoch
+    // boundary, replay must wait for the parent's new parameters, not the old ones.
+    usr.flatMap(_.stateContext.lastHeaderOpt).filter { tip =>
+      hr.bestFullBlockIdOpt.contains(tip.id)
+    }.foreach { tip =>
+      val ready = pendingInputAnnouncements.take(
+        tip,
+        settings.matrix.pendingAnnouncements.replayPerParent,
+        id => hr.typedModifierById[Header](id),
+        p => hr.isInBestChain(p)
+      )
+      ready.foreach { case (announcement, peer) =>
+        if (!processInputBlock(announcement, hr, mp, peer, usr)) {
+          pendingInputAnnouncements.noteReplayNotForwarded()
+        }
+      }
+      if (pendingInputAnnouncements.hasReady(tip) && !pendingReplayScheduled) {
+        pendingReplayScheduled = true
+        self ! ReplayPendingInputAnnouncements
+      }
+    }
+  }
+
   /**
    * Process an input block received from a peer.
    *
@@ -1475,7 +1526,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         hr: ErgoHistoryReader,
                         mp: ErgoMemPoolReader,
                         remote: ConnectedPeer,
-                        usrOpt: Option[UtxoStateReader]): Unit = {
+                        usrOpt: Option[UtxoStateReader]): Boolean = {
+    var forwarded = false
 
     // Input blocks are only useful when nearly synced (within 2 blocks)
     // If we're far behind, ignore them and continue with normal header/block sync
@@ -1483,14 +1535,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         inputBlockInfo.header.height < hr.fullBlockHeight - 2) {
       //todo: change to .debug before release
       log.info(s"Ignoring input block at height ${inputBlockInfo.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
-      return
+      return false
     }
 
     // Input blocks should only be processed by UTXO mode nodes
     // Digest mode nodes cannot validate input blocks properly (validation is skipped when usrOpt is empty)
     if (usrOpt.isEmpty) {
       log.warn(s"Received input block but local node is in digest mode - input blocks cannot be validated in digest mode, ignoring")
-      return
+      return false
     }
 
     val subBlockHeader = inputBlockInfo.header
@@ -1499,7 +1551,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Skip already known input blocks
     if (hr.getInputBlock(subBlockId).isDefined) {
       log.debug(s"Input block $subBlockId already known, ignoring")
-      return
+      return false
     }
 
     // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
@@ -1530,7 +1582,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
         log.debug(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} does not bind an expected difficulty")
         clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
-        return
+        return false
       }
       val valid = usrOpt
         .map(_.stateContext.currentParameters)
@@ -1552,6 +1604,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 log.info(s"Diff is empty $subBlockId , processing immediately")
 
                 // write sub-block and transactions to db
+                forwarded = true
                 viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
                 val transactionsData = InputBlockTransactionsData(inputBlockInfo.id, mempoolTxs)
                 viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
@@ -1561,6 +1614,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 log.info(s"Diff is abt ${diff.length} transactions, asking them from $remote")
 
                 // write sub-block to db
+                forwarded = true
                 viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
               }
             )
@@ -1569,6 +1623,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // input block coming with no transaction ids announced
 
             // write sub-block to db
+            forwarded = true
             viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
 
             // todo: make it debug before release
@@ -1579,6 +1634,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        // Replay detaches pending announcements, so invalid deliveries must be released here.
+        clearDeliveryIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         penalizeMisbehavingPeer(remote)
       }
     } else {
@@ -1588,7 +1645,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val orderingId = inputBlockInfo.header.parentId
 
-        // todo: save input block?
+        if (pendingInputAnnouncements.add(inputBlockInfo, remote)) {
+          setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
+        } else {
+          clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
+        }
 
         // todo: make it debug before release
         log.info(s"On processing $subBlockId, downloading its parent and unknown ordering block $orderingId from $remote")
@@ -1602,6 +1663,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // just ignore the subblock
       }
     }
+    forwarded
   }
 
   /**
@@ -2074,6 +2136,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      pendingInputAnnouncements.removeConnection(connectedPeer.handlerRef)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -2291,7 +2354,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       logger.debug(s"Invalidating semantically failed modifier $modId", e)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
+    case ReplayPendingInputAnnouncements =>
+      pendingReplayScheduled = false
+      replayPendingInputAnnouncements(historyReader, mempoolReader, utxoStateReaderOpt)
+
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
+      replayPendingInputAnnouncements(newHistoryReader, mempoolReader, utxoStateReaderOpt)
       context.become(initialized(newHistoryReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
@@ -2301,6 +2369,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       activatedScriptVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>
+          replayPendingInputAnnouncements(historyReader, mempoolReader, Some(utxoStateReader))
           context.become(initialized(historyReader, mempoolReader, Some(utxoStateReader), blockAppliedTxsCache))
         case _ =>
       }
@@ -2449,6 +2518,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       peerManagerEvents orElse
       checkDelivery(hr) orElse {
       case CleanupLocalInputBlockChunks =>
+        pendingInputAnnouncements.expire()
+        context.system.eventStream.publish(pendingInputAnnouncements.fullInfo)
         cleanupLocalInputBlockChunks()
       case a: Any => log.error("Strange input: " + a)
     }

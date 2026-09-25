@@ -391,7 +391,7 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
     val dir = createTempDir
     val fullHistorySettings: ErgoSettings = ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, chainSettings,
-      nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
+      nodeSettings, scorexSettings, walletSettings, settings.cacheSettings, matrix = settings.matrix)
 
     ErgoHistory.readOrGenerate(fullHistorySettings)(null)
   }

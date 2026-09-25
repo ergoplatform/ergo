@@ -66,7 +66,7 @@ class UtxoBootstrapNoNipopowSyncSpecification extends ErgoCorePropertyTest with 
       extraIndex = false
     )
     ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, settings.chainSettings, nodeSettings,
-      null, null, settings.cacheSettings)
+      null, null, settings.cacheSettings, matrix = settings.matrix)
   }
 
   /**

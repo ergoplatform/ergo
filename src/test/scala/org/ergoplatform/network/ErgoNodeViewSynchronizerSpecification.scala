@@ -1894,6 +1894,89 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  /** History with a stored input block for the first header of a 3-block chain, a sub-block peer at that height, and the state. */
+  private def relayFixture(ctx: Synchronizer2Fixture): (ErgoHistory, Seq[ErgoFullBlock], ConnectedPeer, WrappedUtxoState) = {
+    import ctx._
+    import org.ergoplatform.consensus.Equal
+    import org.ergoplatform.network.{ModePeerFeature, PeerSpec, Version}
+
+    val hist  = ErgoHistory.readOrGenerate(settings)(null)
+    val chain = genChain(3, hist)
+    val header = chain.head.header
+    val wrappedState = boxesHolderGen
+      .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+      .sample
+      .get
+    synchronizerMockRef ! ChangedState(wrappedState)
+    synchronizerMockRef ! ChangedHistory(hist)
+    synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+    Thread.sleep(500)
+
+    hist.applyInputBlock(
+      InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, InputBlockFields.empty, None)
+    )
+
+    val subBlocksPeerSpec = PeerSpec(
+      settings.scorexSettings.network.agentName,
+      Version.SubblocksVersion,
+      settings.scorexSettings.network.nodeName,
+      None,
+      Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+    )
+    val subBlocksPeer = ConnectedPeer(
+      connectionIdGen.sample.get,
+      pchProbe.ref,
+      Some(PeerInfo(subBlocksPeerSpec, System.currentTimeMillis()))
+    )
+    syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
+    (hist, chain, subBlocksPeer, wrappedState)
+  }
+
+  property("NodeViewSynchronizer: an input-block Inv is requested only when the input block is not held") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+
+      val (_, chain, subBlocksPeer, _) = relayFixture(ctx)
+      val held    = chain.head.header.id
+      val notHeld = chain(1).header.id
+      def isRequestFor(m: Any, id: ModifierId): Boolean = m match {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+          val data = stn.message.data.get.asInstanceOf[InvData]
+          data.typeId == InputBlockTypeId.value && data.ids.contains(id)
+        case _ => false
+      }
+
+      // an id this node already holds (e.g. its own, announced back by a relaying peer): not requested
+      val heldInv = InvData(InputBlockTypeId.value, Seq(held))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(heldInv)), Some(subBlocksPeer))
+      ncProbe.receiveWhile(2 seconds) { case m => m }.exists(isRequestFor(_, held)) shouldBe false
+
+      // control: an id it does not hold is requested from the announcing peer
+      val notHeldInv = InvData(InputBlockTypeId.value, Seq(notHeld))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(notHeldInv)), Some(subBlocksPeer))
+      ncProbe.fishForMessage(3 seconds) { case m => isRequestFor(m, notHeld) }
+    }
+  }
+
+  property("NodeViewSynchronizer: a requested input block that arrives already held is marked received") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+
+      val (hist, chain, subBlocksPeer, state) = relayFixture(ctx)
+      val header = chain.head.header
+      // requested (e.g. after a relayed id) while the same input block was being stored from a push
+      deliveryTracker.setRequested(InputBlockTypeId.value, header.id, subBlocksPeer)(_ => Cancellable.alreadyCancelled)
+
+      val copy = InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, InputBlockFields.empty, None)
+      synchronizerMockRef.underlyingActor.processInputBlock(copy, hist, ErgoMemPool.empty(settings), subBlocksPeer, Some(state))
+
+      // delivered, though redundant: not left Requested, where a delivery check would count it against the supplier
+      deliveryTracker.status(header.id, InputBlockTypeId.value, Seq.empty) shouldBe Received
+    }
+  }
+
   property(
     "NodeViewSynchronizer: NewBestInputBlock for unknown input block does not crash"
   ) {

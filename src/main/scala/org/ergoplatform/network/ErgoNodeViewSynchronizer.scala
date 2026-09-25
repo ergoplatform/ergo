@@ -1191,7 +1191,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         } else {
           log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+          invData.ids.filter { mid =>
+            deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown &&
+              // input blocks are not kept in the modifier store: an announced one this node already holds
+              // (e.g. its own, announced back by a relaying peer) is not requested again
+              !(modifierTypeId == InputBlockTypeId.value && hr.getInputBlock(mid).isDefined)
+          }
         }
     }
 
@@ -1499,6 +1504,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Skip already known input blocks
     if (hr.getInputBlock(subBlockId).isDefined) {
       log.debug(s"Input block $subBlockId already known, ignoring")
+      // a copy requested before this one was stored (e.g. asked for after a relayed id while a push was in
+      // flight) was still delivered: mark it received so the supplier is not treated as non-delivering
+      setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
       return
     }
 

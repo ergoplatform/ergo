@@ -1877,13 +1877,12 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
-  property("NodeViewSynchronizer: NewBestInputBlock with local=false does not broadcast") {
+  property("NodeViewSynchronizer: NewBestInputBlock(local=false) for an unknown input block sends nothing") {
     withFixture2 { ctx =>
       import ctx._
 
-      // When an input block is received from a remote peer (local=false),
-      // the P2P layer should not re-broadcast it.
-      // The handler's else branch is currently a todo — no messages should be sent.
+      // A received input block is relayed by id only if this node holds it; an id it does not hold
+      // (not in history) sends nothing.
       @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
       val randomId =
         org.ergoplatform.utils.generators.CoreObjectGenerators.modifierIdGen.sample.get
@@ -1930,6 +1929,30 @@ class ErgoNodeViewSynchronizerSpecification
     )
     syncTracker.updateStatus(subBlocksPeer, Equal, Some(header.height))
     (hist, chain, subBlocksPeer, wrappedState)
+  }
+
+  property("NodeViewSynchronizer: NewBestInputBlock(local=false) announces the received input block's id to sub-block peers") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import scorex.core.network.SendToPeers
+
+      val (_, chain, subBlocksPeer, _) = relayFixture(ctx)
+      val id = chain.head.header.id
+
+      synchronizerMockRef ! NewBestInputBlock(Some(id), local = false)
+
+      // an Inv carrying the id only (the full announcement is pushed only by the node that mined it)
+      val msg = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      msg.message.spec.messageCode shouldBe InvSpec.messageCode
+      val inv = msg.message.data.get.asInstanceOf[InvData]
+      inv.typeId shouldBe InputBlockTypeId.value
+      inv.ids shouldBe Seq(id)
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(subBlocksPeer)
+        case other              => fail(s"Expected SendToPeers, got $other")
+      }
+    }
   }
 
   property("NodeViewSynchronizer: an input-block Inv is requested only when the input block is not held") {

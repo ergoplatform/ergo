@@ -1420,6 +1420,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * Peers an input block (or its id) is sent to: those supporting sub-blocks, in UTXO mode, and within two blocks
+    * of this node's full-block height.
+    */
+  private def inputBlockRecipients(historyReader: ErgoHistoryReader): Seq[ConnectedPeer] = {
+    syncTracker.statuses.filter { s =>
+      val peer = s._1
+      val peerHeight = s._2.height
+      SubBlocksFilter.condition(peer) &&
+        peer.mode.exists(_.stateType == StateType.Utxo) &&
+        peerHeight <= historyReader.fullBlockHeight + 2 &&
+        peerHeight >= historyReader.fullBlockHeight - 2
+    }.keys.toSeq
+  }
+
+  /**
    * Request an input block from a peer by its ID.
    *
    * This method sends a request to the specified peer to download an input block with the given ID.
@@ -2354,6 +2369,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case NewBestInputBlock(Some(id), local) =>
       historyReader.getInputBlock(id) match {
         case Some(preIbi) =>
+          val peers = inputBlockRecipients(historyReader)
           if (local) {
             log.debug(s"Sending locally generated input block $id out")
 
@@ -2365,19 +2381,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             } else {
               preIbi.copy(weakTxIds = None)
             }
-            val peers = syncTracker.statuses.filter { s =>
-              val peer = s._1
-              val peerHeight = s._2.height
-              // send input block to peers on same height and also supporting sub-blocks and in utxo mode
-              SubBlocksFilter.condition(peer) &&
-                peer.mode.exists(_.stateType == StateType.Utxo) &&
-                peerHeight <= historyReader.fullBlockHeight + 2 &&
-                peerHeight >= historyReader.fullBlockHeight - 2
-            }.keys.toSeq
             val msg = Message(InputBlockMessageSpec, Right(ibi), None)
             networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
-          } else {
-            // todo: send only id out
+          } else if (peers.nonEmpty) {
+            // an input block received from a peer: announce its id only, as ordering-block announcements are
+            // relayed, so it travels beyond the miner's own peers; a peer that lacks it requests it
+            // (processInv -> modifiersReq -> processInputBlockRequest)
+            val msg = Message(InvSpec, Right(InvData(InputBlockTypeId.value, Seq(id))), None)
+            networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
           }
         case None =>
           // shouldnt be there by input block processing logic

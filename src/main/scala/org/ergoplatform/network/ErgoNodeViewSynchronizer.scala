@@ -81,6 +81,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
 
+  // A locally applied section can satisfy an outstanding request before its peer replies.
+  // Keep only a short, one-reply allowance for that exact connection.
+  // The tracker permits 8 * desiredInvObjects headers plus desiredInvObjects sections.
+  private val maxLateReplies = math.max(1L, math.min(4096L, networkSettings.desiredInvObjects.toLong * 9)).toInt
+  private val lateBlockSectionReplies = new LateBlockSectionReplies(maxLateReplies, deliveryTimeout.toNanos)
+
   private val minModifiersPerBucket = 8 // minimum of persistent modifiers (excl. headers) to download by single peer
   private val maxModifiersPerBucket = 12 // maximum of persistent modifiers (excl. headers) to download by single peer
 
@@ -586,6 +592,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! stn
 
     modifierIds.foreach { modifierId =>
+      lateBlockSectionReplies.discard(modifierTypeId, modifierId)
       deliveryTracker.setRequested(modifierTypeId, modifierId, peer, checksDone) { deliveryCheck =>
         context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
       }
@@ -844,7 +851,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .groupBy { case (id, _) => deliveryTracker.status(id, typeId, Seq.empty) }
         .view.force
 
-    val spam = modifiersByStatus.filterKeys(_ != Requested)
+    val spam = modifiersByStatus.filterKeys(_ != Requested).map { case (status, mods) =>
+      val unexpected = if (typeId == ErgoTransaction.modifierTypeId) mods else {
+        mods.filterNot { case (id, _) => lateBlockSectionReplies.consume(typeId, id, remote) }
+      }
+      status -> unexpected
+    }.filter(_._2.nonEmpty)
 
     if (spam.nonEmpty) {
       if (typeId == ErgoTransaction.modifierTypeId) {
@@ -1496,6 +1508,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       declined.put(id, System.currentTimeMillis())
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
+      if (NetworkObjectTypeId.isBlockSection(modTypeId)) {
+        deliveryTracker.getRequestedInfo(modTypeId, modId).foreach { info =>
+          lateBlockSectionReplies.record(modTypeId, modId, info.peer)
+        }
+      }
       deliveryTracker.setHeld(modId, modTypeId)
 
     case RecoverableFailedModification(modTypeId, modId, e) =>
@@ -1573,6 +1590,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (historyReader.fullBlockHeight > 0) {
         log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
         deliveryTracker.reset()
+        lateBlockSectionReplies.clear()
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
@@ -1669,6 +1687,49 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   override def receive: Receive = initializing(None, None, None, FixedSizeApproximateCacheQueue.empty(cacheQueueSize = 5))
 
+}
+
+/** One late reply per locally satisfied request, from the connection that received it. */
+private[network] final class LateBlockSectionReplies(maxEntries: Int,
+                                                     lifetimeNanos: Long,
+                                                     nowNanos: () => Long = () => System.nanoTime()) {
+  require(maxEntries > 0 && lifetimeNanos > 0)
+
+  private val pending = mutable.LinkedHashMap.empty[
+    (NetworkObjectTypeId.Value, ModifierId), (ConnectedPeer, Long)]
+
+  def record(typeId: NetworkObjectTypeId.Value, id: ModifierId, peer: ConnectedPeer): Unit = {
+    val now = nowNanos()
+    while (pending.headOption.exists { case (_, (_, recordedAt)) =>
+      now - recordedAt >= lifetimeNanos
+    }) {
+      pending.remove(pending.head._1)
+    }
+    val key = typeId -> id
+    pending.remove(key)
+    if (pending.size >= maxEntries) pending.remove(pending.head._1)
+    pending.put(key, peer -> now)
+  }
+
+  def consume(typeId: NetworkObjectTypeId.Value, id: ModifierId, peer: ConnectedPeer): Boolean = {
+    val key = typeId -> id
+    pending.get(key) match {
+      case Some((_, recordedAt)) if nowNanos() - recordedAt >= lifetimeNanos =>
+        pending.remove(key)
+        false
+      case Some((expected, _)) if expected.connectionId == peer.connectionId &&
+        expected.handlerRef == peer.handlerRef =>
+        pending.remove(key)
+        true
+      case _ => false
+    }
+  }
+
+  def clear(): Unit = pending.clear()
+
+  def discard(typeId: NetworkObjectTypeId.Value, id: ModifierId): Unit = {
+    pending.remove(typeId -> id)
+  }
 }
 
 object ErgoNodeViewSynchronizer {

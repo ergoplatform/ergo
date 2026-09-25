@@ -347,6 +347,155 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
   }
 
+  property("select same-parent sibling branches in arrival order during recovery and live insertion") {
+    for {
+      leftFirst <- Seq(true, false)
+      rootFirst <- Seq(false, true)
+    } withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None
+      )
+      val left = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None
+      )
+      val right = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None
+      )
+      val leftChild = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(left.id)), None
+      )
+      val rightChild = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(right.id)), None
+      )
+      val branches = if (leftFirst) Seq(Seq(left, leftChild), Seq(right, rightChild))
+        else Seq(Seq(right, rightChild), Seq(left, leftChild))
+      val expectedChains = branches.map(branch => root.id +: branch.map(_.id))
+
+      withClue(s"leftFirst=$leftFirst, rootFirst=$rootFirst: ") {
+        if (rootFirst) {
+          h.applyInputBlock(root) shouldBe None
+          branches.flatten.foreach { ib =>
+            h.applyInputBlock(ib) shouldBe None
+            h.disconnectedWaitlist shouldBe empty
+          }
+        } else {
+          branches.foreach { branch =>
+            branch.reverse.foreach { ib =>
+              h.applyInputBlock(ib) shouldBe ib.prevInputBlockId
+            }
+          }
+          h.disconnectedWaitlist.toSet shouldBe branches.flatten.toSet
+          h.applyInputBlock(root) shouldBe None
+        }
+        h.disconnectedWaitlist shouldBe empty
+        h.inputBlocksTree().get.forks.map(_.chain) shouldBe expectedChains
+
+        h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe
+          (Seq(root.id) -> Seq.empty)
+        branches.head.foreach { ib =>
+          h.applyInputBlockTransactions(ib.id, Seq.empty, us)
+        }
+        branches(1).foreach { ib =>
+          h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
+            (Seq.empty -> Seq.empty)
+        }
+        h.bestInputBlocksChain() shouldBe expectedChains.head.reverse
+        h.inputBlocksTree().get.forks.head.processedIndex shouldBe 2
+      }
+    }
+  }
+
+  property("apply cached early bodies after their waitlisted announcements attach") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None
+      )
+      val child = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None
+      )
+      val grandchild = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(child.id)), None
+      )
+      Seq(grandchild, child).foreach { ib =>
+        h.applyInputBlock(ib) shouldBe ib.prevInputBlockId
+        h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
+          (Seq.empty -> Seq.empty)
+        h.getInputBlockTransactions(ib.id) shouldBe Some(Seq.empty)
+      }
+      h.disconnectedWaitlist.toSet shouldBe Set(child, grandchild)
+      h.inputBlocksTree().get.forks shouldBe empty
+      h.bestInputBlocksChain() shouldBe empty
+
+      h.applyInputBlock(root) shouldBe None
+      h.disconnectedWaitlist shouldBe empty
+      val chain = Seq(root.id, child.id, grandchild.id)
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe Seq(chain)
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(-1)
+      h.bestInputBlocksChain() shouldBe empty
+      h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe
+        (chain -> Seq.empty)
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(2)
+      h.bestInputBlocksChain() shouldBe chain.reverse
+    }
+  }
+
+  property("switch to a recovered longer branch with the exact rollback suffix and common prefix preserved") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None
+      )
+      val oldChild = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None
+      )
+      val oldTip = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(oldChild.id)), None
+      )
+      Seq(root, oldChild, oldTip).foreach { ib =>
+        h.applyInputBlock(ib) shouldBe None
+        h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
+          (Seq(ib.id) -> Seq.empty)
+      }
+      val rootProcessed = h.inputBlocksTree().get.forks.head.processedBlocks.take(1)
+      val parent = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None
+      )
+      val child = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(parent.id)), None
+      )
+      val tip = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(child.id)), None
+      )
+      Seq(tip, child).foreach { ib =>
+        h.applyInputBlock(ib) shouldBe ib.prevInputBlockId
+        h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
+          (Seq.empty -> Seq.empty)
+        h.getInputBlockTransactions(ib.id) shouldBe Some(Seq.empty)
+      }
+      h.disconnectedWaitlist.toSet shouldBe Set(child, tip)
+      h.applyInputBlock(parent) shouldBe None
+      val recoveredChain = Seq(root.id, parent.id, child.id, tip.id)
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe Seq(
+        Seq(root.id, oldChild.id, oldTip.id), recoveredChain
+      )
+      h.disconnectedWaitlist shouldBe empty
+      h.inputBlocksTree().get.forks(1).processedBlocks shouldBe rootProcessed
+      h.inputBlocksTree().get.forks(1).processedIndex shouldBe 0
+      h.bestInputBlocksChain() shouldBe Seq(oldTip.id, oldChild.id, root.id)
+      h.applyInputBlockTransactions(parent.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+
+      val (forward, rollback) = h.applyInputBlockTransactions(tip.id, Seq.empty, us)
+      forward shouldBe Seq(parent.id, child.id, tip.id)
+      rollback shouldBe Seq(oldChild.id, oldTip.id)
+      rollback should not contain root.id
+      h.bestInputBlocksChain() shouldBe recoveredChain.reverse
+      val selected = h.inputBlocksTree().get.forks.find(_.chain == recoveredChain).get
+      selected.chain.head shouldBe root.id
+      selected.processedIndex shouldBe 3
+      selected.processedBlocks.take(1) shouldBe rootProcessed
+    }
+  }
+
   property("input block - fork switching - disjoint forks") {
 
     val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)

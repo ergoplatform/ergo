@@ -718,7 +718,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   /**
     * Temporary cache of children which do not have parents downloaded yet
     */
-  private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockAnnouncement]()
+  private[modifierprocessors] val disconnectedWaitlist = mutable.LinkedHashSet[InputBlockAnnouncement]()
 
   private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
 

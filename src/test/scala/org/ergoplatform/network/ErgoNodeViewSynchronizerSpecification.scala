@@ -188,6 +188,13 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val (synchronizer, nodeViewHolder, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
   }
 
+  // What the synchronizer sends to the network controller within `max`, of one message kind. It sends a periodic sync
+  // message on its own schedule, so a test that expects no request (or no broadcast) checks for that kind only.
+  private def sentWithCode(ncProbe: TestProbe, code: Byte, max: FiniteDuration): Seq[SendToNetwork] =
+    ncProbe.receiveWhile(max) { case m => m }.collect {
+      case stn: SendToNetwork if stn.message.spec.messageCode == code => stn
+    }
+
   class Synchronizer2Fixture extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
@@ -924,7 +931,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
       // Should NOT request the parent header since it's already in history
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, RequestModifierSpec.messageCode, 1.second) shouldBe empty
 
       // The modifier should still be set to Unknown
       eventually {
@@ -957,7 +964,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
       // Should NOT send any network request since no older peers available
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, RequestModifierSpec.messageCode, 1.second) shouldBe empty
 
       // The modifier should still be set to Unknown
       eventually {
@@ -1290,7 +1297,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, InvSpec.messageCode, 1.second) shouldBe empty
     }
   }
 
@@ -1326,7 +1333,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, InvSpec.messageCode, 1.second) shouldBe empty
     }
   }
 
@@ -1430,7 +1437,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Send LocalBlockApplied - should not broadcast but should perform cleanup
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
-      ncProbe.expectNoMessage(500.millis)
+      sentWithCode(ncProbe, InvSpec.messageCode, 500.millis) shouldBe empty
 
       // Send RemoteBlockApplied - should broadcast (different block)
       val newBlock2 = statefulyValidFullBlock(wus)
@@ -1465,7 +1472,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         Some(peer))
 
       // request must not be sent, the inv is dropped
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, RequestModifierSpec.messageCode, 1.second) shouldBe empty
     }
   }
 

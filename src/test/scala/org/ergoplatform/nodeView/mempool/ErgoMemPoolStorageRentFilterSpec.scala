@@ -19,7 +19,8 @@ import sigma.interpreter.{ContextExtension, ProverResult}
 
 /**
   * Pins the invariants of the mempool policy filter rejecting storage rent collection
-  * transactions (`ErgoMemPool.containsStorageRentClaim`).
+  * transactions (`ErgoMemPool.containsStorageRentClaim`, gated on the
+  * `ergo.node.rejectStorageRentTxs` setting).
   *
   * A storage rent claim spends a box via an empty spending proof and the storage-rent-specific
   * context extension variable #127 (index of the recreated output). Storage rent is to be
@@ -66,8 +67,9 @@ class ErgoMemPoolStorageRentFilterSpec extends AnyFlatSpec
                              rentBox: ErgoBox,
                              plainBox: ErgoBox)
 
-  private def fixture(): Fixture = {
-    val s = settings
+  private def fixture(filterEnabled: Boolean = true): Fixture = {
+    val s = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      rejectStorageRentTxs = filterEnabled))
     val rentBox = box(BoxValue, Constants.TrueTree, 0)
     val plainBox = box(BoxValue, Constants.TrueTree, 1)
     val state = WrappedUtxoState(BoxHolder(Seq(rentBox, plainBox)), createTempDir,
@@ -174,6 +176,21 @@ class ErgoMemPoolStorageRentFilterSpec extends AnyFlatSpec
     val (updPool, outcome) = process(f, ordinary)
     outcome shouldBe a[ProcessingOutcome.Accepted]
     updPool.isInvalidated(ordinary.id) shouldBe false
+  }
+
+  // ------------------------------------------------------------------ (e)
+
+  it should "(e) keep the filter off by default and relay the same transaction when it is off" in {
+    settings.nodeSettings.rejectStorageRentTxs shouldBe false
+
+    val f = fixture(filterEnabled = false)
+    val tx = rentClaim(f.rentBox)
+
+    // With the policy off, the transaction goes through ordinary validation (and is accepted
+    // here as an unexpired TrueTree spend) - pins the policy-only nature of the filter.
+    val (updPool, outcome) = process(f, tx)
+    outcome shouldBe a[ProcessingOutcome.Accepted]
+    updPool.isInvalidated(tx.id) shouldBe false
   }
 
 }

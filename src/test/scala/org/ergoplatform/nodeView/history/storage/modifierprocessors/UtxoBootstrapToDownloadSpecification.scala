@@ -3,9 +3,12 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.SnapshotsInfoTypeId
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.serialization.ManifestSerializer
-import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.settings.{NipopowSettings, UtxoSettings}
+import org.ergoplatform.utils.{ErgoCorePropertyTest, HistoryTestHelpers}
+import scorex.util.ModifierId
 
 /**
   * Tests for UTXO set snapshot bootstrap behavior in `ToDownloadProcessor` /
@@ -28,6 +31,22 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
                     PoPoWBootstrap = false,
                     BlocksToKeep,
                     utxoBootstrap = true)
+
+  private def genNipopowUtxoBootstrapHistory(genesisId: ModifierId): ErgoHistory = {
+    import org.ergoplatform.utils.ErgoNodeTestConstants.{settings => baseSettings}
+    val bootstrapSettings = baseSettings.copy(
+      directory = HistoryTestHelpers.createTempDir.getAbsolutePath,
+      chainSettings = baseSettings.chainSettings.copy(epochLength = 10000, useLastEpochs = 3, genesisId = Some(genesisId)),
+      nodeSettings = baseSettings.nodeSettings.copy(
+        stateType = StateType.Utxo,
+        verifyTransactions = true,
+        blocksToKeep = -1,
+        utxoSettings = UtxoSettings(utxoBootstrap = true, 0, 2),
+        nipopowSettings = NipopowSettings(nipopowBootstrap = true, p2pNipopows = 1)
+      )
+    )
+    ErgoHistory.readOrGenerate(bootstrapSettings)(null)
+  }
 
   private def headersWithFreshTail(history: ErgoHistory, extra: Int = 1) = {
     val chain = genChain(BlocksInChain + extra, history)
@@ -125,6 +144,42 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
       history.nextModifiersToDownload(1, (_, id) => !history.contains(id))
     toDownloadMap should not be empty
     toDownloadMap.contains(SnapshotsInfoTypeId.value) shouldBe false
+  }
+
+  property("near the tip, block sections are downloaded after snapshot applied on NiPoPoW-bootstrapped history") {
+    val senderHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false,
+                                        blocksToKeep = -1, epochLength = 10000, useLastEpochs = 3)
+    val senderChain = genChain(250, senderHistory)
+    applyChain(senderHistory, senderChain)
+    val suffixHeadId = senderHistory.bestHeaderIdAtHeight(150).get
+    val proofBytes = senderHistory
+      .popowProofBytes(senderHistory.P2PNipopowProofM, senderHistory.P2PNipopowProofK, Some(suffixHeadId)).get
+
+    var history = genNipopowUtxoBootstrapHistory(senderHistory.bestHeaderIdAtHeight(GenesisHeight).get)
+    history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
+    history.setHeadersChainSynced() // as done by ErgoNodeViewHolder after NiPoPoW proof application
+    val proofTip = history.headersHeight
+
+    // headers chain is continuous from this height up to the proof tip only
+    val continuousFrom = (proofTip to GenesisHeight by -1).takeWhile(h => history.bestHeaderIdAtHeight(h).nonEmpty).last
+    continuousFrom should be > GenesisHeight
+
+    history = applyHeaderChain(history, HeaderChain(senderChain.drop(proofTip).map(_.header)))
+
+    // apply UTXO set snapshot and some full blocks after it, so best full block is 100 blocks after a missing header
+    val bestFullBlockHeight = continuousFrom - 1 + 100
+    val snapshotHeight = bestFullBlockHeight - 12
+    history.onUtxoSnapshotApplied(snapshotHeight)
+    history = applyChain(history, senderChain.slice(snapshotHeight, bestFullBlockHeight))
+    history.bestFullBlockOpt.map(_.height) shouldBe Some(bestFullBlockHeight)
+    history.bestHeaderIdAtHeight(bestFullBlockHeight - 100) shouldBe None
+    // near the tip
+    (history.headersHeight - bestFullBlockHeight) should be < 128
+
+    // sections of the next block are to be downloaded
+    val nextHeader = senderChain(bestFullBlockHeight).header
+    val toDownload = history.nextModifiersToDownload(1, (_, id) => !history.contains(id)).values.flatten.toSeq
+    toDownload should contain theSameElementsAs history.requiredModifiersForHeader(nextHeader).map(_._2)
   }
 
 }

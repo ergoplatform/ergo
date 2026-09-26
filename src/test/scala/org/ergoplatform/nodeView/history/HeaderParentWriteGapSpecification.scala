@@ -29,4 +29,23 @@ class HeaderParentWriteGapSpecification extends ErgoCorePropertyTest {
     result.failed.toOption.foreach(e => e should not be a[MalformedModifierError])
     result shouldBe 'success
   }
+
+  // the age check itself still holds: a header whose parent is keepVersions or more below the best full block
+  // is rejected by hdrTooOld (a fork too deep to apply)
+  property("a header whose parent is keepVersions below the best full block is still rejected as too old") {
+    var history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false,
+                                  blocksToKeep = -1, epochLength = 10000, useLastEpochs = 3)
+    val chain = genChain(203, history)
+    history = applyChain(history, chain)
+    val keepVersions = org.ergoplatform.utils.ErgoNodeTestConstants.settings.nodeSettings.keepVersions
+    val parent = chain.head.header
+    (history.fullBlockHeight - parent.height) should be >= keepVersions
+
+    val forkChild = genHeaderChain(1, Some(parent), history.difficultyCalculator, diffBitsOpt = None, useRealTs = false).last
+    forkChild.parentId shouldBe parent.id
+    val result = history.applicableTry(forkChild)
+    result shouldBe 'failure
+    result.failed.get shouldBe a[MalformedModifierError]
+    result.failed.get.getMessage should include("older than current height minus")
+  }
 }

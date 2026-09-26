@@ -426,6 +426,14 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
+    * Checks whether any input of `tx` is a storage rent claim in a block at `height`
+    * (see `ErgoTransaction.isStorageRentClaim`), with input boxes resolved against `s`.
+    * To be called only after `inputsNotSpent(tx, s)`, so every input box is resolved.
+    */
+  private def spendsStorageRentClaim(tx: ErgoTransaction, s: UtxoStateReader, height: Int): Boolean =
+    ErgoTransaction.hasStorageRentClaim(tx, tx.inputs.flatMap(inp => s.boxById(inp.boxId)), height)
+
+  /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
     * detects a block applied concurrently with the assembly.
@@ -971,6 +979,12 @@ object CandidateGenerator extends ScorexLogging {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
+            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
+          } else if (acc.nonEmpty && spendsStorageRentClaim(tx, stateWithTxs, nextHeight)) {
+            // A storage rent claim is allowed only in the first transaction of a block (rule bsStorageRentPosition),
+            // and a transaction accepted now would not be the first one. Whether an input is a claim depends on the
+            // height of the including block, so a pool transaction admitted earlier may become one while it waits.
+            log.debug(s"Transaction ${tx.id} is a storage rent claim at height $nextHeight, not the first transaction")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             // check validity and calculate transaction cost

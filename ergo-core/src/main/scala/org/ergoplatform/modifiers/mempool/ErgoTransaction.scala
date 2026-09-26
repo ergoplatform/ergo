@@ -20,6 +20,7 @@ import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
 import org.ergoplatform.utils.{BoxUtils, ScorexEncoding}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.wallet.protocol.{Constants => WalletConstants}
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.serialization.ErgoSerializer
@@ -28,6 +29,7 @@ import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, Validati
 import scorex.db.ByteArrayUtils
 import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+import sigma.ast.SShort
 import sigma.data.SigmaConstants.{MaxBoxSize, MaxPropositionBytes}
 import sigma.serialization.{ConstantStore, SigmaByteReader, SigmaByteWriter}
 
@@ -485,6 +487,43 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
 
   private def unresolvedIndices(inputs: IndexedSeq[BoxId], resolvedInputs: IndexedSeq[ErgoBox]): IndexedSeq[Int] =
     inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
+
+  /**
+    * Storage rent claim predicate (EIP draft "Storage Rent Claims Restricted to the First Transaction
+    * of a Block", validation rule `bsStorageRentPosition`).
+    *
+    * An input of `tx` spending `box` in a block at `height` is a storage rent claim when all hold:
+    *  1. `height - box.creationHeight >= StoragePeriod`
+    *  2. the input's spending proof is empty
+    *  3. the input's context extension holds variable #127, typed `Short`, and its value is a valid
+    *     index into `tx.outputCandidates`
+    *
+    * These are exactly the conditions under which `ErgoInterpreter.verify` evaluates `checkExpiredBox`.
+    * If variable #127 is present but is not a `Short`, or is out of range, the interpreter falls back
+    * to the box's own script, so such an input is not a rent claim. The type is checked before the
+    * value is read, so this function never throws.
+    */
+  def isStorageRentClaim(input: Input, box: ErgoBox, tx: ErgoTransaction, height: Int): Boolean = {
+    height - box.creationHeight >= WalletConstants.StoragePeriod &&
+      input.spendingProof.proof.isEmpty &&
+      (input.spendingProof.extension.values.get(WalletConstants.StorageIndexVarId) match {
+        case Some(c) if c.tpe == SShort =>
+          c.value match {
+            case idx: Short => idx >= 0 && idx < tx.outputCandidates.length
+            case _ => false
+          }
+        case _ => false
+      })
+  }
+
+  /**
+    * @param boxesToSpend - boxes spent by `tx.inputs`, in the same order
+    * @return whether any input of `tx` is a storage rent claim at `height`, see `isStorageRentClaim`
+    */
+  def hasStorageRentClaim(tx: ErgoTransaction, boxesToSpend: IndexedSeq[ErgoBox], height: Int): Boolean =
+    tx.inputs.iterator.zip(boxesToSpend.iterator).exists { case (input, box) =>
+      isStorageRentClaim(input, box, tx, height)
+    }
 }
 
 object ErgoTransactionSerializer extends ErgoSerializer[ErgoTransaction] {

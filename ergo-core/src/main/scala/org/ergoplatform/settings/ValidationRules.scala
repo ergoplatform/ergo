@@ -175,6 +175,9 @@ object ValidationRules {
     bsBlockTransactionsCost -> RuleStatus(im => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction], classOf[BlockTransactions]),
       mayBeDisabled = false),
+    bsStorageRentPosition -> RuleStatus(im => fatal(s"Storage rent claims are allowed only in the first transaction of a block. ${im.error}", im.modifierId, im.modifierTypeId),
+      Seq(classOf[BlockTransactions]),
+      mayBeDisabled = true),
 
     // full block processing validation
     fbOperationFailed -> RuleStatus(im => fatal(s"Operations against the state AVL+ tree should be successful. ${im.error}", im.modifierId, im.modifierTypeId),
@@ -285,6 +288,7 @@ object ValidationRules {
   val bsTooOld: Short = 305
   val bsBlockTransactionsSize: Short = 306
   val bsBlockTransactionsCost: Short = 307
+  val bsStorageRentPosition: Short = 308 // introduced in v5 blocks (EIP draft: storage rent claims in the first transaction only)
 
   // extension validation
   val exSize: Short = 400

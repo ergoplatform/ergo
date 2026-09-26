@@ -15,10 +15,11 @@ import org.ergoplatform.settings.ValidationRules._
 import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
-import org.ergoplatform.validation.{ModifierValidator, ValidationResult}
+import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult}
 import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.settings.Constants.FalseTree
+import org.ergoplatform.utils.ScorexEncoder
 import scorex.crypto.authds.avltree.batch.{Insert, Lookup, Remove}
 import scorex.crypto.authds.{ADDigest, ADValue}
 import scorex.util.encode.Base16
@@ -132,6 +133,26 @@ object ErgoState extends ScorexLogging {
       }
     }
 
+    /*
+     * Rule `bsStorageRentPosition` (EIP draft "Storage Rent Claims Restricted to the First Transaction
+     * of a Block"): from block version 5 on, a storage rent claim (see `ErgoTransaction.isStorageRentClaim`)
+     * is allowed only in the first transaction of a block. Input boxes are already resolved by the caller,
+     * so no extra state reads are needed. Validated against the rule statuses of the current state context
+     * (not the initial ones used by `validateStateless`), so the rule can be disabled via soft-fork voting.
+     */
+    def validateStorageRentPosition(tx: ErgoTransaction,
+                                    txIndex: Int,
+                                    boxesToSpendTry: Try[IndexedSeq[ErgoBox]]): ValidationResult[Unit] = {
+      val height = currentStateContext.currentHeight
+      ModifierValidator(currentStateContext.validationSettings)(ScorexEncoder.default)
+        .validateNot(bsStorageRentPosition,
+          currentStateContext.blockVersion >= 5 && txIndex >= 1 &&
+            boxesToSpendTry.toOption.exists(boxes => ErgoTransaction.hasStorageRentClaim(tx, boxes, height)),
+          InvalidModifier(s"Transaction ${tx.id} at position $txIndex spends an input as a storage rent claim at height $height",
+            tx.id, tx.modifierTypeId))
+        .result
+    }
+
     val checkpointHeight = nodeSettings.checkpoint.map(_.height).getOrElse(0)
     if (currentStateContext.currentHeight <= checkpointHeight) {
       Valid(0L)
@@ -149,6 +170,7 @@ object ErgoState extends ScorexLogging {
         costResult = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)
           .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
+          .validate(validateStorageRentPosition(tx, i, boxesToSpendTry))
           .payload[Long](validCostResult.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
             tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result

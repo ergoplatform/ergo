@@ -175,8 +175,8 @@ object ValidationRules {
     bsBlockTransactionsCost -> RuleStatus(im => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction], classOf[BlockTransactions]),
       mayBeDisabled = false),
-    bsStorageRentPosition -> RuleStatus(im => fatal(s"Storage rent claims are allowed only in the first transaction of a block. ${im.error}", im.modifierId, im.modifierTypeId),
-      Seq(classOf[BlockTransactions]),
+    bsStorageRentAttestation -> RuleStatus(im => fatal(s"Rent-claim transactions must be attested in the extension by the block producer. ${im.error}", im.modifierId, im.modifierTypeId),
+      Seq(classOf[BlockTransactions], classOf[Extension]),
       mayBeDisabled = true),
 
     // full block processing validation
@@ -288,7 +288,7 @@ object ValidationRules {
   val bsTooOld: Short = 305
   val bsBlockTransactionsSize: Short = 306
   val bsBlockTransactionsCost: Short = 307
-  val bsStorageRentPosition: Short = 308 // introduced in v5 blocks (EIP draft: storage rent claims in the first transaction only)
+  val bsStorageRentAttestation: Short = 308 // introduced in v5 blocks (EIP draft: extension attestation of rent-claim transactions)
 
   // extension validation
   val exSize: Short = 400

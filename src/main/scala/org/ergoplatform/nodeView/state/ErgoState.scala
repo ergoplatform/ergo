@@ -7,12 +7,13 @@ import org.ergoplatform._
 import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.mining.groupElemFromBytes
 import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.state.StateChanges
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
+import org.ergoplatform.settings.{Algos, ChainSettings, ErgoSettings, NodeConfigurationSettings, Parameters}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.ValidationResult.Valid
 import org.ergoplatform.validation.{InvalidModifier, ModifierValidator, ValidationResult}
@@ -101,12 +102,15 @@ object ErgoState extends ScorexLogging {
     * Tries to validate and execute transactions.
     * @param transactions to be validated and executed
     * @param currentStateContext to be used for tx execution
+    * @param extension extension section of the block the transactions belong to, checked against the transactions
+    *                  by rule `bsStorageRentAttestation`
     * @param checkBoxExistence function to provide ErgoBox by BoxId
     * @return Result of transactions execution with total cost inside
     */
   def execTransactions(transactions: Seq[ErgoTransaction],
                        currentStateContext: ErgoStateContext,
-                       nodeSettings: NodeConfigurationSettings)
+                       nodeSettings: NodeConfigurationSettings,
+                       extension: Extension)
                       (checkBoxExistence: ErgoBox.BoxId => Try[ErgoBox]): ValidationResult[Long] = {
     val verifier: ErgoInterpreter = ErgoInterpreter(currentStateContext.currentParameters)
 
@@ -134,22 +138,42 @@ object ErgoState extends ScorexLogging {
     }
 
     /*
-     * Rule `bsStorageRentPosition` (EIP draft "Storage Rent Claims Restricted to the First Transaction
-     * of a Block"): from block version 5 on, a storage rent claim (see `ErgoTransaction.isStorageRentClaim`)
-     * is allowed only in the first transaction of a block. Input boxes are already resolved by the caller,
-     * so no extra state reads are needed. Validated against the rule statuses of the current state context
-     * (not the initial ones used by `validateStateless`), so the rule can be disabled via soft-fork voting.
+     * Rule `bsStorageRentAttestation` (EIP draft, miner attestation of rent-claim transactions): from block
+     * version 5 on, let C be the ids, in block order, of the transactions of the block with at least one storage
+     * rent claim input (see `ErgoTransaction.isStorageRentClaim`) at the block's height. If C is non-empty, the
+     * block extension has exactly one field with key `Extension.storageRentClaimsKey`, and its value is
+     * `Extension.storageRentClaimsDigest(C)`. If C is empty, the extension has no field with that key. The position
+     * of a claim in the block is irrelevant. C is collected in the transactions loop below, from the input boxes
+     * resolved there. Validated against the rule statuses of the current state context (not the initial ones used by
+     * `validateStateless`), so the rule can be disabled via soft-fork voting.
      */
-    def validateStorageRentPosition(tx: ErgoTransaction,
-                                    txIndex: Int,
-                                    boxesToSpendTry: Try[IndexedSeq[ErgoBox]]): ValidationResult[Unit] = {
-      val height = currentStateContext.currentHeight
+    val height = currentStateContext.currentHeight
+    val attestationRequired = currentStateContext.blockVersion >= 5
+
+    def validateStorageRentAttestation(claimTxIds: Seq[ModifierId]): ValidationResult[Unit] = {
+      val key = Extension.storageRentClaimsKey
+      val attested = extension.fields.collect { case (k, v) if java.util.Arrays.equals(k, key) => v }
+      lazy val expected = Extension.storageRentClaimsDigest(claimTxIds)
+      val valid = if (claimTxIds.isEmpty) {
+        attested.isEmpty
+      } else {
+        attested match {
+          case Seq(value) => java.util.Arrays.equals(value, expected)
+          case _ => false
+        }
+      }
+      def details: String = {
+        val found = attested.map(Algos.encode).mkString("[", ", ", "]")
+        if (claimTxIds.isEmpty) {
+          s"No rent-claim transactions at height $height, but field ${Algos.encode(key)} is present: $found"
+        } else {
+          s"Rent-claim transactions at height $height: ${claimTxIds.mkString("[", ", ", "]")}, " +
+            s"field ${Algos.encode(key)} expected ${Algos.encode(expected)}, found $found"
+        }
+      }
       ModifierValidator(currentStateContext.validationSettings)(ScorexEncoder.default)
-        .validateNot(bsStorageRentPosition,
-          currentStateContext.blockVersion >= 5 && txIndex >= 1 &&
-            boxesToSpendTry.toOption.exists(boxes => ErgoTransaction.hasStorageRentClaim(tx, boxes, height)),
-          InvalidModifier(s"Transaction ${tx.id} at position $txIndex spends an input as a storage rent claim at height $height",
-            tx.id, tx.modifierTypeId))
+        .validate(bsStorageRentAttestation, !attestationRequired || valid,
+          InvalidModifier(details, extension.id, extension.modifierTypeId))
         .result
     }
 
@@ -159,6 +183,8 @@ object ErgoState extends ScorexLogging {
     } else {
       import spire.syntax.all.cfor
       var costResult: ValidationResult[Long] = Valid[Long](0L)
+      // C of rule `bsStorageRentAttestation`, collected only where the rule applies
+      val claimTxIds = mutable.ArrayBuffer.empty[ModifierId]
       cfor(0)(_ < transactions.length && costResult.isValid, _ + 1) { i =>
         val validCostResult = costResult.asInstanceOf[Valid[Long]]
         val tx = transactions(i)
@@ -170,13 +196,19 @@ object ErgoState extends ScorexLogging {
         costResult = tx.validateStateless()
           .validateNoFailure(txBoxesToSpend, boxesToSpendTry, tx.id, tx.modifierTypeId)
           .validateNoFailure(txDataBoxes, dataBoxesTry, tx.id, tx.modifierTypeId)
-          .validate(validateStorageRentPosition(tx, i, boxesToSpendTry))
           .payload[Long](validCostResult.value)
           .validateTry(boxes, e => ModifierValidator.fatal("Missed data boxes", tx.id, tx.modifierTypeId, e)) { case (_, (dataBoxes, toSpend)) =>
             tx.validateStateful(toSpend, dataBoxes, currentStateContext, validCostResult.value)(verifier).result
           }
+        if (attestationRequired &&
+            boxesToSpendTry.toOption.exists(toSpend => ErgoTransaction.hasStorageRentClaim(tx, toSpend, height))) {
+          claimTxIds += tx.id
+        }
       }
-      costResult
+      costResult match {
+        case Valid(totalCost) => validateStorageRentAttestation(claimTxIds).map(_ => totalCost)
+        case invalid => invalid
+      }
     }
   }
 

@@ -12,7 +12,7 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.MerkleTree
 import scorex.crypto.hash.Digest32
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, idToBytes}
 
 /**
   * Extension section of Ergo block. Contains key-value storage
@@ -70,6 +70,38 @@ object Extension extends ApiCodecs {
     * against the genesis block are to be written into a single key space defined by the value below.
     */
   val ValidationRulesPrefix: Byte = 0x02
+
+  /**
+    * From block version 5 on, a block containing storage rent claim transactions (transactions with at least one
+    * input satisfying `ErgoTransaction.isStorageRentClaim` at the block's height) carries a single field in the key
+    * space defined by the value below, attesting to those transactions, and a block without such transactions
+    * carries no field there (validation rule `bsStorageRentAttestation`). The field key is `storageRentClaimsKey`,
+    * the value is `storageRentClaimsDigest` of the claim transaction ids in block order.
+    *
+    * Nodes not aware of this key space accept the field: outside the known key spaces, extension validation checks
+    * only key and value sizes, duplicate keys and non-emptiness.
+    */
+  val StorageRentClaimsPrefix: Byte = 0x03
+
+  /**
+    * @return key of the storage rent claims attestation field, see `StorageRentClaimsPrefix`
+    */
+  def storageRentClaimsKey: Array[Byte] = Array(StorageRentClaimsPrefix, 0x00.toByte)
+
+  /**
+    * @param txIds - ids of the storage rent claim transactions of a block, in block order
+    * @return Blake2b256 hash of the concatenation of the 32-byte transaction ids in the given order,
+    *         value of the storage rent claims attestation field, see `StorageRentClaimsPrefix`
+    */
+  def storageRentClaimsDigest(txIds: Seq[ModifierId]): Array[Byte] =
+    Algos.hash(Bytes.concat(txIds.map(id => idToBytes(id)): _*))
+
+  /**
+    * @param txIds - ids of the storage rent claim transactions of a block, in block order
+    * @return the storage rent claims attestation field for these transactions, see `StorageRentClaimsPrefix`
+    */
+  def storageRentClaimsField(txIds: Seq[ModifierId]): (Array[Byte], Array[Byte]) =
+    storageRentClaimsKey -> storageRentClaimsDigest(txIds)
 
   /**
     * Id a type of network object encoding extension

@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -27,7 +27,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -426,12 +426,32 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
-    * Checks whether any input of `tx` is a storage rent claim in a block at `height`
-    * (see `ErgoTransaction.isStorageRentClaim`), with input boxes resolved against `s`.
-    * To be called only after `inputsNotSpent(tx, s)`, so every input box is resolved.
+    * Ids, in block order, of the transactions in `txs` with at least one storage rent claim input in a block at
+    * `height` (see `ErgoTransaction.hasStorageRentClaim`): the set C of rule `bsStorageRentAttestation`.
+    * Input boxes are resolved as `UtxoState.applyTransactions` resolves them, among the outputs of `txs` first, then
+    * in the UTXO set `s`. A transaction with an input resolved in neither is not counted (the block would be invalid).
     */
-  private def spendsStorageRentClaim(tx: ErgoTransaction, s: UtxoStateReader, height: Int): Boolean =
-    ErgoTransaction.hasStorageRentClaim(tx, tx.inputs.flatMap(inp => s.boxById(inp.boxId)), height)
+  def storageRentClaimTxIds(txs: Seq[ErgoTransaction], s: UtxoStateReader, height: Int): Seq[ModifierId] = {
+    val createdOutputs = txs.flatMap(_.outputs).map(o => bytesToId(o.id) -> o).toMap
+    txs.filter { tx =>
+      val boxes = tx.inputs.flatMap(inp => createdOutputs.get(bytesToId(inp.boxId)).orElse(s.boxById(inp.boxId)))
+      boxes.length == tx.inputs.length && ErgoTransaction.hasStorageRentClaim(tx, boxes, height)
+    }.map(_.id)
+  }
+
+  /**
+    * Extension fields a block producer adds for rule `bsStorageRentAttestation` (enforced from block version 5) to
+    * a block with transactions `txs` (in block order) and upcoming state context `upcomingContext`: the field
+    * `Extension.storageRentClaimsField` over the ids of the storage rent claim transactions among `txs` if there is
+    * any, and no field if there is none or the block version is below 5.
+    */
+  def storageRentAttestation(txs: Seq[ErgoTransaction],
+                             s: UtxoStateReader,
+                             upcomingContext: ErgoStateContext): ExtensionCandidate = {
+    val claimTxIds =
+      if (upcomingContext.blockVersion >= 5) storageRentClaimTxIds(txs, s, upcomingContext.currentHeight) else Seq.empty
+    ExtensionCandidate(if (claimTxIds.nonEmpty) Seq(Extension.storageRentClaimsField(claimTxIds)) else Seq.empty)
+  }
 
   /**
     * Checks that the best full block in the history corresponds to the state.
@@ -727,9 +747,11 @@ object CandidateGenerator extends ScorexLogging {
                       adProof: SerializedAdProof,
                       adDigest: ADDigest,
                       eliminate: EliminateTransactions): (Candidate, EliminateTransactions) = {
+        // Rule bsStorageRentAttestation: attest to the storage rent claim transactions of this block, if any
+        val blockExtension = extensionCandidate ++ storageRentAttestation(blockTxs, state, upcomingContext)
         val candidate = CandidateBlock(
           bestHeaderOpt, version, nBits, adDigest,
-          adProof, blockTxs, timestamp, extensionCandidate, votes
+          adProof, blockTxs, timestamp, blockExtension, votes
         )
         val ext = deriveWorkMessage(candidate)
         log.info(
@@ -979,13 +1001,6 @@ object CandidateGenerator extends ScorexLogging {
             //mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
-            loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
-          } else if (acc.nonEmpty && upcomingContext.blockVersion >= 5 && spendsStorageRentClaim(tx, stateWithTxs, nextHeight)) {
-            // A storage rent claim is allowed only in the first transaction of a block (rule bsStorageRentPosition,
-            // enforced from block version 5, hence the same gate here), and a transaction accepted now would not be
-            // the first one. Whether an input is a claim depends on the height of the including block, so a pool
-            // transaction admitted earlier may become one while it waits.
-            log.debug(s"Transaction ${tx.id} is a storage rent claim at height $nextHeight, not the first transaction")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {
             // check validity and calculate transaction cost

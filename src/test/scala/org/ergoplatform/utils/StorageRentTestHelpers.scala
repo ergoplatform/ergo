@@ -2,6 +2,7 @@ package org.ergoplatform.utils
 
 import org.ergoplatform.ErgoBox.{R4, TokenId}
 import org.ergoplatform.mining.CandidateGenerator
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, ErgoStateContext, UtxoState}
 import org.ergoplatform.settings.Algos.HF
@@ -11,17 +12,18 @@ import org.ergoplatform.wallet.utils.TestFileUtils
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.crypto.authds.ADValue
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, Insert, PersistentBatchAVLProver, VersionedLDBAVLStorage}
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
 import scorex.util.bytesToId
+import scorex.util.encode.Base16
 import sigma.Colls
 import sigma.ast.{ErgoTree, EvaluatedValue, LongConstant, SType, ShortConstant}
 import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
 
 /**
-  * Fixtures for the storage rent position tests (EIP draft "Storage Rent Claims Restricted to the First
-  * Transaction of a Block", rule `bsStorageRentPosition`).
+  * Fixtures for the storage rent attestation tests (EIP draft, miner attestation of rent-claim transactions in the
+  * block extension, rule `bsStorageRentAttestation`).
   *
   * A rent claim input is built as in `ExpirationSpecification`: empty proof, and context variable #127
   * holding the index of the output which recreates the box.
@@ -30,8 +32,37 @@ trait StorageRentTestHelpers extends ErgoStateContextHelpers with TestFileUtils 
 
   import ErgoNodeTestConstants.{genesisEmissionBox, settings}
 
-  /** Block version from which rule `bsStorageRentPosition` is enforced */
-  val RentPositionVersion: Byte = 5
+  /** Block version from which rule `bsStorageRentAttestation` is enforced */
+  val RentAttestationVersion: Byte = 5
+
+  /**
+    * Key of the attestation field, written out as the EIP specifies it (key space 0x03, index 0x00), independently
+    * of `Extension.storageRentClaimsKey`
+    */
+  val AttestationKey: Array[Byte] = Array[Byte](0x03, 0x00)
+
+  /**
+    * Attestation value for `txs`, written out as the EIP specifies it, independently of
+    * `Extension.storageRentClaimsDigest`: Blake2b256 of the concatenated 32-byte transaction ids, in the given order
+    */
+  def attestationDigest(txs: ErgoTransaction*): Array[Byte] =
+    Blake2b256(txs.flatMap(tx => Base16.decode(tx.id).get).toArray)
+
+  /** Header id for extensions built in these tests: block validation against the state does not check it */
+  private val AnyHeaderId = bytesToId(Array.fill(32)(0: Byte))
+
+  /** Block extension with the given fields */
+  def extensionWith(fields: (Array[Byte], Array[Byte])*): Extension = Extension(AnyHeaderId, fields)
+
+  /** Block extension with no fields */
+  val noExtension: Extension = extensionWith()
+
+  /** Block extension attesting to `claimTxs`, listed in the given order */
+  def attesting(claimTxs: ErgoTransaction*): Extension = extensionWith(AttestationKey -> attestationDigest(claimTxs: _*))
+
+  /** Values of the attestation fields of `ext` */
+  def attestationValues(ext: ExtensionCandidate): Seq[Array[Byte]] =
+    ext.fields.collect { case (k, v) if java.util.Arrays.equals(k, AttestationKey) => v }
 
   val StoragePeriod: Int = WalletConstants.StoragePeriod
 

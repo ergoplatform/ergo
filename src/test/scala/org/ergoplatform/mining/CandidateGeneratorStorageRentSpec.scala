@@ -1,45 +1,104 @@
 package org.ergoplatform.mining
 
-import org.ergoplatform.Input
+import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.mining.difficulty.DifficultySerializer
+import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
+import org.ergoplatform.modifiers.history.popow.NipopowAlgos
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.state.UtxoState
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
+import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, StorageRentTestHelpers}
+import org.ergoplatform.{ErgoBox, Input}
+import scorex.util.{ModifierId, bytesToId}
 import sigma.interpreter.ProverResult
 
-import scala.util.{Failure, Success}
+import scala.reflect.ClassTag
+import scala.util.{Success, Try}
 
 /**
-  * Candidate assembly under the EIP draft "Storage Rent Claims Restricted to the First Transaction of a
-  * Block": `CandidateGenerator.collectTxs` never places a storage rent claim, evaluated at the candidate's
-  * height, after the first transaction of the candidate.
+  * Candidate assembly under the EIP draft on miner attestation of rent-claim transactions (rule
+  * `bsStorageRentAttestation`): `CandidateGenerator.createCandidate` adds the attestation field, over the rent-claim
+  * transactions of the candidate in block order, to the candidate's extension from block version 5 on, and adds no
+  * field when the candidate has no rent claim or its block version is below 5. The generated candidate, proven with
+  * the test PoW scheme, is applied as a full block to the UTXO state it was built on.
   */
 class CandidateGeneratorStorageRentSpec extends ErgoCorePropertyTest with StorageRentTestHelpers {
 
   import org.ergoplatform.utils.ErgoCoreTestConstants._
+  import org.ergoplatform.utils.ErgoNodeTestConstants.genesisEmissionBox
 
   /** Height of the best block; the candidate is for nextHeight */
   private val tip: Int = StoragePeriod + 2001
   private val nextHeight: Int = tip + 1
 
-  private def claimsAfterFirst(txs: Seq[ErgoTransaction], us: UtxoState): Seq[ErgoTransaction] =
-    txs.drop(1).filter(tx => ErgoTransaction.hasStorageRentClaim(tx, tx.inputs.flatMap(i => us.boxById(i.boxId)), nextHeight))
+  /**
+    * History reader with `parent` as the best full block, as `createCandidate` reads it: the best full block's
+    * header, its extension (interlinks of a chain whose genesis is `genesisId`), and the required difficulty.
+    */
+  private def historyWithBest(parent: Header, anyTx: ErgoTransaction): ErgoHistoryReader = {
+    val genesisId: ModifierId = bytesToId(Array.fill(32)(9: Byte))
+    val parentExtension = Extension(parent.id, NipopowAlgos.packInterlinks(Seq(genesisId)))
+    val parentBlock = ErgoFullBlock(parent, BlockTransactions(parent.id, parent.version, Seq(anyTx)), parentExtension, None)
+    new ErgoHistoryReader {
+      override val historyStorage: HistoryStorage = null
+      override protected val settings: ErgoSettings = rentSettings
+      override protected def requireProofs: Boolean = false
+      override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = ???
+      override protected def validate(m: NonHeaderBlockSection): Try[Unit] = ???
+      override val powScheme: AutolykosPowScheme = rentSettings.chainSettings.powScheme
 
-  property("collectTxsPosition: candidate generation never places a rent claim after the first transaction, " +
-    "including a pool transaction which becomes a rent claim at nextHeight") {
+      override def bestFullBlockOpt: Option[ErgoFullBlock] = Some(parentBlock)
+      override def typedModifierById[T <: BlockSection : ClassTag](id: ModifierId): Option[T] =
+        Some(parentExtension).collect { case e: T => e }
+      override def requiredDifficultyAfter(parent: Header): BigInt =
+        DifficultySerializer.decodeCompactBits(rentSettings.chainSettings.initialNBits)
+    }
+  }
+
+  /** Fresh UTXO state at `tip` with the genesis emission box and `boxes`, at the given block version */
+  private def stateAtTip(version: Byte, boxes: Seq[ErgoBox]): UtxoState = {
+    val ctx = stateContext(tip, version, rentSettings, validationSettingsNoIl)
+    val us = utxoStateAt(genesisEmissionBox +: boxes, Some(genesisEmissionBox), ctx, rentSettings)
+    val upcoming = us.stateContext.simplifiedUpcoming()
+    upcoming.currentHeight shouldBe nextHeight
+    upcoming.blockVersion shouldBe version
+    us
+  }
+
+  /**
+    * Candidate generated by `CandidateGenerator.createCandidate` on `us`, with the emission transaction and `pool`
+    * as mempool transactions, and the full block obtained by proving it with the test PoW scheme
+    */
+  private def generate(us: UtxoState, pool: Seq[ErgoTransaction]): (CandidateBlock, ErgoFullBlock) = {
+    val emission = CandidateGenerator.collectEmission(us, defaultMinerPk, us.stateContext).get
+    val history = historyWithBest(us.stateContext.lastHeaderOpt.get, emission)
+    val (candidate, _) = CandidateGenerator.createCandidate(defaultMinerPk, history, ErgoValidationSettingsUpdate.empty,
+      us, pool.map(tx => UnconfirmedTransaction(tx, None)), Some(emission), Seq.empty, rentSettings).get
+    val block = candidate.candidateBlock
+    block.transactions.head shouldBe emission
+    val fb = powScheme.proveCandidate(block, defaultMinerSecretNumber).get
+    fb.header.height shouldBe nextHeight
+    fb.header.votingStarts(rentSettings.chainSettings.voting.votingLength) shouldBe false
+    java.util.Arrays.equals(fb.header.extensionRoot, block.extension.digest) shouldBe true
+    block -> fb
+  }
+
+  property("candidateAttests: at block version 5, the candidate's extension carries the attestation field over the " +
+    "rent claims collected, wherever collectTxs placed them, and the proven candidate applies to the state; with " +
+    "no claim collected there is no field; at block version 4 there is no field") {
     val plain = boxAt(TrueTree, tip - 10, seed = 31)
     // `false` script: valid only through the rent branch
     val expired = boxAt(FalseTree, nextHeight - StoragePeriod - 50, seed = 32)
     // StoragePeriod - 1 blocks old for a block at tip (when it was admitted, the tip was tip - 1),
     // exactly StoragePeriod old at nextHeight
     val crossing = boxAt(TrueTree, nextHeight - StoragePeriod, seed = 33)
-
-    val ctx = stateContext(tip, RentPositionVersion, rentSettings, validationSettingsNoIl)
-    val us = utxoStateAt(Seq(plain, expired, crossing), None, ctx, rentSettings)
-    val upcoming = us.stateContext.simplifiedUpcoming()
-    upcoming.currentHeight shouldBe nextHeight
-    upcoming.blockVersion shouldBe RentPositionVersion
+    val boxes = Seq(plain, expired, crossing)
 
     val plainTx = ErgoTransaction(IndexedSeq(Input(plain.id, ProverResult.empty)), IndexedSeq(recreated(plain, nextHeight)))
     val claimTx = rentShapedTx(expired, nextHeight)
@@ -48,46 +107,46 @@ class CandidateGeneratorStorageRentSpec extends ErgoCorePropertyTest with Storag
     ErgoTransaction.hasStorageRentClaim(crossingTx, IndexedSeq(crossing), tip) shouldBe false
     ErgoTransaction.hasStorageRentClaim(crossingTx, IndexedSeq(crossing), nextHeight) shouldBe true
     ErgoTransaction.hasStorageRentClaim(claimTx, IndexedSeq(expired), nextHeight) shouldBe true
-    // each of them is valid on its own at nextHeight, so a skip below is due to position only
-    Seq(plainTx, claimTx, crossingTx).foreach { tx =>
-      us.validateWithCost(tx, upcoming, parameters.maxBlockCost, None) shouldBe a[Success[_]]
-    }
+    ErgoTransaction.hasStorageRentClaim(plainTx, IndexedSeq(plain), nextHeight) shouldBe false
 
-    def collect(txs: Seq[ErgoTransaction]): (Seq[ErgoTransaction], Seq[scorex.util.ModifierId]) =
-      CandidateGenerator.collectTxs(defaultMinerPk, parameters.maxBlockCost, parameters.maxBlockSize, us, upcoming, txs)
+    // (1) version 5, claims offered after a non-claim: all collected in pool order, attested in block order
+    val us1 = stateAtTip(RentAttestationVersion, boxes)
+    val (block1, fb1) = generate(us1, Seq(plainTx, claimTx, crossingTx))
+    block1.version shouldBe RentAttestationVersion
+    block1.transactions.map(_.id) shouldBe Seq(block1.transactions.head.id, plainTx.id, claimTx.id, crossingTx.id)
+    block1.transactions.indexOf(claimTx) shouldBe 2
+    block1.transactions.indexOf(crossingTx) shouldBe 3
+    val values1 = attestationValues(block1.extension)
+    values1.length shouldBe 1
+    java.util.Arrays.equals(values1.head, attestationDigest(claimTx, crossingTx)) shouldBe true
+    // the interlinks from the parent's extension are kept next to the field
+    block1.extension.fields.exists(_._1.head == Extension.InterlinksVectorPrefix) shouldBe true
+    // the proven candidate is a valid block at version 5, rule 308 included
+    us1.applyModifier(fb1, None)(_ => ()) shouldBe a[Success[_]]
 
-    // (1) the first accepted transaction is not a claim: both claims are skipped and marked invalid
-    val (collected1, invalid1) = collect(Seq(plainTx, claimTx, crossingTx))
-    collected1 shouldBe Seq(plainTx)
-    invalid1 should contain theSameElementsAs Seq(claimTx.id, crossingTx.id)
-    claimsAfterFirst(collected1, us) shouldBe empty
+    // (2) version 5, a claim offered first: it follows the emission transaction, and is attested alone
+    val us2 = stateAtTip(RentAttestationVersion, boxes)
+    val (block2, fb2) = generate(us2, Seq(claimTx, plainTx))
+    block2.transactions.tail shouldBe Seq(claimTx, plainTx)
+    val values2 = attestationValues(block2.extension)
+    values2.length shouldBe 1
+    java.util.Arrays.equals(values2.head, attestationDigest(claimTx)) shouldBe true
+    us2.applyModifier(fb2, None)(_ => ()) shouldBe a[Success[_]]
 
-    // (2) a claim offered first is placed at t_0; no second claim follows it
-    val (collected2, invalid2) = collect(Seq(claimTx, crossingTx, plainTx))
-    collected2 shouldBe Seq(claimTx, plainTx)
-    invalid2 shouldBe Seq(crossingTx.id)
-    claimsAfterFirst(collected2, us) shouldBe empty
+    // (3) version 5, no claim collected: no field
+    val us3 = stateAtTip(RentAttestationVersion, boxes)
+    val (block3, fb3) = generate(us3, Seq(plainTx))
+    block3.transactions.tail shouldBe Seq(plainTx)
+    attestationValues(block3.extension) shouldBe empty
+    us3.applyModifier(fb3, None)(_ => ()) shouldBe a[Success[_]]
 
-    // (3) the collected transactions pass block validation at block version 5, including rule 308
-    Seq(collected1, collected2).foreach { txs =>
-      ErgoState.execTransactions(txs, upcoming, rentSettings.nodeSettings) { id =>
-        us.boxById(id).fold[scala.util.Try[org.ergoplatform.ErgoBox]](Failure(new Exception("box not found")))(Success(_))
-      }.isValid shouldBe true
-    }
-
-    // (4) before activation (upcoming block version 4) the skip is not applied: rule 308 is not enforced there,
-    // so a valid claim after the first transaction is collected and its fee is not lost
-    val ctx4 = stateContext(tip, Header.Interpreter60Version, rentSettings, validationSettingsNoIl)
-    val us4 = utxoStateAt(Seq(plain, expired, crossing), None, ctx4, rentSettings)
-    val upcoming4 = us4.stateContext.simplifiedUpcoming()
-    upcoming4.currentHeight shouldBe nextHeight
-    upcoming4.blockVersion shouldBe Header.Interpreter60Version
-    val (collected4, invalid4) =
-      CandidateGenerator.collectTxs(defaultMinerPk, parameters.maxBlockCost, parameters.maxBlockSize, us4, upcoming4,
-        Seq(plainTx, claimTx, crossingTx))
-    collected4 shouldBe Seq(plainTx, claimTx, crossingTx)
-    invalid4 shouldBe empty
-    claimsAfterFirst(collected4, us4) should contain theSameElementsAs Seq(claimTx, crossingTx)
+    // (4) version 4, claims collected: no field (rule 308 is not enforced there), and the block applies
+    val us4 = stateAtTip(Header.Interpreter60Version, boxes)
+    val (block4, fb4) = generate(us4, Seq(plainTx, claimTx, crossingTx))
+    block4.version shouldBe Header.Interpreter60Version
+    block4.transactions.tail shouldBe Seq(plainTx, claimTx, crossingTx)
+    attestationValues(block4.extension) shouldBe empty
+    us4.applyModifier(fb4, None)(_ => ()) shouldBe a[Success[_]]
   }
 
 }

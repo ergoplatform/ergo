@@ -78,7 +78,7 @@ class ErgoMemPoolStorageRentSpec extends ErgoCorePropertyTest with StorageRentTe
 
   property("mempoolDeclinesV5: the same at block version 5, where the process path also parses the transaction " +
     "under activated script version 4") {
-    mempoolDeclinesAt(RentPositionVersion)
+    mempoolDeclinesAt(RentAttestationVersion)
   }
 
 }

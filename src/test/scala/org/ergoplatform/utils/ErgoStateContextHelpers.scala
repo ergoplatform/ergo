@@ -11,12 +11,15 @@ import org.ergoplatform.utils.generators.ErgoCoreGenerators.defaultHeaderGen
   */
 trait ErgoStateContextHelpers {
 
-  def stateContext(height: Int, blockVersion: Byte, settings: ErgoSettings): ErgoStateContext = {
+  def stateContext(height: Int,
+                   blockVersion: Byte,
+                   settings: ErgoSettings,
+                   validationSettings: ErgoValidationSettings = ErgoValidationSettings.initial): ErgoStateContext = {
     val header = defaultHeaderGen.sample.get.copy(version = blockVersion, height = height)
     val params = Parameters(MainnetLaunchParameters.height,
       MainnetLaunchParameters.parametersTable.updated(Parameters.BlockVersion, blockVersion),
       MainnetLaunchParameters.proposedUpdate)
-    new ErgoStateContext(Seq(header), None, genesisStateDigest, params, ErgoValidationSettings.initial,
+    new ErgoStateContext(Seq(header), None, genesisStateDigest, params, validationSettings,
       VotingData.empty)(settings.chainSettings)
   }
 

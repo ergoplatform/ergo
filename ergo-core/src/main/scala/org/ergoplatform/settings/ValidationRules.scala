@@ -175,6 +175,9 @@ object ValidationRules {
     bsBlockTransactionsCost -> RuleStatus(im => fatal(s"Accumulated cost of block transactions should not exceed <maxBlockCost>. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction], classOf[BlockTransactions]),
       mayBeDisabled = false),
+    bsStorageRentAttestation -> RuleStatus(im => fatal(s"Rent-claim transactions must be attested in the extension by the block producer. ${im.error}", im.modifierId, im.modifierTypeId),
+      Seq(classOf[BlockTransactions], classOf[Extension]),
+      mayBeDisabled = true),
 
     // full block processing validation
     fbOperationFailed -> RuleStatus(im => fatal(s"Operations against the state AVL+ tree should be successful. ${im.error}", im.modifierId, im.modifierTypeId),
@@ -285,6 +288,7 @@ object ValidationRules {
   val bsTooOld: Short = 305
   val bsBlockTransactionsSize: Short = 306
   val bsBlockTransactionsCost: Short = 307
+  val bsStorageRentAttestation: Short = 308 // introduced in v5 blocks, Header.StorageRentAttestationVersion (EIP-0052: attestation of rent-claim transactions)
 
   // extension validation
   val exSize: Short = 400

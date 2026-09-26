@@ -1234,11 +1234,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * Move `pmod` to `Invalid` if it is permanently invalid, to `Received` otherwise
+    * Move `pmod` to `Held` if it is already in history (a duplicate, dropped), to `Invalid` if it is permanently
+    * invalid, to `Received` otherwise. Returns whether `pmod` should be passed on for application.
     */
   @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
   def validateAndSetStatus(hr: ErgoHistory, remote: ConnectedPeer, pmod: BlockSection): Boolean = {
     hr.applicableTry(pmod) match {
+      case Failure(e) if e.isInstanceOf[MalformedModifierError] && hr.contains(pmod.id) =>
+        // already in history, e.g. applied from another source while this request was outstanding: a duplicate of a
+        // valid modifier, not an invalid one, so it is dropped without penalizing the peer that answered the request
+        log.debug(s"Modifier ${pmod.encodedId} is already in history, dropping the copy from $remote")
+        deliveryTracker.setHeld(pmod.id, pmod.modifierTypeId)
+        false
       case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
         log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
         deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)

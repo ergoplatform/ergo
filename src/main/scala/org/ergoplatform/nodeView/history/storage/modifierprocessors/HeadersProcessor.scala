@@ -421,7 +421,9 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
         .validate(hdrHeight, header.height == parent.height + 1, InvalidModifier(s"${header.height} vs ${parent.height}", header.id, header.modifierTypeId))
         .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
+        // the parent's own height, not the height index: headers are validated while a parent may be half-written
+        // (HistoryStorage.insert stores the object before its indexes), and a missing index is not a too-old parent
+        .validate(hdrTooOld, fullBlockHeight - parent.height < nodeSettings.keepVersions, InvalidModifier(parent.height.toString, header.id, header.modifierTypeId))
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
         .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))

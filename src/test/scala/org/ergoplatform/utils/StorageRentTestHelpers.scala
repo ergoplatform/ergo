@@ -22,7 +22,7 @@ import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
 
 /**
-  * Fixtures for the storage rent attestation tests (EIP draft, miner attestation of rent-claim transactions in the
+  * Fixtures for the storage rent attestation tests (EIP-0052, miner attestation of rent-claim transactions in the
   * block extension, rule `bsStorageRentAttestation`).
   *
   * A rent claim input is built as in `ExpirationSpecification`: empty proof, and context variable #127

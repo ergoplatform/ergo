@@ -283,20 +283,6 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                     new ProcessingOutcome.Declined(exc, validationStartTime))
                 }
 
-                // Mempool policy (EIP draft, miner-attested storage rent): a rent claim enters a block only if the
-                // block producer lists it in the extension attestation field (rule bsStorageRentAttestation from
-                // block version 5), so a relayed claim is not something this node can place. Declined at admission,
-                // evaluated at the height of the next block. Needs no fork.
-                if (nodeSettings.declineStorageRentClaims &&
-                    ErgoTransaction.hasStorageRentClaim(tx, resolvedInputs.flatten, utxo.stateContext.currentHeight + 1)) {
-                  log.info(s"Mempool rejecting storage rent claim transaction: ${tx.id}")
-                  val exc = new Exception(
-                    "Mempool policy declines a storage rent claim; rent claims are placed and attested by the block producer")
-                  // The pool is rebuilt directly, as for the re-emission token decline above.
-                  return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
-                    new ProcessingOutcome.Declined(exc, validationStartTime))
-                }
-
                 // added in 6.0 to check now versioned serializers
                 // as having unparseable outputs is okay per protocol rules, but in some cases in 6.0
                 // tree deserialization fails with versioning issues (eg when tree version > activated version),

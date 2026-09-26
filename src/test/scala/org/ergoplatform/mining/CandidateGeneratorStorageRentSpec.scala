@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import scala.util.{Success, Try}
 
 /**
-  * Candidate assembly under the EIP draft on miner attestation of rent-claim transactions (rule
+  * Candidate assembly under EIP-0052 on miner attestation of rent-claim transactions (rule
   * `bsStorageRentAttestation`): `CandidateGenerator.createCandidate` adds the attestation field, over the rent-claim
   * transactions of the candidate in block order, to the candidate's extension from block version 5 on, and adds no
   * field when the candidate has no rent claim or its block version is below 5. The generated candidate, proven with

@@ -18,7 +18,7 @@ import sigma.interpreter.{ContextExtension, ProverResult}
 import scala.util.{Failure, Success}
 
 /**
-  * Rule `bsStorageRentAttestation` (308), EIP draft on miner attestation of rent-claim transactions: from block
+  * Rule `bsStorageRentAttestation` (308), EIP-0052 on miner attestation of rent-claim transactions: from block
   * version 5 on, let C be the ids, in block order, of the transactions of a block with at least one storage rent
   * claim input at the block's height. If C is non-empty, the block extension carries exactly one field with key
   * 0x0300 and value Blake2b256 of the concatenated ids of C; if C is empty, it carries no field with that key.

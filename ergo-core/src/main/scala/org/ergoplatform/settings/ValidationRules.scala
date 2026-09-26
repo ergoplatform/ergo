@@ -288,7 +288,7 @@ object ValidationRules {
   val bsTooOld: Short = 305
   val bsBlockTransactionsSize: Short = 306
   val bsBlockTransactionsCost: Short = 307
-  val bsStorageRentAttestation: Short = 308 // introduced in v5 blocks, Header.StorageRentAttestationVersion (EIP draft: attestation of rent-claim transactions)
+  val bsStorageRentAttestation: Short = 308 // introduced in v5 blocks, Header.StorageRentAttestationVersion (EIP-0052: attestation of rent-claim transactions)
 
   // extension validation
   val exSize: Short = 400

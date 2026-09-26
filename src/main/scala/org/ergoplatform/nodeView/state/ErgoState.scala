@@ -138,7 +138,7 @@ object ErgoState extends ScorexLogging {
     }
 
     /*
-     * Rule `bsStorageRentAttestation` (EIP draft, miner attestation of rent-claim transactions): from block
+     * Rule `bsStorageRentAttestation` (EIP-0052, miner attestation of rent-claim transactions): from block
      * version 5 on, let C be the ids, in block order, of the transactions of the block with at least one storage
      * rent claim input (see `ErgoTransaction.isStorageRentClaim`) at the block's height. If C is non-empty, the
      * block extension has exactly one field with key `Extension.storageRentClaimsKey`, and its value is

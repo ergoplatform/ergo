@@ -149,7 +149,7 @@ object Header extends ApiCodecs {
 
   /**
     * Block version after the soft-fork introducing miner attestation of storage rent claims
-    * (rule bsStorageRentAttestation, EIP draft)
+    * (rule bsStorageRentAttestation, EIP-0052)
     */
   val StorageRentAttestationVersion: Byte = 5
 

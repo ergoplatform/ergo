@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
@@ -527,54 +527,40 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: longer fork is applied and shorter is not") {
     withFixture2 { ctx =>
       import ctx._
+      val hist = viewHistory
 
-      def sendHeader(block: ErgoFullBlock): Unit = {
-        deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+      // Delivers a chain's headers as one reply. The delivery tracker is not thread-safe and the synchronizer
+      // updates it while it handles replies and their application events, so the test marks the headers as
+      // requested only once the synchronizer is done with the previous chain, and before sending anything.
+      def sendHeaders(chain: Seq[ErgoFullBlock]): Unit = {
+        chain.foreach { b =>
+          deliveryTracker.setRequested(Header.modifierTypeId, b.header.id, peer)(_ => Cancellable.alreadyCancelled)
+        }
+        val modData = ModifiersData(Header.modifierTypeId, chain.map(b => b.header.id -> b.header.bytes).toMap)
         synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
-      def sendBlockSection(block: BlockSection): Unit = {
-        deliveryTracker.setRequested(block.modifierTypeId, block.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
-        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
-      }
-
-      def sendBlock(block: ErgoFullBlock): Unit = {
-        sendBlockSection(block.blockTransactions)
-        sendBlockSection(block.extension)
-        block.adProofs.foreach(sendBlockSection(_))
+      def appliedAndSettled(chain: Seq[ErgoFullBlock]): Unit = eventually(timeout(10.seconds)) {
+        hist.bestHeaderOpt.map(_.id) shouldBe Some(chain.last.id)
+        // the synchronizer has handled every application event: no header is still tracked as received
+        chain.foreach(b => deliveryTracker.status(b.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown)
       }
 
       deliveryTracker.reset()
 
-      val hist = viewHistory
-      // generate smaller fork that is going to be reverted after applying a bigger fork
+      // a shorter chain, received first, becomes the best one
       val smallFork = genChain(4, hist)
+      sendHeaders(smallFork)
+      appliedAndSettled(smallFork)
 
-      smallFork.foreach(sendHeader)
-      // history should eventually contain all smaller fork headers
-      eventually {
-        smallFork.forall(block => hist.contains(block.id))
-      }
-      smallFork.foreach(sendBlock)
-      // history should eventually contain smaller fork block parts
-      eventually {
-        smallFork.forall(block => hist.contains(block.extension.id) && hist.contains(block.blockTransactions.id))
-      }
-      // generate bigger fork that is going to win over smaller fork that is to be reverted
+      // a longer competing chain, received later, replaces it as the best one. Headers of the shorter chain stay
+      // in history; only the best chain changes. (Switching full blocks needs blocks valid for the view holder's
+      // state, which these generated blocks are not; that is covered by NodeViewHolderTests, "forking - switching".)
       val bigFork = genChain(20, hist, extension = emptyExtension)
-
-      bigFork.foreach(sendHeader)
-      // history should revert all smaller fork headers
-      eventually {
-        smallFork.forall(block => !hist.contains(block.id))
-      }
-      bigFork.foreach(sendBlock)
-      // history should revert all smaller fork block parts
-      eventually {
-        smallFork.forall(block => !hist.contains(block.extension.id) && !hist.contains(block.blockTransactions.id))
-      }
+      // both chains start from genesis: the longer one competes with the shorter one, it does not extend it
+      bigFork.head.header.parentId shouldBe smallFork.head.header.parentId
+      sendHeaders(bigFork)
+      appliedAndSettled(bigFork)
     }
   }
 

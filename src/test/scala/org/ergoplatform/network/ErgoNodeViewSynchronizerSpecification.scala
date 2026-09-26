@@ -4,9 +4,10 @@ import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -175,6 +176,13 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val (synchronizer, nodeViewHolder, syncInfo, mod, tx, peer, pchProbe, ncProbe, eventListener, modSerializer, deliveryTracker) = nodeViewSynchronizer
   }
 
+  // What the synchronizer sends to the network controller within `max`, of one message kind. It sends a periodic sync
+  // message on its own schedule, so a test that expects no request (or no broadcast) checks for that kind only.
+  private def sentWithCode(ncProbe: TestProbe, code: Byte, max: FiniteDuration): Seq[SendToNetwork] =
+    ncProbe.receiveWhile(max) { case m => m }.collect {
+      case stn: SendToNetwork if stn.message.spec.messageCode == code => stn
+    }
+
   class Synchronizer2Fixture extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
@@ -203,6 +211,21 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       pchProbe.ref,
       Some(peerInfo)
     )
+
+    // The view holder's own history. Tests seed and read history through it: a second ErgoHistory opened on the
+    // same directory shares the database but not the caches, so one instance can keep serving a stale index value
+    // (such as the best header id) after the other has written.
+    val viewHistory: ErgoHistory = {
+      val viewProbe = TestProbe("ViewProbe")
+      nodeViewHolderMockRef.tell(
+        GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)), viewProbe.ref)
+      val (h, pool) = viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+      // Until it holds a history and a mempool the synchronizer defers every message by 1 s, in rounds. Handing them
+      // over before the test's first message makes it handle the test's messages at once.
+      synchronizerMockRef ! ChangedHistory(h)
+      synchronizerMockRef ! ChangedMempool(pool)
+      h
+    }
   }
 
   /**
@@ -353,7 +376,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // we generate and apply existing base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -388,7 +411,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         }
       }
       eventually {
-        // test whether applied header was actually persisted to history
+        // test whether applied header was actually persisted to history: a fresh instance has no caches and reads the
+        // database
         val hist = ErgoHistory.readOrGenerate(settings)(null)
         hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
@@ -428,7 +452,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
       val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
       val parentOpt = newHistory.lastHeaders(2).headOption
@@ -451,7 +475,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // Generate base chain and set up synchronizer with it
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -503,54 +527,40 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: longer fork is applied and shorter is not") {
     withFixture2 { ctx =>
       import ctx._
+      val hist = viewHistory
 
-      def sendHeader(block: ErgoFullBlock): Unit = {
-        deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+      // Delivers a chain's headers as one reply. The delivery tracker is not thread-safe and the synchronizer
+      // updates it while it handles replies and their application events, so the test marks the headers as
+      // requested only once the synchronizer is done with the previous chain, and before sending anything.
+      def sendHeaders(chain: Seq[ErgoFullBlock]): Unit = {
+        chain.foreach { b =>
+          deliveryTracker.setRequested(Header.modifierTypeId, b.header.id, peer)(_ => Cancellable.alreadyCancelled)
+        }
+        val modData = ModifiersData(Header.modifierTypeId, chain.map(b => b.header.id -> b.header.bytes).toMap)
         synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
-      def sendBlockSection(block: BlockSection): Unit = {
-        deliveryTracker.setRequested(block.modifierTypeId, block.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
-        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
-      }
-
-      def sendBlock(block: ErgoFullBlock): Unit = {
-        sendBlockSection(block.blockTransactions)
-        sendBlockSection(block.extension)
-        block.adProofs.foreach(sendBlockSection(_))
+      def appliedAndSettled(chain: Seq[ErgoFullBlock]): Unit = eventually(timeout(10.seconds)) {
+        hist.bestHeaderOpt.map(_.id) shouldBe Some(chain.last.id)
+        // the synchronizer has handled every application event: no header is still tracked as received
+        chain.foreach(b => deliveryTracker.status(b.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown)
       }
 
       deliveryTracker.reset()
 
-      val hist = ErgoHistory.readOrGenerate(settings)(null)
-      // generate smaller fork that is going to be reverted after applying a bigger fork
+      // a shorter chain, received first, becomes the best one
       val smallFork = genChain(4, hist)
+      sendHeaders(smallFork)
+      appliedAndSettled(smallFork)
 
-      smallFork.foreach(sendHeader)
-      // history should eventually contain all smaller fork headers
-      eventually {
-        smallFork.forall(block => hist.contains(block.id))
-      }
-      smallFork.foreach(sendBlock)
-      // history should eventually contain smaller fork block parts
-      eventually {
-        smallFork.forall(block => hist.contains(block.extension.id) && hist.contains(block.blockTransactions.id))
-      }
-      // generate bigger fork that is going to win over smaller fork that is to be reverted
+      // a longer competing chain, received later, replaces it as the best one. Headers of the shorter chain stay
+      // in history; only the best chain changes. (Switching full blocks needs blocks valid for the view holder's
+      // state, which these generated blocks are not; that is covered by NodeViewHolderTests, "forking - switching".)
       val bigFork = genChain(20, hist, extension = emptyExtension)
-
-      bigFork.foreach(sendHeader)
-      // history should revert all smaller fork headers
-      eventually {
-        smallFork.forall(block => !hist.contains(block.id))
-      }
-      bigFork.foreach(sendBlock)
-      // history should revert all smaller fork block parts
-      eventually {
-        smallFork.forall(block => !hist.contains(block.extension.id) && !hist.contains(block.blockTransactions.id))
-      }
+      // both chains start from genesis: the longer one competes with the shorter one, it does not extend it
+      bigFork.head.header.parentId shouldBe smallFork.head.header.parentId
+      sendHeaders(bigFork)
+      appliedAndSettled(bigFork)
     }
   }
 
@@ -631,7 +641,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -671,7 +681,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -693,7 +703,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -713,7 +723,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
       // Should NOT request the parent header since it's already in history
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, RequestModifierSpec.messageCode, 1.second) shouldBe empty
 
       // The modifier should still be set to Unknown
       eventually {
@@ -726,7 +736,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -746,7 +756,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
       // Should NOT send any network request since no older peers available
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, RequestModifierSpec.messageCode, 1.second) shouldBe empty
 
       // The modifier should still be set to Unknown
       eventually {
@@ -759,7 +769,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -785,7 +795,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -823,7 +833,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -853,7 +863,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -888,7 +898,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build a base chain and apply it to history
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -954,7 +964,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build a base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -1058,7 +1068,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build base chain and state
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
 
@@ -1079,7 +1089,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, InvSpec.messageCode, 1.second) shouldBe empty
     }
   }
 
@@ -1091,7 +1101,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build base chain and state
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
 
@@ -1115,7 +1125,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
       // Should receive no additional InvSpec messages
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, InvSpec.messageCode, 1.second) shouldBe empty
     }
   }
 
@@ -1219,7 +1229,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Send LocalBlockApplied - should not broadcast but should perform cleanup
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
-      ncProbe.expectNoMessage(500.millis)
+      sentWithCode(ncProbe, InvSpec.messageCode, 500.millis) shouldBe empty
 
       // Send RemoteBlockApplied - should broadcast (different block)
       val newBlock2 = statefulyValidFullBlock(wus)
@@ -1254,7 +1264,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         Some(peer))
 
       // request must not be sent, the inv is dropped
-      ncProbe.expectNoMessage(1.second)
+      sentWithCode(ncProbe, RequestModifierSpec.messageCode, 1.second) shouldBe empty
     }
   }
 

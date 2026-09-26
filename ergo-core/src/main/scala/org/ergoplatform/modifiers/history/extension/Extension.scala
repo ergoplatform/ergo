@@ -73,10 +73,11 @@ object Extension extends ApiCodecs {
 
   /**
     * From block version 5 on, a block containing storage rent claim transactions (transactions with at least one
-    * input satisfying `ErgoTransaction.isStorageRentClaim` at the block's height) carries a single field in the key
-    * space defined by the value below, attesting to those transactions, and a block without such transactions
-    * carries no field there (validation rule `bsStorageRentAttestation`). The field key is `storageRentClaimsKey`,
-    * the value is `storageRentClaimsDigest` of the claim transaction ids in block order.
+    * input satisfying `ErgoTransaction.isStorageRentClaim` at the block's height) carries a single field,
+    * `storageRentClaimsKey`, in the key space defined by the value below, attesting to those transactions, and a
+    * block without such transactions carries no field there (validation rule `bsStorageRentAttestation`). The
+    * field key is `storageRentClaimsKey`, the value is `storageRentClaimsDigest` of the claim transaction ids in
+    * block order.
     *
     * Nodes not aware of this key space accept the field: outside the known key spaces, extension validation checks
     * only key and value sizes, duplicate keys and non-emptiness.

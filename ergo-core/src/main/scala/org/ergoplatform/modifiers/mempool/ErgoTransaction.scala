@@ -489,8 +489,8 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
     inputs.zipWithIndex.filterNot(i => resolvedInputs.exists(bx => util.Arrays.equals(bx.id, i._1))).map(_._2)
 
   /**
-    * Storage rent claim predicate (EIP draft "Storage Rent Claims Restricted to the First Transaction
-    * of a Block", validation rule `bsStorageRentPosition`).
+    * Storage rent claim predicate (EIP draft, miner-attested storage rent: mempool policy and validation rule
+    * `bsStorageRentAttestation`).
     *
     * An input of `tx` spending `box` in a block at `height` is a storage rent claim when all hold:
     *  1. `height - box.creationHeight >= StoragePeriod`

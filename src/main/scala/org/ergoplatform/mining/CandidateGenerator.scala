@@ -449,7 +449,11 @@ object CandidateGenerator extends ScorexLogging {
                              s: UtxoStateReader,
                              upcomingContext: ErgoStateContext): ExtensionCandidate = {
     val claimTxIds =
-      if (upcomingContext.blockVersion >= 5) storageRentClaimTxIds(txs, s, upcomingContext.currentHeight) else Seq.empty
+      if (upcomingContext.blockVersion >= Header.StorageRentAttestationVersion) {
+        storageRentClaimTxIds(txs, s, upcomingContext.currentHeight)
+      } else {
+        Seq.empty
+      }
     ExtensionCandidate(if (claimTxIds.nonEmpty) Seq(Extension.storageRentClaimsField(claimTxIds)) else Seq.empty)
   }
 

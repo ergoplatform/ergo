@@ -89,10 +89,10 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       txs match {
         case head :: tail if costAcc < CostLimit =>
           val validationContext = state.stateContext.simplifiedUpcoming()
-          // Mempool policy (as at admission, see `ErgoMemPool.process`): a storage rent claim is valid only in the
-          // first transaction of a block (rule bsStorageRentPosition), and whether an input is a claim depends on
-          // the height of the including block, so a pooled transaction may become one while it waits. Inputs are
-          // resolved against the state with the pool's transactions; if any is missing, the existing path decides.
+          // Mempool policy (as at admission, see ErgoMemPool.process): rent claims are placed and attested by the
+          // block producer (rule bsStorageRentAttestation), and whether an input is a claim depends on the height of
+          // the including block, so a pooled transaction may become one while it waits. Inputs are resolved against
+          // the state with the pool's transactions; if any is missing, the existing path decides.
           val resolvedInputs = head.transaction.inputs.map(inp => state.boxById(inp.boxId))
           val becameRentClaim = nodeSettings.declineStorageRentClaims && resolvedInputs.forall(_.isDefined) &&
             ErgoTransaction.hasStorageRentClaim(head.transaction, resolvedInputs.flatten, validationContext.currentHeight)

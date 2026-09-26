@@ -9,7 +9,7 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, StorageRentTestHelpers}
 import sigma.interpreter.ProverResult
 
 /**
-  * Mempool policy of the EIP draft "Storage Rent Claims Restricted to the First Transaction of a Block":
+  * Mempool policy of the EIP draft on miner-attested storage rent (stage one):
   * with `declineStorageRentClaims` (default true), `ErgoMemPool.process` declines a transaction spending an
   * input as a storage rent claim at the height of the next block. The policy is not gated on block version.
   */

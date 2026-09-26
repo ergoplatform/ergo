@@ -19,7 +19,7 @@ import scala.concurrent.duration._
 import scala.util.Success
 
 /**
-  * Mempool recheck under the EIP draft "Storage Rent Claims Restricted to the First Transaction of a Block":
+  * Mempool recheck under the EIP draft on miner-attested storage rent (stage one):
   * `CleanupWorker.validatePool` invalidates a pooled transaction which has become a storage rent claim at the
   * height of the next block (with `declineStorageRentClaims`, default true), the same policy as at admission.
   */

@@ -148,7 +148,7 @@ object ErgoState extends ScorexLogging {
      * `validateStateless`), so the rule can be disabled via soft-fork voting.
      */
     val height = currentStateContext.currentHeight
-    val attestationRequired = currentStateContext.blockVersion >= 5
+    val attestationRequired = currentStateContext.blockVersion >= Header.StorageRentAttestationVersion
 
     def validateStorageRentAttestation(claimTxIds: Seq[ModifierId]): ValidationResult[Unit] = {
       val key = Extension.storageRentClaimsKey

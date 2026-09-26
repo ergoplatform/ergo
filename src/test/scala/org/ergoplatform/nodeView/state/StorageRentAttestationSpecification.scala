@@ -175,6 +175,7 @@ class StorageRentAttestationSpecification extends ErgoCorePropertyTest with Stor
   }
 
   property("predicateBoundary.isStorageRentClaim: predicate conditions, never throws") {
+    RentAttestationVersion shouldBe Header.StorageRentAttestationVersion
     val box = boxAt(FalseTree, H - StoragePeriod, seed = 9)
     val tx = rentShapedTx(box, H)
     val in = tx.inputs.head
@@ -239,6 +240,48 @@ class StorageRentAttestationSpecification extends ErgoCorePropertyTest with Stor
     applied.get.boxById(expiredA.id) shouldBe None
     applied.get.emissionBoxOpt.map(_.id).map(scorex.util.bytesToId) shouldBe
       Some(scorex.util.bytesToId(blockTxs.head.outputs.head.id))
+  }
+
+  property("attestedClaimDigestState: a DigestState checks rule 308 against the block's own extension: the " +
+    "block of attestedClaimAnyPosition is accepted with the field and rejected by rule 308 without it") {
+    val expiredA = boxAt(FalseTree, H - StoragePeriod, seed = 21)
+    val expiredB = boxAt(FalseTree, H - StoragePeriod - 100, seed = 22)
+    val plain = boxAt(TrueTree, H - 10, seed = 23)
+    val claimA = rentShapedTx(expiredA, H)
+    val claimB = rentShapedTx(expiredB, H)
+    val plainTx = plainSpend(plain, H)
+    val blockBoxes = Seq(expiredA, expiredB, plain)
+
+    /**
+      * Digest state at height H - 1 with the same stored context and root digest as `us` (the construction of
+      * `DigestState.recover`: the context under `ErgoStateReader.ContextKey`, the root hash under the version),
+      * and the full block at H built from `us` as in `applyAtH`. The context is the one `us` was built with
+      * (`stateBelowH`): `stateContext` samples a fresh last header on every call, and the block's parent is
+      * this one.
+      */
+    def digestStateAndBlock(ext: ExtensionCandidate): (DigestState, ErgoFullBlock) = {
+      val us = stateBelowH(RentAttestationVersion, blockBoxes)
+      val fb = blockAtH(us, RentAttestationVersion, Seq(emissionE2E(us), claimA, plainTx, claimB), ext)
+      fb.adProofs shouldBe defined
+      val ds = DigestState.recover(us.version, us.rootDigest, us.stateContext, createTempDir, rentSettings).get
+      ds.stateContext.currentHeight shouldBe H - 1
+      ds.stateContext.blockVersion shouldBe RentAttestationVersion
+      java.util.Arrays.equals(ds.rootDigest, us.rootDigest) shouldBe true
+      ds -> fb
+    }
+
+    val (dsAttested, attested) = digestStateAndBlock(
+      ExtensionCandidate(Seq(AttestationKey -> attestationDigest(claimA, claimB))))
+    val applied = dsAttested.applyModifier(attested, None)(_ => ())
+    applied shouldBe a[Success[_]]
+    java.util.Arrays.equals(applied.get.rootDigest, attested.header.stateRoot) shouldBe true
+    applied.get.stateContext.currentHeight shouldBe H
+
+    val (dsUnattested, unattested) = digestStateAndBlock(emptyExtension)
+    dsUnattested.applyModifier(unattested, None)(_ => ()) match {
+      case Failure(e) => e.getMessage should include(RuleText)
+      case Success(_) => fail("digest state applied a block with unattested rent claims at block version 5")
+    }
   }
 
   property("unattestedClaimRejectedV5AcceptedV4: the same block without the field is rejected by rule 308 at " +

@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -18,8 +19,8 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
@@ -1315,6 +1316,87 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         Some(peer))
 
       requestForModifierSent(ncProbe, Extension.modifierTypeId, unknownSectionId)
+    }
+  }
+
+  // records whether the delivery check scheduled for a request was cancelled
+  private class RecordingCancellable extends Cancellable {
+    private val cancelled = new java.util.concurrent.atomic.AtomicBoolean(false)
+    override def cancel(): Boolean = cancelled.compareAndSet(false, true)
+    override def isCancelled: Boolean = cancelled.get()
+  }
+
+  // a reply for a modifier the node already holds, while its request is still outstanding (as when it was applied from
+  // another source before the peer answered): marked held and dropped, the request is closed, the peer is not penalized
+  private def replyForHeldModifier(deliveryTracker: DeliveryTracker,
+                                   synchronizer: ActorRef,
+                                   ncProbe: TestProbe,
+                                   peer: ConnectedPeer,
+                                   hist: ErgoHistory,
+                                   mod: BlockSection): Unit = {
+    hist.contains(mod.id) shouldBe true
+    val check = new RecordingCancellable
+    deliveryTracker.setRequested(mod.modifierTypeId, mod.id, peer)(_ => check)
+    val modData = ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes))
+    synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+    val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
+    sent.exists {
+      case PenalizePeer(_, _) => true
+      case _ => false
+    } shouldBe false
+    eventually {
+      deliveryTracker.status(mod.id, mod.modifierTypeId, Seq(hist)) shouldBe Held
+    }
+    check.isCancelled shouldBe true
+  }
+
+  property("NodeViewSynchronizer: a requested header that is already in history is not judged invalid") {
+    withFixture { ctx =>
+      ctx.deliveryTracker.reset()
+      // the fixture history holds the first 1000 headers of `chain` (localChain)
+      replyForHeldModifier(ctx.deliveryTracker, ctx.synchronizer, ctx.ncProbe, ctx.peer, history, localChain.last)
+    }
+  }
+
+  property("NodeViewSynchronizer: a requested extension that is already in history is not judged invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      def reply(section: BlockSection): Unit = {
+        deliveryTracker.setRequested(section.modifierTypeId, section.id, peer)(_ => Cancellable.alreadyCancelled)
+        val modData = ModifiersData(section.modifierTypeId, Map(section.id -> section.bytes))
+        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+      }
+
+      deliveryTracker.reset()
+      // the view holder's own history instance: a second ErgoHistory on the same directory would keep its own caches
+      val viewProbe = TestProbe("ViewProbe")
+      nodeViewHolderMockRef.tell(GetDataFromCurrentView[UtxoState, ErgoHistory](_.history), viewProbe.ref)
+      val hist = viewProbe.expectMsgType[ErgoHistory](10.seconds)
+      val block = genChain(1, hist).head
+      // the extension only: block transactions would complete the block, whose generated transactions this
+      // fixture's state rejects; both sections are checked by the same `alreadyApplied` rule
+      val sections = Seq(block.extension)
+
+      reply(block.header)
+      // applied, and the synchronizer is done with it: the delivery tracker is not thread-safe, so the test updates
+      // it only while the synchronizer is not handling this chain's events
+      eventually(timeout(10.seconds)) {
+        hist.contains(block.header.id) shouldBe true
+        deliveryTracker.status(block.header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      sections.foreach(reply)
+      // applied, and the tracker has cleared the first delivery (the applied-modifier event was handled)
+      eventually(timeout(10.seconds)) {
+        sections.foreach { s =>
+          hist.contains(s.id) shouldBe true
+          deliveryTracker.status(s.id, s.modifierTypeId, Seq.empty) shouldBe Unknown
+        }
+      }
+      ncProbe.receiveWhile(1.second) { case m => m }
+
+      // each section is already in history (e.g. applied from another source) when a reply for it arrives
+      sections.foreach(replyForHeldModifier(deliveryTracker, synchronizerMockRef, ncProbe, peer, hist, _))
     }
   }
 

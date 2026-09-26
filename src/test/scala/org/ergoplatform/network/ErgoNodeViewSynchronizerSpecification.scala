@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
@@ -1318,4 +1319,27 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  // The node under test stores the UTXO set (the test configuration's stateType): it regenerates UTXO set
+  // transformation proofs when applying a block (UtxoState), so it does not download them (requiredModifiersForHeader).
+  property("NodeViewSynchronizer: a node that stores the UTXO set does not request announced ADProofs") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      val nextHeader = chain.take(1001).last
+
+      // control: an announced block transactions section of the same block is requested
+      val txsInv = InvData(BlockTransactions.modifierTypeId, Seq(nextHeader.transactionsId))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(txsInv)), Some(peer))
+      requestForModifierSent(ncProbe, BlockTransactions.modifierTypeId, nextHeader.transactionsId)
+
+      val proofsInv = InvData(ADProofs.modifierTypeId, Seq(nextHeader.ADProofsId))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(proofsInv)), Some(peer))
+      val sent = ncProbe.receiveWhile(2.seconds) { case m => m }
+      sent.exists {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[InvData].typeId == ADProofs.modifierTypeId
+        case _ => false
+      } shouldBe false
+    }
+  }
 }

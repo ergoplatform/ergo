@@ -13,6 +13,7 @@ import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -215,6 +216,21 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       pchProbe.ref,
       Some(peerInfo)
     )
+
+    // The view holder's own history. Tests seed and read history through it: a second ErgoHistory opened on the
+    // same directory shares the database but not the caches, so one instance can keep serving a stale index value
+    // (such as the best header id) after the other has written.
+    val viewHistory: ErgoHistory = {
+      val viewProbe = TestProbe("ViewProbe")
+      nodeViewHolderMockRef.tell(
+        GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)), viewProbe.ref)
+      val (h, pool) = viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+      // Until it holds a history and a mempool the synchronizer defers every message by 1 s, in rounds. Handing them
+      // over before the test's first message makes it handle the test's messages at once.
+      synchronizerMockRef ! ChangedHistory(h)
+      synchronizerMockRef ! ChangedMempool(pool)
+      h
+    }
   }
 
   /**

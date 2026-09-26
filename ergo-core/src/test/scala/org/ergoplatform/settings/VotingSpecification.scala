@@ -180,6 +180,134 @@ class VotingSpecification extends ErgoCorePropertyTest {
     esc41.currentParameters.storageFeeFactor shouldBe (kInit - Parameters.StorageFeeFactorStep)
   }
 
+  Seq(1, -1).foreach { direction =>
+    property(s"approved unknown parameter vote in direction $direction preserves known parameter updates") {
+      val version = Header.Interpreter60Version
+      val unknownParameter = 42.toByte
+      val unknownVote = (direction * unknownParameter).toByte
+      val knownVote = (direction * StorageFeeFactorIncrease).toByte
+      val initialTable = DefaultParameters.updated(BlockVersion, version.toInt)
+        .updated(SubblocksPerBlockIncrease, SubblocksPerBlockDefault)
+      val initialParameters = Parameters(2, initialTable, ErgoValidationSettingsUpdate.empty)
+      val beforeUnknownVotes = validationSettingsNoIl.updated(
+        ErgoValidationSettingsUpdate(Seq(ValidationRules.exMatchParameters), Seq.empty)
+      )
+      val afterUnknownVotes = beforeUnknownVotes.updated(
+        ErgoValidationSettingsUpdate(Seq(ValidationRules.hdrVotesUnknown), Seq.empty)
+      )
+      def context(settings: ErgoValidationSettings): ErgoStateContext = new ErgoStateContext(
+        Seq.empty, None, genesisStateDigest, initialParameters, settings, VotingData.empty
+      )(updSettings)
+
+      val proposal = defaultHeaderGen.sample.get.copy(
+        height = 2, version = version, votes = Array(knownVote, unknownVote, NoParameter)
+      )
+      val unknownProposal = proposal.copy(votes = Array(unknownVote, NoParameter, NoParameter))
+      context(beforeUnknownVotes).appendHeader(unknownProposal).failed.get.getMessage should include("Incorrect vote")
+      context(afterUnknownVotes).appendHeader(proposal).isSuccess shouldBe true
+
+      val proposalExtension = (initialParameters.toExtensionCandidate ++
+        afterUnknownVotes.toExtensionCandidate).toExtension(headerId)
+      val proposed = context(afterUnknownVotes).process(proposal, Some(proposalExtension)).get
+      val voted = proposed.appendHeader(proposal.copy(height = 3)).get
+      voted.votingData.epochVotes.toMap shouldBe Map(knownVote -> 2, unknownVote -> 2)
+      votingSettings.changeApproved(voted.votingData.epochVotes.toMap.apply(unknownVote)) shouldBe true
+
+      val expectedKnownValue = StorageFeeFactorDefault + direction * StorageFeeFactorStep
+      val receivedTable = initialTable.updated(StorageFeeFactorIncrease, expectedKnownValue)
+        .updated(unknownParameter, 100)
+      val receivedParameters = Parameters(4, receivedTable, ErgoValidationSettingsUpdate.empty)
+      val nextExtension = (receivedParameters.toExtensionCandidate ++
+        afterUnknownVotes.toExtensionCandidate).toExtension(headerId)
+      val nextHeader = unknownProposal.copy(height = 4)
+      val next = voted.process(nextHeader, Some(nextExtension)).get
+
+      next.currentParameters.parametersTable shouldBe receivedTable
+      next.currentParameters.storageFeeFactor shouldBe expectedKnownValue
+      next.currentParameters.blockVersion shouldBe version
+      next.currentParameters.softForkStartingHeight shouldBe None
+      next.votingData.epochVotes.toMap shouldBe Map(unknownVote -> 1)
+
+      // Once received in an extension, the formerly unknown parameter is in the local table.
+      val votedAgain = next.appendHeader(nextHeader.copy(height = 5)).get
+      votedAgain.votingData.epochVotes.toMap shouldBe Map(unknownVote -> 2)
+      val expectedNextTable = receivedTable.updated(unknownParameter, 100 + direction)
+      def followingExtension(table: Map[Byte, Int]) = {
+        val params = Parameters(6, table, ErgoValidationSettingsUpdate.empty)
+        (params.toExtensionCandidate ++ afterUnknownVotes.toExtensionCandidate).toExtension(headerId)
+      }
+      val followingHeader = nextHeader.copy(height = 6, votes = Array.fill(3)(NoParameter))
+      val following = votedAgain.process(followingHeader, Some(followingExtension(expectedNextTable))).get
+      following.currentParameters.parametersTable shouldBe expectedNextTable
+      following.votingData shouldBe VotingData.empty
+
+      val mismatchedTable = expectedNextTable.updated(unknownParameter, 100)
+      val mismatched = votedAgain.process(followingHeader, Some(followingExtension(mismatchedTable)))
+      mismatched.failed.get.getMessage should include(
+        s"Calculated and received parameters differ in parameter $unknownParameter"
+      )
+    }
+  }
+
+  property("approved parameter votes preserve known bounds and ignore absent parameters") {
+    Seq(
+      (StorageFeeFactorIncrease, StorageFeeFactorMax),
+      (StorageFeeFactorDecrease, StorageFeeFactorMin)
+    ).foreach { case (vote, bound) =>
+      val table = DefaultParameters.updated(StorageFeeFactorIncrease, bound)
+      val params = Parameters(2, table, ErgoValidationSettingsUpdate.empty)
+      val votes = Seq(vote -> 2, 42.toByte -> 2, (-42).toByte -> 2, SoftFork -> 2)
+      params.updateParams(table, votes, votingSettings) shouldBe table
+    }
+    val params = Parameters(2, DefaultParameters, ErgoValidationSettingsUpdate.empty)
+    params.updateParams(DefaultParameters, Seq(StorageFeeFactorIncrease -> 1, 42.toByte -> 1), votingSettings) shouldBe
+      DefaultParameters
+  }
+
+  property("version 6 parameter matching should require calculated parameters") {
+    val versionBefore60 = (Header.Interpreter60Version - 1).toByte
+    val unknownParameter = 42.toByte
+
+    val pre60Extra = processParameters(versionBefore60, _.updated(unknownParameter, 100))
+    val exact60 = processParameters(Header.Interpreter60Version, identity)
+    val extra60 = processParameters(
+      Header.Interpreter60Version,
+      _.updated(unknownParameter, 100)
+    )
+    val missingKnown60 = processParameters(
+      Header.Interpreter60Version,
+      _ - StorageFeeFactorIncrease
+    )
+    val missingSubblocks60 = processParameters(
+      Header.Interpreter60Version,
+      _ - SubblocksPerBlockIncrease
+    )
+    val mismatchedKnown60 = processParameters(
+      Header.Interpreter60Version,
+      table => table.updated(StorageFeeFactorIncrease, table(StorageFeeFactorIncrease) + 1)
+    )
+
+    val results = Seq(
+      "pre-6 extra parameter rejected" -> pre60Extra.isFailure,
+      "version 6 exact parameters accepted" -> exact60.isSuccess,
+      "version 6 extra parameter accepted" -> extra60.isSuccess,
+      "version 6 missing known parameter rejected" -> missingKnown60.isFailure,
+      "version 6 missing subblocks parameter rejected" -> missingSubblocks60.isFailure,
+      "version 6 mismatched known parameter rejected" -> mismatchedKnown60.isFailure
+    )
+
+    results shouldBe results.map { case (description, _) => description -> true }
+    pre60Extra.failed.get.getMessage should include(
+      "At the beginning of the epoch, the extension should contain all the system parameters"
+    )
+    Seq(missingKnown60, missingSubblocks60).foreach { result =>
+      result.failed.get.getMessage should include("Parameters differ in size")
+    }
+    mismatchedKnown60.failed.get.getMessage should include(
+      s"Calculated and received parameters differ in parameter $StorageFeeFactorIncrease"
+    )
+  }
+
   /**
     * A test which is ensuring that approved soft-fork activates properly.
     * For the test, we have:
@@ -389,6 +517,54 @@ class VotingSpecification extends ErgoCorePropertyTest {
     }
     val extension = (upcoming.currentParameters.toExtensionCandidate ++ upcoming.validationSettings.toExtensionCandidate).toExtension(headerId)
     esc.process(header, Some(extension))
+  }
+
+  private def processParameters(
+    version: Byte,
+    receivedTable: Map[Byte, Int] => Map[Byte, Int]
+  ): Try[ErgoStateContext] = {
+    val currentParams = Parameters(
+      2,
+      DefaultParameters.updated(BlockVersion, version),
+      ErgoValidationSettingsUpdate.empty
+    )
+    val currentValidationSettings = if (version >= Header.Interpreter60Version) {
+      validationSettingsNoIl.updated(
+        ErgoValidationSettingsUpdate(Seq(ValidationRules.exMatchParameters), Seq.empty)
+      )
+    } else {
+      validationSettingsNoIl
+    }
+    val header = defaultHeaderGen.sample.get.copy(
+      height = 4,
+      votes = Array.fill(3)(NoParameter),
+      version = version
+    )
+    val (calculatedParams, validationSettingsUpdate) = currentParams.update(
+      header.height,
+      forkVote = false,
+      Seq.empty,
+      ErgoValidationSettingsUpdate.empty,
+      votingSettings
+    )
+    val calculatedValidationSettings = currentValidationSettings.updated(validationSettingsUpdate)
+    val receivedParams = Parameters(
+      calculatedParams.height,
+      receivedTable(calculatedParams.parametersTable),
+      calculatedParams.proposedUpdate
+    )
+    val extension = (receivedParams.toExtensionCandidate ++
+      calculatedValidationSettings.toExtensionCandidate).toExtension(headerId)
+    val stateContext = new ErgoStateContext(
+      Seq.empty,
+      None,
+      genesisStateDigest,
+      currentParams,
+      currentValidationSettings,
+      VotingData.empty
+    )(updSettings)
+
+    stateContext.process(header, Some(extension))
   }
 
 }

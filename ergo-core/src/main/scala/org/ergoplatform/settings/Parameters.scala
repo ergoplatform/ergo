@@ -163,7 +163,7 @@ class Parameters(val height: Height,
 
       val paramIdAbs = if (paramId < 0) (-paramId).toByte else paramId
 
-      if (votingSettings.changeApproved(count)) {
+      if (votingSettings.changeApproved(count) && parametersTable.contains(paramIdAbs)) {
         val currentValue = parametersTable(paramIdAbs)
         val maxValue = maxValues.getOrElse(paramIdAbs, Int.MaxValue / 2)
         val minValue = minValues.getOrElse(paramIdAbs, 0)

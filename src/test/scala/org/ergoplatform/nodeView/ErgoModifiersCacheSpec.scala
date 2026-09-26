@@ -1,15 +1,21 @@
 package org.ergoplatform.nodeView
 
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
+import ch.qos.logback.core.read.ListAppender
+import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalatest.OptionValues
+import org.slf4j.LoggerFactory
 import scorex.crypto.hash.Blake2b256
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 
 class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
@@ -117,6 +123,35 @@ class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
       }
     }
     applyLoop()
+  }
+
+
+  property("a cached copy of a modifier already in history is dropped as a duplicate, not reported as invalid") {
+    val history0 = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+    val block = genChain(1, history0).head
+    val history1 = history0.append(block.header).get._1
+    // a UTXO-mode node stores downloaded proofs as they are
+    val history = history1.append(block.adProofs.value).get._1
+
+    val warnings = Seq[BlockSection](block.header, block.adProofs.value).flatMap { stored =>
+      history.contains(stored.id) shouldBe true
+      // a second copy, as when it was delivered twice, is still in the cache
+      val modifiersCache = new ErgoModifiersCache(10)
+      modifiersCache.put(stored.id, stored)
+
+      val cacheLogger = LoggerFactory.getLogger(classOf[ErgoModifiersCache]).asInstanceOf[LogbackLogger]
+      val appender = new ListAppender[ILoggingEvent]
+      appender.start()
+      cacheLogger.addAppender(appender)
+      val candidate = try modifiersCache.popCandidate(history) finally cacheLogger.detachAppender(appender)
+      appender.stop()
+
+      candidate shouldBe None
+      modifiersCache.size shouldBe 0
+      appender.list.asScala.filter(_.getLevel.isGreaterOrEqual(Level.WARN)).map(_.getFormattedMessage).toList
+    }
+    // no warning for either copy (collected first, so a failure lists every case)
+    warnings shouldBe empty
   }
 
 }

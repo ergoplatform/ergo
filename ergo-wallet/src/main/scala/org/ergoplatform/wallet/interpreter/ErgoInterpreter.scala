@@ -33,17 +33,16 @@ class ErgoInterpreter(params: BlockchainParameters)
 
   /**
     * After an expired box holding tokens or additional registers is charged down to the minimum
-    * allowed value, for how many blocks it can still be sponsored (recreated with a topped-up
-    * value) before it may be fully consumed. 2 weeks.
+    * allowed value, for how many blocks it can still be refreshed with preserving tokens / registers.
     */
   val StorageGracePeriod: Int = 2 * Constants.BlocksPerWeek
 
   /**
     * Height starting from which the grace-period rules apply to expired boxes holding tokens or
-    * additional registers (flag-day activation enforced by the majority of mining hashrate, no
-    * block version change). Placeholder, to be finalized before the release.
-    * The network type is not available at this level (`BlockchainParameters` does not carry it),
-    * so a single height applies to all networks.
+    * additional registers
+    *
+    * TODO: set before releasesponsored (recreated with a topped-up
+    * value) before it may be fully consumed. 2 weeks
     */
   val StorageGracePeriodActivationHeight: Int = 2100000
 
@@ -56,8 +55,7 @@ class ErgoInterpreter(params: BlockchainParameters)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
-    // The grace-period rules protect only boxes holding tokens or additional registers
-    // (e.g. oracle tokens): for them the original owner's data and assets may matter to others.
+    // The grace-period rules protect only boxes holding tokens or additional registers.    // : for them the original owner's data and assets may matter to others.    // : for them the original owner's data and assets may matter to others.
     // Plain value boxes are charged and consumed under the original rules.
     val graceRulesApply = currentHeight >= StorageGracePeriodActivationHeight &&
       (box.additionalTokens.nonEmpty || box.additionalRegisters.nonEmpty)

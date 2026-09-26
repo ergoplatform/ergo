@@ -27,16 +27,20 @@ class ErgoMemPoolStorageRentSpec extends ErgoCorePropertyTest with StorageRentTe
     case _ => false
   }
 
-  property("mempoolDeclines: ErgoMemPool.process declines a rent claim with declineStorageRentClaims = true, " +
-    "and accepts it with the setting false") {
+  /**
+    * The body of `mempoolDeclines`, run at the block version of the state's best header: at block version 5 the
+    * process path also parses the transaction under `VersionContext.withVersions(4, 4)` before validation.
+    */
+  private def mempoolDeclinesAt(blockVersion: Byte): Unit = {
     // `false` script: an Accepted outcome can only come from the rent branch
     val expired = boxAt(FalseTree, tip + 1 - StoragePeriod, seed = 21) // exactly StoragePeriod old at tip + 1
     val almost = boxAt(TrueTree, tip + 2 - StoragePeriod, seed = 22) // one block short at tip + 1
     val plain = boxAt(TrueTree, tip - 5, seed = 23)
 
-    val ctx = stateContext(tip, Header.Interpreter60Version, rentSettings, validationSettingsNoIl)
+    val ctx = stateContext(tip, blockVersion, rentSettings, validationSettingsNoIl)
     val us = utxoStateAt(Seq(expired, almost, plain), None, ctx, rentSettings)
     us.stateContext.currentHeight shouldBe tip
+    us.stateContext.blockVersion shouldBe blockVersion
 
     val claim = rentShapedTx(expired, tip + 1)
     ErgoTransaction.hasStorageRentClaim(claim, IndexedSeq(expired), tip + 1) shouldBe true
@@ -65,6 +69,16 @@ class ErgoMemPoolStorageRentSpec extends ErgoCorePropertyTest with StorageRentTe
     val plainTx = ErgoTransaction(IndexedSeq(Input(plain.id, ProverResult.empty)), IndexedSeq(recreated(plain, tip + 1)))
     ErgoMemPool.empty(rentSettings).process(UnconfirmedTransaction(plainTx, None), us)._2 shouldBe
       a[ProcessingOutcome.Accepted]
+  }
+
+  property("mempoolDeclines: ErgoMemPool.process declines a rent claim with declineStorageRentClaims = true, " +
+    "and accepts it with the setting false (block version 4)") {
+    mempoolDeclinesAt(Header.Interpreter60Version)
+  }
+
+  property("mempoolDeclinesV5: the same at block version 5, where the process path also parses the transaction " +
+    "under activated script version 4") {
+    mempoolDeclinesAt(RentPositionVersion)
   }
 
 }

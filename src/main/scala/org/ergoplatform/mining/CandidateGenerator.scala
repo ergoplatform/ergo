@@ -980,10 +980,11 @@ object CandidateGenerator extends ScorexLogging {
             //do these checks before validating the scripts to save time
             log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
-          } else if (acc.nonEmpty && spendsStorageRentClaim(tx, stateWithTxs, nextHeight)) {
-            // A storage rent claim is allowed only in the first transaction of a block (rule bsStorageRentPosition),
-            // and a transaction accepted now would not be the first one. Whether an input is a claim depends on the
-            // height of the including block, so a pool transaction admitted earlier may become one while it waits.
+          } else if (acc.nonEmpty && upcomingContext.blockVersion >= 5 && spendsStorageRentClaim(tx, stateWithTxs, nextHeight)) {
+            // A storage rent claim is allowed only in the first transaction of a block (rule bsStorageRentPosition,
+            // enforced from block version 5, hence the same gate here), and a transaction accepted now would not be
+            // the first one. Whether an input is a claim depends on the height of the including block, so a pool
+            // transaction admitted earlier may become one while it waits.
             log.debug(s"Transaction ${tx.id} is a storage rent claim at height $nextHeight, not the first transaction")
             loop(mempoolTxs.tail, acc, lastFeeTx, invalidTxs :+ tx.id)
           } else {

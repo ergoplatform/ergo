@@ -3,7 +3,7 @@ package org.ergoplatform.local
 import akka.actor.{Actor, ActorRef}
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.settings.NodeConfigurationSettings
@@ -60,9 +60,11 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     * Validates transactions from mempool for some specified amount of time.
     *
     * @return - updated valid transactions and invalidated transaction ids
+    *
+    * Visible within the package for `CleanupWorkerStorageRentSpec`, which exercises it via `TestActorRef`.
     */
-  private def validatePool(validator: UtxoStateReader,
-                           mempool: ErgoMemPoolReader): Future[(Seq[UnconfirmedTransaction], Seq[ModifierId])] = Future {
+  private[local] def validatePool(validator: UtxoStateReader,
+                                  mempool: ErgoMemPoolReader): Future[(Seq[UnconfirmedTransaction], Seq[ModifierId])] = Future {
 
     val now = System.currentTimeMillis()
 
@@ -87,14 +89,27 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       txs match {
         case head :: tail if costAcc < CostLimit =>
           val validationContext = state.stateContext.simplifiedUpcoming()
-          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
-            case Success(txCost) =>
-              val updTx = head.withCost(txCost)
-              validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
-            case Failure(e) =>
-              val txId = head.id
-              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+          // Mempool policy (as at admission, see `ErgoMemPool.process`): a storage rent claim is valid only in the
+          // first transaction of a block (rule bsStorageRentPosition), and whether an input is a claim depends on
+          // the height of the including block, so a pooled transaction may become one while it waits. Inputs are
+          // resolved against the state with the pool's transactions; if any is missing, the existing path decides.
+          val resolvedInputs = head.transaction.inputs.map(inp => state.boxById(inp.boxId))
+          val becameRentClaim = nodeSettings.declineStorageRentClaims && resolvedInputs.forall(_.isDefined) &&
+            ErgoTransaction.hasStorageRentClaim(head.transaction, resolvedInputs.flatten, validationContext.currentHeight)
+          if (becameRentClaim) {
+            val txId = head.id
+            log.info(s"Transaction $txId invalidated: storage rent claim at height ${validationContext.currentHeight}")
+            validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+          } else {
+            state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
+              case Success(txCost) =>
+                val updTx = head.withCost(txCost)
+                validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
+              case Failure(e) =>
+                val txId = head.id
+                log.info(s"Transaction $txId invalidated: ${e.getMessage}")
+                validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+            }
           }
         case _ =>
           validated -> invalidated

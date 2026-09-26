@@ -1,6 +1,7 @@
 package org.ergoplatform.mining
 
 import org.ergoplatform.Input
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
@@ -73,6 +74,20 @@ class CandidateGeneratorStorageRentSpec extends ErgoCorePropertyTest with Storag
         us.boxById(id).fold[scala.util.Try[org.ergoplatform.ErgoBox]](Failure(new Exception("box not found")))(Success(_))
       }.isValid shouldBe true
     }
+
+    // (4) before activation (upcoming block version 4) the skip is not applied: rule 308 is not enforced there,
+    // so a valid claim after the first transaction is collected and its fee is not lost
+    val ctx4 = stateContext(tip, Header.Interpreter60Version, rentSettings, validationSettingsNoIl)
+    val us4 = utxoStateAt(Seq(plain, expired, crossing), None, ctx4, rentSettings)
+    val upcoming4 = us4.stateContext.simplifiedUpcoming()
+    upcoming4.currentHeight shouldBe nextHeight
+    upcoming4.blockVersion shouldBe Header.Interpreter60Version
+    val (collected4, invalid4) =
+      CandidateGenerator.collectTxs(defaultMinerPk, parameters.maxBlockCost, parameters.maxBlockSize, us4, upcoming4,
+        Seq(plainTx, claimTx, crossingTx))
+    collected4 shouldBe Seq(plainTx, claimTx, crossingTx)
+    invalid4 shouldBe empty
+    claimsAfterFirst(collected4, us4) should contain theSameElementsAs Seq(claimTx, crossingTx)
   }
 
 }

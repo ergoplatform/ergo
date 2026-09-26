@@ -8,9 +8,10 @@ import org.ergoplatform.settings.ValidationRules.bsStorageRentPosition
 import org.ergoplatform.settings.{ErgoValidationSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, StorageRentTestHelpers}
 import org.ergoplatform.validation.ValidationResult
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
-import sigma.ast.{ByteConstant, IntConstant, ShortConstant}
-import sigma.data.ProveDlog
+import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import sigma.ast.{ByteConstant, ErgoTree, IntConstant, ShortConstant, SigmaPropConstant}
+import sigma.data.{ProveDlog, TrivialProp}
 import sigma.interpreter.{ContextExtension, ProverResult}
 
 import scala.util.{Failure, Success}
@@ -227,6 +228,39 @@ class StorageRentPositionSpecification extends ErgoCorePropertyTest with Storage
     exec(Seq(emission, claim), boxes, ctxDisabled).isValid shouldBe true
     // control: the same shape with the rule active
     rejectedBy308(exec(Seq(emissionEnabled, claim), boxes, ctxEnabled)) shouldBe true
+  }
+
+  // Documents sigma 6.0.6 soft-fork passthrough at activated script version 4; the EIP requires block version 5
+  // to ship with an interpreter supporting script version 4, after which this test must be inverted.
+  //
+  // At block version 5, `ErgoContext` sets activatedScriptVersion = 4, above the interpreter's
+  // MaxSupportedScriptVersion (3), and `Interpreter.checkSoftForkCondition` then treats an ErgoTree of
+  // version 4 as passing without evaluating it. The box below is not a rent claim (not expired, no variable 127).
+  property("v4TreePassthroughAtV5: a box with a version-4 ErgoTree and proposition sigmaProp(false), spent with an " +
+    "empty proof, is rejected at block version 4 and (currently) accepted at block version 5") {
+    val v4False = ErgoTree.withoutSegregation(ErgoTree.headerWithVersion(ErgoTree.ZeroHeader, 4),
+      SigmaPropConstant(TrivialProp.FalseProp))
+    v4False.version shouldBe 4
+
+    val box = boxAt(v4False, H - 10, seed = 10)
+    val spend = ErgoTransaction(IndexedSeq(Input(box.id, ProverResult.empty)),
+      IndexedSeq(new ErgoBoxCandidate(box.value, TrueTree, H)))
+    ErgoTransaction.hasStorageRentClaim(spend, IndexedSeq(box), H) shouldBe false
+
+    val ctx5 = ctxAt(RentPositionVersion)
+    val ctx4 = withVersion(ctx5, V4)
+
+    // transaction-level (as in the probe the EIP cites)
+    spend.statefulValidity(IndexedSeq(box), IndexedSeq.empty, ctx4)(ErgoInterpreter(ctx4.currentParameters)) match {
+      case Failure(e) => e.getMessage should include("ErgoTree version 4 is higher than activated 3")
+      case Success(_) => fail("v4-tree false-script box spent with an empty proof accepted at block version 4")
+    }
+    spend.statefulValidity(IndexedSeq(box), IndexedSeq.empty, ctx5)(ErgoInterpreter(ctx5.currentParameters)) shouldBe
+      a[Success[_]]
+
+    // block-level, through the same validation as `UtxoState` and `DigestState`
+    exec(Seq(spend), Seq(box), ctx4).isValid shouldBe false
+    exec(Seq(spend), Seq(box), ctx5).isValid shouldBe true
   }
 
   property("isStorageRentClaim: predicate conditions, never throws") {

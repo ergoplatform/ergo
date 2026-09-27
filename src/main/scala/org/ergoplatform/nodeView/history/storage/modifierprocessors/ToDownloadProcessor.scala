@@ -4,7 +4,8 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -142,11 +143,29 @@ trait ToDownloadProcessor
   private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
     if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       if (updateBestBlock) {
-        updateBestFullBlock(header)
+        updateBestFullBlock(header, lowestApplicableHeight(header))
       } else {
         setHeadersChainSynced()
       }
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+    }
+  }
+
+  /**
+    * After bootstrapping with a NiPoPoW proof, headers chain has gaps below the proof suffix. A full block can be
+    * applied first only if its previous `LastHeadersInContext - 1` headers are connected to it (they are needed to
+    * construct state context), so full blocks downloading must not start from a height below that.
+    *
+    * @return the lowest height a full block connected to `header` can be applied first at
+    */
+  private def lowestApplicableHeight(header: Header): Int = {
+    if (nodeSettings.nipopowSettings.nipopowBootstrap && nodeSettings.blocksToKeep >= 0) {
+      // no need to look further back than a full block downloading can start from
+      val depth = nodeSettings.blocksToKeep + chainSettings.voting.votingLength + Constants.LastHeadersInContext
+      val lowestConnected = headerChainBack(depth, header, _ => false).headOption.fold(header.height)(_.height)
+      if (lowestConnected == GenesisHeight) GenesisHeight else lowestConnected + Constants.LastHeadersInContext - 1
+    } else {
+      GenesisHeight
     }
   }
 

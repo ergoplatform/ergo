@@ -53,7 +53,16 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
     * @param header - header of new best full block
     * @return minimal height to process best full block
     */
-  def updateBestFullBlock(header: Header): Int = {
+  def updateBestFullBlock(header: Header): Int = updateBestFullBlock(header, GenesisHeight)
+
+  /** Update minimal full block height and header chain synced flag
+    *
+    * @param header - header of new best full block
+    * @param lowestHeight - full blocks can not be applied below this height (as after NiPoPoW bootstrapping,
+    *                       there are gaps in headers chain below proof suffix)
+    * @return minimal height to process best full block
+    */
+  def updateBestFullBlock(header: Header, lowestHeight: Int): Int = {
     val minimalFullBlockHeight = if (nodeConfig.blocksToKeep < 0) {
       if (nodeConfig.utxoSettings.utxoBootstrap) {
         // we have constant min full block height corresponding to first block after utxo set snapshot
@@ -65,10 +74,18 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
       // Start from config.blocksToKeep blocks back
       val h = Math.max(readMinimalFullBlockHeight(), header.height - nodeConfig.blocksToKeep + 1)
       // ... but not later than the beginning of a voting epoch
-      if (h > VotingEpochLength) {
+      val epochStart = if (h > VotingEpochLength) {
         Math.min(h, extensionWithParametersHeight(h))
       } else {
         h
+      }
+      if (epochStart >= lowestHeight) {
+        epochStart
+      } else if (lowestHeight > VotingEpochLength && lowestHeight % VotingEpochLength != 0) {
+        // ... and not earlier than lowestHeight, so start from the next voting epoch then
+        extensionWithParametersHeight(lowestHeight) + VotingEpochLength
+      } else {
+        lowestHeight
       }
     }
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true

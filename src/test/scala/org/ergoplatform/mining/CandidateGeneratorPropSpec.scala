@@ -324,6 +324,55 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     txs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
   }
 
+  property("collectTxs includes every fee chunk when fee boxes exceed MaxFeeBoxesPerTransaction") {
+    val chunkSize = CandidateGenerator.MaxFeeBoxesPerTransaction
+    val bh        = boxesHolderGen.sample.get
+    val rnd       = new RandomWrapper
+    val us        = createUtxoState(bh, parameters)
+    val minValue  = BoxUtils.sufficientAmount(parameters)
+    val inputs    = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).take(chunkSize * 2)
+    val mempoolTxs =
+      inputs.map(i => validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp))
+    val feeBoxes = mempoolTxs.flatMap(_.outputs)
+    feeBoxes.size should be > chunkSize
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      mempoolTxs
+    )
+
+    invalid shouldBe empty
+    val mempoolIds = mempoolTxs.map(_.id).toSet
+    val (included, feeTxs) = collected.partition(tx => mempoolIds.contains(tx.id))
+    included should contain theSameElementsAs mempoolTxs
+
+    // every chunk reaches the block, not only the first or the last one
+    feeTxs.length shouldBe math.ceil(feeBoxes.size.toDouble / chunkSize).toInt
+    feeTxs.foreach { feeTx =>
+      feeTx.inputs.length should be <= chunkSize
+      feeTx.outputs.map(_.propositionBytes.toSeq) shouldBe
+        Seq(expectedRewardOutputScriptBytes(defaultMinerPk).toSeq)
+    }
+    val spent = feeTxs.flatMap(_.inputs.map(_.boxId.toSeq))
+    spent.distinct.size shouldBe spent.size
+    spent.toSet shouldBe feeBoxes.map(_.id.toSeq).toSet
+    feeTxs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
+  }
+
   property("stale emission tx is invalidated when its box was spent by concurrently applied block") {
     val us0 = createUtxoState(settings)._1
     us0.emissionBoxOpt should not be None

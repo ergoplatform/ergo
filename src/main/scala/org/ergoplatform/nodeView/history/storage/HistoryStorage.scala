@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment, StorageRentBox}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
@@ -112,6 +112,26 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
         value
       }
     }
+
+  /**
+    * Read up to `limit` storage-rent eligibility entries for currently-unspent boxes created
+    * at or before `creationHeight`, in ascending (creationHeight, globalIndex) order.
+    * Returns an empty array when the extra index is disabled or does not cover the height.
+    */
+  def storageRentBoxesUntil(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
+    val start = StorageRentBox.key(0, 0L)
+    extraStore.scanFrom(
+      start,
+      limit,
+      keyFilter = key =>
+        key.length == StorageRentBox.KeyLength &&
+          key(0) == StorageRentBox.KeyMarker &&
+          java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight,
+      continueScan = key => key.nonEmpty && key(0) == StorageRentBox.KeyMarker
+    ).map { case (_, bytes) =>
+      ExtraIndexSerializer.parseBytes(bytes).asInstanceOf[StorageRentBox]
+    }
+  }
 
   /**
     * @return object with `id` if it is in the objects database

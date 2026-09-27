@@ -161,6 +161,38 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       seg._1.boxCount == seg._2._1
     })
 
+  /**
+    * Verify the storage-rent eligibility index against the ground truth: every unspent
+    * IndexedErgoBox must have exactly one rent entry with matching fields, in ascending
+    * (creationHeight, globalIndex) order.
+    */
+  def checkRentIndex(): Unit = {
+    val state = IndexerState.fromHistory(_history)
+    val expected = (0L until state.globalBoxIndex).flatMap { boxNum =>
+      NumericBoxIndex.getBoxByNumber(history, boxNum).filter(!_.isSpent)
+    }
+    val rentEntries = history.storageRentBoxesUntil(Int.MaxValue, math.max(expected.length * 2, 100))
+    rentEntries.length shouldBe expected.length
+    val byKey = expected.map(iEb => StorageRentBox(iEb).id -> iEb).toMap
+    rentEntries.foreach { srb =>
+      byKey.get(srb.id) match {
+        case Some(iEb) =>
+          srb.creationHeight shouldBe iEb.box.creationHeight
+          srb.globalIndex shouldBe iEb.globalIndex
+          srb.boxId shouldBe iEb.id
+          srb.value shouldBe iEb.box.value
+          srb.bytesLen shouldBe iEb.box.bytes.length
+        case None =>
+          fail(s"Unexpected storage-rent entry for box ${srb.boxId}")
+      }
+    }
+    // ascending order by (creationHeight, globalIndex); note globalIndex alone is NOT
+    // monotonic here: test chains create boxes whose R3 creation height differs from the
+    // inclusion order, and the rent clock runs on R3
+    rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq shouldBe
+      rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq.sorted
+  }
+
   // example G-30;R-20;G-35;R-30
   def rollbackWithPattern(pattern: String): Unit = {
 
@@ -215,6 +247,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         else
           boxOpt shouldBe None
       }
+
+      checkRentIndex()
     }
 
     def generate(n: Int): Unit = {
@@ -238,6 +272,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
           .retrieveUtxos(history, ErgoMemPool.empty(settings), 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
         utxos.exists(_.isSpent) shouldBe false
       }
+
+      checkRentIndex()
 
     }
 
@@ -330,6 +366,15 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     done.await()
     val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
     checkTokens(indexedTokens) shouldBe 0
+    indexer ! Reset()
+  }
+
+  property("storage rent eligibility index") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    checkRentIndex()
     indexer ! Reset()
   }
 

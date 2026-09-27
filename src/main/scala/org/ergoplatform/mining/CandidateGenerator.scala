@@ -911,6 +911,17 @@ object CandidateGenerator extends ScorexLogging {
     ).headOption
   }
 
+  /**
+    * Maximum number of fee boxes a single fee-collecting transaction is allowed to spend.
+    *
+    * This bound is defensive, not a validity fix. Before chunking, a fee transaction that failed
+    * validation did not invalidate the candidate: `collectTxs` stopped at the last accepted step,
+    * so the block was only shortened. Its cost cap is `maxBlockCost`, while assembly is bounded by
+    * `maxBlockCost - safeGap`, so the block limit binds first, and the per-transaction input bound
+    * (`Short.MaxValue`) is far looser than this constant. Chunking keeps each fee transaction small
+    * and bounded, at the price of `interpreterInitCost` and one extra output per additional chunk.
+    * The value is not derived from a consensus limit (#2185 names none).
+    */
   val MaxFeeBoxesPerTransaction: Int = 100
 
   def collectFees(

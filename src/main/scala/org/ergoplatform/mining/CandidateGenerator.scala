@@ -798,9 +798,13 @@ object CandidateGenerator extends ScorexLogging {
   /**
     * Maximum number of fee boxes a single fee-collecting transaction is allowed to spend.
     *
-    * A block may contain far more fee-paying transactions than that, and putting every fee box into
-    * one reward transaction can push that transaction past the block limits, which makes the whole
-    * candidate invalid. Fee boxes are therefore collected in chunks of at most this size.
+    * This bound is defensive, not a validity fix. Before chunking, a fee transaction that failed
+    * validation did not invalidate the candidate: `collectTxs` stopped at the last accepted step,
+    * so the block was only shortened. Its cost cap is `maxBlockCost`, while assembly is bounded by
+    * `maxBlockCost - safeGap`, so the block limit binds first, and the per-transaction input bound
+    * (`Short.MaxValue`) is far looser than this constant. Chunking keeps each fee transaction small
+    * and bounded, at the price of `interpreterInitCost` and one extra output per additional chunk.
+    * The value is not derived from a consensus limit (#2185 names none).
     */
   val MaxFeeBoxesPerTransaction: Int = 100
 
@@ -916,8 +920,9 @@ object CandidateGenerator extends ScorexLogging {
     val feeBoxes: Seq[ErgoBox] = ErgoState
       .newBoxes(txs)
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
-    // Fee boxes are spent in chunks: a single transaction taking all of them as inputs may be too
-    // big or too costly to be valid when a block carries many fee-paying transactions.
+    // Fee boxes are spent in chunks of at most MaxFeeBoxesPerTransaction, so that no single fee
+    // transaction grows with the number of fee-paying transactions in the block (defensive bound,
+    // see MaxFeeBoxesPerTransaction).
     val feeTxs: Seq[ErgoTransaction] = feeBoxes
       .grouped(MaxFeeBoxesPerTransaction)
       .map { chunk =>

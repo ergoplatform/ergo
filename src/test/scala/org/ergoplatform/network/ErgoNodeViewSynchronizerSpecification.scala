@@ -1051,6 +1051,44 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   /**
+    * A peer that asks for a block the node has just announced must get it, also before the node view holder has
+    * applied the block: otherwise the request waits the whole delivery timeout.
+    */
+  property("NodeViewSynchronizer: a newly mined block is served as soon as it is announced") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      Thread.sleep(2000) // let the synchronizer take the view holder's start-up events
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header)
+      // collect everything sent in the window, then keep the announcements (other messages may interleave)
+      val announced = ncProbe.receiveWhile(2.seconds) { case m => m }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == InvSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[InvData]
+      }.flatMap(inv => inv.ids.map(inv.typeId -> _))
+      announced should contain(Header.modifierTypeId -> newBlock.header.id)
+      newBlock.header.sectionIds.foreach(section => announced should contain(section))
+
+      // the peer asks for everything it was told about, before the block is applied
+      announced.groupBy(_._1).foreach { case (typeId, ids) =>
+        synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, ids.map(_._2)))), Some(peer))
+      }
+      // the synchronizer answers through the requesting peer's handler
+      val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
+        case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
+          msg.data.get.asInstanceOf[ModifiersData]
+      }.flatMap(md => md.modifiers.keys.map(md.typeId -> _))
+      announced.foreach(a => served should contain(a))
+    }
+  }
+
+  /**
     * Test that LocalBlockApplied does not duplicate broadcast when NewBlockMined already fired.
     */
   property("NodeViewSynchronizer: NewBlockMined should prevent duplicate broadcast on LocalBlockApplied") {

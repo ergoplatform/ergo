@@ -74,7 +74,7 @@ class CandidateGenerator(
     // and skips broadcast since the block was already announced.
     // TODO: Consider switching to direct actor message for lower latency
     //       instead of event bus publish.
-    context.system.eventStream.publish(NewBlockMined(newBlock.header))
+    context.system.eventStream.publish(NewBlockMined(newBlock.header, newBlock.blockSections))
 
     viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
     val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {

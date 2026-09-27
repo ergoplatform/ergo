@@ -155,6 +155,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private var lastCheckForModifiersToDownload: Long = 0L
 
+  // Header and sections of blocks this node mined and has not applied yet, by id (at most the last 4): a mined block is
+  // announced before the node view holder applies it, so a peer's request can arrive before history has it
+  private val MinedBlocksToServe = 4
+  private var minedToServe: Vector[Map[ModifierId, (NetworkObjectTypeId.Value, Array[Byte])]] = Vector.empty
+
+  private def minedModifier(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
+    minedToServe.iterator.flatMap(_.get(id)).toSeq.headOption
+
+  // a mined block is served from here until it is applied, or dropped if its header or a section turned out invalid
+  private def dropMinedContaining(id: ModifierId): Unit =
+    minedToServe = minedToServe.filterNot(_.contains(id))
+
   /**
     * How many block sections stored in processing queue, imprecise number as updated only when
     * this actor is getting data from view holder actor
@@ -1194,7 +1206,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           }
         case expectedTypeId: NetworkObjectTypeId.Value =>
           invData.ids.flatMap { id =>
-            hr.modifierTypeAndBytesById(id).flatMap { case (mTypeId, bytes) =>
+            minedModifier(id).orElse(hr.modifierTypeAndBytesById(id)).flatMap { case (mTypeId, bytes) =>
               if (mTypeId == expectedTypeId) {
                 Some(id -> bytes)
               } else {
@@ -1432,7 +1444,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       * propagation latency. LocalBlockApplied arrives later and skips broadcast
       * since the block was already announced.
       */
-    case NewBlockMined(header) =>
+    case NewBlockMined(header, sections) =>
+      val served = (header +: sections).map(m => m.id -> (m.modifierTypeId -> m.bytes)).toMap
+      minedToServe = (minedToServe :+ served).takeRight(MinedBlocksToServe)
       log.info(
         s"Immediately announcing newly mined block ${header.encodedId} " +
         s"at height ${header.height} to all peers"
@@ -1444,6 +1458,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // Locally mined block applied - skip broadcast (already done via NewBlockMined)
     case LocalBlockApplied(header, _) =>
+      // applied: history serves it from now on (#2414)
+      dropMinedContaining(header.id)
       log.debug(
         s"Local block applied at height ${header.height}, " +
         s"header id: ${header.encodedId}, skipping broadcast"
@@ -1520,10 +1536,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case SyntacticallyFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Invalidating syntactically failed modifier $modId", e)
+      dropMinedContaining(modId)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case SemanticallyFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Invalidating semantically failed modifier $modId", e)
+      dropMinedContaining(modId)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>

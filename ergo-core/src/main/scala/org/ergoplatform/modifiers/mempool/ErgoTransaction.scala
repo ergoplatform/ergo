@@ -98,7 +98,6 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txNegativeOutput, outputCandidates.forall(_.value >= 0), InvalidModifier(s"$id: ${outputCandidates.map(_.value)}", id, modifierTypeId))
       .validateNoFailure(txOutputSum, outputsSumTry, id, modifierTypeId)
       .validate(txInputsUnique, inputs.distinct.size == inputs.size, InvalidModifier(s"$id: ${inputs.distinct.size} == ${inputs.size}", id, modifierTypeId))
-      .validate(txDataInputsUnique, dataInputs.distinct.size == dataInputs.size, InvalidModifier(s"$id: ${dataInputs.distinct.size} == ${dataInputs.size}", id, modifierTypeId))
   }
 
   /**
@@ -421,6 +420,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           modifierTypeId
         )
       )
+      // Check that data inputs are unique. The rule is applied since
+      // ErgoTransaction.DataInputsUniquenessHeight only
+      .validate(
+        txDataInputsUnique,
+        stateContext.currentHeight < ErgoTransaction.DataInputsUniquenessHeight ||
+          dataInputs.distinct.size == dataInputs.size,
+        InvalidModifier(s"$id: ${dataInputs.distinct.size} == ${dataInputs.size}", id, modifierTypeId)
+      )
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
         verifyOutput(validationState, out, stateContext, maxCreationHeightInInputs)
@@ -477,6 +484,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding {
 
   val modifierTypeId: NetworkObjectTypeId.Value = TransactionTypeId.value
+
+  /**
+    * Height since which transactions with duplicated data inputs are considered invalid
+    * (validation rule txDataInputsUnique, #110).
+    * Int.MaxValue means the rule is not activated yet; to be replaced with a concrete height
+    * after a full-chain scan (see DuplicateDataInputsChecker tool) confirms no historical
+    * violations.
+    */
+  val DataInputsUniquenessHeight: Int = Int.MaxValue
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)

@@ -148,6 +148,10 @@ object DuplicateDataInputsChecker {
       s"(of them with data inputs: ${report.txsWithDataInputs})")
     println(s"Total violations: ${report.violations.size} " +
       s"(in the best chain: ${report.bestChainViolations.size})")
+    if (report.violations.nonEmpty) {
+      val heights = report.violations.map(_.height)
+      println(s"Violation heights: from ${heights.min} to ${heights.max}")
+    }
 
     report.bestChainViolations.foreach { v =>
       println(s"  height ${v.height}, block ${Algos.encode(v.blockId)}, tx ${Algos.encode(v.txId)}, " +

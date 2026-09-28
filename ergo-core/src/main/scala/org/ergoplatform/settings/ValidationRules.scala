@@ -54,7 +54,7 @@ object ValidationRules {
       mayBeDisabled = false),
     txDataInputsUnique -> RuleStatus(im => fatal(s"There should be no duplicate data inputs. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
-      mayBeDisabled = false),
+      mayBeDisabled = true),
     txAssetsInOneBox -> RuleStatus(im => fatal(s"A number of tokens within a box should not exceed ${ErgoBoxAssetExtractor.MaxAssetsPerBox}" +
       s" and sum of assets of one type should not exceed ${Long.MaxValue}. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
@@ -245,8 +245,8 @@ object ValidationRules {
   val txInputsUnique: Short = 107
   val txPositiveAssets: Short = 108
   val txAssetsInOneBox: Short = 109
-  val txDataInputsUnique: Short = 110
   // stateful transaction validation
+  val txDataInputsUnique: Short = 110 // applied since ErgoTransaction.DataInputsUniquenessHeight
   val txDust: Short = 111
   val txFuture: Short = 112
   val txBoxesToSpend: Short = 113

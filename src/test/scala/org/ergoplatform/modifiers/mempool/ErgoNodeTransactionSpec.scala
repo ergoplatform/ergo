@@ -155,31 +155,40 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     }
   }
 
-  property("duplicated data inputs") {
+  property("duplicated data inputs prohibited since activation height") {
+    val activationHeight = ErgoTransaction.DataInputsUniquenessHeight
+
     val dataBoxesGen = Gen.nonEmptyListOf(NodeTransactionGenerators.ergoBoxGenNoProp)
       .map(_.toIndexedSeq)
     forAll(validErgoTransactionGen, dataBoxesGen) { case ((from, tx), dataBoxes) =>
       val dataInputs = dataBoxes.map(b => DataInput(b.id))
 
-      // transaction with unique data inputs is valid
+      // transaction with unique data inputs is valid both before and after the activation height
       val txWithDataInputs = ErgoTransaction(tx.inputs, dataInputs, tx.outputCandidates)
       txWithDataInputs.statelessValidity().isSuccess shouldBe true
-      txWithDataInputs.statefulValidity(from, dataBoxes, emptyStateContext).isSuccess shouldBe true
+      txWithDataInputs.statefulValidity(from, dataBoxes,
+        stateContext(activationHeight - 1, 1, settings)).isSuccess shouldBe true
+      txWithDataInputs.statefulValidity(from, dataBoxes,
+        stateContext(activationHeight, 1, settings)).isSuccess shouldBe true
 
-      // transaction with duplicated data inputs is rejected by stateless validation
+      // transaction with duplicated data inputs passes stateless validation (the rule is stateful),
+      // and is still valid before the activation height ...
       val txWithDuplicatedDataInputs = ErgoTransaction(tx.inputs, dataInputs ++ dataInputs, tx.outputCandidates)
-      txWithDuplicatedDataInputs.statelessValidity().isSuccess shouldBe false
-      val expectedDataInputsMsg = ValidationRules.errorMessage(
-        ValidationRules.txDataInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
-      txWithDuplicatedDataInputs.statelessValidity().failed.get.getMessage should
-        include(expectedDataInputsMsg.take(30))
+      txWithDuplicatedDataInputs.statelessValidity().isSuccess shouldBe true
+      txWithDuplicatedDataInputs.statefulValidity(from, dataBoxes ++ dataBoxes,
+        stateContext(activationHeight - 1, 1, settings)).isSuccess shouldBe true
 
-      // duplicated ordinary inputs are also rejected by stateless validation
+      // ... but is rejected by stateful validation since the activation height
+      val postActivation = txWithDuplicatedDataInputs.statefulValidity(from, dataBoxes ++ dataBoxes,
+        stateContext(activationHeight, 1, settings))
+      postActivation.isSuccess shouldBe false
+      val expectedMsg = ValidationRules.errorMessage(
+        ValidationRules.txDataInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
+      postActivation.failed.get.getMessage should include(expectedMsg.take(30))
+
+      // duplicated ordinary inputs are still rejected by stateless validation
       val txWithDuplicatedInputs = tx.copy(inputs = tx.inputs ++ tx.inputs)
       txWithDuplicatedInputs.statelessValidity().isSuccess shouldBe false
-      val expectedInputsMsg = ValidationRules.errorMessage(
-        ValidationRules.txInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
-      txWithDuplicatedInputs.statelessValidity().failed.get.getMessage should include(expectedInputsMsg.take(30))
     }
   }
 

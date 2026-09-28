@@ -177,11 +177,26 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val tx = buildAndValidate(Seq(recreateBox, consumeBox)).get
 
     tx.inputs.length shouldBe 2
-    tx.outputCandidates.length shouldBe 2 // recreated + aggregate
+    tx.outputCandidates.length shouldBe 2 // recreated + one proceeds output
 
-    // recreate input names its recreated output (index 0), full-consume names the aggregate (1)
+    // recreate input names its recreated output (index 0), full-consume names the proceeds (1)
     tx.inputs(0).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
     tx.inputs(1).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(1)
+
+    // zero fee: outputs balance inputs exactly
+    tx.outputCandidates.map(_.value).sum shouldBe recreateBox.value + consumeBox.value
+  }
+
+  property("multiple burned boxes get distinct outputs and validate") {
+    val b1 = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = true)
+    val b2 = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = true)
+    val tx = buildAndValidate(Seq(b1, b2)).get
+
+    tx.inputs.length shouldBe 2
+    tx.outputCandidates.length shouldBe 2 // one P2PK output per burned box, tokens burned
+    tx.inputs(0).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
+    tx.inputs(1).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(1)
+    tx.outputCandidates.foreach(_.additionalTokens.length shouldBe 0)
   }
 
   property("rent proceeds go to the canonical miner P2PK, not the delayed reward script") {

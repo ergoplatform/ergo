@@ -101,6 +101,9 @@ object ValidationRules {
     txMonotonicHeight -> RuleStatus(im => fatal(s"Creation height of any output should be not less than  ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
+    txRentDistinctOutputs -> RuleStatus(im => fatal(s"Storage rent recreation inputs should name distinct outputs. ${im.error}", im.modifierId, im.modifierTypeId),
+      Seq(classOf[ErgoTransaction]),
+      mayBeDisabled = true),
 
     // header validation
     hdrGenesisParent -> RuleStatus(im => fatal(s"Genesis header should have genesis parent id. ${im.error}", im.modifierId, im.modifierTypeId),
@@ -257,6 +260,15 @@ object ValidationRules {
   val txNegHeight: Short = 122 // introduced in v2 blocks
   val txReemission: Short = 123 // introduced in EIP-27 (soft-fork)
   val txMonotonicHeight: Short = 124 // introduced in v3 blocks
+  val txRentDistinctOutputs: Short = 125 // storage rent duplicate var-127 output fix (soft-fork)
+
+  /**
+    * Height starting from which the `txRentDistinctOutputs` rule is enforced (flag-day
+    * activation enforced by the majority of mining hashrate, no block version change).
+    * Placeholder, to be finalized before the release. The network type is not available at
+    * this level, so a single height applies to all networks.
+    */
+  val StorageRentDistinctOutputsActivationHeight: Int = 2100000
 
   // header validation
   val hdrGenesisParent: Short = 200

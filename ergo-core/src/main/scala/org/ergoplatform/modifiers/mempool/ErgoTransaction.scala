@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoValidationSettings}
 import org.ergoplatform.utils.{BoxUtils, ScorexEncoding}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -428,6 +428,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txInputsSum, inputSumTry.isSuccess, InvalidModifier(s"$id as invalid Inputs Sum", id, modifierTypeId))
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, InvalidModifier(s"$id: $inputSumTry == $outputsSumTry", id, modifierTypeId))
+      // Check that storage-rent var-127 values are unique across all inputs, so that two
+      // identical expired boxes can not be claimed against one shared output (which would
+      // let the collector keep everything above the larger box's recreation floor).
+      .validate(txRentDistinctOutputs, rentOutputIndicesDistinct(stateContext),
+        InvalidModifier(s"$id: repeated storage rent var-127 value", id, modifierTypeId))
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", id, modifierTypeId, e)) { case (validation, (outAssets, outAssetsNum)) =>
         verifyAssets(validation, outAssets, outAssetsNum, boxesToSpend, stateContext)
       }
@@ -438,6 +443,23 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
+  }
+
+  /**
+    * Check that the context extension var-127 values (indices of recreated outputs in
+    * storage-rent claims) of this transaction's inputs are pairwise distinct
+    * (rule `txRentDistinctOutputs`). Applies only from the activation height on; below it
+    * the check always passes, so historical transactions keep validating.
+    */
+  private def rentOutputIndicesDistinct(stateContext: ErgoStateContext): Boolean = {
+    if (stateContext.currentHeight < StorageRentDistinctOutputsActivationHeight) {
+      true
+    } else {
+      val indices = inputs.flatMap { input =>
+        input.spendingProof.extension.values.get(Constants.StorageIndexVarId).map(_.value)
+      }
+      indices.distinct.size == indices.size
+    }
   }
 
   /**

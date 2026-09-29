@@ -354,16 +354,22 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
     val ecb1 = getWorkMessage(minerRef, Seq(mandatoryTx1))
     ecb1.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb1.proofsForMandatoryTransactions.get.txProofs.head.proof.leafData
+      .sameElements(mandatoryTx1.serializedId) shouldBe true
     ecb1.proofsForMandatoryTransactions.get.check() shouldBe true
 
     val ecb2 = getWorkMessage(minerRef, Seq(mandatoryTx2))
     ecb2.msg.sameElements(ecb1.msg) shouldBe false
     ecb2.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb2.proofsForMandatoryTransactions.get.txProofs.head.proof.leafData
+      .sameElements(mandatoryTx2.serializedId) shouldBe true
     ecb2.proofsForMandatoryTransactions.get.check() shouldBe true
 
     val ecb3 = getWorkMessage(minerRef, Seq.empty)
     ecb3.msg.sameElements(ecb2.msg) shouldBe true
     ecb3.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
+    ecb3.proofsForMandatoryTransactions.get.txProofs.head.proof.leafData
+      .sameElements(mandatoryTx2.serializedId) shouldBe true
     ecb3.proofsForMandatoryTransactions.get.check() shouldBe true
 
     system.terminate()

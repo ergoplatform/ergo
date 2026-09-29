@@ -30,6 +30,9 @@ class WalletRegistrySpec
   private val emptyBag = KeyValuePairsBag.empty
   private val walletBoxStatus = Set(PaymentsScanId)
 
+  // box ids are Array[Byte], which compares by reference, so encode them before putting them into sets
+  private def idOf(tb: TrackedBox): String = Base16.encode(tb.box.id)
+
   private val ws = settings.walletSettings
 
   it should "read unspent wallet boxes" in {
@@ -287,6 +290,45 @@ class WalletRegistrySpec
         // one spent box and 2 unspent boxes should be present
         reg.spentBoxesByInclusionHeight(appId2, 4, 7).length shouldBe 1
         reg.unspentBoxesByInclusionHeight(appId2, 4, 7).length shouldBe 2
+      }
+    }
+  }
+
+  it should "get wallet boxes by inclusion height" in {
+    forAll(trackedBoxGen) { tb0 =>
+      withVersionedStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+
+        val unspentLow = tb0.copy(scans = Set(PaymentsScanId), inclusionHeightOpt = Some(5), spendingHeightOpt = None)
+        val unspentHigh = trackedBoxGen.sample.get
+          .copy(scans = Set(PaymentsScanId), inclusionHeightOpt = Some(50), spendingHeightOpt = None)
+        val spentMid = trackedBoxGen.sample.get
+          .copy(scans = Set(PaymentsScanId), inclusionHeightOpt = Some(20), spendingHeightOpt = Some(25))
+        Seq(unspentLow, unspentHigh, spentMid).foreach { bx =>
+          WalletRegistry.putBox(emptyBag, bx).transact(store).get
+        }
+
+        // range covering everything, both spent and unspent
+        reg.walletBoxesByInclusionHeight(0, 100).map(idOf).toSet shouldBe
+          Set(idOf(unspentLow), idOf(unspentHigh), idOf(spentMid))
+        // only unspent ones
+        reg.walletUnspentBoxesByInclusionHeight(0, 100).map(idOf).toSet shouldBe
+          Set(idOf(unspentLow), idOf(unspentHigh))
+
+        // bounds are inclusive on both ends
+        reg.walletUnspentBoxesByInclusionHeight(5, 5).map(idOf).toSet shouldBe Set(idOf(unspentLow))
+        reg.walletUnspentBoxesByInclusionHeight(50, 50).map(idOf).toSet shouldBe Set(idOf(unspentHigh))
+        // a window containing no box yields nothing
+        reg.walletUnspentBoxesByInclusionHeight(6, 49) shouldBe empty
+        // lower bound only
+        reg.walletUnspentBoxesByInclusionHeight(6, 100).map(idOf).toSet shouldBe Set(idOf(unspentHigh))
+
+        // -1 as upper bound means "unbounded", same convention as /scan/unspentBoxes;
+        // it must return exactly what the unspent index returns
+        reg.walletUnspentBoxesByInclusionHeight(0, -1).map(idOf).toSet shouldBe
+          reg.walletUnspentBoxes().map(idOf).toSet
+        reg.walletBoxesByInclusionHeight(0, -1).map(idOf).toSet shouldBe
+          reg.walletConfirmedBoxes().map(idOf).toSet
       }
     }
   }

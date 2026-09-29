@@ -104,7 +104,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 
   private def executeWithContextR: Route =
-    (path("executeWithContext") & post & entity(as[ExecuteRequest])) { req =>
+    (path("executeWithContext") & post & withAuth & entity(as[ExecuteRequest])) { req =>
       compileSource(req.script, req.env, req.treeVersion.getOrElse(0)).fold(
         e => BadRequest(e.getMessage),
         tree => {

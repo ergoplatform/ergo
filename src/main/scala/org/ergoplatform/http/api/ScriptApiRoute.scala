@@ -70,37 +70,30 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
     onSuccess((readersHolder ? GetReaders).mapTo[Readers].map(r => op(r)))(toRoute)
   }
 
-  // todo: unite p2sAddress and p2shAddress, https://github.com/ergoplatform/ergo/issues/2213
-  private def p2sAddressR: Route = (path("p2sAddress") & post & entity(as[CompileRequest])) { compileRequest =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
-      onSuccess(addrsF) { addrs =>
-        val scriptVersion = Header.scriptFromBlockVersion(bv)
-        val treeVersion = compileRequest.treeVersion
-        VersionContext.withVersions(scriptVersion, treeVersion) {
-          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(Pay2SAddress.apply).fold(
-            e => BadRequest(e.getMessage),
-            address => ApiResponse(addressResponse(address))
-          )
+  /**
+    * Shared implementation behind `p2sAddressR` and `p2shAddressR`: compiles the submitted
+    * source against the requester's public keys and wraps the resulting `ErgoTree` with
+    * `wrapAddress`, differing only in whether the result is a P2S or P2SH address.
+    */
+  private def compiledAddressR(wrapAddress: ErgoTree => ErgoAddress): Route =
+    (post & entity(as[CompileRequest])) { compileRequest =>
+      withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+        onSuccess(addrsF) { addrs =>
+          val scriptVersion = Header.scriptFromBlockVersion(bv)
+          val treeVersion = compileRequest.treeVersion
+          VersionContext.withVersions(scriptVersion, treeVersion) {
+            compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(wrapAddress).fold(
+              e => BadRequest(e.getMessage),
+              address => ApiResponse(addressResponse(address))
+            )
+          }
         }
       }
     }
-  }
 
+  private def p2sAddressR: Route = path("p2sAddress") { compiledAddressR(Pay2SAddress.apply) }
 
-  private def p2shAddressR: Route = (path("p2shAddress") & post & entity(as[CompileRequest])) { compileRequest =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
-      onSuccess(addrsF) { addrs =>
-        val scriptVersion = Header.scriptFromBlockVersion(bv)
-        val treeVersion = compileRequest.treeVersion
-        VersionContext.withVersions(scriptVersion, treeVersion) {
-          compileSource(compileRequest.source, keysToEnv(addrs.map(_.pubkey)), treeVersion).map(Pay2SHAddress.apply).fold(
-            e => BadRequest(e.getMessage),
-            address => ApiResponse(addressResponse(address))
-          )
-        }
-      }
-    }
-  }
+  private def p2shAddressR: Route = path("p2shAddress") { compiledAddressR(Pay2SHAddress.apply) }
 
 
   private def executeWithContextR: Route =

@@ -28,5 +28,13 @@ object WordList {
     Try(loadFile()).map(r => try r.getLines().toList finally r.close())
 
   private def resourceLoader(fileName: String): () => BufferedSource =
-    () => Source.fromInputStream(getClass.getResourceAsStream(s"/wordlist/$fileName"))(Codec.UTF8)
+    () => {
+      val path = s"/wordlist/$fileName"
+      val stream =
+        Option(getClass.getResourceAsStream(path))
+          .orElse(Option(Thread.currentThread().getContextClassLoader.getResourceAsStream(path)))
+          .orElse(Option(ClassLoader.getSystemResourceAsStream(path)))
+          .getOrElse(throw new IllegalArgumentException(s"Wordlist resource not found: $path"))
+      Source.fromInputStream(stream)(Codec.UTF8)
+    }
 }

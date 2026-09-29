@@ -462,3 +462,5 @@ object AutolykosPowScheme {
   }
 
 }
+
+object MainnetPoWVerifier extends AutolykosPowScheme(k = 32, n = 26)

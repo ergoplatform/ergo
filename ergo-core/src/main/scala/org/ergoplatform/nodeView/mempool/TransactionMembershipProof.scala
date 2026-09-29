@@ -4,7 +4,7 @@ import io.circe.{Encoder, Json}
 import org.ergoplatform.sdk.JsonCodecs
 import org.ergoplatform.settings.Algos
 import scorex.crypto.authds.merkle.MerkleProof
-import scorex.crypto.hash.Digest32
+import scorex.crypto.hash.{Digest, Digest32}
 import scorex.util.ModifierId
 import io.circe.syntax._
 
@@ -15,7 +15,11 @@ import io.circe.syntax._
   * @param txId - transaction identifier
   * @param proof - Merkle proof of transaction membership
   */
-case class TransactionMembershipProof(txId: ModifierId, proof: MerkleProof[Digest32])
+case class TransactionMembershipProof(txId: ModifierId, proof: MerkleProof[Digest32]) {
+  def valid(expectedRootHash: Digest): Boolean = {
+    proof.valid(expectedRootHash)
+  }
+}
 
 object TransactionMembershipProof extends JsonCodecs {
 

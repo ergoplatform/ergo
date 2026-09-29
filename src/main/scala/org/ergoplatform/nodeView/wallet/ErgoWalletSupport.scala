@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey, ExtendedSecretKey}
-import org.ergoplatform.sdk.wallet.{AssetUtils, TokensMap}
+import org.ergoplatform.sdk.wallet.AssetUtils
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.wallet.Constants.PaymentsScanId
@@ -96,30 +96,6 @@ trait ErgoWalletSupport extends ScorexLogging {
       val oldPubKeys = oldDerivedSecrets.map(_.publicKey)
       oldPubKeys.foreach(storage.addPublicKey(_).get)
       storage.removePaths().get
-    }
-  }
-
-  // merge tokens from burn request with auto-burn mechanism
-  private def mergeBurnWhitelistTokens(state: ErgoWalletState,
-                                       inputBoxes: Array[TrackedBox],
-                                       burnTokensRequestMap: TokensMap): TokensMap = {
-    val input = inputBoxes.flatMap(_.tokens)
-    state.walletVars.settings.walletSettings.tokensWhitelist match {
-      case Some(x: Seq[String]) if x.isEmpty =>
-        AssetUtils.mergeAssets(
-          TransactionBuilder.collTokensToMap(
-            input.map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
-          ),
-          burnTokensRequestMap)
-      case Some(x: Seq[String]) => AssetUtils.mergeAssets(
-        TransactionBuilder.collTokensToMap(
-          input
-            .filterNot(tMap => x.contains(tMap._1))
-            .map { case (id, amt) => (IdUtils.decodedTokenId(id), amt) }.toColl
-        ),
-        burnTokensRequestMap)
-      case None =>
-        burnTokensRequestMap
     }
   }
 
@@ -307,15 +283,12 @@ trait ErgoWalletSupport extends ScorexLogging {
 
     //filter burnTokens requests
     val (requestsWithBurnTokens, requestsWithoutBurnTokens) = requests.partition(_.isInstanceOf[BurnTokensRequest])
-    val burnTokensRequestMap = TransactionBuilder.collTokensToMap(
-      requestsWithBurnTokens
-        .toArray
-        .map(_.asInstanceOf[BurnTokensRequest])
-        .flatMap(_.assetsToBurn)
-        .toColl
-    )
-    //filter out tokens on whitelist from wallet and merge the rest with burnTokens from requests
-    val burnTokensMap = mergeBurnWhitelistTokens(state, inputBoxes.toArray, burnTokensRequestMap)
+    val requestedBurnTokens = requestsWithBurnTokens
+      .toArray
+      .map(_.asInstanceOf[BurnTokensRequest])
+      .flatMap(_.assetsToBurn)
+    require(requestedBurnTokens.forall(_._2 > 0), "Non-positive burn asset value")
+    val burnTokensRequestMap = TransactionBuilder.collTokensToMap(requestedBurnTokens.toColl)
 
     //We're getting id of the first input, it will be used in case of asset issuance (asset id == first input id)
     requestsToBoxCandidates(requestsWithoutBurnTokens, inputBoxes.head.box.id, state.fullHeight, state.parameters, state.walletVars.publicKeyAddresses)
@@ -334,9 +307,17 @@ trait ErgoWalletSupport extends ScorexLogging {
 
         //add burnTokens to target assets so that they are excluded from the change outputs
         //thus total outputs assets will be reduced which is interpreted as _token burning_
-        val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensMap)
+        val targetAssetsWithBurn = AssetUtils.mergeAssets(targetAssets, burnTokensRequestMap)
 
-        val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
+        // Automatic burning applies only to selected surplus, after output and explicit burn targets.
+        val selectionOpt = state.walletVars.settings.walletSettings.tokensWhitelist match {
+          case Some(whitelist) =>
+            val preservedTokens = whitelist.toSet
+            boxSelector.select(inputBoxes.iterator, (_: TrackedBox) => true,
+              targetBalance, targetAssetsWithBurn, tokenId => preservedTokens.contains(tokenId))
+          case None =>
+            boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
+        }
         val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)

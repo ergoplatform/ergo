@@ -146,7 +146,10 @@ object TransactionBuilder {
   }
 
   def collTokensToMap(tokens: Coll[(TokenId, Long)]): TokensMap =
-    tokens.toArray.map(t => t._1.toModifierId -> t._2).toMap
+    tokens.toArray.foldLeft(Map.empty[ModifierId, Long]) { case (amounts, (tokenId, amount)) =>
+      val id = tokenId.toModifierId
+      amounts.updated(id, java7.compat.Math.addExact(amounts.getOrElse(id, 0L), amount))
+    }
 
   def tokensMapToColl(tokens: TokensMap): Coll[(TokenId, Long)] =
     tokens.toArray.map {t => t._1.toTokenId -> t._2}.toColl

@@ -138,16 +138,15 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
       val safeInterval                     = settings.scorexSettings.network.penaltySafeInterval.toMillis
       val (penaltyScoreAcc, lastPenaltyTs) = penaltyBook.getOrElse(address, (0, 0L))
       val applyPenalty                     = currentTime - lastPenaltyTs - safeInterval > 0 || penaltyType.isPermanent
-      val newPenaltyScore = if (applyPenalty) {
-        penaltyScoreAcc + penaltyScore(penaltyType)
+      if (applyPenalty) {
+        val newPenaltyScore = penaltyScoreAcc + penaltyScore(penaltyType)
+        if (newPenaltyScore > settings.scorexSettings.network.penaltyScoreThreshold) {
+          true
+        } else {
+          penaltyBook += address -> (newPenaltyScore -> currentTime)
+          false
+        }
       } else {
-        penaltyScoreAcc
-      }
-
-      if (newPenaltyScore > settings.scorexSettings.network.penaltyScoreThreshold) {
-        true
-      } else {
-        penaltyBook += address -> (newPenaltyScore -> System.currentTimeMillis())
         false
       }
     }

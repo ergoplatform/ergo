@@ -365,6 +365,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
+    // Computed only since DataInputsUniquenessHeight activation, thanks to short-circuiting
+    // in the txDataInputsUnique check below
+    lazy val distinctDataInputsSize = dataInputs.distinct.size
+
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
@@ -420,13 +424,14 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           modifierTypeId
         )
       )
-      // Check that data inputs are unique. The rule is applied since
-      // ErgoTransaction.DataInputsUniquenessHeight only
+      // Check that there is no more than one pair of data inputs with the same box id.
+      // The rule is applied since ErgoTransaction.DataInputsUniquenessHeight only
       .validate(
         txDataInputsUnique,
         stateContext.currentHeight < ErgoTransaction.DataInputsUniquenessHeight ||
-          dataInputs.distinct.size == dataInputs.size,
-        InvalidModifier(s"$id: ${dataInputs.distinct.size} == ${dataInputs.size}", id, modifierTypeId)
+          distinctDataInputsSize == dataInputs.size ||
+          distinctDataInputsSize + 1 == dataInputs.size,
+        InvalidModifier(s"$id: more than one pair of data inputs with the same box", id, modifierTypeId)
       )
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>

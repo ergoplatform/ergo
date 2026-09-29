@@ -14,7 +14,7 @@ import scala.util.{Failure, Success}
   * Scans the whole blockchain stored in a local node database block-by-block and checks
   * that no historical data violates the tightened consensus rules:
   *
-  *  - no duplicated data inputs in any transaction
+  *  - no more than one pair of data inputs with the same box id in any transaction
   *    (consensus rule `txDataInputsUnique`, id 110, see ValidationRules);
   *  - no SUnit types in box registers and context extension values
   *    (tightened sigma-state rule #1019 CheckV6Type, sertests branch of
@@ -49,7 +49,7 @@ object DuplicateDataInputsChecker {
   case class Violation(height: Int,
                        blockId: ModifierId,
                        txId: ModifierId,
-                       duplicatedDataInputs: Seq[ModifierId],
+                       overReferencedBoxes: Seq[ModifierId],
                        inBestChain: Boolean)
 
   case class TypeViolation(height: Int,
@@ -216,16 +216,17 @@ object DuplicateDataInputsChecker {
                         bt.txs.foreach { tx =>
                           txsChecked += 1
                           if (tx.dataInputs.nonEmpty) txsWithDataInputs += 1
-                          if (tx.dataInputs.distinct.size != tx.dataInputs.size) {
-                            val duplicated = tx.dataInputs
+                          if (tx.dataInputs.size - tx.dataInputs.distinct.size > 1) {
+                            // more than one pair of data inputs with the same box id
+                            val overReferenced = tx.dataInputs
                               .groupBy(di => bytesToId(di.boxId))
-                              .collect { case (boxId, occurrences) if occurrences.size > 1 => boxId }
+                              .collect { case (boxId, occurrences) if occurrences.length > 1 => boxId }
                               .toSeq
-                            val violation = Violation(height, bt.headerId, tx.id, duplicated, inBestChain)
+                            val violation = Violation(height, bt.headerId, tx.id, overReferenced, inBestChain)
                             violations = violations :+ violation
                             println(s"Violation: height $height, block ${Algos.encode(bt.headerId)}, " +
-                              s"tx ${Algos.encode(tx.id)}, duplicated data inputs " +
-                              s"${duplicated.map(Algos.encode).mkString(", ")}" +
+                              s"tx ${Algos.encode(tx.id)}, more than one pair of data inputs " +
+                              s"with the same box id: ${overReferenced.map(Algos.encode).mkString(", ")}" +
                               (if (!inBestChain) " (fork block)" else ""))
                           }
 
@@ -322,11 +323,11 @@ object DuplicateDataInputsChecker {
     println(s"Blocks failed to parse: ${report.unparsedBlocks}")
     println(s"Transactions checked: ${report.txsChecked} " +
       s"(of them with data inputs: ${report.txsWithDataInputs})")
-    println(s"Duplicated data inputs violations: ${report.violations.size} " +
+    println(s"Duplicated data inputs pairs violations: ${report.violations.size} " +
       s"(in the best chain: ${report.bestChainViolations.size})")
     if (report.violations.nonEmpty) {
       val heights = report.violations.map(_.height)
-      println(s"Duplicated data inputs violation heights: from ${heights.min} to ${heights.max}")
+      println(s"Duplicated data inputs pairs violation heights: from ${heights.min} to ${heights.max}")
     }
     println(s"Type violations (tightened sigma-state rules): ${report.typeViolations.size} " +
       s"(in the best chain: ${report.bestChainTypeViolations.size})")
@@ -337,7 +338,8 @@ object DuplicateDataInputsChecker {
 
     report.bestChainViolations.foreach { v =>
       println(s"  height ${v.height}, block ${Algos.encode(v.blockId)}, tx ${Algos.encode(v.txId)}, " +
-        s"duplicated data inputs ${v.duplicatedDataInputs.map(Algos.encode).mkString(", ")}")
+        s"boxes in duplicated data input pairs: " +
+        s"${v.overReferencedBoxes.map(Algos.encode).mkString(", ")}")
     }
     report.bestChainTypeViolations.foreach { v =>
       println(s"  height ${v.height}, block ${Algos.encode(v.blockId)}, tx ${Algos.encode(v.txId)}, " +

@@ -52,7 +52,7 @@ object ValidationRules {
     txInputsUnique -> RuleStatus(im => fatal(s"There should be no duplicate inputs. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = false),
-    txDataInputsUnique -> RuleStatus(im => fatal(s"There should be no duplicate data inputs. ${im.error}", im.modifierId, im.modifierTypeId),
+    txDataInputsUnique -> RuleStatus(im => fatal(s"There should be no more than one pair of data inputs with the same box id in a transaction. ${im.error}", im.modifierId, im.modifierTypeId),
       Seq(classOf[ErgoTransaction]),
       mayBeDisabled = true),
     txAssetsInOneBox -> RuleStatus(im => fatal(s"A number of tokens within a box should not exceed ${ErgoBoxAssetExtractor.MaxAssetsPerBox}" +

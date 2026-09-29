@@ -2,7 +2,7 @@ package org.ergoplatform.it
 
 import java.io.File
 import java.util.concurrent.TimeoutException
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
 import io.circe.Json
 import org.ergoplatform.it.api.NodeApi.{NodeInfo, nodeInfoDecoder}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -152,18 +152,21 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       docker.stopNode(minerAGen.containerId)
       docker.stopNode(minerBGen.containerId)
 
-      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, isolatedPeersConfig,
+      val minerAIsolated: Node = docker.startDevNetNode(DeepRollBackSpec.isolatedMiningConfig.withFallback(minerAConfig), isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
 
       // 1. Let nodeA mine `chainLength + delta` blocks in isolation
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
 
-      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, isolatedPeersConfig,
+      val minerBIsolated: Node = docker.startDevNetNode(DeepRollBackSpec.isolatedMiningConfig.withFallback(minerBConfig), isolatedPeersConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
       Async.await(observeNodes("isolated miners started", minerAIsolated, minerBIsolated))
 
       // 2. Let nodeB mine `chainLength` blocks in isolation
       Async.await(minerBIsolated.waitForHeight(chainLength, 100.millis))
+
+      Async.await(minerAIsolated.connectedPeers) shouldBe empty
+      Async.await(minerBIsolated.connectedPeers) shouldBe empty
 
       log.info("Mining phase done")
 
@@ -215,4 +218,10 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
     }
   }
 
+}
+
+object DeepRollBackSpec {
+  // The retained peer database survives restarts. Disable automatic outgoing connections
+  // and incoming admission during mining; final restarts use the ordinary node configs.
+  private[it] val isolatedMiningConfig: Config = ConfigFactory.parseString("scorex.network.maxConnections = 0")
 }

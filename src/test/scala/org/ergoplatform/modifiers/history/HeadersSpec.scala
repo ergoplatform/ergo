@@ -1,7 +1,11 @@
 package org.ergoplatform.modifiers.history
 
-import com.google.common.primitives.Longs
+import com.google.common.primitives.{Ints, Longs}
+import org.ergoplatform.mining.{AutolykosPowScheme, AutolykosSolutionSerializer, randomSecret}
+import org.ergoplatform.mining.difficulty.DifficultySerializer
+import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.ErgoCoreTestConstants.powScheme
 import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
 
@@ -32,6 +36,32 @@ class HeadersSpec extends ErgoCorePropertyTest {
         header.copy(powSolution = header.powSolution.copy(d = header.powSolution.d + 1)).id should not equal initialId
       }
     }
+  }
+
+  property("bytes can be added to the header") {
+    val pow = new AutolykosPowScheme(powScheme.k, powScheme.n)
+
+    val difficulty = 10
+    val ver = (Header.Interpreter50Version + 1).toByte
+    val nBits = DifficultySerializer.encodeCompactBits(difficulty)
+    val header = defaultHeaderGen.sample.get.copy(version = ver, nBits = nBits)
+    val bytesWithoutPow = HeaderSerializer.bytesWithoutPow(header)
+    bytesWithoutPow(bytesWithoutPow.length - 1) = 5
+    val updByteWithoutPow: Array[Byte] = bytesWithoutPow ++ Array.fill(5)(5.toByte)
+    val msg = Blake2b256(updByteWithoutPow)
+
+    val sk = randomSecret()
+    val x = randomSecret()
+    val b = pow.getB(header.nBits)
+    val hbs = Ints.toByteArray(header.height)
+    val N = pow.calcN(header)
+    val solution = pow.checkNonces(ver, hbs, msg, sk, x, b, N, 0, 1000).get
+
+    require(pow.hitForVersion2ForMessage(msg, solution.n, hbs, N) < b)
+
+    require(HeaderSerializer.parseBytesTry(updByteWithoutPow ++ AutolykosSolutionSerializer.toBytes(ver, solution)).isSuccess)
+
+    // todo: but unparsed bytes are not stored in Header, so roundtrip is broken
   }
 
 }

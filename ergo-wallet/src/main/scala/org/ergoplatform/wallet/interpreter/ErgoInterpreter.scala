@@ -32,6 +32,21 @@ class ErgoInterpreter(params: BlockchainParameters)
   override type CTX = ErgoLikeContext
 
   /**
+    * After an expired box holding tokens or additional registers is charged down to the minimum
+    * allowed value, for how many blocks it can still be refreshed with preserving tokens / registers.
+    */
+  val StorageGracePeriod: Int = 2 * Constants.BlocksPerWeek
+
+  /**
+    * Height starting from which the grace-period rules apply to expired boxes holding tokens or
+    * additional registers
+    *
+    * TODO: set before releasesponsored (recreated with a topped-up
+    * value) before it may be fully consumed. 2 weeks
+    */
+  val StorageGracePeriodActivationHeight: Int = 2100000
+
+  /**
     * Checks that expired box is spent in a proper way
     *
     * @param box           - box being spent
@@ -40,6 +55,24 @@ class ErgoInterpreter(params: BlockchainParameters)
     * @return whether the box is spent properly according to the storage fee rule
     */
   protected def checkExpiredBox(box: ErgoBox, output: ErgoBoxCandidate, currentHeight: Height): Boolean = {
+    // The grace-period rules protect only boxes holding tokens or additional registers.    // : for them the original owner's data and assets may matter to others.    // : for them the original owner's data and assets may matter to others.
+    // Plain value boxes are charged and consumed under the original rules.
+    val graceRulesApply = currentHeight >= StorageGracePeriodActivationHeight &&
+      (box.additionalTokens.nonEmpty || box.additionalRegisters.nonEmpty)
+    if (graceRulesApply) {
+      checkExpiredBoxWithGracePeriod(box, output, currentHeight)
+    } else {
+      checkExpiredBoxOriginal(box, output, currentHeight)
+    }
+  }
+
+  /**
+    * Original expired-box spending rules: the storage fee is charged in full on recreation, and
+    * if the box value does not cover the fee, the box may be fully consumed by anyone.
+    */
+  private def checkExpiredBoxOriginal(box: ErgoBox,
+                                      output: ErgoBoxCandidate,
+                                      currentHeight: Height): Boolean = {
     val storageFee = params.storageFeeFactor * box.bytes.length
 
     val storageFeeNotCovered = box.value - storageFee <= 0
@@ -52,6 +85,36 @@ class ErgoInterpreter(params: BlockchainParameters)
       .forall(rId => rId == ErgoBox.ValueRegId || rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
 
     storageFeeNotCovered || (correctCreationHeight && correctOutValue && correctRegisters)
+  }
+
+  /**
+    * Storage rent rules with the grace period: an expired box may be charged only down to the
+    * minimum allowed value (`minValuePerByte` per box byte). If the box value does not cover
+    * the storage fee, the box may be fully consumed (burned) only after a grace period
+    * (`StorageGracePeriod` after the storage period is over); until then it may be recreated,
+    * keeping at least the minimum value, topped up by a sponsor if needed. Every spend valid
+    * under these rules is also valid under the original rules.
+    */
+  private def checkExpiredBoxWithGracePeriod(box: ErgoBox,
+                                             output: ErgoBoxCandidate,
+                                             currentHeight: Height): Boolean = {
+    val storageFee = params.storageFeeFactor * box.bytes.length
+    val minValue = params.minValuePerByte.toLong * box.bytes.length
+
+    val gracePeriodPassed =
+      currentHeight - box.creationHeight >= Constants.StoragePeriod + StorageGracePeriod
+    val storageFeeNotCovered = box.value - storageFee <= 0
+    val burnable = storageFeeNotCovered && gracePeriodPassed
+
+    lazy val correctCreationHeight = output.creationHeight == currentHeight
+    lazy val correctOutValue = output.value >= Math.max(box.value - storageFee, minValue)
+
+    // all the registers except of R0 (monetary value) and R3 (creation height and reference) must be preserved
+    lazy val correctRegisters = ErgoBox.allRegisters
+      .iterator
+      .forall(rId => rId == ErgoBox.ValueRegId || rId == ErgoBox.ReferenceRegId || box.get(rId) == output.get(rId))
+
+    burnable || (correctCreationHeight && correctOutValue && correctRegisters)
   }
 
   /**

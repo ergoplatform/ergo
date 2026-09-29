@@ -5,6 +5,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
@@ -194,6 +195,40 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history = applyBlock(history, block3)
 
     history.bestFullBlockOpt shouldBe Some(block3)
+  }
+
+  property("better fork with a missing full block is parked, then applied once the gap is filled") {
+    var history = genHistory()._1
+
+    // main full chain: genesis, m1, m2
+    val mainChain = genChain(3)
+    history = applyChain(history, mainChain)
+    val m1 = mainChain(1)
+    val m2 = mainChain(2)
+    history.bestFullBlockOpt.value.header shouldBe m2.header
+
+    // a longer fork branching off m1; apply its headers only for now
+    val fork = genChain(3, m1).tail // fa (height 3), fb (height 4), fc (height 5)
+    val fa = fork.head
+    val fb = fork(1)
+    val fc = fork(2)
+    applyHeaderChain(history, HeaderChain(fork.map(_.header)))
+    history.bestHeaderOpt.value shouldBe fc.header
+
+    // complete every fork block but the first one (fa): a backward gap remains
+    history = applyChain(history, Seq(fb, fc))
+
+    // the fork has a higher header score, but it is not fully downloaded yet, so the node must
+    // keep its current best block rather than reorg onto (or crash on) the incomplete chain
+    history.bestFullBlockOpt.value.header shouldBe m2.header
+    history.asInstanceOf[FullBlockProcessor].isInBestFullChain(fc.id) shouldBe false
+
+    // filling the gap lets the deeper fork win and rolls the previous best chain back
+    history = applyChain(history, Seq(fa))
+    history.bestFullBlockOpt.value.header shouldBe fc.header
+    val fbp = history.asInstanceOf[FullBlockProcessor]
+    fbp.isInBestFullChain(fc.id) shouldBe true
+    fbp.isInBestFullChain(m2.id) shouldBe false
   }
 
   property("bootstrap from headers and last full blocks") {

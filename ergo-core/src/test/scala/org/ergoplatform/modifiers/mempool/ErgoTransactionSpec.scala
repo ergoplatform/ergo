@@ -1,7 +1,5 @@
 package org.ergoplatform.modifiers.mempool
 
-// needed for Scala 2.11
-import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import io.circe.syntax._
 import org.ergoplatform.ErgoBox._

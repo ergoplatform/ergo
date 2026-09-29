@@ -269,10 +269,10 @@ object ValidationRules {
   /**
     * Height starting from which the `txRentDistinctOutputs` rule is enforced (flag-day
     * activation enforced by the majority of mining hashrate, no block version change).
-    * Placeholder, to be finalized before the release. The network type is not available at
-    * this level, so a single height applies to all networks.
+    * The network type is not available at this level, so a single height applies to
+    * all networks.
     */
-  val StorageRentDistinctOutputsActivationHeight: Int = 2100000
+  val StorageRentDistinctOutputsActivationHeight: Int = 1885000
 
   // header validation
   val hdrGenesisParent: Short = 200

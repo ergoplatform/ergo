@@ -515,11 +515,8 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   /**
     * Height since which transactions with duplicated data inputs are considered invalid
     * (validation rule txDataInputsUnique, #110).
-    * Int.MaxValue means the rule is not activated yet; to be replaced with a concrete height
-    * after a full-chain scan (see DuplicateDataInputsChecker tool) confirms no historical
-    * violations.
     */
-  val DataInputsUniquenessHeight: Int = Int.MaxValue
+  val DataInputsUniquenessHeight: Int = 1885000
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)

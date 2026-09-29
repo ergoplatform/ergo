@@ -120,6 +120,53 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
     chain.foreach(x => nipopowAlgos.maxLevelOf(x.header) >= 0 shouldBe true)
   }
 
+  property("log2 - precise and overflow-safe") {
+    NipopowAlgos.log2(BigInt(1)) shouldEqual 0.0
+    NipopowAlgos.log2(BigInt(2)) shouldEqual 1.0
+    NipopowAlgos.log2(BigInt(1) << 256) shouldEqual 256.0
+    // Beyond Double's exponent range: doubleValue alone would yield +Infinity.
+    val large = NipopowAlgos.log2(BigInt(1) << 1024)
+    large.isInfinite shouldBe false
+    math.abs(large - 1024.0) should be < 1e-9
+    NipopowAlgos.log2(BigInt(0)) shouldEqual Double.NegativeInfinity
+    NipopowAlgos.log2(BigInt(-1)).isNaN shouldBe true
+  }
+
+  // Level-boundary canary, see #2556. `log2` rests on `math.log`, which is specified
+  // to within 1 ulp rather than bit-exactly, so for a hit within a few hundred ulps of
+  // a level boundary the truncated level depends on the JDK and on the CPU
+  // architecture. No mainnet header has come close enough for this to matter - the
+  // nearest is ~1.7e9 ulps away - and the constants below sit next to a boundary by
+  // construction, they are not taken from real blocks.
+  //
+  // This deliberately pins no single value: it asserts the runtime we are on is one of
+  // the classes already recorded. A new triple means a new class - please note it on
+  // #2556. The runtime-independent levels are 11, 30, 24; no float class gets all three.
+  property("log2 - level boundary is one of the known runtime classes (#2556)") {
+    val t1 = BigInt("6970984169202524253037322628355088478036255079432670670749696")
+    val h1 = BigInt("3403800863868407501259206016150990932074611810800886611968")
+    val t2 = BigInt("22597575170739970084675297616952165580278685765328851259359232")
+    val h2 = BigInt("10522815944040438093608276699383750648812778372988928")
+    val h3 = BigInt("207751517570095187901637506342880669535499801197543424")
+
+    def level(target: BigInt, hit: BigInt): Int =
+      (NipopowAlgos.log2(target) - NipopowAlgos.log2(hit)).toInt
+
+    val knownClasses = Map(
+      Seq(11, 30, 25) -> "A: x86_64, JDK 8 (what CI runs)",
+      Seq(10, 31, 25) -> "B: x86_64, JDK 11/17/21",
+      Seq(11, 30, 24) -> "C: aarch64, any JDK; identical to StrictMath.log"
+    )
+    val observed = Seq(level(t1, h1), level(t2, h2), level(t1, h3))
+
+    withClue(
+      s"unrecorded level-boundary triple $observed on java " +
+        s"${System.getProperty("java.version")} / ${System.getProperty("os.arch")}; " +
+        s"known: ${knownClasses.mkString("; ")} - please record it on #2556: ") {
+      knownClasses.keySet should contain(observed)
+    }
+  }
+
   property("lowestCommonAncestor - diverging") {
     val sizes = Seq(10, 100, 1000)
     sizes.foreach { size =>

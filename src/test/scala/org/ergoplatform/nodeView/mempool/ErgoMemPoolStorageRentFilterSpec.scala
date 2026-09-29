@@ -7,7 +7,7 @@ import org.ergoplatform.nodeView.state.BoxHolder
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.{ErgoStateContextHelpers, ErgoTestHelpers}
-import org.ergoplatform.wallet.utils.TestFileUtils
+import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -32,7 +32,7 @@ class ErgoMemPoolStorageRentFilterSpec extends AnyFlatSpec
   with Matchers
   with ErgoTestHelpers
   with ErgoStateContextHelpers
-  with TestFileUtils {
+  with FileUtils {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 

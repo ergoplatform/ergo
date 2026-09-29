@@ -14,7 +14,6 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.UtxoState.ManifestId
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalacheck.Gen
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -23,6 +22,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, S
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PenaltyType
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer}
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.testkit.generators.{SyntacticallyTargetedModifierProducer, TotallyValidModifierProducer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.crypto.hash.Digest32
@@ -40,7 +40,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   with ScorexLogging
   with SyntacticallyTargetedModifierProducer
   with TotallyValidModifierProducer[ST]
-  with TestFileUtils {
+  with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ChainGenerator._
 

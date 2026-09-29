@@ -2,12 +2,11 @@ package org.ergoplatform.db
 
 import akka.util.ByteString
 import org.ergoplatform.settings.Algos
-import org.ergoplatform.wallet.utils.TestFileUtils
-import org.iq80.leveldb.{DB, Options}
-import scorex.db.LDBFactory.factory
-import scorex.db.{LDBKVStore, LDBVersionedStore}
+import org.ergoplatform.wallet.utils.FileUtils
+import scorex.db.RocksDBFactory.RegisteredDB
+import scorex.db.{RocksDBFactory, RocksDBKVStore, RocksDBVersionedStore}
 
-trait DBSpec extends TestFileUtils {
+trait DBSpec extends FileUtils {
 
   implicit class ValueOps(x: Option[Array[Byte]]) {
     def toBs: Option[ByteString] = x.map(ByteString.apply)
@@ -21,22 +20,18 @@ trait DBSpec extends TestFileUtils {
 
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))
 
-  protected def withDb[T](body: DB => T): T = {
-    val options = new Options()
-    options.createIfMissing(true)
-    options.verifyChecksums(true)
-    options.maxOpenFiles(2000)
-    val db = factory.open(createTempDir, options)
+  protected def withDb[T](body: RegisteredDB => T): T = {
+    val db = RocksDBFactory.open(createTempDir)
     try body(db) finally db.close()
   }
 
   protected def versionId(s: String): Array[Byte] = byteString32(s)
 
-  protected def withStore[T](body: LDBKVStore => T): T =
-    withDb { db: DB => body(new LDBKVStore(db)) }
+  protected def withStore[T](body: RocksDBKVStore => T): T =
+    withDb { db: RegisteredDB => body(new RocksDBKVStore(db)) }
 
-  protected def withVersionedStore[T](keepVersions: Int)(body: LDBVersionedStore => T): T = {
-    val db = new LDBVersionedStore(createTempDir, keepVersions)
+  protected def withVersionedStore[T](keepVersions: Int)(body: RocksDBVersionedStore => T): T = {
+    val db = new RocksDBVersionedStore(createTempDir, keepVersions)
     try body(db) finally db.close()
   }
 

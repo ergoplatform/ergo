@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.settings.Algos.HF
-import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.{PersistentBatchAVLProver, VersionedRocksDBAVLStorage}
 import scorex.crypto.hash.Digest32
 import scorex.util.ScorexLogging
 import org.ergoplatform.settings.ErgoSettings
@@ -27,7 +27,7 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
   private[nodeView] def dumpSnapshot(height: Height,
                                      expectedRootHash: Array[Byte],
                                      manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth): Try[Array[Byte]] = {
-    val storage = persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage]
+    val storage = persistentProver.storage.asInstanceOf[VersionedRocksDBAVLStorage]
     snapshotsDb.writeSnapshot(storage, height, expectedRootHash, manifestDepth)
   }
 

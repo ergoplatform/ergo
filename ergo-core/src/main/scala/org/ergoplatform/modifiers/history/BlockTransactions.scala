@@ -182,7 +182,7 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
     }
 
     val txs: IndexedSeq[ErgoTransaction] = {
-      lazy val version = Header.scriptAndTreeFromBlockVersions(blockVersion)
+      lazy val version = Header.versionContextFromBlockVersions(blockVersion)
 
       (1 to txCount).map { _ =>
         if (blockVersion >= Header.Interpreter60Version) {

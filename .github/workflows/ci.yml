@@ -47,8 +47,14 @@ jobs:
               ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-      - name: Runs wallet tests
-        run: sbt ++${{ matrix.scala }} ergoWallet/test
+      - name: Runs wallet tests with coverage
+        run: sbt ++${{ matrix.scala }} coverWallet
+
+      - name: Upload wallet coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: wallet-coverage-report-${{ matrix.scala }}
+          path: ergo-wallet/target/scala-${{ matrix.scala }}/scoverage-report/
 
       - name: Publish a wallet snapshot ${{ github.ref }}
         if: env.HAS_SECRETS == 'true'
@@ -90,8 +96,14 @@ jobs:
             ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-      - name: Runs ergo-core tests
-        run: sbt ++${{ matrix.scala }} ergoCore/test
+      - name: Runs ergo-core tests with coverage
+        run: sbt ++${{ matrix.scala }} coverCore
+
+      - name: Upload core coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-coverage-report-${{ matrix.scala }}
+          path: ergo-core/target/scala-${{ matrix.scala }}/scoverage-report/
 
       - name: Publish a wallet snapshot ${{ github.ref }}
         if: env.HAS_SECRETS == 'true'
@@ -131,8 +143,14 @@ jobs:
               ~/Library/Caches/Coursier/v1
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-      - name: Runs node tests
-        run: sbt -Denv=test clean ++${{ matrix.scala }} test
+      - name: Runs node tests with coverage
+        run: sbt -Denv=test clean ++${{ matrix.scala }} coverAll
+
+      - name: Upload node coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-coverage-report-${{ matrix.scala }}
+          path: target/scala-${{ matrix.scala }}/scoverage-report/
 
   test_it:
      name: Run it node tests
@@ -166,8 +184,61 @@ jobs:
              ~/Library/Caches/Coursier/v1
            key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
-       - name: Runs it node tests
+       - name: Runs it node tests with coverage
          run: |
            cd it
            mkdir tmp
-           TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++${{ matrix.scala }} it:test
+           TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++${{ matrix.scala }} coverage it:test coverageReport
+
+       - name: Upload it coverage report
+         uses: actions/upload-artifact@v4
+         with:
+           name: it-coverage-report-${{ matrix.scala }}
+           path: it/target/scala-${{ matrix.scala }}/scoverage-report/
+
+  coverage-upload:
+    name: Upload coverage reports
+    needs: [test_wallet, test_core, test_node, test_it]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-reports
+
+      - name: List coverage reports
+        run: find coverage-reports -name "scoverage.xml" -o -name "index.html" | head -20
+
+      - name: Generate coverage summary
+        run: |
+          echo "Coverage Reports Summary:"
+          echo "======================="
+          reports=$(find coverage-reports -name "scoverage.xml")
+          if [ -z "$reports" ]; then
+            echo "No coverage reports found!"
+            exit 1
+          fi
+          for report in $reports; do
+            echo "Report: $report"
+            # Extract coverage percentage from scoverage.xml
+            if grep -q 'statement-rate' "$report"; then
+              stmt_rate=$(grep -o 'statement-rate="[0-9.]*"' "$report" | cut -d'"' -f2)
+              branch_rate=$(grep -o 'branch-rate="[0-9.]*"' "$report" | cut -d'"' -f2)
+              echo "  Statement Coverage: ${stmt_rate}%"
+              echo "  Branch Coverage: ${branch_rate}%"
+            fi
+            echo ""
+          done
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-reports/**/scoverage.xml
+          flags: scala
+          name: ergo-codecov
+        if: ${{ secrets.CODECOV_TOKEN != '' }}

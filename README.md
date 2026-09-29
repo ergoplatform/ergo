@@ -2,6 +2,8 @@
 
 # Ergo
 
+![Code Coverage](https://codecov.io/gh/ergoplatform/ergo/branch/develop/graph/badge.svg)
+
 Welcome to the repository for the [Ergo Platform](https://ergoplatform.org/). Ergo is a Proof-of-Work cryptocurrency protocol that has been designed to offer a secure environment for new kinds of money, peer-to-peer interactions, trust-minimized financial tooling and derivatives. This repository contains the reference client, also known as the node, for Ergo.
 
 The reference client is primarily written in Scala. While certain components of the protocol are implemented in other languages (for instance, [sigma-rust](https://github.com/ergoplatform/sigma-rust) is a Rust-based implementation of the ErgoScript cryptocurrency scripting language), the reference client provides the most complete and comprehensive implementation of the Ergo protocol at the moment.
@@ -30,6 +32,17 @@ The Ergo client operates under certain assumptions about its environment:
 
 * The execution environment is trusted. Although the seed is stored in an encrypted file, and the client's wallet attempts to purge the secret key from memory as soon as it is no longer needed, the client does not have defenses against side-channel attacks, memory scans, etc.
 * Clocks are expected to be synchronized to a reasonable degree. If a block's timestamp is more than 20 minutes into the future, the block will be temporarily rejected. The client does not utilize NTP or other time synchronization protocols.
+
+## Code Coverage
+
+This project uses [Scoverage](https://github.com/scoverage/sbt-scoverage) for code coverage reporting. Coverage reports are generated on every commit and uploaded to [Codecov](https://codecov.io/gh/ergoplatform/ergo).
+
+To enable Codecov uploads, set the `CODECOV_TOKEN` secret in your GitHub repository settings.
+
+### Coverage Commands
+- `sbt coverAll` - Run all tests with coverage and generate aggregated reports
+- `sbt coverCore` - Run ergo-core tests with coverage
+- `sbt coverWallet` - Run wallet tests with coverage
 
 ## Building and Running the Node and UI
 

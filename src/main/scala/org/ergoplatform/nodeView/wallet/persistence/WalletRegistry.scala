@@ -158,7 +158,15 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * Unspent boxes belong to the wallet (payments scan)
     */
   def walletUnspentBoxes(limit: Int = Int.MaxValue): Seq[TrackedBox] = unspentBoxes(Constants.PaymentsScanId, limit)
-
+  /**
+  * Read unspent wallet boxes within height range (payments scan)
+  *
+  * @param heightFrom - min inclusion height of unspent boxes
+  * @param heightTo   - max inclusion height of unspent boxes
+  * @return sequences of wallet-related unspent boxes found in the database
+  */
+def walletUnspentBoxesByInclusionHeight(heightFrom: Height, heightTo: Height): Seq[TrackedBox] =
+  unspentBoxesByInclusionHeight(Constants.PaymentsScanId, heightFrom, heightTo)
   /**
     * Spent boxes belong to the wallet (payments scan)
     */

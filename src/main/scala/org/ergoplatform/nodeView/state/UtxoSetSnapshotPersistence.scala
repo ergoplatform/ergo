@@ -62,10 +62,12 @@ trait UtxoSetSnapshotPersistence extends ScorexLogging {
       Future {
         log.info("Started work within future")
         val ft0 = System.currentTimeMillis()
-        dumpSnapshot(height, expectedRootHash)
+        dumpSnapshot(height, expectedRootHash).get
         snapshotsDb.pruneSnapshots(ergoSettings.nodeSettings.utxoSettings.storingUtxoSnapshots)
         val ft = System.currentTimeMillis()
         log.info("Work within future finished in: " + (ft - ft0) + " ms.")
+      }(scala.concurrent.ExecutionContext.Implicits.global).failed.foreach { e =>
+        log.error(s"Snapshot persistence failed at height $height", e)
       }(scala.concurrent.ExecutionContext.Implicits.global)
       val ms = System.currentTimeMillis()
       log.info("Main thread time to dump utxo set snapshot: " + (ms - ms0) + " ms.")

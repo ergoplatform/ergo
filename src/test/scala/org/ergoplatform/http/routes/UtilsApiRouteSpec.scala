@@ -12,8 +12,10 @@ import org.ergoplatform.http.api.ErgoUtilsApiRoute
 import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.ergoplatform.wallet.crypto.MessageSigning
 import scorex.util.encode.Base16
 import sigma.serialization.ErgoTreeSerializer
+import sigmastate.interpreter.HintsBag
 
 import scala.concurrent.duration._
 
@@ -150,6 +152,79 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("address").as[String] shouldEqual Right(invalidAddress)
       c.downField("isValid").as[Boolean] shouldEqual Right(false)
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
+    }
+  }
+
+  private val signer = defaultProver
+  private val signerAddress =
+    P2PKAddress(signer.hdPubKeys.head.key)(settings.addressEncoder)
+
+  private def signedRequest(message: String): Json = {
+    val signedMessage =
+      MessageSigning.wrap(message.getBytes("UTF-8"), MessageSigning.freshSalt())
+    val key = signer.hdPubKeys.head.key
+    val proof = signer.signMessage(key, signedMessage, HintsBag.empty).get
+    Json.obj(
+      "address" -> Json.fromString(signerAddress.toString),
+      "signedMessage" -> Json.fromString(Base16.encode(signedMessage)),
+      "proof" -> Json.fromString(Base16.encode(proof))
+    )
+  }
+
+  it should "verify a signed message" in {
+    val message = "I am the owner of this address"
+    Post(s"$prefix/verifyMessage", signedRequest(message)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("isValid").as[Boolean] shouldEqual Right(true)
+      // the caller is told what the signature attests to, not just that it is well formed
+      c.downField("message").as[String] shouldEqual Right(message)
+    }
+  }
+
+  it should "not verify a signed message for another address" in {
+    val other = P2PKAddress(signer.hdPubKeys.last.key)(settings.addressEncoder)
+    val request = signedRequest("hi")
+      .deepMerge(Json.obj("address" -> Json.fromString(other.toString)))
+    Post(s"$prefix/verifyMessage", request) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("isValid").as[Boolean] shouldEqual Right(false)
+    }
+  }
+
+  it should "not verify a message which was not wrapped for signing" in {
+    // a proof over bare bytes could be a transaction input proof, so it is not accepted
+    val bare = "I am the owner of this address".getBytes("UTF-8")
+    val proof = signer.signMessage(signer.hdPubKeys.head.key, bare, HintsBag.empty).get
+    val request = Json.obj(
+      "address" -> Json.fromString(signerAddress.toString),
+      "signedMessage" -> Json.fromString(Base16.encode(bare)),
+      "proof" -> Json.fromString(Base16.encode(proof))
+    )
+    Post(s"$prefix/verifyMessage", request) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("isValid").as[Boolean] shouldEqual Right(false)
+      c.downField("message").as[Option[String]] shouldEqual Right(None)
+    }
+  }
+
+  it should "reject a verification request which does not parse" in {
+    val request = Json.obj("address" -> Json.fromString(signerAddress.toString))
+    Post(s"$prefix/verifyMessage", request) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "refuse to verify a message against an address which is not a P2PK one" in {
+    // only a P2PK address carries a public key to check a signature against
+    val request = signedRequest("hi")
+      .deepMerge(Json.obj("address" -> Json.fromString(p2saddress.toString)))
+    Post(s"$prefix/verifyMessage", request) ~> Route.seal(route) ~> check {
+      status shouldBe StatusCodes.BadRequest
+      // the request parses, the address is simply of the wrong kind - pin that branch
+      val detail = responseAs[Json].hcursor.downField("detail").as[String]
+      detail.toOption.get should include("not a P2PK address")
     }
   }
 

@@ -49,6 +49,7 @@ case class NodeConfigurationSettings(override val stateType: StateType,
                                      headerChainDiff: Int,
                                      adProofsSuffixLength: Int,
                                      extraIndex: Boolean,
+                                     rejectStorageRentTxs: Boolean = false,
                                      blacklistedTransactions: Seq[String] = Seq.empty,
                                      checkpoint: Option[CheckpointSettings] = None) extends ClientCapabilities {
   /**
@@ -94,6 +95,7 @@ trait NodeConfigurationReaders extends StateTypeReaders with CheckpointingSettin
       cfg.as[Int](s"$path.headerChainDiff"),
       cfg.as[Int](s"$path.adProofsSuffixLength"),
       cfg.as[Boolean](s"$path.extraIndex"),
+      cfg.as[Boolean](s"$path.rejectStorageRentTxs"),
       cfg.as[Seq[String]](s"$path.blacklistedTransactions"),
       cfg.as[Option[CheckpointSettings]](s"$path.checkpoint")
     )

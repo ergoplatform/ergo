@@ -42,10 +42,12 @@ class ErgoPeersApiRoute(peerManager: ActorRef,
   }
 
   def allPeers: Route = (path("all") & get) {
-    val result = askActor[Map[InetSocketAddress, PeerInfo]](peerManager, GetAllPeers).map {
-      _.map { case (address, peerInfo) =>
-        PeerInfoResponse.fromAddressAndInfo(address, peerInfo)
-      }
+    val result = askActor[Map[InetSocketAddress, PeerInfo]](peerManager, GetAllPeers).map { peers =>
+      peers.toSeq
+        .sortBy(_._1.toString)
+        .map { case (address, peerInfo) =>
+          PeerInfoResponse.fromAddressAndInfo(address, peerInfo)
+        }
     }
     ApiResponse(result)
   }

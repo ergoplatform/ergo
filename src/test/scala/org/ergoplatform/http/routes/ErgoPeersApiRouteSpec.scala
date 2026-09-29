@@ -15,6 +15,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.core.network.NetworkController.ReceivableMessages.GetConnectedPeers
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.GetAllPeers
+import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.settings.RESTApiSettings
 
 import java.net.InetSocketAddress
@@ -87,6 +88,24 @@ class ErgoPeersApiRouteSpec extends AnyFlatSpec
         c.downField("name").as[String] shouldEqual Right(peer.peerInfo.get.peerSpec.nodeName)
         c.downField("connectionType").as[String] shouldEqual Right("Incoming")
       }
+    }
+  }
+
+  it should "return all known peers" in {
+    val networkControllerProbe = TestProbe()
+    val route: Route = ErgoPeersApiRoute(peerManagerProbe.ref, networkControllerProbe.ref, null, null, restApiSettings).route
+    val peers = (1 to 55).map { i =>
+      val addr = new InetSocketAddress(s"8.8.0.$i", 9000 + i)
+      addr -> PeerInfo.fromAddress(addr)
+    }.toMap
+    Future {
+      peerManagerProbe.expectMsg(GetAllPeers)
+      peerManagerProbe.reply(peers)
+    }
+
+    Get("/peers/all") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].asArray.get.size shouldBe 55
     }
   }
 }

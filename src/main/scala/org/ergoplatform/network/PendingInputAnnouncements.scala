@@ -17,10 +17,6 @@ import scala.collection.mutable
   * while connection-scoped disposal removes entries when that sender disconnects.
   * Replay starts immediately on ordering apply, in arrival order, once history
   * and state agree on the applied tip; bounded batches continue via self-messages.
-  * TODO(restart lag): short, unfunded early-chain devnet restarts showed higher
-  * input-tip lag than stock. Hypothesis: the replay burst immediately after apply
-  * near genesis. A longer funded restart did not reproduce it; the cause is not
-  * isolated, so replay scheduling is unchanged.
   */
 final class PendingInputAnnouncements(maxEntries: Int,
                                       maxBytes: Long,

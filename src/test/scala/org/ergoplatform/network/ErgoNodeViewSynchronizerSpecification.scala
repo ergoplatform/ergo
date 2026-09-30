@@ -3615,6 +3615,10 @@ class ErgoNodeViewSynchronizerSpecification
       synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
       Thread.sleep(500)
 
+      // requested from this peer: dropped here, so not left for a non-delivery check either
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      deliveryTracker.setRequested(InputBlockTypeId.value, inputBlockInfo.id, peer)(_ => Cancellable.alreadyCancelled)
+
       // processInputBlock should return early because usrOpt is None
       val synchronizer = synchronizerMockRef.underlyingActor
       synchronizer.processInputBlock(
@@ -3624,6 +3628,7 @@ class ErgoNodeViewSynchronizerSpecification
         peer,
         None
       )
+      deliveryTracker.status(inputBlockInfo.id, InputBlockTypeId.value, Seq.empty) shouldBe Unknown
 
       // No network messages and no penalization should occur
       Thread.sleep(200)
@@ -3818,6 +3823,10 @@ class ErgoNodeViewSynchronizerSpecification
         Some(expectedNBits)
       ) shouldBe false
 
+      // requested from this peer: a delivered but invalid input block is not left for a non-delivery check
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      deliveryTracker.setRequested(InputBlockTypeId.value, invalidInputBlock.id, peer)(_ => Cancellable.alreadyCancelled)
+
       synchronizerMockRef.underlyingActor.processInputBlock(
         invalidInputBlock,
         hist,
@@ -3825,6 +3834,7 @@ class ErgoNodeViewSynchronizerSpecification
         peer,
         Some(wrappedState)
       )
+      deliveryTracker.status(invalidInputBlock.id, InputBlockTypeId.value, Seq.empty) shouldBe Unknown
 
       val messages = ncProbe.receiveWhile(max = 2 seconds, idle = 200.millis) {
         case m => m
@@ -4054,6 +4064,80 @@ class ErgoNodeViewSynchronizerSpecification
         case _ => false
       }
       reRequest.asInstanceOf[SendToNetwork].sendingStrategy shouldBe SendToPeer(otherPeer)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: a re-requested input block is tracked as requested from the peer asked"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.CheckDelivery
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val inputBlockId = bytesToId(Array.fill(32)(0xFC.toByte))
+      val invData      = InvData(InputBlockTypeId.value, Seq(inputBlockId))
+      val otherPeer    = peer.copy(connectionId = connectionIdGen.sample.get)
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+      ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(otherPeer))
+      ncProbe.expectNoMessage(500.millis)
+
+      synchronizerMockRef ! CheckDelivery(peer, InputBlockTypeId.value, inputBlockId)
+      ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(inputBlockId)
+        case _ => false
+      }
+      Thread.sleep(300)
+
+      // tracked, so a further delivery check can follow up on the second peer
+      deliveryTracker.status(inputBlockId, InputBlockTypeId.value, Seq.empty) shouldBe Requested
+      deliveryTracker.getRequestedInfo(InputBlockTypeId.value, inputBlockId).map(_.peer) shouldBe Some(otherPeer)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: an announcer that disconnected is not used for an input-block re-request"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{CheckDelivery, DisconnectedPeer}
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val inputBlockId = bytesToId(Array.fill(32)(0xFD.toByte))
+      val invData      = InvData(InputBlockTypeId.value, Seq(inputBlockId))
+      val otherPeer    = peer.copy(connectionId = connectionIdGen.sample.get)
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+      ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(otherPeer))
+      synchronizerMockRef ! DisconnectedPeer(otherPeer)
+      ncProbe.expectNoMessage(500.millis)
+
+      synchronizerMockRef ! CheckDelivery(peer, InputBlockTypeId.value, inputBlockId)
+      val reRequest = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(inputBlockId)
+        case _ => false
+      }
+      reRequest.asInstanceOf[SendToNetwork].sendingStrategy shouldBe SendToPeer(peer)
     }
   }
 

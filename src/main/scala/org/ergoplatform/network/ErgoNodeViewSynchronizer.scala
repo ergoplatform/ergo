@@ -178,6 +178,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
 
   /**
+    * For an input block requested from one peer, another peer that announced it while the request was open (the Inv
+    * filter drops that announcement). A delivery check that finds the block missing re-requests it from this peer
+    * rather than from the one that did not deliver. At most one per id; cleared when the id is released, on a retry,
+    * when an ordering block is applied, and on `ChainIsStuck`.
+    */
+  private val inputBlockAlternates = mutable.Map[ModifierId, ConnectedPeer]()
+
+  private val MaxInputBlockAlternates = 1000
+
+  /**
     * How many peers should have a utxo set snapshot to start downloading it
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
@@ -1191,6 +1201,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         } else {
           log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
+          if (modifierTypeId == InputBlockTypeId.value) {
+            rememberInputBlockAlternates(invData.ids, peer)
+          }
           invData.ids.filter { mid =>
             deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown &&
               // input blocks are not kept in the modifier store: an announced one this node already holds
@@ -1425,8 +1438,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * left to track: the Inv filter skips input blocks this node holds, so `Unknown` cannot lead to a re-request.
     */
   private def releaseInputBlockTracking(id: ModifierId): Unit = {
+    inputBlockAlternates.remove(id)
     if (deliveryTracker.status(id, InputBlockTypeId.value, Seq.empty) != ModifiersStatus.Unknown) {
       deliveryTracker.setUnknown(id, InputBlockTypeId.value)
+    }
+  }
+
+  /**
+    * Remember `peer` as the alternate source of each announced input block that is currently requested from
+    * another peer (see `inputBlockAlternates`).
+    */
+  private def rememberInputBlockAlternates(ids: Seq[ModifierId], peer: ConnectedPeer): Unit = {
+    ids.foreach { id =>
+      deliveryTracker.getRequestedInfo(InputBlockTypeId.value, id) match {
+        case Some(info) if info.peer != peer &&
+                           !inputBlockAlternates.contains(id) &&
+                           inputBlockAlternates.size < MaxInputBlockAlternates =>
+          inputBlockAlternates.put(id, peer)
+        case _ => ()
+      }
     }
   }
 
@@ -2041,8 +2071,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         modifierTypeId == OrderingBlockAnnouncementTypeId.value) {
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               if (modifierTypeId == InputBlockTypeId.value && checksDone < 2) {
-                log.info(s"re-requesting input block $modifierId")
-                requestInputBlock(modifierId, peer)
+                // another peer announced it while the request was open: ask that one instead
+                val retryPeer = inputBlockAlternates.remove(modifierId).getOrElse(peer)
+                log.info(s"re-requesting input block $modifierId from $retryPeer")
+                requestInputBlock(modifierId, retryPeer)
               } else {
                 log.info(s"re-requesting input txs $modifierId")
                 hr.getInputBlock(modifierId).foreach { ibi =>
@@ -2380,6 +2412,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (historyReader.fullBlockHeight > 0) {
         log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
         deliveryTracker.reset()
+        inputBlockAlternates.clear()
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
@@ -2423,6 +2456,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       finished.foreach { id =>
         deliveryTracker.setUnknown(id, InputBlockTypeId.value)
       }
+      inputBlockAlternates.clear()
   }
 
   /** handlers of messages coming from peers */

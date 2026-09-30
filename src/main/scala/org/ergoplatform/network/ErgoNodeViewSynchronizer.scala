@@ -2458,7 +2458,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 
     // this signal is sent on ordering block application: the input blocks of the finished slot need no delivery
-    // tracking any more (including stored ones that never became best), so the tracker holds at most one slot's
+    // tracking any more (including stored ones that never became best), so the tracker holds at most one slot's worth
     case NewBestInputBlock(None, _) =>
       val finished = deliveryTracker.fullInfo.received.filter(_._1 == InputBlockTypeId.value).flatMap(_._2.keys).toList
       finished.foreach { id =>

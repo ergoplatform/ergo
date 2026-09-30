@@ -1982,7 +1982,7 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
-  property("NodeViewSynchronizer: a requested input block that arrives already held is marked received") {
+  property("NodeViewSynchronizer: a requested input block that arrives already held is released from tracking") {
     withFixture2 { ctx =>
       import ctx._
       import org.ergoplatform.modifiers.InputBlockTypeId
@@ -1995,8 +1995,68 @@ class ErgoNodeViewSynchronizerSpecification
       val copy = InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, InputBlockFields.empty, None)
       synchronizerMockRef.underlyingActor.processInputBlock(copy, hist, ErgoMemPool.empty(settings), subBlocksPeer, Some(state))
 
-      // delivered, though redundant: not left Requested, where a delivery check would count it against the supplier
-      deliveryTracker.status(header.id, InputBlockTypeId.value, Seq.empty) shouldBe Received
+      // delivered, though redundant: neither left Requested (a delivery check would count it against the supplier)
+      // nor Received (input blocks are never set Held, so the entry would stay until a ChainIsStuck reset)
+      deliveryTracker.status(header.id, InputBlockTypeId.value, Seq.empty) shouldBe Unknown
+    }
+  }
+
+  property("NodeViewSynchronizer: input blocks still Received are released when an ordering block is applied") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+
+      val (_, chain, subBlocksPeer, _) = relayFixture(ctx)
+      val id = chain(1).header.id
+      // validated (Received) but never announced as best: without a release it would stay until ChainIsStuck
+      deliveryTracker.setRequested(InputBlockTypeId.value, id, subBlocksPeer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setReceived(id, InputBlockTypeId.value, subBlocksPeer)
+      deliveryTracker.status(id, InputBlockTypeId.value, Seq.empty) shouldBe Received
+
+      synchronizerMockRef ! NewBestInputBlock(None, local = false)
+      Thread.sleep(300)
+      deliveryTracker.status(id, InputBlockTypeId.value, Seq.empty) shouldBe Unknown
+    }
+  }
+
+  property("NodeViewSynchronizer: a delivery check for an input block already held releases it without a request") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.CheckDelivery
+
+      val (_, chain, subBlocksPeer, _) = relayFixture(ctx)
+      val header = chain.head.header // its input block is held (relayFixture stores it)
+      deliveryTracker.setRequested(InputBlockTypeId.value, header.id, subBlocksPeer)(_ => Cancellable.alreadyCancelled)
+
+      synchronizerMockRef ! CheckDelivery(subBlocksPeer, InputBlockTypeId.value, header.id)
+      Thread.sleep(300)
+      deliveryTracker.status(header.id, InputBlockTypeId.value, Seq.empty) shouldBe Unknown
+      // no re-request of an input block this node already has
+      ncProbe.expectNoMessage(500.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: an input block dropped for its height clears only its supplier's request") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+
+      val (hist, _, subBlocksPeer, state) = relayFixture(ctx)
+      val far = genChain(10, hist).last.header // height 10, full height 0: outside the +-2 window
+      val announcement = InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, far, InputBlockFields.empty, None)
+      val otherPeer = subBlocksPeer.copy(connectionId = connectionIdGen.sample.get)
+
+      // requested from another peer: an unsolicited copy from this one must not erase that request
+      deliveryTracker.setRequested(InputBlockTypeId.value, far.id, otherPeer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef.underlyingActor.processInputBlock(announcement, hist, ErgoMemPool.empty(settings), subBlocksPeer, Some(state))
+      deliveryTracker.status(far.id, InputBlockTypeId.value, Seq.empty) shouldBe Requested
+
+      // requested from this peer and delivered: dropped, so cleared rather than left for a delivery check to penalize
+      deliveryTracker.setUnknown(far.id, InputBlockTypeId.value)
+      deliveryTracker.setRequested(InputBlockTypeId.value, far.id, subBlocksPeer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef.underlyingActor.processInputBlock(announcement, hist, ErgoMemPool.empty(settings), subBlocksPeer, Some(state))
+      deliveryTracker.status(far.id, InputBlockTypeId.value, Seq.empty) shouldBe Unknown
     }
   }
 

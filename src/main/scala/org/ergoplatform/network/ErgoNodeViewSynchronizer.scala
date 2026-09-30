@@ -1462,7 +1462,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /**
     * Peers an input block (or its id) is sent to: those supporting sub-blocks, in UTXO mode, and within two blocks
-    * of this node's full-block height.
+    * of this node's full-block height. The peer height is the one tracked from its last sync message, which can lag
+    * a peer that is in fact at the tip (#2597).
     */
   private def inputBlockRecipients(historyReader: ErgoHistoryReader): Seq[ConnectedPeer] = {
     syncTracker.statuses.filter { s =>
@@ -2437,9 +2438,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             val msg = Message(InputBlockMessageSpec, Right(ibi), None)
             networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
           } else if (peers.nonEmpty) {
-            // an input block received from a peer: announce its id only, as ordering-block announcements are
-            // relayed, so it travels beyond the miner's own peers; a peer that lacks it requests it
-            // (processInv -> modifiersReq -> processInputBlockRequest)
+            // an input block received from a peer: announce its id only (the `todo: send only id out` of 546eee98e),
+            // so it travels beyond the miner's own peers; a peer that lacks it requests it
+            // (processInv -> modifiersReq -> processInputBlockRequest). Unlike an ordering-block announcement, which
+            // is relayed on receipt, this runs once the input block is applied, so each hop adds its fetch and apply.
+            log.debug(s"Relaying input block $id to ${peers.size} peers")
             val msg = Message(InvSpec, Right(InvData(InputBlockTypeId.value, Seq(id))), None)
             networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
           }

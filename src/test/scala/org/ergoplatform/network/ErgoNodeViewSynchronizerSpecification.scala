@@ -4017,6 +4017,47 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: an undelivered input block is re-requested from another peer that announced it"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.CheckDelivery
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import scorex.core.network.SendToPeer
+      import scorex.util.bytesToId
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+
+      val inputBlockId = bytesToId(Array.fill(32)(0xFB.toByte))
+      val invData      = InvData(InputBlockTypeId.value, Seq(inputBlockId))
+      val otherPeer    = peer.copy(connectionId = connectionIdGen.sample.get)
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+
+      val initial = ncProbe.expectMsgClass(3 seconds, classOf[SendToNetwork])
+      initial.message.spec.messageCode shouldBe RequestModifierSpec.messageCode
+      initial.sendingStrategy shouldBe SendToPeer(peer)
+
+      // announced by a second peer while the first request is open: not requested again now
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(otherPeer))
+      ncProbe.expectNoMessage(500.millis)
+
+      synchronizerMockRef ! CheckDelivery(peer, InputBlockTypeId.value, inputBlockId)
+
+      val reRequest = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(inputBlockId)
+        case _ => false
+      }
+      reRequest.asInstanceOf[SendToNetwork].sendingStrategy shouldBe SendToPeer(otherPeer)
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: delivered input block clears Requested status so CheckDelivery does not re-request"
   ) {
     withFixture2 { ctx =>

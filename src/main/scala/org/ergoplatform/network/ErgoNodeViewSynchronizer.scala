@@ -2425,9 +2425,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     // todo: broadcast only locally generated new best input block?
     case NewBestInputBlock(Some(id), local) =>
-      releaseInputBlockTracking(id)
       historyReader.getInputBlock(id) match {
         case Some(preIbi) =>
+          releaseInputBlockTracking(id)
           val peers = inputBlockRecipients(historyReader)
           if (local) {
             log.debug(s"Sending locally generated input block $id out")

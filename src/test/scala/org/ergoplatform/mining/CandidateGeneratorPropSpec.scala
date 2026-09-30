@@ -183,6 +183,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       }
 
       fromBigMempool.length should be > 2
+      fromBigMempool.map(_.encodedId).distinct.length shouldBe fromBigMempool.length
       fromBigMempool.map(_.size).sum should be < maxSize
       costs.sum should be < maxCost
       if (!withTokens) fromBigMempool.size should be < txsWithFees.size

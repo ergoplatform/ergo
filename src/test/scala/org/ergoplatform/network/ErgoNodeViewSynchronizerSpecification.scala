@@ -1067,6 +1067,83 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: a peer's header Inv on our best chain raises its recorded height for input-block relay"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.{InvData, InvSpec}
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.utils.generators.ChainGenerator.applyChain
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val applied = genChain(8, hist)
+      applyChain(hist, applied)
+      val fullHeight = hist.fullBlockHeight
+      val header = genChain(3, hist).map(_.header).find(_.height == fullHeight + 1).get
+      def appliedAt(h: Int) = applied.map(_.header).find(_.height == h).get
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+      hist.applyInputBlock(
+        InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, InputBlockFields.empty, None)
+      )
+
+      val peerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      def newPeer(): ConnectedPeer =
+        ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(PeerInfo(peerSpec, System.currentTimeMillis())))
+      def headerInv(from: ConnectedPeer, ids: Seq[scorex.util.ModifierId]) =
+        Message(InvSpec, Left(InvSpec.toBytes(InvData(Header.modifierTypeId, ids))), Some(from))
+
+      // at the tip in fact, recorded 3 below it; it announces (after applying) the header at our full height
+      val caughtUp = newPeer()
+      syncTracker.updateStatus(caughtUp, Equal, Some(fullHeight - 3))
+      synchronizerMockRef ! headerInv(caughtUp, Seq(appliedAt(fullHeight).id))
+      // really behind: it announces a header five below our height
+      val behind = newPeer()
+      syncTracker.updateStatus(behind, Equal, Some(fullHeight - 6))
+      synchronizerMockRef ! headerInv(behind, Seq(appliedAt(fullHeight - 5).id))
+      // a header the node does not hold raises nothing
+      val offChain = newPeer()
+      syncTracker.updateStatus(offChain, Equal, Some(fullHeight - 3))
+      synchronizerMockRef ! headerInv(offChain, Seq(header.id))
+      Thread.sleep(300)
+
+      syncTracker.statuses.get(caughtUp).map(_.height) shouldBe Some(fullHeight)
+      syncTracker.statuses.get(behind).map(_.height) shouldBe Some(fullHeight - 5)
+      syncTracker.statuses.get(offChain).map(_.height) shouldBe Some(fullHeight - 3)
+
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+      val msg = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == InputBlockMessageSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      msg.sendingStrategy match {
+        case SendToPeers(peers) =>
+          peers should contain(caughtUp)
+          peers should not contain behind
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with txs when <= 3 transactions"
   ) {
     withFixture2 { ctx =>

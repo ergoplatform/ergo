@@ -418,6 +418,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     } else {
       log.debug(s"Spammy sync detected from $remote")
+      // the comparison and reply are skipped, but keep the peer's latest reported height: a peer applying a run of
+      // headers sends SyncInfos back to back, and dropping all but the first would leave its oldest height recorded,
+      // which the relay filters then read as stale
+      syncInfo match {
+        case syncV2: ErgoSyncInfoV2 if syncV2.height.isDefined =>
+          syncTracker.getStatus(remote).foreach(status => syncTracker.updateStatus(remote, status, syncV2.height))
+        case _ =>
+      }
     }
   }
 

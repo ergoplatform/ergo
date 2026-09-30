@@ -2019,6 +2019,23 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  property("NodeViewSynchronizer: a best-input-block signal the history cannot show yet keeps its tracking") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.modifiers.InputBlockTypeId
+
+      val (_, chain, subBlocksPeer, _) = relayFixture(ctx)
+      val id = chain(1).header.id // not stored in this history: a reader that does not show the block yet
+      deliveryTracker.setRequested(InputBlockTypeId.value, id, subBlocksPeer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setReceived(id, InputBlockTypeId.value, subBlocksPeer)
+
+      synchronizerMockRef ! NewBestInputBlock(Some(id), local = false)
+      Thread.sleep(300)
+      // released only once the block is visible: otherwise a relayed Inv could fetch it again
+      deliveryTracker.status(id, InputBlockTypeId.value, Seq.empty) shouldBe Received
+    }
+  }
+
   property("NodeViewSynchronizer: a delivery check for an input block already held releases it without a request") {
     withFixture2 { ctx =>
       import ctx._

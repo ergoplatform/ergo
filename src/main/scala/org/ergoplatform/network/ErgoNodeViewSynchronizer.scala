@@ -181,7 +181,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * For an input block requested from one peer, another peer that announced it while the request was open (the Inv
     * filter drops that announcement). A delivery check that finds the block missing re-requests it from this peer
     * rather than from the one that did not deliver. At most one per id; cleared when the id is released, on a retry,
-    * when an ordering block is applied, and on `ChainIsStuck`.
+    * when the alternate disconnects, when an ordering block is applied, and on `ChainIsStuck`.
     */
   private val inputBlockAlternates = mutable.Map[ModifierId, ConnectedPeer]()
 
@@ -1553,6 +1553,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Digest mode nodes cannot validate input blocks properly (validation is skipped when usrOpt is empty)
     if (usrOpt.isEmpty) {
       log.warn(s"Received input block but local node is in digest mode - input blocks cannot be validated in digest mode, ignoring")
+      clearRequestedIfFromSupplier(inputBlockInfo.id, InputBlockTypeId.value, remote)
       return
     }
 
@@ -1645,6 +1646,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        // delivered, so not also a non-delivery: the misbehaviour penalty is the one that applies
+        clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         penalizeMisbehavingPeer(remote)
       }
     } else {
@@ -2075,7 +2078,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 // another peer announced it while the request was open: ask that one instead
                 val retryPeer = inputBlockAlternates.remove(modifierId).getOrElse(peer)
                 log.info(s"re-requesting input block $modifierId from $retryPeer")
-                requestInputBlock(modifierId, retryPeer)
+                // tracked like any block section, so a further delivery check follows up on this peer
+                requestBlockSection(modifierTypeId, Seq(modifierId), retryPeer, checksDone)
               } else {
                 log.info(s"re-requesting input txs $modifierId")
                 hr.getInputBlock(modifierId).foreach { ibi =>
@@ -2149,6 +2153,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      inputBlockAlternates.retain { case (_, alternate) => alternate != connectedPeer }
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {

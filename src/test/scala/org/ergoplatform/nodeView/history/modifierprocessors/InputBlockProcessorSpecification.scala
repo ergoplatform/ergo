@@ -323,6 +323,54 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
   }
 
+  property("shared-root completion preserves progress in every waiting fork") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+      val siblings = (0 until 3).map { _ =>
+        InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None)
+      }
+      (root +: siblings).foreach(h.applyInputBlock(_) shouldBe None)
+      val chains = h.inputBlocksTree().get.forks.map(_.chain)
+      chains.size shouldBe 3
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(-1, -1, -1)
+
+      h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe (Seq(root.id) -> Seq.empty)
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe chains
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(0, 0, 0)
+      h.bestInputBlocksChain() shouldBe Seq(root.id)
+
+      h.applyInputBlockTransactions(siblings.head.id, Seq.empty, us) shouldBe
+        (Seq(siblings.head.id) -> Seq.empty)
+      h.bestInputBlocksChain() shouldBe Seq(siblings.head.id, root.id)
+    }
+  }
+
+  property("fork-switch completion preserves the selected branch and shared progress") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+      def childOf(parent: InputBlockAnnouncement): InputBlockAnnouncement =
+        InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(parent.id)), None)
+      val oldTip = childOf(root)
+      val shared = childOf(root)
+      val newTip = childOf(shared)
+      val sibling = childOf(shared)
+      Seq(root, oldTip, shared, newTip, sibling).foreach(h.applyInputBlock(_) shouldBe None)
+      val chains = Seq(Seq(root.id, oldTip.id), Seq(root.id, shared.id, newTip.id),
+        Seq(root.id, shared.id, sibling.id))
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe chains
+
+      h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe (Seq(root.id) -> Seq.empty)
+      h.applyInputBlockTransactions(oldTip.id, Seq.empty, us) shouldBe (Seq(oldTip.id) -> Seq.empty)
+      h.applyInputBlockTransactions(shared.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
+      h.applyInputBlockTransactions(newTip.id, Seq.empty, us) shouldBe
+        (Seq(shared.id, newTip.id) -> Seq(oldTip.id))
+
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe chains
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(1, 2, 1)
+      h.bestInputBlocksChain() shouldBe Seq(newTip.id, shared.id, root.id)
+    }
+  }
+
   property("create separate sibling forks for descendants of the same parent") {
     withInputBlockFixture { (us, h, orderingParent, _) =>
     val rootIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)

@@ -124,14 +124,20 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val hit = hitForVersion2(header)
 
     val b = getB(header.nBits)
-    hit < b
+    isOrderingHit(hit, b)
   }
 
   def checkInputBlockPoW(header: Header, parameters: Parameters): Boolean = {
     val hit = hitForVersion2(header) // todo: cache hit in header
 
     val orderingTarget = getB(header.nBits)
-    val inputTarget = orderingTarget * parameters.subBlocksPerBlock
+    isInputHit(hit, orderingTarget, parameters.subBlocksPerBlock)
+  }
+
+  def isOrderingHit(hit: BigInt, b: BigInt): Boolean = hit < b
+
+  def isInputHit(hit: BigInt, b: BigInt, n: Int): Boolean = {
+    val inputTarget = b * n
     hit < inputTarget
   }
   /**
@@ -389,8 +395,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
   private[mining] def classifyHit(hit: BigInt,
                                   b: BigInt,
                                   subblocksPerBlock: Int): AutolykosPowScheme.HitClassification = {
-    if (hit < b) AutolykosPowScheme.OrderingHit
-    else if (hit < b * subblocksPerBlock) AutolykosPowScheme.InputHit
+    if (isOrderingHit(hit, b)) AutolykosPowScheme.OrderingHit
+    else if (isInputHit(hit, b, subblocksPerBlock)) AutolykosPowScheme.InputHit
     else AutolykosPowScheme.NoHit
   }
 

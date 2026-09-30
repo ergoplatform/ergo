@@ -22,8 +22,8 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
   private val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
   private def assertClassification(hit: BigInt, b: BigInt, multiplier: Int): Unit = {
-    val orderingAccepted = hit < b
-    val inputAccepted = hit < b * multiplier
+    val orderingAccepted = powScheme.isOrderingHit(hit, b)
+    val inputAccepted = powScheme.isInputHit(hit, b, multiplier)
     val verdict = powScheme.classifyHit(hit, b, multiplier)
 
     withClue(s"hit=$hit, target=$b, multiplier=$multiplier: ") {
@@ -39,11 +39,29 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
     boundary <- Seq("ordering", "input")
     offset <- Seq(-1, 0, 1)
   } {
-    property(s"prover classification should agree with validation at the $boundary " +
+    property(s"prover classification should agree with shared predicates at the $boundary " +
       s"target with offset $offset and multiplier $multiplier") {
       val b = BigInt(100)
       val target = if (boundary == "ordering") b else b * multiplier
       assertClassification(target + offset, b, multiplier)
+    }
+  }
+
+  property("isOrderingHit should accept b - 1 and reject b and b + 1") {
+    val b = BigInt(100)
+    powScheme.isOrderingHit(b - 1, b) shouldBe true
+    powScheme.isOrderingHit(b, b) shouldBe false
+    powScheme.isOrderingHit(b + 1, b) shouldBe false
+  }
+
+  Seq(1, 2, 30, 64).foreach { multiplier =>
+    property(s"isInputHit should accept b * n - 1 and reject b * n and b * n + 1 " +
+      s"with multiplier $multiplier") {
+      val b = BigInt(100)
+      val inputTarget = b * multiplier
+      powScheme.isInputHit(inputTarget - 1, b, multiplier) shouldBe true
+      powScheme.isInputHit(inputTarget, b, multiplier) shouldBe false
+      powScheme.isInputHit(inputTarget + 1, b, multiplier) shouldBe false
     }
   }
 

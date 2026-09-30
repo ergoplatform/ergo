@@ -395,10 +395,11 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
   }
 
-  property("select same-parent sibling branches in arrival order during recovery and live insertion") {
+  property("select two same-parent sibling branches in arrival order during recovery and live insertion") {
     for {
       leftFirst <- Seq(true, false)
       rootFirst <- Seq(false, true)
+      firstSiblingBodiesFirst <- Seq(true, false)
     } withInputBlockFixture { (us, h, orderingParent, _) =>
       val root = InputBlockAnnouncement(
         1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None
@@ -419,7 +420,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
         else Seq(Seq(right, rightChild), Seq(left, leftChild))
       val expectedChains = branches.map(branch => root.id +: branch.map(_.id))
 
-      withClue(s"leftFirst=$leftFirst, rootFirst=$rootFirst: ") {
+      withClue(s"leftFirst=$leftFirst, rootFirst=$rootFirst, firstSiblingBodiesFirst=$firstSiblingBodiesFirst: ") {
         if (rootFirst) {
           h.applyInputBlock(root) shouldBe None
           branches.flatten.foreach { ib =>
@@ -432,7 +433,7 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
               h.applyInputBlock(ib) shouldBe ib.prevInputBlockId
             }
           }
-          h.disconnectedWaitlist.toSet shouldBe branches.flatten.toSet
+          h.disconnectedWaitlist.toVector shouldBe branches.flatMap(_.reverse)
           h.applyInputBlock(root) shouldBe None
         }
         h.disconnectedWaitlist shouldBe empty
@@ -440,13 +441,17 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
 
         h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe
           (Seq(root.id) -> Seq.empty)
-        branches.head.foreach { ib =>
-          h.applyInputBlockTransactions(ib.id, Seq.empty, us)
-        }
-        branches(1).foreach { ib =>
+        h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(0, 0)
+        def applySecondSiblingBodies(): Unit = branches(1).foreach { ib =>
           h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
             (Seq.empty -> Seq.empty)
         }
+        if (!firstSiblingBodiesFirst) applySecondSiblingBodies()
+        branches.head.foreach { ib =>
+          h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
+            (Seq(ib.id) -> Seq.empty)
+        }
+        if (firstSiblingBodiesFirst) applySecondSiblingBodies()
         h.bestInputBlocksChain() shouldBe expectedChains.head.reverse
         h.inputBlocksTree().get.forks.head.processedIndex shouldBe 2
       }

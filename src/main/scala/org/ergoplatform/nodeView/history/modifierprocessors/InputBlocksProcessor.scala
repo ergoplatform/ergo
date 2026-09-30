@@ -717,6 +717,7 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Temporary cache of children which do not have parents downloaded yet
+    * Iteration preserves arrival order; recovery relies on it when attaching equal-length sibling forks.
     */
   private[modifierprocessors] val disconnectedWaitlist = mutable.LinkedHashSet[InputBlockAnnouncement]()
 

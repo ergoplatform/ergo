@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
+import scorex.util.ModifierId
 
 /**
  * An immutable state for extra indexer
@@ -10,12 +11,14 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
  * @param globalBoxIndex - Indexed box count
  * @param rollbackTo - blockheight to rollback to, 0 if no rollback is in progress
  * @param caughtUp - flag to indicate if the indexer is caught up with the chain and is listening for updates
+ * @param indexedHeaderId - id of the last block represented by the extra index
  */
 case class IndexerState(indexedHeight: Int,
                         globalTxIndex: Long,
                         globalBoxIndex: Long,
                         rollbackTo: Int,
-                        caughtUp: Boolean) {
+                        caughtUp: Boolean,
+                        indexedHeaderId: Option[ModifierId] = None) {
 
   def rollbackInProgress: Boolean = rollbackTo > 0
 
@@ -42,7 +45,8 @@ object IndexerState {
       globalTxIndex,
       globalBoxIndex,
       rollbackTo,
-      caughtUp = indexedHeight == history.fullBlockHeight
+      caughtUp = indexedHeight == history.fullBlockHeight,
+      indexedHeaderId = history.bestHeaderIdAtHeight(indexedHeight)
     )
   }
 

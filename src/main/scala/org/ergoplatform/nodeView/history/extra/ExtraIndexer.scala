@@ -376,7 +376,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     log.info(s"Buffered block $height / $chainHeight [txs: ${txs.length}, boxes: $boxCount] (buffer: $modCount / $saveLimit)")
 
     val maxHeight = headerOpt.map(_.height).getOrElse(chainHeight)
-    newState.copy(caughtUp = newState.indexedHeight == maxHeight)
+    newState.copy(
+      caughtUp = newState.indexedHeight == maxHeight,
+      indexedHeaderId = headerOpt.map(_.id).orElse(history.bestHeaderIdAtHeight(height))
+    )
   }
 
   /**
@@ -457,7 +460,12 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       newState = newState.incrementBoxIndex
 
       // Save changes
-      newState = newState.copy(indexedHeight = height, rollbackTo = 0, caughtUp = true)
+      newState = newState.copy(
+        indexedHeight = height,
+        rollbackTo = 0,
+        caughtUp = state.caughtUp,
+        indexedHeaderId = history.bestHeaderIdAtHeight(height)
+      )
       historyStorage.removeExtra(toRemove.toArray)
       saveProgress(newState)
     } catch {
@@ -470,10 +478,18 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   protected def loaded(state: IndexerState): Receive = {
 
     case Index() if !state.caughtUp && !state.rollbackInProgress =>
-      val newState = index(state.incrementIndexedHeight)
-      if (modCount >= saveLimit) saveProgress(newState)
-      context.become(receive.orElse(loaded(newState)))
-      self ! Index()
+      val nextHeaderOpt = history.bestHeaderAtHeight(state.indexedHeight + 1)
+      val extendsIndexedTip = nextHeaderOpt.forall { header =>
+        state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)
+      }
+      if (extendsIndexedTip) {
+        val newState = index(state.incrementIndexedHeight)
+        if (modCount >= saveLimit) saveProgress(newState)
+        context.become(receive.orElse(loaded(newState)))
+        self ! Index()
+      } else {
+        log.info("Deferring catch-up because the next header does not extend the indexed tip")
+      }
 
     case Index() if state.caughtUp =>
       if (modCount > 0) saveProgress(state)
@@ -483,16 +499,37 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 
     // after the indexer caught up with the chain, stay up to date
     case FullBlockApplied(header: Header) if state.caughtUp && !state.rollbackInProgress =>
-      if (header.height == state.indexedHeight + 1) { // applied block is next in line
+      val indexedTipStillBest = state.indexedHeight == 0 ||
+        (chainHeight >= state.indexedHeight && state.indexedHeaderId.exists { indexedHeaderId =>
+          history.bestHeaderIdAtHeight(state.indexedHeight).contains(indexedHeaderId)
+        })
+      val isDirectSuccessor = header.height == state.indexedHeight + 1 &&
+        (state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)) &&
+        history.bestHeaderIdAtHeight(header.height).contains(header.id)
+
+      if (isDirectSuccessor) {
         val newState: IndexerState = index(state.incrementIndexedHeight, Some(header))
         saveProgress(newState)
         context.become(receive.orElse(loaded(newState)))
         caughtUpHook(header.height)
-      } else if (header.height > state.indexedHeight + 1) { // applied block is ahead of indexer
+      } else if (!indexedTipStillBest) {
+        log.info(s"Deferring block ${header.id} at height ${header.height} until rollback")
+        context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
+      } else if (header.height > state.indexedHeight + 1) {
         context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
         self ! Index()
-      } else // applied block has already been indexed, skipping duplicate
+      } else {
         log.warn(s"Skipping block ${header.id} applied at height ${header.height}, indexed height is ${state.indexedHeight}")
+      }
+
+    case _: FullBlockApplied if state.rollbackInProgress => stash()
+
+    // Resume catch-up when a block is applied while the indexer is behind.
+    // Without this the indexer can stall after logging "Deferring catch-up",
+    // because no Index() message is scheduled and further FullBlockApplied events
+    // are dropped while caughtUp = false.
+    case _: FullBlockApplied if !state.caughtUp && !state.rollbackInProgress =>
+      self ! Index()
 
     case Rollback(branchPoint: ModifierId) =>
       if (state.rollbackInProgress) {
@@ -504,6 +541,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
             if (branchHeight < state.indexedHeight) {
               context.become(receive.orElse(loaded(state.copy(rollbackTo = branchHeight))))
               self ! RemoveAfter(branchHeight)
+            } else if (!state.caughtUp) {
+              blockCache.clear()
+              readingUpTo = 0
+              self ! Index()
             }
           case None =>
             log.error(s"No rollback height found for $branchPoint")
@@ -518,6 +559,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       readingUpTo = 0
       val newState = removeAfter(state, branchHeight)
       context.become(receive.orElse(loaded(newState)))
+      if (!newState.caughtUp && !newState.rollbackInProgress) self ! Index()
       caughtUpHook()
       log.info(s"Successfully rolled back indexes to $branchHeight")
       unstashAll()

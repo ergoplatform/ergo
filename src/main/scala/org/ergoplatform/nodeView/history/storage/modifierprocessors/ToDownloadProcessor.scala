@@ -111,16 +111,42 @@ trait ToDownloadProcessor
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
       Nil
+    } else if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) {
+      // While bootstrapping from a UTXO set snapshot, do not download full block sections
+      // until the snapshot has been applied. Block sections downloaded before the snapshot
+      // would be stored as non-best and never applied to the freshly recreated state.
+      // Headers-chain sync detection must still run here: otherwise, with nipopowBootstrap = false,
+      // `isHeadersChainSynced` is never set, `nextModifiersToDownload` stays empty and the
+      // snapshot is never requested. Only the in-memory flag may be set though: running
+      // `updateBestFullBlock` would persist minimalFullBlockHeight, and `isUtxoSnapshotApplied`
+      // is derived from it (readMinimalFullBlockHeight() > GenesisHeight), so with blocksToKeep >= 0
+      // it would flip to true with no snapshot applied and the snapshot would be skipped forever.
+      markHeadersSyncedIfFresh(header)
+      Nil
     } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
-      // Headers chain is synced after this header. Start downloading full blocks
-      updateBestFullBlock(header)
-      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
-      Nil
     } else {
+      // Headers chain is synced after this header. Start downloading full blocks
+      markHeadersSyncedIfFresh(header, updateBestBlock = true)
       Nil
+    }
+  }
+
+  /**
+    * Mark headers chain as synced when a fresh header arrives (from the network's perspective,
+    * the chain is at the tip then). When `updateBestBlock` is true the best full block pointer
+    * is persisted as well, which advances minimalFullBlockHeight; callers in the UTXO snapshot
+    * bootstrap path must not do that (see above).
+    */
+  private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
+    if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
+      if (updateBestBlock) {
+        updateBestFullBlock(header)
+      } else {
+        setHeadersChainSynced()
+      }
+      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
     }
   }
 

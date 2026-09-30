@@ -36,6 +36,13 @@ final case class WalletVars(proverOpt: Option[ErgoProvingInterpreter],
 
   val publicKeyAddresses: Seq[P2PKAddress] = stateCacheOpt.map(_.publicKeyAddresses).getOrElse(Seq.empty)
 
+  def ownsAddress(address: P2PKAddress): Boolean =
+    proverOpt.exists { prover =>
+      val tracked = trackedPubKeys.exists(_.key.value.equals(address.pubkey.value))
+      val signable = prover.secrets.exists(_.publicImage.equals(address.pubkey))
+      tracked && signable
+    }
+
   val trackedBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.trackedBytes).getOrElse(Seq.empty)
 
   val miningScriptsBytes: Seq[Array[Byte]] = stateCacheOpt.map(_.miningScriptsBytes).getOrElse(Seq.empty)

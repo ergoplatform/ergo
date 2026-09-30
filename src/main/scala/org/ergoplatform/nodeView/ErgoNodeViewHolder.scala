@@ -4,23 +4,24 @@ import akka.actor.SupervisorStrategy.Escalate
 import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.core._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
-import org.ergoplatform.wallet.utils.FileUtils
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
-import org.ergoplatform.core._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
-import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.utils.ScorexEncoding
-import org.ergoplatform.validation.RecoverableModifierError
+import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -184,7 +185,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   protected final def updateState(history: ErgoHistory,
                                   state: State,
                                   progressInfo: ProgressInfo[BlockSection],
-                                  suffixApplied: IndexedSeq[BlockSection]): (ErgoHistory, Try[State], Seq[BlockSection]) = {
+                                  suffixApplied: IndexedSeq[BlockSection],
+                                  local: Boolean = false): (ErgoHistory, Try[State], Seq[BlockSection]) = {
     requestDownloads(progressInfo)
 
     val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[BlockSection]) = if (progressInfo.chainSwitchingNeeded) {
@@ -197,13 +199,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     stateToApplyTry match {
       case Success(stateToApply) =>
-        applyState(history, stateToApply, suffixTrimmed, progressInfo) match {
+        applyState(history, stateToApply, suffixTrimmed, progressInfo, local) match {
           case Success(stateUpdateInfo) =>
             stateUpdateInfo.failedMod match {
               case Some(_) =>
                 @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
                 val alternativeProgressInfo = stateUpdateInfo.alternativeProgressInfo.get
-                updateState(stateUpdateInfo.history, stateUpdateInfo.state, alternativeProgressInfo, stateUpdateInfo.suffix)
+                updateState(stateUpdateInfo.history, stateUpdateInfo.state, alternativeProgressInfo, stateUpdateInfo.suffix, local)
               case None =>
                 (stateUpdateInfo.history, Success(stateUpdateInfo.state), stateUpdateInfo.suffix)
             }
@@ -221,7 +223,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   private def applyState(history: ErgoHistory,
                          stateToApply: State,
                          suffixTrimmed: IndexedSeq[BlockSection],
-                         progressInfo: ProgressInfo[BlockSection]): Try[UpdateInformation] = {
+                         progressInfo: ProgressInfo[BlockSection],
+                         local: Boolean): Try[UpdateInformation] = {
     val updateInfoSample = UpdateInformation(history, stateToApply, None, None, suffixTrimmed)
     progressInfo.toApply.foldLeft[Try[UpdateInformation]](Success(updateInfoSample)) {
       case (f@Failure(ex), _) =>
@@ -230,11 +233,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (success@Success(updateInfo), modToApply) =>
         if (updateInfo.failedMod.isEmpty) {
           val chainTipOpt = history.estimatedTip()
+          // todo: make cleaner ADProofs dump instead of pmodModify , see https://github.com/ergoplatform/ergo/issues/2413
           updateInfo.state.applyModifier(modToApply, chainTipOpt)(lm => pmodModify(lm.pmod, local = true)) match {
             case Success(stateAfterApply) =>
               history.reportModifierIsValid(modToApply).map { newHis =>
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
-                  context.system.eventStream.publish(FullBlockApplied(modToApply.asInstanceOf[ErgoFullBlock].header))
+                  val fullBlock = modToApply.asInstanceOf[ErgoFullBlock]
+                  val txIds = fullBlock.blockTransactions.transactions.map(_.id)
+                  val event = if (local) {
+                    LocalBlockApplied(fullBlock.header, txIds)
+                  } else {
+                    RemoteBlockApplied(fullBlock.header, txIds)
+                  }
+                  context.system.eventStream.publish(event)
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
@@ -242,6 +253,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
               log.warn(s"Invalid modifier! Typeid: ${modToApply.modifierTypeId} id: ${modToApply.id} ", e)
               history.reportModifierIsInvalid(modToApply, progressInfo).map { case (newHis, newProgressInfo) =>
                 context.system.eventStream.publish(SemanticallyFailedModification(modToApply.modifierTypeId, modToApply.id, e))
+                ErgoNodeViewHolder.extractFailedTxId(e).foreach { txId =>
+                  log.warn(s"Removing transaction $txId which caused the block validation failure from the mempool")
+                  val updatedPool = memoryPool().invalidate(txId)
+                  updateNodeView(updatedMempool = Some(updatedPool))
+                  context.system.eventStream.publish(FailedOnRecheckTransaction(txId, new Exception("Became invalid")))
+                }
                 UpdateInformation(newHis, updateInfo.state, Some(modToApply), Some(newProgressInfo), updateInfo.suffix)
               }
           }
@@ -267,9 +284,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val winnerTxs = dbl.winnerTxIds
         log.debug(s"Transaction $tx declined, as other transactions $winnerTxs are paying more")
         context.system.eventStream.publish(DeclinedTransaction(unconfirmedTx.withCost(dbl.cost)))
-      case dcl: ProcessingOutcome.Declined => // do nothing
+      case dcl: ProcessingOutcome.Declined =>
         val e = dcl.e
         log.debug(s"Transaction $tx declined, reason: ${e.getMessage}")
+        // Most declining paths return the pool unchanged, and for them this is a no-op. A path
+        // that does record something about the declined transaction (such as caching its id)
+        // returns a new pool, and that pool has to be installed or the record is lost.
+        if (newPool ne memoryPool()) updateNodeView(updatedMempool = Some(newPool))
         context.system.eventStream.publish(DeclinedTransaction(unconfirmedTx.withCost(dcl.cost)))
     }
     processingOutcome
@@ -299,6 +320,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       if (history().isEmpty) {
         history().applyPopowProof(proof)
         if (!history().isEmpty) {
+          // When UTXO set snapshot bootstrap is enabled, mark headers chain as synced right after
+          // a trusted NiPoPoW proof is applied. This allows the node to start requesting UTXO set
+          // snapshots immediately, instead of waiting for normal header sync to reach the tip.
+          if (settings.nodeSettings.utxoSettings.utxoBootstrap) {
+            history().setHeadersChainSynced()
+          }
           updateNodeView(updatedHistory = Some(history()))
         }
       }
@@ -351,6 +378,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           }
 
           applyFromCacheLoop(headersCache)
+
+          // Newly accepted headers may unblock sections received before their headers.
+          applyFromCacheLoop(modifiersCache)
 
           val cleared = headersCache.cleanOverfull()
           val upd = BlockSectionsProcessingCacheUpdate(
@@ -476,7 +506,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
             if (progressInfo.toApply.nonEmpty) {
               val (newHistory, newStateTry, blocksApplied) =
-                updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty)
+                updateState(historyBeforeStUpdate, minimalState(), progressInfo, IndexedSeq.empty, local)
 
               newStateTry match {
                 case Success(newMinState) =>
@@ -566,6 +596,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       )
   }
 
+  private def isPreparedUtxoSnapshotState(state: State, history: ErgoHistory): Boolean =
+    ErgoNodeViewHolder.isPreparedUtxoSnapshotState(
+      state.isInstanceOf[UtxoState],
+      settings.nodeSettings.utxoSettings.utxoBootstrap,
+      history.isUtxoSnapshotApplied,
+      state.version,
+      state.rootDigest,
+      {
+        val snapshotHeight = history.minimalFullBlockHeight - 1
+        history.bestHeaderAtHeight(snapshotHeight)
+      })
+
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (ErgoState.genesisStateVersion, None, _) =>
@@ -574,8 +616,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         Success(stateIn)
+      case (_, None, _) if isPreparedUtxoSnapshotState(stateIn, history) =>
+        log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
+        Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
+        stateIn.closeStorage()
         Success(recreatedState())
       case (_, Some(bestFullBlock), _: DigestState) =>
         log.info(s"State and history are inconsistent. Going to switch state to version ${bestFullBlock.encodedId}")
@@ -617,8 +663,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       .fold[Try[ErgoStateContext]](Failure(new Exception("Could not find extension to recover from"))
       )(ext => ErgoStateContext.recover(settings.chainSettings.genesisStateDigest, ext, lastHeaders)(settings.chainSettings))
       .flatMap { ctx =>
-        val recoverVersion = idToVersion(lastHeaders.last.id)
-        val recoverRoot = bestFullBlock.header.stateRoot
+        val recoveredHeader = lastHeaders.last
+        val recoverVersion = idToVersion(recoveredHeader.id)
+        val recoverRoot = recoveredHeader.stateRoot
         DigestState.recover(recoverVersion, recoverRoot, ctx, stateDir(settings), settings)
       }
 
@@ -705,6 +752,25 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 object ErgoNodeViewHolder {
 
+  private[nodeView] def isPreparedUtxoSnapshotState(
+      stateIsUtxo: Boolean,
+      utxoBootstrap: => Boolean,
+      snapshotApplied: => Boolean,
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      snapshotHeaderOpt: => Option[Header]): Boolean =
+    stateIsUtxo &&
+      utxoBootstrap &&
+      snapshotApplied &&
+      snapshotHeaderOpt.exists(matchesPreparedUtxoSnapshotHeader(stateVersion, stateRoot, _))
+
+  private def matchesPreparedUtxoSnapshotHeader(
+      stateVersion: VersionTag,
+      stateRoot: Array[Byte],
+      header: Header): Boolean =
+    stateVersion == idToVersion(header.id) &&
+      java.util.Arrays.equals(stateRoot, header.stateRoot)
+
   object ReceivableMessages {
     // Tracking last modifier and header & block heights in time, being periodically checked for possible stuck
     case class ChainProgress(lastMod: BlockSection, headersHeight: Int, blockHeight: Int, lastUpdate: Long)
@@ -751,6 +817,24 @@ object ErgoNodeViewHolder {
   case class DownloadRequest(modifiersToFetch: Map[NetworkObjectTypeId.Value, Seq[ModifierId]]) extends NodeViewHolderEvent
 
   case class CurrentView[State](history: ErgoHistory, state: State, vault: ErgoWallet, pool: ErgoMemPool)
+
+  /**
+    * Extract id of a transaction which caused block validation failure, walking the cause chain.
+    * Transaction-level validation errors are reported as [[MalformedModifierError]] tagged with
+    * the transaction id, or as [[TooHighCostError]] carrying the transaction itself.
+    */
+  @tailrec
+  def extractFailedTxId(error: Throwable): Option[ModifierId] = error match {
+    case null =>
+      None
+    case mme: MalformedModifierError
+        if mme.modifierTypeId == ErgoTransaction.modifierTypeId =>
+      Some(mme.modifierId)
+    case TooHighCostError(tx, _) =>
+      Some(tx.id)
+    case other =>
+      extractFailedTxId(other.getCause)
+  }
 
   /**
     * Checks whether chain got stuck by comparing timestamp of bestFullBlock or last time a modifier was applied to history.

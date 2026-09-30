@@ -1,0 +1,42 @@
+name: Mainnet UTXO snapshot bootstrap test
+
+# Boots a mainnet node with nipopowBootstrap + utxoBootstrap from an empty data dir and
+# waits for a full sync. Validates the fast-bootstrap path end-to-end against the real
+# network. Kept separate from release.yml so the multi-hour run cannot block publishing.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  bootstrap_mainnet:
+    name: NiPoPoW + UTXO snapshot bootstrap on mainnet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current branch (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java and Scala
+        uses: olafurpg/setup-scala@v10
+        with:
+          java-version: adopt@1.8
+
+      - name: Cache sbt
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.sbt
+            ~/.ivy2/cache
+            ~/.coursier/cache/v1
+            ~/.cache/coursier/v1
+            ~/AppData/Local/Coursier/Cache/v1
+            ~/Library/Caches/Coursier/Cache/v1
+          key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Run mainnet bootstrap test
+        run: |
+          mkdir tmp
+          TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++2.12.20 docker "it2:testOnly *TestUtxoSnapshotBootstrapOnMainNetSpec"

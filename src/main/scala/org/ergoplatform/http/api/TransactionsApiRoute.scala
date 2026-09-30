@@ -14,7 +14,7 @@ import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.mempool.HistogramStats.getFeeHistogram
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
-import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, RESTApiSettings}
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.ADKey
 import scorex.util.encode.Base16
@@ -37,11 +37,11 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   val boxId: Directive1[BoxId] = pathPrefix(Segment).flatMap(handleBoxId)
 
   private def handleBoxId(value: String): Directive1[BoxId] = {
-    ADKey @@ Base16.decode(value) match {
-      case Success(boxId) =>
-        provide(boxId)
+    Base16.decode(value) match {
+      case Success(boxId) if boxId.length == Constants.ModifierIdSize =>
+        provide(ADKey @@ boxId)
       case _ =>
-        reject(ValidationRejection(s"boxId $value is invalid, it should be hex string"))
+        reject(ValidationRejection(s"boxId $value is invalid, it should be 64 chars long hex string"))
     }
   }
 
@@ -49,7 +49,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   private def handleTokenId(value: String): Directive1[TokenId] = {
     Algos.decode(value) match {
-      case Success(tokenId) =>
+      case Success(tokenId) if tokenId.length == Constants.ModifierIdSize =>
         provide(tokenId.toTokenId)
       case _ =>
         reject(ValidationRejection(s"tokenId $value is invalid, it should be 64 chars long hex string"))
@@ -101,8 +101,14 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   /**
     * Creates a transaction JSON representation with resolved input boxes.
+    *
+    * `cost` is the validation cost measured when the transaction entered the pool. It is None
+    * when no script validation was done for it, i.e. when the node runs a digest state, or when
+    * the transaction was returned to the pool by a rollback and has not been re-checked yet.
   */
-  private def createTransactionWithResolvedInputs(tx: ErgoTransaction, resolvedInputs: Map[BoxId, ErgoBox]): Json = {
+  private def createTransactionWithResolvedInputs(tx: ErgoTransaction,
+                                                  resolvedInputs: Map[BoxId, ErgoBox],
+                                                  cost: Option[Int]): Json = {
 
     val enrichedInputs = tx.inputs.map { input =>
       val baseInput = Json.obj(
@@ -123,7 +129,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
       "inputs"     -> enrichedInputs.asJson,
       "dataInputs" -> tx.dataInputs.asJson,
       "outputs"    -> tx.outputs.asJson,
-      "size"       -> tx.size.asJson
+      "size"       -> tx.size.asJson,
+      "cost"       -> cost.asJson
     )
   }
 
@@ -137,7 +144,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
         val enrichedTxs = transactions.map { unconfirmedTx =>
           val tx             = unconfirmedTx.transaction
           val resolvedInputs = resolveTransactionInputs(tx.inputs, state, pool)
-          createTransactionWithResolvedInputs(tx, resolvedInputs)
+          createTransactionWithResolvedInputs(tx, resolvedInputs, unconfirmedTx.lastCost)
         }
         enrichedTxs.asJson
     }
@@ -145,11 +152,12 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   /**
     * Resolves inputs for a single transaction and returns it with resolved inputs.
   */
-  private def getUnconfirmedTransactionWithResolvedInputs(transaction: ErgoTransaction): Future[Json] =
+  private def getUnconfirmedTransactionWithResolvedInputs(unconfirmedTx: UnconfirmedTransaction): Future[Json] =
     getStateAndPool.map {
       case (state, pool) =>
+        val transaction    = unconfirmedTx.transaction
         val resolvedInputs = resolveTransactionInputs(transaction.inputs, state, pool)
-      createTransactionWithResolvedInputs(transaction, resolvedInputs)
+        createTransactionWithResolvedInputs(transaction, resolvedInputs, unconfirmedTx.lastCost)
     }
 
   private def getUnconfirmedTransactions(offset: Int, limit: Int): Future[Json] = getUnconfirmedTransactionsWithResolvedInputs(offset, limit)
@@ -247,7 +255,7 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
     (pathPrefix("unconfirmed" / "byTransactionId") & get & modifierId) { modifierId =>
       ApiResponse(
         getMemPool.flatMap { pool =>
-          pool.modifierById(modifierId) match {
+          pool.unconfirmedById(modifierId) match {
             case Some(unconfirmedTx) =>
               getUnconfirmedTransactionWithResolvedInputs(unconfirmedTx)
             case None =>
@@ -292,25 +300,25 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
               val allTxs = pool.getAll
               val txsWithOutputMatch =
                 allTxs
-                  .collect { case tx if tx.transaction.outputs.exists(_.ergoTree.bytesHex == ergoTree) =>
-                    tx.transaction
-                  }.toSet
+                  .filter(_.transaction.outputs.exists(_.ergoTree.bytesHex == ergoTree))
+                  .toSet
 
               getState.flatMap {
                 case state: UtxoStateReader =>
                   val txWithInputMatch =
                     allTxs
-                      .collect { case tx if
-                          tx.transaction.inputs.exists(i => state.boxById(i.boxId).exists(_.ergoTree.bytesHex == ergoTree)) =>
-                        tx.transaction
-                      }
+                      .filter(
+                        _.transaction.inputs.exists(i => state.boxById(i.boxId).exists(_.ergoTree.bytesHex == ergoTree))
+                      )
                       val allMatchingTxs = (txsWithOutputMatch ++ txWithInputMatch).toSeq.slice(offset, offset + limit)
                       Future.sequence(allMatchingTxs.map(getUnconfirmedTransactionWithResolvedInputs)).map(_.asJson)
                 case _ =>
+                      // digest state: inputs cannot be resolved, but the response keeps the shape
+                      // declared by the ErgoTransactionWithInputBoxes schema, `cost` included
                       Future.successful(
                         txsWithOutputMatch
                           .slice(offset, offset + limit)
-                          .map(_.asJson)
+                          .map(utx => createTransactionWithResolvedInputs(utx.transaction, Map.empty, utx.lastCost))
                           .asJson
                       )
               }

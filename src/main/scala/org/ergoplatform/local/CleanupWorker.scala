@@ -82,7 +82,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     def validationLoop(txs: Iterator[UnconfirmedTransaction],
                        validated: mutable.ArrayBuilder[UnconfirmedTransaction],
                        invalidated: mutable.ArrayBuilder[ModifierId],
-                      costAcc: Long
+                       costAcc: Long
                       ): (mutable.ArrayBuilder[UnconfirmedTransaction], mutable.ArrayBuilder[ModifierId]) = {
       if (costAcc < CostLimit && txs.hasNext) {
         val head = txs.next()

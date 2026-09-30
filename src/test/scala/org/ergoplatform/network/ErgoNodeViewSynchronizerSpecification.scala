@@ -1067,6 +1067,71 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: a SyncInfo arriving within the throttle interval still updates the peer's recorded height"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.utils.generators.ChainGenerator.applyChain
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val applied = genChain(8, hist)
+      applyChain(hist, applied)
+      val fullHeight = hist.fullBlockHeight
+      val header = genChain(3, hist).map(_.header).find(_.height == fullHeight + 1).get
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+      hist.applyInputBlock(
+        InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, InputBlockFields.empty, None)
+      )
+
+      val peerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val follower = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(PeerInfo(peerSpec, System.currentTimeMillis())))
+      syncTracker.updateStatus(follower, Equal, Some(fullHeight))
+
+      // a follower catching up sends one SyncInfo per applied header batch, back to back: the second one, within the
+      // 100 ms throttle, carries its current height
+      def syncAt(h: Int) = {
+        val info = ErgoSyncInfoV2(Seq(applied.map(_.header).find(_.height == h).get))
+        Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
+      }
+      synchronizerMockRef ! syncAt(fullHeight - 5)
+      synchronizerMockRef ! syncAt(fullHeight)
+      Thread.sleep(300)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight)
+
+      // and it is therefore near the tip for relay
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+      val msg = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == InputBlockMessageSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(follower)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with txs when <= 3 transactions"
   ) {
     withFixture2 { ctx =>

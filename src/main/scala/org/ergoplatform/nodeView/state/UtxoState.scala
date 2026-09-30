@@ -4,6 +4,7 @@ import java.io.File
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -68,12 +69,15 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     * @param headerId of the block these transactions belong to
     * @param expectedDigest AVL+ tree digest of UTXO set after applying operations from txs
     * @param currentStateContext Additional data required for transactions validation
+    * @param extension extension section of the block, checked against the transactions by rule
+    *                  `bsStorageRentAttestation`
     * @return
     */
   private[state] def applyTransactions(transactions: Seq[ErgoTransaction],
                                        headerId: ModifierId,
                                        expectedDigest: ADDigest,
-                                       currentStateContext: ErgoStateContext): Try[Unit] = {
+                                       currentStateContext: ErgoStateContext,
+                                       extension: Extension): Try[Unit] = {
     val createdOutputs = transactions.flatMap(_.outputs).map(o => (ByteArrayWrapper(o.id), o)).toMap
 
     def checkBoxExistence(id: ErgoBox.BoxId): Try[ErgoBox] = createdOutputs
@@ -81,7 +85,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       .orElse(boxById(id))
       .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
 
-    val txProcessing = ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings)(checkBoxExistence)
+    val txProcessing =
+      ErgoState.execTransactions(transactions, currentStateContext, ergoSettings.nodeSettings, extension)(checkBoxExistence)
     if (txProcessing.isValid) {
       log.debug(s"Cost of block $headerId (${currentStateContext.currentHeight}): ${txProcessing.payload.getOrElse(0)}")
       val blockOpsTry = ErgoState.stateChanges(transactions).flatMap { stateChanges =>
@@ -136,7 +141,8 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
         val inRoot = rootDigest
 
         val stateTry = stateContext.appendFullBlock(fb).flatMap { newStateContext =>
-          val txsTry = applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext)
+          val txsTry =
+            applyTransactions(fb.blockTransactions.txs, fb.header.id, fb.header.stateRoot, newStateContext, fb.extension)
 
           txsTry.map { _: Unit =>
             val emissionBox = extractEmissionBox(fb)

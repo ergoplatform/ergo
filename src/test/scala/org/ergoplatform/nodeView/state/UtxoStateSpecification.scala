@@ -46,6 +46,9 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
   private val emptyModifierId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
+  /** Extension of a block with no fields, for block validation of transactions without rent claims */
+  private val noExtension: Extension = emptyExtension.toExtension(emptyModifierId)
+
   property("Founders box workflow") {
     var (us, bh) = createUtxoState(settings)
     var foundersBox = genesisBoxes.last
@@ -265,7 +268,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val incorrectTransactions = IndexedSeq(txWithMissedDataInputs)
       // proof for transaction works correctly, providing proof-of-non-existence for missed input
       val digest2 = us.proofsForTransactions(incorrectTransactions).get._2
-      us.applyTransactions(incorrectTransactions, emptyModifierId, digest2, emptyStateContext) shouldBe 'failure
+      us.applyTransactions(incorrectTransactions, emptyModifierId, digest2, emptyStateContext, noExtension) shouldBe 'failure
 
       // trying to apply transactions with correct data inputs
       val existingDataInputs = existingBoxes.map(DataInput).toIndexedSeq
@@ -273,7 +276,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val txWithDataInputs = ErgoTransaction(headTx.inputs, existingDataInputs, headTx.outputCandidates)
       val correctTransactions = IndexedSeq(txWithDataInputs)
       val digest = us.proofsForTransactions(correctTransactions).get._2
-      us.applyTransactions(correctTransactions, emptyModifierId, digest, emptyStateContext).get
+      us.applyTransactions(correctTransactions, emptyModifierId, digest, emptyStateContext, noExtension).get
       us.closeStorage()
     }
   }
@@ -311,17 +314,17 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       val txs3 = IndexedSeq(headTx, nextTx, txWithDataInputs2)
       val (_, digest3) = us.proofsForTransactions(txs3).get
-      us.applyTransactions(txs3, emptyModifierId, digest3, emptyStateContext) shouldBe 'success
+      us.applyTransactions(txs3, emptyModifierId, digest3, emptyStateContext, noExtension) shouldBe 'success
       us.rollbackTo(version)
 
       val txs4 = IndexedSeq(headTx, txWithDataInputs2, nextTx)
       val (_, digest4) = us.proofsForTransactions(txs4).get
-      us.applyTransactions(txs4, emptyModifierId, digest4, emptyStateContext) shouldBe 'success
+      us.applyTransactions(txs4, emptyModifierId, digest4, emptyStateContext, noExtension) shouldBe 'success
       us.rollbackTo(version)
 
       val txs5 = IndexedSeq(txWithDataInputs2, headTx, nextTx)
       us.proofsForTransactions(txs5) shouldBe 'failure
-      us.applyTransactions(txs5, emptyModifierId, digest4, emptyStateContext) shouldBe 'failure
+      us.applyTransactions(txs5, emptyModifierId, digest4, emptyStateContext, noExtension) shouldBe 'failure
       us.rollbackTo(version)
 
       // trying to apply transactions with data inputs same as outputs of the previous tx
@@ -331,7 +334,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val txsNext = IndexedSeq(headTx, nextTxWithDataInputs)
       // proof of non-existence
       val d2 = us.proofsForTransactions(txsNext).get._2
-      us.applyTransactions(txsNext, emptyModifierId, d2, emptyStateContext) shouldBe 'success
+      us.applyTransactions(txsNext, emptyModifierId, d2, emptyStateContext, noExtension) shouldBe 'success
       us.closeStorage()
     }
   }
@@ -352,7 +355,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val wBlock = invalidErgoFullBlockGen.sample.get
       val block = wBlock.copy(header = wBlock.header.copy(height = 1))
       val newSC = us.stateContext.appendFullBlock(block).get
-      us.applyTransactions(txs, emptyModifierId, digest, newSC).get
+      us.applyTransactions(txs, emptyModifierId, digest, newSC, noExtension).get
       us.closeStorage()
     }
   }
@@ -378,7 +381,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val bt = new BlockTransactions(header.id, 1: Byte, txs)
       val fb = new ErgoFullBlock(header, bt, genExtension(header, us.stateContext), None)
       val newSC = us.stateContext.appendFullBlock(fb).get
-      us.applyTransactions(txs, emptyModifierId, digest, newSC).get
+      us.applyTransactions(txs, emptyModifierId, digest, newSC, noExtension).get
       us.closeStorage()
     }
   }
@@ -618,7 +621,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
     val invalidTx = validTx.copy(outputCandidates = invalidOutputs)
 
     val error = wusAfterGenesis
-      .applyTransactions(Seq(invalidTx), invalidTx.id, wusAfterGenesis.rootDigest, wusAfterGenesis.stateContext)
+      .applyTransactions(Seq(invalidTx), invalidTx.id, wusAfterGenesis.rootDigest, wusAfterGenesis.stateContext, noExtension)
       .failed
       .get
 

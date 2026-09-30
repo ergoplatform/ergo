@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -27,7 +27,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -426,6 +426,38 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
+    * Ids, in block order, of the transactions in `txs` with at least one storage rent claim input in a block at
+    * `height` (see `ErgoTransaction.hasStorageRentClaim`): the set C of rule `bsStorageRentAttestation`.
+    * Input boxes are resolved as `UtxoState.applyTransactions` resolves them, among the outputs of `txs` first, then
+    * in the UTXO set `s`. A transaction with an input resolved in neither is not counted (the block would be invalid).
+    */
+  def storageRentClaimTxIds(txs: Seq[ErgoTransaction], s: UtxoStateReader, height: Int): Seq[ModifierId] = {
+    val createdOutputs = txs.flatMap(_.outputs).map(o => bytesToId(o.id) -> o).toMap
+    txs.filter { tx =>
+      val boxes = tx.inputs.flatMap(inp => createdOutputs.get(bytesToId(inp.boxId)).orElse(s.boxById(inp.boxId)))
+      boxes.length == tx.inputs.length && ErgoTransaction.hasStorageRentClaim(tx, boxes, height)
+    }.map(_.id)
+  }
+
+  /**
+    * Extension fields a block producer adds for rule `bsStorageRentAttestation` (enforced from block version 5) to
+    * a block with transactions `txs` (in block order) and upcoming state context `upcomingContext`: the field
+    * `Extension.storageRentClaimsField` over the ids of the storage rent claim transactions among `txs` if there is
+    * any, and no field if there is none or the block version is below 5.
+    */
+  def storageRentAttestation(txs: Seq[ErgoTransaction],
+                             s: UtxoStateReader,
+                             upcomingContext: ErgoStateContext): ExtensionCandidate = {
+    val claimTxIds =
+      if (upcomingContext.blockVersion >= Header.StorageRentAttestationVersion) {
+        storageRentClaimTxIds(txs, s, upcomingContext.currentHeight)
+      } else {
+        Seq.empty
+      }
+    ExtensionCandidate(if (claimTxIds.nonEmpty) Seq(Extension.storageRentClaimsField(claimTxIds)) else Seq.empty)
+  }
+
+  /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
     * detects a block applied concurrently with the assembly.
@@ -719,9 +751,11 @@ object CandidateGenerator extends ScorexLogging {
                       adProof: SerializedAdProof,
                       adDigest: ADDigest,
                       eliminate: EliminateTransactions): (Candidate, EliminateTransactions) = {
+        // Rule bsStorageRentAttestation: attest to the storage rent claim transactions of this block, if any
+        val blockExtension = extensionCandidate ++ storageRentAttestation(blockTxs, state, upcomingContext)
         val candidate = CandidateBlock(
           bestHeaderOpt, version, nBits, adDigest,
-          adProof, blockTxs, timestamp, extensionCandidate, votes
+          adProof, blockTxs, timestamp, blockExtension, votes
         )
         val ext = deriveWorkMessage(candidate)
         log.info(

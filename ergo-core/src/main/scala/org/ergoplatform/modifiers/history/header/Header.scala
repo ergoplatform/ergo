@@ -147,6 +147,12 @@ object Header extends ApiCodecs {
     */
   val Interpreter60Version: Byte = 4
 
+  /**
+    * Block version after the soft-fork introducing miner attestation of storage rent claims
+    * (rule bsStorageRentAttestation, EIP-0052)
+    */
+  val StorageRentAttestationVersion: Byte = 5
+
   def scriptFromBlockVersion(blockVersion: Byte): Byte = {
     (blockVersion - 1).toByte
   }

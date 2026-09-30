@@ -4,6 +4,7 @@ import java.io.File
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
@@ -40,7 +41,8 @@ class DigestState protected(override val version: VersionTag,
   private[state] def validateTransactions(transactions: Seq[ErgoTransaction],
                                           expectedHash: ADDigest,
                                           proofs: ADProofs,
-                                          currentStateContext: ErgoStateContext): Try[Unit] = {
+                                          currentStateContext: ErgoStateContext,
+                                          extension: Extension): Try[Unit] = {
     // Check modifications, returning sequence of old values
     val knownBoxesTry =
       ErgoState.stateChanges(transactions).map { stateChanges =>
@@ -56,7 +58,7 @@ class DigestState protected(override val version: VersionTag,
         .fold[Try[ErgoBox]](Failure(new Exception(s"Box with id ${Algos.encode(id)} not found")))(Success(_))
       }
 
-    ErgoState.execTransactions(transactions, currentStateContext, nodeSettings)(checkBoxExistence)
+    ErgoState.execTransactions(transactions, currentStateContext, nodeSettings, extension)(checkBoxExistence)
       .toTry
       .map(_ => ())
   }
@@ -72,7 +74,7 @@ class DigestState protected(override val version: VersionTag,
           stateContext.appendFullBlock(fb).flatMap { currentStateContext =>
             val txs = fb.blockTransactions.txs
             val declaredHash = fb.header.stateRoot
-            validateTransactions(txs, declaredHash, proofs, currentStateContext)
+            validateTransactions(txs, declaredHash, proofs, currentStateContext, fb.extension)
           }
       }
 

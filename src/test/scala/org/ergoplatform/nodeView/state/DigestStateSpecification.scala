@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.{DataInput, Input}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.core._
@@ -16,6 +17,9 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
+  /** Extension of a block with no fields, for block validation of transactions without rent claims */
+  private val noExtension: Extension = emptyExtension.toExtension(bytesToId(Array.fill(32)(0.toByte)))
 
   private val emptyVersion: VersionTag = bytesToVersion(Array.fill(32)(0: Byte))
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
@@ -166,15 +170,15 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
       val txs1 = IndexedSeq(headTx, nextTx, txWithDataInputs)
       val (proofBytes1, digest1) = us.proofsForTransactions(txs1).get
       val proof1 = ADProofs(defaultHeaderGen.sample.get.id, proofBytes1)
-      ds.validateTransactions(txs1, digest1, proof1, emptyStateContext) shouldBe 'success
+      ds.validateTransactions(txs1, digest1, proof1, emptyStateContext, noExtension) shouldBe 'success
 
       val txs2 = IndexedSeq(headTx, txWithDataInputs, nextTx)
       val (proofBytes2, digest2) = us.proofsForTransactions(txs2).get
       val proof2 = ADProofs(defaultHeaderGen.sample.get.id, proofBytes2)
-      ds.validateTransactions(txs2, digest2, proof2, emptyStateContext) shouldBe 'success
+      ds.validateTransactions(txs2, digest2, proof2, emptyStateContext, noExtension) shouldBe 'success
 
       val txs3 = IndexedSeq(txWithDataInputs, headTx, nextTx)
-      ds.validateTransactions(txs3, digest2, proof2, emptyStateContext) shouldBe 'failure
+      ds.validateTransactions(txs3, digest2, proof2, emptyStateContext, noExtension) shouldBe 'failure
 
       ds.close()
       us.closeStorage()

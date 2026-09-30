@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.state
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Args, ErgoSettingsReader}
@@ -23,6 +24,9 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
+
+  /** Extension of a block with no fields, for block validation of transactions without rent claims */
+  private val noExtension: Extension = emptyExtension.toExtension(bytesToId(Array.fill(32)(0.toByte)))
 
   property("applyModifier() - double spending") {
     forAll(boxesHolderGen, Gen.choose(1: Byte, 2: Byte)) { case (bh, version) =>
@@ -170,29 +174,29 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
     val expectedCost = 185160
 
     // successful validation
-    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
+    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings, noExtension)(id => Try(boxes(ByteArrayWrapper(id)))) shouldBe Valid(expectedCost)
 
     // cost limit exception expected when crossing MaxBlockCost
     val tooManyTxs = (1 to 10).flatMap(_ => generateTxs)
     assert(
-      ErgoState.execTransactions(tooManyTxs, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
+      ErgoState.execTransactions(tooManyTxs, stateContext, settings.nodeSettings, noExtension)(id => Try(boxes(ByteArrayWrapper(id)))).errors.head.message.contains(
         "Accumulated cost of block transactions should not exceed <maxBlockCost>"
       )
     )
 
     // missing box in state
-    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings)(_ => Failure(new RuntimeException)).errors.head.message shouldBe
+    ErgoState.execTransactions(txs, stateContext, settings.nodeSettings, noExtension)(_ => Failure(new RuntimeException)).errors.head.message shouldBe
       "Every input of the transaction should be in UTXO. null"
 
     // tx validation should kick in and detect block height violation
     val invalidTx = invalidErgoTransactionGen.sample.get
     assert(
-      ErgoState.execTransactions(txs :+ invalidTx, stateContext, settings.nodeSettings)(id => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
+      ErgoState.execTransactions(txs :+ invalidTx, stateContext, settings.nodeSettings, noExtension)(id => Try(boxes.getOrElse(ByteArrayWrapper(id), invalidTx.outputs.head)))
         .errors.head.message.startsWith("Transaction outputs should have creationHeight not exceeding block height.")
     )
 
     // no transactions are valid
-    assert(ErgoState.execTransactions(Seq.empty, stateContext, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
+    assert(ErgoState.execTransactions(Seq.empty, stateContext, settings.nodeSettings, noExtension)(id => Try(boxes(ByteArrayWrapper(id)))).isValid)
   }
 
   property("ErgoState.execTransactions() - invalid 6.0 spending after 6.0 activation") {
@@ -211,7 +215,7 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
 
     val boxes = (IndexedSeq(bx) ++ txs.flatMap(_.outputs)).map(o => ByteArrayWrapper(o.id) -> o).toMap
 
-    val execRes = ErgoState.execTransactions(txs, sc, settings.nodeSettings)(id => Try(boxes(ByteArrayWrapper(id))))
+    val execRes = ErgoState.execTransactions(txs, sc, settings.nodeSettings, noExtension)(id => Try(boxes(ByteArrayWrapper(id))))
     execRes.isInstanceOf[Invalid] shouldBe true
     execRes.asInstanceOf[Invalid].errors.head.message.startsWith("Scripts of all transaction inputs should pass verification") shouldBe true
 
@@ -225,7 +229,7 @@ class ErgoStateSpecification extends ErgoCorePropertyTest with ErgoCompilerHelpe
 
     val boxes2 = (IndexedSeq(bx) ++ txs2.flatMap(_.outputs)).map(o => ByteArrayWrapper(o.id) -> o).toMap
 
-    val execRes2 = ErgoState.execTransactions(txs2, sc, settings.nodeSettings)(id => Try(boxes2(ByteArrayWrapper(id))))
+    val execRes2 = ErgoState.execTransactions(txs2, sc, settings.nodeSettings, noExtension)(id => Try(boxes2(ByteArrayWrapper(id))))
     execRes2.isInstanceOf[Valid[_]] shouldBe true
   }
 

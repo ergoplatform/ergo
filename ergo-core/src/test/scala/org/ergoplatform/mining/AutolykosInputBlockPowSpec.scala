@@ -47,6 +47,7 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
     }
   }
 
+  // nBits 33810432 = 0x0203E800 -> difficulty 1000; floor(q / 1000) * 64 = literal below.
   private val referenceInputTarget =
     BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335616")
   private val referenceHits = Seq(

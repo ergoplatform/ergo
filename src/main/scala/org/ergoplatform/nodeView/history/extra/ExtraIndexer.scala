@@ -83,6 +83,14 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   protected val segments: mutable.HashMap[ModifierId, Segment[_]] = mutable.HashMap.empty[ModifierId, Segment[_]]
 
   /**
+    * Storage-rent eligibility index buffers: upserts and deletions keyed by the entry id
+    * (the index key). A box created and spent within the same buffer window is removed from
+    * the upserts only; a box created in an already-flushed batch gets a deletion marker.
+    */
+  protected val rentBoxes: mutable.HashMap[ModifierId, StorageRentBox] = mutable.HashMap.empty[ModifierId, StorageRentBox]
+  protected val rentBoxDeletes: mutable.HashSet[ModifierId] = mutable.HashSet.empty[ModifierId]
+
+  /**
     * Input tokens in a transaction, cleared after every transaction
     */
   private val inputTokens: mutable.HashMap[Seq[Byte], Long] = mutable.HashMap.empty[Seq[Byte], Long]
@@ -153,6 +161,16 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
       case None => // box not found at all (this shouldn't happen)
         log.warn(s"Unknown box used as input: $id")
         false
+    }
+  }
+
+  /**
+    * Delete the storage-rent eligibility entry of a box being spent (see [[rentBoxes]]).
+    */
+  private def markRentBoxSpent(iEb: IndexedErgoBox): Unit = {
+    val srb = StorageRentBox(iEb)
+    if (rentBoxes.remove(srb.id).isEmpty) {
+      rentBoxDeletes += srb.id
     }
   }
 
@@ -235,7 +253,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   /**
     * @return number of indexes in all buffers
     */
-  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size
+  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size +
+    rentBoxes.size + rentBoxDeletes.size
 
   /**
     * Write buffered indexes to database and clear buffers.
@@ -269,8 +288,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         (GlobalBoxIndexKey, ByteBuffer.allocate(8).putLong(state.globalBoxIndex).array),
         (RollbackToKey, ByteBuffer.allocate(4).putInt(state.rollbackTo).array)
       ),
-      (((((general ++= boxes.values) ++= trees.values) ++= templates.values) ++= tokens.values) ++= segments.values).toArray
+      ((((((general ++= boxes.values) ++= trees.values) ++= templates.values) ++= tokens.values) ++= segments.values) ++= rentBoxes.values).toArray
     )
+
+    // delete spent storage-rent eligibility entries from db
+    if (rentBoxDeletes.nonEmpty) historyStorage.removeExtra(rentBoxDeletes.toArray)
 
     log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
 
@@ -281,6 +303,8 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     templates.clear()
     tokens.clear()
     segments.clear()
+    rentBoxes.clear()
+    rentBoxDeletes.clear()
   }
 
   /**
@@ -321,6 +345,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val spendingProof = tx.inputs(i).spendingProof
           if (findAndSpendBox(boxId, tx.id, height, spendingProof)) { // spend box and add tx
             val iEb = boxes(boxId)
+            markRentBoxSpent(iEb)
             findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
             findAndUpdateTemplate(hashTreeTemplate(iEb.box.ergoTree), Left(iEb))
               cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -339,6 +364,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         boxes.put(iEb.id, iEb) // box by id
         general += NumericBoxIndex(newState.globalBoxIndex, iEb.id) // box id by global box number
         outputs(i) = iEb.globalIndex
+
+        // unspent box by creation height (storage-rent eligibility index)
+        val srb = StorageRentBox(iEb)
+        rentBoxes.put(srb.id, srb)
 
         // box by address
         findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
@@ -417,7 +446,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
           template.findAndModBox(iEb.globalIndex, history)
 
-          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address, template) ++ address.buffer.values ++ template.buffer.values)
+          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address, template, StorageRentBox(iEb)) ++ address.buffer.values ++ template.buffer.values)
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
             history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
@@ -455,6 +484,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         }
         toRemove += iEb.id // box by id
         toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number
+        toRemove += StorageRentBox(iEb).id // unspent box by creation height
         newState = newState.decrementBoxIndex
       }
       newState = newState.incrementBoxIndex
@@ -685,7 +715,7 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 6
+  val NewestVersion: Int = 7
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")

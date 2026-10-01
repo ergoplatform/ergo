@@ -161,8 +161,131 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       seg._1.boxCount == seg._2._1
     })
 
+  /**
+    * Verify the storage-rent eligibility index against the ground truth: every unspent
+    * IndexedErgoBox must have exactly one rent entry with matching fields, in ascending
+    * (creationHeight, globalIndex) order.
+    */
+  def checkRentIndex(): Unit = {
+    val state = IndexerState.fromHistory(_history)
+    val expected = (0L until state.globalBoxIndex).flatMap { boxNum =>
+      NumericBoxIndex.getBoxByNumber(history, boxNum).filter(!_.isSpent)
+    }
+    val rentEntries = history.storageRentBoxesUntil(Int.MaxValue, math.max(expected.length * 2, 100))
+    rentEntries.length shouldBe expected.length
+    val byKey = expected.map(iEb => StorageRentBox(iEb).id -> iEb).toMap
+    rentEntries.foreach { srb =>
+      byKey.get(srb.id) match {
+        case Some(iEb) =>
+          srb.creationHeight shouldBe iEb.box.creationHeight
+          srb.globalIndex shouldBe iEb.globalIndex
+          srb.boxId shouldBe iEb.id
+          srb.value shouldBe iEb.box.value
+          srb.bytesLen shouldBe iEb.box.bytes.length
+        case None =>
+          fail(s"Unexpected storage-rent entry for box ${srb.boxId}")
+      }
+    }
+    // ascending order by (creationHeight, globalIndex); note globalIndex alone is NOT
+    // monotonic here: test chains create boxes whose R3 creation height differs from the
+    // inclusion order, and the rent clock runs on R3
+    rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq shouldBe
+      rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq.sorted
+  }
+
+  /**
+    * Ground truth for the rent index derived WITHOUT any indexer state: replay the best
+    * chain's blocks and keep the boxes that were created and never spent, assigning the
+    * global box index in output order. The genesis box is not part of the chain's blocks,
+    * so the produced indices are offset relative to `NumericBoxIndex`, which counts from
+    * the genesis box.
+    *
+    * This is deliberately independent of `IndexerState` and `NumericBoxIndex`: those are
+    * maintained by the indexer under test, so a systematic miscount of the rent rows
+    * could cancel out in a comparison using them on both sides.
+    */
+  def unspentBoxesFromChain(height: Int): Map[ModifierId, (Int, Long)] = {
+    val created = mutable.HashMap.empty[ModifierId, (Int, Long)]
+    val spent = mutable.HashSet.empty[ModifierId]
+    var globalIndex = 0L
+    var h = 1
+    while (h <= height) {
+      history.bestHeaderIdAtHeight(h).foreach { headerId =>
+        history.typedModifierById[Header](headerId).foreach { header =>
+          history.getFullBlock(header).foreach { block =>
+            block.transactions.foreach { tx =>
+              tx.inputs.foreach(in => spent += bytesToId(in.boxId))
+              tx.outputs.foreach { out =>
+                created.put(bytesToId(out.id), (out.creationHeight, globalIndex))
+                globalIndex += 1
+              }
+            }
+          }
+        }
+      }
+      h += 1
+    }
+    created.filterNot { case (id, _) => spent.contains(id) }.toMap
+  }
+
+  /**
+    * The rent index must hold exactly the boxes the chain has created and never spent, and
+    * its rows must be ordered by (creationHeight, globalIndex) - the order the ascending
+    * range scan in `HistoryStorage.storageRentBoxesUntil` relies on.
+    *
+    * Box ids are compared against the chain-derived truth, so this catches rent rows that
+    * survive a rollback for boxes that no longer exist, and rows missing for boxes that do.
+    */
+  def checkRentIndexAgainstChain(height: Int): Unit = {
+    val expected = unspentBoxesFromChain(height)
+    val rentEntries =
+      history.storageRentBoxesUntil(Int.MaxValue, math.max(expected.size * 4, 1000))
+
+    withClue(s"rent index size at height $height: ") {
+      rentEntries.length shouldBe expected.size
+    }
+
+    val actualIds = rentEntries.map(_.boxId).toSet
+    withClue("rent index must cover exactly the boxes unspent on the best chain: ") {
+      actualIds shouldBe expected.keySet
+    }
+
+    // creation height is part of the key, so it must match the box exactly
+    rentEntries.foreach { e =>
+      expected.get(e.boxId).foreach { case (creationHeight, _) =>
+        e.creationHeight shouldBe creationHeight
+      }
+    }
+
+    // The global index cannot be compared against a chain replay: the indexer counts
+    // from the genesis box while a chain replay only sees block outputs. What matters
+    // for the range scan is that the numbering is strictly increasing in
+    // (creationHeight, globalIndex) order, so the rows form one ascending, unique run.
+    val keys = rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq
+    withClue("rent rows must be strictly ascending by (creationHeight, globalIndex): ") {
+      keys shouldBe keys.sorted
+      keys.distinct.length shouldBe keys.length
+    }
+
+    // the value/size fields are what the claim builder needs to price the storage rent
+    rentEntries.foreach { e =>
+      history.typedExtraIndexById[IndexedErgoBox](e.boxId).foreach { iEb =>
+        e.value shouldBe iEb.box.value
+        e.bytesLen shouldBe iEb.box.bytes.length
+      }
+    }
+
+  }
+
   // example G-30;R-20;G-35;R-30
-  def rollbackWithPattern(pattern: String): Unit = {
+  def rollbackWithPattern(pattern: String, checkChain: Boolean = false): Unit = {
+    // when checkChain is set, the rent rows are additionally verified against the
+    // chain-derived unspent set, which does not rely on indexer state
+    var rolledBackTo: Int = 0
+    def checkRent(): Unit = {
+      checkRentIndex()
+      if (checkChain) checkRentIndexAgainstChain(rolledBackTo)
+    }
 
     def rollback(n: Int): Unit = {
       println(s"Rollback to $n")
@@ -215,6 +338,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         else
           boxOpt shouldBe None
       }
+
+      rolledBackTo = n
+      checkRent()
     }
 
     def generate(n: Int): Unit = {
@@ -239,6 +365,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         utxos.exists(_.isSpent) shouldBe false
       }
 
+      rolledBackTo = n
+      checkRent()
     }
 
     pattern.split(";").map(_.split("-")).map(x => x(0) -> x(1).toInt).foreach {
@@ -332,6 +460,60 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     checkTokens(indexedTokens) shouldBe 0
     indexer ! Reset()
   }
+
+  property("storage rent eligibility index") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("rent index is trimmed to the unspent set after a rollback") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    checkRentIndexAgainstChain(HEIGHT)
+
+    // rolling back discards the blocks that created some boxes, so those rows must go
+    val back = BRANCHPOINT
+    indexer ! Rollback(history.bestHeaderIdAtHeight(back).get)
+    lock.lock()
+    done.await()
+
+    checkRentIndexAgainstChain(back)
+    indexer ! Reset()
+  }
+
+  property("rent index stays correct across repeated rollbacks") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+    checkRentIndexAgainstChain(HEIGHT)
+
+    // each rollback must re-derive the rent rows of the surviving range only; rolling
+    // forward again is separate (the chain generator cannot extend a rolled-back chain,
+    // so this covers successive rollbacks, as rollbackWithPattern does)
+    Seq(HEIGHT - 10, BRANCHPOINT, 8, 1).foreach { back =>
+      indexer ! Rollback(history.bestHeaderIdAtHeight(back).get)
+      lock.lock()
+      done.await()
+      checkRentIndexAgainstChain(back)
+    }
+    indexer ! Reset()
+  }
+
+  property("rent index survives rollback interleaved with generation") {
+    // same rollback/generate interleaving as rollbackWithPattern, but the rent rows are
+    // checked against chain-derived truth rather than indexer state
+    rollbackWithPattern("G-30;R-20;G-35;R-30", checkChain = true)
+  }
+
+
 
   property("alternating gens and rollbacks") {
     rollbackWithPattern("G-10;R-5;G-15;R-10;G-20;R-5")

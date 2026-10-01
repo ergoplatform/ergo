@@ -20,14 +20,14 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -677,6 +677,31 @@ object CandidateGenerator extends ScorexLogging {
 
       val emissionTxs = emissionTxOpt.toSeq
 
+      // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
+      // bypassing the mempool (goes into the block right after the prioritized transactions)
+      val rentClaimTxs: Seq[ErgoTransaction] =
+        if (ergoSettings.nodeSettings.storageRentCollection) {
+          val upcomingHeight = upcomingContext.currentHeight
+          val threshold = upcomingHeight - Constants.StoragePeriod
+          if (threshold > 0) {
+            val eligible = history.storageRentBoxesUntil(threshold, StorageRentClaimBuilder.MaxClaims)
+              .toSeq
+              .flatMap(entry => state.boxById(ADKey @@ idToBytes(entry.boxId)))
+            StorageRentClaimBuilder.buildClaim(
+              eligible,
+              upcomingHeight,
+              upcomingContext.currentParameters,
+              minerPk,
+              Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty),
+              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet
+            ).toSeq
+          } else {
+            Seq.empty
+          }
+        } else {
+          Seq.empty
+        }
+
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
@@ -694,7 +719,7 @@ object CandidateGenerator extends ScorexLogging {
         state.stateContext.currentParameters.maxBlockSize,
         state,
         upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
+        emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
       )
 
       val (txs, toEliminate) = collectPoolTxs

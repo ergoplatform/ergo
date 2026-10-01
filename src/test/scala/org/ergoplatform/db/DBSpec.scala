@@ -17,6 +17,10 @@ trait DBSpec extends TestFileUtils {
     def toBs: Seq[(ByteString, ByteString)] = xs.map(x => ByteString(x._1) -> ByteString(x._2))
   }
 
+  implicit class ArrayPairsOps(xs: Array[(Array[Byte], Array[Byte])]) {
+    def toBs: Seq[(ByteString, ByteString)] = xs.toSeq.toBs
+  }
+
   protected def byteString(s: String): Array[Byte] = s.getBytes("UTF-8")
 
   protected def byteString32(s: String): Array[Byte] = Algos.hash(byteString(s))

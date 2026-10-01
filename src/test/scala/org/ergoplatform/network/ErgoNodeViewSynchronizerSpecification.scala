@@ -474,10 +474,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val otherPeer = ConnectedPeer(
         connectionIdGen.sample.get,
         pchProbe.ref,
-        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+        Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+          StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))),
+          System.currentTimeMillis()))
       )
-      val announced = InvData(canonical.modifierTypeId, Seq(canonical.id))
-      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(announced)), Some(otherPeer))
+      syncTracker.updateStatus(otherPeer, org.ergoplatform.consensus.Older, Some(blocks.last.header.height))
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(canonical.modifierTypeId -> Seq(canonical.id)))
       requestForModifierSent(ncProbe, canonical.modifierTypeId, canonical.id)
       eventually {
         deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Requested

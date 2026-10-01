@@ -1257,10 +1257,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         if (sameIdVersionMismatch) {
           deliveryTracker.setUnknown(pmod.id, pmod.modifierTypeId)
+          penalizeMaliciousPeer(remote)
         } else {
           deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
+          penalizeMisbehavingPeer(remote)
         }
-        penalizeMisbehavingPeer(remote)
         false
       case Failure(_: RecoverableModifierError) if transactionHeaderMissing =>
         // Wait for the header before caching an ID whose version cannot yet be checked.

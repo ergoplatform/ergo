@@ -1227,7 +1227,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def raiseHeightFromHeaderInv(hr: ErgoHistory, ids: Seq[ModifierId], peer: ConnectedPeer): Unit = {
     val announced = ids.flatMap(id => hr.heightOf(id).filter(_ => hr.isInBestChain(id)))
     if (announced.nonEmpty) {
-      syncTracker.updateHeight(peer, announced.max, raiseOnly = true)
+      val h = announced.max
+      syncTracker.statuses.get(peer).filter(_.height < h).foreach { status =>
+        log.debug(s"Raising recorded height of $peer from ${status.height} to $h (header Inv)")
+      }
+      syncTracker.updateHeight(peer, h, raiseOnly = true)
     }
   }
 

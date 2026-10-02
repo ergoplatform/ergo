@@ -112,12 +112,17 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     */
   def removeTxAndDoubleSpends(tx: ErgoTransaction): ErgoMemPool = {
     def removeTx(mp: ErgoMemPool, tx: ErgoTransaction): ErgoMemPool = {
-      log.debug(s"Removing transaction ${tx.id} from the mempool")
-      new ErgoMemPool(mp.pool.remove(tx), mp.updateStatsOnRemoval(tx), sortingOption)
+      val updatedPool = mp.pool.remove(tx)
+      if (updatedPool eq mp.pool) {
+        mp
+      } else {
+        log.debug(s"Removing transaction ${tx.id} from the mempool")
+        new ErgoMemPool(updatedPool, mp.updateStatsOnRemoval(tx), sortingOption)
+      }
     }
 
     // An applied transaction may arrive through a block without ever entering the pool.
-    val poolWithoutTx = if (contains(tx.id)) removeTx(this, tx) else this
+    val poolWithoutTx = removeTx(this, tx)
     val doubleSpentTransactionIds = tx.inputs.flatMap(i =>
       poolWithoutTx.pool.inputs.get(i.boxId)
     ).toSet

@@ -89,4 +89,26 @@ class AppliedTransactionConflictsSpec extends AnyFlatSpec with ErgoTestHelpers w
     after.stats.takenTxns shouldBe 8
     after.pool.outputs.keySet shouldBe (child.outputs ++ unrelated.outputs).map(_.id).toSet
   }
+
+  it should "remove an applied transaction retained only in the ordered index" in {
+    val applied = transaction(1)(1000000L)
+    val unrelated = transaction(2)(1000000L)
+    val healthy = poolWith(applied, unrelated)
+    val ordered = healthy.pool
+    val incomplete = new OrderedTxPool(
+      ordered.orderedTransactions,
+      ordered.transactionsRegistry - applied.id,
+      ordered.invalidatedTxIds,
+      ordered.outputs,
+      ordered.inputs -- applied.inputs.map(_.boxId)
+    )(settings)
+    val before = new ErgoMemPool(incomplete, healthy.stats, healthy.sortingOption)(settings)
+    before.contains(applied.id) shouldBe false
+    before.getAll.map(_.id).toSet shouldBe Set(applied.id, unrelated.id)
+
+    val after = before.removeWithDoubleSpends(Seq(applied))
+
+    after.getAll.map(_.id) shouldBe Seq(unrelated.id)
+    after.pool.outputs.keySet shouldBe unrelated.outputs.map(_.id).toSet
+  }
 }

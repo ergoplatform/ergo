@@ -1135,6 +1135,55 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: a throttled V1 SyncInfo, or a V2 one without headers, changes neither the peer's status nor its height"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Older
+      import org.ergoplatform.nodeView.history.ErgoSyncInfoV1
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.utils.generators.ChainGenerator.applyChain
+      import scorex.core.network.ConnectedPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val applied = genChain(8, hist)
+      applyChain(hist, applied)
+      val fullHeight = hist.fullBlockHeight
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val peerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val follower = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(PeerInfo(peerSpec, System.currentTimeMillis())))
+      // Older is a status the chain comparison cannot give these SyncInfos, so it survives only if the comparison (and
+      // with it any reply) is skipped
+      syncTracker.updateStatus(follower, Older, Some(fullHeight - 5))
+      def throttleNext(): Unit = syncTracker.statuses.update(
+        follower,
+        syncTracker.statuses(follower).copy(lastSyncGetTime = Some(System.currentTimeMillis() + 60000))
+      )
+      def send(info: org.ergoplatform.nodeView.history.ErgoSyncInfo): Unit =
+        synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
+
+      throttleNext()
+      send(ErgoSyncInfoV1(Seq(applied.last.header.id)))
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
+
+      throttleNext()
+      send(ErgoSyncInfoV2(Seq.empty))
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with txs when <= 3 transactions"
   ) {
     withFixture2 { ctx =>

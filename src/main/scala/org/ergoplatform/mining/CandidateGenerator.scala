@@ -1135,52 +1135,62 @@ object CandidateGenerator extends ScorexLogging {
     val invalidTxs = MutableArray.empty[ModifierId]
     var done = false
 
-    def feesFor(ordering: Seq[CostedTransaction]): Option[Seq[CostedTransaction]] = {
+    // Failure means a derived fee transaction is invalid; None means the valid
+    // candidate has reached its cost or size budget.
+    def feesFor(ordering: Seq[CostedTransaction]): Try[Option[Seq[CostedTransaction]]] = {
       val sources = inputBlockTransactions ++ ordering.map(_._1)
       val boxes = sources.flatMap(_.outputs).map(b => bytesToId(b.id) -> b).toMap
-      val costedFees = collectFees(currentHeight, sources, minerPk, upcomingContext)
-        .foldLeft(Try(Vector.empty[CostedTransaction])) { (result, feeTx) =>
-          result.flatMap { accumulated =>
-            val checkedCost = feeCosts.get(feeTx.id) match {
-              case Some(cost) => Success(cost)
-              case None =>
-                val inputs = feeTx.inputs.flatMap(i => boxes.get(bytesToId(i.boxId)))
-                feeTx.statefulValidity(inputs, IndexedSeq.empty, upcomingContext)(verifier).map { cost =>
-                  feeCosts.put(feeTx.id, cost)
-                  cost
-                }
+      val feeTxs = collectFees(currentHeight, sources, minerPk, upcomingContext)
+      val newOutputIds = ordering.flatMap(_._1.outputs).map(b => bytesToId(b.id)).toSet
+      val (requiredTxs, optionalTxs) = feeTxs.partition { tx =>
+        tx.inputs.exists(i => newOutputIds.contains(bytesToId(i.boxId)))
+      }
+      def costFee(feeTx: ErgoTransaction): Try[CostedTransaction] = {
+        val checkedCost = feeCosts.get(feeTx.id) match {
+          case Some(cost) => Success(cost)
+          case None =>
+            val inputs = feeTx.inputs.flatMap(i => boxes.get(bytesToId(i.boxId)))
+            feeTx.statefulValidity(inputs, IndexedSeq.empty, upcomingContext)(verifier).map { cost =>
+              feeCosts.put(feeTx.id, cost)
+              cost
             }
-            checkedCost.map(cost => accumulated :+ (feeTx -> cost))
-          }
         }
-      costedFees match {
-        case Success(allFees) =>
-          val newOutputIds = ordering.flatMap(_._1.outputs).map(b => bytesToId(b.id)).toSet
-          val (required, optional) = allFees.partition { case (tx, _) =>
-            tx.inputs.exists(i => newOutputIds.contains(bytesToId(i.boxId)))
-          }
+        checkedCost.map(cost => feeTx -> cost)
+      }
+      val required = requiredTxs.foldLeft(Try(Vector.empty[CostedTransaction])) { (result, feeTx) =>
+        result.flatMap(accumulated => costFee(feeTx).map(accumulated :+ _))
+      }
+      required match {
+        case Success(costedRequired) =>
           val base = prefix ++ ordering
-          if (!correctLimits(base ++ required, orderingCostLimit, maxBlockSize, version)) {
-            None
+          if (!correctLimits(base ++ costedRequired, orderingCostLimit, maxBlockSize, version)) {
+            Success(None)
           } else {
-            var selected: Seq[CostedTransaction] = required
+            var selected: Seq[CostedTransaction] = costedRequired
+            var optionalCapacity = true
             // Already selected input transactions remain mandatory. Optional rewards must not
             // prevent their ordering confirmation when only part of the fee collection fits.
-            optional.iterator.takeWhile { feeTx =>
-              if (correctLimits(base ++ selected :+ feeTx, orderingCostLimit, maxBlockSize, version)) {
-                selected = selected :+ feeTx
-                true
-              } else false
-            }.foreach(_ => ())
-            Some(selected)
+            optionalTxs.iterator.takeWhile(_ => optionalCapacity).foreach { feeTx =>
+              costFee(feeTx) match {
+                case Success(costed) =>
+                  if (correctLimits(base ++ selected :+ costed,
+                    orderingCostLimit, maxBlockSize, version)) {
+                    selected = selected :+ costed
+                  } else optionalCapacity = false
+                case Failure(error) =>
+                  log.warn(s"Optional fee collection is not selectable: ${error.getMessage}")
+              }
+            }
+            Success(Some(selected))
           }
         case Failure(error) =>
           log.warn(s"Fee collection is not selectable: ${error.getMessage}")
-          None
+          Failure(error)
       }
     }
 
-    lastFeeTxs = feesFor(Seq.empty).getOrElse(Seq.empty)
+    // A mandatory prefix cannot be deferred here. Keep the existing prefix-only fallback.
+    lastFeeTxs = feesFor(Seq.empty).toOption.flatten.getOrElse(Seq.empty)
 
     while (!done) {
       def currentInput: Seq[ErgoTransaction] = accInput.map(_._1)
@@ -1247,14 +1257,19 @@ object CandidateGenerator extends ScorexLogging {
                 }
               } else {
                 feesFor(accOrdering :+ costed) match {
-                  case Some(fees) =>
+                  case Success(Some(fees)) =>
                     accOrdering += costed
                     lastFeeTxs = fees
                     remainingTxs = remainingTxs.tail
                     true
-                  case None =>
+                  case Success(None) =>
                     done = true
                     false
+                  case Failure(_) =>
+                    // The new transaction made its derived fee collector invalid.
+                    // Preserve it and its descendants for a later candidate.
+                    deferTx()
+                    true
                 }
               }
             }

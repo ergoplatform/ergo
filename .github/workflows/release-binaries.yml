@@ -15,8 +15,8 @@ jobs:
       ERGO_RELEASE_PLATFORM: macos-x64
       ERGO_RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
       - name: Download ergo node jar 
         run: |
           echo $GITHUB_REF

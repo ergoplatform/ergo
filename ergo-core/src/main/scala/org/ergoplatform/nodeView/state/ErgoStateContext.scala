@@ -113,6 +113,39 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     */
   def blockVersion: Header.Version = currentParameters.blockVersion
 
+  /**
+    * @return id of the EIP-27 re-emission token when the storage-rent repairs
+    *         and the ordinary post-activation EIP-27 spending rules are both
+    *         active. Chain identity must not depend on the local
+    *         `checkReemissionRules` flag.
+    */
+  def storageRentReemissionTokenId: Option[sigma.Coll[Byte]] = {
+    val reemissionSettings = chainSettings.reemission
+    val tokenId = reemissionSettings.reemissionTokenIdBytes
+    if (blockVersion >= Header.Interpreter70Version &&
+        currentHeight > reemissionSettings.activationHeight &&
+        tokenId.length == Constants.ModifierIdSize) {
+      Some(tokenId)
+    } else {
+      None
+    }
+  }
+
+  /**
+    * EIP-27 remains an optional local soft-fork check under legacy block
+    * versions. From the EIP-27 activation height under the repaired rules, its
+    * transaction-wide checks are mandatory. This includes the activation-height
+    * injection branch, one block before ordinary re-emission-token spending and
+    * the storage-rent carve-out become applicable.
+    */
+  def shouldCheckReemissionRules: Boolean = {
+    val reemissionSettings = chainSettings.reemission
+    chainSettings.reemission.checkReemissionRules ||
+      (blockVersion >= Header.Interpreter70Version &&
+        currentHeight >= reemissionSettings.activationHeight &&
+        reemissionSettings.reemissionTokenIdBytes.length == Constants.ModifierIdSize)
+  }
+
   private def votingEpochLength: Int = votingSettings.votingLength
 
   def lastHeaderOpt: Option[Header] = lastHeaders.headOption

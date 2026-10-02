@@ -454,7 +454,7 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
         val currentTxCost = validation.result.payload.get
         verifyInput(validation, boxesToSpend, dataBoxes, box, idx.toShort, stateContext, currentTxCost)
       }
-      .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
+      .validate(txReemission, !stateContext.shouldCheckReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
   }
 

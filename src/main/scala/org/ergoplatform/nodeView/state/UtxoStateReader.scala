@@ -49,7 +49,8 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
                        costLimit: Int,
                        interpreterOpt: Option[ErgoInterpreter]): Try[Int] = {
     val parameters = context.currentParameters.withBlockCost(costLimit)
-    val verifier = interpreterOpt.getOrElse(ErgoInterpreter(parameters))
+    val verifier =
+      interpreterOpt.getOrElse(ErgoInterpreter(parameters, context.storageRentReemissionTokenId))
 
     tx.statelessValidity().flatMap { _ =>
       val boxesToSpend = tx.inputs.flatMap(i => boxById(i.boxId))

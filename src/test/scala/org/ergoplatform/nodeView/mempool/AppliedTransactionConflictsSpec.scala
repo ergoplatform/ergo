@@ -110,5 +110,6 @@ class AppliedTransactionConflictsSpec extends AnyFlatSpec with ErgoTestHelpers w
 
     after.getAll.map(_.id) shouldBe Seq(unrelated.id)
     after.pool.outputs.keySet shouldBe unrelated.outputs.map(_.id).toSet
+    after.stats shouldBe before.stats
   }
 }

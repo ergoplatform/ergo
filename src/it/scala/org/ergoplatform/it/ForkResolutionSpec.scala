@@ -18,7 +18,9 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
 
   val nodesQty: Int = 4
 
-  val commonChainLength: Int = 5
+  // sync v2 sends headers at offsets 0, 16, 128, 512 from the tip, so the header 16 blocks below a forked
+  // tip must be in the common chain, otherwise the peer can't find the common point
+  val commonChainLength: Int = 16
   val forkLength: Int = 5
   val syncLength: Int = 15
 
@@ -49,17 +51,24 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     }
   }
 
-  def startNodesWithBinds(nodeConfigs: List[Config],
-                          configEnrich: ExtraConfig = noExtraConfig): List[Node] = {
+  /** Starts the containers without waiting for the nodes to respond */
+  def launchNodes(nodeConfigs: List[Config],
+                  configEnrich: ExtraConfig = noExtraConfig): List[Node] = {
     log.trace(s"Starting ${nodeConfigs.size} containers")
     val nodes: Try[List[Node]] = nodeConfigs
       .map(_.withFallback(specialDataDirConfig(remoteVolume)))
       .zip(volumesMapping)
       .map { case (cfg, vol) => docker.startDevNetNode(cfg, configEnrich, Some(vol)) }
       .sequence
+    nodes.get
+  }
+
+  def startNodesWithBinds(nodeConfigs: List[Config],
+                          configEnrich: ExtraConfig = noExtraConfig): List[Node] = {
+    val nodes = launchNodes(nodeConfigs, configEnrich)
     implicit val patienceConfig: PatienceConfig = PatienceConfig((nodeConfigs.size * 2).seconds, 3.second)
     eventually {
-      Await.result(Future.traverse(nodes.get)(_.waitForStartup), 180.seconds)
+      Await.result(Future.traverse(nodes)(_.waitForStartup), 180.seconds)
     }
   }
 
@@ -80,23 +89,25 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))
       Async.await(Future.traverse(nodes)(_.waitForHeight(initMaxHeight + commonChainLength, 100.millis)))
       // Isolated followers can't mine while headers are 6+ blocks ahead of full blocks, so close the
-      // gap and stop all nodes at once (a sequential stop lets it reopen)
-      Async.await(Future.traverse(nodes.tail) { node =>
-        node.waitFor[Int](
-          n => n.headersHeight.flatMap(h => n.fullHeight.map(h - _)),
-          _ < 3,
-          100.millis
-        )
-      })
-      val isolatedNodes = Async.await {
-        Await.result(Future.traverse(nodes)(node => Future(docker.stopNode(node.containerId))), 1.minute)
-        clearPeerDatabases()
-        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
-      }
+      // gap (for all followers at the same moment), then kill all nodes at once: the gap reopens
+      // while the miner keeps mining during the 5s grace period of a regular stop
+      Async.await(nodes.head.waitFor[Int](
+        _ => Future.traverse(nodes.tail)(n => n.headersHeight.flatMap(h => n.fullHeight.map(h - _))).map(_.max),
+        _ < 2,
+        100.millis
+      ))
+      Await.result(Future.traverse(nodes)(node => Future(docker.stopNode(node.containerId, 0))), 1.minute)
+      clearPeerDatabases()
       val forkHeight = initMaxHeight + commonChainLength + forkLength
-      Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
+      // Kill each node as soon as it reaches forkHeight, even before the others are up: a fork deeper
+      // than 16 blocks can't be resolved by sync v2, which sends headers at offsets 0, 16, 128, 512
+      val isolatedNodes = launchNodes(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig)
+      Async.await(Future.traverse(isolatedNodes) { node =>
+        node
+          .waitFor[Int](_.fullHeight.recover { case _ => 0 }, _ >= forkHeight, 100.millis)
+          .map(_ => docker.stopNode(node.containerId, 0))
+      })
       val regularNodes = Async.await {
-        isolatedNodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
         Future.successful(startNodesWithBinds(minerConfig +: onlineSyncNodesConfig))
       }

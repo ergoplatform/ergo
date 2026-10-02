@@ -33,7 +33,8 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
   // boundary (~4.2 days every ~72.5 days for blocksToKeep = 2880) the pruning floor falls into the
   // proof's sparse prefix (ergoplatform/ergo#2595) and no full block is applied; the
   // "first full block applied" await below reports that. The in-window stall is expected from
-  // the code and has not been observed on mainnet.
+  // the code and has not been observed on mainnet. A second known failure is ergoplatform/ergo#1159,
+  // which the kill-and-restart step can hit; see the suffix step below.
   //
   // The node data dir is mounted from a host temp directory (not an anonymous container volume)
   // so that the container can be killed and restarted with the same data directory.
@@ -204,8 +205,13 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
     // Phase 5: the full-block suffix catches up with the header chain. Observed: minutes. Capped at
     // 1 hour so that the awaits sum to well under the 6 h job limit and a stall ends as this named
     // failure, not as a job cancellation.
+    // Known failure here: ergoplatform/ergo#1159. If the pruning floor recomputed after the restart moves up
+    // one voting epoch, past the full blocks applied before the kill, the node rejects the blocks in between
+    // and full-block sync stops (about 5-10% of runs, until a fix such as #2359 or #2273 is merged).
     val syncedInfo = awaitNamed("suffix synced", 1.hour,
-      "full height did not reach header height within 1 hour after the first full block; " + heightsOf(restartedNode)) {
+      "full height did not reach header height within 1 hour after the first full block; " + heightsOf(restartedNode) +
+        "; likely ergoplatform/ergo#1159 if full height is still near the pre-kill full height " +
+        preKillInfo.bestBlockHeightOpt) {
       Async.async {
         Async.await(restartedNode.waitFor[NodeInfo](
           _.info,

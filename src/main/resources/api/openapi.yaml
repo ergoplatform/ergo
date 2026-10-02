@@ -2796,6 +2796,10 @@ paths:
   /blocks/at/{blockHeight}:
     get:
       summary: Get header ids at the given height
+      description: >-
+        Returns locally stored header ids, including forks. A retained raw row above
+        the selected best-header height may still be returned after invalidation;
+        its first id is not a selected-chain header.
       operationId: getFullBlockAt
       tags:
         - blocks

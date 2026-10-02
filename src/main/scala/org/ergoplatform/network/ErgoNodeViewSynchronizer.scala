@@ -809,13 +809,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  // ConnectedPeer.equals uses only the remote address. A replacement handler at that address
+  // must not have its active request cancelled by a reply from the previous connection.
+  private def sameActiveConnection(requested: ConnectedPeer, remote: ConnectedPeer): Boolean =
+    requested.connectionId == remote.connectionId && requested.handlerRef == remote.handlerRef
+
+  private def requestOwnedBy(id: ModifierId,
+                             modifierTypeId: NetworkObjectTypeId.Value,
+                             remote: ConnectedPeer): Boolean = {
+    deliveryTracker.getRequestedInfo(modifierTypeId, id).exists { info =>
+      sameActiveConnection(info.peer, remote)
+    }
+  }
+
   /**
     * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
     * to mempool for processing
     */
   def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
-      deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
+      if (requestOwnedBy(id, ErgoTransaction.modifierTypeId, remote)) {
+        // The oversized bytes cannot authenticate their declared id. Let another peer supply it.
+        deliveryTracker.setUnknown(id, ErgoTransaction.modifierTypeId)
+      }
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
@@ -852,10 +868,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         case _ =>
           // Penalize peer and do nothing
           // Only the requested connection may cancel the live request on a bad reply.
-          val requestedSourceMatches = deliveryTracker.getRequestedInfo(modifierTypeId, id).exists { info =>
-            info.peer.connectionId == remote.connectionId && info.peer.handlerRef == remote.handlerRef
-          }
-          if (requestedSourceMatches) {
+          if (requestOwnedBy(id, modifierTypeId, remote)) {
             // Forget about block section, so it will be redownloaded if announced again only
             deliveryTracker.setUnknown(id, modifierTypeId)
           }
@@ -993,7 +1006,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val manifestId = ModifierId @@ Algos.encode(manifest.id)
         log.info(s"Got manifest $manifestId from $remote")
         deliveryTracker.getRequestedInfo(ManifestTypeId.value, manifestId) match {
-          case Some(ri) if ri.peer == remote =>
+          case Some(ri) if sameActiveConnection(ri.peer, remote) =>
             deliveryTracker.setUnknown(manifestId, ManifestTypeId.value)
             val manifestRecordOpt = availableManifests.get(manifestId)
             manifestRecordOpt match {
@@ -1407,16 +1420,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * penalize the peer that actually delivered it, and the pending entry would block requesting
     * or replaying the announcement later. Clear it back to `Unknown` (re-requestable) on such a
     * benign-drop exit, but only when this peer is the one we requested it from -- an unsolicited
-    * response from another peer must not erase the real supplier's pending request. Mirrors the
-    * `getRequestedInfo(..) if ri.peer == remote` guard used on the snapshot download paths.
+    * response from another connection must not erase the real supplier's pending request.
     */
   private def clearRequestedIfFromSupplier(modifierId: ModifierId,
                                            modifierTypeId: NetworkObjectTypeId.Value,
                                            remote: ConnectedPeer): Unit = {
-    deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
-      case Some(info) if info.peer == remote =>
-        deliveryTracker.setUnknown(modifierId, modifierTypeId)
-      case _ => ()
+    if (requestOwnedBy(modifierId, modifierTypeId, remote)) {
+      deliveryTracker.setUnknown(modifierId, modifierTypeId)
     }
   }
 

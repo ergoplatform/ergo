@@ -639,6 +639,115 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  property("NodeViewSynchronizer: oversized transaction from another handler preserves its requested owner") {
+    withFixture { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      deliveryTracker.reset()
+      val replacementHandler = TestProbe("ReplacementTxHandler")
+      val replacementPeer = peer.copy(handlerRef = replacementHandler.ref)
+      val otherHandler = TestProbe("OtherTxHandler")
+      val otherPeer = peer.copy(
+        connectionId = peer.connectionId.copy(
+          remoteAddress = new InetSocketAddress("203.0.113.3", 9030)
+        ),
+        handlerRef = otherHandler.ref
+      )
+      deliveryTracker.setRequested(tx.modifierTypeId, tx.id, replacementPeer)(
+        _ => system.scheduler.scheduleOnce(10.minutes, ncProbe.ref, "unused")(system.dispatcher)
+      )
+      val requestTimer = deliveryTracker.getRequestedInfo(tx.modifierTypeId, tx.id).get.cancellable
+      val oversized = Array.fill[Byte](ErgoSettingsReader.read().nodeSettings.maxTransactionSize + 1)(0)
+      val reply = ModifiersData(tx.modifierTypeId, Map(tx.id -> oversized))
+
+      for (wrongPeer <- Seq(peer, otherPeer)) {
+        synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(reply)), Some(wrongPeer))
+        ncProbe.fishForMessage(3 seconds) {
+          case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+            address == wrongPeer.connectionId.remoteAddress
+          case _ => false
+        }
+        deliveryTracker.getRequestedInfo(tx.modifierTypeId, tx.id)
+          .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+        requestTimer.isCancelled shouldBe false
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: oversized transaction from the requested owner remains retryable") {
+    withFixture { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      deliveryTracker.reset()
+      deliveryTracker.setRequested(tx.modifierTypeId, tx.id, peer)(
+        _ => system.scheduler.scheduleOnce(10.minutes, ncProbe.ref, "unused")(system.dispatcher)
+      )
+      val requestTimer = deliveryTracker.getRequestedInfo(tx.modifierTypeId, tx.id).get.cancellable
+      val oversized = Array.fill[Byte](ErgoSettingsReader.read().nodeSettings.maxTransactionSize + 1)(0)
+      val reply = ModifiersData(tx.modifierTypeId, Map(tx.id -> oversized))
+
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(reply)), Some(peer))
+      ncProbe.fishForMessage(3 seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      deliveryTracker.status(tx.id, tx.modifierTypeId, Seq.empty) shouldBe Unknown
+      requestTimer.isCancelled shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: manifest from an old handler preserves its replacement's request") {
+    withFixture { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import org.ergoplatform.serialization.ManifestSerializer
+      import org.ergoplatform.settings.Algos
+      import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+      import scorex.db.LDBFactory
+
+      deliveryTracker.reset()
+      val state = localStateGen.sample.get
+      val storage = state.persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage]
+      val snapshotStore = LDBFactory.createKvDb(createTempDir.getAbsolutePath)
+      val bytes = try {
+        val rootHash = state.rootDigest.dropRight(1)
+        val rootLabel = storage.dumpSnapshot(snapshotStore, ManifestSerializer.MainnetManifestDepth, rootHash).get
+        snapshotStore.get(rootLabel).get
+      } finally {
+        snapshotStore.close()
+      }
+      val manifest = ManifestSerializer.defaultSerializer.parseBytes(bytes)
+      val id = ModifierId @@ Algos.encode(manifest.id)
+
+      val replacementHandler = TestProbe("ReplacementManifestHandler")
+      val replacementPeer = peer.copy(handlerRef = replacementHandler.ref)
+      replacementPeer shouldBe peer // ConnectedPeer.equals compares only the remote address.
+      replacementPeer.handlerRef should not be peer.handlerRef
+      deliveryTracker.setRequested(ManifestTypeId.value, id, replacementPeer)(
+        _ => system.scheduler.scheduleOnce(10.minutes, ncProbe.ref, "unused")(system.dispatcher)
+      )
+      val attempt = deliveryTracker.getRequestedInfo(ManifestTypeId.value, id).get
+
+      synchronizer ! Message(ManifestSpec, Left(ManifestSpec.toBytes(bytes)), Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.SpamPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      deliveryTracker.status(id, ManifestTypeId.value, Seq.empty) shouldBe Requested
+      deliveryTracker.getRequestedInfo(ManifestTypeId.value, id)
+        .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+      attempt.cancellable.isCancelled shouldBe false
+    }
+  }
+
   property("NodeViewSynchronizer: valid reply from another peer keeps existing acceptance") {
     withFixture { ctx =>
       import ctx._

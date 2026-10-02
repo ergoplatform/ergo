@@ -421,7 +421,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // the comparison and reply are skipped; a peer may report several heights within the interval, so keep the
       // latest, as the relay filters read it
       syncInfo match {
-        case syncV2: ErgoSyncInfoV2 => syncV2.height.foreach(h => syncTracker.updateHeight(remote, h, raiseOnly = false))
+        case syncV2: ErgoSyncInfoV2 => syncV2.height.foreach { h =>
+          syncTracker.statuses.get(remote).filter(_.height > h).foreach { status =>
+            log.debug(s"Throttled SyncInfo lowers the recorded height of $remote from ${status.height} to $h")
+          }
+          syncTracker.updateHeight(remote, h, raiseOnly = false)
+        }
         case _ =>
       }
     }

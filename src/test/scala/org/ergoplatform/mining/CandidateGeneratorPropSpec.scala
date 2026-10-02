@@ -481,7 +481,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
   /**
    * Test: Double-spend detection within collectTxs
    * Verifies that when multiple transactions attempt to spend the same inputs,
-   * only the first valid one is included and others are marked as invalid.
+   * only the first valid one is included. The other remains a valid alternative
+   * if this candidate is never mined.
    */
   property("should filter double-spending transactions in collectTxs") {
     val bh = boxesHolderGen.sample.get
@@ -520,10 +521,10 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     result._2.length should be <= 2
     result._2.length should be >= 1
 
-    // At least one of the conflicting txs should be in invalid list (result._3)
-    // Both result._3 and tx.id are ModifierId (String type)
-    val conflictingInvalid = result._3.count(id => id == tx1.id || id == tx2.id)
-    conflictingInvalid should be >= 1
+    val selectedConflicts = result._2.count(tx => tx.id == tx1.id || tx.id == tx2.id)
+    selectedConflicts shouldBe 1
+    result._3 should not contain tx1.id
+    result._3 should not contain tx2.id
   }
 
   /**
@@ -711,11 +712,11 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
   }
 
   /**
-   * Test: Mixed valid and invalid transactions
+   * Test: Mixed valid and conflicting candidate alternatives
    * Verifies that collectTxs correctly processes a mixed mempool,
-   * collecting valid transactions while filtering out invalid ones.
+   * collecting valid transactions while leaving unselected alternatives in the pool.
    */
-  property("should process mixed valid and invalid transactions") {
+  property("should preserve conflicting alternatives while collecting valid transactions") {
     val bh = boxesHolderGen.sample.get
     val us = createUtxoState(bh, parameters)
     val inputs = bh.boxes.values.toIndexedSeq.take(10)
@@ -726,7 +727,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp)
     }
 
-    // Create invalid transaction (double-spend)
+    // Create alternatives conflicting with the earlier valid selections.
     val doubleSpendTx1 = validTransactionFromBoxes(inputs.take(2), rnd, issueNew = false)
     val doubleSpendTx2 = validTransactionFromBoxes(inputs.take(2), rnd, issueNew = false) // Same inputs
 
@@ -755,8 +756,10 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     result._1 shouldBe empty
     validTxs.foreach(tx => result._2.exists(_.id sameElements tx.id) shouldEqual true)
 
-    // At least one double-spend should be in invalid list (result._3)
-    result._3.length should be >= 1
+    Seq(doubleSpendTx1, doubleSpendTx2).foreach { tx =>
+      result._2 should not contain tx
+      result._3 should not contain tx.id
+    }
   }
 
 }

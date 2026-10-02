@@ -1128,6 +1128,11 @@ object CandidateGenerator extends ScorexLogging {
     // but give optional transactions no additional cost allowance in that case.
     val orderingCostLimit = math.max(maxBlockCost.toLong, prefix.map(_._2.toLong).sum)
     var remainingTxs = transactions.filterNot(tx => prefixIds.contains(tx.id))
+    val pendingOutputCounts = scala.collection.mutable.Map.empty[ModifierId, Int]
+    remainingTxs.iterator.flatMap(_.outputs).foreach { output =>
+      val id = bytesToId(output.id)
+      pendingOutputCounts.update(id, pendingOutputCounts.getOrElse(id, 0) + 1)
+    }
     val accInput = MutableArray.empty[CostedTransaction]
     val accOrdering = MutableArray.empty[CostedTransaction]
     val deferredOutputs = scala.collection.mutable.Set.empty[ModifierId]
@@ -1203,6 +1208,13 @@ object CandidateGenerator extends ScorexLogging {
 
       remainingTxs.headOption match {
         case Some(tx) =>
+          tx.outputs.foreach { output =>
+            val id = bytesToId(output.id)
+            val remainingCount = pendingOutputCounts(id) - 1
+            if (remainingCount == 0) pendingOutputCounts.remove(id)
+            else pendingOutputCounts.update(id, remainingCount)
+          }
+
           def dependsOn(outputIds: collection.Set[ModifierId]): Boolean =
             tx.inputs.exists(i => outputIds.contains(bytesToId(i.boxId))) ||
               tx.dataInputs.exists(i => outputIds.contains(bytesToId(i.boxId)))
@@ -1212,15 +1224,30 @@ object CandidateGenerator extends ScorexLogging {
             remainingTxs = remainingTxs.tail
           }
 
-          if (dependsOn(deferredOutputs) || dependsOn(feeOutputIds)) {
-            // Preserve descendants for a later candidate when their dependencies are available.
-            deferTx()
-          } else if (!inputsNotSpent(tx, stateWithTxs) || doublespend(allCurrent, tx)) {
-            // Mark transaction as invalid if it tries to do double-spending or trying to spend outputs not present
-            // Do these checks before validating the scripts to save time
-            log.debug(s"Transaction ${tx.id} double-spending or spending non-existing inputs")
+          val unresolvedIds = (tx.inputs.map(_.boxId) ++ tx.dataInputs.map(_.boxId))
+            .filter(id => stateWithTxs.boxById(id).isEmpty)
+            .map(id => bytesToId(id))
+            .toSet
+          val allUnresolvedDeferred = unresolvedIds.forall { id =>
+            deferredOutputs.contains(id) || feeOutputIds.contains(id) || pendingOutputCounts.contains(id)
+          }
+
+          if (unresolvedIds.nonEmpty && !allUnresolvedDeferred) {
+            log.debug(s"Transaction ${tx.id} has non-existing spending or data inputs")
             invalidTxs += tx.id
             remainingTxs = remainingTxs.tail
+          } else if (unresolvedIds.nonEmpty) {
+            // Preserve the transaction only when every unavailable dependency is deferred
+            // or produced later in this candidate's priority order.
+            deferTx()
+          } else if (doublespend(inputBlockTransactions, tx)) {
+            log.debug(s"Transaction ${tx.id} double-spending a mandatory input transaction")
+            invalidTxs += tx.id
+            remainingTxs = remainingTxs.tail
+          } else if (doublespend(currentInput ++ accOrdering.map(_._1), tx)) {
+            // This candidate may never be mined. A conflicting alternative can remain
+            // valid for a later candidate, so do not eliminate it from the mempool.
+            deferTx()
           } else {
 
             def validateTx(softFieldsAllowed: Boolean): Try[Int] = {

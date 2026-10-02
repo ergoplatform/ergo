@@ -71,8 +71,8 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
 
   // makeSnapshotEvery on mainnet
   private val SnapshotEvery = 52224
-  // window length for blocksToKeep = 2880, i.e. blocksToKeep + ~100
-  private val WindowLength = 2980
+  // blocksToKeep plus ~100: header sync is declared synced about 85-100 blocks below the tip
+  private val WindowLength = blocksToKeep + 100
   // maxPeerHeight is 0 until peers have reported their heights; mainnet is far above this
   private val MinPlausibleTip = 1000000
 
@@ -83,11 +83,14 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
       .flatMap(_.hcursor.downField("maxPeerHeight").as[Option[Int]].toOption.flatten)
       .filter(_ > MinPlausibleTip)
 
+  // The node's current header and full heights, for timeout messages
+  private def heightsOf(n: Node): String =
+    Try(Await.result(n.info, 30.seconds)).toOption
+      .fold("node info unavailable")(i => s"header height ${i.bestHeaderHeightOpt}, full height ${i.bestBlockHeightOpt}")
+
   // Says whether the run started inside the post-snapshot window (#2595), from the peers' tip sampled just before the
   // kill (or, failing that, at failure time), not from the node's own header height, which lags the tip during header sync.
   private def windowHint(n: Node, tipAtStart: Option[Int]): String = {
-    val heights = Try(Await.result(n.info, 30.seconds)).toOption
-      .fold("node info unavailable")(i => s"header height ${i.bestHeaderHeightOpt}, full height ${i.bestBlockHeightOpt}")
     val tip = tipAtStart.map(t => ("at start", t)).orElse(peersTip(n).map(t => ("at failure", t)))
     val where = tip.fold("peers' tip unknown") { case (when, t) =>
       val r = (t + 11) % SnapshotEvery
@@ -98,7 +101,7 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
       }
       s"peers' tip $when $t, (t + 11) % $SnapshotEvery = $r: $verdict"
     }
-    s"$heights; $where"
+    s"${heightsOf(n)}; $where"
   }
 
   // Waits for the future, converting a timeout into a test failure with a named message.
@@ -164,7 +167,8 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
     awaitNamed("node recovered after restart", 10.minutes,
       s"restarted node did not report the pre-kill header height $preKillHeaderHeight " +
         s"(full height ${preKillInfo.bestBlockHeightOpt}) within 10 minutes; " +
-        "recovery from the on-disk state failed (this is not ergoplatform/ergo#2595)") {
+        "recovery from the on-disk state failed (this is not ergoplatform/ergo#2595); " +
+        "restarted node now reports: " + heightsOf(restartedNode)) {
       Async.async {
         Async.await(restartedNode.waitFor[NodeInfo](
           _.info,
@@ -201,7 +205,7 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
     // 1 hour so that the awaits sum to well under the 6 h job limit and a stall ends as this named
     // failure, not as a job cancellation.
     val syncedInfo = awaitNamed("suffix synced", 1.hour,
-      "full height did not reach header height within 1 hour after the first full block; " + windowHint(restartedNode, tipAtStart)) {
+      "full height did not reach header height within 1 hour after the first full block; " + heightsOf(restartedNode)) {
       Async.async {
         Async.await(restartedNode.waitFor[NodeInfo](
           _.info,

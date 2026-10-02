@@ -2430,7 +2430,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           releaseInputBlockTracking(id)
           val peers = inputBlockRecipients(historyReader)
           if (local) {
-            log.debug(s"Sending locally generated input block $id out")
+            log.debug(s"Sending locally generated input block $id to ${peers.size} peers")
 
             // we propagate input block with transactions immediately if it has no more than 3 transactions
             // todo: check number of transactions on retrieval

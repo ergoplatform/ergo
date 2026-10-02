@@ -2068,14 +2068,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(txsInv)), Some(peer))
       requestForModifierSent(ncProbe, BlockTransactions.modifierTypeId, nextHeader.transactionsId)
 
+      // the ADProofs announcement, then the same block's extension as a sentinel: the synchronizer handles one
+      // sender's messages in order, so whatever the ADProofs announcement causes is sent before the extension request
       val proofsInv = InvData(ADProofs.modifierTypeId, Seq(nextHeader.ADProofsId))
       synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(proofsInv)), Some(peer))
-      val sent = ncProbe.receiveWhile(2.seconds) { case m => m }
-      sent.exists {
+      val extInv = InvData(Extension.modifierTypeId, Seq(nextHeader.extensionId))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(extInv)), Some(peer))
+      def requested(m: Any, typeId: org.ergoplatform.modifiers.NetworkObjectTypeId.Value): Boolean = m match {
         case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
-          stn.message.data.get.asInstanceOf[InvData].typeId == ADProofs.modifierTypeId
+          stn.message.data.get.asInstanceOf[InvData].typeId == typeId
         case _ => false
-      } shouldBe false
+      }
+      val beforeSentinel = scala.collection.mutable.Buffer[Any]()
+      ncProbe.fishForMessage(10.seconds) {
+        case m if requested(m, Extension.modifierTypeId) => true
+        case m => beforeSentinel += m; false
+      }
+      beforeSentinel.exists(requested(_, ADProofs.modifierTypeId)) shouldBe false
     }
   }
 }

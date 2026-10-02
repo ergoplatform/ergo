@@ -702,14 +702,227 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  property("NodeViewSynchronizer: oversized supplier is not re-requested for the same transaction") {
+    withFixture2 { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+      import scorex.core.network.SendToPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+      val inv = InvData(tx.modifierTypeId, Seq(tx.id))
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+      val first = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(tx.id)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      first.sendingStrategy shouldBe SendToPeer(peer)
+
+      val oversized = Array.fill[Byte](settings.nodeSettings.maxTransactionSize + 1)(0)
+      synchronizerMockRef ! Message(ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(tx.modifierTypeId, Map(tx.id -> oversized)))),
+        Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      deliveryTracker.status(tx.id, tx.modifierTypeId, Seq.empty) shouldBe Unknown
+
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+      ncProbe.expectNoMessage(300.millis)
+
+      val otherHandler = TestProbe("OtherOversizedTxSupplier")
+      val otherPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("203.0.113.2", 9030)),
+        handlerRef = otherHandler.ref)
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(otherPeer))
+      val second = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(tx.id)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      second.sendingStrategy shouldBe SendToPeer(otherPeer)
+    }
+  }
+
+  property("NodeViewSynchronizer: repeated oversized replies exhaust only their connection") {
+    withFixture2 { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+      import org.ergoplatform.modifiers.mempool.ErgoTransaction
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+      import scorex.core.network.SendToPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val oversized = Array.fill[Byte](settings.nodeSettings.maxTransactionSize + 1)(0)
+      val ids = (0 until 32).map(i => bytesToId(Array.fill[Byte](32)(i.toByte)))
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      ids.foreach { id =>
+        val inv = InvData(ErgoTransaction.modifierTypeId, Seq(id))
+        synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+        val request = ncProbe.fishForMessage(3.seconds) {
+          case stn: SendToNetwork =>
+            stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+            stn.message.data.get.asInstanceOf[InvData].ids == Seq(id)
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe peer.handlerRef
+        synchronizerMockRef ! Message(ModifiersSpec,
+          Left(ModifiersSpec.toBytes(ModifiersData(ErgoTransaction.modifierTypeId, Map(id -> oversized)))),
+          Some(peer))
+        ncProbe.fishForMessage(3.seconds) {
+          case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+            address == peer.connectionId.remoteAddress
+          case _ => false
+        }
+      }
+
+      // The first id must remain suppressed after the cache reaches its bound.
+      val repeated = InvData(ErgoTransaction.modifierTypeId, Seq(ids.head))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(repeated)), Some(peer))
+      ncProbe.expectNoMessage(300.millis)
+
+      val replacementHandler = TestProbe("ReplacementOversizedSupplier")
+      val replacementPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress =
+          new InetSocketAddress(peer.connectionId.remoteAddress.getAddress,
+            peer.connectionId.remoteAddress.getPort + 1)),
+        handlerRef = replacementHandler.ref)
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(repeated)), Some(replacementPeer))
+      val replacementRequest = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(ids.head)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      replacementRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe replacementHandler.ref
+    }
+  }
+
+  property("NodeViewSynchronizer: old disconnect cannot clear a same-address replacement's sync status") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
+
+      val replacementHandler = TestProbe("SameAddressReplacementHandler")
+      val replacementPeer = peer.copy(handlerRef = replacementHandler.ref)
+      replacementPeer shouldBe peer // ConnectedPeer equality ignores handler identity.
+
+      synchronizerMockRef ! HandshakedPeer(peer)
+      syncTracker.knownPeers().map(_.handlerRef).toSet shouldBe Set(peer.handlerRef)
+
+      synchronizerMockRef ! HandshakedPeer(replacementPeer)
+      syncTracker.knownPeers().map(_.handlerRef).toSet shouldBe Set(replacementHandler.ref)
+      syncTracker.fullInfo().map(_.peer.handlerRef).toSet shouldBe Set(replacementHandler.ref)
+
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      syncTracker.knownPeers().map(_.handlerRef).toSet shouldBe Set(replacementHandler.ref)
+      syncTracker.fullInfo().map(_.peer.handlerRef).toSet shouldBe Set(replacementHandler.ref)
+
+      synchronizerMockRef ! HandshakedPeer(peer)
+      syncTracker.knownPeers().map(_.handlerRef).toSet shouldBe Set(replacementHandler.ref)
+    }
+  }
+
+  property("NodeViewSynchronizer: disconnected transaction supplier cannot restore a request") {
+    withFixture2 { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+      import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{CheckDelivery, DisconnectedPeer, HandshakedPeer}
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+      import scorex.core.network.SendToPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val tx = validErgoTransactionGenTemplate(0, 0).sample.get._2
+      val inv = InvData(tx.modifierTypeId, Seq(tx.id))
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == RequestModifierSpec.messageCode
+        case _ => false
+      }
+      val oldTimer = deliveryTracker.getRequestedInfo(tx.modifierTypeId, tx.id).get.cancellable
+
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      deliveryTracker.status(tx.id, tx.modifierTypeId, Seq.empty) shouldBe Requested
+      oldTimer.isCancelled shouldBe false
+
+      // Initializing actors can replay an old handshake after its disconnect event.
+      synchronizerMockRef ! HandshakedPeer(peer)
+      syncTracker.knownPeers().exists(_.handlerRef == peer.handlerRef) shouldBe false
+
+      // A legitimate reply from another peer remains admissible while the old request is live.
+      val replacementHandler = TestProbe("ReplacementAfterDisconnect")
+      val replacementPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress =
+          new InetSocketAddress(peer.connectionId.remoteAddress.getAddress,
+            peer.connectionId.remoteAddress.getPort + 1)),
+        handlerRef = replacementHandler.ref)
+      val accepted = synchronizerMockRef.underlyingActor.processSpam(replacementPeer,
+        tx.modifierTypeId, Map(tx.id -> tx.bytes), FixedSizeApproximateCacheQueue(1, Vector.empty))
+      accepted.keySet shouldBe Set(tx.id)
+
+      // A late malformed reply from the retired owner cannot cancel that admission window.
+      val oversized = Array.fill[Byte](settings.nodeSettings.maxTransactionSize + 1)(0)
+      synchronizerMockRef ! Message(ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(tx.modifierTypeId, Map(tx.id -> oversized)))),
+        Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      deliveryTracker.status(tx.id, tx.modifierTypeId, Seq.empty) shouldBe Requested
+
+      synchronizerMockRef ! CheckDelivery(peer, tx.modifierTypeId, tx.id)
+      deliveryTracker.status(tx.id, tx.modifierTypeId, Seq.empty) shouldBe Unknown
+      oldTimer.isCancelled shouldBe true
+
+      // A queued announcement from the retired handler must not recreate the request.
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+      ncProbe.expectNoMessage(300.millis)
+      deliveryTracker.status(tx.id, tx.modifierTypeId, Seq.empty) shouldBe Unknown
+
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(replacementPeer))
+      val replacementRequest = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(tx.id)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      replacementRequest.sendingStrategy shouldBe SendToPeer(replacementPeer)
+
+      // An already queued timeout from the retired handler cannot cancel the new owner.
+      synchronizerMockRef ! CheckDelivery(peer, tx.modifierTypeId, tx.id)
+      deliveryTracker.getRequestedInfo(tx.modifierTypeId, tx.id)
+        .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+    }
+  }
+
   property("NodeViewSynchronizer: manifest from an old handler preserves its replacement's request") {
     withFixture { ctx =>
       import ctx._
-      import org.ergoplatform.network.peer.PenaltyType
+      import java.net.InetSocketAddress
       import org.ergoplatform.serialization.ManifestSerializer
       import org.ergoplatform.settings.Algos
       import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
-      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
       import scorex.db.LDBFactory
 
       deliveryTracker.reset()
@@ -727,8 +940,12 @@ class ErgoNodeViewSynchronizerSpecification
       val id = ModifierId @@ Algos.encode(manifest.id)
 
       val replacementHandler = TestProbe("ReplacementManifestHandler")
-      val replacementPeer = peer.copy(handlerRef = replacementHandler.ref)
-      replacementPeer shouldBe peer // ConnectedPeer.equals compares only the remote address.
+      val replacementPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress =
+          new InetSocketAddress(peer.connectionId.remoteAddress.getAddress,
+            peer.connectionId.remoteAddress.getPort + 1)),
+        handlerRef = replacementHandler.ref)
+      replacementPeer.connectionId.remoteAddress.getAddress shouldBe peer.connectionId.remoteAddress.getAddress
       replacementPeer.handlerRef should not be peer.handlerRef
       deliveryTracker.setRequested(ManifestTypeId.value, id, replacementPeer)(
         _ => system.scheduler.scheduleOnce(10.minutes, ncProbe.ref, "unused")(system.dispatcher)
@@ -736,11 +953,7 @@ class ErgoNodeViewSynchronizerSpecification
       val attempt = deliveryTracker.getRequestedInfo(ManifestTypeId.value, id).get
 
       synchronizer ! Message(ManifestSpec, Left(ManifestSpec.toBytes(bytes)), Some(peer))
-      ncProbe.fishForMessage(3.seconds) {
-        case PenalizePeer(address, PenaltyType.SpamPenalty) =>
-          address == peer.connectionId.remoteAddress
-        case _ => false
-      }
+      ncProbe.expectNoMessage(300.millis)
       deliveryTracker.status(id, ManifestTypeId.value, Seq.empty) shouldBe Requested
       deliveryTracker.getRequestedInfo(ManifestTypeId.value, id)
         .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)

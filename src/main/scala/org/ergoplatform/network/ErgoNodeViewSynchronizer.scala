@@ -112,6 +112,28 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val MaxProcessingTransactionsCacheSize = 50
 
+  // A declared transaction id is unauthenticated until its bytes are parsed. Keep oversized
+  // replies scoped to their connection so another supplier can still provide the real tx.
+  // Stop asking a connection for transactions after too many distinct oversized replies.
+  private val MaxOversizedTransactionsPerSupplier = 32
+  private val oversizedTransactionSuppliers = mutable.Map.empty[ActorRef, mutable.Set[ModifierId]]
+  private val exhaustedOversizedSuppliers = mutable.Set.empty[ActorRef]
+  // Messages already forwarded by NetworkController can arrive after a disconnect event.
+  // Weak keys retain that event while any queued message still holds the old handler.
+  private val disconnectedHandlers =
+    java.util.Collections.newSetFromMap(new java.util.WeakHashMap[ActorRef, java.lang.Boolean]())
+
+  private def rememberOversizedTransactionSupplier(peer: ConnectedPeer, id: ModifierId): Unit = {
+    if (!exhaustedOversizedSuppliers.contains(peer.handlerRef)) {
+      val ids = oversizedTransactionSuppliers.getOrElseUpdate(peer.handlerRef, mutable.Set.empty[ModifierId])
+      ids += id
+      if (ids.size >= MaxOversizedTransactionsPerSupplier) {
+        oversizedTransactionSuppliers -= peer.handlerRef
+        exhaustedOversizedSuppliers += peer.handlerRef
+      }
+    }
+  }
+
   /**
     * Max cost of transactions we are going to process between blocks
     */
@@ -828,8 +850,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
-      if (requestOwnedBy(id, ErgoTransaction.modifierTypeId, remote)) {
+      if (!disconnectedHandlers.contains(remote.handlerRef) &&
+          requestOwnedBy(id, ErgoTransaction.modifierTypeId, remote)) {
         // The oversized bytes cannot authenticate their declared id. Let another peer supply it.
+        rememberOversizedTransactionSupplier(remote, id)
         deliveryTracker.setUnknown(id, ErgoTransaction.modifierTypeId)
       }
       penalizeMisbehavingPeer(remote)
@@ -1033,6 +1057,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               case None =>
                 log.error(s"No height found for manifest ${Algos.encode(manifest.id)}")
             }
+          case Some(ri) if Option(ri.peer.connectionId.remoteAddress.getAddress)
+            .exists(_ == remote.connectionId.remoteAddress.getAddress) =>
+            // The old handler and its replacement share an IP-level penalty identity. Ignore
+            // the late reply without clearing the replacement's request or penalizing it.
+            log.debug(s"Ignoring manifest $manifestId from replaced connection $remote")
           case _ =>
             log.info(s"Penalizing spamming peer $remote sent non-asked manifest $manifestId")
             penalizeSpammingPeer(remote)
@@ -1158,6 +1187,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
 
+    if (disconnectedHandlers.contains(peer.handlerRef)) {
+      log.debug(s"Ignoring inventory from disconnected handler ${peer.handlerRef}")
+      return
+    }
+
     val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
 
     // We download transactions only if following conditions met:
@@ -1181,7 +1215,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // check that transaction is not in the mempool already or invalidated earlier
             invData.ids.filter { mid =>
               deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown &&
-                !mp.isInvalidated(mid)
+                !mp.isInvalidated(mid) &&
+                !exhaustedOversizedSuppliers.contains(peer.handlerRef) &&
+                !oversizedTransactionSuppliers.get(peer.handlerRef).exists(_.contains(mid))
             }
           }
           // filter out transactions that were already applied to history
@@ -1976,7 +2012,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
+      if (deliveryTracker.getRequestedInfo(modifierTypeId, modifierId)
+        .exists(info => sameActiveConnection(info.peer, peer))) {
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
         if (modifierTypeId == ErgoTransaction.modifierTypeId) {
@@ -2086,10 +2123,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
-      syncTracker.updateStatus(remote, status = Unknown, height = None)
+      if (!disconnectedHandlers.contains(remote.handlerRef)) {
+        // ConnectedPeer equality is address-only; replace the old map key as well as its value.
+        syncTracker.knownPeers()
+          .find(existing => existing == remote && !sameActiveConnection(existing, remote))
+          .foreach(syncTracker.clearStatus)
+        syncTracker.updateStatus(remote, status = Unknown, height = None)
+      }
 
     case DisconnectedPeer(connectedPeer) =>
-      syncTracker.clearStatus(connectedPeer)
+      disconnectedHandlers.add(connectedPeer.handlerRef)
+      if (syncTracker.knownPeers().exists(sameActiveConnection(_, connectedPeer))) {
+        syncTracker.clearStatus(connectedPeer)
+      }
+      oversizedTransactionSuppliers -= connectedPeer.handlerRef
+      exhaustedOversizedSuppliers -= connectedPeer.handlerRef
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {

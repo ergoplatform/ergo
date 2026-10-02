@@ -309,22 +309,35 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     val common = history.bestFullBlockOpt.value
 
     val fork1 = genChain(3, common).tail
-    val fork2 = genChain(2, common).tail
+    val fork2Tag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(1: Byte, 0: Byte)))
+    val fork2 = genChain(2, history, extension = defaultExtension ++ fork2Tag).tail
 
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
+    fork1.length shouldBe 3
+    fork2.length shouldBe 2
+    fork1.take(2).map(_.header.height) shouldBe fork2.map(_.header.height)
+    fork1.head.header.id should not be fork2.head.header.id
+    fork1(1).header.id should not be fork2(1).header.id
+    fork2.indices.foreach { i =>
+      history.bestHeaderIdAtHeight(fork2(i).header.height) shouldBe Some(fork1(i).header.id)
+    }
     history.bestHeaderOpt.value shouldBe fork1.last.header
 
     val progressInfo = ProgressInfo[PM](Some(common.parentId), fork1, Seq.empty, Seq.empty)
-    history.reportModifierIsInvalid(fork1.head.header, progressInfo)
+    history = history.reportModifierIsInvalid(fork1.head.header, progressInfo).get._1
 
     history.bestHeaderOpt.value shouldBe fork2.last.header
-    history.bestHeaderIdAtHeight(fork2.last.header.height) shouldBe Some(fork2.last.header.id)
-    history.isInBestChain(fork2.last.header) shouldBe true
+    fork2.foreach { block =>
+      history.bestHeaderIdAtHeight(block.header.height) shouldBe Some(block.header.id)
+      history.isInBestChain(block.header) shouldBe true
+    }
     history.isInBestChain(fork1.last.header) shouldBe false
     history.bestHeaderIdAtHeight(fork1.last.header.height) shouldBe None
-    history.syncInfoV2(full = false).lastHeaders.map(_.id) should contain(fork2.last.header.id)
+    history.syncInfoV2(full = false).lastHeaders.map(_.id) shouldBe Seq(fork2.last.header.id)
+    history.continuationIds(ErgoSyncInfoV2(Seq(common.header)), fork2.length + 1)
+      .map(_._2) shouldBe fork2.map(_.header.id)
     history.bestFullBlockOpt.value shouldBe fork2.last
   }
 

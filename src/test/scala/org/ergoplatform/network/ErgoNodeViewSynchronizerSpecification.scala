@@ -1249,6 +1249,27 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     * A peer that asks for a block the node has just announced must get it, also before the node view holder has
     * applied the block: otherwise the request waits the whole delivery timeout.
     */
+  // Hand the view holder's history and mempool to the synchronizer before a test's first message: until it holds both
+  // it defers every message by 1 s, in rounds, so a test that sleeps instead depends on start-up timing
+  private def handOverView(ctx: Synchronizer2Fixture): Unit = {
+    import ctx._
+    val viewProbe = TestProbe("ViewProbe")
+    nodeViewHolderMockRef.tell(
+      ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)),
+      viewProbe.ref)
+    val (h, pool) = viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+    synchronizerMockRef ! ChangedHistory(h)
+    synchronizerMockRef ! ChangedMempool(pool)
+  }
+
+  // the ids in the first ModifiersData sent to the peer that contains `marker`
+  private def servedWith(pchProbe: TestProbe, marker: scorex.util.ModifierId): Seq[scorex.util.ModifierId] =
+    pchProbe.fishForMessage(10.seconds) {
+      case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
+        msg.data.get.asInstanceOf[ModifiersData].modifiers.contains(marker)
+      case _ => false
+    }.asInstanceOf[Message[_]].data.get.asInstanceOf[ModifiersData].modifiers.keys.toSeq
+
   property("NodeViewSynchronizer: a newly mined block is served as soon as it is announced") {
     withFixture2 { ctx =>
       import ctx._
@@ -1259,7 +1280,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      Thread.sleep(2000) // let the synchronizer take the view holder's start-up events
+      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections) // as CandidateGenerator publishes it
       // collect everything sent in the window, then keep the announcements (other messages may interleave)
@@ -1293,7 +1314,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      Thread.sleep(2000) // let the synchronizer take the view holder's start-up events
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1301,12 +1323,14 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // is still answered can only come from the in-memory copy
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
+      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
+      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
       synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id)))), Some(peer))
-      val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
-        case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
-          msg.data.get.asInstanceOf[ModifiersData]
-      }.flatMap(_.modifiers.keys)
+        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
+        Some(peer))
+      val served = servedWith(pchProbe, marker.header.id)
+      served should contain(marker.header.id)
       served should not contain newBlock.header.id
     }
   }
@@ -1321,19 +1345,22 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      Thread.sleep(2000) // let the synchronizer take the view holder's start-up events
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
+      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
+      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
       synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id)))), Some(peer))
-      val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
-        case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
-          msg.data.get.asInstanceOf[ModifiersData]
-      }.flatMap(_.modifiers.keys)
+        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
+        Some(peer))
+      val served = servedWith(pchProbe, marker.header.id)
+      served should contain(marker.header.id)
       served should not contain newBlock.header.id
     }
   }

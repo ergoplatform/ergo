@@ -1,5 +1,9 @@
 name: Publish release-binaries
 
+# CI builds the release jar: do not upload one by hand, neither to the draft nor after publishing.
+# A hand-built jar is the plain jar and never matches the stripped jar built here, so the jar job
+# fails and no bundles are built (see the `replace` input below for a deliberate overwrite).
+
 on:
   release:
     types: [published]
@@ -23,6 +27,58 @@ permissions:
   contents: write
 
 jobs:
+  check-versions:
+    # Fails the run (a red run, which notifies the release publisher if they have Actions
+    # notifications on) when appVersion or the openapi version does not match the tag, without
+    # blocking the jar or the bundles: no other job needs this one.
+    # appVersion is what the node announces to peers; the openapi version is what its API docs
+    # show (/info reports the tag version).
+    name: Check appVersion and openapi version against the tag
+    runs-on: ubuntu-latest
+    env:
+      ERGO_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.ERGO_RELEASE_TAG }}
+          persist-credentials: false
+      - name: Compare versions
+        run: |
+          set -eu
+          V="${ERGO_RELEASE_TAG#v}"
+          FAILED=false
+          CONF_VERSION=$(grep "appVersion =" src/main/resources/application.conf | cut -d '=' -f2 | tr -d '[:space:]' || true)
+          OPENAPI_LINE=$(grep 'version:' src/main/resources/api/openapi.yaml || true)
+          OPENAPI_VERSION=$(printf '%s' "$OPENAPI_LINE" | tr '\n' ' ' | awk -F '"' '{print $2}')
+          check() {
+            file="$1"
+            value="$2"
+            ok=false
+            # The tag version must equal the value, or continue after it with a
+            # non-digit (6.0.4RC2, 6.0.2.1); compared as plain strings, so dots are literal.
+            if [ -n "$value" ]; then
+              case "$V" in
+                "$value"*)
+                  rest="${V#"$value"}"
+                  if [ -z "$rest" ] || [[ ! "$rest" =~ ^[0-9] ]]; then
+                    ok=true
+                  fi
+                  ;;
+                *) ;;
+              esac
+            fi
+            if [ "$ok" != true ]; then
+              echo "::error::$file version ($value) does not match release tag $ERGO_RELEASE_TAG"
+              FAILED=true
+            fi
+          }
+          check application.conf "$CONF_VERSION"
+          check openapi.yaml "$OPENAPI_VERSION"
+          if [ "$FAILED" = true ]; then
+            exit 1
+          fi
+          echo "appVersion and openapi version match $ERGO_RELEASE_TAG"
+
   release-jar:
     name: Build and attach ergo node jar
     runs-on: ubuntu-latest
@@ -32,9 +88,10 @@ jobs:
     steps:
       # Full history and tags are required: sbt-dynver derives the version
       # (and hence the jar name) from `git describe`.
+      # refs/tags/ because release branches share names with tags and checkout prefers a branch.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.ERGO_RELEASE_TAG }}
+          ref: refs/tags/${{ env.ERGO_RELEASE_TAG }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -58,46 +115,13 @@ jobs:
       - name: Build fat jar
         run: sbt assembly
 
-      - name: Check appVersion and openapi version against the tag
-        # Non-fatal: a published tag cannot be withdrawn, so a mismatch only warns. appVersion is
-        # what the node announces to peers; the openapi version is what its API docs show (/info
-        # reports the tag version).
-        run: |
-          set -eu
-          V="${ERGO_RELEASE_TAG#v}"
-          CONF_VERSION=$(grep "appVersion =" src/main/resources/application.conf | cut -d '=' -f2 | tr -d '[:space:]' || true)
-          OPENAPI_LINE=$(grep 'version:' src/main/resources/api/openapi.yaml || true)
-          OPENAPI_VERSION=$(printf '%s' "$OPENAPI_LINE" | tr '\n' ' ' | awk -F '"' '{print $2}')
-          check() {
-            file="$1"
-            value="$2"
-            ok=false
-            # The tag version must equal the value, or continue after it with a
-            # non-digit (6.0.4RC2, 6.0.2.1); compared as plain strings, so dots are literal.
-            if [ -n "$value" ]; then
-              case "$V" in
-                "$value"*)
-                  rest="${V#"$value"}"
-                  if [ -z "$rest" ] || [[ ! "$rest" =~ ^[0-9] ]]; then
-                    ok=true
-                  fi
-                  ;;
-                *) ;;
-              esac
-            fi
-            if [ "$ok" != true ]; then
-              echo "::warning::$file version ($value) does not match release tag $ERGO_RELEASE_TAG"
-            fi
-          }
-          check application.conf "$CONF_VERSION"
-          check openapi.yaml "$OPENAPI_VERSION"
-
       - name: Attach jar and sha256 to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # The stripped jar is the one the Docker image ships. Its class files are identical to the
-        # plain jar's; sbt-reproducible-builds normalizes the zip metadata (entry timestamps,
-        # manifest order).
+        # This is the same stripped build the Docker image uses (the image builds it on Temurin 11,
+        # this job on JDK 8, so the two files are not byte-identical). Its class files are
+        # identical to the plain jar's; sbt-reproducible-builds normalizes the zip metadata (entry
+        # timestamps, manifest order).
         run: |
           set -eu
           cd target/scala-2.12/stripped

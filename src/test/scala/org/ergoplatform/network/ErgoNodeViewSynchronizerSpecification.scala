@@ -1071,7 +1071,7 @@ class ErgoNodeViewSynchronizerSpecification
   ) {
     withFixture2 { ctx =>
       import ctx._
-      import org.ergoplatform.consensus.Equal
+      import org.ergoplatform.consensus.Older
       import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
       import org.ergoplatform.network.{PeerSpec, Version}
       import org.ergoplatform.network.peer.PeerInfo
@@ -1105,17 +1105,20 @@ class ErgoNodeViewSynchronizerSpecification
         Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
       )
       val follower = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(PeerInfo(peerSpec, System.currentTimeMillis())))
-      syncTracker.updateStatus(follower, Equal, Some(fullHeight))
+      // Older is a status the chain comparison cannot give this SyncInfo (its header is our tip), so it is kept only if
+      // the comparison is skipped, i.e. on the throttled branch
+      syncTracker.updateStatus(follower, Older, Some(fullHeight - 5))
+      // the peer's previous SyncInfo is recorded as just received (ahead of now, so the 100 ms throttle applies to the
+      // next one however long processing takes)
+      syncTracker.statuses.update(
+        follower,
+        syncTracker.statuses(follower).copy(lastSyncGetTime = Some(System.currentTimeMillis() + 60000))
+      )
 
-      // a follower catching up sends one SyncInfo per applied header batch, back to back: the second one, within the
-      // 100 ms throttle, carries its current height
-      def syncAt(h: Int) = {
-        val info = ErgoSyncInfoV2(Seq(applied.map(_.header).find(_.height == h).get))
-        Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
-      }
-      synchronizerMockRef ! syncAt(fullHeight - 5)
-      synchronizerMockRef ! syncAt(fullHeight)
-      Thread.sleep(300)
+      // a throttled SyncInfo carries the peer's current height
+      val info = ErgoSyncInfoV2(Seq(applied.map(_.header).find(_.height == fullHeight).get))
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
+      syncTracker.getStatus(follower) shouldBe Some(Older)
       syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight)
 
       // and it is therefore near the tip for relay

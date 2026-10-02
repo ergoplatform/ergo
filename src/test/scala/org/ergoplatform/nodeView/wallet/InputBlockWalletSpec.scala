@@ -1,8 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
+import org.ergoplatform._
+import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils._
 import org.ergoplatform.wallet.boxes.BoxSelector.MinBoxValue
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.scalatest.concurrent.Eventually
 import scorex.util.ModifierId
 
@@ -174,6 +179,65 @@ class InputBlockWalletSpec extends ErgoCorePropertyTest with WalletTestOps with 
       eventually {
         val boxes = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
         boxes.size should be >= 2
+      }
+    }
+  }
+
+  property("same-block chained rollback restores the exact wallet state") {
+    withFixture { implicit w =>
+      val address = getPublicKeys.head
+      val genesisBlock = makeGenesisBlock(address.pubkey)
+      applyBlock(genesisBlock) shouldBe 'success
+
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.second, 200.millis)
+      val balanceBefore = eventually {
+        val balance = await(wallet.balancesWithUnconfirmed)
+        balance.walletBalance should be > 0L
+        balance
+      }
+      val boxesBefore = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        .map(_.trackedBox.boxId).toSet
+
+      val tx1 = await(wallet.generateTransaction(Seq(
+        PaymentRequest(address, MinBoxValue * 10, Array.empty, Map.empty)
+      ))).get
+      val intermediate = tx1.outputs.head
+      val unsignedTx2 = new UnsignedErgoTransaction(
+        IndexedSeq(new UnsignedInput(intermediate.id)),
+        IndexedSeq.empty,
+        IndexedSeq(intermediate.toCandidate)
+      )
+      val tx2 = await(wallet.signTransaction(
+        unsignedTx2, Seq.empty, TransactionHintsBag.empty, Some(Seq(intermediate)), None
+      )).get
+      tx2.inputs.head.boxId.sameElements(intermediate.id) shouldBe true
+      tx1.statelessValidity() shouldBe 'success
+      tx2.statelessValidity() shouldBe 'success
+
+      val nextHeader = makeNextBlock(getUtxoState, Seq(tx1)).header
+      nextHeader.parentId shouldBe getHistory.bestHeaderOpt.get.id
+      val inputBlock = InputBlockAnnouncement(1, nextHeader, InputBlockFields.empty, None)
+      getHistory.applyInputBlock(inputBlock) shouldBe None
+      getHistory.getInputBlock(inputBlock.id) shouldBe Some(inputBlock)
+      getHistory.applyInputBlockTransactions(inputBlock.id, Seq(tx1, tx2), getUtxoState) shouldBe
+        (Seq(inputBlock.id) -> Seq.empty)
+      getHistory.bestInputBlocksChain() shouldBe Seq(inputBlock.id)
+      getHistory.getInputBlockTransactions(inputBlock.id).map(_.map(_.id)) shouldBe
+        Some(Seq(tx1.id, tx2.id))
+      wallet.scanInputBlock(inputBlock.id)
+      eventually {
+        val boxes = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+        boxes.exists(_.trackedBox.box.id.sameElements(tx2.outputs.head.id)) shouldBe true
+      }
+
+      wallet.rollbackInputBlock(inputBlock.id)
+      eventually {
+        val balanceAfter = await(wallet.balancesWithUnconfirmed)
+        balanceAfter.walletBalance shouldBe balanceBefore.walletBalance
+        balanceAfter.walletAssetBalances.toMap shouldBe balanceBefore.walletAssetBalances.toMap
+        val boxesAfter = await(wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = true))
+          .map(_.trackedBox.boxId).toSet
+        boxesAfter shouldBe boxesBefore
       }
     }
   }

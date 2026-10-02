@@ -549,7 +549,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     // new transaction should be cleared from pool after applying new block
-    await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
+    eventually(timeout(candidateGenDelay), interval(25.millis)) {
+      await((readersHolderRef ? GetReaders).mapTo[Readers]).m.size shouldBe 0
+    }
 
     // validate total amount of transactions created
     val blocks: IndexedSeq[ErgoFullBlock] = readers.h

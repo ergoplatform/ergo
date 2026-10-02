@@ -247,7 +247,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     * @return - header id or None
     */
   def bestHeaderIdAtHeight(height: Int): Option[ModifierId] = {
-    historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
+    if (height > headersHeight) None else historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
       // in 99% cases bs.length == 32 (no orphaned headers)
       if (bs.length == 32) {
         bytesToId(bs)
@@ -315,7 +315,8 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     */
   @tailrec
   protected final def loopHeightDown(height: Int, p: ModifierId => Boolean): Option[Header] = {
-    headerIdsAtHeight(height).find(id => p(id)).flatMap(id => typedModifierById[Header](id)) match {
+    headerIdsAtHeight(height).iterator.filter(p)
+      .flatMap(id => typedModifierById[Header](id)).take(1).toList.headOption match {
       case Some(header) => Some(header)
       case None if height > 0 => loopHeightDown(height - 1, p)
       case None => None

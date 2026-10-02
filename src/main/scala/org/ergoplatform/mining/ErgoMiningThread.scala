@@ -2,7 +2,8 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
-import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
+import com.google.common.primitives.Longs
+import org.ergoplatform.{AutolykosSolution, InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.util.ScorexLogging
@@ -68,7 +69,8 @@ class ErgoMiningThread(
       }
     case StatusReply.Error(ex) =>
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
-      context.become(mining(nonce + 1, candidateBlock, parameters, solvedBlocksCount))
+      // resume after the rejected solution's nonce (recorded when it was found), not at the batch start
+      context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount))
       self ! MineCmd
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
@@ -78,9 +80,11 @@ class ErgoMiningThread(
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
           log.info(s"Found solution for ordering block, sending it for validation")
+          context.become(mining(nonceAfter(newBlock.header.powSolution), candidateBlock, parameters, solvedBlocksCount))
           candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
         case InputBlockFound(newBlock) =>
           log.info(s"Found solution for input block, sending it for validation")
+          context.become(mining(nonceAfter(newBlock.header.powSolution), candidateBlock, parameters, solvedBlocksCount))
           candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
@@ -92,6 +96,8 @@ class ErgoMiningThread(
     case GetSolvedBlocksCount =>
       sender() ! SolvedBlocksCount(solvedBlocksCount)
   }
+
+  private def nonceAfter(solution: AutolykosSolution): Int = Longs.fromByteArray(solution.n).toInt + 1
 
 }
 

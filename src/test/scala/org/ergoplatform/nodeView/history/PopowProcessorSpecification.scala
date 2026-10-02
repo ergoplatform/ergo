@@ -39,7 +39,14 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
   private def genPrunedDigestHistory(genesisId: ModifierId,
                                      blocksToKeep: Int,
                                      nipopowBootstrap: Boolean = true,
-                                     votingLength: Option[Int] = None): ErgoHistory = {
+                                     votingLength: Option[Int] = None): ErgoHistory =
+    ErgoHistory.readOrGenerate(prunedDigestSettings(genesisId, blocksToKeep, nipopowBootstrap, votingLength))(null)
+      .ensuring(_.bestFullBlockOpt.isEmpty)
+
+  private def prunedDigestSettings(genesisId: ModifierId,
+                                   blocksToKeep: Int,
+                                   nipopowBootstrap: Boolean = true,
+                                   votingLength: Option[Int] = None) = {
     val voting = votingLength.fold(baseSettings.chainSettings.voting)(l => baseSettings.chainSettings.voting.copy(votingLength = l))
     val prunedSettings = baseSettings.copy(
       directory = createTempDir.getAbsolutePath,
@@ -51,7 +58,7 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
         nipopowSettings = NipopowSettings(nipopowBootstrap = nipopowBootstrap, p2pNipopows = 1)
       )
     )
-    ErgoHistory.readOrGenerate(prunedSettings)(null).ensuring(_.bestFullBlockOpt.isEmpty)
+    prunedSettings
   }
 
   val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
@@ -172,6 +179,27 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     val toDownload = history.nextModifiersToDownload(1000, (_, id) => !history.contains(id)).values.flatten.toSet
     senderChain.filter(_.header.height < expected).map(_.header.transactionsId).exists(toDownload.contains) shouldBe false
     toDownload should contain(senderChain.last.header.transactionsId)
+  }
+
+  property("after a restart, a full block floor stored inside a popow headers gap moves past the gap") {
+    val (senderChain, proofBytes, genesisId) = senderChainAndProof()
+    val settings = prunedDigestSettings(genesisId, blocksToKeep = 60)
+    val history = ErgoHistory.readOrGenerate(settings)(null)
+    history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
+    val lowest = continuousFrom(history) + Constants.LastHeadersInContext - 1
+    // a database written before this change: the floor stored at height 1, inside the gap
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.closeStorage()
+
+    val restarted = ErgoHistory.readOrGenerate(settings)(null)
+    restarted.isHeadersChainSynced shouldBe false
+    restarted.minimalFullBlockHeight shouldBe GenesisHeight
+    // headers after the proof are coming as usual, so the node marks the headers chain synced again
+    applyHeaderChain(restarted, HeaderChain(senderChain.drop(restarted.headersHeight).map(_.header)))
+    withClue(s"tip=${restarted.headersHeight} lowest=$lowest floor=${restarted.minimalFullBlockHeight}: ") {
+      restarted.isHeadersChainSynced shouldBe true
+      restarted.minimalFullBlockHeight should be >= lowest
+    }
   }
 
   property("a continuous headers chain keeps the full block floor it had without nipopowBootstrap") {

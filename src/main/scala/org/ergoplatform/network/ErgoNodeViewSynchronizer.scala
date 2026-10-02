@@ -851,8 +851,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Some(mod)
         case _ =>
           // Penalize peer and do nothing
-          // Forget about block section, so it will be redownloaded if announced again only
-          deliveryTracker.setUnknown(id, modifierTypeId)
+          // Only the requested connection may cancel the live request on a bad reply.
+          val requestedSourceMatches = deliveryTracker.getRequestedInfo(modifierTypeId, id).exists { info =>
+            info.peer.connectionId == remote.connectionId && info.peer.handlerRef == remote.handlerRef
+          }
+          if (requestedSourceMatches) {
+            // Forget about block section, so it will be redownloaded if announced again only
+            deliveryTracker.setUnknown(id, modifierTypeId)
+          }
           penalizeMisbehavingPeer(remote)
           log.warn(s"Failed to parse modifier with declared id ${ScorexEncoder.encodeId(id)} from ${remote.toString}")
           None

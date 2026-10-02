@@ -532,6 +532,141 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  property("NodeViewSynchronizer: malformed reply from another peer should preserve the requested source") {
+    withFixture { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      val otherHandler = TestProbe("OtherPeerHandler")
+      val otherPeer = peer.copy(
+        connectionId = peer.connectionId.copy(
+          remoteAddress = new InetSocketAddress("203.0.113.2", 9030)
+        ),
+        handlerRef = otherHandler.ref
+      )
+
+      val inv = InvData(Header.modifierTypeId, Seq(header.id))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, header.id)
+      eventually {
+        deliveryTracker.getSource(header.id, Header.modifierTypeId) shouldBe Some(peer)
+      }
+      val requestTimer = deliveryTracker.getRequestedInfo(Header.modifierTypeId, header.id).get.cancellable
+
+      val malformed = ModifiersData(Header.modifierTypeId, Map(header.id -> Array[Byte](0)))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(malformed)), Some(otherPeer))
+      ncProbe.fishForMessage(3 seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == otherPeer.connectionId.remoteAddress
+        case _ => false
+      }
+
+      deliveryTracker.getSource(header.id, Header.modifierTypeId) shouldBe Some(peer)
+      requestTimer.isCancelled shouldBe false
+
+      val valid = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(valid)), Some(peer))
+      eventually {
+        deliveryTracker.status(header.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: malformed reply from the requested owner clears its request") {
+    withFixture { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      val inv = InvData(Header.modifierTypeId, Seq(header.id))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, header.id)
+      eventually {
+        deliveryTracker.getSource(header.id, Header.modifierTypeId) shouldBe Some(peer)
+      }
+      val requestTimer = deliveryTracker.getRequestedInfo(Header.modifierTypeId, header.id).get.cancellable
+      requestTimer.isCancelled shouldBe false
+
+      val malformed = ModifiersData(Header.modifierTypeId, Map(header.id -> Array[Byte](0)))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(malformed)), Some(peer))
+      ncProbe.fishForMessage(3 seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      deliveryTracker.status(header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+      requestTimer.isCancelled shouldBe true
+    }
+  }
+
+  property("NodeViewSynchronizer: malformed reply from an old handler should preserve its replacement") {
+    withFixture { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      val replacementHandler = TestProbe("ReplacementPeerHandler")
+      val replacementPeer = peer.copy(handlerRef = replacementHandler.ref)
+      replacementPeer shouldBe peer // ConnectedPeer.equals compares only the remote address.
+      replacementPeer.handlerRef should not be peer.handlerRef
+
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(
+        _ => Cancellable.alreadyCancelled
+      )
+      deliveryTracker.setUnknown(header.id, Header.modifierTypeId)
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, replacementPeer)(
+        _ => Cancellable.alreadyCancelled
+      )
+
+      val malformed = ModifiersData(Header.modifierTypeId, Map(header.id -> Array[Byte](0)))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(malformed)), Some(peer))
+      ncProbe.fishForMessage(3 seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+
+      deliveryTracker.getRequestedInfo(Header.modifierTypeId, header.id)
+        .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+    }
+  }
+
+  property("NodeViewSynchronizer: valid reply from another peer keeps existing acceptance") {
+    withFixture { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      val otherHandler = TestProbe("OtherPeerHandler")
+      val otherPeer = peer.copy(
+        connectionId = peer.connectionId.copy(
+          remoteAddress = new InetSocketAddress("203.0.113.2", 9030)
+        ),
+        handlerRef = otherHandler.ref
+      )
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(
+        _ => Cancellable.alreadyCancelled
+      )
+
+      val valid = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(valid)), Some(otherPeer))
+      eventually {
+        deliveryTracker.status(header.id, Header.modifierTypeId, Seq.empty) shouldBe Received
+        deliveryTracker.getSource(header.id, Header.modifierTypeId)
+          .map(_.handlerRef) shouldBe Some(otherHandler.ref)
+      }
+    }
+  }
+
   property(
     "NodeViewSynchronizer: apply continuation header from syncV2 and download its block"
   ) {

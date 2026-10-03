@@ -202,9 +202,9 @@ superblock is also a valid block (every superblock is passing block PoW test).
 
 We propose to name full blocks in Ergo as \textit{ordering blocks} from now, and use input-blocks (or sub-blocks) to carry most
 of transactions. For starters, we set $t = T * 64$ (the multiplier will be revisited later) and define input-block $i$ generation
-condition as $ T < H(i) < t$, then a miner can generate on average 63 input blocks plus an ordering block
+condition as $T \le H(i) < t$, then a miner can generate on average 63 input blocks plus an ordering block
 per ordering block generation period. Please note that, unlike superblocks, input blocks are not passing ordering-block PoW check,
-but an ordering block is passing input block check.
+but an ordering block ($H < T$) also passes the input-block check.
 
 \subsection{Linking Structure}
 \label{subsec:linking-structure}

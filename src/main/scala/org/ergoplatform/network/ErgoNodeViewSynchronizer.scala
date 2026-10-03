@@ -99,12 +99,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var lastModifierGotTime: Long = 0
 
   /**
-    * The node stops to accept transactions if declined table reaches this max size. It prevents spam attacks trying
-    * to bloat the table (or exhaust node's CPU)
-    */
-  private val MaxDeclined = 1000
-
-  /**
     * No more than this number of unparsed transactions can be cached
     */
   private val MaxProcessingTransactionsCacheSize = 50
@@ -126,11 +120,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 
   /**
-    * Dictionary (tx id -> checking time), which is storing transactions declined by the mempool, as mempool is not
-    * storing this information. We keep declined transactions in the dictionary for few blocks just, as declined
-    * transaction could become acceptable with time
+    * Ids of transactions declined by the mempool, as the mempool is not storing this information. We keep them for
+    * few blocks just, as a declined transaction could become acceptable with time. The table is bounded, see
+    * `MaxDeclined` and `addDeclined`
     */
-  private val declined = mutable.TreeMap[ModifierId, Long]()
+  private val declined = mutable.HashSet[ModifierId]()
 
   /**
     * Counter which contains total cost of transactions entered mempool or rejected by it since last block processed.
@@ -214,6 +208,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val cost = costOpt.getOrElse(FallbackCostValue)
 
+    // Per-peer budget is charged with a floor for declined transactions, see `MinDeclinedTxCost`. The global
+    // counter below keeps the measured costs only.
+    val chargedCost = processingResult match {
+      case _: DeclinedTransaction => math.max(cost, MinDeclinedTxCost)
+      case _ => cost
+    }
+
     val newInterblockCost = processingResult match {
       case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
       case _: SuccessfulTransaction => interblockCost.copy(acceptedCost = interblockCost.acceptedCost + cost)
@@ -229,9 +230,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(peer) =>
         val peerTxInfo = perPeerCost.getOrElse(peer, IncomingTxInfo.empty())
         val newPeerCost = processingResult match {
-          case _: FailedTransaction => peerTxInfo.copy(invalidatedCost = peerTxInfo.invalidatedCost + cost)
-          case _: SuccessfulTransaction => peerTxInfo.copy(acceptedCost = peerTxInfo.acceptedCost + cost)
-          case _: DeclinedTransaction => peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + cost)
+          case _: FailedTransaction => peerTxInfo.copy(invalidatedCost = peerTxInfo.invalidatedCost + chargedCost)
+          case _: SuccessfulTransaction => peerTxInfo.copy(acceptedCost = peerTxInfo.acceptedCost + chargedCost)
+          case _: DeclinedTransaction => peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + chargedCost)
         }
         log.debug(s"Old peer ${peer.connectionId} cost info: ${peerTxInfo.totalCost}, " +
           s"new: $newPeerCost, tx processing cache size: ${txProcessingCache.size}")
@@ -1118,8 +1119,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
       interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
       peerCost <= MempoolPeerCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-      txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
-        declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
+      txProcessingCache.size <= MaxProcessingTransactionsCacheSize // txs processing cache is not overfull
     }
 
     val modifierTypeId = invData.typeId
@@ -1141,7 +1141,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notDeclined = notApplied.filter(id => !declined.contains(id))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
             s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost
+          val txsToAsk =
+            ((MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost).toInt
           notDeclined.take(txsToAsk)
         } else {
           Seq.empty
@@ -1371,17 +1372,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
   }
 
-  // helper method to clear declined transactions after some off, so the node may accept them again
-  private def clearDeclined(): Unit = {
-    val clearTimeout = FiniteDuration(20, MINUTES)
-    val now = System.currentTimeMillis()
 
-    val toRemove = declined.filter { case (_, time) =>
-      (now - time) > clearTimeout.toMillis
+  /**
+    * Number of declined transaction ids currently kept in the table, exposed for tests
+    */
+  private[network] def declinedTxsCount: Int = declined.size
+
+  // add transaction id to the table of declined transactions, keeping the table size bounded
+  private def addDeclined(id: ModifierId): Unit = {
+    while (declined.size >= MaxDeclined) {
+      declined -= declined.head
     }
-    log.debug(s"Declined transactions to be cleared: ${toRemove.size}")
-    toRemove.foreach { case (id, _) =>
-      declined.remove(id)
+    declined += id
+  }
+
+  // clear declined transactions when new block is applied, so the node may ask peers for them again;
+  // a declined transaction is worth re-evaluating once a block arrives, as its double-spend winner may be
+  // mined by now, mempool may have free capacity, etc.
+  private def clearDeclined(): Unit = {
+    if (declined.nonEmpty) {
+      log.debug(s"Clearing ${declined.size} declined transactions on block applied")
+      declined.clear()
     }
   }
 
@@ -1473,7 +1484,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       broadcastModifierInv(tx)
 
     case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
-      declined.put(utx.id, System.currentTimeMillis())
+      addDeclined(utx.id)
       processMempoolResult(dt)
 
     case ft@FailedTransaction(utx, error) =>
@@ -1493,7 +1504,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     case FailedOnRecheckTransaction(id, _) =>
-      declined.put(id, System.currentTimeMillis())
+      addDeclined(id)
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
       deliveryTracker.setHeld(modId, modTypeId)
@@ -1673,6 +1684,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 object ErgoNodeViewSynchronizer {
 
+  /**
+    * Max number of declined transaction ids kept to not ask peers for the same transactions again. The table is
+    * bounded (an entry is dropped when the limit is reached), so that a peer sending plenty of declined
+    * transactions cannot bloat node's memory.
+    *
+    * This is not a limit on the load the node accepts: declining transactions is limited per peer by
+    * `MinDeclinedTxCost` instead, so that a single peer is not able to shut down transaction intake of the whole
+    * node, see `txAcceptanceFilter` in the class above.
+    */
+  private[network] val MaxDeclined = 1000
+
+  /**
+    * Minimal cost charged to a peer for a transaction declined by the mempool (1000 cost units ~ 1 ms of CPU).
+    * The cheapest declines (min fee not met, double spend loser, re-emission or storage rent prefilter) are made
+    * before scripts are executed, so their measured cost is close to zero and they are not throttled by
+    * `MempoolPeerCostPerBlock` at all. With this floor, every decline costs (at least) 200 ms of the peer's budget,
+    * so no peer is able to send an unlimited number of them.
+    *
+    * The floor is applied to the per-peer counter only (never to the global one), so that the global transaction
+    * intake protection stays proportional to the real work done by the node.
+    */
+  private[network] val MinDeclinedTxCost = 200000
+
   private def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,
             syncInfoSpec: ErgoSyncInfoMessageSpec.type,
@@ -1693,10 +1727,15 @@ object ErgoNodeViewSynchronizer {
 
   /**
     * Container for aggregated costs of accepted, declined or invalidated transactions. Can be used to track global
-    * state of total cost of transactions received (since last block processed), or per-peer state
+    * state of total cost of transactions received (since last block processed), or per-peer state.
+    *
+    * Costs are accumulated, so the fields are `Long` on purpose: a single validation cost may be as big as
+    * `Int.MaxValue` (see `ProcessingOutcome.cost`), and declined transactions are charged with `MinDeclinedTxCost`
+    * floor each, so summing them up in `Int` would overflow. An overflowed (negative) cost would then pass every
+    * limit check below, silently disabling the throttling.
     */
-  case class IncomingTxInfo(acceptedCost: Int, declinedCost: Int, invalidatedCost: Int) {
-    val totalCost: Int = acceptedCost + declinedCost + invalidatedCost
+  case class IncomingTxInfo(acceptedCost: Long, declinedCost: Long, invalidatedCost: Long) {
+    val totalCost: Long = acceptedCost + declinedCost + invalidatedCost
   }
 
   object IncomingTxInfo {

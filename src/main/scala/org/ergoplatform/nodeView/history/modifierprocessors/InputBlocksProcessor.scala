@@ -15,6 +15,7 @@ import spire.syntax.all.cfor
 
 import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -678,13 +679,17 @@ trait InputBlocksProcessor extends ScorexLogging {
     def empty: InputBlocksTree = InputBlocksTree(Seq.empty)
   }
 
+  // The maps below are written by the node view holder and read from other actors' threads (e.g. the synchronizer's
+  // getInputBlock), so they are concurrent maps: a read finds every entry stored and not yet removed, whatever else is
+  // written meanwhile. Consistency across maps (a record visible before its tree update) is not implied.
+
   // dictionary which is storing ordering block -> best input block correspondence
-  private val inputBlockTrees = mutable.Map[ModifierId, InputBlocksTree]()
+  private val inputBlockTrees = TrieMap[ModifierId, InputBlocksTree]()
 
   /**
     * Input block id -> input block index
     */
-  private val inputBlockRecords = mutable.Map[ModifierId, InputBlockAnnouncement]()
+  private val inputBlockRecords = TrieMap[ModifierId, InputBlockAnnouncement]()
 
   /**
     * input block id -> input block transaction ids index
@@ -692,7 +697,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   // todo: transactions can be put here without input block received, ie PoW and difficulty checked
   // todo: and they wont be cleared on pruning and the so structure can be DoSed. Fix by putting such transactions
   // todo: into a special queue
-  private val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+  private val inputBlockTransactions = TrieMap[ModifierId, Seq[ModifierId]]()
 
   /**
     * txid -> transaction index
@@ -713,7 +718,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * Transactions commited in an ordering block
     * Ordering (full) block -> transactions committed by it
     */
-  private val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
+  private val orderingBlockTransactions = TrieMap[ModifierId, Seq[ErgoTransaction]]()
 
   /**
     * Temporary cache of children which do not have parents downloaded yet
@@ -1097,7 +1102,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
-  private val orderingBlockAnnouncements = mutable.Map[ModifierId, OrderingBlockAnnouncement]()
+  // written by the synchronizer (storeOrderingBlockAnnouncement), pruned by the node view holder: concurrent, as above
+  private val orderingBlockAnnouncements = TrieMap[ModifierId, OrderingBlockAnnouncement]()
 
   /**
     * Stores an ordering block announcement for later retrieval.

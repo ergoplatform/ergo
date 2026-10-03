@@ -1924,13 +1924,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         viewHolderRef ! ProcessOrderingBlock(oba)
       } else {
         // todo: request full block for now, see todo notes above
-        log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
         val ext = Extension(oba.header.id, oba.extensionFields)
         viewHolderRef ! ModifiersFromRemote(Seq(ext))
         val status = deliveryTracker.status(
           oba.header.transactionsId, BlockTransactions.modifierTypeId, Seq(hr)
         )
         if (status == ModifiersStatus.Unknown) {
+          log.info(s"Requesting all the block transactions for ${oba.header.id} as prev input block not found")
           requestBlockSection(BlockTransactions.modifierTypeId, Array(oba.header.transactionsId), remote)
         }
       }

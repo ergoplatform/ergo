@@ -50,7 +50,13 @@ class LocalBlockDownloadSpecification extends ErgoCorePropertyTest with FileUtil
     implicit val system: ActorSystem = ActorSystem()
     implicit val ec: ExecutionContext = system.dispatcher
     val directory: java.io.File = createTempDir
-    val settings: ErgoSettings = initSettings.copy(directory = directory.getAbsolutePath)
+    val settings: ErgoSettings = initSettings.copy(
+      directory = directory.getAbsolutePath,
+      scorexSettings = initSettings.scorexSettings.copy(
+        // Scheduler ticks run outside TestActorRef's calling-thread dispatcher.
+        network = initSettings.scorexSettings.network.copy(syncInterval = 1.day)
+      )
+    )
     val network: TestProbe = TestProbe()
     val peerHandler: TestProbe = TestProbe()
     val holder: TestActorRef[ViewHolder] = TestActorRef(Props(new ViewHolder(settings)))

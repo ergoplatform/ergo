@@ -2265,7 +2265,7 @@ components:
           description: >-
             Live pending announcement occupancy and cumulative counters since the synchronizer
             started. These announcements are untrusted and await their applied ordering parent.
-          required: [size, bytes, admitted, replayed, replayNotForwarded, evictions, drops]
+          required: [size, bytes, admitted, replayed, replayNotForwarded, replayInvalid, evictions, drops]
           properties:
             size:
               type: integer
@@ -2291,7 +2291,17 @@ components:
               type: integer
               format: int64
               minimum: 0
-              description: Replay attempts not forwarded to the view holder (invalid, already known, or deferred).
+              description: >-
+                Replay attempts not forwarded to the view holder for reasons other than failed
+                validation, such as already-known announcements, heights no longer at tip + 1,
+                or parents that no longer bind an expected difficulty. These are not deferred.
+            replayInvalid:
+              type: integer
+              format: int64
+              minimum: 0
+              description: >-
+                Replay attempts that fail announcement validation (PoW, difficulty or Merkle
+                proofs). They are not forwarded and the original sender is penalized.
             evictions:
               type: integer
               format: int64

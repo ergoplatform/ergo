@@ -1488,8 +1488,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         p => hr.isInBestChain(p)
       )
       ready.foreach { case (announcement, peer) =>
-        if (!processInputBlock(announcement, hr, mp, peer, usr)) {
-          pendingInputAnnouncements.noteReplayNotForwarded()
+        processInputBlockOutcome(announcement, hr, mp, peer, usr) match {
+          case InputBlockInvalid => pendingInputAnnouncements.noteReplayInvalid()
+          case InputBlockNotForwarded => pendingInputAnnouncements.noteReplayNotForwarded()
+          case InputBlockForwarded => ()
         }
       }
       if (pendingInputAnnouncements.hasReady(tip) && !pendingReplayScheduled) {
@@ -1526,7 +1528,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         hr: ErgoHistoryReader,
                         mp: ErgoMemPoolReader,
                         remote: ConnectedPeer,
-                        usrOpt: Option[UtxoStateReader]): Boolean = {
+                        usrOpt: Option[UtxoStateReader]): Boolean =
+    processInputBlockOutcome(inputBlockInfo, hr, mp, remote, usrOpt) == InputBlockForwarded
+
+  private def processInputBlockOutcome(inputBlockInfo: InputBlockAnnouncement,
+                                      hr: ErgoHistoryReader,
+                                      mp: ErgoMemPoolReader,
+                                      remote: ConnectedPeer,
+                                      usrOpt: Option[UtxoStateReader]): InputBlockProcessingOutcome = {
     var forwarded = false
 
     // Input blocks are only useful when nearly synced (within 2 blocks)
@@ -1535,14 +1544,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         inputBlockInfo.header.height < hr.fullBlockHeight - 2) {
       //todo: change to .debug before release
       log.info(s"Ignoring input block at height ${inputBlockInfo.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
-      return false
+      return InputBlockNotForwarded
     }
 
     // Input blocks should only be processed by UTXO mode nodes
     // Digest mode nodes cannot validate input blocks properly (validation is skipped when usrOpt is empty)
     if (usrOpt.isEmpty) {
       log.warn(s"Received input block but local node is in digest mode - input blocks cannot be validated in digest mode, ignoring")
-      return false
+      return InputBlockNotForwarded
     }
 
     val subBlockHeader = inputBlockInfo.header
@@ -1551,7 +1560,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Skip already known input blocks
     if (hr.getInputBlock(subBlockId).isDefined) {
       log.debug(s"Input block $subBlockId already known, ignoring")
-      return false
+      return InputBlockNotForwarded
     }
 
     // apply sub-block if it is on current height // todo: relax the rule to process input-blocks for last 1-2 ordering blocks as well ?
@@ -1582,7 +1591,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // genesis-height announcement past genesis. Drop it; a real parent arrives via header sync.
         log.debug(s"Not processing input block $subBlockId: parent ${subBlockHeader.parentId} does not bind an expected difficulty")
         clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
-        return false
+        return InputBlockNotForwarded
       }
       val valid = usrOpt
         .map(_.stateContext.currentParameters)
@@ -1637,6 +1646,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // Replay detaches pending announcements, so invalid deliveries must be released here.
         clearDeliveryIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         penalizeMisbehavingPeer(remote)
+        return InputBlockInvalid
       }
     } else {
       if (subBlockHeader.height == hr.fullBlockHeight + 2) {
@@ -1663,7 +1673,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         // just ignore the subblock
       }
     }
-    forwarded
+    if (forwarded) InputBlockForwarded else InputBlockNotForwarded
   }
 
   /**
@@ -2561,6 +2571,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+  private sealed trait InputBlockProcessingOutcome
+  private case object InputBlockForwarded extends InputBlockProcessingOutcome
+  private case object InputBlockInvalid extends InputBlockProcessingOutcome
+  private case object InputBlockNotForwarded extends InputBlockProcessingOutcome
+
 
   private def props(networkControllerRef: ActorRef,
             viewHolderRef: ActorRef,

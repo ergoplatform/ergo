@@ -373,6 +373,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
         json.get[Long]("admitted") shouldBe Right(if (evict) 2L else 1L)
         json.get[Long]("replayed") shouldBe Right(0L)
         json.get[Long]("replayNotForwarded") shouldBe Right(0L)
+        json.get[Long]("replayInvalid") shouldBe Right(0L)
         val drops = json.downField("drops")
         drops.get[Long]("hostLimit") shouldBe Right(if (evict) 0L else 1L)
         Seq("duplicate", "variantLimit", "oversize", "expired",
@@ -635,7 +636,8 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
       val json = org.ergoplatform.local.ErgoStatsCollector.NodeInfo.jsonEncoder(info).hcursor
         .downField("pendingInputAnnouncements")
       json.get[Long]("replayed") shouldBe Right((batchSize + (if (poisoned) 1 else 0)).toLong)
-      json.get[Long]("replayNotForwarded") shouldBe Right(if (invalidOnly || poisoned) 1L else 0L)
+      json.get[Long]("replayNotForwarded") shouldBe Right(0L)
+      json.get[Long]("replayInvalid") shouldBe Right(if (invalidOnly || poisoned) 1L else 0L)
       if (invalidOnly) {
         validations shouldBe Vector(nextParameters -> Some(expectedBits))
         if (otherSupplier) {
@@ -714,7 +716,7 @@ class PendingInputAnnouncementsSpecification extends ErgoCorePropertyTest {
     replayScenario(epoch = false, earlyBody = false, knownBeforeApply = true, reorg = true)
   }
 
-  property("replay counts replayed and not-forwarded announcements") {
+  property("replay counts replayed and invalid announcements separately") {
     replayScenario(epoch = false, earlyBody = false, batchSize = 3)
     replayScenario(epoch = false, earlyBody = false, invalidOnly = true)
   }

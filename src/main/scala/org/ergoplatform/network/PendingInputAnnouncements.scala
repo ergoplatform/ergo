@@ -48,6 +48,7 @@ final class PendingInputAnnouncements(maxEntries: Int,
   private var admittedCount = 0L
   private var replayedCount = 0L
   private var replayNotForwardedCount = 0L
+  private var replayInvalidCount = 0L
   private var lastWarning: Option[Long] = None
 
   def size: Int = entries.size
@@ -56,7 +57,12 @@ final class PendingInputAnnouncements(maxEntries: Int,
   def drops: Map[String, Long] = dropCounts
   def fullInfo: PendingInputAnnouncements.Stats =
     PendingInputAnnouncements.Stats(size, byteSize, admittedCount, replayedCount,
-      replayNotForwardedCount, evictions, drops)
+      replayNotForwardedCount, evictions, drops, replayInvalid = replayInvalidCount)
+
+  def noteReplayInvalid(): Unit = {
+    replayInvalidCount += 1
+    onChange()
+  }
 
   def noteReplayNotForwarded(): Unit = {
     replayNotForwardedCount += 1
@@ -244,7 +250,8 @@ object PendingInputAnnouncements {
   /** Immutable snapshot published by the owning synchronizer for /info. */
   case class Stats(size: Int = 0, bytes: Long = 0L,
                    admitted: Long = 0L, replayed: Long = 0L, replayNotForwarded: Long = 0L,
-                   evictions: Long = 0L, drops: Map[String, Long] = emptyDrops)
+                   evictions: Long = 0L, drops: Map[String, Long] = emptyDrops,
+                   replayInvalid: Long = 0L)
 
   object Stats {
     implicit val jsonEncoder: Encoder[Stats] = (stats: Stats) => Json.obj(
@@ -253,6 +260,7 @@ object PendingInputAnnouncements {
       "admitted" -> Json.fromLong(stats.admitted),
       "replayed" -> Json.fromLong(stats.replayed),
       "replayNotForwarded" -> Json.fromLong(stats.replayNotForwarded),
+      "replayInvalid" -> Json.fromLong(stats.replayInvalid),
       "evictions" -> Json.fromLong(stats.evictions),
       "drops" -> Json.obj(stats.drops.toSeq.map { case (reason, count) =>
         reason -> Json.fromLong(count)

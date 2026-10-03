@@ -1467,15 +1467,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // Accepted pending deliveries are Received; disposal must release those too.
       clearDeliveryIfFromSupplier(announcement.id, InputBlockTypeId.value, peer)
     }
-    pending.onChange = () => context.system.eventStream.publish(pending.fullInfo)
+    pending.onChange = () => context.system.eventStream.publish(pendingAnnouncementsInfo)
     pending
   }
 
   private var pendingReplayScheduled = false
 
+  private def pendingAnnouncementsInfo: PendingInputAnnouncements.Stats =
+    pendingInputAnnouncements.fullInfo.copy(enabled = settings.matrix.pendingAnnouncements.enabled)
+
   private def replayPendingInputAnnouncements(hr: ErgoHistoryReader,
                                               mp: ErgoMemPoolReader,
                                               usr: Option[UtxoStateReader]): Unit = {
+    if (!settings.matrix.pendingAnnouncements.enabled) return
+
     // BlockApplied is published before ChangedState. In particular at an epoch
     // boundary, replay must wait for the parent's new parameters, not the old ones.
     usr.flatMap(_.stateContext.lastHeaderOpt).filter { tip =>
@@ -1645,10 +1650,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         val orderingId = inputBlockInfo.header.parentId
 
-        if (pendingInputAnnouncements.add(inputBlockInfo, remote)) {
-          setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
-        } else {
-          clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
+        if (settings.matrix.pendingAnnouncements.enabled) {
+          if (pendingInputAnnouncements.add(inputBlockInfo, remote)) {
+            setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
+          } else {
+            clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
+          }
         }
 
         // todo: make it debug before release
@@ -2519,7 +2526,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       checkDelivery(hr) orElse {
       case CleanupLocalInputBlockChunks =>
         pendingInputAnnouncements.expire()
-        context.system.eventStream.publish(pendingInputAnnouncements.fullInfo)
+        context.system.eventStream.publish(pendingAnnouncementsInfo)
         cleanupLocalInputBlockChunks()
       case a: Any => log.error("Strange input: " + a)
     }

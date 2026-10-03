@@ -2265,8 +2265,13 @@ components:
           description: >-
             Live pending announcement occupancy and cumulative counters since the synchronizer
             started. These announcements are untrusted and await their applied ordering parent.
-          required: [size, bytes, admitted, replayed, replayNotForwarded, evictions, drops]
+          required: [enabled, size, bytes, admitted, replayed, replayNotForwarded, evictions, drops]
           properties:
+            enabled:
+              type: boolean
+              description: >-
+                Whether +2 announcements are held for replay. When false, they are dropped
+                and unknown ordering headers are still requested; occupancy and counters stay zero.
             size:
               type: integer
               format: int32

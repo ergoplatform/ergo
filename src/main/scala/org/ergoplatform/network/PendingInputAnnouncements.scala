@@ -244,10 +244,12 @@ object PendingInputAnnouncements {
   /** Immutable snapshot published by the owning synchronizer for /info. */
   case class Stats(size: Int = 0, bytes: Long = 0L,
                    admitted: Long = 0L, replayed: Long = 0L, replayNotForwarded: Long = 0L,
-                   evictions: Long = 0L, drops: Map[String, Long] = emptyDrops)
+                   evictions: Long = 0L, drops: Map[String, Long] = emptyDrops,
+                   enabled: Boolean = true)
 
   object Stats {
     implicit val jsonEncoder: Encoder[Stats] = (stats: Stats) => Json.obj(
+      "enabled" -> Json.fromBoolean(stats.enabled),
       "size" -> Json.fromInt(stats.size),
       "bytes" -> Json.fromLong(stats.bytes),
       "admitted" -> Json.fromLong(stats.admitted),

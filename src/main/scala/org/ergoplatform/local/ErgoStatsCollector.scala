@@ -75,7 +75,9 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     settings.launchParameters,
     eip27Supported = true,
     settings.scorexSettings.restApi.publicUrl,
-    settings.nodeSettings.extraIndex)
+    settings.nodeSettings.extraIndex,
+    pendingInputAnnouncements = PendingInputAnnouncements.Stats(
+      enabled = settings.matrix.pendingAnnouncements.enabled))
 
   override def receive: Receive =
     onConnectedPeers orElse

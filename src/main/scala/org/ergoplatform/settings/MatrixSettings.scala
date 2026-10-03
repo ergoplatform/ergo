@@ -1,6 +1,7 @@
 package org.ergoplatform.settings
 
-case class PendingAnnouncementsSettings(maxEntries: Int,
+case class PendingAnnouncementsSettings(enabled: Boolean,
+                                        maxEntries: Int,
                                         maxBytes: Long,
                                         perPeer: Int,
                                         replayPerParent: Int,

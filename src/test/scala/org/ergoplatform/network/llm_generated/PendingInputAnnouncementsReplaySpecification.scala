@@ -280,4 +280,73 @@ class PendingInputAnnouncementsReplaySpecification extends ErgoCorePropertyTest 
       }
     }
   }
+
+  property("rollback discards a held +2 root now above tip + 2 and retains the nearer root") {
+    withPeers { (p, q) =>
+      val appliedTip = blocks(1).header
+      val rollbackTip = blocks.head.header
+      val futureParent = blocks(2).header
+      val far = announcement(41).copy(header = announcement(41).header.copy(
+        height = appliedTip.height + 2, parentId = futureParent.id))
+      val near = announcement(42).copy(header = announcement(42).header.copy(
+        height = appliedTip.height + 1, parentId = appliedTip.id))
+      val store = new PendingInputAnnouncements(4, 100000, 4, 1000, () => 0L)
+      var discarded = Vector.empty[(InputBlockAnnouncement, ConnectedPeer)]
+      store.onDiscard = (a, peer) => discarded :+= a -> peer
+      store.add(far, p) shouldBe true
+      store.add(near, q) shouldBe true
+      val parents = Map(appliedTip.id -> appliedTip, futureParent.id -> futureParent)
+      store.take(appliedTip, 0, parents.get) shouldBe empty
+      store.size shouldBe 2
+      store.hasReady(appliedTip) shouldBe true
+      store.drops("staleParent") shouldBe 0L
+
+      far.header.height should be > rollbackTip.height + 2
+      store.take(rollbackTip, 64, parents.get) shouldBe empty
+      discarded shouldBe Vector(far -> p)
+      store.size shouldBe 1
+      store.byteSize shouldBe InputBlockAnnouncement.serializer.toBytes(near).length.toLong
+      store.drops("staleParent") shouldBe 1L
+      store.drops("expired") shouldBe 0L
+      store.evictions shouldBe 0L
+      store.fullInfo.replayed shouldBe 0L
+      store.hasReady(rollbackTip) shouldBe false
+
+      store.take(appliedTip) shouldBe Seq(near -> q)
+      discarded shouldBe Vector(far -> p)
+      store.byteSize shouldBe 0L
+      store.fullInfo.admitted shouldBe store.fullInfo.replayed + store.drops("staleParent")
+    }
+  }
+
+  property("capacity eviction removes the older of a busiest host's two leaves") {
+    withPeers { (p, q) =>
+      val other = announcement(50)
+      // Header timestamps and clock ticks cannot replace arrival order as the tie-break.
+      val older = announcement(900)
+      val newer = announcement(100)
+      val incoming = announcement(60)
+      val heldBytes = Seq(other, older, newer).map(
+        a => InputBlockAnnouncement.serializer.toBytes(a).length.toLong).sum
+      Seq(new PendingInputAnnouncements(3, 100000, 3, 1000, () => 0L),
+        new PendingInputAnnouncements(10, heldBytes, 3, 1000, () => 0L)).foreach { store =>
+        var discarded = Vector.empty[(InputBlockAnnouncement, ConnectedPeer)]
+        store.onDiscard = (a, peer) => discarded :+= a -> peer
+        store.add(other, q) shouldBe true
+        store.add(older, p) shouldBe true
+        store.add(newer, p) shouldBe true
+        store.size shouldBe 3
+        store.evictions shouldBe 0L
+        store.add(incoming, q) shouldBe true
+        discarded shouldBe Vector(older -> p)
+        store.evictions shouldBe 1L
+        store.size shouldBe 3
+        store.take(blocks.head.header) shouldBe Seq(other -> q, newer -> p, incoming -> q)
+        store.size shouldBe 0
+        store.byteSize shouldBe 0L
+        store.drops.values.sum shouldBe 0L
+        store.fullInfo.admitted shouldBe store.fullInfo.replayed + store.evictions
+      }
+    }
+  }
 }

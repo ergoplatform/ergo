@@ -875,6 +875,13 @@ class ErgoNodeViewSynchronizerSpecification
       synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(repeated)), Some(peer))
       ncProbe.expectNoMessage(300.millis)
 
+      // A new id must also be suppressed: this checks the handler-wide cutoff,
+      // not only the per-id oversized reply set.
+      val unseen = InvData(ErgoTransaction.modifierTypeId,
+        Seq(bytesToId(Array.fill[Byte](32)(32.toByte))))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(unseen)), Some(peer))
+      ncProbe.expectNoMessage(300.millis)
+
       val replacementHandler = TestProbe("ReplacementOversizedSupplier")
       val replacementPeer = peer.copy(
         connectionId = peer.connectionId.copy(remoteAddress =

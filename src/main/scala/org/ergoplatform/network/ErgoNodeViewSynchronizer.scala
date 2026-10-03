@@ -75,7 +75,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
-  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+  // full and reduced V2 sync infos differ, so they are cached separately
+  private var fullSyncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+
+  private var reducedSyncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -316,11 +319,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /** Get V2 sync info from cache or load it from history and add to cache */
   private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
     val headersHeight = history.headersHeight
-    syncInfoV2CacheByHeadersHeight
+    val cache = if (full) fullSyncInfoV2CacheByHeadersHeight else reducedSyncInfoV2CacheByHeadersHeight
+    cache
       .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
       .getOrElse {
         val v2SyncInfo = history.syncInfoV2(full)
-        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        if (full) {
+          fullSyncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        } else {
+          reducedSyncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        }
         v2SyncInfo
       }
   }

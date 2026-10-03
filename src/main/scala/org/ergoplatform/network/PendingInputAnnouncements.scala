@@ -146,17 +146,8 @@ final class PendingInputAnnouncements(maxEntries: Int,
         while (entries.size >= maxEntries || usedBytes > maxBytes - bytes) {
           val occupancy = entries.valuesIterator.toSeq.groupBy(
             entry => peerHostKey(entry.peer)).map { case (h, es) => h -> es.size }
-          val activePeers = (occupancy.keySet + host).size
-          val fairShare = maxEntries / math.max(1, activePeers)
-          val incomingCount = occupancy.getOrElse(host, 0) + 1
-          val candidates = entries.iterator.filter { case (_, entry) =>
-            val count = occupancy(peerHostKey(entry.peer))
-            incomingCount <= fairShare || count >= fairShare
-          }.toVector
-          // Non-empty: either every entry qualifies, or the incoming host holds at
-          // least fairShare entries. Oversize rejection prevents an empty-store loop.
           // Prefer the largest occupancy, then the incoming host, then oldest arrival.
-          val victim = candidates.maxBy { case (_, entry) =>
+          val victim = entries.iterator.maxBy { case (_, entry) =>
             val h = peerHostKey(entry.peer)
             (occupancy(h), if (h == host) 1 else 0)
           }._1

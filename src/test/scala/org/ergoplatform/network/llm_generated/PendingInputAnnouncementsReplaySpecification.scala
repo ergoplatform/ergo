@@ -16,6 +16,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.settings.Parameters
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.scalacheck.Gen
 import scorex.core.network.{ConnectedPeer, DeliveryTracker, ModifiersStatus}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 
@@ -30,6 +31,26 @@ class PendingInputAnnouncementsReplaySpecification extends ErgoCorePropertyTest 
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators.connectionIdGen
 
   private val blocks = genChain(3)
+
+  implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
+    PropertyCheckConfiguration(minSuccessful = 1000)
+
+  private def announcement(n: Int): InputBlockAnnouncement =
+    InputBlockAnnouncement(1, blocks(1).header.copy(timestamp = n.toLong),
+      InputBlockFields.empty, None)
+
+  private def withPeers(f: (ConnectedPeer, ConnectedPeer) => Unit): Unit = {
+    implicit val system: ActorSystem = ActorSystem("pending-replay-store-test")
+    try {
+      val first = ConnectedPeer(connectionIdGen.sample.get.copy(
+        remoteAddress = new java.net.InetSocketAddress("10.0.0.1", 9000)),
+        TestProbe().ref, None)
+      val second = ConnectedPeer(connectionIdGen.sample.get.copy(
+        remoteAddress = new java.net.InetSocketAddress("10.0.0.2", 9000)),
+        TestProbe().ref, None)
+      f(first, second)
+    } finally Await.result(system.terminate(), 10.seconds)
+  }
 
   private def proxy[T](cls: Class[T])(f: (Method, Array[AnyRef]) => Any): T =
     cls.cast(Proxy.newProxyInstance(cls.getClassLoader, Array(cls), new InvocationHandler {
@@ -204,6 +225,59 @@ class PendingInputAnnouncementsReplaySpecification extends ErgoCorePropertyTest 
       (1 to 3).foreach(_ => f.ref ! ChangedHistory(f.hr))
       f.stateContextReads shouldBe drainedReads
       f.validations shouldBe 1
+    }
+  }
+
+  property("the fairness filter never changes the busiest-host, incoming-host, oldest victim") {
+    withPeers { (peer, _) =>
+      val scenarios = for {
+        hosts <- Gen.choose(1, 6)
+        counts <- Gen.listOfN(hosts, Gen.choose(1, 5))
+        incoming <- Gen.choose(0, hosts)
+        headroom <- Gen.choose(0, 12)
+        arrivalKeys <- Gen.listOfN(counts.sum, Gen.choose(-100, 100))
+      } yield (counts, incoming, headroom, arrivalKeys)
+      forAll(scenarios) { case (counts, incoming, headroom, arrivalKeys) =>
+        val hostsInArrivalOrder = counts.zipWithIndex.flatMap { case (count, host) =>
+          Seq.fill(count)(host)
+        }.zip(arrivalKeys).sortBy(_._2).map(_._1).toVector
+        val entries = hostsInArrivalOrder.zipWithIndex
+        val entryCap = counts.sum + headroom
+        val fairShare = entryCap / (counts.size + (if (incoming == counts.size) 1 else 0))
+        val incomingCount = counts.lift(incoming).getOrElse(0) + 1
+        val filtered = entries.filter { case (host, _) =>
+          incomingCount <= fairShare || counts(host) >= fairShare
+        }
+        def priority(entry: (Int, Int)): (Int, Int) =
+          (counts(entry._1), if (entry._1 == incoming) 1 else 0)
+        val victim = entries.maxBy(priority)
+        filtered.maxBy(priority) shouldBe victim
+        // All busiest hosts survive, so neither the host tie-break nor FIFO changes.
+        entries.filter(e => counts(e._1) == counts.max).foreach { entry =>
+          filtered should contain (entry)
+        }
+
+        def host(n: Int): ConnectedPeer = peer.copy(connectionId = peer.connectionId.copy(
+          remoteAddress = new java.net.InetSocketAddress(s"10.0.0.${n + 1}", 9000)))
+        val held = entries.map { case (h, id) => announcement(id + 1) -> host(h) }
+        val next = announcement(held.size + 1)
+        def bytes(a: InputBlockAnnouncement): Long =
+          InputBlockAnnouncement.serializer.toBytes(a).length.toLong
+        // Force byte pressure even when the entry cap has headroom. Any one victim fits.
+        val byteCap = held.map(e => bytes(e._1)).sum + bytes(next) - held.map(e => bytes(e._1)).min
+        val store = new PendingInputAnnouncements(entryCap, byteCap, counts.max + 1,
+          1000, () => 0L)
+        var discarded = Vector.empty[InputBlockAnnouncement]
+        store.onDiscard = (a, _) => discarded :+= a
+        held.foreach { case (a, p) => store.add(a, p) shouldBe true }
+        store.add(next, host(incoming)) shouldBe true
+        discarded.map(_.id) shouldBe Vector(held(victim._2)._1.id)
+        store.evictions shouldBe 1L
+        store.take(blocks.head.header).map(_._1.id) shouldBe
+          held.filterNot(_._1.id == held(victim._2)._1.id).map(_._1.id) :+ next.id
+        store.size shouldBe 0
+        store.byteSize shouldBe 0L
+      }
     }
   }
 }

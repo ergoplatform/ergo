@@ -11,7 +11,7 @@ import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentThreshold
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, getIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, RollbackToKey, getIndex}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
@@ -70,30 +70,36 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   if(ergoSettings.nodeSettings.extraIndex)
     pathPrefix("blockchain") {
       getIndexedHeightR ~
-      getTxByIdR ~
-      getTxByIndexR ~
-      getTxsByAddressR ~
-      getTxsByAddressGetRoute ~
-      getTxRangeR ~
-      getBoxByIdR ~
-      getBoxByIndexR ~
-      getBoxesByTokenIdR ~
-      getBoxesByTokenIdUnspentR ~
-      getBoxesByAddressR ~
-      getBoxesByAddressGetRoute ~
-      getBoxesByAddressUnspentR ~
-      getBoxesByAddressUnspentGetRoute ~
-      getBoxesByTemplateHashR ~
-      getBoxesByTemplateHashUnspentR ~
-      getBoxRangeR ~
-      getBoxesByErgoTreeR ~
-      getBoxesByErgoTreeUnspentR ~
-      getTokenInfoByIdR ~
-      getTokenInfoByIdsR ~
-      getAddressBalanceTotalR ~
-      getAddressBalanceTotalGetRoute ~
-      getBlockByHeaderIdR ~
-      getBlocksByHeaderIdsR
+      onSuccess(getHistory) { history =>
+        if (getIndex(RollbackToKey, history).getInt != 0) {
+          InternalError("Extra index rollback recovery is incomplete")
+        } else {
+          getTxByIdR ~
+          getTxByIndexR ~
+          getTxsByAddressR ~
+          getTxsByAddressGetRoute ~
+          getTxRangeR ~
+          getBoxByIdR ~
+          getBoxByIndexR ~
+          getBoxesByTokenIdR ~
+          getBoxesByTokenIdUnspentR ~
+          getBoxesByAddressR ~
+          getBoxesByAddressGetRoute ~
+          getBoxesByAddressUnspentR ~
+          getBoxesByAddressUnspentGetRoute ~
+          getBoxesByTemplateHashR ~
+          getBoxesByTemplateHashUnspentR ~
+          getBoxRangeR ~
+          getBoxesByErgoTreeR ~
+          getBoxesByErgoTreeUnspentR ~
+          getTokenInfoByIdR ~
+          getTokenInfoByIdsR ~
+          getAddressBalanceTotalR ~
+          getAddressBalanceTotalGetRoute ~
+          getBlockByHeaderIdR ~
+          getBlocksByHeaderIdsR
+        }
+      }
     }
   else
     pathPrefix("blockchain") {

@@ -1,0 +1,57 @@
+name: Mainnet NiPoPoW + digest + full-block suffix bootstrap test
+
+# Boots a mainnet node with nipopowBootstrap + stateType=digest + blocksToKeep (full-block
+# suffix, no UTXO snapshot) from an empty data dir and waits until full blocks are applied and
+# the node is synced. Companion of the NiPoPoW + UTXO snapshot job in bootstrap-mainnet.yml;
+# a separate file so a long run cannot block publishing. Observed runtime locally on mainnet:
+# 5-10 minutes.
+#
+# Runs on every published release (kushti preferred release-time checks for the sibling job,
+# ergoplatform/ergo#2496) and on manual dispatch. A run started within ~4.2 days after a UTXO
+# snapshot epoch boundary (every ~72.5 days; next near height 1932277) is expected from reading
+# the code (not yet observed) to fail at the first-full-block step because of
+# ergoplatform/ergo#2595 until #2596 or an equivalent fix is merged. The kill in the
+# kill-and-restart step is guarded against ergoplatform/ergo#1159: it waits until the full height is at or
+# above the floor a restart could recompute, and fails by name at the kill guard if that takes more than
+# 10 minutes, so a red at the suffix step is not expected. Being a separate workflow, a red run here does not
+# block publishing.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  bootstrap_mainnet_digest_suffix:
+    name: NiPoPoW + digest + full-block suffix bootstrap on mainnet
+    runs-on: ubuntu-latest
+    # 6 h is the GitHub-hosted runner job limit; observed runtime is minutes.
+    timeout-minutes: 360
+    steps:
+      - name: Checkout current branch (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java and sbt
+        uses: coursier/setup-action@v3
+        with:
+          jvm: temurin:8
+          apps: sbt
+
+      - name: Cache sbt
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.sbt
+            ~/.ivy2/cache
+            ~/.coursier/cache/v1
+            ~/.cache/coursier/v1
+            ~/AppData/Local/Coursier/Cache/v1
+            ~/Library/Caches/Coursier/Cache/v1
+          key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Run mainnet NiPoPoW + digest + suffix bootstrap test
+        run: |
+          mkdir tmp
+          TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++2.12.20 docker "it2:testOnly *TestDigestSuffixNipopowBootstrapOnMainNetSpec"

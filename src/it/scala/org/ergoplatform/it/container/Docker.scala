@@ -294,7 +294,9 @@ class Docker(
       case _       => ""
     }
 
-    val shellCmd = "echo Options: $OPTS; java $OPTS -Dlibrary.leveldbjni.path=/opt/ergo -jar " +
+    // `exec` makes java PID 1, so that it gets SIGTERM: a shell as PID 1 ignores it, and
+    // `docker stop` would always end with SIGKILL after its timeout
+    val shellCmd = "echo Options: $OPTS; exec java $OPTS -Dlibrary.leveldbjni.path=/opt/ergo -jar " +
       s"$miscCmdOptions /opt/ergo/ergo.jar $networkTypeCmdOption -c /opt/ergo/${networkType.verboseName}Template.conf"
 
     client

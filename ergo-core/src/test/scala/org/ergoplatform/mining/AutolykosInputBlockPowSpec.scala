@@ -55,7 +55,8 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
   }
 
   Seq(1, 2, 30, 64).foreach { multiplier =>
-    property(s"isInputHit should accept b * n - 1 and reject b * n and b * n + 1 " +
+    property(s"isInputHit should accept b * subBlocksPerBlock - 1 " +
+      s"and reject b * subBlocksPerBlock and b * subBlocksPerBlock + 1 " +
       s"with multiplier $multiplier") {
       val b = BigInt(100)
       val inputTarget = b * multiplier

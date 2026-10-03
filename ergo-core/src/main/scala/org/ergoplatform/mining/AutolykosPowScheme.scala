@@ -136,8 +136,8 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 
   def isOrderingHit(hit: BigInt, b: BigInt): Boolean = hit < b
 
-  def isInputHit(hit: BigInt, b: BigInt, n: Int): Boolean = {
-    val inputTarget = b * n
+  def isInputHit(hit: BigInt, b: BigInt, subBlocksPerBlock: Int): Boolean = {
+    val inputTarget = b * subBlocksPerBlock
     hit < inputTarget
   }
   /**

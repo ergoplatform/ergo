@@ -1476,6 +1476,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def replayPendingInputAnnouncements(hr: ErgoHistoryReader,
                                               mp: ErgoMemPoolReader,
                                               usr: Option[UtxoStateReader]): Unit = {
+    if (pendingInputAnnouncements.size == 0) return
+
     // BlockApplied is published before ChangedState. In particular at an epoch
     // boundary, replay must wait for the parent's new parameters, not the old ones.
     usr.flatMap(_.stateContext.lastHeaderOpt).filter { tip =>

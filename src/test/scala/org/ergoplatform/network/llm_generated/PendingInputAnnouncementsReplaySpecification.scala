@@ -7,7 +7,7 @@ import org.ergoplatform.mining.{AutolykosPowScheme, InputBlockFields}
 import org.ergoplatform.modifiers.InputBlockTypeId
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
-  ChangedHistory, ChangedMempool, ChangedState
+  ChangedHistory, ChangedMempool, ChangedState, ProcessInputBlock
 }
 import org.ergoplatform.network.message.{InvData, RequestModifierSpec}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec}
@@ -51,6 +51,7 @@ class PendingInputAnnouncementsReplaySpecification extends ErgoCorePropertyTest 
     val parent = blocks(1).header
     var parentAvailable = false
     var validations = 0
+    var stateContextReads = 0
     var replayValid = true
     var alreadyKnown = false
     var advanceDuringReplay = false
@@ -71,7 +72,10 @@ class PendingInputAnnouncementsReplaySpecification extends ErgoCorePropertyTest 
         parameters, emptyStateContext.validationSettings, emptyStateContext.votingData)(
         cfg.chainSettings)
       proxy(classOf[UtxoStateReader]) { (m, _) =>
-        if (m.getName == "stateContext") ctx else throw new AssertionError(m.getName)
+        if (m.getName == "stateContext") {
+          stateContextReads += 1
+          ctx
+        } else throw new AssertionError(m.getName)
       }
     }
     val hr = proxy(classOf[ErgoHistory]) { (m, args) => m.getName match {
@@ -177,5 +181,29 @@ class PendingInputAnnouncementsReplaySpecification extends ErgoCorePropertyTest 
 
   property("an already-known replay is not counted as invalid") {
     rejectedReplay(invalid = false, known = true)
+  }
+
+  property("an empty store skips state context reads on history changes before and after replay") {
+    withSynchronizer { f =>
+      val initialReads = f.stateContextReads
+      (1 to 3).foreach(_ => f.ref ! ChangedHistory(f.hr))
+      f.stateContextReads shouldBe initialReads
+
+      f.announce()
+      val heldReads = f.stateContextReads
+      f.ref ! ChangedHistory(f.hr)
+      f.stateContextReads shouldBe heldReads + 1
+      f.validations shouldBe 0
+      f.info.get[Int]("size") shouldBe Right(1)
+      f.applyParent()
+      f.validations shouldBe 1
+      f.vh.expectMsg(ProcessInputBlock(f.announcement, f.peer))
+      f.info.get[Int]("size") shouldBe Right(0)
+
+      val drainedReads = f.stateContextReads
+      (1 to 3).foreach(_ => f.ref ! ChangedHistory(f.hr))
+      f.stateContextReads shouldBe drainedReads
+      f.validations shouldBe 1
+    }
   }
 }

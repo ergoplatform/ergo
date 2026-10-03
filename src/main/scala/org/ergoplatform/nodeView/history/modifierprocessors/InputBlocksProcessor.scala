@@ -625,7 +625,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               // todo: pass real cost of input block instead of costDelta = 0
               f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
@@ -655,7 +655,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               // todo: pass real cost of input block instead of costDelta = 0
               f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }

@@ -15,6 +15,54 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
 
+  property("pending announcement settings are read from ergo.node.matrix.pendingAnnouncements") {
+    val path = "src/test/resources/settings.json"
+    ConfigFactory.parseFile(new java.io.File(path)).hasPath("ergo.node.matrix") shouldBe false
+    val caps = ErgoSettingsReader.read(Args(Some(path), None)).matrix.pendingAnnouncements
+    caps.enabled shouldBe true
+    caps.maxEntries shouldBe 256
+    caps.maxBytes shouldBe 4194304L
+    caps.perPeer shouldBe 128
+    caps.perPeer shouldBe 2 * Parameters.SubsPerBlockDefault
+    caps.replayPerParent shouldBe 64
+    caps.ttlMs shouldBe 120000L
+    ConfigFactory.load().getLong("ergo.node.matrix.pendingAnnouncements.ttlMs") shouldBe 120000L
+  }
+
+  property("pending announcements can be disabled while caps remain positive and validated") {
+    val base = ConfigFactory.load()
+    def config(value: String) = ConfigFactory.parseString(
+      s"ergo.node.matrix.pendingAnnouncements.enabled = $value").withFallback(base).resolve()
+    val caps = ErgoSettingsReader.fromConfig(config("false")).matrix.pendingAnnouncements
+    caps.enabled shouldBe false
+    caps.maxEntries shouldBe 256
+    caps.ttlMs shouldBe 120000L
+    ErgoSettingsReader.fromConfig(config("true")).matrix.pendingAnnouncements.enabled shouldBe true
+    scala.util.Try(ErgoSettingsReader.fromConfig(config("123"))).isFailure shouldBe true
+    Seq("maxEntries", "maxBytes", "perPeer", "replayPerParent", "ttlMs").foreach { key =>
+      Seq(0, -1).foreach { value =>
+        val invalid = ConfigFactory.parseString(
+          s"ergo.node.matrix.pendingAnnouncements.$key = $value")
+          .withFallback(config("false")).resolve()
+        scala.util.Try(ErgoSettingsReader.fromConfig(invalid)).isFailure shouldBe true
+      }
+    }
+  }
+
+  property("configured TTL and replay budget override defaults and reject nonpositive values") {
+    val base = ConfigFactory.load()
+    def config(ttl: Long, replay: Int) = ConfigFactory.parseString(
+      s"ergo.node.matrix.pendingAnnouncements { ttlMs = $ttl, replayPerParent = $replay }")
+      .withFallback(base).resolve()
+    val caps = ErgoSettingsReader.fromConfig(config(321L, 7)).matrix.pendingAnnouncements
+    caps.ttlMs shouldBe 321L
+    caps.replayPerParent shouldBe 7
+    Seq(0L, -1L).foreach { ttl =>
+      scala.util.Try(ErgoSettingsReader.fromConfig(config(ttl, 7))).isFailure shouldBe true
+    }
+    scala.util.Try(ErgoSettingsReader.fromConfig(config(321L, 0))).isFailure shouldBe true
+  }
+
   property("should keep data user home  by default") {
     val settings = ErgoSettingsReader.read()
     settings.directory shouldBe System.getProperty("user.dir") + "/.ergo_test/data"

@@ -105,6 +105,15 @@ trait NodeApi {
     )
   }
 
+  def headersHeight: Future[Int] = get("/info") flatMap { r =>
+    val response = ergoJsonAnswerAs[Json](r.getResponseBody)
+    val eitherHeight = response.hcursor.downField("headersHeight").as[Option[Int]]
+    eitherHeight.fold[Future[Int]](
+      e => Future.failed(new Exception(s"Error getting `headersHeight` from /info response: $e\n$response", e)),
+      maybeHeight => Future.successful(maybeHeight.getOrElse(0))
+    )
+  }
+
   def status: Future[Status] = get("/info").map(j => Status(ergoJsonAnswerAs[Json](j.getResponseBody).noSpaces))
 
   def info: Future[NodeInfo] = get("/info").map(r => ergoJsonAnswerAs[NodeInfo](r.getResponseBody))

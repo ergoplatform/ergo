@@ -449,7 +449,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
           header.height,
           lastTxIndex,
           Array.fill(lastTx.inputs.size)(0L),
-          outputIndexes
+          outputIndexes,
+          header.id
         )
         val indexedBoxes = lastTx.outputs.zip(outputIndexes).map { case (output, outputIndex) =>
           new IndexedErgoBox(
@@ -486,7 +487,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
           reloaded.typedExtraIndexById[NumericTxIndex](numericTx.id).contains(numericTx) &&
             reloaded.typedExtraIndexById[IndexedErgoTransaction](indexedTx.id).exists { tx =>
               tx.txid == indexedTx.txid && tx.globalIndex == indexedTx.globalIndex &&
-                tx.height == indexedTx.height && tx.outputNums.sameElements(indexedTx.outputNums)
+                tx.height == indexedTx.height && tx.blockId == header.id &&
+                tx.outputNums.sameElements(indexedTx.outputNums)
             } &&
             reloaded.typedExtraIndexById[NumericBoxIndex](numericBox.id).contains(numericBox) &&
             reloaded.typedExtraIndexById[IndexedErgoBox](lastBox.id).exists(_.globalIndex == lastBoxIndex)
@@ -542,6 +544,21 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         ))
         rebuiltAfterMalformedTx.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
         rebuiltAfterMalformedTx.closeStorage()
+
+        val malformedBlockId = HistoryStorage(dbSettings)
+        val wrongBlockTx = indexedTx.copy(blockId = bytesToId(Array.fill[Byte](32)(1)))
+        malformedBlockId.insertExtraTry(Array.empty, Array(wrongBlockTx)).get
+        malformedBlockId.close()
+
+        val rebuiltAfterWrongBlockId = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterWrongBlockId).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterWrongBlockId).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterWrongBlockId).getLong,
+          rebuiltAfterWrongBlockId.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterWrongBlockId.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterWrongBlockId.closeStorage()
 
         val malformedInputs = HistoryStorage(dbSettings)
         val malformedInputTx = indexedTx.copy(inputNums = indexedTx.inputNums.map(_ + 1L))
@@ -620,6 +637,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     preserved.globalTxIndex should be > 0L
     preserved.globalBoxIndex should be > 0L
     probe.expectMsg(true)
+    probe.expectMsg((0, 0L, 0L, None))
     probe.expectMsg((0, 0L, 0L, None))
     probe.expectMsg((0, 0L, 0L, None))
     probe.expectMsg((0, 0L, 0L, None))
@@ -1009,6 +1027,11 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     expectedTxs.zipWithIndex.foreach { case (tx, num) =>
       NumericTxIndex.getTxByNumber(history, num).map(_.id) shouldBe Some(tx.id)
     }
+    val txAtCompetingHeight = fullChainTransactionsAt(3).txs.head
+    val hydrated = history.typedExtraIndexById[IndexedErgoTransaction](txAtCompetingHeight.id).get
+      .retrieveBody(history)
+    hydrated.blockId shouldBe selected.id
+    hydrated.timestamp shouldBe selected.timestamp
     IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
     indexer ! Reset()
   }

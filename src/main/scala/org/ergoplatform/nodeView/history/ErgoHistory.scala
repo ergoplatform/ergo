@@ -304,7 +304,7 @@ object ErgoHistory extends ScorexLogging {
           case header: Header if header.height == indexedHeight && header.id == id => header
         } else None
       }
-      val terminalRowsMatchCheckpoint = indexedHeaderOpt.exists { header =>
+      val terminalRowsMatchCheckpoint = schemaVersionOpt.contains(NewestVersion) && indexedHeaderOpt.exists { header =>
         if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
           false
         } else {
@@ -334,6 +334,7 @@ object ErgoHistory extends ScorexLogging {
               val indexedTxMatches = db.getExtraIndex(lastTx.id).exists {
                 case tx: IndexedErgoTransaction =>
                   tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
+                    tx.blockId == header.id &&
                     tx.index == transactions.txs.size - 1 && tx.size == lastTx.size &&
                     expectedInputNumsOpt.exists(expected => tx.inputNums.sameElements(expected)) &&
                     tx.outputNums.sameElements(expectedOutputNums) && tx.dataInputs.sameElements(lastTx.dataInputs)

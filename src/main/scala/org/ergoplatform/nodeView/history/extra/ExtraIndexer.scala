@@ -433,7 +433,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       }
 
       //process transaction
-      general += IndexedErgoTransaction.fromTx(tx, n, height, newState.globalTxIndex, inputs, outputs)
+      general += IndexedErgoTransaction.fromTx(tx, n, height, newState.globalTxIndex, inputs, outputs, header.id)
       general += NumericTxIndex(newState.globalTxIndex, tx.id)
 
       newState = newState.incrementTxIndex
@@ -843,7 +843,7 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 7
+  val NewestVersion: Int = 8
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")

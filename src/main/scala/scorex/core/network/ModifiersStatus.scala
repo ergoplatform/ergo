@@ -31,4 +31,5 @@ object ModifiersStatus {
     */
   case object Invalid extends ModifiersStatus
 
+  case object UnknownStatus extends ModifiersStatus
 }

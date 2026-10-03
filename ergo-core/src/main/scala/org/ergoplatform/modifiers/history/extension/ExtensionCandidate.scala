@@ -44,13 +44,26 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
     * @return BatchMerkleProof or None if keys not found
     */
   @nowarn
-  def batchProofFor(keys: Array[Byte]*): Option[BatchMerkleProof[Digest32]] = {
+  def batchProofForInterlinks(keys: Array[Byte]*): Option[BatchMerkleProof[Digest32]] = {
     val indices = keys.flatMap(key => fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)
       .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
       .flatMap(leafData => interlinksMerkleTree.indexByElementHash(leafData)))
     if (indices.isEmpty) None else interlinksMerkleTree.proofByIndices(indices)
   }
+
+  def batchProofFor(keys: Array[Byte]*): Option[BatchMerkleProof[Digest32]] = {
+    val indices = keys.flatMap(key => fields.find(_._1 sameElements key)
+      .map(Extension.kvToLeaf)
+      .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
+      .flatMap(leafData => merkleTree.indexByElementHash(leafData)))
+    if (indices.isEmpty) None else merkleTree.proofByIndices(indices)
+  }
+
+  def proofForInputBlockData: Option[BatchMerkleProof[Digest32]] = {
+    batchProofFor(Extension.InputBlockKeys :_* )
+  }
+
 }
 
 object ExtensionCandidate {

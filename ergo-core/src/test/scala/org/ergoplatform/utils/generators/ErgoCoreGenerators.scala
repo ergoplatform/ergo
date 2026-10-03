@@ -2,8 +2,9 @@ package org.ergoplatform.utils.generators
 
 import com.google.common.primitives.Shorts
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosSolution, genPk, q}
+import org.ergoplatform.mining.{genPk, q}
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -137,7 +138,7 @@ object ErgoCoreGenerators {
     w <- genECPoint
     n <- genBytes(8)
     d <- Arbitrary.arbitrary[BigInt].map(_.mod(q - 1) + 1)
-  } yield AutolykosSolution(pk, w, n, d)
+  } yield new AutolykosSolution(pk, w, n, d)
 
   /**
     * Generates required difficulty in interval [1, 2^^255]
@@ -181,7 +182,7 @@ object ErgoCoreGenerators {
     * Header generator with default miner pk in pow solution
     */
   lazy val defaultHeaderGen: Gen[Header] = invalidHeaderGen.map { h =>
-    h.copy(powSolution = h.powSolution.copy(pk = defaultMinerPkPoint))
+    h.copy(powSolution = new AutolykosSolution(defaultMinerPkPoint, h.powSolution.w, h.powSolution.n, h.powSolution.d))
   }
 
   lazy val randomADProofsGen: Gen[ADProofs] = for {

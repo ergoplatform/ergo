@@ -9,15 +9,16 @@ import io.circe.Json
 import org.bouncycastle.util.encoders.Hex
 import org.ergoplatform.http.api.requests.MiningRequest
 import org.ergoplatform.mining.CandidateGenerator.Candidate
-import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
+import org.ergoplatform.mining.{AutolykosSolutionJsonCodecs, CandidateGenerator, ErgoMiner, WeakAutolykosSolution}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
-import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
+import org.ergoplatform.{AutolykosSolution, ErgoAddress, ErgoTreePredef, InputSolutionFound, OrderingSolutionFound, Pay2SAddress}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import sigma.data.ProveDlog
 import sigma.serialization.GroupElementSerializer
+import AutolykosSolutionJsonCodecs.jsonDecoder
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
@@ -35,6 +36,7 @@ case class MiningApiRoute(miner: ActorRef,
       candidateWithTxsR ~
       candidateWithTxsAndPkR ~
       solutionR ~
+      weakSolutionR ~
       rewardAddressR ~
       rewardPublicKeyR
   }
@@ -76,7 +78,17 @@ case class MiningApiRoute(miner: ActorRef,
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>
     val result = if (ergoSettings.nodeSettings.useExternalMiner) {
-      miner.askWithStatus(solution).mapTo[Unit]
+      miner.askWithStatus(OrderingSolutionFound(solution)).mapTo[Unit]
+    } else {
+      Future.failed(new Exception("External miner support is inactive"))
+    }
+    ApiResponse(result)
+  }
+
+  def weakSolutionR: Route = (path("weakSolution") & post & entity(as[WeakAutolykosSolution])) { weakSolution =>
+    val result = if (ergoSettings.nodeSettings.useExternalMiner) {
+      val solution = new AutolykosSolution(weakSolution.pk, AutolykosSolution.wForV2, weakSolution.n, AutolykosSolution.dForV2)
+      miner.askWithStatus(InputSolutionFound(solution)).mapTo[Unit]
     } else {
       Future.failed(new Exception("External miner support is inactive"))
     }

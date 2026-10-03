@@ -625,7 +625,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               // todo: pass real cost of input block instead of costDelta = 0
               f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
@@ -655,7 +655,7 @@ trait InputBlocksProcessor extends ScorexLogging {
               // todo: pass real cost of input block instead of costDelta = 0
               f.registerCompletion(ib.id, costDelta = 0) match {
                 case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
+                  updTree = new InputBlocksTree(updTree.forks.updated(idx, ibc))
                 case Failure(e) =>
                   log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
               }
@@ -722,8 +722,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Temporary cache of children which do not have parents downloaded yet
+    * Iteration preserves arrival order; recovery relies on it when attaching equal-length sibling forks.
     */
-  private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockAnnouncement]()
+  private[modifierprocessors] val disconnectedWaitlist = mutable.LinkedHashSet[InputBlockAnnouncement]()
 
   private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
 

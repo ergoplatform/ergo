@@ -733,7 +733,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   context.system.eventStream.publish(SemanticallyFailedModification(pmod.modifierTypeId, pmod.id, e))
               }
             } else {
-              requestDownloads(progressInfo)
+              // A local header's sections follow in the same message or via POST /blocks.
+              // CheckModifiersToDownload requests missing sections with Unknown status
+              // every syncInterval (5 seconds by default), including after recoverable
+              // failures.
+              if (!local || pmod.modifierTypeId != Header.modifierTypeId) {
+                requestDownloads(progressInfo)
+              }
               updateNodeView(updatedHistory = Some(historyBeforeStUpdate))
             }
           case Failure(CriticalSystemException(error)) =>

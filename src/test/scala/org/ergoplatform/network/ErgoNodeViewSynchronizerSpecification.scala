@@ -1171,15 +1171,23 @@ class ErgoNodeViewSynchronizerSpecification
       def send(info: org.ergoplatform.nodeView.history.ErgoSyncInfo): Unit =
         synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
 
+      import scorex.core.network.SendToPeer
+      def repliesToFollower(): Seq[Any] = ncProbe.receiveWhile(500.millis) { case m => m }.collect {
+        case m @ SendToNetwork(_, SendToPeer(p)) if p == follower => m
+      }
+      ncProbe.receiveWhile(200.millis) { case m => m }
+
       throttleNext()
       send(ErgoSyncInfoV1(Seq(applied.last.header.id)))
       syncTracker.getStatus(follower) shouldBe Some(Older)
       syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
+      repliesToFollower() shouldBe empty
 
       throttleNext()
       send(ErgoSyncInfoV2(Seq.empty))
       syncTracker.getStatus(follower) shouldBe Some(Older)
       syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
+      repliesToFollower() shouldBe empty
     }
   }
 

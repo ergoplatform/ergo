@@ -2,7 +2,7 @@ package org.ergoplatform.it.api
 
 import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import java.util.concurrent.{CountDownLatch, Executors, TimeoutException}
 
 import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
@@ -16,6 +16,7 @@ import org.ergoplatform.it.api.NodeApi.{
   UnexpectedStatusCodeException,
   WaitPolicy
 }
+import org.ergoplatform.it.util.NoProgressException
 import org.ergoplatform.settings.NetworkType
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
@@ -29,9 +30,12 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
 
   private val released   = new CountDownLatch(1)
   private val serverPool = Executors.newCachedThreadPool() // "/hang" holds its thread
+  // computed on every /info request
+  @volatile private var infoBody: () => String = () => infoJson(fullHeight = 1, headers = 1)
 
   private val server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
   server.setExecutor(serverPool)
+  server.createContext("/info", handler(respond(_, 200, infoBody())))
   server.createContext("/fail", handler(respond(_, 500, "failed")))
   server.createContext("/hang", handler(_ => released.await()))
   server.start()
@@ -63,7 +67,13 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
     exchange.close()
   }
 
-  private def withNode[T](policy: WaitPolicy, problem: () => Option[String] = () => None)
+  private def infoJson(fullHeight: Int, headers: Int): String =
+    s"""{"fullHeight":$fullHeight,"bestFullHeaderId":"f$fullHeight",""" +
+      s""""headersHeight":$headers,"bestHeaderId":"h$headers","peersCount":0}"""
+
+  private def withNode[T](policy: WaitPolicy,
+                          problem: () => Option[String] = () => None,
+                          clock: () => Deadline = () => Deadline.now)
                          (test: NodeApi => T): T = {
     val node = new NodeApi {
       implicit override def ec: ExecutionContext                 = NodeApiWaitSpec.this.ec
@@ -73,6 +83,7 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
       override protected val client: AsyncHttpClient             = http
       override protected def waitPolicy: WaitPolicy              = policy
       override protected def containerProblem(): Option[String] = problem()
+      override protected def stallClock: () => Deadline          = clock
     }
     try test(node)
     finally node.close()
@@ -82,7 +93,7 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
     Await.ready(result, 10.seconds).value.get.failed.get
 
   "Retrying" should "give up on a node that has not answered for the policy's limit" in {
-    withNode(WaitPolicy(Some(1.second), checkContainer = false)) { node =>
+    withNode(WaitPolicy(Some(1.second), None, checkContainer = false)) { node =>
       val started = Deadline.now
       val error   = failure(node.get("/hang"))
       Deadline.now - started should be >= 1.second
@@ -97,7 +108,7 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
       probes.incrementAndGet()
       Some("container 01-node01 status=exited exitCode=137")
     }
-    withNode(WaitPolicy(None, checkContainer = true), problem) { node =>
+    withNode(WaitPolicy(None, None, checkContainer = true), problem) { node =>
       failure(node.get("/hang")).getMessage should include("exitCode=137")
       probes.get() shouldBe 1 // asked on the third attempt only
     }
@@ -111,8 +122,49 @@ class NodeApiWaitSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll {
   }
 
   it should "still fail at once on an unexpected status" in {
-    withNode(WaitPolicy(Some(1.minute), checkContainer = true)) { node =>
+    withNode(WaitPolicy(Some(1.minute), None, checkContainer = true)) { node =>
       failure(node.get("/fail")) shouldBe an[UnexpectedStatusCodeException]
+    }
+  }
+
+  "Height wait" should "fail once the full-block tip stands still, headers or not" in {
+    val requests = new AtomicInteger()
+    infoBody = () => infoJson(fullHeight = 1, headers = requests.incrementAndGet())
+    withNode(WaitPolicy(None, Some(300.millis), checkContainer = false)) { node =>
+      val error = failure(node.waitForHeight(5, 10.millis))
+      error shouldBe a[NoProgressException]
+      error.getMessage should (include("fullHeight >= 5") and include("fullHeight=1") and
+        include("peersCount=0"))
+    }
+  }
+
+  it should "not fail while the full-block tip moves, however long the wait" in {
+    // every sample takes 200 ms of the fake clock and finds one more block
+    val clock  = new AtomicReference(Deadline.now)
+    val height = new AtomicInteger()
+    infoBody = () => {
+      clock.updateAndGet(_ + 200.millis)
+      val h = height.incrementAndGet()
+      infoJson(fullHeight = h, headers = h)
+    }
+    val policy = WaitPolicy(None, Some(300.millis), checkContainer = false)
+    withNode(policy, clock = () => clock.get) { node =>
+      Await.result(node.waitForHeight(10, 10.millis), 10.seconds) shouldBe 10
+    }
+  }
+
+  it should "return the height once it is reached" in {
+    infoBody = () => infoJson(fullHeight = 5, headers = 5)
+    withNode(WaitPolicy(None, Some(300.millis), checkContainer = false)) { node =>
+      Await.result(node.waitForHeight(5, 10.millis), 10.seconds) shouldBe 5
+    }
+  }
+
+  it should "keep waiting on a node without a stall limit" in {
+    infoBody = () => infoJson(fullHeight = 1, headers = 1)
+    withNode(WaitPolicy.Unbounded) { node =>
+      val result = node.waitForHeight(5, 10.millis)
+      a[TimeoutException] should be thrownBy Await.ready(result, 1.second)
     }
   }
 

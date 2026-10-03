@@ -410,7 +410,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   protected def processSync(hr: ErgoHistory, syncInfo: ErgoSyncInfo, remote: ConnectedPeer): Unit = {
     val diff = syncTracker.updateLastSyncGetTime(remote)
     if (diff > PerPeerSyncLockTime) {
-      // process sync if sent in more than 200 ms after previous sync
+      // process sync if sent in more than 100 ms after previous sync
       log.debug(s"Processing sync from $remote")
       syncInfo match {
         case syncV1: ErgoSyncInfoV1 => processSyncV1(hr, syncV1, remote)
@@ -418,6 +418,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     } else {
       log.debug(s"Spammy sync detected from $remote")
+      // the comparison and reply are skipped; a peer may report several heights within the interval, so keep the
+      // latest, as the relay filters read it
+      syncInfo match {
+        case syncV2: ErgoSyncInfoV2 => syncV2.height.foreach { h =>
+          syncTracker.statuses.get(remote).filter(_.height > h).foreach { status =>
+            log.debug(s"Throttled SyncInfo lowers the recorded height of $remote from ${status.height} to $h")
+          }
+          syncTracker.updateHeight(remote, h, raiseOnly = false)
+        }
+        case _ =>
+      }
     }
   }
 

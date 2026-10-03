@@ -75,7 +75,7 @@ class UtxoBootstrapRestartSpecification extends ErgoCorePropertyTest with FileUt
       extraIndex = false
     )
     ErgoSettings(dir.getAbsolutePath, NetworkType.TestNet, settings.chainSettings, nodeSettings,
-      null, null, settings.cacheSettings)
+      null, null, settings.cacheSettings, matrix = settings.matrix)
   }
 
   property("node restarted after nipopow headers persisted but before snapshot application resumes bootstrap") {

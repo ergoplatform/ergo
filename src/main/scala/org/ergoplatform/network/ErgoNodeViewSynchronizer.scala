@@ -1,6 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
+import akka.actor.Terminated
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
@@ -79,6 +80,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+
+  // A peer handler identifies a connection; ConnectedPeer equality only compares remote addresses.
+  // This marker lasts for this synchronizer instance; restarting it permits another replay.
+  private val processedInputTipReplayedTo = mutable.Set[ActorRef]()
+
+  private[network] def inputTipReplayConnectionCount: Int = processedInputTipReplayedTo.size
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -386,6 +393,32 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * Replay the processed input tip while replying to a V2 peer whose announced header tip
+    * matches ours at the local full-block height. `Equal` only compares header chains; the
+    * matching height is a routing precondition and does not prove the peer has full blocks.
+    */
+  private def sendProcessedInputTip(history: ErgoHistory, peer: ConnectedPeer): Unit = {
+    val localHeight = history.fullBlockHeight
+    val eligible = localHeight > 0 &&
+      SubBlocksFilter.condition(peer) &&
+      peer.mode.exists(_.stateType == StateType.Utxo) &&
+      syncTracker.statuses.get(peer).exists { status =>
+        status.status == Equal && status.height == localHeight
+      }
+    if (eligible && !processedInputTipReplayedTo.contains(peer.handlerRef)) {
+      // The announced tip may still await transactions. Only replay the processed prefix.
+      history.bestInputBlocksChain().headOption.flatMap(history.getInputBlock).foreach { tip =>
+        val announcement = if (tip.weakTxIds.getOrElse(Seq.empty).size <= 3) tip
+        else tip.copy(weakTxIds = None)
+        val message = Message(InputBlockMessageSpec, Right(announcement), None)
+        networkControllerRef ! SendToNetwork(message, SendToPeer(peer))
+        processedInputTipReplayedTo += peer.handlerRef
+        context.watch(peer.handlerRef)
+      }
+    }
+  }
+
+  /**
     * Send sync message to a concrete peer. Used in [[processSync]] and [[processSyncV2]] methods.
     */
   protected def sendSyncToPeer(remote: ConnectedPeer, sync: ErgoSyncInfo): Unit = {
@@ -515,6 +548,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (syncSendNeeded) {
       val ownSyncInfo = getV2SyncInfo(hr, full = true)
       sendSyncToPeer(remote, ownSyncInfo)
+      sendProcessedInputTip(hr, remote)
     }
   }
 
@@ -2073,7 +2107,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       syncTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(connectedPeer) =>
+      processedInputTipReplayedTo -= connectedPeer.handlerRef
+      context.unwatch(connectedPeer.handlerRef)
       syncTracker.clearStatus(connectedPeer)
+
+    case Terminated(handler) =>
+      // A rejected handshake can remove its connection before DisconnectedPeer is published.
+      processedInputTipReplayedTo -= handler
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {

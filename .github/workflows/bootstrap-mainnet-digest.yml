@@ -33,10 +33,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+      - name: Setup Java and sbt
+        uses: coursier/setup-action@v3
         with:
-          java-version: adopt@1.8
+          jvm: temurin:8
+          apps: sbt
 
       - name: Cache sbt
         uses: actions/cache@v4

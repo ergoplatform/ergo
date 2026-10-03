@@ -184,11 +184,13 @@ class TestDigestSuffixNipopowBootstrapOnMainNetSpec
     if (insideRestartBand(preKillInfo, tipAtStart)) {
       if (tipAtStart.isEmpty) {
         fail(s"[kill guard] peers' tip unknown for $KillGuardTimeout with full blocks applied " +
-          s"(full height ${preKillInfo.bestBlockHeightOpt}); the floor a restart could recompute cannot be bounded, " +
+          s"(header height ${preKillInfo.bestHeaderHeightOpt}, full height ${preKillInfo.bestBlockHeightOpt}); " +
+          "the floor a restart could recompute cannot be bounded, " +
           "so the node was not killed (ergoplatform/ergo#1159 guard)")
       } else {
         fail(s"[kill guard] full height ${preKillInfo.bestBlockHeightOpt} did not reach the floor a restart could " +
-          s"recompute ($bound, from peers' tip $tipAtStart) within $KillGuardTimeout; killing now could hit " +
+          s"recompute ($bound, from peers' tip $tipAtStart; node's header height ${preKillInfo.bestHeaderHeightOpt}) " +
+          s"within $KillGuardTimeout; killing now could hit " +
           "ergoplatform/ergo#1159, so the node was not killed")
       }
     }

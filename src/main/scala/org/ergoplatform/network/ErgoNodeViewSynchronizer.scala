@@ -118,8 +118,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val MaxOversizedTransactionsPerSupplier = 32
   private val oversizedTransactionSuppliers = mutable.Map.empty[ActorRef, mutable.Set[ModifierId]]
   private val exhaustedOversizedSuppliers = mutable.Set.empty[ActorRef]
-  // Messages already forwarded by NetworkController can arrive after a disconnect event.
-  // Weak keys retain that event while any queued message still holds the old handler.
+  // Initialization replays messages on a timer. Keep a retired handler's identity so a
+  // delayed handshake or inventory cannot revive it after DisconnectedPeer is processed.
   private val disconnectedHandlers =
     java.util.Collections.newSetFromMap(new java.util.WeakHashMap[ActorRef, java.lang.Boolean]())
 
@@ -130,6 +130,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (ids.size >= MaxOversizedTransactionsPerSupplier) {
         oversizedTransactionSuppliers -= peer.handlerRef
         exhaustedOversizedSuppliers += peer.handlerRef
+        log.warn(s"Stopping transaction requests from ${peer.connectionId} after " +
+          s"$MaxOversizedTransactionsPerSupplier distinct oversized replies")
       }
     }
   }
@@ -219,7 +221,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes,
+        remote = processingCacheRecord.source,
+        requestAtReceipt = processingCacheRecord.requestAtReceipt,
+        fromCache = true)
       txProcessingCache -= txId
     }
   }
@@ -769,7 +774,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       parseAndProcessTransaction(txId, txBytes, remote)
     }
     toPutIntoCache.foreach { case (txId, txBytes) =>
-      txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
+      txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote,
+        requestInfoOwnedBy(txId, ErgoTransaction.modifierTypeId, remote)))
     }
   }
 
@@ -836,24 +842,45 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def sameActiveConnection(requested: ConnectedPeer, remote: ConnectedPeer): Boolean =
     requested.connectionId == remote.connectionId && requested.handlerRef == remote.handlerRef
 
-  private def requestOwnedBy(id: ModifierId,
-                             modifierTypeId: NetworkObjectTypeId.Value,
-                             remote: ConnectedPeer): Boolean = {
-    deliveryTracker.getRequestedInfo(modifierTypeId, id).exists { info =>
+  private def requestInfoOwnedBy(id: ModifierId,
+                                 modifierTypeId: NetworkObjectTypeId.Value,
+                                 remote: ConnectedPeer): Option[DeliveryTracker.RequestedInfo] = {
+    deliveryTracker.getRequestedInfo(modifierTypeId, id).filter { info =>
       sameActiveConnection(info.peer, remote)
     }
   }
+
+  private def requestOwnedBy(id: ModifierId,
+                             modifierTypeId: NetworkObjectTypeId.Value,
+                             remote: ConnectedPeer): Boolean =
+    requestInfoOwnedBy(id, modifierTypeId, remote).isDefined
 
   /**
     * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
     * to mempool for processing
     */
-  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
+  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit =
+    parseAndProcessTransaction(id, bytes, remote, requestAtReceipt = None, fromCache = false)
+
+  private def parseAndProcessTransaction(id: ModifierId,
+                                         bytes: Array[Byte],
+                                         remote: ConnectedPeer,
+                                         requestAtReceipt: Option[DeliveryTracker.RequestedInfo],
+                                         fromCache: Boolean): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
-      if (!disconnectedHandlers.contains(remote.handlerRef) &&
-          requestOwnedBy(id, ErgoTransaction.modifierTypeId, remote)) {
-        // The oversized bytes cannot authenticate their declared id. Let another peer supply it.
+      val currentRequest = requestInfoOwnedBy(id, ErgoTransaction.modifierTypeId, remote)
+      val ownedReply = if (fromCache) requestAtReceipt.isDefined else currentRequest.isDefined
+      val sameAttempt = if (fromCache) {
+        requestAtReceipt.exists(received => currentRequest.exists(_ eq received))
+      } else {
+        currentRequest.isDefined
+      }
+      if (!disconnectedHandlers.contains(remote.handlerRef) && ownedReply) {
+        // Count a deferred reply against its supplier even if its request has since timed out.
         rememberOversizedTransactionSupplier(remote, id)
+      }
+      if (!disconnectedHandlers.contains(remote.handlerRef) && sameAttempt) {
+        // The oversized bytes cannot authenticate their declared id. Let another peer supply it.
         deliveryTracker.setUnknown(id, ErgoTransaction.modifierTypeId)
       }
       penalizeMisbehavingPeer(remote)
@@ -2588,7 +2615,9 @@ object ErgoNodeViewSynchronizer {
   /**
     * Transaction bytes and source peer to be recorded in a cache and processed later
     */
-  class TransactionProcessingCacheRecord(val txBytes: Array[Byte], val source: ConnectedPeer)
+  class TransactionProcessingCacheRecord(val txBytes: Array[Byte],
+                                         val source: ConnectedPeer,
+                                         val requestAtReceipt: Option[DeliveryTracker.RequestedInfo])
 
   case object CheckModifiersToDownload
 

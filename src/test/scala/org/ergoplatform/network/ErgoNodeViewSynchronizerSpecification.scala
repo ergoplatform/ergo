@@ -754,6 +754,86 @@ class ErgoNodeViewSynchronizerSpecification
     }
   }
 
+  property("NodeViewSynchronizer: deferred oversized reply remains supplier-scoped after request timeout") {
+    withFixture2 { ctx =>
+      import ctx._
+      import java.net.InetSocketAddress
+      import org.ergoplatform.modifiers.mempool.ErgoTransaction
+      import org.ergoplatform.network.message.{InvData, InvSpec, RequestModifierSpec}
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+      import scorex.core.network.SendToPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val ids = (1 to 2).map(i => bytesToId(Array.fill[Byte](32)(i.toByte)))
+      val typeId = ErgoTransaction.modifierTypeId
+      val oversized = Array.fill[Byte](settings.nodeSettings.maxTransactionSize + 1)(0)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(typeId, ids))), Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids.toSet == ids.toSet
+        case _ => false
+      }
+
+      synchronizerMockRef ! Message(ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(typeId, ids.map(_ -> oversized).toMap))),
+        Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      val deferredIds = ids.filter(id => deliveryTracker.status(id, typeId, Seq.empty) == Requested)
+      deferredIds.size shouldBe 1
+      val deferredId = deferredIds.head
+
+      synchronizerMockRef ! CheckDelivery(peer, typeId, deferredId)
+      deliveryTracker.status(deferredId, typeId, Seq.empty) shouldBe Unknown
+      val deferredInv = InvData(typeId, Seq(deferredId))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(deferredInv)), Some(peer))
+      val renewedRequest = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(deferredId)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      renewedRequest.sendingStrategy shouldBe SendToPeer(peer)
+      val renewedTimer = deliveryTracker.getRequestedInfo(typeId, deferredId).get.cancellable
+
+      synchronizerMockRef ! LocalBlockApplied(chain.head, Seq.empty)
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+      deliveryTracker.getRequestedInfo(typeId, deferredId)
+        .map(_.cancellable) shouldBe Some(renewedTimer)
+      renewedTimer.isCancelled shouldBe false
+
+      synchronizerMockRef ! CheckDelivery(peer, typeId, deferredId)
+      deliveryTracker.status(deferredId, typeId, Seq.empty) shouldBe Unknown
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(deferredInv)), Some(peer))
+      ncProbe.expectNoMessage(300.millis)
+      val replacementHandler = TestProbe("DeferredReplacementHandler")
+      val replacementPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("203.0.113.2", 9030)),
+        handlerRef = replacementHandler.ref)
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(deferredInv)), Some(replacementPeer))
+      val nextRequest = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork =>
+          stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids == Seq(deferredId)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      nextRequest.sendingStrategy shouldBe SendToPeer(replacementPeer)
+    }
+  }
+
   property("NodeViewSynchronizer: repeated oversized replies exhaust only their connection") {
     withFixture2 { ctx =>
       import ctx._
@@ -920,8 +1000,10 @@ class ErgoNodeViewSynchronizerSpecification
     withFixture { ctx =>
       import ctx._
       import java.net.InetSocketAddress
+      import org.ergoplatform.network.peer.PenaltyType
       import org.ergoplatform.serialization.ManifestSerializer
       import org.ergoplatform.settings.Algos
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
       import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
       import scorex.db.LDBFactory
 
@@ -941,9 +1023,6 @@ class ErgoNodeViewSynchronizerSpecification
 
       val replacementHandler = TestProbe("ReplacementManifestHandler")
       val replacementPeer = peer.copy(
-        connectionId = peer.connectionId.copy(remoteAddress =
-          new InetSocketAddress(peer.connectionId.remoteAddress.getAddress,
-            peer.connectionId.remoteAddress.getPort + 1)),
         handlerRef = replacementHandler.ref)
       replacementPeer.connectionId.remoteAddress.getAddress shouldBe peer.connectionId.remoteAddress.getAddress
       replacementPeer.handlerRef should not be peer.handlerRef
@@ -957,6 +1036,15 @@ class ErgoNodeViewSynchronizerSpecification
       deliveryTracker.status(id, ManifestTypeId.value, Seq.empty) shouldBe Requested
       deliveryTracker.getRequestedInfo(ManifestTypeId.value, id)
         .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+      attempt.cancellable.isCancelled shouldBe false
+
+      val unrelatedHandler = TestProbe("UnrelatedManifestHandler")
+      val unrelatedPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("203.0.113.2", 9030)),
+        handlerRef = unrelatedHandler.ref)
+      synchronizer ! Message(ManifestSpec, Left(ManifestSpec.toBytes(bytes)), Some(unrelatedPeer))
+      ncProbe.expectMsg(PenalizePeer(unrelatedPeer.connectionId.remoteAddress, PenaltyType.SpamPenalty))
+      deliveryTracker.status(id, ManifestTypeId.value, Seq.empty) shouldBe Requested
       attempt.cancellable.isCancelled shouldBe false
     }
   }

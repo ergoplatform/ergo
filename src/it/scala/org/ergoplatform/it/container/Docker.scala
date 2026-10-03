@@ -474,6 +474,19 @@ class Docker(
     try f
     catch { case NonFatal(e) => log.warn(s"$tag: could not $action: $e") }
 
+  /** Each node's /info summary and, unless its container is running, the container's
+    * state: evidence for a failure message. */
+  def describeNodes(nodes: Seq[Node]): Future[String] =
+    Future
+      .traverse(nodes) { node =>
+        node.infoSummary.flatMap { info =>
+          Future(blocking(containerProblem(node.containerId))).map { problem =>
+            s"${node.nodeLabel}: $info${problem.fold("")(p => s", $p")}"
+          }
+        }
+      }
+      .map(_.mkString("; "))
+
   private def label(containerId: String): String =
     synchronized(startedContainers)
       .find(_._1 == containerId)

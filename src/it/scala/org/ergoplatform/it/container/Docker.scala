@@ -24,6 +24,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
+import org.ergoplatform.it.api.NodeApi.WaitPolicy
 import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60, MainNet, TestNet, Tests}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NetworkType}
 import scorex.util.ScorexLogging
@@ -178,7 +179,13 @@ class Docker(
 
       log.info(s"Started node ${label(containerId)}: $nodeInfo")
 
-      val node = new Node(settings, nodeInfo, http)
+      val node = new Node(
+        settings,
+        nodeInfo,
+        http,
+        WaitPolicy.forNetwork(networkType),
+        () => containerProblem(containerId)
+      )
       nodeRepository = nodeRepository :+ node
       node
     } recoverWith {

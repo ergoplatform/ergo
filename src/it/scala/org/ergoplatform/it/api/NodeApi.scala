@@ -13,12 +13,14 @@ import org.asynchttpclient._
 import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.util._
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.settings.NetworkType
 import org.slf4j.{Logger, LoggerFactory}
 import scorex.util.ScorexLogging
 
 import scala.compat.java8.FutureConverters._
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.util.control.NonFatal
 
 trait NodeApi {
 
@@ -37,6 +39,15 @@ trait NodeApi {
   protected val timer: Timer = new HashedWheelTimer()
 
   protected val log: Logger = LoggerFactory.getLogger(s"${getClass.getName} $restAddress")
+
+  /** How long requests and waits on this node may go on; unbounded unless overridden. */
+  protected def waitPolicy: WaitPolicy = WaitPolicy.Unbounded
+
+  /** Names this node in failure messages. */
+  def nodeLabel: String = s"$restAddress:$nodeRestPort"
+
+  /** Why the node cannot answer any more, e.g. its container exited; blocking. */
+  protected def containerProblem(): Option[String] = None
 
   def get(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
     retrying(f(_get(s"http://$restAddress:$nodeRestPort$path")).build())
@@ -129,8 +140,9 @@ trait NodeApi {
   def retrying(request: Request,
                interval: FiniteDuration = 1.second,
                statusCode: Int = HttpConstants.ResponseStatusCodes.OK_200): Future[Response] = {
-    def executeRequest: Future[Response] = {
+    def executeRequest(failingSince: Option[Deadline], attempt: Int): Future[Response] = {
       log.trace(s"Executing request '$request'")
+      val startedAt = Deadline.now
       client.executeRequest(request, new AsyncCompletionHandler[Response] {
         override def onCompleted(response: Response): Response = {
           if (response.getStatusCode == statusCode) {
@@ -146,11 +158,37 @@ trait NodeApi {
         .recoverWith {
           case e@(_: IOException | _: TimeoutException) =>
             log.debug(s"Failed to execute request '$request' with error: ${e.getMessage}")
-            timer.schedule(executeRequest, interval)
+            val since = failingSince.getOrElse(startedAt)
+            unreachableReason(since, attempt).flatMap {
+              case Some(reason) =>
+                val url            = request.getUrl
+                val unreachableFor = Deadline.now - since
+                val error =
+                  NodeUnreachableException(nodeLabel, url, unreachableFor, reason, e)
+                // Future.traverse reports only the first failure in its list order
+                log.warn(error.getMessage)
+                Future.failed(error)
+              case None =>
+                timer.schedule(executeRequest(Some(since), attempt + 1), interval)
+            }
         }
     }
 
-    executeRequest
+    executeRequest(None, attempt = 1)
+  }
+
+  /** Why to stop retrying a request failing since `since`, if this node's policy says so;
+    * every third attempt also asks whether the container is still running. */
+  private def unreachableReason(since: Deadline, attempt: Int): Future[Option[String]] = {
+    val policy  = waitPolicy
+    val expired = policy.maxUnreachable.filter(Deadline.now - since >= _)
+    val problem =
+      if (policy.checkContainer && (expired.isDefined || attempt % 3 == 0)) {
+        Future(blocking(containerProblem())).recover { case NonFatal(_) => None }
+      } else {
+        Future.successful(None)
+      }
+    problem.map(_.orElse(expired.map(limit => s"no response for $limit")))
   }
 
 }
@@ -160,6 +198,36 @@ object NodeApi extends ScorexLogging {
   case class UnexpectedStatusCodeException(request: Request, response: Response)
     extends Exception(s"Request: ${request.getUrl}\n Unexpected status code (${response.getStatusCode}): " +
       s"${response.getResponseBody}")
+
+  /** Not an IOException nor a TimeoutException, so that nothing retries it; serializable,
+    * so that a forked test JVM can report it. */
+  case class NodeUnreachableException(node: String,
+                                      url: String,
+                                      unreachableFor: FiniteDuration,
+                                      reason: String,
+                                      cause: Throwable)
+    extends Exception(
+      s"$node: $url unreachable for ${unreachableFor.toSeconds} s, " +
+        s"$reason; last error: $cause",
+      cause
+    )
+
+  /** Bounds on requests to a node; None keeps retrying as long as the caller waits. */
+  case class WaitPolicy(maxUnreachable: Option[FiniteDuration], checkContainer: Boolean)
+
+  object WaitPolicy {
+    val Unbounded: WaitPolicy = WaitPolicy(maxUnreachable = None, checkContainer = false)
+
+    /** The suites' devnet nodes answer REST within seconds of their container start. */
+    val LocalDevNet: WaitPolicy = WaitPolicy(Some(60.seconds), checkContainer = true)
+
+    /** it2's mainnet nodes may be busy for minutes (NiPoPoW proof, UTXO snapshot), so
+      * they keep the unbounded behaviour. */
+    def forNetwork(networkType: NetworkType): WaitPolicy = networkType match {
+      case NetworkType.DevNet | NetworkType.DevNet60 => LocalDevNet
+      case _                                         => Unbounded
+    }
+  }
 
   case class Peer(address: String, name: String)
 

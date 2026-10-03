@@ -1154,6 +1154,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     val modifierTypeId = invData.typeId
 
+    if (modifierTypeId == Header.modifierTypeId) {
+      raiseHeightFromHeaderInv(hr, invData.ids, peer)
+    }
+
     val newModifierIds = modifierTypeId match {
       case ErgoTransaction.modifierTypeId =>
 
@@ -1212,6 +1216,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     } else {
       // headers chain is not synced yet, but our requested list is half empty - ask for more headers
       sendSync(historyReader)
+    }
+  }
+
+  /**
+    * A peer that announces a header on our best chain has at least that header: raise its recorded height to the
+    * header's (never lower it). A follower broadcasts this Inv after applying a block, so a follower at the tip stays
+    * within the relay filters' ±2 window without a SyncInfo; no message is added (#2597).
+    */
+  private def raiseHeightFromHeaderInv(hr: ErgoHistory, ids: Seq[ModifierId], peer: ConnectedPeer): Unit = {
+    val announced = ids.flatMap(id => hr.heightOf(id).filter(_ => hr.isInBestChain(id)))
+    if (announced.nonEmpty) {
+      val h = announced.max
+      syncTracker.statuses.get(peer).filter(_.height < h).foreach { status =>
+        log.debug(s"Raising recorded height of $peer from ${status.height} to $h (header Inv)")
+      }
+      syncTracker.updateHeight(peer, h, raiseOnly = true)
     }
   }
 

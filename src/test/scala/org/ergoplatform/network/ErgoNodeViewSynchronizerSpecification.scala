@@ -1131,6 +1131,16 @@ class ErgoNodeViewSynchronizerSpecification
         case SendToPeers(peers) => peers should contain(follower)
         case other => fail(s"Expected SendToPeers, got $other")
       }
+
+      // a throttled SyncInfo reporting a lower height replaces the record, as an unthrottled one does
+      syncTracker.statuses.update(
+        follower,
+        syncTracker.statuses(follower).copy(lastSyncGetTime = Some(System.currentTimeMillis() + 60000))
+      )
+      val lower = ErgoSyncInfoV2(Seq(applied.map(_.header).find(_.height == fullHeight - 2).get))
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(lower)), Some(follower))
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 2)
     }
   }
 

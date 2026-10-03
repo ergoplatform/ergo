@@ -10,10 +10,11 @@ name: Mainnet NiPoPoW + digest + full-block suffix bootstrap test
 # ergoplatform/ergo#2496) and on manual dispatch. A run started within ~4.2 days after a UTXO
 # snapshot epoch boundary (every ~72.5 days; next near height 1932277) is expected from reading
 # the code (not yet observed) to fail at the first-full-block step because of
-# ergoplatform/ergo#2595 until #2596 or an equivalent fix is merged. The kill-and-restart step
-# can also hit ergoplatform/ergo#1159 (about 5-10% of runs, seen once on Actions): the run then
-# fails at the suffix step with full height stuck shortly after the restart. Being a separate
-# workflow, a red run here does not block publishing.
+# ergoplatform/ergo#2595 until #2596 or an equivalent fix is merged. The kill in the
+# kill-and-restart step is guarded against ergoplatform/ergo#1159: it waits until the full height is at or
+# above the floor a restart could recompute, and fails by name at the kill guard if that takes more than
+# 10 minutes, so a red at the suffix step is not expected. Being a separate workflow, a red run here does not
+# block publishing.
 
 on:
   release:

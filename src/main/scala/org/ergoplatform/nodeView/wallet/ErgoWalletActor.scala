@@ -13,9 +13,9 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResu
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
+import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
-import org.ergoplatform.nodeView.wallet.persistence.{Balance, InputBlockDiff}
+import org.ergoplatform.nodeView.wallet.persistence.InputBlockDiff
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
@@ -245,19 +245,22 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Some(txs) =>
             val dustLimit = settings.walletSettings.dustLimit
 
-            // Process all transactions atomically and record the net diff for rollback support
-            val (finalRegistry, allAdded, allRemovedOffChain, allRemovedOnChain) =
-              txs.foldLeft(
-                (state.offChainRegistry, Seq.empty[TrackedBox], Seq.empty[TrackedBox], Seq.empty[Balance])
-              ) { case ((registry, addedAcc, removedOffAcc, removedOnAcc), tx) =>
-                val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
-                val inputs = WalletScanLogic.extractInputBoxes(tx)
-                val (newRegistry, removedOff, removedOn) =
-                  registry.updateOnTransactionWithDiff(newWalletBoxes, inputs, state.walletVars.externalScans)
-                (newRegistry, addedAcc ++ newWalletBoxes, removedOffAcc ++ removedOff, removedOnAcc ++ removedOn)
-              }
+            // Process all transactions atomically, then compare the registry endpoints for rollback.
+            val finalRegistry = txs.foldLeft(state.offChainRegistry) { (registry, tx) =>
+              val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+              val inputs = WalletScanLogic.extractInputBoxes(tx)
+              registry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
+            }
 
-            val diff = InputBlockDiff(allAdded, allRemovedOffChain, allRemovedOnChain)
+            val beforeRegistry = state.offChainRegistry
+            val beforeOffChainIds = beforeRegistry.offChainBoxes.map(_.boxId).toSet
+            val afterOffChainIds = finalRegistry.offChainBoxes.map(_.boxId).toSet
+            val afterOnChainIds = finalRegistry.onChainBalances.map(_.id).toSet
+            val diff = InputBlockDiff(
+              finalRegistry.offChainBoxes.filterNot(b => beforeOffChainIds.contains(b.boxId)),
+              beforeRegistry.offChainBoxes.filterNot(b => afterOffChainIds.contains(b.boxId)),
+              beforeRegistry.onChainBalances.filterNot(b => afterOnChainIds.contains(b.id))
+            )
             val registryWithDiff = finalRegistry.copy(
               inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff)
             )

@@ -5,11 +5,12 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.core.VersionTag
+import org.ergoplatform.core.{VersionTag, bytesToId, idToBytes}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
 
 import scala.collection.compat.immutable.ArraySeq
@@ -31,6 +32,66 @@ class WalletRegistrySpec
   private val walletBoxStatus = Set(PaymentsScanId)
 
   private val ws = settings.walletSettings
+
+  it should "seed a new registry with the pre-genesis version" in {
+    val freshSettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 2)
+    )
+    WalletRegistry(freshSettings).get.close()
+
+    val store = new LDBVersionedStore(WalletRegistry.registryFolder(freshSettings), 2)
+    try {
+      store.lastVersionID.map(_.toSeq) shouldBe Some(WalletRegistry.PreGenesisStateVersion.toSeq)
+      store.versionIdExists(WalletRegistry.PreGenesisStateVersion) shouldBe true
+    } finally store.close()
+  }
+
+  it should "retain the committed block version when reopening without the pre-genesis checkpoint" in {
+    Seq(0, 2).foreach { keepVersions =>
+      withClue(s"keepVersions=$keepVersions: ") {
+        val reopenSettings = settings.copy(
+          directory = createTempDir.getAbsolutePath,
+          nodeSettings = settings.nodeSettings.copy(keepVersions = keepVersions)
+        )
+        val blockIds = (1 to keepVersions + 1).map(height => bytesToId(byteString32(s"wallet-reopen-$height")))
+        val registry = WalletRegistry(reopenSettings).get
+        try {
+          blockIds.zipWithIndex.foreach { case (blockId, index) =>
+            registry.updateOnBlock(
+              ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), blockId, index + 1).get
+          }
+          registry.fetchDigest().height shouldBe blockIds.size
+        } finally registry.close()
+
+        val beforeReopen = new LDBVersionedStore(WalletRegistry.registryFolder(reopenSettings), keepVersions)
+        try {
+          beforeReopen.lastVersionID.map(_.toSeq) shouldBe Some(idToBytes(blockIds.last).toSeq)
+          beforeReopen.versionIdExists(WalletRegistry.PreGenesisStateVersion) shouldBe false
+        } finally beforeReopen.close()
+
+        val reopened = WalletRegistry(reopenSettings).get
+        try reopened.fetchDigest().height shouldBe blockIds.size
+        finally reopened.close()
+
+        val afterReopen = new LDBVersionedStore(WalletRegistry.registryFolder(reopenSettings), keepVersions)
+        try afterReopen.lastVersionID.map(_.toSeq) shouldBe Some(idToBytes(blockIds.last).toSeq)
+        finally afterReopen.close()
+
+        val continued = WalletRegistry(reopenSettings).get
+        try {
+          val nextBlockId = bytesToId(byteString32(s"wallet-reopen-${blockIds.size + 1}"))
+          continued.updateOnBlock(
+            ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), nextBlockId, blockIds.size + 1).get
+          continued.fetchDigest().height shouldBe blockIds.size + 1
+          if (keepVersions > 0) {
+            continued.rollback(VersionTag @@ Base16.encode(idToBytes(blockIds.last))).get
+            continued.fetchDigest().height shouldBe blockIds.size
+          }
+        } finally continued.close()
+      }
+    }
+  }
 
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>

@@ -1564,4 +1564,55 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+
+  it should "clear the solved block on its FullBlockApplied when the candidate was already regenerated on it" in
+    new TestKit(ActorSystem()) {
+      val testProbe = new TestProbe(system)
+      system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+      // a fresh chain of its own
+      val settings: ErgoSettings =
+        defaultSettings.copy(directory = s"${defaultSettings.directory}-solved-clear-${System.currentTimeMillis()}")
+      val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
+      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+      val candidateGenerator: ActorRef =
+        CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
+
+      def candidate(optPk: Option[ProveDlog]): Candidate = {
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = optPk), testProbe.ref)
+        testProbe.fishForMessage(newBlockDelay) { case StatusReply.Success(_: Candidate) => true; case _ => false } match {
+          case StatusReply.Success(c: Candidate) => c
+        }
+      }
+      def solve(c: Candidate): ErgoFullBlock =
+        settings.chainSettings.powScheme.proveCandidate(c.candidateBlock, defaultMinerSecret.w, 0, 1000).get
+
+      // the first reply means the generator is initialized and subscribed; from here on the block-applied event
+      // (LocalBlockApplied, the FullBlockApplied the node view holder publishes for its own block) is delivered to it
+      // by hand, to fix the order of events
+      val first = candidate(None)
+      system.eventStream.unsubscribe(candidateGenerator, classOf[FullBlockApplied])
+
+      val solved = solve(first)
+      candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == solved.id; case _ => false }
+
+      // a request the cache does not answer (another miner key, as /mining/candidateWithTxsAndPk sends) is processed
+      // after the solved block is applied and before the generator sees the block-applied event for it
+      val otherPk = DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes())).publicImage
+      candidate(Some(otherPk)).candidateBlock.parentOpt.map(_.id) shouldBe Some(solved.id)
+      candidateGenerator ! LocalBlockApplied(solved.header, solved.blockTransactions.transactions.map(_.id))
+
+      // the next solution on the new block must be accepted
+      val nextSolved = solve(candidate(None))
+      nextSolved.parentId shouldBe solved.id
+      candidateGenerator.tell(nextSolved.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(blockValidationDelay) {
+        case StatusReply.Success(()) => true
+        case StatusReply.Error(e)    => fail(s"next solution rejected: ${e.getMessage}")
+        case _                       => false
+      }
+      system.terminate()
+    }
+
 }

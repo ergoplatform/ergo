@@ -1174,10 +1174,14 @@ class ErgoNodeViewSynchronizerSpecification
       // Older is a status the chain comparison cannot give these SyncInfos, so it survives only if the comparison (and
       // with it any reply) is skipped
       syncTracker.updateStatus(follower, Older, Some(fullHeight - 5))
-      def throttleNext(): Unit = syncTracker.statuses.update(
-        follower,
-        syncTracker.statuses(follower).copy(lastSyncGetTime = Some(System.currentTimeMillis() + 60000))
-      )
+      def throttleNext(): Long = {
+        val ahead = System.currentTimeMillis() + 60000
+        syncTracker.statuses.update(follower, syncTracker.statuses(follower).copy(lastSyncGetTime = Some(ahead)))
+        ahead
+      }
+      // processSync records each SyncInfo's arrival time before the throttle check, so a time earlier than the one set
+      // ahead shows the message was handled rather than dropped
+      def handled(ahead: Long): Boolean = syncTracker.statuses(follower).lastSyncGetTime.exists(_ < ahead)
       def send(info: org.ergoplatform.nodeView.history.ErgoSyncInfo): Unit =
         synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
 
@@ -1187,14 +1191,16 @@ class ErgoNodeViewSynchronizerSpecification
       }
       ncProbe.receiveWhile(200.millis) { case m => m }
 
-      throttleNext()
+      val aheadV1 = throttleNext()
       send(ErgoSyncInfoV1(Seq(applied.last.header.id)))
+      handled(aheadV1) shouldBe true
       syncTracker.getStatus(follower) shouldBe Some(Older)
       syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
       repliesToFollower() shouldBe empty
 
-      throttleNext()
+      val aheadV2 = throttleNext()
       send(ErgoSyncInfoV2(Seq.empty))
+      handled(aheadV2) shouldBe true
       syncTracker.getStatus(follower) shouldBe Some(Older)
       syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
       repliesToFollower() shouldBe empty

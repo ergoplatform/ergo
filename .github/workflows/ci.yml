@@ -21,22 +21,23 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.18, 2.12.20, 2.11.12]
-        java: [adopt@1.8]
+        scala: [2.13.18, 2.12.20]
+        java: [temurin:8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: coursier/setup-action@v3
         with:
-          java-version: ${{ matrix.java }}
+          jvm: ${{ matrix.java }}
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
               ~/.sbt
@@ -64,22 +65,23 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        scala: [2.13.18, 2.12.20, 2.11.12]
-        java: [adopt@1.8]
+        scala: [2.13.18, 2.12.20]
+        java: [temurin:8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: coursier/setup-action@v3
         with:
-          java-version: ${{ matrix.java }}
+          jvm: ${{ matrix.java }}
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.sbt
@@ -106,21 +108,22 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.20]
-        java: [adopt@1.8]
+        java: [temurin:8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: coursier/setup-action@v3
         with:
-          java-version: ${{ matrix.java }}
+          jvm: ${{ matrix.java }}
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
               ~/.sbt
@@ -140,22 +143,23 @@ jobs:
        matrix:
          os: [ ubuntu-latest ]
          scala: [ 2.12.20 ]
-         java: [ adopt@1.8 ]
+         java: [ temurin:8 ]
      runs-on: ${{ matrix.os }}
      steps:
        - name: Checkout current branch (full)
-         uses: actions/checkout@v4
+         uses: actions/checkout@v7
          with:
            path: it
            fetch-depth: 0
 
        - name: Setup Java and Scala
-         uses: olafurpg/setup-scala@v10
+         uses: coursier/setup-action@v3
          with:
-           java-version: ${{ matrix.java }}
+           jvm: ${{ matrix.java }}
+           apps: sbt
 
        - name: Cache sbt
-         uses: actions/cache@v4
+         uses: actions/cache@v6
          with:
            path: |
              ~/.sbt

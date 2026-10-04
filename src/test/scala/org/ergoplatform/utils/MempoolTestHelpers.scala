@@ -12,6 +12,8 @@ trait MempoolTestHelpers {
 
     override def modifierById(modifierId: ModifierId): Option[ErgoTransaction] = ???
 
+    override def unconfirmedById(modifierId: ModifierId): Option[UnconfirmedTransaction] = ???
+
     override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = ???
 
     override def size: Int = ???

@@ -45,12 +45,13 @@ object HistoryTestHelpers extends FileUtils {
                       epochLength: Int = 100000000,
                       useLastEpochs: Int = 10,
                       initialDiffOpt: Option[BigInt] = None,
-                      genesisIdOpt: Option[ModifierId] = None): ErgoHistory = {
+                      genesisIdOpt: Option[ModifierId] = None,
+                      utxoBootstrap: Boolean = false): ErgoHistory = {
 
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
-      UtxoSettings(false, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 20.seconds,
+      UtxoSettings(utxoBootstrap, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 20.seconds,
       useExternalMiner = false, internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
       offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
       rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false

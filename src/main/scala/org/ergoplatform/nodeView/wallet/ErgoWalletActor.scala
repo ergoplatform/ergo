@@ -232,7 +232,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
-    // A recreated registry must not consume catch-up messages queued by its predecessor.
+    // Ordinary catch-ups may be queued against the old registry when rescan starts.
+    // Its own historical scan walks the requested range through fullHeight without them.
     case ScanInThePast(_, false) if state.rescanInProgress =>
       log.debug("Ignoring an ordinary catch-up scan while a wallet rescan is in progress")
 

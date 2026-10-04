@@ -16,7 +16,7 @@ import org.scalatest.concurrent.Eventually
 
 import java.io.File
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.util.{Success, Try}
@@ -40,7 +40,7 @@ class WalletRescanMailboxRaceSpec
     scans: Vector[ScanObservation]
   )
 
-  property("a rescan does not replay a queued catch-up scan into its new registry") {
+  property("a rescan ignores catch-ups queued before or after the API-default request") {
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val first = makeGenesisBlock(address.pubkey)
@@ -63,7 +63,12 @@ class WalletRescanMailboxRaceSpec
       history.bestFullBlockAt(first.height).map(_.id) shouldBe Some(first.id)
       history.bestFullBlockAt(second.height).map(_.id) shouldBe Some(second.id)
 
-      def run(name: String, queueCatchUp: Boolean): RunResult = {
+      def run(
+        name: String,
+        fromHeight: Int,
+        queueBeforeRescan: Boolean,
+        queueAfterRescan: Boolean
+      ): RunResult = {
         val actorSettings = w.settings.copy(
           directory = new File(w.nodeViewDir, name).getAbsolutePath,
           nodeSettings = w.settings.nodeSettings.copy(blocksToKeep = -1)
@@ -71,7 +76,9 @@ class WalletRescanMailboxRaceSpec
         actorSettings.nodeSettings.isFullBlocksPruned shouldBe false
         val readEntered = new CountDownLatch(1)
         val releaseRead = new CountDownLatch(1)
-        val scansFinished = new CountDownLatch(2)
+        val secondScanEntered = new CountDownLatch(1)
+        val releaseSecondScan = new CountDownLatch(1)
+        val holdFirstSecondScan = new AtomicBoolean(true)
         val initialHeight = new AtomicInteger(-1)
         val recreations = new AtomicInteger(0)
         val observations = new ConcurrentLinkedQueue[ScanObservation]()
@@ -114,7 +121,12 @@ class WalletRescanMailboxRaceSpec
               after.walletBalance,
               result.isSuccess
             ))
-            scansFinished.countDown()
+            if (block.height == second.height && holdFirstSecondScan.compareAndSet(true, false)) {
+              secondScanEntered.countDown()
+              if (!releaseSecondScan.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("timed out waiting to release the second scan")
+              }
+            }
             result
           }
         }
@@ -133,20 +145,25 @@ class WalletRescanMailboxRaceSpec
           readEntered.await(10, TimeUnit.SECONDS) shouldBe true
           initialHeight.get() shouldBe 0
           probe.send(actor, ChangedState(fullState))
-          if (queueCatchUp) probe.send(actor, ScanOnChain(second))
-          probe.send(actor, RescanWallet(1))
+          if (queueBeforeRescan) probe.send(actor, ScanOnChain(second))
+          probe.send(actor, RescanWallet(fromHeight))
+          if (queueAfterRescan) probe.send(actor, ScanOnChain(second))
         } finally {
           releaseRead.countDown()
         }
 
         probe.expectMsg(Success(()))
-        withClue(s"observed scans: ${observations.iterator().asScala.toVector}") {
-          scansFinished.await(15, TimeUnit.SECONDS) shouldBe true
+        try {
+          withClue(s"observed scans: ${observations.iterator().asScala.toVector}") {
+            secondScanEntered.await(15, TimeUnit.SECONDS) shouldBe true
+          }
+          // The status request follows the last queued rescan step on both paths.
+          probe.send(actor, GetWalletStatus)
+        } finally {
+          releaseSecondScan.countDown()
         }
-        probe.send(actor, GetWalletStatus)
         val status = probe.expectMsgType[WalletStatus]
         val scans = observations.iterator().asScala.toVector
-        scans.size shouldBe 2
         recreations.get() shouldBe 1
 
         probe.watch(actor)
@@ -158,14 +175,31 @@ class WalletRescanMailboxRaceSpec
         RunResult(status, digest, scans)
       }
 
-      val control = run("single-pass", queueCatchUp = false)
+      val defaultControl = run("default-single-pass", 0, false, false)
+      defaultControl.scans.map(_.blockHeight) shouldBe Vector(1, 2)
+      defaultControl.scans.forall(_.succeeded) shouldBe true
+      defaultControl.status.error shouldBe None
+      defaultControl.digest.height shouldBe second.height
+      defaultControl.digest.walletBalance should be > 0L
+
+      val defaultRaced = run("default-live-after-rescan", 0, false, true)
+      defaultRaced.status.error shouldBe None
+      defaultRaced.digest.height shouldBe second.height
+      withClue(s"control scans ${defaultControl.scans}; raced scans ${defaultRaced.scans}: ") {
+        defaultRaced.digest.walletBalance shouldBe defaultControl.digest.walletBalance
+      }
+      defaultRaced.scans.map(_.blockHeight) shouldBe Vector(1, 2)
+      defaultRaced.scans.map(_.beforeHeight) shouldBe Vector(0, 1)
+      defaultRaced.scans.forall(_.succeeded) shouldBe true
+
+      val control = run("single-pass", 1, false, false)
       control.scans.map(_.blockHeight) shouldBe Vector(1, 2)
       control.scans.forall(_.succeeded) shouldBe true
       control.status.error shouldBe None
       control.digest.height shouldBe second.height
       control.digest.walletBalance should be > 0L
 
-      val raced = run("queued-catch-up", queueCatchUp = true)
+      val raced = run("queued-catch-up", 1, true, false)
       raced.scans.map(_.blockHeight) shouldBe Vector(1, 2)
       raced.scans.map(_.beforeHeight) shouldBe Vector(0, 1)
       raced.scans.forall(_.succeeded) shouldBe true

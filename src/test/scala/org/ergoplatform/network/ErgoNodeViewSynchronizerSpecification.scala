@@ -1067,6 +1067,147 @@ class ErgoNodeViewSynchronizerSpecification
   }
 
   property(
+    "NodeViewSynchronizer: a SyncInfo arriving within the throttle interval still updates the peer's recorded height"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Older
+      import org.ergoplatform.network.message.inputblocks.InputBlockMessageSpec
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.utils.generators.ChainGenerator.applyChain
+      import scorex.core.network.{ConnectedPeer, SendToPeers}
+      import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val applied = genChain(8, hist)
+      applyChain(hist, applied)
+      val fullHeight = hist.fullBlockHeight
+      val header = genChain(3, hist).map(_.header).find(_.height == fullHeight + 1).get
+
+      val wrappedState = boxesHolderGen
+        .map(WrappedUtxoState(_, createTempDir, parameters, settings))
+        .sample
+        .get
+      synchronizerMockRef ! ChangedState(wrappedState)
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      Thread.sleep(500)
+      hist.applyInputBlock(
+        InputBlockAnnouncement(InputBlockAnnouncement.initialMessageVersion, header, InputBlockFields.empty, None)
+      )
+
+      val peerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val follower = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(PeerInfo(peerSpec, System.currentTimeMillis())))
+      // Older is a status the chain comparison cannot give this SyncInfo (its header is our tip), so it is kept only if
+      // the comparison is skipped, i.e. on the throttled branch
+      syncTracker.updateStatus(follower, Older, Some(fullHeight - 5))
+      // the peer's previous SyncInfo is recorded as just received (ahead of now, so the 100 ms throttle applies to the
+      // next one however long processing takes)
+      syncTracker.statuses.update(
+        follower,
+        syncTracker.statuses(follower).copy(lastSyncGetTime = Some(System.currentTimeMillis() + 60000))
+      )
+
+      // a throttled SyncInfo carries the peer's current height
+      val info = ErgoSyncInfoV2(Seq(applied.map(_.header).find(_.height == fullHeight).get))
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight)
+
+      // and it is therefore near the tip for relay
+      synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
+      val msg = ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == InputBlockMessageSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      msg.sendingStrategy match {
+        case SendToPeers(peers) => peers should contain(follower)
+        case other => fail(s"Expected SendToPeers, got $other")
+      }
+
+      // a throttled SyncInfo reporting a lower height replaces the record, as an unthrottled one does
+      syncTracker.statuses.update(
+        follower,
+        syncTracker.statuses(follower).copy(lastSyncGetTime = Some(System.currentTimeMillis() + 60000))
+      )
+      val lower = ErgoSyncInfoV2(Seq(applied.map(_.header).find(_.height == fullHeight - 2).get))
+      synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(lower)), Some(follower))
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 2)
+    }
+  }
+
+  property(
+    "NodeViewSynchronizer: a throttled V1 SyncInfo, or a V2 one without headers, changes neither the peer's status nor its height"
+  ) {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.consensus.Older
+      import org.ergoplatform.nodeView.history.ErgoSyncInfoV1
+      import org.ergoplatform.network.{PeerSpec, Version}
+      import org.ergoplatform.network.peer.PeerInfo
+      import org.ergoplatform.utils.generators.ChainGenerator.applyChain
+      import scorex.core.network.ConnectedPeer
+
+      val hist = ErgoHistory.readOrGenerate(settings)(null)
+      val applied = genChain(8, hist)
+      applyChain(hist, applied)
+      val fullHeight = hist.fullBlockHeight
+      synchronizerMockRef ! ChangedHistory(hist)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val peerSpec = PeerSpec(
+        settings.scorexSettings.network.agentName,
+        Version.SubblocksVersion,
+        settings.scorexSettings.network.nodeName,
+        None,
+        Seq(ModePeerFeature(StateType.Utxo, verifyingTransactions = true, None, -1))
+      )
+      val follower = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(PeerInfo(peerSpec, System.currentTimeMillis())))
+      // Older is a status the chain comparison cannot give these SyncInfos, so it survives only if the comparison (and
+      // with it any reply) is skipped
+      syncTracker.updateStatus(follower, Older, Some(fullHeight - 5))
+      def throttleNext(): Long = {
+        val ahead = System.currentTimeMillis() + 60000
+        syncTracker.statuses.update(follower, syncTracker.statuses(follower).copy(lastSyncGetTime = Some(ahead)))
+        ahead
+      }
+      // processSync records each SyncInfo's arrival time before the throttle check, so a time earlier than the one set
+      // ahead shows the message was handled rather than dropped
+      def handled(ahead: Long): Boolean = syncTracker.statuses(follower).lastSyncGetTime.exists(_ < ahead)
+      def send(info: org.ergoplatform.nodeView.history.ErgoSyncInfo): Unit =
+        synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(ErgoSyncInfoMessageSpec.toBytes(info)), Some(follower))
+
+      import scorex.core.network.SendToPeer
+      def repliesToFollower(): Seq[Any] = ncProbe.receiveWhile(500.millis) { case m => m }.collect {
+        case m @ SendToNetwork(_, SendToPeer(p)) if p == follower => m
+      }
+      ncProbe.receiveWhile(200.millis) { case m => m }
+
+      val aheadV1 = throttleNext()
+      send(ErgoSyncInfoV1(Seq(applied.last.header.id)))
+      handled(aheadV1) shouldBe true
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
+      repliesToFollower() shouldBe empty
+
+      val aheadV2 = throttleNext()
+      send(ErgoSyncInfoV2(Seq.empty))
+      handled(aheadV2) shouldBe true
+      syncTracker.getStatus(follower) shouldBe Some(Older)
+      syncTracker.statuses.get(follower).map(_.height) shouldBe Some(fullHeight - 5)
+      repliesToFollower() shouldBe empty
+    }
+  }
+
+  property(
     "NodeViewSynchronizer: NewBestInputBlock(local=true) broadcasts IBI with txs when <= 3 transactions"
   ) {
     withFixture2 { ctx =>

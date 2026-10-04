@@ -1022,10 +1022,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     awaitCondition(created)
     val selected = fullChainHeaderAt(3)
     val competing = selected.copy(timestamp = selected.timestamp + 1)
+    val competingTransactions = fullChainTransactionsAt(3).copy(headerId = competing.id)
+    competingTransactions.id shouldBe competing.transactionsId
     val heightKey = ByteArrayWrapper(org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(3).array))
     val ids = ExtraIndexer.fastIdToBytes(competing.id) ++ ExtraIndexer.fastIdToBytes(selected.id)
     _history.historyStorage.insert(Array(heightKey -> ids, _history.validityKey(competing.id) -> Array[Byte](1)),
-      Array[org.ergoplatform.modifiers.BlockSection](competing)).get
+      Array[org.ergoplatform.modifiers.BlockSection](competing, competingTransactions)).get
     history.bestHeaderIdAtHeight(3) shouldBe Some(competing.id)
     fullChainHeaderAt(3).id shouldBe selected.id
     indexer ! Index()

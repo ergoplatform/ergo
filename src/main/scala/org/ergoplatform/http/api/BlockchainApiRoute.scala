@@ -1,7 +1,8 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.server.{Directive, Directive1, ExceptionHandler, Route, ValidationRejection}
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.pattern.ask
 import io.circe.Json
@@ -17,7 +18,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
-import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError, ServiceUnavailable}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import scorex.core.api.http.ApiResponse
@@ -58,6 +59,17 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   override implicit val ergoAddressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
+  private case object ExtraIndexRecoveryIncomplete extends RuntimeException("Extra index checkpoint recovery is incomplete")
+
+  private def recoveryUnavailable: Route =
+    respondWithHeader(RawHeader("Retry-After", "1")) {
+      ServiceUnavailable(ExtraIndexRecoveryIncomplete.getMessage)
+    }
+
+  private val recoveryExceptionHandler: ExceptionHandler = ExceptionHandler {
+    case ExtraIndexRecoveryIncomplete => recoveryUnavailable
+  }
+
   private val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
   private def handleErgoAddress(value: String): Directive1[ErgoAddress] =
@@ -66,14 +78,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case _ => reject(ValidationRejection("Wrong address format"))
     }
 
-  override val route: Route =
+  override val route: Route = handleExceptions(recoveryExceptionHandler) {
   if(ergoSettings.nodeSettings.extraIndex)
     pathPrefix("blockchain") {
       getIndexedHeightR ~
       onSuccess(getRawHistory) { history =>
         if (getIndex(RollbackToKey, history).getInt != 0 ||
             !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
-          InternalError("Extra index checkpoint recovery is incomplete")
+          recoveryUnavailable
         } else {
           getTxByIdR ~
           getTxByIndexR ~
@@ -106,6 +118,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     pathPrefix("blockchain") {
       indexerNotEnabledR
     }
+  }
 
   private def getRawHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
@@ -113,7 +126,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def checkedHistory(history: ErgoHistoryReader): ErgoHistoryReader = {
     if (getIndex(RollbackToKey, history).getInt != 0 ||
         !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
-      throw new IllegalStateException("Extra index checkpoint recovery is incomplete")
+      throw ExtraIndexRecoveryIncomplete
     }
     history
   }

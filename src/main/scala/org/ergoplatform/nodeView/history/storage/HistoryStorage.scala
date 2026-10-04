@@ -259,7 +259,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     * Delete the extra index database and reopen it, preserving deletion failures.
     */
   def deleteExtraDBTry(ergoSettings: ErgoSettings): Try[HistoryStorage] = {
-    log.warn(s"Removing extra index database due to old schema.")
+    log.warn("Removing extra index database after an invalid checkpoint.")
     val root = new File(s"${ergoSettings.directory}/history/extra")
     Try(close()).flatMap { _ =>
       HistoryStorage.deleteRecursively(root.toPath, Files.delete)

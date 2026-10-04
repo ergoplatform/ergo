@@ -372,7 +372,26 @@ object ErgoHistory extends ScorexLogging {
       val checkpointIsValid = schemaVersionOpt.contains(NewestVersion) && numericValuesAreWellFormed &&
         valuesAreNonNegative && (emptyCheckpoint || nonEmptyCheckpoint)
       if (!checkpointIsValid) {
-        val freshDb = db.deleteExtraDBTry(ergoSettings).get
+        val failedChecks = Seq(
+          !schemaVersionOpt.contains(NewestVersion) -> "schema version",
+          !numericValuesAreWellFormed -> "counter encoding",
+          !valuesAreNonNegative -> "negative counters",
+          (rollbackTo != 0) -> "rollback marker",
+          (indexedHeight == 0 && !emptyCheckpoint) -> "empty checkpoint shape",
+          (indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
+            .exists(_.isEmpty)) -> "missing checkpoint counters",
+          (indexedHeight > 0 && (globalTxIndex <= 0 || globalBoxIndex <= 0)) ->
+            "non-positive global index counters",
+          (indexedHeight > 0 && indexedHeaderOpt.isEmpty) -> "checkpoint header or validity",
+          (indexedHeight > 0 && schemaVersionOpt.contains(NewestVersion) && indexedHeaderOpt.isDefined &&
+            globalTxIndex > 0 && globalBoxIndex > 0 && !terminalRowsMatchCheckpoint) ->
+            "terminal transaction or box rows"
+        ).collect { case (true, name) => name }
+        log.warn(s"Rebuilding invalid extra index checkpoint: ${failedChecks.mkString(", ")}")
+        val freshDb = db.deleteExtraDBTry(ergoSettings).recoverWith { case error =>
+          log.error("Extra index rebuild failed; aborting startup rather than using closed or partially deleted history stores", error)
+          Failure(error)
+        }.get
         freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty).recoverWith { case error =>
           Try(freshDb.close()).failed.foreach(error.addSuppressed)
           Failure(error)

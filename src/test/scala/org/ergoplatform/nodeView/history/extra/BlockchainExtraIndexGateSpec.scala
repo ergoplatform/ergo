@@ -29,6 +29,15 @@ class BlockchainExtraIndexGateSpec
   private val txPath = "/blockchain/transaction/byId/" + ("00" * 32)
   private val boxPath = "/blockchain/box/byId/" + ("00" * 32)
 
+  it should "keep disabled indexing distinct from temporary checkpoint recovery" in {
+    val disabledRoute = BlockchainApiRoute(digestReadersRef,
+      indexedSettings.copy(nodeSettings = indexedSettings.nodeSettings.copy(extraIndex = false)), None).route
+    Get(txPath) ~> disabledRoute ~> check {
+      status shouldBe StatusCodes.InternalServerError
+      header("Retry-After") shouldBe None
+    }
+  }
+
   it should "withhold extra-index rows while rollback recovery is incomplete" in {
     Get(txPath) ~> route ~> check {
       status shouldBe StatusCodes.NotFound
@@ -43,10 +52,12 @@ class BlockchainExtraIndexGateSpec
         status shouldBe StatusCodes.OK
       }
       Get(txPath) ~> route ~> check {
-        status shouldBe StatusCodes.InternalServerError
+        status shouldBe StatusCodes.ServiceUnavailable
+        header("Retry-After").map(_.value()) shouldBe Some("1")
       }
       Get(boxPath) ~> route ~> check {
-        status shouldBe StatusCodes.InternalServerError
+        status shouldBe StatusCodes.ServiceUnavailable
+        header("Retry-After").map(_.value()) shouldBe Some("1")
       }
     } finally {
       history.historyStorage.insertExtraTry(
@@ -75,10 +86,12 @@ class BlockchainExtraIndexGateSpec
         status shouldBe StatusCodes.OK
       }
       Get(txPath) ~> route ~> check {
-        status shouldBe StatusCodes.InternalServerError
+        status shouldBe StatusCodes.ServiceUnavailable
+        header("Retry-After").map(_.value()) shouldBe Some("1")
       }
       Get(boxPath) ~> route ~> check {
-        status shouldBe StatusCodes.InternalServerError
+        status shouldBe StatusCodes.ServiceUnavailable
+        header("Retry-After").map(_.value()) shouldBe Some("1")
       }
     } finally {
       history.historyStorage.removeExtraTry(Array(bytesToId(IndexedHeightKey), bytesToId(IndexedHeaderIdKey))).get
@@ -149,7 +162,8 @@ class BlockchainExtraIndexGateSpec
       val switchingRoute = BlockchainApiRoute(switchingReaders, indexedSettings, None).route
       try {
         Get(path) ~> switchingRoute ~> check {
-          status shouldBe StatusCodes.InternalServerError
+          status shouldBe StatusCodes.ServiceUnavailable
+          header("Retry-After").map(_.value()) shouldBe Some("1")
         }
       } finally {
         history.historyStorage.insertExtraTry(

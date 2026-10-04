@@ -74,6 +74,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
   protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
+    // The full-chain marker may be written before state marks the header valid.
     _history.headerIdsAtHeight(height)
       .find { id =>
         FullBlockProcessor.isInBestFullChain(historyStorage, id) &&

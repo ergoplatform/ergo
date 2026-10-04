@@ -1086,6 +1086,11 @@ class ErgoNodeViewSynchronizerSpecification
       val fullHeight = hist.fullBlockHeight
       val header = genChain(3, hist).map(_.header).find(_.height == fullHeight + 1).get
       def appliedAt(h: Int) = applied.map(_.header).find(_.height == h).get
+      // a header the node holds on a fork: a sibling of our best header one below our height, lighter than our chain
+      val forkHeader = genChain(1, applied.find(_.header.height == fullHeight - 2).get).last.header
+      hist.append(forkHeader).get
+      hist.heightOf(forkHeader.id) shouldBe Some(fullHeight - 1)
+      hist.isInBestChain(forkHeader.id) shouldBe false
 
       val wrappedState = boxesHolderGen
         .map(WrappedUtxoState(_, createTempDir, parameters, settings))
@@ -1111,6 +1116,10 @@ class ErgoNodeViewSynchronizerSpecification
       def headerInv(from: ConnectedPeer, ids: Seq[scorex.util.ModifierId]) =
         Message(InvSpec, Left(InvSpec.toBytes(InvData(Header.modifierTypeId, ids))), Some(from))
 
+      // a header the node holds off its best chain raises nothing, though it is above the recorded height
+      val onFork = newPeer()
+      syncTracker.updateStatus(onFork, Equal, Some(fullHeight - 3))
+      synchronizerMockRef ! headerInv(onFork, Seq(forkHeader.id))
       // at the tip in fact, recorded 3 below it; it announces (after applying) the header at our full height
       val caughtUp = newPeer()
       syncTracker.updateStatus(caughtUp, Equal, Some(fullHeight - 3))
@@ -1128,6 +1137,7 @@ class ErgoNodeViewSynchronizerSpecification
       syncTracker.statuses.get(caughtUp).map(_.height) shouldBe Some(fullHeight)
       syncTracker.statuses.get(behind).map(_.height) shouldBe Some(fullHeight - 5)
       syncTracker.statuses.get(offChain).map(_.height) shouldBe Some(fullHeight - 3)
+      syncTracker.statuses.get(onFork).map(_.height) shouldBe Some(fullHeight - 3)
 
       synchronizerMockRef ! NewBestInputBlock(Some(header.id), local = true)
       val msg = ncProbe.fishForMessage(3 seconds) {

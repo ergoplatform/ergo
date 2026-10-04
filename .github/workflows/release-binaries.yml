@@ -195,10 +195,10 @@ jobs:
       ERGO_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
       REPLACE_ASSETS: ${{ inputs.replace == true }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
       - name: Download ergo node jar 
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

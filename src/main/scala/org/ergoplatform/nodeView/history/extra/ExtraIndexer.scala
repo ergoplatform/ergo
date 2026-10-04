@@ -6,6 +6,7 @@ import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -860,6 +861,19 @@ object ExtraIndexer {
 
   def getIndex(key: Array[Byte], history: ErgoHistoryReader): ByteBuffer = {
     getIndex(key, history.historyStorage)
+  }
+
+  def checkpointOnSelectedFullChain(history: ErgoHistoryReader): Boolean = {
+    val indexedHeight = getIndex(IndexedHeightKey, history).getInt
+    if (indexedHeight == 0) true
+    else history.historyStorage.modifierBytesById(bytesToId(IndexedHeaderIdKey))
+      .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+      .map(bytesToId)
+      .flatMap(history.typedModifierById[Header])
+      .exists { header =>
+        header.height == indexedHeight &&
+          FullBlockProcessor.isInBestFullChain(history.historyStorage, header.id)
+      }
   }
 
   def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {

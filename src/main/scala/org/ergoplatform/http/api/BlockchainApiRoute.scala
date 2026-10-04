@@ -70,9 +70,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   if(ergoSettings.nodeSettings.extraIndex)
     pathPrefix("blockchain") {
       getIndexedHeightR ~
-      onSuccess(getHistory) { history =>
-        if (getIndex(RollbackToKey, history).getInt != 0) {
-          InternalError("Extra index rollback recovery is incomplete")
+      onSuccess(getRawHistory) { history =>
+        if (getIndex(RollbackToKey, history).getInt != 0 ||
+            !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+          InternalError("Extra index checkpoint recovery is incomplete")
         } else {
           getTxByIdR ~
           getTxByIndexR ~
@@ -106,11 +107,22 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       indexerNotEnabledR
     }
 
-  private def getHistory: Future[ErgoHistoryReader] =
+  private def getRawHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
+  private def checkedHistory(history: ErgoHistoryReader): ErgoHistoryReader = {
+    if (getIndex(RollbackToKey, history).getInt != 0 ||
+        !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+      throw new IllegalStateException("Extra index checkpoint recovery is incomplete")
+    }
+    history
+  }
+
+  private def getHistory: Future[ErgoHistoryReader] =
+    getRawHistory.map(checkedHistory)
+
   private def getHistoryWithMempool: Future[(ErgoHistoryReader,ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map(r => (r.h, r.m))
+    (readersHolder ? GetReaders).mapTo[Readers].map(r => (checkedHistory(r.h), r.m))
 
   private def getAddress(tree: ErgoTree)(history: ErgoHistoryReader): Option[IndexedErgoAddress] =
     history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(tree))
@@ -133,7 +145,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getIndexedHeightF: Future[Json] =
-    getHistory.map { history =>
+    getRawHistory.map { history =>
       Json.obj(
         "indexedHeight" -> getIndex(ExtraIndexer.IndexedHeightKey, history).getInt.asJson,
         "fullHeight" -> history.fullBlockHeight.asJson
@@ -485,11 +497,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     history.typedModifierById[Header](headerId).flatMap { header =>
 
       val blockTransactionsOpt = history.typedModifierById[BlockTransactions](header.transactionsId)
+        .filter(_.headerId == header.id)
 
       blockTransactionsOpt.flatMap { blockTransactions =>
         val resolvedTransactions = blockTransactions.txs.flatMap { tx =>
           history
             .typedExtraIndexById[IndexedErgoTransaction](tx.id)
+            .filter(_.blockId == header.id)
             .map(_.retrieveBody(history))
         }
 

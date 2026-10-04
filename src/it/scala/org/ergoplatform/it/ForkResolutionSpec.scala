@@ -94,7 +94,12 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       Async.await(Future.traverse(regularNodes)(_.waitForHeight(forkHeight + syncLength, 100.millis)))
       val sample = Async.await(regularNodes.head.headerIdsByHeight(forkHeight)).headOption.value
       val headers = Async.await(Future.traverse(regularNodes) { node =>
-        node.waitFor[Seq[String]](_.headerIdsByHeight(forkHeight), _.headOption.contains(sample), 100.millis)
+        node.waitForProgress[Seq[String], String](
+          s"header $sample at height $forkHeight",
+          _.headerIdsByHeight(forkHeight),
+          _.headOption.contains(sample),
+          100.millis
+        )(_.headOption, ids => s"selected ${ids.headOption.getOrElse("none")}")
       })
 
       log.debug(s"Headers at height $forkHeight: ${headers.mkString(",")}")

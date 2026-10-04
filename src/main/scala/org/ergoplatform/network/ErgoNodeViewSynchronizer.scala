@@ -1225,7 +1225,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * within the relay filters' ±2 window without a SyncInfo; no message is added (#2597).
     */
   private def raiseHeightFromHeaderInv(hr: ErgoHistory, ids: Seq[ModifierId], peer: ConnectedPeer): Unit = {
-    val announced = ids.flatMap(id => hr.heightOf(id).filter(_ => hr.isInBestChain(id)))
+    // isInBestChain(id) would look the height up again
+    val announced = ids.flatMap(id => hr.heightOf(id).filter(h => hr.bestHeaderIdAtHeight(h).contains(id)))
     if (announced.nonEmpty) {
       val h = announced.max
       syncTracker.statuses.get(peer).filter(_.height < h).foreach { status =>

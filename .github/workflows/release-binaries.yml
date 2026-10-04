@@ -38,7 +38,7 @@ jobs:
     env:
       ERGO_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ env.ERGO_RELEASE_TAG }}
           persist-credentials: false
@@ -89,19 +89,20 @@ jobs:
       # Full history and tags are required: sbt-dynver derives the version
       # (and hence the jar name) from `git describe`.
       # refs/tags/ because release branches share names with tags and checkout prefers a branch.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ env.ERGO_RELEASE_TAG }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+      - name: Setup Java and sbt
+        uses: coursier/setup-action@v3
         with:
-          java-version: adopt@1.8
+          jvm: temurin:8
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.sbt

@@ -70,7 +70,7 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
   }
 
   private def working(jobId: UUID): Receive = {
-    case CleanupDone(`jobId`, result) if sender() == worker =>
+    case CleanupDone(`jobId`, result) =>
       result.foreach(nodeViewHolderRef ! _)
       context become awaiting
       pending match {

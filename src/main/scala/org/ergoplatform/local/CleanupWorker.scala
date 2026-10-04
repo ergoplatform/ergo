@@ -86,7 +86,7 @@ class CleanupWorker(nodeSettings: NodeConfigurationSettings) extends Actor with 
               validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
             case Failure(e) =>
               val txId = head.id
-              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
+              log.debug(s"Transaction $txId failed cleanup validation: ${e.getMessage}")
               validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
           }
         case _ =>

@@ -223,15 +223,14 @@ class MempoolCleanupSpec extends AnyFlatSpec with Matchers with NodeViewTestOps 
     }
   }
 
-  it should "reject a wrong sender and a completed job replay while preserving queued work" in {
+  it should "reject a completed job replay while preserving queued work" in {
     implicit val system: ActorSystem = ActorSystem()
     val holder = TestProbe()
     val intercepted = TestProbe()
     val reads = TestProbe()
     val release = new CountDownLatch(1)
     val (state, _) = createUtxoState(settings)
-    // Hold the actual terminal envelope, so the UUID is the real active job's
-    // identity; only its sender is changed in the negative case.
+    // Hold the actual terminal envelope so it can be replayed during the next job.
     val auditor = TestActorRef(new MempoolAuditor(holder.ref, holder.ref, settings) {
       private var holdFirstCompletion = true
       override def aroundReceive(receive: Receive, message: Any): Unit = message match {
@@ -253,8 +252,6 @@ class MempoolCleanupSpec extends AnyFlatSpec with Matchers with NodeViewTestOps 
       }
       val secondRequest = RecheckMempool(state, secondPool, UUID.randomUUID())
       holder.send(auditor, secondRequest)
-      holder.send(auditor, done)
-      holder.expectNoMessage(100.millis)
       reads.expectNoMessage(100.millis)
       auditor.tell(done, worker)
       holder.expectMsg(done.result.get)

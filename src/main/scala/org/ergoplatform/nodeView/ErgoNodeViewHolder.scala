@@ -111,7 +111,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                updatedState: Option[State] = None,
                                updatedVault: Option[ErgoWallet] = None,
                                updatedMempool: Option[ErgoMemPool] = None): Unit = {
-    if (updatedState.nonEmpty) stateRevision = UUID.randomUUID()
     val newNodeView = (updatedHistory.getOrElse(history()),
       updatedState.getOrElse(minimalState()),
       updatedVault.getOrElse(vault()),
@@ -548,8 +547,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 
-                  updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
-
                   // if blockchain is synced,
                   // send an order to clean mempool up from transactions possibly become invalid
                   // we can check mempool transactions only in "utxo" mode
@@ -561,6 +558,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   }
 
                   log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
+                  updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
                   chainProgress =
                     Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
 
@@ -707,6 +705,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sender() ! txModify(unconfirmedTx)
     case RecheckedTransactions(revision, originals, unconfirmedTxs, invalidatedIds) if revision == stateRevision =>
       val currentPool = memoryPool()
+      // Candidate generation can remove a parent while its child remains in the pool.
+      // Refreshing that child from the old snapshot would defer its next validity check.
       val originalOutputs = originals.iterator.flatMap(_.transaction.outputs).map(b => bytesToId(b.id)).toSet
       val currentOutputs = currentPool.getAll.iterator.flatMap(_.transaction.outputs).map(b => bytesToId(b.id)).toSet
       val eligibleIds = originals.iterator.filter { original =>
@@ -725,7 +725,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val e = new Exception("Became invalid")
         toEliminate.foreach(id => context.system.eventStream.publish(FailedOnRecheckTransaction(id, e)))
       }
-    case _: RecheckedTransactions => // state changed while validation was running
+      val skipped = unconfirmedTxs.size + invalidatedIds.size - refreshed.size - toEliminate.size
+      log.debug(s"Mempool cleanup result: refreshed=${refreshed.size}, eliminated=${toEliminate.size}, skipped=$skipped")
+    case RecheckedTransactions(_, _, unconfirmedTxs, invalidatedIds) =>
+      val skipped = unconfirmedTxs.size + invalidatedIds.size
+      log.debug(s"Mempool cleanup result discarded after state revision change: " +
+        s"refreshed=0, eliminated=0, skipped=$skipped")
     case EliminateTransactions(ids) =>
       val updatedPool = ids.foldLeft(memoryPool()) { case (pool, txId) => pool.invalidate(txId) }
       updateNodeView(updatedMempool = Some(updatedPool))

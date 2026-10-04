@@ -648,33 +648,42 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   }
 
   property("binds cached transactions to the selected header") {
+    val commandProbe = TestProbe()(system)
+    def awaitProcessed(message: Any): Unit = {
+      commandProbe.send(indexer, message)
+      commandProbe.send(indexer, GetLoadedState())
+      commandProbe.expectMsgType[IndexerState]
+    }
+
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    awaitCondition(done)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
+    }
     val originalTransactions = history.bestBlockTransactionsAt(HEIGHT).get
     val staleTransactions = originalTransactions.copy(
       txs = history.bestBlockTransactionsAt(HEIGHT - 1).get.txs
     )
 
     indexer ! ForceRollback(HEIGHT - 1)
-    awaitCondition(done)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT - 1
+    }
     val branchState = IndexerState.fromHistory(_history)
 
-    indexer ! GenerateBetterChainTip()
-    awaitCondition(created)
-    indexer ! CreateDB(HEIGHT + 1)
-    awaitCondition(created)
+    awaitProcessed(GenerateBetterChainTip())
+    awaitProcessed(CreateDB(HEIGHT + 1))
     val selectedTransactions = history.bestBlockTransactionsAt(HEIGHT).get
     selectedTransactions.headerId should not be originalTransactions.headerId
     selectedTransactions.txs.head.id should not be staleTransactions.txs.head.id
 
-    indexer ! CacheBlockTransactions(HEIGHT, staleTransactions)
-    awaitCondition(created)
+    awaitProcessed(CacheBlockTransactions(HEIGHT, staleTransactions))
     indexer ! Index()
-    awaitCondition(done)
-
-    NumericTxIndex.getTxByNumber(history, branchState.globalTxIndex).map(_.id) shouldBe
-      Some(selectedTransactions.txs.head.id)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+      NumericTxIndex.getTxByNumber(history, branchState.globalTxIndex).map(_.id) shouldBe
+        Some(selectedTransactions.txs.head.id)
+    }
     indexer ! Reset()
   }
 

@@ -30,7 +30,7 @@ import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
-import scorex.core.network.{ConnectedPeer, ConnectionId, DeliveryTracker, ModifiersStatus, Outgoing}
+import scorex.core.network.{ConnectedPeer, ConnectionId, DeliveryTracker, ModifiersStatus, Outgoing, SendToPeer}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ModifierId
 
@@ -140,8 +140,9 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
       forwarded.take(2).foreach { utx =>
         viewHolderProbe.send(synchronizer, DeclinedTransaction(utx.withCost(1000)))
       }
+      expectRequest(networkProbe, Seq(groups(0)(5).id))
       sendInv(viewHolderProbe, synchronizer, peers(2), groups(2).map(_.id))
-      expectRequest(networkProbe, groups(2).take(1).map(_.id))
+      networkProbe.expectNoMessage(150.millis)
     } finally {
       Await.result(system.terminate(), Duration.Inf)
     }
@@ -190,14 +191,14 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
       // A block clears completed costs, but six pending reservations must remain.
       val header = genHeaderChain(1, history, None, false).last
       viewHolderProbe.send(synchronizer, LocalBlockApplied(header, Seq.empty))
-      sendInv(viewHolderProbe, synchronizer, peers(2), transactions.drop(6).map(_.id))
-      networkProbe.expectNoMessage(150.millis)
       val firstAttempt = tracker.getRequestedInfo(txType, target.id).get.requestId
       val otherAttempt = tracker.getRequestedInfo(txType, transactions(1).id).get.requestId
 
       viewHolderProbe.send(synchronizer, CheckDelivery(peers(0), txType, target.id, firstAttempt))
       sendInv(viewHolderProbe, synchronizer, peers(0), Seq(target.id))
       expectRequest(networkProbe, Seq(target.id))
+      sendInv(viewHolderProbe, synchronizer, peers(2), transactions.drop(6).map(_.id))
+      networkProbe.expectNoMessage(150.millis)
 
       viewHolderProbe.send(synchronizer, CheckDelivery(peers(0), txType, target.id, firstAttempt))
       val targetData = ModifiersData(txType, Map(target.id -> target.bytes))
@@ -213,6 +214,7 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
 
       viewHolderProbe.send(synchronizer,
         CheckDelivery(peers(1), txType, transactions(1).id, otherAttempt))
+      expectRequest(networkProbe, Seq(transactions(6).id))
       viewHolderProbe.send(synchronizer,
         Message(ModifiersSpec, Left(ModifiersSpec.toBytes(targetData)), Some(peers(1))))
       val forwarded = viewHolderProbe.expectMsgType[TransactionFromRemote]
@@ -223,8 +225,6 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
       // The active delivery timer cannot release a transaction already under validation.
       viewHolderProbe.send(synchronizer, CheckDelivery(peers(0), txType, target.id, secondAttempt))
       sendInv(viewHolderProbe, synchronizer, peers(2), transactions.drop(6).map(_.id))
-      expectRequest(networkProbe, Seq(transactions(6).id))
-      sendInv(viewHolderProbe, synchronizer, peers(2), transactions.drop(7).map(_.id))
       networkProbe.expectNoMessage(150.millis)
     } finally {
       Await.result(system.terminate(), Duration.Inf)
@@ -394,6 +394,252 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
       viewHolderProbe.send(synchronizer,
         CheckDelivery(silentPeer, txType, transactions.head.id, activeAttempt))
       sendInv(viewHolderProbe, synchronizer, responsivePeer, Seq(transactions(2).id))
+      expectRequest(networkProbe, Seq(transactions(2).id))
+    } finally {
+      Await.result(system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("a mainnet-cost inventory tail resumes when a request slot becomes free") {
+    val fixture = new AkkaFixture
+    implicit val system: ActorSystem = fixture.system
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    try {
+      val mainnetCostSettings = settings.copy(
+        nodeSettings = settings.nodeSettings.copy(maxTransactionCost = 4900000)
+      )
+      val history = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val tracker = DeliveryTracker.empty(mainnetCostSettings)
+      val networkProbe = TestProbe()
+      val viewHolderProbe = TestProbe()
+      val handlerProbe = TestProbe()
+      val sender = peer(23511, handlerProbe.ref)
+      val txGen = validErgoTransactionGenTemplate(0, 0, maxInputs = 1)
+      val transactions = Vector.fill(3)(txGen.sample.get._2)
+      transactions.map(_.id).distinct.size shouldBe 3
+
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        networkProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        mainnetCostSettings,
+        ErgoSyncTracker(mainnetCostSettings.scorexSettings.network),
+        tracker
+      )))
+      viewHolderProbe.expectMsgType[GetNodeViewChanges]
+      viewHolderProbe.send(synchronizer, ChangedHistory(history))
+      viewHolderProbe.send(synchronizer, ChangedMempool(ErgoMemPool.empty(mainnetCostSettings)))
+
+      val txType = ErgoTransaction.modifierTypeId
+      sendInv(viewHolderProbe, synchronizer, sender, transactions.map(_.id))
+      expectRequest(networkProbe, transactions.take(2).map(_.id))
+      tracker.status(transactions(2).id, txType, Seq.empty) shouldBe ModifiersStatus.Unknown
+
+      viewHolderProbe.awaitCond(tracker.getRequestedInfo(txType, transactions.head.id).isDefined,
+        3.seconds)
+      val activeAttempt = tracker.getRequestedInfo(txType, transactions.head.id).get.requestId
+      viewHolderProbe.send(synchronizer,
+        CheckDelivery(sender, txType, transactions.head.id, activeAttempt))
+      networkProbe.fishForMessage(3.seconds) {
+        case send: SendToNetwork if send.message.spec.messageCode == RequestModifierSpec.messageCode =>
+          send.message.data.get.asInstanceOf[InvData].ids.contains(transactions(2).id)
+        case _ => false
+      }
+    } finally {
+      Await.result(system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("a disconnected inventory owner cannot receive a deferred transaction request") {
+    val fixture = new AkkaFixture
+    implicit val system: ActorSystem = fixture.system
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    try {
+      val mainnetCostSettings = settings.copy(
+        nodeSettings = settings.nodeSettings.copy(maxTransactionCost = 4900000)
+      )
+      val history = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val tracker = DeliveryTracker.empty(mainnetCostSettings)
+      val networkProbe = TestProbe()
+      val viewHolderProbe = TestProbe()
+      val oldHandler = TestProbe()
+      val newHandler = TestProbe()
+      val oldPeer = peer(23512, oldHandler.ref)
+      val newPeer = peer(23512, newHandler.ref)
+      val txGen = validErgoTransactionGenTemplate(0, 0, maxInputs = 1)
+      val transactions = Vector.fill(3)(txGen.sample.get._2)
+      transactions.map(_.id).distinct.size shouldBe 3
+
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        networkProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        mainnetCostSettings,
+        ErgoSyncTracker(mainnetCostSettings.scorexSettings.network),
+        tracker
+      )))
+      viewHolderProbe.expectMsgType[GetNodeViewChanges]
+      viewHolderProbe.send(synchronizer, ChangedHistory(history))
+      viewHolderProbe.send(synchronizer, ChangedMempool(ErgoMemPool.empty(mainnetCostSettings)))
+
+      val txType = ErgoTransaction.modifierTypeId
+      sendInv(viewHolderProbe, synchronizer, oldPeer, transactions.map(_.id))
+      expectRequest(networkProbe, transactions.take(2).map(_.id))
+      viewHolderProbe.awaitCond(tracker.getRequestedInfo(txType, transactions.head.id).isDefined,
+        3.seconds)
+      val activeAttempt = tracker.getRequestedInfo(txType, transactions.head.id).get.requestId
+      viewHolderProbe.send(synchronizer, DisconnectedPeer(oldPeer))
+      viewHolderProbe.send(synchronizer,
+        CheckDelivery(oldPeer, txType, transactions.head.id, activeAttempt))
+      networkProbe.expectNoMessage(200.millis)
+
+      sendInv(viewHolderProbe, synchronizer, newPeer, Seq(transactions(2).id))
+      val request = networkProbe.fishForMessage(3.seconds) {
+        case send: SendToNetwork =>
+          send.message.spec.messageCode == RequestModifierSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      request.message.data.get.asInstanceOf[InvData].ids shouldBe Seq(transactions(2).id)
+      request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+    } finally {
+      Await.result(system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("a late disconnect does not discard a replacement connection's deferred inventory") {
+    val fixture = new AkkaFixture
+    implicit val system: ActorSystem = fixture.system
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    try {
+      val mainnetCostSettings = settings.copy(
+        nodeSettings = settings.nodeSettings.copy(maxTransactionCost = 4900000)
+      )
+      val history = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val tracker = DeliveryTracker.empty(mainnetCostSettings)
+      val networkProbe = TestProbe()
+      val viewHolderProbe = TestProbe()
+      val oldHandler = TestProbe()
+      val newHandler = TestProbe()
+      val oldPeer = peer(23515, oldHandler.ref)
+      val newPeer = peer(23515, newHandler.ref)
+      val txGen = validErgoTransactionGenTemplate(0, 0, maxInputs = 1)
+      val transactions = Vector.fill(3)(txGen.sample.get._2)
+      transactions.map(_.id).distinct.size shouldBe 3
+
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        networkProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        mainnetCostSettings,
+        ErgoSyncTracker(mainnetCostSettings.scorexSettings.network),
+        tracker
+      )))
+      viewHolderProbe.expectMsgType[GetNodeViewChanges]
+      viewHolderProbe.send(synchronizer, ChangedHistory(history))
+      viewHolderProbe.send(synchronizer, ChangedMempool(ErgoMemPool.empty(mainnetCostSettings)))
+
+      val txType = ErgoTransaction.modifierTypeId
+      sendInv(viewHolderProbe, synchronizer, oldPeer, transactions.map(_.id))
+      expectRequest(networkProbe, transactions.take(2).map(_.id))
+      sendInv(viewHolderProbe, synchronizer, newPeer, Seq(transactions(2).id))
+      networkProbe.expectNoMessage(150.millis)
+      viewHolderProbe.awaitCond(tracker.getRequestedInfo(txType, transactions.head.id).isDefined,
+        3.seconds)
+      val activeAttempt = tracker.getRequestedInfo(txType, transactions.head.id).get.requestId
+      viewHolderProbe.send(synchronizer, DisconnectedPeer(oldPeer))
+      viewHolderProbe.send(synchronizer,
+        CheckDelivery(oldPeer, txType, transactions.head.id, activeAttempt))
+
+      val request = networkProbe.fishForMessage(3.seconds) {
+        case send: SendToNetwork =>
+          send.message.spec.messageCode == RequestModifierSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      request.message.data.get.asInstanceOf[InvData].ids shouldBe Seq(transactions(2).id)
+      request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+    } finally {
+      Await.result(system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("a deferred peer with exhausted cost does not block another peer") {
+    val fixture = new AkkaFixture
+    implicit val system: ActorSystem = fixture.system
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    try {
+      val mainnetCostSettings = settings.copy(
+        nodeSettings = settings.nodeSettings.copy(maxTransactionCost = 4900000)
+      )
+      val history = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val tracker = DeliveryTracker.empty(mainnetCostSettings)
+      val networkProbe = TestProbe()
+      val viewHolderProbe = TestProbe()
+      val handlerProbe = TestProbe()
+      val firstPeer = peer(23513, handlerProbe.ref)
+      val secondPeer = peer(23514, handlerProbe.ref)
+      val txGen = validErgoTransactionGenTemplate(0, 0, maxInputs = 1)
+      val transactions = Vector.fill(4)(txGen.sample.get._2)
+      transactions.map(_.id).distinct.size shouldBe 4
+
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        networkProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        mainnetCostSettings,
+        ErgoSyncTracker(mainnetCostSettings.scorexSettings.network),
+        tracker
+      )))
+      viewHolderProbe.expectMsgType[GetNodeViewChanges]
+      viewHolderProbe.send(synchronizer, ChangedHistory(history))
+      viewHolderProbe.send(synchronizer, ChangedMempool(ErgoMemPool.empty(mainnetCostSettings)))
+
+      val txType = ErgoTransaction.modifierTypeId
+      sendInv(viewHolderProbe, synchronizer, firstPeer, transactions.take(3).map(_.id))
+      expectRequest(networkProbe, transactions.take(2).map(_.id))
+      sendInv(viewHolderProbe, synchronizer, secondPeer, Seq(transactions(3).id))
+      networkProbe.expectNoMessage(150.millis)
+
+      transactions.take(2).foreach { tx =>
+        val data = ModifiersData(txType, Map(tx.id -> tx.bytes))
+        viewHolderProbe.send(synchronizer,
+          Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(firstPeer)))
+      }
+      val forwarded = viewHolderProbe.receiveN(2, 5.seconds).collect {
+        case TransactionFromRemote(unconfirmedTx) => unconfirmedTx
+      }
+      forwarded.map(_.id).toSet shouldBe transactions.take(2).map(_.id).toSet
+      forwarded.foreach { utx =>
+        viewHolderProbe.send(synchronizer, DeclinedTransaction(utx.withCost(3000000)))
+      }
+      expectRequest(networkProbe, Seq(transactions(3).id))
+      networkProbe.expectNoMessage(150.millis)
+
+      val header = genHeaderChain(1, history, None, false).last
+      viewHolderProbe.send(synchronizer, LocalBlockApplied(header, Seq.empty))
       expectRequest(networkProbe, Seq(transactions(2).id))
     } finally {
       Await.result(system.terminate(), Duration.Inf)

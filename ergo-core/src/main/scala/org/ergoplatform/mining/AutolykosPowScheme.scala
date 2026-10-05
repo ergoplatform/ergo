@@ -124,14 +124,20 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     val hit = hitForVersion2(header)
 
     val b = getB(header.nBits)
-    hit < b
+    isOrderingHit(hit, b)
   }
 
   def checkInputBlockPoW(header: Header, parameters: Parameters): Boolean = {
     val hit = hitForVersion2(header) // todo: cache hit in header
 
     val orderingTarget = getB(header.nBits)
-    val inputTarget = orderingTarget * parameters.subBlocksPerBlock
+    isInputHit(hit, orderingTarget, parameters.subBlocksPerBlock)
+  }
+
+  def isOrderingHit(hit: BigInt, b: BigInt): Boolean = hit < b
+
+  def isInputHit(hit: BigInt, b: BigInt, subBlocksPerBlock: Int): Boolean = {
+    val inputTarget = b * subBlocksPerBlock
     hit < inputTarget
   }
   /**
@@ -386,6 +392,14 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
     )
   }
 
+  private[mining] def classifyHit(hit: BigInt,
+                                  b: BigInt,
+                                  subblocksPerBlock: Int): AutolykosPowScheme.HitClassification = {
+    if (isOrderingHit(hit, b)) AutolykosPowScheme.OrderingHit
+    else if (isInputHit(hit, b, subblocksPerBlock)) AutolykosPowScheme.InputHit
+    else AutolykosPowScheme.NoHit
+  }
+
   /**
     * Check nonces from `startNonce` to `endNonce` for message `m`, secrets `sk` and `x`, difficulty `b`.
     * Return BlockSolutionSearchResult if there is any valid nonce in this interval, for ordering or input block.
@@ -426,14 +440,15 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
         val indexes = genIndexes(seed, N)
         toBigInt(hash(indexes.map(i => genElement(version, m, p1, p2, Ints.toByteArray(i), h)).sum.toByteArray))
       }
-      if (d <= b) {
-        log.debug(s"Ordering block solution found at $i")
-        OrderingSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
-      } else if (d <= b * subblocksPerBlock) {
-        log.debug(s"Input block solution found at $i")
-        InputSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
-      } else {
-        loop(i + 1)
+      classifyHit(d, b, subblocksPerBlock) match {
+        case AutolykosPowScheme.OrderingHit =>
+          log.debug(s"Ordering block solution found at $i")
+          OrderingSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+        case AutolykosPowScheme.InputHit =>
+          log.debug(s"Input block solution found at $i")
+          InputSolutionFound(new AutolykosSolution(genPk(sk), genPk(x), nonce, d))
+        case AutolykosPowScheme.NoHit =>
+          loop(i + 1)
       }
     }
 
@@ -481,6 +496,11 @@ class AutolykosPowScheme(val k: Int, val n: Int) extends ScorexLogging {
 }
 
 object AutolykosPowScheme {
+
+  private[mining] sealed trait HitClassification
+  private[mining] case object OrderingHit extends HitClassification
+  private[mining] case object InputHit extends HitClassification
+  private[mining] case object NoHit extends HitClassification
 
   /**
     * Calculate header fields based on its parent, namely, header's parent id and height

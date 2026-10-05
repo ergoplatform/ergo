@@ -719,13 +719,27 @@ object CandidateGenerator extends ScorexLogging {
           val upcomingHeight = upcomingContext.currentHeight
           val threshold = upcomingHeight - Constants.StoragePeriod
           if (threshold > 0) {
-            val eligible = history.storageRentBoxesUntil(threshold, StorageRentClaimBuilder.MaxClaims)
+            val scanned = history.storageRentBoxesUntil(threshold, StorageRentClaimBuilder.MaxClaims)
               .toSeq
               .flatMap(entry => state.boxById(ADKey @@ idToBytes(entry.boxId)))
+            // boxes at or below the minimum allowed value (or with a minimum value wrapping
+            // non-positive in 32-bit arithmetic) can not be charged or recreated; they are
+            // broken eligibility entries, so drop them from the index right away
+            // and never claim them
+            val params = upcomingContext.currentParameters
+            val (belowMinValue, eligible) = scanned.partition { b =>
+              val minValue = params.minValuePerByte * b.bytes.length
+              minValue <= 0 || b.value <= minValue.toLong
+            }
+            if (belowMinValue.nonEmpty) {
+              log.warn(s"Removing ${belowMinValue.length} storage-rent eligibility entries " +
+                s"for boxes at or below the minimum value: ${belowMinValue.map(b => bytesToId(b.id))}")
+              history.removeStorageRentBoxes(belowMinValue.map(b => bytesToId(b.id)))
+            }
             StorageRentClaimBuilder.buildClaim(
               eligible,
               upcomingHeight,
-              upcomingContext.currentParameters,
+              params,
               minerPk,
               Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty),
               ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet

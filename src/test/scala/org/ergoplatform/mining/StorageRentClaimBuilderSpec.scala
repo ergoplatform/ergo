@@ -2,7 +2,7 @@ package org.ergoplatform.mining
 
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
-import org.ergoplatform.settings.{Constants, ValidationRules}
+import org.ergoplatform.settings.{Constants, ErgoValidationSettingsUpdate, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.ErgoBox
@@ -31,7 +31,7 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
   /** Height of the block being assembled in tests. */
   private val H: Int = 3 * Constants.StoragePeriod
 
-  /** Box old enough to be rent-eligible, grace period not yet passed. */
+  /** Box old enough to be rent-eligible. */
   private def agedBox(value: Long, withToken: Boolean = false): ErgoBox =
     tokenizedBox(value, Constants.StoragePeriod, withToken)
 
@@ -55,28 +55,43 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
   private def boxWithTokens(value: Long, age: Int, tokenIds: Seq[Byte]): ErgoBox =
     testBox(value, Constants.TrueTree, H - age, tokenIds.map(tokenEntry), Map.empty)
 
+  /** Storage fee of `box`, in plain (non-wrapping) arithmetic. */
+  private def feeOf(box: ErgoBox): Long = parameters.storageFeeFactor.toLong * box.bytes.length
+
   /**
-    * A box that can not be charged any more (its value is below the protocol minimum, so
-    * it is a burn candidate) and carries `tokenIds`.
+    * A rent-eligible box just unable to cover its storage fee (value == fee, VLQ fixpoint),
+    * so consensus allows it to be fully consumed.
+    */
+  private def burnableBox(age: Int, withToken: Boolean): ErgoBox = {
+    var b = tokenizedBox(10000000000L, age, withToken)
+    while (b.value - feeOf(b) > 0) {
+      b = tokenizedBox(feeOf(b), age, withToken)
+    }
+    b
+  }
+
+  /**
+    * A rent-eligible box which can not cover its storage fee (a burn candidate) and carries
+    * `tokenIds`.
     */
   private def burnCandidateWithTokens(tokenIds: Seq[Byte]): ErgoBox = {
-    val age = Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod
-    var b = boxWithTokens(10000000000L, age, tokenIds)
-    while (b.value >= minValueOf(b)) {
-      b = boxWithTokens(minValueOf(b) - 1, age, tokenIds)
+    var b = boxWithTokens(10000000000L, Constants.StoragePeriod, tokenIds)
+    while (b.value - feeOf(b) > 0) {
+      b = boxWithTokens(feeOf(b), Constants.StoragePeriod, tokenIds)
     }
     b
   }
 
   private val WhitelistedTokenId: ModifierId = tokenIdOf(7.toByte)
 
+  /** Minimum allowed value of `box` (`minValuePerByte * box bytes`). */
   private def minValueOf(box: ErgoBox): Long = parameters.minValuePerByte.toLong * box.bytes.length
 
-  /** A box whose value is just below the protocol minimum for its size (VLQ fixpoint). */
-  private def belowMinBox(age: Int, withToken: Boolean): ErgoBox = {
-    var b = tokenizedBox(10000000000L, age, withToken)
-    while (b.value >= minValueOf(b)) {
-      b = tokenizedBox(minValueOf(b) - 1, age, withToken)
+  /** A rent-eligible box sitting exactly at the minimum allowed value (VLQ fixpoint). */
+  private def atMinValueBox(age: Int): ErgoBox = {
+    var b = tokenizedBox(10000000000L, age, withToken = false)
+    while (b.value > minValueOf(b)) {
+      b = tokenizedBox(minValueOf(b), age, withToken = false)
     }
     b
   }
@@ -123,7 +138,7 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     tx.outputCandidates.map(_.value).sum shouldBe b.value
   }
 
-  property("token box with value above the fee is refreshed towards the minimum only as much as the fee") {
+  property("token box with value above the fee is recreated, keeping its tokens and paying the fee") {
     val b = agedBox(10000000000L, withToken = true)
     val tx = buildAndValidate(Seq(b)).get
     val recreated = tx.outputCandidates.head
@@ -131,23 +146,25 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     recreated.value shouldBe b.value - parameters.storageFeeFactor * b.bytes.length
   }
 
-  property("box with value between minimum and fee is refreshed towards the minimum") {
-    // grace period: the charge stops at the minimum allowed value instead of seizing the box
-    val probe = agedBox(10000000000L, withToken = true)
-    val minV = minValueOf(probe)
-    val fee = parameters.storageFeeFactor.toLong * probe.bytes.length
-    val value = minV + fee / 2 // minV < value < fee
-    val b = tokenizedBox(value, Constants.StoragePeriod, withToken = true)
+  property("recreated output below the dust floor is bumped up to it") {
+    // the after-fee value may be below the minimum allowed value for the recreated output;
+    // the builder then tops it up to the dust floor (charging less than the full fee)
+    var b = tokenizedBox(10000000000L, Constants.StoragePeriod, withToken = false)
+    while (b.value - feeOf(b) > 1) {
+      b = tokenizedBox(feeOf(b) + 1, Constants.StoragePeriod, withToken = false)
+    }
+    b.value - feeOf(b) shouldBe 1 // sanity: one nanoERG left after the fee
 
     val tx = buildAndValidate(Seq(b)).get
     val recreated = tx.outputCandidates.head
-    recreated.value shouldBe minValueOf(b)
-    tx.outputCandidates.last.value shouldBe value - minValueOf(b)
-    tx.outputCandidates.map(_.value).sum shouldBe value
+    recreated.value should be > 1L // bumped from the after-fee value of 1 nanoERG
+    // exactly at the dust floor of the recreated box as serialized in the claim
+    recreated.value shouldBe parameters.minValuePerByte.toLong * recreated.toBox(tx.id, 0).bytes.length
+    tx.outputCandidates.map(_.value).sum shouldBe b.value
   }
 
-  property("box below the minimum is burned only after the grace period, tokens destroyed") {
-    val b = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = true)
+  property("box which can not cover its storage fee is burned, tokens destroyed") {
+    val b = burnableBox(Constants.StoragePeriod, withToken = true)
     val tx = buildAndValidate(Seq(b)).get
 
     tx.inputs.length shouldBe 1
@@ -160,22 +177,36 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     tx.inputs.head.spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
   }
 
-  property("box below the minimum is not touched during the grace period") {
-    val b = belowMinBox(Constants.StoragePeriod, withToken = true) // expired but grace period not over
-    buildAndValidate(Seq(b)) shouldBe None
+  property("box which can not cover its storage fee is burned as soon as it is rent-eligible") {
+    // no grace period: a burnable box is consumed right at the storage-period boundary
+    val b = burnableBox(Constants.StoragePeriod, withToken = false)
+    buildAndValidate(Seq(b)).isDefined shouldBe true
   }
 
   property("box with a whitelisted token is never burned") {
-    val b = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = true)
+    val b = burnableBox(Constants.StoragePeriod, withToken = true)
     // whitelisted: skipped entirely, left for sponsors
     buildAndValidate(Seq(b), whitelist = Set(WhitelistedTokenId)) shouldBe None
-    // not whitelisted: burned after the grace period
+    // not whitelisted: burned once rent-eligible
     buildAndValidate(Seq(b), whitelist = Set.empty).isDefined shouldBe true
   }
 
   property("too young box is skipped") {
     val b = tokenizedBox(10000000000L, Constants.StoragePeriod - 1, withToken = false)
     buildAndValidate(Seq(b)) shouldBe None
+  }
+
+  property("box at or below the minimum value is skipped") {
+    val b = atMinValueBox(Constants.StoragePeriod)
+    (b.value <= minValueOf(b)) shouldBe true // sanity: not above the minimum
+    buildAndValidate(Seq(b)) shouldBe None
+  }
+
+  property("box at or below the minimum value does not block other claims") {
+    val bad = atMinValueBox(Constants.StoragePeriod)
+    val good = agedBox(10000000000L)
+    val tx = buildAndValidate(Seq(bad, good)).get
+    tx.inputs.map(in => bytesToId(in.boxId)) shouldBe Seq(bytesToId(good.id))
   }
 
   property("fee-overflow box is skipped") {
@@ -185,6 +216,19 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val big = testBox(10000000000L, Constants.TrueTree, 0, tokens, Map.empty)
     parameters.storageFeeFactor * big.bytes.length should be < 0 // sanity: fee wraps negative
     buildAndValidate(Seq(big)) shouldBe None
+  }
+
+  property("min-value-overflow box is skipped") {
+    // boxes on-chain can not be big enough to wrap minValuePerByte * bytes negative, but
+    // the parameter can be voted up; simulate that with a minValuePerByte which makes the
+    // product land just above Int.MaxValue, i.e. wrap negative
+    val b = agedBox(10000000000L)
+    val hugeMinValueParams = new Parameters(0,
+      Parameters.DefaultParameters +
+        (Parameters.MinValuePerByteIncrease -> (Int.MaxValue / b.bytes.length + 1)),
+      ErgoValidationSettingsUpdate.empty)
+    hugeMinValueParams.minValuePerByte * b.bytes.length should be < 0 // sanity: wraps negative
+    StorageRentClaimBuilder.buildClaim(Seq(b), H, hugeMinValueParams, minerPk, None, Set.empty) shouldBe None
   }
 
   property("reemission-token box is skipped on EIP-27 networks") {
@@ -198,30 +242,40 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
 
   property("mixed branches validate and index outputs correctly") {
     val recreateBox = agedBox(10000000000L)
-    val consumeBox = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = false)
+    val consumeBox = burnableBox(Constants.StoragePeriod, withToken = false)
     val tx = buildAndValidate(Seq(recreateBox, consumeBox)).get
 
     tx.inputs.length shouldBe 2
-    tx.outputCandidates.length shouldBe 2 // recreated + one proceeds output
+    tx.outputCandidates.length shouldBe 3 // recreated + per-burn proceeds + fee output
 
-    // recreate input names its recreated output (index 0), full-consume names the proceeds (1)
+    // recreate input names its recreated output (index 0), full-consume names its own
+    // proceeds output (1); the fee output (2) is unnamed
     tx.inputs(0).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
     tx.inputs(1).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(1)
+    tx.outputCandidates(1).value shouldBe consumeBox.value
+    tx.outputCandidates(1).ergoTree shouldBe MinerTree
+    tx.outputCandidates(2).value shouldBe parameters.storageFeeFactor * recreateBox.bytes.length
 
     // zero fee: outputs balance inputs exactly
     tx.outputCandidates.map(_.value).sum shouldBe recreateBox.value + consumeBox.value
   }
 
-  property("multiple burned boxes get distinct outputs and validate") {
-    val b1 = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = true)
-    val b2 = belowMinBox(Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod, withToken = true)
+  property("multiple burned boxes get distinct outputs with their own values") {
+    val b1 = burnableBox(Constants.StoragePeriod, withToken = true)
+    val b2 = burnableBox(Constants.StoragePeriod, withToken = true)
     val tx = buildAndValidate(Seq(b1, b2)).get
 
     tx.inputs.length shouldBe 2
     tx.outputCandidates.length shouldBe 2 // one P2PK output per burned box, tokens burned
     tx.inputs(0).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
     tx.inputs(1).spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(1)
-    tx.outputCandidates.foreach(_.additionalTokens.length shouldBe 0)
+    // each proceeds output carries exactly the value of the box it replaces
+    tx.outputCandidates(0).value shouldBe b1.value
+    tx.outputCandidates(1).value shouldBe b2.value
+    tx.outputCandidates.foreach { out =>
+      out.ergoTree shouldBe MinerTree
+      out.additionalTokens.length shouldBe 0
+    }
   }
 
   property("rent proceeds go to the canonical miner P2PK, not the delayed reward script") {
@@ -261,15 +315,13 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
       .value.asInstanceOf[Short].toInt)
 
   /**
-    * Boxes past the storage period + grace period, i.e. claimable by the full-consume
-    * (burn) branch. The age is varied per box so that every box (and thus every input) is
-    * distinct - a claim with duplicate inputs would be rejected by `txInputsUnique`
-    * instead, masking the var #127 assertions.
+    * Boxes past the storage period which can not cover their storage fee, i.e. claimable by
+    * the full-consume (burn) branch. The age is varied per box so that every box (and thus
+    * every input) is distinct - a claim with duplicate inputs would be rejected by
+    * `txInputsUnique` instead, masking the var #127 assertions.
     */
-  private def burnBoxAt(i: Int): ErgoBox = {
-    val age = Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod + i
-    belowMinBox(age, withToken = true)
-  }
+  private def burnBoxAt(i: Int): ErgoBox =
+    burnableBox(Constants.StoragePeriod + i, withToken = true)
 
   property("the test height is at or above the duplicate var #127 activation height") {
     // Guards the whole spec: `buildAndValidate` runs `statefulValidity`, which only
@@ -281,8 +333,8 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
 
   property("a claim over many recreated and burned boxes keeps var #127 distinct") {
     // distinct values => distinct box ids
-    val recreateBoxes = (0 until 25).map(i => agedBox(10000000000L + i))
-    val burnBoxes = (0 until 15).map(burnBoxAt)
+    val recreateBoxes = (0 until 6).map(i => agedBox(10000000000L + i))
+    val burnBoxes = (0 until 4).map(burnBoxAt)
     val tx = buildAndValidate(recreateBoxes ++ burnBoxes).get
 
     tx.inputs.length shouldBe recreateBoxes.length + burnBoxes.length
@@ -297,8 +349,8 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
   property("every var #127 value names an existing output of the claim") {
     // The interpreter resolves var #127 with `outputCandidates(idx)` directly; an
     // out-of-range index throws, falls back to signature verification, claim rejected.
-    val recreateBoxes = (0 until 12).map(i => agedBox(10000000000L + i))
-    val burnBoxes = (0 until 8).map(burnBoxAt)
+    val recreateBoxes = (0 until 6).map(i => agedBox(10000000000L + i))
+    val burnBoxes = (0 until 4).map(burnBoxAt)
     val tx = buildAndValidate(recreateBoxes ++ burnBoxes).get
 
     val indices = var127Indices(tx)
@@ -319,32 +371,42 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val nRecreated = recreateBoxes.length
     val indices = var127Indices(tx)
 
-    // recreated boxes are the first `nRecreated` outputs, proceeds come after: the two
-    // branches occupy disjoint index ranges, which is what keeps the values distinct
+    // recreated boxes are the first `nRecreated` outputs, per-burn proceeds come right
+    // after, the fee output is last and unnamed: the two branches occupy disjoint index
+    // ranges, which is what keeps the var #127 values distinct
     indices.take(nRecreated) should contain theSameElementsAs (0 until nRecreated)
     indices.drop(nRecreated) should contain theSameElementsAs
-      (nRecreated until tx.outputCandidates.length)
+      (nRecreated until nRecreated + burnBoxes.length)
+    tx.outputCandidates.length shouldBe nRecreated + burnBoxes.length + 1
   }
 
-  property("claims stay valid when burned boxes are dropped for lack of clean proceeds") {
-    // Burning splits the aggregate proceeds evenly, one P2PK output per burned box. When
-    // the proceeds cannot give every burned box a dust-clean output the builder drops the
-    // smallest burned boxes; the survivors must still name pairwise distinct outputs.
+  property("every burned box gets its own proceeds output with its full value") {
+    // more boxes than MaxClaims are offered, so this also pins the cap in the burn branch
     val burnBoxes = (0 until 20).map { i =>
-      val age = Constants.StoragePeriod + StorageRentClaimBuilder.StorageGracePeriod + i
-      belowMinBox(age, withToken = false)
+      burnableBox(Constants.StoragePeriod + i, withToken = false)
     }
-    buildAndValidate(burnBoxes).foreach { tx =>
-      val indices = var127Indices(tx)
-      withClue("surviving var #127 values must stay pairwise distinct: ") {
-        indices.distinct.length shouldBe indices.length
-      }
-      indices.foreach { idx => idx should be < tx.outputCandidates.length }
-      // one proceeds output per surviving burned box; the ones dropped for dust are
-      // absent from both the inputs and the outputs, so the two stay aligned
-      indices.length shouldBe tx.outputCandidates.length
-      indices should contain theSameElementsAs (0 until tx.outputCandidates.length)
+    val tx = buildAndValidate(burnBoxes).get
+
+    tx.inputs.length shouldBe StorageRentClaimBuilder.MaxClaims
+    val indices = var127Indices(tx)
+    withClue("var #127 values must be pairwise distinct: ") {
+      indices.distinct.length shouldBe indices.length
     }
+    indices should contain theSameElementsAs (0 until tx.outputCandidates.length)
+    // each input names the output carrying exactly its box's value, to the miner P2PK
+    tx.inputs.zipWithIndex.foreach { case (in, i) =>
+      val out = tx.outputCandidates(indices(i))
+      out.value shouldBe burnBoxes.find(b => java.util.Arrays.equals(b.id, in.boxId)).get.value
+      out.ergoTree shouldBe MinerTree
+    }
+  }
+
+  property("a claim never sweeps more than MaxClaims boxes") {
+    val boxes = (0 until StorageRentClaimBuilder.MaxClaims + 5).map(i => agedBox(10000000000L + i))
+    val tx = buildAndValidate(boxes).get
+    tx.inputs.length shouldBe StorageRentClaimBuilder.MaxClaims
+    // the first MaxClaims boxes, in order, are the ones claimed
+    tx.inputs.map(_.boxId) shouldBe boxes.take(StorageRentClaimBuilder.MaxClaims).map(_.id)
   }
 
   /** Every token id present in any output of `tx`. */

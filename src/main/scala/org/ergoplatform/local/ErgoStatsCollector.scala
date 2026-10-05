@@ -16,7 +16,7 @@ import org.ergoplatform.settings.{Algos, ErgoSettings, Parameters}
 import scorex.core.network.ConnectedPeer
 import scorex.core.network.NetworkController.ReceivableMessages.{GetConnectedPeers, GetPeersStatus}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.network.ErgoSyncTracker
+import org.ergoplatform.network.{ErgoSyncTracker, PendingInputAnnouncements}
 import scorex.util.{ModifierId, ScorexLogging}
 import org.ergoplatform.network.peer.PeersStatus
 
@@ -39,6 +39,7 @@ class ErgoStatsCollector(readersHolder: ActorRef,
     readersHolder ! GetReaders
     context.system.eventStream.subscribe(self, classOf[ChangedHistory])
     context.system.eventStream.subscribe(self, classOf[NewBestInputBlock])
+    context.system.eventStream.subscribe(self, classOf[PendingInputAnnouncements.Stats])
     context.system.eventStream.subscribe(self, classOf[ChangedState])
     context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
@@ -103,6 +104,8 @@ class ErgoStatsCollector(readersHolder: ActorRef,
   }
 
   private def getInfo: Receive = {
+    case stats: PendingInputAnnouncements.Stats =>
+      nodeInfo = nodeInfo.copy(pendingInputAnnouncements = stats)
     case GetNodeInfo => sender() ! nodeInfo
   }
 
@@ -217,7 +220,9 @@ object ErgoStatsCollector {
                       parameters: Parameters,
                       eip27Supported: Boolean,
                       restApiUrl: Option[URL],
-                      extraIndex: Boolean)
+                      extraIndex: Boolean,
+                      pendingInputAnnouncements: PendingInputAnnouncements.Stats =
+                        PendingInputAnnouncements.Stats())
 
   object NodeInfo extends ApiCodecs {
     implicit val paramsEncoder: Encoder[Parameters] = org.ergoplatform.settings.ParametersSerializer.jsonEncoder
@@ -236,6 +241,7 @@ object ErgoStatsCollector {
         "bestFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.encodedId).asJson,
         "previousFullHeaderId" -> ni.bestFullBlockOpt.map(_.header.parentId).map(Algos.encode).asJson,
         "bestInputBlock" -> ni.bestInputBlockId.asJson,
+        "pendingInputAnnouncements" -> ni.pendingInputAnnouncements.asJson,
         "difficulty" -> ni.bestFullBlockOpt.map(_.header.requiredDifficulty).map(difficultyEncoder.apply).asJson,
         "headersScore" -> ni.headersScore.map(difficultyEncoder.apply).asJson,
         "fullBlocksScore" -> ni.fullBlocksScore.map(difficultyEncoder.apply).asJson,

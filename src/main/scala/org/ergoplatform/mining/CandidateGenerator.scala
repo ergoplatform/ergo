@@ -288,7 +288,7 @@ class CandidateGenerator(
       log.info(s"Processed solution $solution with the result $result")
       sender() ! result
 
-    case _: AutolykosSolution =>
+    case _: AutolykosSolution | _: SolutionFound =>
       sender() ! StatusReply.error(
         s"Block already solved : ${state.solvedBlock.map(_.id)}"
       )

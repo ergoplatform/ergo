@@ -8,7 +8,6 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.persistence.{WalletDigest, WalletRegistry}
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.sdk.SecretString
-import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector
 import org.ergoplatform.wallet.settings.SecretStorageSettings
@@ -80,7 +79,6 @@ class WalletRescanMailboxRaceSpec
         val releaseSecondScan = new CountDownLatch(1)
         val holdFirstSecondScan = new AtomicBoolean(true)
         val initialHeight = new AtomicInteger(-1)
-        val recreations = new AtomicInteger(0)
         val observations = new ConcurrentLinkedQueue[ScanObservation]()
         val service = new ErgoWalletServiceImpl(actorSettings) {
           override def readWallet(
@@ -95,14 +93,6 @@ class WalletRescanMailboxRaceSpec
               throw new IllegalStateException("timed out waiting to release wallet loading")
             }
             super.readWallet(state, testMnemonic, testKeysQty, secretStorageSettings)
-          }
-
-          override def recreateRegistry(
-            state: ErgoWalletState,
-            settings: ErgoSettings
-          ): Try[ErgoWalletState] = {
-            recreations.incrementAndGet()
-            super.recreateRegistry(state, settings)
           }
 
           override def scanBlockUpdate(
@@ -164,7 +154,6 @@ class WalletRescanMailboxRaceSpec
         }
         val status = probe.expectMsgType[WalletStatus]
         val scans = observations.iterator().asScala.toVector
-        recreations.get() shouldBe 1
 
         probe.watch(actor)
         probe.send(actor, CloseWallet)

@@ -999,10 +999,12 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       // Verify DownloadRequest is published for full block transactions
       val downloadReq = testProbe.fishForMessage(5.seconds) {
-        case _: DownloadRequest => true
+        case d: DownloadRequest =>
+          d.modifiersToFetch.contains(BlockTransactions.modifierTypeId)
         case _ => false
       }.asInstanceOf[DownloadRequest]
-      downloadReq.modifiersToFetch should contain key org.ergoplatform.modifiers.history.BlockTransactions.modifierTypeId
+      downloadReq.modifiersToFetch(BlockTransactions.modifierTypeId) shouldBe
+        Seq(nextBlock.header.transactionsId)
 
       // Header should still be applied
       Thread.sleep(500)
@@ -1039,10 +1041,12 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       // Verify DownloadRequest is published
       val downloadReq = testProbe.fishForMessage(5.seconds) {
-        case _: DownloadRequest => true
+        case d: DownloadRequest =>
+          d.modifiersToFetch.contains(BlockTransactions.modifierTypeId)
         case _ => false
       }.asInstanceOf[DownloadRequest]
-      downloadReq.modifiersToFetch should contain key org.ergoplatform.modifiers.history.BlockTransactions.modifierTypeId
+      downloadReq.modifiersToFetch(BlockTransactions.modifierTypeId) shouldBe
+        Seq(nextBlock.header.transactionsId)
 
       // Header should still be applied
       Thread.sleep(500)

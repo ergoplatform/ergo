@@ -46,7 +46,10 @@ object IndexerState {
       .modifierBytesById(bytesToId(IndexedHeaderIdKey))
       .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
       .map(bytesToId)
-      .filter(id => history.typedModifierById[Header](id).exists(_.height == indexedHeight))
+      .filter(id => history.historyStorage.modifierById(id).exists {
+        case header: Header => header.id == id && header.height == indexedHeight
+        case _ => false
+      })
     IndexerState(
       indexedHeight,
       globalTxIndex,

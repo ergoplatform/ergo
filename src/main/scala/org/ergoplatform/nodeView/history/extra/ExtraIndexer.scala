@@ -546,25 +546,26 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   private def reconcileIndexedTip(state: IndexerState): Boolean = {
-    val rollbackHeaderOpt = for {
-      indexedHeaderId <- state.indexedHeaderId
-      indexedHeader <- history.typedModifierById[Header](indexedHeaderId)
-      bestFullBlock <- history.bestFullBlockOpt
-      branchPointId <- history.chainToHeader(Some(indexedHeader), bestFullBlock.header)._1
-      branchHeader <- history.typedModifierById[Header](branchPointId)
-      if branchHeader.height < state.indexedHeight
-    } yield branchHeader
+    // A reorg can invalidate both the indexed tip and its parents. Walk stored
+    // headers because the normal history traversal hides invalid headers.
+    @scala.annotation.tailrec
+    def selectedIndexedAncestor(id: ModifierId, height: Int): Option[Header] = {
+      historyStorage.modifierById(id) match {
+        case Some(header: Header) if height > 0 && header.id == id && header.height == height =>
+          if (fullChainHeaderAtHeight(height).exists(_.id == id)) Some(header)
+          else if (height > 1) selectedIndexedAncestor(header.parentId, height - 1)
+          else None
+        case _ => None
+      }
+    }
+
+    val rollbackHeaderOpt = state.indexedHeaderId
+      .flatMap(id => selectedIndexedAncestor(id, state.indexedHeight))
+      .filter(_.height < state.indexedHeight)
 
     rollbackHeaderOpt.exists { branchHeader =>
       beginRollback(state, branchHeader)
       true
-    }
-  }
-
-  private def validatedRollbackHeader(state: IndexerState, branchPoint: ModifierId): Option[Header] = {
-    history.typedModifierById[Header](branchPoint).filter { header =>
-      header.height < state.indexedHeight &&
-        fullChainHeaderAtHeight(header.height).exists(_.id == header.id)
     }
   }
 
@@ -686,16 +687,11 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       } else if (indexedTipIsOnBestFullChain(state)) {
         log.info(s"Ignoring rollback to $branchPoint because the indexed tip is already on the best full chain")
         if (!state.caughtUp) self ! Index()
-      } else {
-        validatedRollbackHeader(state, branchPoint) match {
-          case Some(header) => beginRollback(state, header)
-          case None if !reconcileIndexedTip(state) =>
-            log.info(s"Deferring rollback to $branchPoint until the indexed tip can be reconciled with the best full chain")
-            val newState = state.copy(caughtUp = false, rollbackTo = 0)
-            context.become(receive.orElse(loaded(newState)))
-            scheduleRetry()
-          case None =>
-        }
+      } else if (!reconcileIndexedTip(state)) {
+        log.info(s"Deferring rollback to $branchPoint until the indexed tip can be reconciled with the best full chain")
+        val newState = state.copy(caughtUp = false, rollbackTo = 0)
+        context.become(receive.orElse(loaded(newState)))
+        scheduleRetry()
       }
 
     case RollbackToHeader(targetHeader, resume)

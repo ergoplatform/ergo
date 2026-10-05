@@ -27,7 +27,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -83,6 +83,24 @@ class CandidateGenerator(
       newBlock.mandatoryBlockSections
     }
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+  }
+
+  /**
+    * Drop storage-rent eligibility entries of boxes spent by rent-claim transactions of an
+    * applied block, so a freshly generated candidate can not pick them up again. The extra
+    * indexer would remove the same entries on its own, but it processes blocks
+    * asynchronously; doing it here closes the window between block application and indexing.
+    * Applies to blocks mined by us and by other miners alike.
+    */
+  private def dropSpentRentBoxEntries(history: ErgoHistoryReader, header: Header): Unit = {
+    history.getFullBlock(header).foreach { block =>
+      val spentBoxIds = rentClaimSpentBoxIds(block.transactions)
+      if (spentBoxIds.nonEmpty) {
+        log.debug(s"Removing ${spentBoxIds.length} storage-rent eligibility entries " +
+          s"spent by rent claims of block ${header.id}")
+        history.removeStorageRentBoxes(spentBoxIds)
+      }
+    }
   }
 
   /**
@@ -174,6 +192,7 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
+      dropSpentRentBoxEntries(state.hr, header)
       val stateWithAppliedTxs =
         state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet))
       if (needNewCandidate(state.cachedCandidate, header)) {
@@ -424,6 +443,22 @@ object CandidateGenerator extends ScorexLogging {
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
+
+  /**
+    * Whether `tx` is a storage-rent claim: spends inputs with empty proofs, each pointing
+    * at its own output via the var #127 (StorageIndexVarId) context extension.
+    */
+  def isStorageRentClaim(tx: ErgoTransaction): Boolean =
+    tx.inputs.exists { in =>
+      in.spendingProof.proof.isEmpty &&
+        in.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
+    }
+
+  /**
+    * Ids of boxes spent by the storage-rent claim transactions among `txs`, in order.
+    */
+  def rentClaimSpentBoxIds(txs: Seq[ErgoTransaction]): Seq[ModifierId] =
+    txs.filter(isStorageRentClaim).flatMap(tx => tx.inputs.map(in => bytesToId(in.boxId)))
 
   /**
     * Checks that the best full block in the history corresponds to the state.
@@ -702,6 +737,10 @@ object CandidateGenerator extends ScorexLogging {
           Seq.empty
         }
 
+      if (rentClaimTxs.nonEmpty) {
+        log.debug(s"Storage-rent claim transactions injected into the candidate: ${rentClaimTxs.map(_.id)}")
+      }
+
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
@@ -713,14 +752,29 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      def collectPoolTxs: (Seq[ErgoTransaction], Seq[ModifierId]) = collectTxs(
-        minerPk,
-        state.stateContext.currentParameters.maxBlockCost - safeGap,
-        state.stateContext.currentParameters.maxBlockSize,
-        state,
-        upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
-      )
+      // A storage-rent claim rejected during candidate assembly gets its input boxes dropped
+      // from the storage-rent index, so a broken eligibility entry is not retried in every
+      // candidate. Removal is idempotent, so a claim re-rejected by the retry pass below is
+      // handled by the same code without any extra bookkeeping.
+      def collectPoolTxs: (Seq[ErgoTransaction], Seq[ModifierId]) = {
+        val res = collectTxs(
+          minerPk,
+          state.stateContext.currentParameters.maxBlockCost - safeGap,
+          state.stateContext.currentParameters.maxBlockSize,
+          state,
+          upcomingContext,
+          emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
+        )
+        val rejectedRentClaimTxIds = res._2.filter(id => rentClaimTxs.exists(_.id == id))
+        if (rejectedRentClaimTxIds.nonEmpty) {
+          val boxIds = rentClaimTxs.filter(tx => rejectedRentClaimTxIds.contains(tx.id))
+            .flatMap(tx => tx.inputs.map(in => bytesToId(in.boxId)))
+          log.warn(s"Storage-rent claim transactions $rejectedRentClaimTxIds rejected during candidate assembly, " +
+            s"removing their ${boxIds.length} input boxes from the storage-rent index")
+          history.removeStorageRentBoxes(boxIds)
+        }
+        res
+      }
 
       val (txs, toEliminate) = collectPoolTxs
 

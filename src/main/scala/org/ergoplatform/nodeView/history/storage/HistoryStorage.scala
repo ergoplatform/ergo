@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment, StorageRentBox}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, IndexedErgoBox, Segment, StorageRentBox}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
@@ -112,6 +112,24 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
         value
       }
     }
+
+  /**
+    * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
+    * transaction spending them failed validation during block assembly, so retrying the claim
+    * is futile. An entry whose [[IndexedErgoBox]] is not in the extra index can not be
+    * located and is left in place.
+    */
+  def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit = {
+    val keys = boxIds.flatMap { boxId =>
+      getExtraIndex(boxId) match {
+        case Some(iEb: IndexedErgoBox) => Some(StorageRentBox(iEb).id)
+        case _ =>
+          log.warn(s"Can not remove storage-rent eligibility entry of box $boxId, box not indexed")
+          None
+      }
+    }
+    if (keys.nonEmpty) removeExtra(keys.toArray)
+  }
 
   /**
     * Read up to `limit` storage-rent eligibility entries for currently-unspent boxes created

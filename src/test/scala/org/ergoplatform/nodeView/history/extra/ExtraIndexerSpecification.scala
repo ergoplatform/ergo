@@ -471,6 +471,34 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
+  property("rent index entries are removable by box id") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    lock.lock()
+    done.await()
+
+    val before = history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue)
+    before.length should be > 2
+
+    // remove the first two entries by box id, as CandidateGenerator does for a rejected claim
+    val toRemove = before.take(2).map(_.boxId)
+    history.removeStorageRentBoxes(toRemove)
+
+    val after = history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue)
+    after.length shouldBe before.length - 2
+    after.map(_.boxId).toSet shouldBe before.drop(2).map(_.boxId).toSet
+
+    // removing again is a no-op: the boxes are still indexed, but the entries are gone
+    history.removeStorageRentBoxes(toRemove)
+    history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+
+    // removing an entry of a box which is not indexed at all does not corrupt the index
+    history.removeStorageRentBoxes(Seq(bytesToId(Array.fill(32)(42.toByte))))
+    history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+
+    indexer ! Reset()
+  }
+
   property("rent index is trimmed to the unspent set after a rollback") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()

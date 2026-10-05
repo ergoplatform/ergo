@@ -18,6 +18,9 @@ import org.ergoplatform.subblocks.InputBlockAnnouncement
   * Repository of messages processed ErgoNodeViewSynchronizer actor
   */
 object ErgoNodeViewSynchronizerMessages {
+  /** Continue bounded pending replay with the latest history and state readers. */
+  case object ReplayPendingInputAnnouncements
+
   /**
     * Signal which is instructing ErgoNodeViewSynchronizer to send sync message to peers (when it is needed)
     */

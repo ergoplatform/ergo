@@ -2260,6 +2260,85 @@ components:
           description: Node's (peer) self-chosen name from config
           type: string
           example: my-node-1
+        pendingInputAnnouncements:
+          type: object
+          description: >-
+            Live pending announcement occupancy and cumulative counters since the synchronizer
+            started. These announcements are untrusted and await their applied ordering parent.
+          required: [size, bytes, admitted, replayed, replayNotForwarded, evictions, drops]
+          properties:
+            size:
+              type: integer
+              format: int32
+              minimum: 0
+              description: Number of untrusted input-block announcements currently held.
+            bytes:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Serialized payload bytes currently held; excludes object and index overhead.
+            admitted:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Announcements admitted since the synchronizer started.
+            replayed:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Announcements detached for validation against an applied ordering parent.
+            replayNotForwarded:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Replay attempts not forwarded to the view holder (invalid, already known, or deferred).
+            evictions:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Announcements removed to admit another payload within the global caps.
+            drops:
+              type: object
+              description: Rejected or discarded announcements by reason, excluding capacity evictions.
+              required: [duplicate, hostLimit, variantLimit, oversize, expired, staleParent, disconnected]
+              properties:
+                duplicate:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Identical payload already held from a host.
+                hostLimit:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Sending host already holds its per-host allowance.
+                variantLimit:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Sending host already holds a variant of this header.
+                oversize:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Serialized payload exceeds the entire byte budget.
+                expired:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Retention lifetime expires.
+                staleParent:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: >-
+                    Announcement leaves the height window, or its known +2 parent has the wrong
+                    height or neither extends the applied tip nor belongs to the best header chain.
+                disconnected:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Supplying connection disconnects before replay.
         appVersion:
           description: Node's application version
           type: string

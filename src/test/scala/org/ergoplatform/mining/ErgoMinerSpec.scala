@@ -20,7 +20,7 @@ import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputBlockFound, InputSolutionFound, OrderingBlockFound, OrderingSolutionFound, SolutionFound}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.{ErgoTree, SigmaAnd, SigmaPropConstant}
@@ -367,6 +367,65 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     ecb3.msg.sameElements(ecb2.msg) shouldBe true
     ecb3.proofsForMandatoryTransactions.get.txProofs.length shouldBe 1
     ecb3.proofsForMandatoryTransactions.get.check() shouldBe true
+
+    system.terminate()
+  }
+
+  /** A solution for the candidate, as an external miner would submit it.
+    * The test chain uses the fake PoW scheme, which accepts any ordering-block solution; the input-block check
+    * (`checkInputBlockPoW`) computes the real hit, so input-level solutions are searched with the real scheme
+    * (at the test chain's minimal difficulty the first nonce already meets the input target). */
+  private def solve(powScheme: AutolykosPowScheme, candidate: Candidate, ordering: Boolean): SolutionFound = {
+    val scheme = if (ordering) powScheme else new AutolykosPowScheme(powScheme.k, powScheme.n)
+    scheme.proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters) match {
+      case OrderingBlockFound(b) if ordering => OrderingSolutionFound(b.header.powSolution)
+      case OrderingBlockFound(b) => InputSolutionFound(b.header.powSolution) // below the ordering target, so also below the input one
+      case InputBlockFound(b) if !ordering => InputSolutionFound(b.header.powSolution)
+      case other => fail(s"no solution of the requested kind: $other")
+    }
+  }
+
+  it should "pass external ordering and input-block solutions to the candidate generator" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+    val ergoSettings: ErgoSettings = {
+      val s = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
+      s.copy(nodeSettings = s.nodeSettings.copy(useExternalMiner = true))
+    }
+    val powScheme = ergoSettings.chainSettings.powScheme
+
+    val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(nodeViewHolderRef)
+    // the route in MiningApiRoute talks to this actor, as /mining/solution and /mining/weakSolution do
+    val minerRef: ActorRef = ErgoMiner(ergoSettings, nodeViewHolderRef, readersHolderRef, Some(defaultMinerSecret))
+    minerRef ! StartMining
+
+    implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 200.millis)
+    def candidate(): Candidate =
+      eventually(await(minerRef.askWithStatus(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None)).mapTo[Candidate]))
+    val solutionTimeout: Timeout = Timeout(10.seconds)
+    def submit(sf: SolutionFound): Unit =
+      await(minerRef.askWithStatus(sf)(solutionTimeout).mapTo[Unit])
+
+    // ordering-block solution, as sent by /mining/solution: accepted and the block applied
+    val orderingSolution = solve(powScheme, candidate(), ordering = true)
+    submit(orderingSolution)
+    val applied = testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
+    applied.header.powSolution.w shouldBe orderingSolution.as.w
+
+    // input-block solution, as sent by /mining/weakSolution, for a candidate on top of the applied block: accepted
+    val c2 = eventually {
+      val c = candidate()
+      c.candidateBlock.parentOpt.map(_.id) shouldBe Some(applied.header.id)
+      c
+    }
+    val inputSolution = solve(powScheme, c2, ordering = false)
+    submit(inputSolution)
+
+    // the accepted input block consumed the cached candidate: a repeated submission is answered with an error
+    // reply instead of being left unanswered until the ask times out
+    val repeated = intercept[Exception](submit(inputSolution))
+    repeated shouldBe a[StatusReply.ErrorMessage]
 
     system.terminate()
   }

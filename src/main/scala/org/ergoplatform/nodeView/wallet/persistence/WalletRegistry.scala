@@ -317,6 +317,34 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     store.rollbackTo(org.ergoplatform.core.versionToBytes(version))
   }
 
+  /** Retained rollback used with a durable intent in WalletStorage. */
+  def rollbackDurably(version: VersionTag): Try[Unit] = {
+    cache.clear()
+    store.rollbackToSync(org.ergoplatform.core.versionToBytes(version)).flatMap { _ =>
+      committedVersionAndDigest.flatMap { case (committedVersion, _) =>
+        if (committedVersion == org.ergoplatform.core.versionToId(version)) Success(())
+        else Failure(new IllegalStateException("Wallet rollback committed a different version"))
+      }
+    }
+  }
+
+  /** Whether a rollback can reach this exact committed registry version. */
+  def hasVersion(version: VersionTag): Boolean =
+    store.versionIdExists(org.ergoplatform.core.versionToBytes(version))
+
+  /** Read the committed tip and digest without treating missing or malformed data as an empty wallet. */
+  def committedVersionAndDigest: Try[(ModifierId, WalletDigest)] = Try {
+    val version = store.lastVersionID.getOrElse(
+      throw new IllegalStateException("Wallet registry has no committed version")
+    )
+    val digest = store.get(RegistrySummaryKey) match {
+      case Some(bytes) => WalletDigestSerializer.parseBytesTry(bytes).get
+      case None if version.sameElements(PreGenesisStateVersion) => WalletDigest.empty
+      case None => throw new IllegalStateException("Wallet registry digest is missing")
+    }
+    bytesToId(version) -> digest
+  }
+
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
     */

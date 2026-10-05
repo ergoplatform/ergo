@@ -1,12 +1,14 @@
 package scorex.db
 
 import com.google.common.primitives.Longs
+import org.iq80.leveldb.{WriteBatch, WriteOptions}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
 
 import scala.collection.mutable
 import scala.util.Random
+import java.io.IOException
 
 //todo: rollbacks and pruning are checked in VersionedStoreSpec, merge both tests?
 class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
@@ -104,4 +106,45 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.update(version3, Seq.empty, Seq(k1 -> v1)).get
     store.versionIdExists(version3) shouldBe true
    }
+
+  property("synced rollback reports a failed undo write after main was changed") {
+    val rollbackDir = getRandomTempDir
+    val first = Longs.toByteArray(101L)
+    val second = Longs.toByteArray(102L)
+    val key = Longs.toByteArray(103L)
+    val oldValue = Longs.toByteArray(104L)
+    val newValue = Longs.toByteArray(105L)
+    var failUndo = false
+    var mainSynced = false
+    var undoSynced = false
+    val faulted = new LDBVersionedStore(rollbackDir, 10) {
+      override private[db] def writeRollbackMain(batch: WriteBatch, options: WriteOptions): Unit = {
+        mainSynced = options.sync()
+        super.writeRollbackMain(batch, options)
+      }
+
+      override private[db] def writeRollbackUndo(batch: WriteBatch, options: WriteOptions): Unit = {
+        undoSynced = options.sync()
+        if (failUndo) throw new IOException("injected undo rollback write failure")
+        super.writeRollbackUndo(batch, options)
+      }
+    }
+    try {
+      faulted.update(first, Seq.empty, Seq(key -> oldValue)).get
+      faulted.update(second, Seq.empty, Seq(key -> newValue)).get
+      failUndo = true
+      faulted.rollbackToSync(first).isFailure shouldBe true
+      mainSynced shouldBe true
+      undoSynced shouldBe true
+      faulted.get(key).get.sameElements(oldValue) shouldBe true
+      faulted.lastVersionID.get.sameElements(second) shouldBe true
+    } finally faulted.close()
+
+    val reopened = new LDBVersionedStore(rollbackDir, 10)
+    try {
+      reopened.get(key).get.sameElements(oldValue) shouldBe true
+      reopened.lastVersionID.get.sameElements(second) shouldBe true
+      reopened.versionIdExists(second) shouldBe true
+    } finally reopened.close()
+  }
 }

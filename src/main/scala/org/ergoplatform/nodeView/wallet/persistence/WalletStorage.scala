@@ -9,7 +9,7 @@ import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.{LDBFactory, LDBKVStore}
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigma.serialization.SigmaSerializer
 
 import java.io.File
@@ -30,6 +30,81 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   import WalletStorage._
 
   private var cachedStateContext: Option[ErgoStateContext] = None
+
+  /** A malformed marker is an error, never an absent quarantine. */
+  def deepForkQuarantine: Try[Boolean] = Try {
+    store.get(DeepForkQuarantineKey) match {
+      case None => false
+      case Some(bytes) if java.util.Arrays.equals(bytes, DeepForkQuarantineValue) => true
+      case Some(bytes) if java.util.Arrays.equals(bytes, ClearedDeepForkQuarantineValue) => false
+      case Some(_) => throw new IllegalStateException("Invalid wallet deep-fork quarantine marker")
+    }
+  }
+
+  /** Fence the registry durably before handling a rollback with no retained version. */
+  def quarantineDeepFork(): Try[Unit] = deepForkQuarantine.flatMap {
+    case true => Success(())
+    case false =>
+      store.insertSync(DeepForkQuarantineKey, DeepForkQuarantineValue).flatMap { _ =>
+        deepForkQuarantine.flatMap {
+          case true => Success(())
+          case false => Failure(new IllegalStateException("Wallet deep-fork quarantine marker was not readable after write"))
+        }
+      }
+  }
+
+  /** Only the actor may clear this after proving its checkpoint on the holder-applied chain. */
+  def clearDeepForkQuarantine(): Try[Unit] =
+    store.insertSync(DeepForkQuarantineKey, ClearedDeepForkQuarantineValue).flatMap { _ =>
+      deepForkQuarantine.flatMap {
+        case false => Success(())
+        case true => Failure(new IllegalStateException("Wallet deep-fork quarantine marker did not clear"))
+      }
+    }
+
+  /** A pending rollback fences the registry even when both databases can be opened. */
+  def retainedRollbackIntent: Try[Option[RetainedRollbackIntent]] = Try {
+    store.get(RetainedRollbackIntentKey) match {
+      case None => None
+      case Some(bytes) if java.util.Arrays.equals(bytes, ClearedRollbackIntent) => None
+      case Some(bytes) if bytes.length == 65 && bytes(0) == PendingRollbackIntentVersion =>
+        Some(RetainedRollbackIntent(bytesToId(bytes.slice(1, 33)), bytesToId(bytes.slice(33, 65))))
+      case Some(_) => throw new IllegalStateException("Invalid wallet retained-rollback intent")
+    }
+  }
+
+  /** Sync and read back the exact source and target before touching the registry. */
+  def beginRetainedRollback(source: ModifierId, target: ModifierId): Try[Unit] =
+    retainedRollbackIntent.flatMap {
+      case Some(_) => Failure(new IllegalStateException("Wallet retained-rollback intent is already pending"))
+      case None =>
+        Try {
+          val sourceBytes = idToBytes(source)
+          val targetBytes = idToBytes(target)
+          require(sourceBytes.length == 32 && targetBytes.length == 32, "Invalid wallet rollback version")
+          Array(PendingRollbackIntentVersion) ++ sourceBytes ++ targetBytes
+        }.flatMap { value =>
+          store.insertSync(RetainedRollbackIntentKey, value).flatMap { _ =>
+            requireRollbackIntentValue(value)
+          }
+        }
+    }
+
+  /** A synced tombstone is the final step; an absent or different intent cannot be cleared. */
+  def clearRetainedRollback(source: ModifierId, target: ModifierId): Try[Unit] =
+    retainedRollbackIntent.flatMap {
+      case Some(intent) if intent.source == source && intent.target == target =>
+        store.insertSync(RetainedRollbackIntentKey, ClearedRollbackIntent).flatMap { _ =>
+          requireRollbackIntentValue(ClearedRollbackIntent)
+        }
+      case _ => Failure(new IllegalStateException("Wallet retained-rollback intent does not match"))
+    }
+
+  private def requireRollbackIntentValue(expected: Array[Byte]): Try[Unit] = Try {
+    if (!store.get(RetainedRollbackIntentKey).exists(actual => java.util.Arrays.equals(actual, expected))) {
+      throw new IllegalStateException("Wallet retained-rollback intent was not readable after sync write")
+    }
+  }
 
   //todo: used now only for importing pre-3.3.0 wallet database, remove after while
   def readPaths(): Seq[DerivationPath] = store
@@ -205,6 +280,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
 
 object WalletStorage {
 
+  final case class RetainedRollbackIntent(source: ModifierId, target: ModifierId)
+
   /**
     * Primary prefix for entities with multiple instances, where iterating over keys space would be needed.
     */
@@ -243,6 +320,12 @@ object WalletStorage {
   val SecretPathsKey: Array[Byte] = noPrefixKey("secret_paths")
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
   val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
+  private val DeepForkQuarantineKey: Array[Byte] = noPrefixKey("deep_fork_quarantine_v1")
+  private val DeepForkQuarantineValue: Array[Byte] = Array(1: Byte)
+  private val ClearedDeepForkQuarantineValue: Array[Byte] = Array(0: Byte)
+  private val RetainedRollbackIntentKey: Array[Byte] = noPrefixKey("retained_rollback_intent_v1")
+  private val PendingRollbackIntentVersion: Byte = 1: Byte
+  private val ClearedRollbackIntent: Array[Byte] = Array(0: Byte)
 
 
   /**

@@ -123,6 +123,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       context.system.eventStream.publish(ChangedMempool(newNodeView._4.getReader))
     }
     nodeView = newNodeView
+    updatedState.foreach { installedState =>
+      newNodeView._1.recordHolderAppliedStateVersion(installedState.version)
+    }
   }
 
   protected def extractTransactions(mod: BlockSection): Seq[ErgoTransaction] = mod match {
@@ -444,6 +447,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     val history = ErgoHistory.readOrGenerate(settings)
 
+    history.recordHolderAppliedStateVersion(state.version)
+
     val wallet = ErgoWallet.readOrGenerate(history.getReader, settings, settings.launchParameters)
 
     val memPool = ErgoMemPool.empty(settings)
@@ -465,6 +470,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
+        history.recordHolderAppliedStateVersion(state.version)
         val wallet = ErgoWallet.readOrGenerate(
           history.getReader,
           settings,

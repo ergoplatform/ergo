@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 case class ErgoWalletState(
     storage: WalletStorage,
@@ -143,25 +143,38 @@ object ErgoWalletState {
   val noWalletFilter: FilterFn = (_: TrackedBox) => true
 
   def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
-    WalletRegistry.apply(ergoSettings).map { registry =>
-      val ergoStorage: WalletStorage = WalletStorage.readOrCreate(ergoSettings)
-      val offChainRegistry = OffChainRegistry.init(registry)
-      val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
-      val maxInputsToUse = ergoSettings.walletSettings.maxInputs
-      ErgoWalletState(
-        ergoStorage,
-        secretStorageOpt = None,
-        registry,
-        offChainRegistry,
-        outputsFilter = None,
-        walletVars,
-        stateReaderOpt = None,
-        mempoolReaderOpt = None,
-        utxoStateReaderOpt = None,
-        parameters,
-        maxInputsToUse,
-        rescanInProgress = false
-      )
+    Try(WalletStorage.readOrCreate(ergoSettings)).flatMap { ergoStorage =>
+      val result = ergoStorage.retainedRollbackIntent.flatMap {
+        case Some(_) =>
+          Failure(new IllegalStateException("Pending wallet retained rollback requires recovery"))
+        case None =>
+          WalletRegistry.apply(ergoSettings).flatMap { registry =>
+            Try {
+              val offChainRegistry = OffChainRegistry.init(registry)
+              val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+              val maxInputsToUse = ergoSettings.walletSettings.maxInputs
+              ErgoWalletState(
+                ergoStorage,
+                secretStorageOpt = None,
+                registry,
+                offChainRegistry,
+                outputsFilter = None,
+                walletVars,
+                stateReaderOpt = None,
+                mempoolReaderOpt = None,
+                utxoStateReaderOpt = None,
+                parameters,
+                maxInputsToUse,
+                rescanInProgress = false
+              )
+            }.recoverWith { case t =>
+              Try(registry.close())
+              Failure(t)
+            }
+          }
+      }
+      if (result.isFailure) Try(ergoStorage.close())
+      result
     }
   }
 }

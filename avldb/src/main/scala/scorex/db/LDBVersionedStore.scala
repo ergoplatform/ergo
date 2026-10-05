@@ -350,7 +350,22 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   }
 
   // Rollback to the specified version: undo all changes done after specified version
-  def rollbackTo(versionID: VersionID): Try[Unit] = Try {
+  def rollbackTo(versionID: VersionID): Try[Unit] = rollbackToWithOptions(versionID, writeOptions)
+
+  /** Sync both database writes before a caller clears its durable rollback intent.
+    * The two databases still cannot be written atomically, so the caller must
+    * keep the intent if either write or a later validation fails.
+    */
+  def rollbackToSync(versionID: VersionID): Try[Unit] =
+    rollbackToWithOptions(versionID, new WriteOptions().sync(true))
+
+  private[db] def writeRollbackMain(batch: WriteBatch, options: WriteOptions): Unit =
+    db.write(batch, options)
+
+  private[db] def writeRollbackUndo(batch: WriteBatch, options: WriteOptions): Unit =
+    undo.write(batch, options)
+
+  private def rollbackToWithOptions(versionID: VersionID, options: WriteOptions): Try[Unit] = Try {
     lock.writeLock().lock()
     try {
       val versionIndex = versions.indexWhere(_.sameElements(versionID))
@@ -382,8 +397,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
                 }
               }
             }
-            db.write(batch, writeOptions)
-            undo.write(undoBatch, writeOptions)
+            writeRollbackMain(batch, options)
+            writeRollbackUndo(undoBatch, options)
           } finally {
             // Make sure you close the batch to avoid resource leaks.
             iterator.close()

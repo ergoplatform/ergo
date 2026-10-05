@@ -4,8 +4,10 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool, ChangedState}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.history.ErgoHistoryReader._
+import org.ergoplatform.modifiers.history.header.PreGenesisHeader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
@@ -17,21 +19,31 @@ import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
+import scorex.util.ModifierId
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
-class ErgoWalletActor(settings: ErgoSettings,
+class ErgoWalletActor(protected val settings: ErgoSettings,
                       parameters: Parameters,
                       ergoWalletService: ErgoWalletService,
                       boxSelector: BoxSelector,
-                      historyReader: ErgoHistoryReader)
-  extends Actor with Stash with ScorexLogging with ScorexEncoding {
+                      protected val historyReader: ErgoHistoryReader)
+  extends Actor with Stash with ScorexLogging with ScorexEncoding with WalletForkRecovery {
 
   private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
+  protected[wallet] case object ContinueFullChainProbe
+  protected[wallet] case object RetryFullChainProbe
+  protected[wallet] var pendingChainMessages = 0
+  private var probeRetryScheduled = false
+  protected[wallet] var supersedingRollback: Option[VersionTag] = None
+  // A rollback can leave the two registry databases temporarily inconsistent.
+  // Status must use the last checked height until the durable intent is cleared.
+  protected[wallet] var retainedRollbackSourceHeight: Option[Int] = None
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
@@ -65,6 +77,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       case Success(state) =>
         context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool])
+        context.system.eventStream.subscribe(self, classOf[ChangedHistory])
         self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)
@@ -74,16 +87,270 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def emptyWallet: Receive = {
     case ReadWallet(state) =>
-      val ws = settings.walletSettings
-      // Try to read wallet from json file or test mnemonic provided in a config file
-      val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
-      context.become(loadedWallet(newState))
+      state.storage.deepForkQuarantine match {
+        case Success(false) =>
+          registryCheckpoint(state) match {
+            case Success((tip, _)) if tip == PreGenesisHeader.id =>
+              loadWallet(state)
+            case Success((tip, height)) =>
+              beginFullChainProbe(state, tip, height)(
+                selectedTip => loadWallet(state, Some(selectedTip)),
+                otherTip => historyReader.ifHolderAppliedFullTip(otherTip) {
+                  persistDeepForkQuarantine(state)
+                } match {
+                  case Some(persisted) =>
+                    finishDeepForkQuarantine(state,
+                      s"registry tip $tip is not on the selected full chain", persisted)
+                  case None => scheduleFullChainProbeRetry()
+                }
+              )
+            case Failure(t) =>
+              enterDeepForkQuarantine(state, s"registry checkpoint is inconsistent: ${t.getMessage}")
+          }
+        case Success(true) =>
+          registryCheckpoint(state) match {
+            case Success((tip, height)) if tip != PreGenesisHeader.id =>
+              beginFullChainProbe(state, tip, height)(
+                selectedTip => {
+                  val prepared = readWalletState(state)
+                  historyReader.ifHolderAppliedFullTip(selectedTip) {
+                    state.storage.clearDeepForkQuarantine().map { _ =>
+                      activateWallet(prepared)
+                    }
+                  } match {
+                  case Some(Success(_)) => ()
+                  case Some(Failure(t)) =>
+                    context.become(quarantinedWallet(state,
+                      new IllegalStateException("Wallet deep-fork quarantine could not be cleared", t)))
+                    unstashAll()
+                  case None => scheduleFullChainProbeRetry()
+                  }
+                },
+                _ => {
+                  context.become(quarantinedWallet(state,
+                    new IllegalStateException("Wallet deep-fork quarantine is active")))
+                  unstashAll()
+                }
+              )
+            case _ =>
+              context.become(quarantinedWallet(state,
+                new IllegalStateException("Wallet deep-fork quarantine is active")))
+          }
+        case Failure(t) =>
+          context.become(quarantinedWallet(state,
+            new IllegalStateException("Wallet deep-fork quarantine marker is unreadable", t)))
+      }
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
   }
 
-  private def loadedWallet(state: ErgoWalletState): Receive = {
+  protected[wallet] def loadedWallet(state: ErgoWalletState): Receive =
+    state.storage.deepForkQuarantine match {
+      case Success(false) => activeWallet(state)
+      case Success(true) =>
+        quarantinedWallet(state, new IllegalStateException("Wallet deep-fork quarantine is active"))
+      case Failure(t) =>
+        quarantinedWallet(state, new IllegalStateException("Wallet deep-fork quarantine marker is unreadable", t))
+    }
+
+  protected def persistDeepForkQuarantine(state: ErgoWalletState): scala.util.Try[Unit] =
+    state.storage.quarantineDeepFork()
+
+  protected def rollbackRetainedRegistry(state: ErgoWalletState, version: VersionTag): Try[Unit] =
+    state.registry.rollbackDurably(version)
+
+  protected def clearRetainedRollbackIntent(state: ErgoWalletState,
+                                            source: ModifierId,
+                                            target: ModifierId): Try[Unit] =
+    state.storage.clearRetainedRollback(source, target)
+
+  private def readWalletState(state: ErgoWalletState): ErgoWalletState = {
+    val ws = settings.walletSettings
+    ergoWalletService.readWallet(
+      state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage
+    )
+  }
+
+  private def activateWallet(newState: ErgoWalletState): Unit = {
+    context.become(loadedWallet(newState))
+    pendingChainMessages = 0
+    unstashAll()
+  }
+
+  private def loadWallet(state: ErgoWalletState,
+                         requiredTip: Option[ModifierId] = None): Unit = {
+    val prepared = readWalletState(state)
+    requiredTip match {
+      case Some(tip) =>
+        if (historyReader.ifHolderAppliedFullTip(tip) {
+          activateWallet(prepared)
+        }.isEmpty) scheduleFullChainProbeRetry()
+      case None => activateWallet(prepared)
+    }
+  }
+
+  /** The digest height must describe its exact committed version, even before chain selection. */
+  protected[wallet] def registryCheckpoint(state: ErgoWalletState): Try[(ModifierId, Int)] =
+    state.registry.committedVersionAndDigest.flatMap { case (tip, digest) => Try {
+      if (tip == PreGenesisHeader.id) {
+        require(digest.height == WalletDigest.empty.height, "Pre-genesis wallet digest height is not empty")
+      } else {
+        require(digest.height > 0, "Wallet registry digest has no block height")
+        historyReader.heightOf(tip).foreach { tipHeight =>
+          require(digest.height == tipHeight, "Wallet registry digest height differs from its committed tip")
+        }
+      }
+      tip -> digest.height
+    }}
+
+  protected def probeSelectedFullChain(targetId: ModifierId,
+                                       targetHeight: Int,
+                                       cursor: Option[FullChainCursor]): FullChainProbe =
+    historyReader.appliedFullChainProbe(targetId, targetHeight, cursor)
+
+  /** Keep one history lock for at most one fixed-size ancestor batch. */
+  protected[wallet] def beginFullChainProbe(state: ErgoWalletState,
+                                  targetId: ModifierId,
+                                  targetHeight: Int)
+                                 (onSelected: ModifierId => Unit,
+                                  onOther: ModifierId => Unit): Unit = {
+    context.become(provingFullChain(state, targetId, targetHeight,
+      None, onSelected, onOther))
+    self ! ContinueFullChainProbe
+  }
+
+  protected[wallet] def scheduleFullChainProbeRetry(): Unit = {
+    if (!probeRetryScheduled) {
+      probeRetryScheduled = true
+      context.system.scheduler.scheduleOnce(2.seconds, self, RetryFullChainProbe)(
+        context.dispatcher, self
+      )
+    }
+  }
+
+  /** A later holder rollback supersedes a branch-point proof not yet committed. */
+  protected[wallet] def startSupersedingRollback(state: ErgoWalletState): Boolean =
+    if (retainedRollbackSourceHeight.nonEmpty) false
+    else supersedingRollback match {
+      case None => false
+      case Some(version) =>
+        supersedingRollback = None
+        if (state.registry.hasVersion(version)) verifyRetainedRollback(state, version)
+        else verifyMissingRollback(state, version)
+        true
+    }
+
+  private def provingFullChain(state: ErgoWalletState,
+                               targetId: ModifierId,
+                               targetHeight: Int,
+                               cursor: Option[FullChainCursor],
+                               onSelected: ModifierId => Unit,
+                               onOther: ModifierId => Unit): Receive = {
+    case RetryFullChainProbe =>
+      probeRetryScheduled = false
+      self ! ContinueFullChainProbe
+    case ContinueFullChainProbe =>
+      Try(probeSelectedFullChain(targetId, targetHeight, cursor)) match {
+        case Success(FullChainSelected(tip)) if historyReader.bestFullBlockIdOpt.contains(tip) =>
+          if (!startSupersedingRollback(state)) onSelected(tip)
+        case Success(FullChainOther(tip)) if historyReader.bestFullBlockIdOpt.contains(tip) =>
+          if (!startSupersedingRollback(state)) onOther(tip)
+        case Success(FullChainPending(next)) =>
+          context.become(provingFullChain(state, targetId, targetHeight,
+            Some(next), onSelected, onOther))
+          self ! ContinueFullChainProbe
+        case Success(FullChainUnknown) =>
+          context.become(provingFullChain(state, targetId, targetHeight,
+            None, onSelected, onOther))
+          scheduleFullChainProbeRetry()
+        case Failure(t) =>
+          log.warn("Selected full-chain proof is temporarily unavailable", t)
+          scheduleFullChainProbeRetry()
+        case _ =>
+          context.become(provingFullChain(state, targetId, targetHeight,
+            None, onSelected, onOther))
+          self ! ContinueFullChainProbe
+      }
+    case _: ChangedHistory =>
+      // A header-only update does not invalidate ancestry below the same full tip.
+      val retainedCursor = cursor.filter { current =>
+        Try(historyReader.bestFullBlockIdOpt.contains(current.fullTipId)).getOrElse(false)
+      }
+      context.become(provingFullChain(state, targetId, targetHeight,
+        retainedCursor, onSelected, onOther))
+      self ! ContinueFullChainProbe
+    case Rollback(version) =>
+      supersedingRollback = Some(version)
+    case _: ChangedState | _: ChangedMempool | _: ScanOffChain | _: ScanOnChain |
+         _: ScanInThePast =>
+      deferChainUpdate(state)
+    case msg =>
+      quarantinedWallet(state,
+        new IllegalStateException("Wallet is waiting for selected full-chain proof"))(msg)
+  }
+
+  private def deferChainUpdate(state: ErgoWalletState): Unit = {
+    if (pendingChainMessages < 256) {
+      pendingChainMessages += 1
+      stash()
+    } else {
+      log.error("Wallet full-chain proof has deferred too many chain updates")
+      context.become(quarantinedWallet(state,
+        new IllegalStateException("Wallet full-chain proof could not keep up with chain updates")))
+      pendingChainMessages = 0
+      unstashAll()
+      ErgoApp.shutdownSystem()(context.system)
+    }
+  }
+
+  /** A rollback target can be superseded before its ancestry proof completes.
+    * Keep the wallet inaccessible without writing an irreversible fork marker;
+    * the holder's next rollback supplies the current branch point.
+    */
+  protected[wallet] def awaitSupersedingRollback(state: ErgoWalletState, detail: String): Unit = {
+    log.warn(detail)
+    val reason = new IllegalStateException(detail)
+    context.become(waitingForSelectedRollback(state, reason))
+  }
+
+  private def waitingForSelectedRollback(state: ErgoWalletState, reason: Throwable): Receive = {
+    case Rollback(version) =>
+      if (state.registry.hasVersion(version)) verifyRetainedRollback(state, version)
+      else verifyMissingRollback(state, version)
+    case _: ChangedState | _: ChangedMempool | _: ScanOffChain | _: ScanOnChain |
+         _: ScanInThePast => deferChainUpdate(state)
+    case _: ChangedHistory => ()
+    case msg => quarantinedWallet(state, reason)(msg)
+  }
+
+  protected[wallet] def awaitRollbackHeader(state: ErgoWalletState,
+                                  version: VersionTag,
+                                  retained: Boolean): Receive = {
+    case RetryFullChainProbe =>
+      probeRetryScheduled = false
+      self ! ContinueFullChainProbe
+    case ContinueFullChainProbe =>
+      val branchPoint = org.ergoplatform.core.versionToId(version)
+      if (historyReader.heightOf(branchPoint).nonEmpty) {
+        if (retained) verifyRetainedRollback(state, version)
+        else verifyMissingRollback(state, version)
+      } else {
+        scheduleFullChainProbeRetry()
+      }
+    case _: ChangedHistory => self ! ContinueFullChainProbe
+    case Rollback(version) =>
+      supersedingRollback = Some(version)
+      startSupersedingRollback(state)
+    case _: ChangedState | _: ChangedMempool | _: ScanOffChain | _: ScanOnChain |
+         _: ScanInThePast => deferChainUpdate(state)
+    case msg =>
+      quarantinedWallet(state,
+        new IllegalStateException("Wallet is waiting for rollback-header authority"))(msg)
+  }
+
+  private def activeWallet(state: ErgoWalletState): Receive = {
+    case _: ChangedHistory | ContinueFullChainProbe | RetryFullChainProbe => ()
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
       ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
@@ -286,20 +553,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case Rollback(version: VersionTag) =>
-      // wallet must be initialized for wallet registry rollback
-      if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {
-        state.registry.rollback(version) match {
-          case Failure(t) =>
-            val errorMsg = s"Failed to rollback wallet registry to version $version due to: ${t.getMessage}"
-            log.error(errorMsg, t)
-            context.become(loadedWallet(state.copy(error = Some(errorMsg))))
-          case _: Success[Unit] =>
-            // Reset outputs Bloom filter to have it initialized again on next block scanned
-            // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
-            context.become(loadedWallet(state.copy(outputsFilter = None)))
-        }
+      if (!state.registry.hasVersion(version)) {
+        verifyMissingRollback(state, version)
       } else {
-        log.warn("Avoiding rollback as wallet is not initialized yet")
+        verifyRetainedRollback(state, version)
       }
 
     /* WALLET COMMANDS */

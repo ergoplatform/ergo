@@ -178,6 +178,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val nipopowProviders = mutable.Set[ConnectedPeer]()
 
   /**
+    * For an input block requested from one peer, another peer that announced it while the request was open (the Inv
+    * filter drops that announcement). A delivery check that finds the block missing re-requests it from this peer
+    * rather than from the one that did not deliver. At most one per id; cleared when the id is released, on a retry,
+    * when the alternate disconnects, when an ordering block is applied, and on `ChainIsStuck`.
+    */
+  private val inputBlockAlternates = mutable.Map[ModifierId, ConnectedPeer]()
+
+  private val MaxInputBlockAlternates = 1000
+
+  /**
     * How many peers should have a utxo set snapshot to start downloading it
     */
   private lazy val MinSnapshots = settings.nodeSettings.utxoSettings.p2pUtxoSnapshots
@@ -1191,7 +1201,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         } else {
           log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+          if (modifierTypeId == InputBlockTypeId.value) {
+            rememberInputBlockAlternates(invData.ids, peer)
+          }
+          invData.ids.filter { mid =>
+            deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown &&
+              // input blocks are not kept in the modifier store: an announced one this node already holds
+              // (e.g. its own, announced back by a relaying peer) is not requested again
+              !(modifierTypeId == InputBlockTypeId.value && hr.getInputBlock(mid).isDefined)
+          }
         }
     }
 
@@ -1415,6 +1433,50 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
+    * Input blocks are never set `Held` (they are not kept in the modifier store), so a `Received` or `Requested`
+    * entry for one would otherwise stay until a `ChainIsStuck` reset. Once the input block is stored, nothing is
+    * left to track: the Inv filter skips input blocks this node holds, so `Unknown` cannot lead to a re-request.
+    */
+  private def releaseInputBlockTracking(id: ModifierId): Unit = {
+    inputBlockAlternates.remove(id)
+    if (deliveryTracker.status(id, InputBlockTypeId.value, Seq.empty) != ModifiersStatus.Unknown) {
+      deliveryTracker.setUnknown(id, InputBlockTypeId.value)
+    }
+  }
+
+  /**
+    * Remember `peer` as the alternate source of each announced input block that is currently requested from
+    * another peer (see `inputBlockAlternates`).
+    */
+  private def rememberInputBlockAlternates(ids: Seq[ModifierId], peer: ConnectedPeer): Unit = {
+    ids.foreach { id =>
+      deliveryTracker.getRequestedInfo(InputBlockTypeId.value, id) match {
+        case Some(info) if info.peer != peer &&
+                           !inputBlockAlternates.contains(id) &&
+                           inputBlockAlternates.size < MaxInputBlockAlternates =>
+          inputBlockAlternates.put(id, peer)
+        case _ => ()
+      }
+    }
+  }
+
+  /**
+    * Peers an input block (or its id) is sent to: those supporting sub-blocks, in UTXO mode, and within two blocks
+    * of this node's full-block height. The peer height is the one tracked from its last sync message, which can lag
+    * a peer that is in fact at the tip (#2597).
+    */
+  private def inputBlockRecipients(historyReader: ErgoHistoryReader): Seq[ConnectedPeer] = {
+    syncTracker.statuses.filter { s =>
+      val peer = s._1
+      val peerHeight = s._2.height
+      SubBlocksFilter.condition(peer) &&
+        peer.mode.exists(_.stateType == StateType.Utxo) &&
+        peerHeight <= historyReader.fullBlockHeight + 2 &&
+        peerHeight >= historyReader.fullBlockHeight - 2
+    }.keys.toSeq
+  }
+
+  /**
    * Request an input block from a peer by its ID.
    *
    * This method sends a request to the specified peer to download an input block with the given ID.
@@ -1483,6 +1545,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         inputBlockInfo.header.height < hr.fullBlockHeight - 2) {
       //todo: change to .debug before release
       log.info(s"Ignoring input block at height ${inputBlockInfo.header.height}, our full block height is ${hr.fullBlockHeight} (gap > 2 blocks)")
+      clearRequestedIfFromSupplier(inputBlockInfo.id, InputBlockTypeId.value, remote)
       return
     }
 
@@ -1490,6 +1553,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Digest mode nodes cannot validate input blocks properly (validation is skipped when usrOpt is empty)
     if (usrOpt.isEmpty) {
       log.warn(s"Received input block but local node is in digest mode - input blocks cannot be validated in digest mode, ignoring")
+      clearRequestedIfFromSupplier(inputBlockInfo.id, InputBlockTypeId.value, remote)
       return
     }
 
@@ -1499,6 +1563,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     // Skip already known input blocks
     if (hr.getInputBlock(subBlockId).isDefined) {
       log.debug(s"Input block $subBlockId already known, ignoring")
+      // a copy requested before this one was stored (e.g. asked for after a relayed id while a push was in
+      // flight) was still delivered: the input block is held, so nothing is left to track
+      releaseInputBlockTracking(subBlockId)
       return
     }
 
@@ -1579,6 +1646,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
+        // delivered, so not also a non-delivery: the misbehaviour penalty is the one that applies
+        clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
         penalizeMisbehavingPeer(remote)
       }
     } else {
@@ -1592,6 +1661,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         // todo: make it debug before release
         log.info(s"On processing $subBlockId, downloading its parent and unknown ordering block $orderingId from $remote")
+        clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
 
         val hid = Header.modifierTypeId
         if (deliveryTracker.status(orderingId, hid, Seq(hr)) == ModifiersStatus.Unknown) {
@@ -1600,6 +1670,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       } else {
         log.info(s"Got sub-block for height ${subBlockHeader.height}, while height of our best full-block is ${hr.fullBlockHeight} : ${subBlockHeader.id}")
         // just ignore the subblock
+        clearRequestedIfFromSupplier(subBlockId, InputBlockTypeId.value, remote)
       }
     }
   }
@@ -1959,6 +2030,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * re-request modifier from a different random peer, if our node does not know a peer who have it
    */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
+    case CheckDelivery(_, modifierTypeId, modifierId)
+        if modifierTypeId == InputBlockTypeId.value && hr.getInputBlock(modifierId).isDefined =>
+      // delivered by another peer (or mined here) in the meantime: nothing to re-request, nobody to penalize
+      releaseInputBlockTracking(modifierId)
+
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
         // If transaction not delivered on time, we just forget about it.
@@ -1999,8 +2075,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                         modifierTypeId == OrderingBlockAnnouncementTypeId.value) {
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               if (modifierTypeId == InputBlockTypeId.value && checksDone < 2) {
-                log.info(s"re-requesting input block $modifierId")
-                requestInputBlock(modifierId, peer)
+                // another peer announced it while the request was open: ask that one instead
+                val retryPeer = inputBlockAlternates.remove(modifierId).getOrElse(peer)
+                log.info(s"re-requesting input block $modifierId from $retryPeer")
+                // tracked like any block section, so a further delivery check follows up on this peer
+                requestBlockSection(modifierTypeId, Seq(modifierId), retryPeer, checksDone)
               } else {
                 log.info(s"re-requesting input txs $modifierId")
                 hr.getInputBlock(modifierId).foreach { ibi =>
@@ -2074,6 +2153,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      inputBlockAlternates.retain { case (_, alternate) => alternate != connectedPeer }
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -2338,6 +2418,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (historyReader.fullBlockHeight > 0) {
         log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
         deliveryTracker.reset()
+        inputBlockAlternates.clear()
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")
       }
@@ -2346,8 +2427,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case NewBestInputBlock(Some(id), local) =>
       historyReader.getInputBlock(id) match {
         case Some(preIbi) =>
+          releaseInputBlockTracking(id)
+          val peers = inputBlockRecipients(historyReader)
           if (local) {
-            log.debug(s"Sending locally generated input block $id out")
+            log.debug(s"Sending locally generated input block $id to ${peers.size} peers")
 
             // we propagate input block with transactions immediately if it has no more than 3 transactions
             // todo: check number of transactions on retrieval
@@ -2357,19 +2440,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             } else {
               preIbi.copy(weakTxIds = None)
             }
-            val peers = syncTracker.statuses.filter { s =>
-              val peer = s._1
-              val peerHeight = s._2.height
-              // send input block to peers on same height and also supporting sub-blocks and in utxo mode
-              SubBlocksFilter.condition(peer) &&
-                peer.mode.exists(_.stateType == StateType.Utxo) &&
-                peerHeight <= historyReader.fullBlockHeight + 2 &&
-                peerHeight >= historyReader.fullBlockHeight - 2
-            }.keys.toSeq
             val msg = Message(InputBlockMessageSpec, Right(ibi), None)
             networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
-          } else {
-            // todo: send only id out
+          } else if (peers.nonEmpty) {
+            // an input block received from a peer: announce its id only (the `todo: send only id out` of 546eee98e),
+            // so it travels beyond the miner's own peers; a peer that lacks it requests it
+            // (processInv -> modifiersReq -> processInputBlockRequest). Unlike an ordering-block announcement, which
+            // is relayed on receipt, this runs once the input block is applied, so each hop adds its fetch and apply.
+            log.debug(s"Relaying input block $id to ${peers.size} peers")
+            val msg = Message(InvSpec, Right(InvData(InputBlockTypeId.value, Seq(id))), None)
+            networkControllerRef ! SendToNetwork(msg, SendToPeers(peers))
           }
         case None =>
           // shouldnt be there by input block processing logic
@@ -2377,8 +2457,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
 
-    // this signal is sent on ordering block application, nothing p2p layer should do
+    // this signal is sent on ordering block application: the input blocks of the finished slot need no delivery
+    // tracking any more (including stored ones that never became best), so the tracker holds at most one slot's worth
     case NewBestInputBlock(None, _) =>
+      val finished = deliveryTracker.fullInfo.received.filter(_._1 == InputBlockTypeId.value).flatMap(_._2.keys).toList
+      finished.foreach { id =>
+        deliveryTracker.setUnknown(id, InputBlockTypeId.value)
+      }
+      inputBlockAlternates.clear()
   }
 
   /** handlers of messages coming from peers */

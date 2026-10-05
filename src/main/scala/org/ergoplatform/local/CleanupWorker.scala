@@ -33,6 +33,11 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     log.info("Cleanup worker started")
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    log.error(s"Attempted cleanup worker restart due to ${reason.getMessage}", reason)
+    super.preRestart(reason, message)
+  }
+
   override def receive: Receive = {
     case RunCleanup(validator, mempool) =>
       val s = sender()
@@ -75,7 +80,7 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
 
     // Take into account other transactions from the pool.
     // This provides possibility to validate transactions which are spending off-chain outputs.
-    val state = validator.withUnconfirmedTransactions(allPoolTxs)
+    val state = validator.withTransactions(allPoolTxs)
 
     //internal loop function validating transactions, returns validated and invalidated transaction ids
     @tailrec
@@ -87,7 +92,8 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
       txs match {
         case head :: tail if costAcc < CostLimit =>
           val validationContext = state.stateContext.simplifiedUpcoming()
-          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
+          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost,
+                                  None, softFieldsAllowed = true) match { // todo: save soft fields status in UnconfTx
             case Success(txCost) =>
               val updTx = head.withCost(txCost)
               validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)

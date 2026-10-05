@@ -4,7 +4,9 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoSetSnapshotPersistence, UtxoStateReader}
 import org.ergoplatform.settings.RESTApiSettings
@@ -23,8 +25,11 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   private def getState: Future[ErgoStateReader] =
     (readersHolder ? GetReaders).mapTo[Readers].map(_.s)
 
-  private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
+  private def getStateAndPool: Future[(ErgoHistoryReader, ErgoStateReader, ErgoMemPoolReader)] =
+    (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.h, rs.s, rs.m))
+
+  private def inputBlockTransactions(history: ErgoHistoryReader): Seq[ErgoTransaction] =
+    history.bestInputBlocksChain().flatMap(id => history.getInputBlockTransactions(id).getOrElse(Seq.empty))
 
   override val route: Route = pathPrefix("utxo") {
     byId ~ serializedById ~ genesis ~ withPoolById ~ withPoolByIds ~ withPoolSerializedById ~ getBoxesBinaryProof ~ getSnapshotsInfo
@@ -32,8 +37,8 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
 
   def withPoolById: Route = (get & path("withPool" / "byId" / Segment)) { id =>
     ApiResponse(getStateAndPool.map {
-      case (usr: UtxoStateReader, mp) =>
-        usr.withMempool(mp).boxById(ADKey @@ Base16.decode(id).get)
+      case (history, usr: UtxoStateReader, mp) =>
+        usr.withMempoolAndInputBlocks(mp, inputBlockTransactions(history)).boxById(ADKey @@ Base16.decode(id).get)
       case _ => None
     })
   }
@@ -41,8 +46,8 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   def withPoolByIds: Route =
     (post & path("withPool" / "byIds") & entity(as[Seq[String]])) { ids =>
       ApiResponse(getStateAndPool.map {
-        case (usr: UtxoStateReader, mp) =>
-          ids.flatMap(id => usr.withMempool(mp).boxById(ADKey @@ Base16.decode(id).get))
+        case (history, usr: UtxoStateReader, mp) =>
+          ids.flatMap(id => usr.withMempoolAndInputBlocks(mp, inputBlockTransactions(history)).boxById(ADKey @@ Base16.decode(id).get))
         case _ => Seq.empty
       })
     }
@@ -51,8 +56,9 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     id =>
       ApiResponse(
         getStateAndPool.map {
-          case (usr: UtxoStateReader, mp) =>
-            usr.withMempool(mp).boxById(ADKey @@ Base16.decode(id).get).map { box =>
+          case (history, usr: UtxoStateReader, mp) =>
+            usr.withMempoolAndInputBlocks(mp, inputBlockTransactions(history))
+              .boxById(ADKey @@ Base16.decode(id).get).map { box =>
               val bytes    = ErgoBoxSerializer.toBytes(box)
               val boxBytes = Base16.encode(bytes)
               Map("boxId" -> id, "bytes" -> boxBytes)

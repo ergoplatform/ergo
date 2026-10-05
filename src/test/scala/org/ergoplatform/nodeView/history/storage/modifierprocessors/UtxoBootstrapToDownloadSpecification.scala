@@ -93,7 +93,7 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     // headers chain is synced and the header is not too far back, still no block sections
     // must be downloaded before the UTXO set snapshot is applied
     val piBefore = history.append(freshHeader).get._2
-    piBefore.toDownload shouldBe Seq.empty
+    piBefore.toDownload shouldBe Map.empty
 
     // apply snapshot at freshHeader's height, so that full blocks downloading
     // starts from nextHeader

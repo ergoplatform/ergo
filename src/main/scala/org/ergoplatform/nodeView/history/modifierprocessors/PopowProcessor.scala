@@ -1,11 +1,11 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.local.{CorrectNipopowProofVerificationResult, NipopowProofVerificationResult, NipopowVerifier}
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProverWithDbAlgs, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
+import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, NipopowProofSerializer, NipopowProverWithDbAlgs, PoPowHeader, PoPowParams}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{ChainSettings, NipopowSettings}

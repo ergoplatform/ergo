@@ -205,7 +205,9 @@ class WalletProvisionalFullTipSpec extends ErgoCorePropertyTest with WalletTestO
       // The wallet commits A2 through the holder. B2 spends the same A1 output on a fork.
       val secondATx = await(wallet.generateTransaction(Seq(payment(TrueTree, initialBalance / 2)))).get
       val secondA = makeNextBlock(getUtxoState, Seq(secondATx))
-      val secondBTx = await(wallet.generateTransaction(Seq(payment(FalseTree, initialBalance / 3)))).get
+      val secondBTx = await(wallet.generateTransaction(Seq(
+        payment(FalseTree, initialBalance / 3), payment(TrueTree, initialBalance / 4)
+      ))).get
       val (forkUtxo, boxHolder) = ValidBlocksGenerators.createUtxoState(w.settings)
       val forkAtFirst = WrappedUtxoState(forkUtxo, boxHolder, w.settings)
         .applyModifier(first)(_ => ()).get
@@ -318,6 +320,60 @@ class WalletProvisionalFullTipSpec extends ErgoCorePropertyTest with WalletTestO
       } finally {
         reopened.registry.close()
         reopened.storage.close()
+      }
+
+      // Continue the same history through a real holder reorganization. The
+      // old B2 validity marker must not become authority until the holder has
+      // rolled back A2 and installed the selected B branch.
+      val transitioning = openActor()
+      val transitioningReader = new ErgoWalletReader {
+        override val walletActor = transitioning
+      }
+      val transitioningProbe = TestProbe()(w.actorSystem)
+      transitioningProbe.watch(transitioning)
+      try {
+        await(transitioningReader.getWalletStatus).error should not be None
+        getCurrentState.version shouldBe idToVersion(secondA.id)
+        history.appliedFullChainProbe(secondA.id, secondA.height) shouldBe FullChainUnknown
+
+        val externalB = secondBTx.outputs.find(_.ergoTree == TrueTree).get
+        val validThirdBTx = ErgoNodeTransactionGenerators.validTransactionFromBoxes(
+          IndexedSeq(externalB), stateCtxOpt = Some(forkAtSecondB.stateContext)
+        )
+        val validThirdB = ValidBlocksGenerators.validFullBlock(
+          Some(secondB), forkAtSecondB, Seq(validThirdBTx)
+        )
+        validThirdB.id should not equal thirdB.id
+        val forkAtValidThirdB = forkAtSecondB.applyModifier(validThirdB)(_ => ()).get
+        val externalB3 = validThirdBTx.outputs.find(_.ergoTree == TrueTree).get
+        val validFourthBTx = ErgoNodeTransactionGenerators.validTransactionFromBoxes(
+          IndexedSeq(externalB3), stateCtxOpt = Some(forkAtValidThirdB.stateContext)
+        )
+        val validFourthB = ValidBlocksGenerators.validFullBlock(
+          Some(validThirdB), forkAtValidThirdB, Seq(validFourthBTx)
+        )
+        val forkAtValidFourthB = forkAtValidThirdB.applyModifier(validFourthB)(_ => ()).get
+        applyBlock(validThirdB) shouldBe 'success
+        applyBlock(validFourthB) shouldBe 'success
+
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          getCurrentState.version shouldBe idToVersion(validFourthB.id)
+          getCurrentState.rootDigest.sameElements(forkAtValidFourthB.rootDigest) shouldBe true
+          history.appliedFullChainProbe(secondA.id, secondA.height) shouldBe
+            FullChainOther(validFourthB.id)
+        }
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          await(transitioningReader.getWalletStatus).error.value.toLowerCase should include("quarantine")
+        }
+      } finally {
+        transitioningProbe.send(transitioning, CloseWallet)
+        transitioningProbe.expectTerminated(transitioning, 5.seconds)
+      }
+      val afterAppliedFork = ErgoWalletState.initial(actorSettings, parameters).get
+      try afterAppliedFork.storage.deepForkQuarantine.get shouldBe true
+      finally {
+        afterAppliedFork.registry.close()
+        afterAppliedFork.storage.close()
       }
     }
   }

@@ -167,6 +167,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * ergo.node.utxo.p2pUtxoSnapshots setting)
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
+  private val disconnectedSnapshotHandlers =
+    java.util.Collections.newSetFromMap(new java.util.WeakHashMap[ActorRef, java.lang.Boolean]())
 
   /**
    * Peers provided nipopow poofs
@@ -928,16 +930,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def processSnapshotsInfo(hr: ErgoHistory,
                                    snapshotsInfo: SnapshotsInfo,
                                    remote: ConnectedPeer): Unit = {
+    if (disconnectedSnapshotHandlers.contains(remote.handlerRef)) return
     snapshotsInfo.availableManifests.foreach { case (height, manifestId: ManifestId) =>
       val encodedManifestId = ModifierId @@ Algos.encode(manifestId)
       val ownId = hr.bestHeaderAtHeight(height).map(_.stateRoot).map(stateDigest => splitDigest(stateDigest)._1)
       if (ownId.getOrElse(Array.emptyByteArray).sameElements(manifestId)) {
         log.debug(s"Discovered manifest $encodedManifestId for height $height from $remote")
-        // add manifest to available manifests dictionary if it is not written there yet
+        // Keep at most one offer per remote address, bound to its current connection.
         val existingOffers = availableManifests.getOrElse(encodedManifestId, (height -> Seq.empty))
-        if (!existingOffers._2.contains(remote)) {
+        val sameAddressOffers = existingOffers._2.filter(_.connectionId.remoteAddress == remote.connectionId.remoteAddress)
+        val alreadyOffered = sameAddressOffers.exists(peer =>
+          peer.connectionId == remote.connectionId && peer.handlerRef == remote.handlerRef)
+        if (!alreadyOffered) {
           log.info(s"Found new manifest ${Algos.encode(manifestId)} for height $height at $remote")
-          availableManifests.put(encodedManifestId, height -> (existingOffers._2 :+ remote))
+          val otherOffers = existingOffers._2.filterNot(_.connectionId.remoteAddress == remote.connectionId.remoteAddress)
+          availableManifests.put(encodedManifestId, height -> (otherOffers :+ remote))
         } else {
           log.warn(s"Double manifest declaration for $manifestId from $remote")
         }
@@ -1359,6 +1366,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      disconnectedSnapshotHandlers.add(connectedPeer.handlerRef)
+      availableManifests.toVector.foreach { case (manifestId, (height, peers)) =>
+        val remaining = peers.filterNot(peer =>
+          peer.connectionId == connectedPeer.connectionId && peer.handlerRef == connectedPeer.handlerRef)
+        if (remaining.isEmpty) availableManifests -= manifestId
+        else if (remaining.size != peers.size) availableManifests.put(manifestId, height -> remaining)
+      }
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {

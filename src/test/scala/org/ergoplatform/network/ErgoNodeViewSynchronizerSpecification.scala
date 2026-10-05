@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSy
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
@@ -22,7 +23,9 @@ import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import scorex.crypto.hash.Digest32
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
@@ -32,6 +35,7 @@ import scorex.testkit.utils.AkkaFixture
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
+import java.net.InetSocketAddress
 
 class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   with Matchers
@@ -209,7 +213,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     * Fixture for UTXO set snapshot bootstrap tests: synchronizer and history are built with
     * `utxoBootstrap` enabled (or disabled, for control tests), history contains headers only.
     */
-  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean) extends AkkaFixture {
+  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean,
+                                         isolatedHistory: Boolean = false) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
@@ -223,7 +228,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
 
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef = if (isolatedHistory) {
+      TestProbe("SnapshotHolderProbe").ref
+    } else {
+      system.actorOf(Props(new NodeViewHolderMock))
+    }
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -255,8 +264,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
   }
 
-  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
-    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap)
+  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean,
+                                       isolatedHistory: Boolean = false)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
+    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap, isolatedHistory)
     try {
       testCode(fixture)
     }
@@ -273,6 +283,104 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
           invData.typeId == typeId && invData.ids.contains(id)
         }
       case _ => false
+    }
+  }
+
+  property("snapshot manifest requests use current connections after both providers reconnect") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val height = ctx.chain.last.height
+      val manifestId = Digest32 @@ splitDigest(ctx.chain.last.stateRoot)._1
+      val snapshotsInfo = new SnapshotsInfo(Map(height -> manifestId))
+      val bytes = SnapshotsInfoSpec.toBytes(snapshotsInfo)
+      val secondOldHandler = TestProbe("SecondOldSnapshotHandler")
+      val secondAddress = new InetSocketAddress("127.0.0.2", 28444)
+      peer.connectionId.remoteAddress should not be secondAddress
+      val secondOld = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = secondAddress),
+        handlerRef = secondOldHandler.ref)
+      val firstNewHandler = TestProbe("FirstNewSnapshotHandler")
+      val secondNewHandler = TestProbe("SecondNewSnapshotHandler")
+      val firstNew = peer.copy(handlerRef = firstNewHandler.ref)
+      val secondNew = secondOld.copy(handlerRef = secondNewHandler.ref)
+
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(peer))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondOld))
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }
+
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      synchronizerMockRef ! DisconnectedPeer(secondOld)
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstNew))
+      // A reply already queued by the retired handler must not replace the new offer.
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(peer))
+      ncProbe.expectNoMessage(300.millis)
+
+      // Repeated checks sample the actual outbound selector, not only the stored count.
+      (1 to 24).foreach { _ =>
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondNew))
+        val nextRequest = ncProbe.fishForMessage(3.seconds) {
+          case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        val chosenPeer = nextRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+        Set(firstNewHandler.ref, secondNewHandler.ref) should contain(chosenPeer.handlerRef)
+      }
+    }
+  }
+
+  property("snapshot manifest offers survive delayed disconnects of replaced connections") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val height = ctx.chain.last.height
+      val manifestId = Digest32 @@ splitDigest(ctx.chain.last.stateRoot)._1
+      val bytes = SnapshotsInfoSpec.toBytes(new SnapshotsInfo(Map(height -> manifestId)))
+      val secondAddress = new InetSocketAddress("127.0.0.2", 28444)
+      peer.connectionId.remoteAddress should not be secondAddress
+      val secondOldHandler = TestProbe("SecondOldSnapshotHandler")
+      val secondOld = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = secondAddress),
+        handlerRef = secondOldHandler.ref)
+      val firstNewHandler = TestProbe("FirstNewSnapshotHandler")
+      val secondNewHandler = TestProbe("SecondNewSnapshotHandler")
+      val firstNew = peer.copy(handlerRef = firstNewHandler.ref)
+      val secondNew = secondOld.copy(handlerRef = secondNewHandler.ref)
+
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(peer))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondOld))
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }
+
+      // New handlers replace both old offers before the old disconnect events arrive.
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstNew))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondNew))
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }
+      val afterReplacement = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val replacementPeer = afterReplacement.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+      Set(firstNewHandler.ref, secondNewHandler.ref) should contain(replacementPeer.handlerRef)
+
+      // A delayed disconnect for the retired handlers must not remove their replacements.
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      synchronizerMockRef ! DisconnectedPeer(secondOld)
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstNew))
+      val requestAfterLateDisconnect = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val peerAfterLateDisconnect = requestAfterLateDisconnect.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+      Set(firstNewHandler.ref, secondNewHandler.ref) should contain(peerAfterLateDisconnect.handlerRef)
     }
   }
 

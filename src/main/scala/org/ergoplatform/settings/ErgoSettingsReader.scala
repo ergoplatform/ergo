@@ -55,7 +55,8 @@ object ErgoSettingsReader extends ScorexLogging
         scorexSettings,
         walletSettings,
         cacheSettings,
-        votingTargets
+        votingTargets,
+        config.as[MatrixSettings](s"$configPath.node.matrix")
       ),
       desiredNetworkTypeOpt
     )

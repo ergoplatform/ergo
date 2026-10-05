@@ -14,6 +14,7 @@ import org.ergoplatform.network.message.{
   RequestModifierSpec
 }
 import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.PenaltyType
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{
   ChainIsStuck,
   GetNodeViewChanges,
@@ -28,7 +29,7 @@ import org.ergoplatform.utils.generators.ChainGenerator._
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import scorex.core.network.{ConnectedPeer, ConnectionId, DeliveryTracker, ModifiersStatus, Outgoing}
 import scorex.testkit.utils.AkkaFixture
 import scorex.util.ModifierId
@@ -394,6 +395,84 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
         CheckDelivery(silentPeer, txType, transactions.head.id, activeAttempt))
       sendInv(viewHolderProbe, synchronizer, responsivePeer, Seq(transactions(2).id))
       expectRequest(networkProbe, Seq(transactions(2).id))
+    } finally {
+      Await.result(system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("a malformed reply from a replaced handler preserves the new request and its budget") {
+    val fixture = new AkkaFixture
+
+    implicit val system: ActorSystem = fixture.system
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    try {
+      val mainnetCostSettings = settings.copy(
+        nodeSettings = settings.nodeSettings.copy(maxTransactionCost = 4900000)
+      )
+      val history = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val tracker = DeliveryTracker.empty(mainnetCostSettings)
+      val networkProbe = TestProbe()
+      val viewHolderProbe = TestProbe()
+      val oldHandler = TestProbe()
+      val newHandler = TestProbe()
+      val unrelatedHandler = TestProbe()
+      val oldPeer = peer(23601, oldHandler.ref)
+      val replacementPeer = peer(23601, newHandler.ref)
+      val unrelatedPeer = peer(23602, unrelatedHandler.ref)
+      oldPeer shouldBe replacementPeer // ConnectedPeer equality ignores the handler.
+      val transactions = Vector.fill(3)(validErgoTransactionGenTemplate(0, 0, maxInputs = 1).sample.get._2)
+      transactions.map(_.id).distinct.size shouldBe 3
+
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        networkProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        mainnetCostSettings,
+        ErgoSyncTracker(mainnetCostSettings.scorexSettings.network),
+        tracker
+      )))
+      viewHolderProbe.expectMsgType[GetNodeViewChanges]
+      viewHolderProbe.send(synchronizer, ChangedHistory(history))
+      viewHolderProbe.send(synchronizer, ChangedMempool(ErgoMemPool.empty(mainnetCostSettings)))
+
+      val txType = ErgoTransaction.modifierTypeId
+      sendInv(viewHolderProbe, synchronizer, oldPeer, Seq(transactions.head.id))
+      expectRequest(networkProbe, Seq(transactions.head.id))
+      viewHolderProbe.awaitCond(tracker.getRequestedInfo(txType, transactions.head.id).isDefined,
+        3.seconds)
+      val oldAttempt = tracker.getRequestedInfo(txType, transactions.head.id).get.requestId
+      viewHolderProbe.send(synchronizer,
+        CheckDelivery(oldPeer, txType, transactions.head.id, oldAttempt))
+      sendInv(viewHolderProbe, synchronizer, replacementPeer, Seq(transactions.head.id))
+      expectRequest(networkProbe, Seq(transactions.head.id))
+      viewHolderProbe.awaitCond(tracker.getRequestedInfo(txType, transactions.head.id)
+        .exists(_.peer.handlerRef == newHandler.ref), 3.seconds)
+      val replacementAttempt = tracker.getRequestedInfo(txType, transactions.head.id).get.requestId
+      replacementAttempt should not be oldAttempt
+
+      sendInv(viewHolderProbe, synchronizer, unrelatedPeer, Seq(transactions(1).id))
+      expectRequest(networkProbe, Seq(transactions(1).id))
+      sendInv(viewHolderProbe, synchronizer, unrelatedPeer, Seq(transactions(2).id))
+      networkProbe.expectNoMessage(150.millis)
+
+      val malformed = ModifiersData(txType, Map(transactions.head.id -> Array.emptyByteArray))
+      viewHolderProbe.send(synchronizer,
+        Message(ModifiersSpec, Left(ModifiersSpec.toBytes(malformed)), Some(oldPeer)))
+      networkProbe.expectMsg(PenalizePeer(oldPeer.connectionId.remoteAddress,
+        PenaltyType.MisbehaviorPenalty))
+      tracker.getRequestedInfo(txType, transactions.head.id)
+        .map(_.requestId) shouldBe Some(replacementAttempt)
+      tracker.getRequestedInfo(txType, transactions.head.id)
+        .map(_.peer.handlerRef) shouldBe Some(newHandler.ref)
+
+      sendInv(viewHolderProbe, synchronizer, unrelatedPeer, Seq(transactions(2).id))
+      networkProbe.expectNoMessage(150.millis)
     } finally {
       Await.result(system.terminate(), Duration.Inf)
     }

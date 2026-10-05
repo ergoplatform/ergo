@@ -737,10 +737,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def authenticatesTransactionId(id: ModifierId, bytes: Array[Byte]): Boolean =
+    bytes.length <= settings.nodeSettings.maxTransactionSize &&
+      VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(
+        ErgoTransactionSerializer.parseBytesTry(bytes)).toOption.exists(_.id == id)
+
   private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
                                      mp: ErgoMemPool,
                                      remote: ConnectedPeer): Unit = {
-    val admitted = requestedModifiers.filter { case (id, _) =>
+    val admitted = requestedModifiers.filter { case (id, bytes) =>
       txReservations.get(id) match {
         case Some(_) if mp.contains(id) =>
           deliveryTracker.setHeld(id, ErgoTransaction.modifierTypeId)
@@ -748,14 +753,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           false
         case Some(reservation) =>
           // An announced transaction may arrive from a different peer. Charge the actual sender.
-          if (reservation.peer == remote || canTransferTxReservation(remote)) {
+          val sameConnection = reservation.peer.connectionId == remote.connectionId &&
+            reservation.peer.handlerRef == remote.handlerRef
+          if (reservation.peer != remote && !canTransferTxReservation(remote)) {
+            false
+          } else if (!sameConnection && !authenticatesTransactionId(id, bytes)) {
+            // A bad reply from another connection cannot consume the active request or its budget.
+            penalizeMisbehavingPeer(remote)
+            false
+          } else {
             deliveryTracker.setReceived(id, ErgoTransaction.modifierTypeId, remote)
             if (deliveryTracker.status(id, ErgoTransaction.modifierTypeId, Seq.empty) ==
               ModifiersStatus.Received) {
               txReservations.update(id, TxReservation(remote, received = true))
               true
             } else false
-          } else false
+          }
         case None => false
       }
     }

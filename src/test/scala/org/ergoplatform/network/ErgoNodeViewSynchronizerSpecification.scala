@@ -1,6 +1,6 @@
 package org.ergoplatform.network
 
-import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
+import akka.actor.{ActorIdentity, ActorRef, ActorSystem, Cancellable, Identify, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -10,7 +10,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{SnapshotTestAccess, StateType, UtxoState}
 import org.ergoplatform.nodeView.state.SnapshotsInfo
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
@@ -28,6 +28,7 @@ import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.serialization.ManifestSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.testkit.utils.AkkaFixture
@@ -275,6 +276,17 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  private def appendSnapshotHeader(ctx: UtxoBootstrapSynchronizerFixture, state: UtxoState): Int = {
+    val parent = ctx.chain.last
+    val header = powScheme.prove(
+      Some(parent), Header.InitialVersion, settings.chainSettings.initialNBits,
+      state.rootDigest, EmptyDigest32, EmptyDigest32, parent.timestamp + 120000L,
+      EmptyDigest32, Array.fill(3)(0: Byte), defaultMinerSecretNumber).get
+    ctx.updHistory.append(header).get
+    ctx.updHistory.bestHeaderAtHeight(header.height).map(_.id) shouldBe Some(header.id)
+    header.height
+  }
+
   private def requestForModifierSent(ncProbe: TestProbe, typeId: org.ergoplatform.modifiers.NetworkObjectTypeId.Value, id: scorex.util.ModifierId): Unit = {
     ncProbe.fishForMessage(3 seconds) {
       case stn: SendToNetwork =>
@@ -381,6 +393,421 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }.asInstanceOf[SendToNetwork]
       val peerAfterLateDisconnect = requestAfterLateDisconnect.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
       Set(firstNewHandler.ref, secondNewHandler.ref) should contain(peerAfterLateDisconnect.handlerRef)
+    }
+  }
+
+  property("snapshot chunk retry does not request a disconnected plan provider") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val boxes = boxesHolderGenOfSize(32 * 1024).sample.get
+      val state = createUtxoState(boxes, parameters)
+      val height = ctx.chain.last.height
+      val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+      val chunkId = scorex.util.bytesToId(manifest.subtreesIds.head)
+
+      updHistory.registerManifestToDownload(manifest, height, Seq(peer))
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(
+        _ => Cancellable.alreadyCancelled)
+      deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Requested
+      updHistory.utxoSetSnapshotDownloadPlan().get.peersToDownload.map(_.handlerRef) shouldBe Seq(peer.handlerRef)
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      synchronizerMockRef ! CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId)
+
+      val staleRequests = ncProbe.receiveWhile(2.seconds) { case message => message }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode => stn
+      }
+      staleRequests shouldBe empty
+
+      splitDigest(ctx.chain.last.stateRoot)._1.sameElements(manifest.id) shouldBe false
+      val newHandler = TestProbe("UnboundSnapshotHandler")
+      val replacement = peer.copy(handlerRef = newHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(replacement)
+      val discovery = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      discovery.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      val offer = new SnapshotsInfo(Map(height -> manifest.id))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(SnapshotsInfoSpec.toBytes(offer)), Some(replacement))
+      ncProbe.expectNoMessage(300.millis)
+      updHistory.utxoSetSnapshotDownloadPlan().get.peersToDownload shouldBe empty
+    }
+  }
+
+  property("snapshot chunks move to a surviving provider when the requested handler disconnects") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val manifest = SnapshotTestAccess.dumpManifest(state, ctx.chain.last.height, ManifestSerializer.MainnetManifestDepth)
+      val secondHandler = TestProbe("SurvivingSnapshotHandler")
+      val secondPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      updHistory.registerManifestToDownload(manifest, ctx.chain.last.height, Seq(peer, secondPeer))
+      val firstChunk = updHistory.getChunkIdsToDownload(1).head
+      val chunkId = bytesToId(firstChunk)
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(
+        _ => Cancellable.alreadyCancelled)
+
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      val reassigned = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstChunk)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      reassigned.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe secondHandler.ref
+      updHistory.utxoSetSnapshotDownloadPlan().get.peersToDownload.map(_.handlerRef) shouldBe Seq(secondHandler.ref)
+    }
+  }
+
+  property("snapshot chunk terminal delivery failure quarantines its plan slot") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val manifest = SnapshotTestAccess.dumpManifest(state, ctx.chain.last.height, ManifestSerializer.MainnetManifestDepth)
+      updHistory.registerManifestToDownload(manifest, ctx.chain.last.height, Seq(peer))
+      val chunkId = bytesToId(updHistory.getChunkIdsToDownload(1).head)
+      val maxChecks = settings.scorexSettings.network.maxDeliveryChecks
+      val checksBeforeTimeout = maxChecks - 2
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer, checksBeforeTimeout)(
+        _ => Cancellable.alreadyCancelled)
+
+      val secondHandler = TestProbe("KnownSnapshotHandler")
+      val secondPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(secondPeer)
+
+      synchronizerMockRef ! CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId)
+      val retried = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      retried.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe peer.handlerRef
+      eventually {
+        deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId).get.checks shouldBe
+          checksBeforeTimeout + 1
+      }
+
+      synchronizerMockRef ! CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId)
+      val discovery = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val queriedHandlers = discovery.sendingStrategy.asInstanceOf[scorex.core.network.SendToPeers]
+        .chosenPeers.map(_.handlerRef)
+      queriedHandlers should contain (secondHandler.ref)
+      queriedHandlers should not contain peer.handlerRef
+      eventually {
+        deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Unknown
+        val plan = updHistory.utxoSetSnapshotDownloadPlan().get
+        plan.downloadingChunks shouldBe 0
+        plan.quarantinedChunkIndices should contain (0)
+      }
+    }
+  }
+
+  property("terminal snapshot failure waits for a distinct offer while old in-flight chunks complete") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val height = appendSnapshotHeader(ctx, state)
+      val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+      val secondHandler = TestProbe("OldSurvivingSnapshotHandler")
+      val secondPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      updHistory.registerManifestToDownload(manifest, height, Seq(peer, secondPeer))
+      val chunks = updHistory.getChunkIdsToDownload(2)
+      val failedId = bytesToId(chunks.head)
+      val otherId = bytesToId(chunks(1))
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, failedId, peer,
+        settings.scorexSettings.network.maxDeliveryChecks)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, otherId, secondPeer)(
+        _ => Cancellable.alreadyCancelled)
+
+      synchronizerMockRef ! CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, failedId)
+      eventually {
+        val plan = updHistory.utxoSetSnapshotDownloadPlan().get
+        plan.peersToDownload.map(_.handlerRef) shouldBe Seq(secondHandler.ref)
+        plan.quarantinedChunkIndices should contain (0)
+        plan.downloadingChunks should be > 1
+      }
+      val freshRequests = ncProbe.receiveWhile(300.millis) { case message => message }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode => stn
+      }
+      freshRequests should not be empty
+      freshRequests.foreach { request =>
+        request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe secondHandler.ref
+        request.message.data.get.asInstanceOf[Array[Byte]].sameElements(chunks.head) shouldBe false
+      }
+
+      val barrier = TestProbe("QuarantinedChunkReplyBarrier")
+      barrier.send(synchronizerMockRef, ChangedState(state))
+      val otherReply = UtxoSnapshotChunkSpec.toBytes(state.getUtxoSnapshotChunkBytes(chunks(1)).get)
+      barrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec, Left(otherReply), Some(secondPeer)))
+      barrier.send(synchronizerMockRef, Identify("old-inflight"))
+      barrier.expectMsg(ActorIdentity("old-inflight", Some(synchronizerMockRef)))
+      val afterOther = updHistory.utxoSetSnapshotDownloadPlan().get
+      afterOther.downloadedChunkIds.take(2) shouldBe IndexedSeq(false, true)
+      afterOther.quarantinedChunkIndices should contain (0)
+      afterOther.downloadingChunks should be > 0
+
+      val failedReply = UtxoSnapshotChunkSpec.toBytes(state.getUtxoSnapshotChunkBytes(chunks.head).get)
+      barrier.send(synchronizerMockRef, CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, failedId))
+      barrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec, Left(failedReply), Some(peer)))
+      barrier.send(synchronizerMockRef, Identify("old-failed"))
+      barrier.expectMsg(ActorIdentity("old-failed", Some(synchronizerMockRef)))
+      updHistory.utxoSetSnapshotDownloadPlan().get.quarantinedChunkIndices should contain (0)
+      val premature = ncProbe.receiveWhile(300.millis) { case message => message }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode => stn
+      }
+      premature shouldBe empty
+
+      val newHandler = TestProbe("DistinctSnapshotHandler")
+      val newcomer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.3", 28445)),
+        handlerRef = newHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(newcomer)
+      val discovery = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      discovery.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+
+      val offer = new SnapshotsInfo(Map(height -> manifest.id))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(SnapshotsInfoSpec.toBytes(offer)), Some(newcomer))
+      val freshChunk = freshRequests.head.message.data.get.asInstanceOf[Array[Byte]]
+      val freshReply = UtxoSnapshotChunkSpec.toBytes(state.getUtxoSnapshotChunkBytes(Digest32 @@ freshChunk).get)
+      barrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec, Left(freshReply), Some(secondPeer)))
+      val resumed = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(chunks.head)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      resumed.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, failedId).get.checks shouldBe 0
+      updHistory.utxoSetSnapshotDownloadPlan().get.quarantinedChunkIndices shouldBe empty
+    }
+  }
+
+  property("snapshot chunk terminal failure discovers a later different-address provider") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val height = appendSnapshotHeader(ctx, state)
+      val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+      updHistory.registerManifestToDownload(manifest, height, Seq(peer))
+      val firstChunk = updHistory.getChunkIdsToDownload(1).head
+      val chunkId = bytesToId(firstChunk)
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer,
+        settings.scorexSettings.network.maxDeliveryChecks)(_ => Cancellable.alreadyCancelled)
+
+      synchronizerMockRef ! CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId)
+      eventually {
+        val plan = updHistory.utxoSetSnapshotDownloadPlan().get
+        plan.peersToDownload shouldBe empty
+        plan.downloadingChunks shouldBe 0
+        plan.quarantinedChunkIndices should contain (0)
+      }
+
+      val newHandler = TestProbe("LaterSnapshotHandler")
+      val newcomer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.3", 28445)),
+        handlerRef = newHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(newcomer)
+      val discovery = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      discovery.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+
+      val offer = new SnapshotsInfo(Map(height -> manifest.id))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(SnapshotsInfoSpec.toBytes(offer)), Some(newcomer))
+      val resumed = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstChunk)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      resumed.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId).get.checks shouldBe 0
+
+      val replyBytes = UtxoSnapshotChunkSpec.toBytes(state.getUtxoSnapshotChunkBytes(firstChunk).get)
+      val barrier = TestProbe("LaterProviderReplyBarrier")
+      barrier.send(synchronizerMockRef, ChangedState(state))
+      barrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec, Left(replyBytes), Some(newcomer)))
+      barrier.send(synchronizerMockRef, Identify("later-provider-reply"))
+      barrier.expectMsg(ActorIdentity("later-provider-reply", Some(synchronizerMockRef)))
+      updHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.head shouldBe true
+    }
+  }
+
+  property("snapshot chunk retry count survives handler replacement until terminal exhaustion") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val height = appendSnapshotHeader(ctx, state)
+      val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+      updHistory.registerManifestToDownload(manifest, height, Seq(peer))
+      val firstChunk = updHistory.getChunkIdsToDownload(1).head
+      val chunkId = bytesToId(firstChunk)
+      val maxChecks = settings.scorexSettings.network.maxDeliveryChecks
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer, maxChecks - 1)(
+        _ => Cancellable.alreadyCancelled)
+
+      val newHandler = TestProbe("BudgetReplacementHandler")
+      val replacement = peer.copy(handlerRef = newHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(replacement)
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }
+      val offer = new SnapshotsInfo(Map(height -> manifest.id))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(SnapshotsInfoSpec.toBytes(offer)), Some(replacement))
+      val migrated = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstChunk)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      migrated.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId).get.checks shouldBe maxChecks - 1
+
+      synchronizerMockRef ! CheckDelivery(replacement, UtxoSnapshotChunkTypeId.value, chunkId)
+      eventually {
+        deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Unknown
+        val plan = updHistory.utxoSetSnapshotDownloadPlan().get
+        plan.peersToDownload shouldBe empty
+        plan.downloadingChunks shouldBe 0
+        plan.quarantinedChunkIndices should contain (0)
+      }
+      val staleRequests = ncProbe.receiveWhile(300.millis) { case message => message }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstChunk) => stn
+      }
+      staleRequests shouldBe empty
+    }
+  }
+
+  property("snapshot chunk slots recover when every provider disconnects and a new handler offers the manifest") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val height = appendSnapshotHeader(ctx, state)
+      val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+      splitDigest(state.rootDigest)._1.sameElements(manifest.id) shouldBe true
+      updHistory.registerManifestToDownload(manifest, height, Seq(peer))
+      val firstChunk = updHistory.getChunkIdsToDownload(1).head
+      val chunkId = bytesToId(firstChunk)
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(
+        _ => Cancellable.alreadyCancelled)
+
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      eventually {
+        val plan = updHistory.utxoSetSnapshotDownloadPlan().get
+        plan.peersToDownload shouldBe empty
+        plan.downloadingChunks shouldBe 0
+        plan.reservedChunkIndices shouldBe empty
+      }
+      ncProbe.expectNoMessage(300.millis)
+
+      val newHandler = TestProbe("ReconnectedSnapshotHandler")
+      val reconnected = peer.copy(handlerRef = newHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(reconnected)
+      val discovery = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      discovery.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      val info = new SnapshotsInfo(Map(height -> manifest.id))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(SnapshotsInfoSpec.toBytes(info)), Some(reconnected))
+      val resumed = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstChunk)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      resumed.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      updHistory.utxoSetSnapshotDownloadPlan().get.downloadingChunks should be > 0
+
+      val chunkBytes = state.getUtxoSnapshotChunkBytes(firstChunk).get
+      val replyBytes = UtxoSnapshotChunkSpec.toBytes(chunkBytes)
+      val replyBarrier = TestProbe("SnapshotReplyBarrier")
+      replyBarrier.send(synchronizerMockRef, ChangedState(state))
+      replyBarrier.send(synchronizerMockRef,
+        CheckDelivery(peer, UtxoSnapshotChunkTypeId.value, chunkId))
+      replyBarrier.send(synchronizerMockRef, Identify("retired-timeout"))
+      replyBarrier.expectMsg(ActorIdentity("retired-timeout", Some(synchronizerMockRef)))
+      deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId).get.peer.handlerRef shouldBe
+        newHandler.ref
+      replyBarrier.send(synchronizerMockRef,
+        Message(UtxoSnapshotChunkSpec, Left(replyBytes), Some(peer)))
+      replyBarrier.send(synchronizerMockRef, Identify("retired-reply"))
+      replyBarrier.expectMsg(ActorIdentity("retired-reply", Some(synchronizerMockRef)))
+      deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Requested
+      updHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.head shouldBe false
+
+      replyBarrier.send(synchronizerMockRef,
+        Message(UtxoSnapshotChunkSpec, Left(replyBytes), Some(reconnected)))
+      replyBarrier.send(synchronizerMockRef, Identify("current-reply"))
+      replyBarrier.expectMsg(ActorIdentity("current-reply", Some(synchronizerMockRef)))
+      deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Unknown
+      updHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.head shouldBe true
+    }
+  }
+
+  property("snapshot chunk requests transfer when a same-address handler replaces a provider") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      val height = appendSnapshotHeader(ctx, state)
+      val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+      updHistory.registerManifestToDownload(manifest, height, Seq(peer))
+      val firstChunk = updHistory.getChunkIdsToDownload(1).head
+      val chunkId = bytesToId(firstChunk)
+      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(
+        _ => Cancellable.alreadyCancelled)
+
+      val newHandler = TestProbe("ReplacementSnapshotHandler")
+      val replacement = peer.copy(handlerRef = newHandler.ref)
+      synchronizerMockRef ! HandshakedPeer(replacement)
+      val discovery = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      discovery.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+      val info = new SnapshotsInfo(Map(height -> manifest.id))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(SnapshotsInfoSpec.toBytes(info)), Some(replacement))
+      val transferred = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstChunk)
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      transferred.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe newHandler.ref
+
+      val replyBytes = UtxoSnapshotChunkSpec.toBytes(state.getUtxoSnapshotChunkBytes(firstChunk).get)
+      val barrier = TestProbe("ReplacementReplyBarrier")
+      barrier.send(synchronizerMockRef, ChangedState(state))
+      barrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec, Left(replyBytes), Some(peer)))
+      barrier.send(synchronizerMockRef, Identify("old"))
+      barrier.expectMsg(ActorIdentity("old", Some(synchronizerMockRef)))
+      deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId).get.peer.handlerRef shouldBe newHandler.ref
+      updHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.head shouldBe false
+
+      barrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec, Left(replyBytes), Some(replacement)))
+      barrier.send(synchronizerMockRef, Identify("new"))
+      barrier.expectMsg(ActorIdentity("new", Some(synchronizerMockRef)))
+      updHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.head shouldBe true
+      synchronizerMockRef ! DisconnectedPeer(peer)
+      eventually {
+        updHistory.utxoSetSnapshotDownloadPlan().get.peersToDownload.map(_.handlerRef) shouldBe Seq(newHandler.ref)
+      }
     }
   }
 

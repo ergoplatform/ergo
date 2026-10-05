@@ -15,7 +15,6 @@ import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest,
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging}
-import spire.syntax.all.cfor
 
 import scala.util.{Failure, Random, Success, Try}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
@@ -76,7 +75,7 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     writeMinimalFullBlockHeight(height + 1)
   }
 
-  private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
+  protected def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {
     _cachedDownloadPlan = Some(plan)
   }
 
@@ -118,6 +117,62 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     }
   }
 
+  def removeSnapshotProvider(peer: ConnectedPeer): Unit = {
+    _cachedDownloadPlan.foreach { plan =>
+      val remaining = plan.peersToDownload.filterNot(p =>
+        p.connectionId == peer.connectionId && p.handlerRef == peer.handlerRef)
+      updateUtxoSetSnashotDownloadPlan(plan.copy(peersToDownload = remaining))
+    }
+  }
+
+  def addSnapshotProvider(manifestId: Digest32, height: Height, peer: ConnectedPeer): Boolean = {
+    _cachedDownloadPlan match {
+      case Some(plan) if plan.snapshotHeight == height && plan.id.sameElements(manifestId) =>
+        val otherAddresses = plan.peersToDownload.filterNot(
+          _.connectionId.remoteAddress == peer.connectionId.remoteAddress)
+        updateUtxoSetSnashotDownloadPlan(plan.copy(peersToDownload = otherAddresses :+ peer))
+        true
+      case _ => false
+    }
+  }
+
+  def releaseChunkDownload(chunkId: SubtreeId): Unit = {
+    _cachedDownloadPlan.foreach { plan =>
+      val released = plan.reservedChunkIndices.filter(idx => plan.expectedChunkIds(idx).sameElements(chunkId))
+      if (released.nonEmpty) {
+        val remaining = plan.reservedChunkIndices -- released
+        updateUtxoSetSnashotDownloadPlan(plan.copy(
+          reservedChunkIndices = remaining,
+          releasedChunkIndices = plan.releasedChunkIndices ++ released,
+          downloadingChunks = remaining.size))
+      }
+    }
+  }
+
+  def quarantineChunkDownload(chunkId: SubtreeId): Unit = {
+    _cachedDownloadPlan.foreach { plan =>
+      val quarantined = plan.reservedChunkIndices.filter(idx => plan.expectedChunkIds(idx).sameElements(chunkId))
+      if (quarantined.nonEmpty) {
+        val remaining = plan.reservedChunkIndices -- quarantined
+        updateUtxoSetSnashotDownloadPlan(plan.copy(
+          reservedChunkIndices = remaining,
+          quarantinedChunkIndices = plan.quarantinedChunkIndices ++ quarantined,
+          downloadingChunks = remaining.size))
+      }
+    }
+  }
+
+  def releaseQuarantinedChunk(chunkId: SubtreeId): Unit = {
+    _cachedDownloadPlan.foreach { plan =>
+      val released = plan.quarantinedChunkIndices.filter(idx => plan.expectedChunkIds(idx).sameElements(chunkId))
+      if (released.nonEmpty) {
+        updateUtxoSetSnashotDownloadPlan(plan.copy(
+          quarantinedChunkIndices = plan.quarantinedChunkIndices -- released,
+          releasedChunkIndices = plan.releasedChunkIndices ++ released))
+      }
+    }
+  }
+
   /**
     * @return up to `howMany` ids of UTXO set snapshot chunks to download
     */
@@ -125,19 +180,21 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
         val expected = plan.expectedChunkIds
-        val downloadIndex = plan.downloadedChunkIds.size
-        val toDownload = if (expected.size > downloadIndex) {
-          expected.slice(downloadIndex, downloadIndex + howMany)
-        } else {
-          IndexedSeq.empty
-        }
+        val retryIndices = plan.releasedChunkIndices.iterator.take(howMany).toVector
+        val freshStart = plan.downloadedChunkIds.size
+        val freshEnd = math.min(expected.size, freshStart + howMany - retryIndices.size)
+        val indices = retryIndices ++ (freshStart until freshEnd)
+        val toDownload = indices.map(expected)
         log.info(s"Downloaded or waiting ${plan.downloadedChunkIds.size} chunks out of ${expected.size}, downloading ${toDownload.size} more")
-        val newDownloaded = plan.downloadedChunkIds ++ toDownload.map(_ => false)
-        val newDownloading = plan.downloadingChunks + toDownload.size
+        val newDownloaded = plan.downloadedChunkIds ++
+          IndexedSeq.fill(freshEnd - freshStart)(false)
+        val newReserved = plan.reservedChunkIndices ++ indices
         val updPlan = plan.copy(
           latestUpdateTime = System.currentTimeMillis(),
           downloadedChunkIds = newDownloaded,
-          downloadingChunks = newDownloading
+          downloadingChunks = newReserved.size,
+          reservedChunkIndices = newReserved,
+          releasedChunkIndices = plan.releasedChunkIndices -- retryIndices
         )
         _cachedDownloadPlan = Some(updPlan)
         toDownload
@@ -154,15 +211,15 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   def registerDownloadedChunk(chunkId: Array[Byte], chunkSerialized: Array[Byte]): Unit = {
     utxoSetSnapshotDownloadPlan() match {
       case Some(plan) =>
-        cfor(0)(_ < plan.downloadedChunkIds.size, _ + 1) { idx =>
-          if (!plan.downloadedChunkIds(idx) && plan.expectedChunkIds(idx).sameElements(chunkId)) {
-            historyStorage.insert(chunkIdFromIndex(idx), chunkSerialized)
-            val updDownloaded = plan.downloadedChunkIds.updated(idx, true)
-            val updDownloading = plan.downloadingChunks - 1
-            val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(), downloadedChunkIds = updDownloaded, downloadingChunks = updDownloading)
-            updateUtxoSetSnashotDownloadPlan(updPlan)
-            return
-          }
+        val matching = plan.reservedChunkIndices.filter(idx => plan.expectedChunkIds(idx).sameElements(chunkId))
+        if (matching.nonEmpty) {
+          matching.foreach(idx => historyStorage.insert(chunkIdFromIndex(idx), chunkSerialized))
+          val updDownloaded = matching.foldLeft(plan.downloadedChunkIds)((ids, idx) => ids.updated(idx, true))
+          val remaining = plan.reservedChunkIndices -- matching
+          val updPlan = plan.copy(latestUpdateTime = System.currentTimeMillis(),
+            downloadedChunkIds = updDownloaded, downloadingChunks = remaining.size,
+            reservedChunkIndices = remaining)
+          updateUtxoSetSnashotDownloadPlan(updPlan)
         }
       case None =>
         log.warn(s"Chunk ${Algos.encode(chunkId)} downloaded but no download plan found")

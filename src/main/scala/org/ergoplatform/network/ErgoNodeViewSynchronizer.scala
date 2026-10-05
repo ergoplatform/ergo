@@ -166,12 +166,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     a.connectionId == b.connectionId && a.handlerRef == b.handlerRef
 
   private def enqueueDeferredTxInv(id: ModifierId, peer: ConnectedPeer): Unit = {
-    if (deferredTxInvs.contains(id)) {
-      // A later announcer may still have the transaction after the first peer disconnects.
-      deferredTxInvs.update(id, peer)
-    } else if (deferredTxInvs.size < MaxDeferredTxInvs &&
-      deferredTxInvs.valuesIterator.count(_ == peer) < MaxDeferredTxInvsPerPeer) {
-      deferredTxInvs.put(id, peer)
+    val peerEntries = deferredTxInvs.valuesIterator.count(isSameConnection(_, peer))
+    deferredTxInvs.get(id) match {
+      case Some(owner) if isSameConnection(owner, peer) => ()
+      // A later announcer may replace the owner, but cannot bypass its own quota.
+      case Some(_) if peerEntries < MaxDeferredTxInvsPerPeer => deferredTxInvs.update(id, peer)
+      case None if deferredTxInvs.size < MaxDeferredTxInvs &&
+        peerEntries < MaxDeferredTxInvsPerPeer => deferredTxInvs.put(id, peer)
+      case _ => ()
     }
   }
 

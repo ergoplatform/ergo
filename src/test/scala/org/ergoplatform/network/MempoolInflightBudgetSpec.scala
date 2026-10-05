@@ -580,6 +580,73 @@ class MempoolInflightBudgetSpec extends AnyPropSpec with Matchers {
     }
   }
 
+  property("reannouncing deferred ids cannot bypass the per-peer inventory cap") {
+    val fixture = new AkkaFixture
+    implicit val system: ActorSystem = fixture.system
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    try {
+      val mainnetCostSettings = settings.copy(
+        nodeSettings = settings.nodeSettings.copy(maxTransactionCost = 4900000)
+      )
+      val history = generateHistory(
+        verifyTransactions = true,
+        StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = -1
+      )
+      val tracker = DeliveryTracker.empty(mainnetCostSettings)
+      val networkProbe = TestProbe()
+      val viewHolderProbe = TestProbe()
+      val handlerProbe = TestProbe()
+      val reservingPeer = peer(23521, handlerProbe.ref)
+      val firstOwner = peer(23522, handlerProbe.ref)
+      val secondOwner = peer(23523, handlerProbe.ref)
+      val reannouncer = peer(23524, handlerProbe.ref)
+      val txGen = validErgoTransactionGenTemplate(0, 0, maxInputs = 1)
+      val transactions = Vector.fill(35)(txGen.sample.get._2)
+      transactions.map(_.id).distinct.size shouldBe transactions.size
+
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        networkProbe.ref,
+        viewHolderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        mainnetCostSettings,
+        ErgoSyncTracker(mainnetCostSettings.scorexSettings.network),
+        tracker
+      )))
+      viewHolderProbe.expectMsgType[GetNodeViewChanges]
+      viewHolderProbe.send(synchronizer, ChangedHistory(history))
+      viewHolderProbe.send(synchronizer, ChangedMempool(ErgoMemPool.empty(mainnetCostSettings)))
+
+      val txType = ErgoTransaction.modifierTypeId
+      val reserved = transactions.take(2).map(_.id)
+      val deferred = transactions.drop(2).map(_.id)
+      sendInv(viewHolderProbe, synchronizer, reservingPeer, reserved)
+      expectRequest(networkProbe, reserved)
+      sendInv(viewHolderProbe, synchronizer, firstOwner, deferred.take(32))
+      sendInv(viewHolderProbe, synchronizer, secondOwner, deferred.drop(32))
+      sendInv(viewHolderProbe, synchronizer, reannouncer, deferred)
+      viewHolderProbe.send(synchronizer, DisconnectedPeer(reannouncer))
+
+      viewHolderProbe.awaitCond(tracker.getRequestedInfo(txType, reserved.head).isDefined,
+        3.seconds)
+      val activeAttempt = tracker.getRequestedInfo(txType, reserved.head).get.requestId
+      viewHolderProbe.send(synchronizer,
+        CheckDelivery(reservingPeer, txType, reserved.head, activeAttempt))
+
+      val request = networkProbe.fishForMessage(3.seconds) {
+        case send: SendToNetwork =>
+          send.message.spec.messageCode == RequestModifierSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      request.message.data.get.asInstanceOf[InvData].ids shouldBe deferred.drop(32)
+      request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer shouldBe secondOwner
+    } finally {
+      Await.result(system.terminate(), Duration.Inf)
+    }
+  }
+
   property("a deferred peer with exhausted cost does not block another peer") {
     val fixture = new AkkaFixture
     implicit val system: ActorSystem = fixture.system

@@ -25,6 +25,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
+import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverManifest
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import scorex.crypto.hash.Digest32
 import scorex.util.bytesToId
@@ -36,6 +37,7 @@ import scorex.testkit.utils.AkkaFixture
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
+import scala.collection.mutable
 import scala.language.postfixOps
 import java.net.InetSocketAddress
 
@@ -646,6 +648,60 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }.asInstanceOf[SendToNetwork]
       reassigned.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe secondHandler.ref
       updHistory.utxoSetSnapshotDownloadPlan().get.peersToDownload.map(_.handlerRef) shouldBe Seq(secondHandler.ref)
+    }
+  }
+
+  property("equal snapshot chunk positions share one actor request and complete together") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val state = createUtxoState(boxesHolderGenOfSize(32 * 1024).sample.get, parameters)
+      try {
+        val height = ctx.chain.last.height
+        val manifest = SnapshotTestAccess.dumpManifest(state, height, ManifestSerializer.MainnetManifestDepth)
+        val repeated = manifest.subtreesIds.head
+        val chunkBytes = state.getUtxoSnapshotChunkBytes(repeated).get
+        val repeatedPlanView = new BatchAVLProverManifest[Digest32](manifest.root, manifest.rootHeight) {
+          override def subtreesIds: mutable.Buffer[Digest32] = mutable.Buffer(repeated, repeated)
+        }
+        updHistory.registerManifestToDownload(repeatedPlanView, height, Seq(peer))
+
+        val unrelatedHandler = TestProbe("UnrelatedSnapshotHandler")
+        val unrelatedPeer = peer.copy(handlerRef = unrelatedHandler.ref)
+        synchronizerMockRef ! DisconnectedPeer(unrelatedPeer)
+
+        val requests = ncProbe.receiveWhile(2.seconds, 200.millis) { case message => message }.collect {
+          case sent: SendToNetwork
+            if sent.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode &&
+              sent.message.data.get.asInstanceOf[Array[Byte]].sameElements(repeated) => sent
+        }
+        requests.size shouldBe 1
+
+        val reservedPlan = updHistory.utxoSetSnapshotDownloadPlan().get
+        reservedPlan.downloadedChunkIds shouldBe IndexedSeq(false, false)
+        reservedPlan.reservedChunkIndices shouldBe Set(0, 1)
+        reservedPlan.downloadingChunks shouldBe 2
+
+        val requestedPeer = requests.head.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+        deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, bytesToId(repeated)).get.peer shouldBe
+          requestedPeer
+        val replyBarrier = TestProbe("EqualSnapshotChunkReplyBarrier")
+        replyBarrier.send(synchronizerMockRef, ChangedState(state))
+        replyBarrier.send(synchronizerMockRef, Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(requestedPeer)))
+        replyBarrier.send(synchronizerMockRef, Identify("equal-chunk-reply"))
+        replyBarrier.expectMsg(ActorIdentity("equal-chunk-reply", Some(synchronizerMockRef)))
+
+        eventually {
+          val plan = updHistory.utxoSetSnapshotDownloadPlan().get
+          plan.downloadedChunkIds shouldBe IndexedSeq(true, true)
+          plan.reservedChunkIndices shouldBe empty
+          plan.downloadingChunks shouldBe 0
+          plan.fullyDownloaded shouldBe true
+        }
+      } finally {
+        state.closeStorage()
+      }
     }
   }
 

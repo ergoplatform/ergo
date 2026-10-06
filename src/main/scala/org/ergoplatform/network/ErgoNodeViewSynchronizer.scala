@@ -979,11 +979,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 val toRequest = hr.getChunkIdsToDownload(howMany = ChunksInParallelMin / ChunksPerPeer)
                 toRequest.foreach { subtreeId =>
                   val chunkId = ModifierId @@ Algos.encode(subtreeId)
-                  val chosen = if (exhaustedSnapshotChunks.contains(chunkId))
-                    currentSnapshotProviderForChunk(hr, chunkId) else Some(remote)
-                  chosen match {
-                    case Some(provider) => requestUtxoSetChunk(subtreeId, provider)
-                    case None => hr.quarantineChunkDownload(subtreeId)
+                  // Equal manifest positions share one content-addressed delivery.
+                  if (deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId).isEmpty) {
+                    val chosen = if (exhaustedSnapshotChunks.contains(chunkId))
+                      currentSnapshotProviderForChunk(hr, chunkId) else Some(remote)
+                    chosen match {
+                      case Some(provider) => requestUtxoSetChunk(subtreeId, provider)
+                      case None => hr.quarantineChunkDownload(subtreeId)
+                    }
                   }
                 }
               case None =>

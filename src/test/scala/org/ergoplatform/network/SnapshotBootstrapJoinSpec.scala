@@ -45,7 +45,9 @@ class SnapshotBootstrapJoinSpec extends ErgoCorePropertyTest
       val sourceDir = createTempDir
       val sourceSettings = fixture.settings.copy(directory = sourceDir.getAbsolutePath)
       val boxes = boxesHolderGenOfSize(9216).sample.get
-      val source = UtxoState.fromBoxHolder(boxes, None, new File(sourceDir, "state"),
+      val sourceStateDir = new File(sourceDir, "state")
+      sourceStateDir.mkdirs() shouldBe true
+      val source = UtxoState.fromBoxHolder(boxes, None, sourceStateDir,
         sourceSettings, parameters)
 
       try {

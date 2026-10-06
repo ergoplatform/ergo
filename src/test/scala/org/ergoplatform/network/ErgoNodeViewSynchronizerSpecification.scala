@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.DownloadRequest
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -298,6 +299,190 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("snapshot manifest timeout refreshes offers before another dedicated request") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val secondHandler = TestProbe("SecondManifestHandler")
+      val secondPeer = peer.copy(
+        connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(ctx.chain.last.height))
+      syncTracker.updateStatus(secondPeer, org.ergoplatform.consensus.Older, Some(ctx.chain.last.height))
+
+      val manifest = Digest32 @@ splitDigest(ctx.chain.last.stateRoot)._1
+      val manifestId = bytesToId(manifest)
+      deliveryTracker.setRequested(ManifestTypeId.value, manifestId, peer)(
+        _ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, ManifestTypeId.value, manifestId)
+
+      ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }
+      deliveryTracker.status(manifestId, ManifestTypeId.value, Seq.empty) shouldBe Unknown
+      ncProbe.expectNoMessage(200.millis)
+
+      val offer = new SnapshotsInfo(Map(ctx.chain.last.height -> manifest))
+      val bytes = SnapshotsInfoSpec.toBytes(offer)
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(peer))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondPeer))
+      val request = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val selected = request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+      Set(peer.handlerRef, secondPeer.handlerRef) should contain(selected.handlerRef)
+      deliveryTracker.status(manifestId, ManifestTypeId.value, Seq.empty) shouldBe Requested
+    }
+  }
+
+  property("snapshot metadata keeps one manifest request in flight across heights") {
+    Seq(true, false).foreach { higherFirst =>
+      withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+        import ctx._
+
+        val lowerHeight = ctx.chain.last.height
+        val lowerManifest = Digest32 @@ splitDigest(ctx.chain.last.stateRoot)._1
+        val state = createUtxoState(boxesHolderGenOfSize(1).sample.get, parameters)
+        val higherHeight = appendSnapshotHeader(ctx, state)
+        val higherManifest = Digest32 @@ splitDigest(state.rootDigest)._1
+        higherManifest.sameElements(lowerManifest) shouldBe false
+
+        val secondHandler = TestProbe("SecondHeightOfferHandler")
+        val secondPeer = peer.copy(
+          connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+          handlerRef = secondHandler.ref)
+        val firstOffer = if (higherFirst) higherHeight -> higherManifest else lowerHeight -> lowerManifest
+        val nextOffer = if (higherFirst) lowerHeight -> lowerManifest else higherHeight -> higherManifest
+
+        val firstBytes = SnapshotsInfoSpec.toBytes(new SnapshotsInfo(Map(firstOffer)))
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(firstBytes), Some(peer))
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(firstBytes), Some(secondPeer))
+        val firstRequest = ncProbe.fishForMessage(3.seconds) {
+          case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        firstRequest.message.data.get.asInstanceOf[Array[Byte]].sameElements(firstOffer._2) shouldBe true
+
+        val nextBytes = SnapshotsInfoSpec.toBytes(new SnapshotsInfo(Map(nextOffer)))
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(nextBytes), Some(peer))
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(nextBytes), Some(secondPeer))
+        ncProbe.expectNoMessage(300.millis)
+        deliveryTracker.status(bytesToId(firstOffer._2), ManifestTypeId.value, Seq.empty) shouldBe Requested
+        deliveryTracker.status(bytesToId(nextOffer._2), ManifestTypeId.value, Seq.empty) shouldBe Unknown
+      }
+    }
+  }
+
+  property("snapshot manifest request continues from cached quorum after owner disconnect") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val prunedMode = ModePeerFeature(StateType.Utxo, verifyingTransactions = true,
+        nipopowBootstrapped = None, blocksToKeep = ModePeerFeature.UTXOSetBootstrapped)
+      val prunedInfo = peer.peerInfo.map(info =>
+        info.copy(peerSpec = info.peerSpec.copy(features = Seq(prunedMode))))
+      val firstPeer = peer.copy(peerInfo = prunedInfo)
+      val secondHandler = TestProbe("SecondCachedManifestHandler")
+      val thirdHandler = TestProbe("ThirdCachedManifestHandler")
+      val secondPeer = firstPeer.copy(
+        connectionId = firstPeer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      val thirdPeer = firstPeer.copy(
+        connectionId = firstPeer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.3", 28444)),
+        handlerRef = thirdHandler.ref)
+      val peers = Seq(firstPeer, secondPeer, thirdPeer)
+      peers.foreach { p =>
+        UtxoSetNetworkingFilter.condition(p) shouldBe true
+        BlockSectionsDownloadFilter.condition(p) shouldBe false
+      }
+
+      val manifest = Digest32 @@ splitDigest(ctx.chain.last.stateRoot)._1
+      val bytes = SnapshotsInfoSpec.toBytes(new SnapshotsInfo(Map(ctx.chain.last.height -> manifest)))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstPeer))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondPeer))
+      val initialRequest = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val initialPeer = initialRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(thirdPeer))
+      ncProbe.expectNoMessage(200.millis)
+      synchronizerMockRef ! DisconnectedPeer(initialPeer)
+      val replacement = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val replacementPeer = replacement.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+      (peers.map(_.handlerRef).toSet - initialPeer.handlerRef) should contain(replacementPeer.handlerRef)
+      deliveryTracker.getRequestedInfo(ManifestTypeId.value, bytesToId(manifest)).get.peer.handlerRef shouldBe
+        replacementPeer.handlerRef
+    }
+  }
+
+  property("snapshot bootstrap discovers a new provider after manifest owner disconnect") {
+    Seq(true, false).foreach { thirdKnownBeforeLoss =>
+      withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+        import ctx._
+
+        val prunedMode = ModePeerFeature(StateType.Utxo, verifyingTransactions = true,
+          nipopowBootstrapped = None, blocksToKeep = ModePeerFeature.UTXOSetBootstrapped)
+        val prunedInfo = peer.peerInfo.map(info =>
+          info.copy(peerSpec = info.peerSpec.copy(features = Seq(prunedMode))))
+        val firstPeer = peer.copy(peerInfo = prunedInfo)
+        val secondHandler = TestProbe("SecondBootstrapOfferHandler")
+        val thirdHandler = TestProbe("NewBootstrapOfferHandler")
+        val secondPeer = firstPeer.copy(
+          connectionId = firstPeer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+          handlerRef = secondHandler.ref)
+        val thirdPeer = firstPeer.copy(
+          connectionId = firstPeer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.3", 28444)),
+          handlerRef = thirdHandler.ref)
+        val manifest = Digest32 @@ splitDigest(ctx.chain.last.stateRoot)._1
+        val bytes = SnapshotsInfoSpec.toBytes(new SnapshotsInfo(Map(ctx.chain.last.height -> manifest)))
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstPeer))
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondPeer))
+        val initialRequest = ncProbe.fishForMessage(3.seconds) {
+          case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        val initialPeer = initialRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+
+        synchronizerMockRef ! HandshakedPeer(firstPeer)
+        synchronizerMockRef ! HandshakedPeer(secondPeer)
+        if (thirdKnownBeforeLoss) synchronizerMockRef ! HandshakedPeer(thirdPeer)
+        synchronizerMockRef ! DisconnectedPeer(initialPeer)
+        if (!thirdKnownBeforeLoss) {
+          ncProbe.expectNoMessage(200.millis)
+          synchronizerMockRef ! HandshakedPeer(thirdPeer)
+        }
+        val discovery = ncProbe.fishForMessage(3.seconds) {
+          case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        if (thirdKnownBeforeLoss) {
+          val queried = discovery.sendingStrategy.asInstanceOf[scorex.core.network.SendToPeers]
+            .chosenPeers.map(_.handlerRef)
+          queried should contain(thirdHandler.ref)
+          queried should not contain initialPeer.handlerRef
+        } else {
+          discovery.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe thirdHandler.ref
+        }
+
+        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(thirdPeer))
+        val replacement = ncProbe.fishForMessage(3.seconds) {
+          case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        val replacementPeer = replacement.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+        (Set(firstPeer.handlerRef, secondPeer.handlerRef, thirdPeer.handlerRef) - initialPeer.handlerRef) should
+          contain(replacementPeer.handlerRef)
+      }
+    }
+  }
+
   property("snapshot manifest requests use current connections after both providers reconnect") {
     withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
       import ctx._
@@ -319,10 +504,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(peer))
       synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondOld))
-      ncProbe.fishForMessage(3.seconds) {
+      val initialRequest = ncProbe.fishForMessage(3.seconds) {
         case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
         case _ => false
-      }
+      }.asInstanceOf[SendToNetwork]
+      val initialPeer = initialRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
 
       synchronizerMockRef ! DisconnectedPeer(peer)
       synchronizerMockRef ! DisconnectedPeer(secondOld)
@@ -331,16 +517,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(peer))
       ncProbe.expectNoMessage(300.millis)
 
-      // Repeated checks sample the actual outbound selector, not only the stored count.
-      (1 to 24).foreach { _ =>
-        synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondNew))
-        val nextRequest = ncProbe.fishForMessage(3.seconds) {
-          case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
-          case _ => false
-        }.asInstanceOf[SendToNetwork]
-        val chosenPeer = nextRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
-        Set(firstNewHandler.ref, secondNewHandler.ref) should contain(chosenPeer.handlerRef)
-      }
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondNew))
+      val nextRequest = ncProbe.fishForMessage(3.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }.asInstanceOf[SendToNetwork]
+      val chosenPeer = nextRequest.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+      Set(firstNewHandler.ref, secondNewHandler.ref) should contain(chosenPeer.handlerRef)
+
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondNew))
+      ncProbe.expectNoMessage(200.millis)
+      deliveryTracker.status(bytesToId(manifestId), ManifestTypeId.value, Seq.empty) shouldBe Requested
+
+      // A timer from the retired connection cannot clear the new request.
+      synchronizerMockRef ! CheckDelivery(initialPeer, ManifestTypeId.value, bytesToId(manifestId))
+      ncProbe.expectNoMessage(200.millis)
+      val active = deliveryTracker.getRequestedInfo(ManifestTypeId.value, bytesToId(manifestId)).get
+      active.peer.handlerRef shouldBe chosenPeer.handlerRef
     }
   }
 
@@ -372,27 +565,21 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // New handlers replace both old offers before the old disconnect events arrive.
       synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstNew))
       synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(secondNew))
-      ncProbe.fishForMessage(3.seconds) {
-        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
-        case _ => false
+      val replacementRequests = ncProbe.receiveWhile(500.millis) { case message => message }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == GetManifestSpec.messageCode => stn
       }
-      val afterReplacement = ncProbe.fishForMessage(3.seconds) {
-        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
-        case _ => false
-      }.asInstanceOf[SendToNetwork]
-      val replacementPeer = afterReplacement.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+      replacementRequests should not be empty
+      val encodedManifestId = bytesToId(manifestId)
+      val replacementPeer = deliveryTracker.getRequestedInfo(ManifestTypeId.value, encodedManifestId).get.peer
       Set(firstNewHandler.ref, secondNewHandler.ref) should contain(replacementPeer.handlerRef)
 
       // A delayed disconnect for the retired handlers must not remove their replacements.
       synchronizerMockRef ! DisconnectedPeer(peer)
       synchronizerMockRef ! DisconnectedPeer(secondOld)
       synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(bytes), Some(firstNew))
-      val requestAfterLateDisconnect = ncProbe.fishForMessage(3.seconds) {
-        case stn: SendToNetwork => stn.message.spec.messageCode == GetManifestSpec.messageCode
-        case _ => false
-      }.asInstanceOf[SendToNetwork]
-      val peerAfterLateDisconnect = requestAfterLateDisconnect.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
-      Set(firstNewHandler.ref, secondNewHandler.ref) should contain(peerAfterLateDisconnect.handlerRef)
+      ncProbe.expectNoMessage(300.millis)
+      val active = deliveryTracker.getRequestedInfo(ManifestTypeId.value, encodedManifestId).get.peer
+      active.handlerRef shouldBe replacementPeer.handlerRef
     }
   }
 
@@ -1806,21 +1993,51 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: InvSpec - snapshot-related invs are not filtered during utxo bootstrap") {
-    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+  property("NodeViewSynchronizer: InvSpec - snapshot objects require the dedicated protocol") {
+    withUtxoBootstrapFixture(utxoBootstrap = false) { ctx =>
       import ctx._
 
       val manifestId = modifierIdGen.sample.get
       synchronizerMockRef ! Message(InvSpec,
         Left(InvSpec.toBytes(InvData(ManifestTypeId.value, Seq(manifestId)))),
         Some(peer))
-      requestForModifierSent(ncProbe, ManifestTypeId.value, manifestId)
-
       val chunkId = modifierIdGen.sample.get
       synchronizerMockRef ! Message(InvSpec,
         Left(InvSpec.toBytes(InvData(UtxoSnapshotChunkTypeId.value, Seq(chunkId)))),
         Some(peer))
-      requestForModifierSent(ncProbe, UtxoSnapshotChunkTypeId.value, chunkId)
+      ncProbe.expectNoMessage(300.millis)
+      deliveryTracker.status(manifestId, ManifestTypeId.value, Seq.empty) shouldBe Unknown
+      deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Unknown
+
+      val sectionId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Extension.modifierTypeId, Seq(sectionId)))),
+        Some(peer))
+      requestForModifierSent(ncProbe, Extension.modifierTypeId, sectionId)
+    }
+  }
+
+  property("NodeViewSynchronizer: DownloadRequest - snapshot objects cannot use generic requests") {
+    withUtxoBootstrapFixture(utxoBootstrap = false) { ctx =>
+      import ctx._
+
+      val fullBlockFeature = ModePeerFeature(StateType.Utxo, verifyingTransactions = true,
+        nipopowBootstrapped = None, blocksToKeep = ModePeerFeature.AllBlocksKept)
+      val fullPeer = peer.copy(peerInfo = peer.peerInfo.map(info =>
+        info.copy(peerSpec = info.peerSpec.copy(features = Seq(fullBlockFeature)))))
+      syncTracker.updateStatus(fullPeer, org.ergoplatform.consensus.Older, Some(ctx.chain.last.height))
+
+      val manifestId = modifierIdGen.sample.get
+      synchronizerMockRef ! DownloadRequest(Map(ManifestTypeId.value -> Seq(manifestId)))
+      val chunkId = modifierIdGen.sample.get
+      synchronizerMockRef ! DownloadRequest(Map(UtxoSnapshotChunkTypeId.value -> Seq(chunkId)))
+      ncProbe.expectNoMessage(300.millis)
+      deliveryTracker.status(manifestId, ManifestTypeId.value, Seq.empty) shouldBe Unknown
+      deliveryTracker.status(chunkId, UtxoSnapshotChunkTypeId.value, Seq.empty) shouldBe Unknown
+
+      val sectionId = modifierIdGen.sample.get
+      synchronizerMockRef ! DownloadRequest(Map(Extension.modifierTypeId -> Seq(sectionId)))
+      requestForModifierSent(ncProbe, Extension.modifierTypeId, sectionId)
     }
   }
 

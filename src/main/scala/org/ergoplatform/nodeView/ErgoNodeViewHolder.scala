@@ -8,7 +8,6 @@ import org.ergoplatform.core._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
@@ -23,7 +22,7 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, S
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import spire.syntax.all.cfor
 
 import java.io.File
@@ -247,7 +246,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   // or waiting for the (asynchronous) extra indexer
                   if (settings.nodeSettings.storageRentCollection) {
                     val claimedBoxIds =
-                      CandidateGenerator.rentClaimSpentBoxIds(fullBlock.blockTransactions.transactions)
+                      ErgoNodeViewHolder.rentClaimSpentBoxIds(fullBlock.blockTransactions.transactions)
                     if (claimedBoxIds.nonEmpty) {
                       log.debug(s"Removing ${claimedBoxIds.length} storage-rent eligibility entries " +
                         s"spent by rent claims of block ${fullBlock.header.id}")
@@ -765,6 +764,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
+
+  /**
+    * Whether `tx` is a storage-rent claim: spends inputs with empty proofs, each pointing
+    * at its own output via the var #127 (StorageIndexVarId) context extension.
+    */
+  def isStorageRentClaim(tx: ErgoTransaction): Boolean =
+    tx.inputs.exists { in =>
+      in.spendingProof.proof.isEmpty &&
+        in.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
+    }
+
+  /**
+    * Ids of boxes spent by the storage-rent claim transactions among `txs`, in order.
+    */
+  def rentClaimSpentBoxIds(txs: Seq[ErgoTransaction]): Seq[ModifierId] =
+    txs.filter(isStorageRentClaim).flatMap(tx => tx.inputs.map(in => bytesToId(in.boxId)))
 
   private[nodeView] def isPreparedUtxoSnapshotState(
       stateIsUtxo: Boolean,

@@ -52,7 +52,7 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
   }
 
   private def rentBoxIndexesInIndex(limit: Int): Seq[Long] =
-    db.storageRentBoxesUntil(Int.MaxValue, limit).map(_.globalIndex).toSeq
+    db.storageRentBoxesAtOrBefore(Int.MaxValue, limit).map(_.globalIndex).toSeq
 
   property("storage rent entries are removable by box id") {
     val iEbs = (0L until 3).map(insertRentBox)

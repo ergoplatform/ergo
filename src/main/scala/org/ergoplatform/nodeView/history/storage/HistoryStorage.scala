@@ -136,7 +136,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     * at or before `creationHeight`, in ascending (creationHeight, globalIndex) order.
     * Returns an empty array when the extra index is disabled or does not cover the height.
     */
-  def storageRentBoxesUntil(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
+  def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
     val start = StorageRentBox.key(0, 0L)
     extraStore.scanFrom(
       start,

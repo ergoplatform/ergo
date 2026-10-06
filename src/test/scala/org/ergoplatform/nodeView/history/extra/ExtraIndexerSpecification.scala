@@ -171,7 +171,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val expected = (0L until state.globalBoxIndex).flatMap { boxNum =>
       NumericBoxIndex.getBoxByNumber(history, boxNum).filter(!_.isSpent)
     }
-    val rentEntries = history.storageRentBoxesUntil(Int.MaxValue, math.max(expected.length * 2, 100))
+    val rentEntries = history.storageRentBoxesAtOrBefore(Int.MaxValue, math.max(expected.length * 2, 100))
     rentEntries.length shouldBe expected.length
     val byGlobalIndex = expected.map(iEb => iEb.globalIndex -> iEb).toMap
     rentEntries.foreach { srb =>
@@ -229,7 +229,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   /**
     * The rent index must hold exactly the boxes the chain has created and never spent, and
     * its rows must be ordered by (creationHeight, globalIndex) - the order the ascending
-    * range scan in `HistoryStorage.storageRentBoxesUntil` relies on.
+    * range scan in `HistoryStorage.storageRentBoxesAtOrBefore` relies on.
     *
     * Box ids are compared against the chain-derived truth, so this catches rent rows that
     * survive a rollback for boxes that no longer exist, and rows missing for boxes that do.
@@ -237,7 +237,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   def checkRentIndexAgainstChain(height: Int): Unit = {
     val expected = unspentBoxesFromChain(height)
     val rentEntries =
-      history.storageRentBoxesUntil(Int.MaxValue, math.max(expected.size * 4, 1000))
+      history.storageRentBoxesAtOrBefore(Int.MaxValue, math.max(expected.size * 4, 1000))
 
     withClue(s"rent index size at height $height: ") {
       rentEntries.length shouldBe expected.size
@@ -485,7 +485,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     lock.lock()
     done.await()
 
-    val before = history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue)
+    val before = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
     before.length should be > 2
 
     // remove the first two entries by box id, as CandidateGenerator does for a rejected claim
@@ -494,17 +494,17 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     toRemove.length shouldBe 2
     history.removeStorageRentBoxes(toRemove)
 
-    val after = history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue)
+    val after = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
     after.length shouldBe before.length - 2
     after.map(_.globalIndex).toSet shouldBe before.drop(2).map(_.globalIndex).toSet
 
     // removing again is a no-op: the boxes are still indexed, but the entries are gone
     history.removeStorageRentBoxes(toRemove)
-    history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
 
     // removing an entry of a box which is not indexed at all does not corrupt the index
     history.removeStorageRentBoxes(Seq(bytesToId(Array.fill(32)(42.toByte))))
-    history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
 
     indexer ! Reset()
   }
@@ -516,7 +516,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     lock.lock()
     done.await()
     // the extra index is fully built, but no storage-rent rows are written
-    history.storageRentBoxesUntil(Int.MaxValue, 1000) shouldBe empty
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, 1000) shouldBe empty
     noRentIndexer ! Reset()
   }
 

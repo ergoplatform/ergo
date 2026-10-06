@@ -122,8 +122,8 @@ trait ErgoHistoryReader
     * `creationHeight`, in ascending (creationHeight, globalIndex) order. Empty when the
     * extra index is disabled.
     */
-  def storageRentBoxesUntil(creationHeight: Int, limit: Int): Array[StorageRentBox] =
-    historyStorage.storageRentBoxesUntil(creationHeight, limit)
+  def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] =
+    historyStorage.storageRentBoxesAtOrBefore(creationHeight, limit)
 
   /**
     * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim

@@ -6,7 +6,7 @@ import akka.testkit.{TestKit, TestProbe}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
@@ -37,7 +37,7 @@ import scala.concurrent.duration._
   * These tests therefore pin the *absence* of claims and the stability of candidate
   * generation with the collector enabled. They do NOT prove the flag or the height guard
   * work: with the flag forced on and the height guard removed, a young chain still yields
-  * no claim, because `storageRentBoxesUntil` is then called with a negative threshold and
+  * no claim, because `storageRentBoxesAtOrBefore` is then called with a negative threshold and
   * matches no row, so the observable result is identical. That mutation was verified to
   * pass this spec, so treat these as regression guards, not as gate coverage.
   *
@@ -81,7 +81,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
 
   /** The var-127 (storage rent) claim transactions of a candidate block. */
   private def rentClaimTransactions(candidate: Candidate): Seq[ErgoTransaction] =
-    candidate.candidateBlock.transactions.filter(CandidateGenerator.isStorageRentClaim)
+    candidate.candidateBlock.transactions.filter(ErgoNodeViewHolder.isStorageRentClaim)
 
   private def testBoxId(b: Byte): ADKey = ADKey @@ Array.fill(32)(b)
 
@@ -98,14 +98,14 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
     val claimTx = ErgoTransaction(
       IndexedSeq(inputWith(testBoxId(1), Array.emptyByteArray, var127Extension)),
       IndexedSeq.empty, IndexedSeq(testOutput))
-    CandidateGenerator.isStorageRentClaim(claimTx) shouldBe true
+    ErgoNodeViewHolder.isStorageRentClaim(claimTx) shouldBe true
   }
 
   it should "not flag transactions with non-empty proofs" in {
     val tx = ErgoTransaction(
       IndexedSeq(inputWith(testBoxId(1), Array(1.toByte), var127Extension)),
       IndexedSeq.empty, IndexedSeq(testOutput))
-    CandidateGenerator.isStorageRentClaim(tx) shouldBe false
+    ErgoNodeViewHolder.isStorageRentClaim(tx) shouldBe false
   }
 
   it should "not flag transactions without var #127" in {
@@ -116,8 +116,8 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
     val otherVarTx = ErgoTransaction(
       IndexedSeq(inputWith(testBoxId(1), Array.emptyByteArray, otherExtension)),
       IndexedSeq.empty, IndexedSeq(testOutput))
-    CandidateGenerator.isStorageRentClaim(noExtensionTx) shouldBe false
-    CandidateGenerator.isStorageRentClaim(otherVarTx) shouldBe false
+    ErgoNodeViewHolder.isStorageRentClaim(noExtensionTx) shouldBe false
+    ErgoNodeViewHolder.isStorageRentClaim(otherVarTx) shouldBe false
   }
 
   it should "flag a transaction when any of its inputs is a claim input" in {
@@ -125,7 +125,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
     val signedInput = inputWith(testBoxId(2), Array(1.toByte), ContextExtension.empty)
     val tx = ErgoTransaction(IndexedSeq(signedInput, claimInput),
       IndexedSeq.empty, IndexedSeq(testOutput))
-    CandidateGenerator.isStorageRentClaim(tx) shouldBe true
+    ErgoNodeViewHolder.isStorageRentClaim(tx) shouldBe true
   }
 
   "rentClaimSpentBoxIds" should "collect the input box ids of claim transactions only" in {
@@ -138,10 +138,10 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
       IndexedSeq(inputWith(testBoxId(3), Array(1.toByte), ContextExtension.empty)),
       IndexedSeq.empty, IndexedSeq(testOutput))
 
-    CandidateGenerator.rentClaimSpentBoxIds(Seq(claimTx, ordinaryTx)) shouldBe
+    ErgoNodeViewHolder.rentClaimSpentBoxIds(Seq(claimTx, ordinaryTx)) shouldBe
       Seq(bytesToId(testBoxId(1)), bytesToId(testBoxId(2)))
-    CandidateGenerator.rentClaimSpentBoxIds(Seq(ordinaryTx)) shouldBe empty
-    CandidateGenerator.rentClaimSpentBoxIds(Seq.empty) shouldBe empty
+    ErgoNodeViewHolder.rentClaimSpentBoxIds(Seq(ordinaryTx)) shouldBe empty
+    ErgoNodeViewHolder.rentClaimSpentBoxIds(Seq.empty) shouldBe empty
   }
 
   private def generateOneCandidate(settings: ErgoSettings)(

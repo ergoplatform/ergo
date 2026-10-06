@@ -35,6 +35,11 @@ class StorageRentBoxSpec extends ErgoCorePropertyTest {
     res.isFailure shouldBe true
   }
 
+  property("an unknown type byte degrades to Failure, not a thrown Error") {
+    // 99 is not assigned to any extra index type; parsing it must fail non-fatally
+    ExtraIndexSerializer.parseBytesTry(Array(99.toByte, 1, 2, 3)).isFailure shouldBe true
+  }
+
   property("keys order lexicographically by (creationHeight, globalIndex)") {
     def hex(key: Array[Byte]): String = Base16.encode(key)
 

@@ -427,22 +427,6 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
-    * Whether `tx` is a storage-rent claim: spends inputs with empty proofs, each pointing
-    * at its own output via the var #127 (StorageIndexVarId) context extension.
-    */
-  def isStorageRentClaim(tx: ErgoTransaction): Boolean =
-    tx.inputs.exists { in =>
-      in.spendingProof.proof.isEmpty &&
-        in.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
-    }
-
-  /**
-    * Ids of boxes spent by the storage-rent claim transactions among `txs`, in order.
-    */
-  def rentClaimSpentBoxIds(txs: Seq[ErgoTransaction]): Seq[ModifierId] =
-    txs.filter(isStorageRentClaim).flatMap(tx => tx.inputs.map(in => bytesToId(in.boxId)))
-
-  /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
     * detects a block applied concurrently with the assembly.
@@ -703,7 +687,7 @@ object CandidateGenerator extends ScorexLogging {
           if (threshold > 0) {
             // rent entries carry no payload, so resolve the box through the box-number
             // index; entries whose box row is gone resolve to nothing and are skipped
-            val scanned = history.storageRentBoxesUntil(threshold, StorageRentClaimBuilder.MaxClaims)
+            val scanned = history.storageRentBoxesAtOrBefore(threshold, StorageRentClaimBuilder.MaxClaims)
               .toSeq
               .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
               .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))

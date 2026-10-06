@@ -427,6 +427,25 @@ object CandidateGenerator extends ScorexLogging {
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
 
   /**
+    * Whether a box can never be claimed by storage-rent collection, so its eligibility
+    * entry should be deleted from the index when encountered: value at or below the
+    * minimum allowed value (can neither be charged nor recreated), minimum value or
+    * storage fee wrapping non-positive in 32-bit arithmetic (mispriced/uncollectable), or
+    * carrying the re-emission token on EIP-27 networks (consensus-unclaimable outright).
+    * Boxes failing these checks are skipped by [[StorageRentClaimBuilder]] anyway; this
+    * predicate only decides which skipped rows may be dropped permanently.
+    */
+  def isPermanentlyUnclaimable(box: ErgoBox,
+                               parameters: Parameters,
+                               reemissionTokenIdOpt: Option[ModifierId]): Boolean = {
+    val minValue = parameters.minValuePerByte * box.bytes.length
+    val storageFee = parameters.storageFeeFactor * box.bytes.length
+    minValue <= 0 || box.value <= minValue.toLong ||
+      storageFee <= 0 ||
+      reemissionTokenIdOpt.exists(box.tokens.contains(_))
+  }
+
+  /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
     * detects a block applied concurrently with the assembly.
@@ -686,31 +705,31 @@ object CandidateGenerator extends ScorexLogging {
           val threshold = upcomingHeight - Constants.StoragePeriod
           if (threshold > 0) {
             // rent entries carry no payload, so resolve the box through the box-number
-            // index; entries whose box row is gone resolve to nothing and are skipped
-            val scanned = history.storageRentBoxesAtOrBefore(threshold, StorageRentClaimBuilder.MaxClaims)
+            // index; entries whose box row is gone resolve to nothing and are skipped.
+            // The scan window is wider than the claim cap: the builder stops at
+            // MaxClaims CLAIMED boxes, so permanently-unclaimable rows in the window do
+            // not starve later claimable ones - and they are deleted below on encounter,
+            // so the window advances across candidates.
+            val scanned = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
               .toSeq
               .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
               .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
-            // boxes at or below the minimum allowed value (or with a minimum value wrapping
-            // non-positive in 32-bit arithmetic) can not be charged or recreated; they are
-            // broken eligibility entries, so drop them from the index right away
-            // and never claim them
             val params = upcomingContext.currentParameters
-            val (belowMinValue, eligible) = scanned.partition { b =>
-              val minValue = params.minValuePerByte * b.bytes.length
-              minValue <= 0 || b.value <= minValue.toLong
-            }
-            if (belowMinValue.nonEmpty) {
-              log.warn(s"Removing ${belowMinValue.length} storage-rent eligibility entries " +
-                s"for boxes at or below the minimum value: ${belowMinValue.map(b => bytesToId(b.id))}")
-              history.removeStorageRentBoxes(belowMinValue.map(b => bytesToId(b.id)))
+            val reemissionTokenIdOpt =
+              Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
+            val (unclaimable, eligible) = scanned.partition(b =>
+              isPermanentlyUnclaimable(b, params, reemissionTokenIdOpt))
+            if (unclaimable.nonEmpty) {
+              log.warn(s"Removing ${unclaimable.length} storage-rent eligibility entries " +
+                s"for permanently unclaimable boxes: ${unclaimable.map(b => bytesToId(b.id))}")
+              history.removeStorageRentBoxes(unclaimable.map(b => bytesToId(b.id)))
             }
             StorageRentClaimBuilder.buildClaim(
               eligible,
               upcomingHeight,
               params,
               minerPk,
-              Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty),
+              reemissionTokenIdOpt,
               ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet
             ).toSeq
           } else {

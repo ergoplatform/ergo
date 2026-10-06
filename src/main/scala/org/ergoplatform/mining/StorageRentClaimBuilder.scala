@@ -62,6 +62,16 @@ object StorageRentClaimBuilder extends ScorexLogging {
   private def dustLimit(candidate: ErgoBoxCandidate, outputIndex: Short, parameters: Parameters): Long =
     parameters.minValuePerByte.toLong * boxSize(candidate, outputIndex)
 
+  /**
+    * Proceeds outputs go to the miner's plain P2PK box, not
+    * `ErgoTreePredef.rewardOutputScript(minerRewardDelay, minerPk)` used for emission and
+    * fee outputs. The delay exists because emission/fee outputs must be locked by
+    * consensus for a period (reward accounting rules). Rent proceeds have no such rule:
+    * the claim is an ordinary spend of expired boxes, and the proceeds box exists only if
+    * the block carrying it stays in the best chain - an orphaned block simply drops both
+    * the claim and its outputs, leaving the expired boxes for the next miner. So a delay
+    * would only lock the miner's own funds without buying any reorg safety.
+    */
   private def p2pkCandidate(value: Long, minerTree: ErgoTree, currentHeight: Int): ErgoBoxCandidate =
     new ErgoBoxCandidate(value, minerTree, currentHeight, Colls.emptyColl, Map.empty)
 
@@ -96,8 +106,12 @@ object StorageRentClaimBuilder extends ScorexLogging {
     val claimed = ArrayBuffer.empty[(ErgoBox, Boolean, ErgoBoxCandidate)]
     // recreation fees collected so far (burned values go to per-box outputs directly)
     var sweptFees = 0L
+    // boxes looked at so far; the cap applies to CLAIMED boxes, not examined ones,
+    // so unclaimable boxes can not starve later claimable ones out of the claim
+    var examined = 0
 
-    eligible.take(MaxClaims).foreach { box =>
+    eligible.iterator.takeWhile(_ => claimed.length < MaxClaims).foreach { box =>
+      examined += 1
       val age = currentHeight - box.creationHeight
       val oldEnough = age >= Constants.StoragePeriod
       val carriesReemissionToken = reemissionTokenIdOpt.exists(box.tokens.contains(_))
@@ -156,6 +170,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
     }
 
     if (claimed.isEmpty) {
+      log.debug(s"Storage-rent claim not built: no claimable box among $examined eligible")
       None
     } else {
       // Recreation fees collect in a separate, unnamed P2PK output appended after the
@@ -168,6 +183,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
       val finalClaimed = if (dropRecreations) claimed.filter(!_._2) else claimed
 
       if (finalClaimed.isEmpty) {
+        log.debug(s"Storage-rent claim not built: no claimable box among $examined eligible")
         None
       } else {
         val feeOutputs =
@@ -181,6 +197,12 @@ object StorageRentClaimBuilder extends ScorexLogging {
             ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(outputIndex.toShort)))
           ))
         }
+        val burnedValue = finalClaimed.filter(!_._2).map(_._3.value).sum
+        val collected = burnedValue + (if (dropRecreations) 0L else sweptFees)
+        log.info(s"Storage-rent claim built: ${finalClaimed.length} boxes claimed " +
+          s"(${finalClaimed.count(_._2)} recreated, ${finalClaimed.count(!_._2)} burned), " +
+          s"${examined - claimed.length} skipped, " +
+          s"collecting $collected nanoERG")
         Some(ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates))
       }
     }

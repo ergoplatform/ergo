@@ -6,18 +6,13 @@ import akka.testkit.{TestKit, TestProbe}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef, ErgoReadersHolderRef}
+import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
-import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
-import scorex.crypto.authds.ADKey
-import scorex.util.bytesToId
-import sigma.ast.ShortConstant
-import sigma.interpreter.{ContextExtension, ProverResult}
 
 import java.nio.file.Files
 
@@ -79,70 +74,19 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
       storageRentTokenWhitelist = Seq.empty),
     directory = randomDir)
 
+  /**
+    * Whether `tx` is a storage-rent claim: spends inputs with empty proofs, each pointing
+    * at its own output via the var #127 (StorageIndexVarId) context extension.
+    */
+  private def isStorageRentClaim(tx: ErgoTransaction): Boolean =
+    tx.inputs.exists { in =>
+      in.spendingProof.proof.isEmpty &&
+        in.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
+    }
+
   /** The var-127 (storage rent) claim transactions of a candidate block. */
   private def rentClaimTransactions(candidate: Candidate): Seq[ErgoTransaction] =
-    candidate.candidateBlock.transactions.filter(ErgoNodeViewHolder.isStorageRentClaim)
-
-  private def testBoxId(b: Byte): ADKey = ADKey @@ Array.fill(32)(b)
-
-  private def testOutput: ErgoBoxCandidate =
-    new ErgoBoxCandidate(1000000000L, Constants.TrueTree, 1)
-
-  private def inputWith(boxId: ADKey, proof: Array[Byte], extension: ContextExtension): Input =
-    new Input(boxId, ProverResult(proof, extension))
-
-  private val var127Extension: ContextExtension =
-    ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(0)))
-
-  "isStorageRentClaim" should "detect a claim by empty proof and var #127 extension" in {
-    val claimTx = ErgoTransaction(
-      IndexedSeq(inputWith(testBoxId(1), Array.emptyByteArray, var127Extension)),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-    ErgoNodeViewHolder.isStorageRentClaim(claimTx) shouldBe true
-  }
-
-  it should "not flag transactions with non-empty proofs" in {
-    val tx = ErgoTransaction(
-      IndexedSeq(inputWith(testBoxId(1), Array(1.toByte), var127Extension)),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-    ErgoNodeViewHolder.isStorageRentClaim(tx) shouldBe false
-  }
-
-  it should "not flag transactions without var #127" in {
-    val otherExtension = ContextExtension(Map(42.toByte -> ShortConstant(0)))
-    val noExtensionTx = ErgoTransaction(
-      IndexedSeq(inputWith(testBoxId(1), Array.emptyByteArray, ContextExtension.empty)),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-    val otherVarTx = ErgoTransaction(
-      IndexedSeq(inputWith(testBoxId(1), Array.emptyByteArray, otherExtension)),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-    ErgoNodeViewHolder.isStorageRentClaim(noExtensionTx) shouldBe false
-    ErgoNodeViewHolder.isStorageRentClaim(otherVarTx) shouldBe false
-  }
-
-  it should "flag a transaction when any of its inputs is a claim input" in {
-    val claimInput = inputWith(testBoxId(1), Array.emptyByteArray, var127Extension)
-    val signedInput = inputWith(testBoxId(2), Array(1.toByte), ContextExtension.empty)
-    val tx = ErgoTransaction(IndexedSeq(signedInput, claimInput),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-    ErgoNodeViewHolder.isStorageRentClaim(tx) shouldBe true
-  }
-
-  "rentClaimSpentBoxIds" should "collect the input box ids of claim transactions only" in {
-    val claimTx = ErgoTransaction(
-      IndexedSeq(
-        inputWith(testBoxId(1), Array.emptyByteArray, var127Extension),
-        inputWith(testBoxId(2), Array.emptyByteArray, var127Extension)),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-    val ordinaryTx = ErgoTransaction(
-      IndexedSeq(inputWith(testBoxId(3), Array(1.toByte), ContextExtension.empty)),
-      IndexedSeq.empty, IndexedSeq(testOutput))
-
-    ErgoNodeViewHolder.rentClaimSpentBoxIds(Seq(claimTx, ordinaryTx)) shouldBe
-      Seq(bytesToId(testBoxId(1)), bytesToId(testBoxId(2)))
-    ErgoNodeViewHolder.rentClaimSpentBoxIds(Seq(ordinaryTx)) shouldBe empty
-    ErgoNodeViewHolder.rentClaimSpentBoxIds(Seq.empty) shouldBe empty
-  }
+    candidate.candidateBlock.transactions.filter(isStorageRentClaim)
 
   private def generateOneCandidate(settings: ErgoSettings)(
     implicit system: ActorSystem): Candidate = {

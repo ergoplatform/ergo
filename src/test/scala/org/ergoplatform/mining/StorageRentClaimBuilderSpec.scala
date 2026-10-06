@@ -420,6 +420,40 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     tx.inputs.map(_.boxId) shouldBe boxes.take(StorageRentClaimBuilder.MaxClaims).map(_.id)
   }
 
+  property("the claim cap counts claimed boxes, not examined ones") {
+    // MaxClaims permanently-skipped boxes (reemission) followed by MaxClaims claimable
+    // ones: the builder must walk past the junk and claim all of the good boxes
+    // (capping examined inputs instead would produce no claim at all)
+    val reemissionId = tokenIdOf(9.toByte)
+    val junk = (0 until StorageRentClaimBuilder.MaxClaims).map { i =>
+      testBox(10000000000L + i, Constants.TrueTree, H - Constants.StoragePeriod - i,
+        Seq(tokenEntry(9.toByte)), Map.empty)
+    }
+    val good = (0 until StorageRentClaimBuilder.MaxClaims).map(i => agedBox(10000000000L + i))
+    val tx = buildAndValidate(junk ++ good, reemissionTokenId = Some(reemissionId)).get
+    tx.inputs.length shouldBe StorageRentClaimBuilder.MaxClaims
+    tx.inputs.map(_.boxId) shouldBe good.map(_.id)
+  }
+
+  property("isPermanentlyUnclaimable marks junk and spares claimable boxes") {
+    // value at or below the minimum
+    CandidateGenerator.isPermanentlyUnclaimable(atMinValueBox(Constants.StoragePeriod), parameters, None) shouldBe true
+    // storage fee wrapping non-positive in 32-bit arithmetic
+    val tokens = (0 until 70).map(i =>
+      (Digest32Coll @@ Colls.fromArray(Array.fill(32)(i.toByte))) -> 1L)
+    val feeWrapBox = testBox(10000000000L, Constants.TrueTree, H - Constants.StoragePeriod, tokens, Map.empty)
+    parameters.storageFeeFactor * feeWrapBox.bytes.length should be < 0 // sanity
+    CandidateGenerator.isPermanentlyUnclaimable(feeWrapBox, parameters, None) shouldBe true
+    // carrying the re-emission token on an EIP-27 network
+    val reemissionId = tokenIdOf(9.toByte)
+    val reemBox = boxWithTokens(10000000000L, Constants.StoragePeriod, Seq(9.toByte))
+    CandidateGenerator.isPermanentlyUnclaimable(reemBox, parameters, Some(reemissionId)) shouldBe true
+    // same box is claimable on a network without EIP-27
+    CandidateGenerator.isPermanentlyUnclaimable(reemBox, parameters, None) shouldBe false
+    // an ordinary rent-eligible box is claimable
+    CandidateGenerator.isPermanentlyUnclaimable(agedBox(10000000000L), parameters, None) shouldBe false
+  }
+
   /** Every token id present in any output of `tx`. */
   private def outputTokenIds(tx: ErgoTransaction): Set[ModifierId] =
     tx.outputCandidates.flatMap(_.additionalTokens.toArray.map(_._1.toModifierId)).toSet

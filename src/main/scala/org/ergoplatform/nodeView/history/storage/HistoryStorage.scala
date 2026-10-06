@@ -89,6 +89,25 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       }
     }
 
+  /**
+    * Read modifier directly from the database, bypassing in-memory caches. Unlike `modifierById`,
+    * returns None if the record in the database is corrupted (fails to parse), even if a parsed
+    * copy of the modifier is present in a cache. Used by database repair procedures.
+    *
+    * @return parsed modifier with `id` read from the database, None if not found or corrupted
+    */
+  def modifierByIdFromDb(id: ModifierId): Option[BlockSection] =
+    objectsStore.get(idToBytes(id)).flatMap { bytes =>
+      HistoryModifierSerializer.parseBytesTry(bytes) match {
+        case Success(pm) =>
+          cacheModifier(pm)
+          Some(pm)
+        case Failure(e) =>
+          log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
+          None
+      }
+    }
+
   def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
     Option(extraCache.getIfPresent(id)) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
       ExtraIndexSerializer.parseBytesTry(bytes) match {

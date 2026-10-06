@@ -3,18 +3,20 @@ package org.ergoplatform.nodeView.history.extra
 import akka.actor.{Actor, ActorIdentity, ActorRef, ActorSystem, Identify, Props, Terminated}
 import akka.testkit.TestProbe
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentThreshold, Index}
 import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -42,6 +44,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   case class CacheBlockTransactions(height: Int, transactions: BlockTransactions)
   case class DeferNextHeaderOnce(height: Int)
   case class DeferBlockTransactionsOnce(height: Int)
+  case class ObserveUnavailableHeader(height: Int, probe: ActorRef)
   case class Reload()
   case class ForceRollback(height: Int)
   case class GetLoadedState()
@@ -719,7 +722,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("the production actor starts catch-up from the event stream") {
+  property("the production actor pulls an applied-state snapshot before catch-up") {
     val dbDir = Files.createTempDirectory("extra-indexer-production-start").toFile
     val dbSettings = initSettings.copy(
       directory = dbDir.getAbsolutePath,
@@ -740,14 +743,23 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val history = setupProbe.expectMsgType[ErgoHistory](30.seconds)
     IndexerState.fromHistory(history).indexedHeight shouldBe 0
 
+    val viewHolderProbe = TestProbe()(system)
     val productionIndexer = system.actorOf(Props(new ExtraIndexer(
       dbSettings.cacheSettings,
-      dbSettings.chainSettings.addressEncoder
+      dbSettings.chainSettings.addressEncoder,
+      Some(viewHolderProbe.ref)
     )))
+    viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+    val thresholdProbe = TestProbe()(system)
+    thresholdProbe.send(productionIndexer, GetSegmentThreshold)
+    thresholdProbe.expectMsg(512)
+    productionIndexer ! RemoteBlockApplied(
+      history.bestFullBlockOpt.get.header, history.bestFullBlockOpt.get.blockTransactions.txs.map(_.id))
     val probe = TestProbe()(system)
     probe.send(productionIndexer, Identify("started"))
     probe.expectMsg(ActorIdentity("started", Some(productionIndexer)))
-    system.eventStream.publish(ExtraIndexer.ReceivableMessages.StartExtraIndexer(history))
+    viewHolderProbe.send(productionIndexer,
+      ExtraIndexer.ReceivableMessages.StartExtraIndexer(history))
 
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       val state = IndexerState.fromHistory(history)
@@ -1323,6 +1335,71 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     hydrated.blockId shouldBe selected.id
     hydrated.timestamp shouldBe selected.timestamp
     IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    indexer ! Reset()
+  }
+
+  property("waits for startup repair before indexing a selected header with missing validity") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val missingValidityHeaders = Seq(fullChainHeaderAt(3))
+    missingValidityHeaders.foreach { header =>
+      FullBlockProcessor.isInBestFullChain(_history.historyStorage, header.id) shouldBe true
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Valid
+    }
+    _history.historyStorage.remove(
+      missingValidityHeaders.map(header => _history.validityKey(header.id)).toArray,
+      Array.empty[ModifierId]
+    ).get
+    missingValidityHeaders.foreach { header =>
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
+    }
+
+    val probe = TestProbe()(system)
+    indexer ! ObserveUnavailableHeader(3, probe.ref)
+    indexer ! Index()
+    probe.expectMsg(3.seconds, 3)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 2
+
+    val appliedTip = fullChainHeaderAt(6)
+    _history.repairAppliedFullChainValidity(fullChainHeaderAt(5).id).isFailure shouldBe true
+    _history.isSemanticallyValid(missingValidityHeaders.head.id) shouldBe ModifierSemanticValidity.Unknown
+
+    val persistedCheckpoint = IndexerState.fromHistory(_history).indexedHeaderId.get
+    _history.historyStorage.insertExtraTry(
+      Array(ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(fullChainHeaderAt(1).id)),
+      Array.empty).get
+    _history.repairAppliedFullChainValidity(appliedTip.id).isFailure shouldBe true
+    _history.isSemanticallyValid(missingValidityHeaders.head.id) shouldBe ModifierSemanticValidity.Unknown
+    _history.historyStorage.insertExtraTry(
+      Array(ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(persistedCheckpoint)),
+      Array.empty).get
+
+    val competingTip = appliedTip.copy(timestamp = appliedTip.timestamp + 1)
+    val competingTransactions = fullChainTransactionsAt(6).copy(headerId = competingTip.id)
+    competingTransactions.id shouldBe competingTip.transactionsId
+    val tipHeightKey = ByteArrayWrapper(
+      org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(appliedTip.height).array))
+    _history.historyStorage.insert(
+      Array(
+        tipHeightKey -> (ExtraIndexer.fastIdToBytes(competingTip.id) ++ ExtraIndexer.fastIdToBytes(appliedTip.id)),
+        FullBlockProcessor.chainStatusKey(competingTip.id) -> FullBlockProcessor.BestChainMarker
+      ),
+      Array[org.ergoplatform.modifiers.BlockSection](competingTip, competingTransactions)
+    ).get
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, competingTip.id) shouldBe true
+    _history.isSemanticallyValid(competingTip.id) shouldBe ModifierSemanticValidity.Unknown
+
+    _history.repairAppliedFullChainValidity(appliedTip.id).get
+    _history.isSemanticallyValid(competingTip.id) shouldBe ModifierSemanticValidity.Unknown
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+
+    _history.historyStorage.remove(
+      Array(_history.validityKey(appliedTip.id)), Array.empty[ModifierId]).get
+    probe.send(indexer, ReopenCheckpoint())
+    probe.expectMsgType[IndexerState].indexedHeight shouldBe 0
     indexer ! Reset()
   }
 

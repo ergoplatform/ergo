@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 
 import java.io.File
 import java.nio.{ByteBuffer, ByteOrder}
@@ -10,9 +10,8 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
-  IndexedHeightKey, NewestVersion, NewestVersionBytes, RollbackToKey, SchemaVersionKey}
+  IndexedHeightKey, NewestVersion, NewestVersionBytes, RollbackToKey, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
@@ -22,6 +21,8 @@ import org.ergoplatform.validation.RecoverableModifierError
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
+import scala.annotation.nowarn
+import scala.collection.mutable.BitSet
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -114,6 +115,85 @@ trait ErgoHistory
         historyStorage.insert(
           Array(validityKey(modifier.id) -> Array(1.toByte)),
           BlockSection.emptyArray).map(_ => this)
+    }
+  }
+
+  /**
+    * Repairs validity rows for the selected full-block suffix that the restored UTXO state proves was applied.
+    * The caller must verify that the applied state version is the selected full-block tip.
+    */
+  def repairAppliedFullChainValidity(appliedTip: ModifierId): Try[ErgoHistory] = synchronized {
+    bestFullBlockOpt match {
+      case Some(tip) if tip.id == appliedTip =>
+        val indexedHeight = getIndex(IndexedHeightKey, historyStorage).getInt
+        val firstHeight = math.max(1, math.max(minimalFullBlockHeight, indexedHeight + 1))
+        val missingValidityHeights = BitSet.empty
+        val validation = Try {
+          var currentId = appliedTip
+          var expectedHeight = tip.height
+          while (expectedHeight >= firstHeight) {
+            val header = typedModifierById[Header](currentId).getOrElse {
+              throw new IllegalStateException(
+                s"Applied full-chain header $currentId is unavailable at height $expectedHeight during validity repair")
+            }
+            if (header.height != expectedHeight ||
+                !FullBlockProcessor.isInBestFullChain(historyStorage, header.id)) {
+              throw new IllegalStateException(
+                s"Applied full-chain ancestry is inconsistent at block ${header.id}, height $expectedHeight")
+            }
+            val validity = (header.id +: header.sectionIds.map(_._2)).map(isSemanticallyValid)
+            if (validity.contains(ModifierSemanticValidity.Invalid)) {
+              throw new IllegalStateException(
+                s"Selected full block ${header.id} at height $expectedHeight contains an invalid section")
+            }
+            if (validity.contains(ModifierSemanticValidity.Unknown)) {
+              if (getFullBlock(header).isEmpty) {
+                throw new IllegalStateException(
+                  s"Selected full block body is unavailable at height $expectedHeight during validity repair")
+              }
+              missingValidityHeights += expectedHeight
+            }
+            currentId = header.parentId
+            expectedHeight -= 1
+          }
+          if (indexedHeight > 0 && firstHeight == indexedHeight + 1) {
+            val indexedHeaderId = historyStorage.modifierBytesById(bytesToId(IndexedHeaderIdKey))
+              .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+              .map(bytesToId)
+              .getOrElse(throw new IllegalStateException(
+                s"Extra-index checkpoint header is unavailable at height $indexedHeight during validity repair"))
+            if (currentId != indexedHeaderId) {
+              throw new IllegalStateException(
+                s"Applied full-chain ancestry does not extend the extra-index checkpoint at height $indexedHeight")
+            }
+          }
+        }
+        validation.flatMap { _ =>
+          Try {
+            var currentId = appliedTip
+            var expectedHeight = tip.height
+            var repairedHistory = this
+            while (expectedHeight >= firstHeight) {
+              val header = typedModifierById[Header](currentId).getOrElse {
+                throw new IllegalStateException(
+                  s"Applied full-chain header $currentId became unavailable during validity repair")
+              }
+              if (missingValidityHeights.contains(expectedHeight)) {
+                val fullBlock = getFullBlock(header).getOrElse {
+                  throw new IllegalStateException(
+                    s"Selected full block body ${header.id} became unavailable during validity repair")
+                }
+                repairedHistory = repairedHistory.reportModifierIsValid(fullBlock).get
+              }
+              currentId = header.parentId
+              expectedHeight -= 1
+            }
+            repairedHistory
+          }
+        }
+      case _ =>
+        Failure(new IllegalStateException(
+          s"Applied state tip $appliedTip does not match the selected full-block tip"))
     }
   }
 
@@ -266,6 +346,7 @@ object ErgoHistory extends ScorexLogging {
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
+  @nowarn("cat=unused")
   def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
     var db = HistoryStorage(ergoSettings)
 
@@ -300,7 +381,7 @@ object ErgoHistory extends ScorexLogging {
         val id = bytesToId(idBytes)
         val validityKey = ByteArrayWrapper(Algos.hash("validity".getBytes(StandardCharsets.UTF_8) ++ idToBytes(id)))
         val isValid = db.getIndex(validityKey).exists(_.sameElements(Array(1.toByte)))
-        if (isValid) db.modifierById(id).collect {
+        if (isValid && FullBlockProcessor.isInBestFullChain(db, id)) db.modifierById(id).collect {
           case header: Header if header.height == indexedHeight && header.id == id => header
         } else None
       }
@@ -389,7 +470,15 @@ object ErgoHistory extends ScorexLogging {
         ).collect { case (true, name) => name }
         log.warn(s"Rebuilding invalid extra index checkpoint: ${failedChecks.mkString(", ")}")
         val freshDb = db.deleteExtraDBTry(ergoSettings).recoverWith { case error =>
-          log.error("Extra index rebuild failed; aborting startup rather than using closed or partially deleted history stores", error)
+          val extraIndexPath = new File(s"${ergoSettings.directory}/history/extra").getAbsolutePath
+          log.error(
+            "Extra index rebuild failed; node startup is aborting. Operator recovery: " +
+              "1) stop every Ergo node process using this data directory; " +
+              "2) inspect the preceding exception and correct its cause, such as disk space, permissions, or open handles; " +
+              s"3) move or remove only '$extraIndexPath'; " +
+              "4) verify that directory no longer exists; 5) restart the node to retry the extra index rebuild. " +
+              "Do not remove the history/index or history/objects directories.",
+            error)
           Failure(error)
         }.get
         freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty).recoverWith { case error =>
@@ -440,8 +529,6 @@ object ErgoHistory extends ScorexLogging {
     }
 
     log.info("History database read")
-    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
-      context.system.eventStream.publish(StartExtraIndexer(history))
     history
   }
 

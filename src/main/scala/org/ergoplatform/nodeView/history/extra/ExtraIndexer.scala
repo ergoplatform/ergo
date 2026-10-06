@@ -8,6 +8,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages._
@@ -16,6 +17,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.ast.ErgoTree
@@ -66,7 +68,6 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * Database handle
     */
   protected var _history: ErgoHistory = _
-
   protected def chainHeight: Int = _history.fullBlockHeight
 
   protected def history: ErgoHistoryReader = _history.getReader
@@ -74,7 +75,6 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
   protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
-    // The full-chain marker may be written before state marks the header valid.
     _history.headerIdsAtHeight(height)
       .find { id =>
         FullBlockProcessor.isInBestFullChain(historyStorage, id) &&
@@ -589,7 +589,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
     // Segmentation mutates parent references before persistence. Flush those rows
     // before either event-driven or self-driven indexing can consume them.
-    case Index() | _: FullBlockApplied if persistencePending && !state.rollbackInProgress =>
+    case _: FullBlockApplied if persistencePending && !state.rollbackInProgress =>
+      cancelRetry()
+      context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
+      if (persistBuffered(state)) self ! Index()
+
+    case Index() if persistencePending && !state.rollbackInProgress =>
       cancelRetry()
       context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
       if (persistBuffered(state)) self ! Index()
@@ -737,7 +742,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   * @param ae            - ergo address encoder to use for handling addresses
   */
 class ExtraIndexer(cacheSettings: CacheSettings,
-                   ae: ErgoAddressEncoder)
+                   ae: ErgoAddressEncoder,
+                   nodeViewHolderRefOpt: Option[ActorRef] = None)
   extends ExtraIndexerBase {
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
@@ -749,7 +755,11 @@ class ExtraIndexer(cacheSettings: CacheSettings,
   override def preStart(): Unit = {
     context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
     context.system.eventStream.subscribe(self, classOf[Rollback])
-    context.system.eventStream.subscribe(self, classOf[StartExtraIndexer])
+    nodeViewHolderRefOpt.foreach { nodeViewHolderRef =>
+      nodeViewHolderRef ! GetDataFromCurrentView[ErgoStateReader, StartExtraIndexer] { view =>
+        StartExtraIndexer(view.history)
+      }
+    }
   }
 
   override def postStop(): Unit = {
@@ -763,6 +773,12 @@ class ExtraIndexer(cacheSettings: CacheSettings,
   }
 
   override def receive: Receive = {
+
+    case GetSegmentThreshold => sender ! segmentThreshold
+
+    case _: FullBlockApplied if _history == null => stash()
+
+    case _: Rollback if _history == null => stash()
 
     case StartExtraIndexer(history: ErgoHistory) =>
       log.info(s"Starting extra indexer")
@@ -873,8 +889,10 @@ object ExtraIndexer {
       }
   }
 
-  def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
-    val props = Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder)
+  def apply(chainSettings: ChainSettings,
+            cacheSettings: CacheSettings,
+            nodeViewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef = {
+    val props = Props(new ExtraIndexer(cacheSettings, chainSettings.addressEncoder, Some(nodeViewHolderRef)))
     system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
   }
 }

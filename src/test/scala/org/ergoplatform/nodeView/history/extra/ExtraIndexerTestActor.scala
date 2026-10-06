@@ -31,6 +31,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     case test.CacheBlockTransactions(height, transactions) => cacheBlockTransactions(height, transactions)
     case test.DeferNextHeaderOnce(height) => deferNextHeaderOnce(height)
     case test.DeferBlockTransactionsOnce(height) => deferBlockTransactionsOnce(height)
+    case test.ObserveUnavailableHeader(height, probe) => unavailableHeaderObserver = Some(height -> probe)
     case test.Reload() => reload()
     case test.FailNextRollbackRemoval(probe) => failNextRollbackRemoval(probe)
     case test.PauseBufferedCatchUpAt(height, limit, probe) => pauseBufferedCatchUpAt(height, limit, probe)
@@ -93,6 +94,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
   private var stateOpt: Option[UtxoState] = None
   private var deferredHeaderHeightOpt: Option[Int] = None
   private var deferredTransactionsHeightOpt: Option[Int] = None
+  private var unavailableHeaderObserver: Option[(Int, ActorRef)] = None
   private var rollbackFailureProbeOpt: Option[ActorRef] = None
   private var failRollbackRemoval: Boolean = false
   private var pauseCatchUpAtHeightOpt: Option[Int] = None
@@ -134,6 +136,12 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
 
   override protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
     val headerOpt = super.fullChainHeaderAtHeight(height)
+    unavailableHeaderObserver.foreach { case (observedHeight, probe) =>
+      if (height == observedHeight && headerOpt.isEmpty) {
+        probe ! height
+        unavailableHeaderObserver = None
+      }
+    }
     if (deferredHeaderHeightOpt.contains(height)) {
       deferredHeaderHeightOpt = None
       headerOpt.map(_.copy(parentId = bytesToId(Array.fill(32)(0x7f.toByte))))
@@ -229,6 +237,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     segments.clear()
     deferredHeaderHeightOpt = None
     deferredTransactionsHeightOpt = None
+    unavailableHeaderObserver = None
     rollbackFailureProbeOpt = None
     failRollbackRemoval = false
     configuredSaveLimit = 1

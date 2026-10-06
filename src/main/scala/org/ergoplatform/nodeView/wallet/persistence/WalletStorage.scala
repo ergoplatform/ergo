@@ -62,6 +62,78 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
       }
     }
 
+  /** A pending replay records its effective first block, so a pruned node can
+    * resume an explicitly requested suffix. The old one-byte pending marker
+    * means a genesis replay, whose first block is at height one.
+    */
+  def pendingRescanStartHeight: Try[Option[Int]] = Try {
+    store.get(RescanRecoveryIntentKey) match {
+      case None => None
+      case Some(bytes) if java.util.Arrays.equals(bytes, PendingRescanRecoveryIntent) => Some(1)
+      case Some(bytes) if java.util.Arrays.equals(bytes, ClearedRescanRecoveryIntent) => None
+      case Some(bytes) if bytes.length == 5 && bytes(0) == HeightBoundRescanRecoveryIntent =>
+        val height = Ints.fromByteArray(bytes.drop(1))
+        require(height >= 1, "Invalid wallet rescan-recovery start height")
+        Some(height)
+      case Some(_) => throw new IllegalStateException("Invalid wallet rescan-recovery intent")
+    }
+  }
+
+  def rescanRecoveryIntent: Try[Boolean] = pendingRescanStartHeight.map(_.nonEmpty)
+
+  private def syncRescanRecoveryIntent(startHeight: Int): Try[Unit] = {
+    val intent = Array(HeightBoundRescanRecoveryIntent) ++ Ints.toByteArray(startHeight)
+    store.insertSync(RescanRecoveryIntentKey, intent).flatMap { _ =>
+      pendingRescanStartHeight.flatMap {
+        case Some(`startHeight`) => Success(())
+        case _ => Failure(new IllegalStateException(
+          "Wallet rescan-recovery intent was not readable after write"))
+      }
+    }
+  }
+
+  /** Sync and read back the intent before closing or deleting the registry. */
+  def beginRescanRecovery(fromHeight: Int = 1): Try[Unit] = {
+    if (fromHeight < 0) Failure(new IllegalArgumentException("Wallet rescan height cannot be negative"))
+    else {
+      val startHeight = math.max(1, fromHeight)
+      pendingRescanStartHeight.flatMap {
+        case Some(`startHeight`) => Success(())
+        case Some(other) => Failure(new IllegalStateException(
+          s"Wallet rescan recovery is pending from height $other, not $startHeight"))
+        case None => syncRescanRecoveryIntent(startHeight)
+      }
+    }
+  }
+
+  /** An explicit retry may only widen the retained replay range. Commit the
+    * earlier start before the actor replaces its live registry again.
+    */
+  def restartRescanRecoveryEarlier(fromHeight: Int): Try[Unit] = {
+    if (fromHeight < 0) Failure(new IllegalArgumentException("Wallet rescan height cannot be negative"))
+    else {
+      val startHeight = math.max(1, fromHeight)
+      pendingRescanStartHeight.flatMap {
+        case Some(old) if startHeight < old => syncRescanRecoveryIntent(startHeight)
+        case Some(old) => Failure(new IllegalStateException(
+          s"Wallet rescan recovery is pending from height $old; an explicit retry must start earlier"))
+        case None => Failure(new IllegalStateException("Wallet rescan recovery is not pending"))
+      }
+    }
+  }
+
+  /** Called only after the rebuilt registry commits the exact selected applied tip. */
+  def clearRescanRecovery(): Try[Unit] = pendingRescanStartHeight.flatMap {
+    case None => Failure(new IllegalStateException("Wallet rescan-recovery intent is not pending"))
+    case Some(_) =>
+      store.insertSync(RescanRecoveryIntentKey, ClearedRescanRecoveryIntent).flatMap { _ =>
+        pendingRescanStartHeight.flatMap {
+          case None => Success(())
+          case Some(_) => Failure(new IllegalStateException("Wallet rescan-recovery intent did not clear"))
+        }
+      }
+  }
+
   /** A pending rollback fences the registry even when both databases can be opened. */
   def retainedRollbackIntent: Try[Option[RetainedRollbackIntent]] = Try {
     store.get(RetainedRollbackIntentKey) match {
@@ -178,6 +250,16 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
   def updateStateContext(ctx: ErgoStateContext): Try[Unit] = {
     cachedStateContext = Some(ctx)
     store.insert(StateContextKey, ctx.bytes)
+  }
+
+  /** Persist the context used for signing before releasing a rescan fence. */
+  def syncStateContext(ctx: ErgoStateContext): Try[Unit] = {
+    val bytes = ctx.bytes
+    store.insertSync(StateContextKey, bytes).flatMap { _ => Try {
+      require(store.get(StateContextKey).exists(_.sameElements(bytes)),
+        "Wallet state context was not readable after its sync write")
+      cachedStateContext = Some(ctx)
+    }}
   }
 
   /**
@@ -323,6 +405,10 @@ object WalletStorage {
   private val DeepForkQuarantineKey: Array[Byte] = noPrefixKey("deep_fork_quarantine_v1")
   private val DeepForkQuarantineValue: Array[Byte] = Array(1: Byte)
   private val ClearedDeepForkQuarantineValue: Array[Byte] = Array(0: Byte)
+  private val RescanRecoveryIntentKey: Array[Byte] = noPrefixKey("rescan_recovery_intent_v1")
+  private val PendingRescanRecoveryIntent: Array[Byte] = Array(1: Byte)
+  private val HeightBoundRescanRecoveryIntent: Byte = 2: Byte
+  private val ClearedRescanRecoveryIntent: Array[Byte] = Array(0: Byte)
   private val RetainedRollbackIntentKey: Array[Byte] = noPrefixKey("retained_rollback_intent_v1")
   private val PendingRollbackIntentVersion: Byte = 1: Byte
   private val ClearedRollbackIntent: Array[Byte] = Array(0: Byte)

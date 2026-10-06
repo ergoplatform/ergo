@@ -93,6 +93,48 @@ class WalletRegistrySpec
     }
   }
 
+  it should "sync a committed checkpoint that remains rollbackable after reopening" in {
+    val checkpointSettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 4)
+    )
+    val firstId = bytesToId(byteString32("wallet-sync-checkpoint-1"))
+    val secondId = bytesToId(byteString32("wallet-sync-checkpoint-2"))
+    val firstVersion = VersionTag @@ Base16.encode(idToBytes(firstId))
+    val emptyScan = ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty)
+    val registry = WalletRegistry(checkpointSettings).get
+    try {
+      registry.updateOnBlock(emptyScan, firstId, 1).get
+      registry.updateOnBlock(emptyScan, secondId, 2).get
+      registry.syncCommittedCheckpoint(secondId, 2).get
+      registry.committedVersionAndDigest.get match {
+        case (version, digest) =>
+          version shouldBe secondId
+          digest.height shouldBe 2
+      }
+    } finally registry.close()
+
+    val reopened = WalletRegistry(checkpointSettings).get
+    try {
+      val (committedVersion, committedDigest) = reopened.committedVersionAndDigest.get
+      committedVersion shouldBe secondId
+      committedDigest.height shouldBe 2
+      reopened.hasVersion(firstVersion) shouldBe true
+
+      reopened.rollbackDurably(firstVersion).get
+      val (restoredVersion, restoredDigest) = reopened.committedVersionAndDigest.get
+      restoredVersion shouldBe firstId
+      restoredDigest.height shouldBe 1
+    } finally reopened.close()
+
+    val afterRollback = WalletRegistry(checkpointSettings).get
+    try {
+      val (version, digest) = afterRollback.committedVersionAndDigest.get
+      version shouldBe firstId
+      digest.height shouldBe 1
+    } finally afterRollback.close()
+  }
+
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
       withVersionedStore(10) { store =>

@@ -6,6 +6,8 @@ import org.ergoplatform.ErgoApp
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.modifiers.history.header.PreGenesisHeader
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool, ChangedState}
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
@@ -83,6 +85,68 @@ private[wallet] trait WalletForkRecovery { this: ErgoWalletActor =>
           case None => scheduleFullChainProbeRetry()
         }
       )
+    }
+  }
+
+  /** Do not start catch-up against the old registry until the selected applied
+    * branch has a contiguous retained body suffix through its full tip.
+    */
+  protected[wallet] def beginCatchUpBodyPreflight(state: ErgoWalletState, startHeight: Int): Unit = {
+    cancelSelectedCatchUpScan()
+    registryCheckpoint(state) match {
+      case Failure(t) =>
+        enterDeepForkQuarantine(state, s"registry checkpoint is inconsistent: ${t.getMessage}")
+      case Success((walletTip, walletHeight)) =>
+        // The pre-genesis sentinel probes through the selected genesis block.
+        // Both empty and checkpointed registries replay from the same full tip.
+        beginFullChainProbe(state, walletTip, walletHeight, requireBodies = true)(
+          selectedTip => {
+            if (selectedTip == walletTip && startHeight == walletHeight + 1) {
+              // A scan that already committed the selected tip has no next body.
+              // Install the verified state under the same short history fence.
+              val completed = historyReader.ifHolderAppliedFullTip(selectedTip) {
+                if (registryCheckpoint(state).toOption.contains(selectedTip -> walletHeight) &&
+                    historyReader.heightOf(selectedTip).contains(walletHeight)) {
+                  activateWallet(state)
+                  true
+                } else false
+              }
+              if (!completed.contains(true)) scheduleFullChainProbeRetry()
+            } else {
+              // Read both durable fences before arming. A quarantined receive
+              // would ignore the selected scan message and strand the plan.
+              val markersClear = state.storage.rescanRecoveryIntent == Success(false) &&
+                state.storage.deepForkQuarantine == Success(false)
+              if (!markersClear) {
+                context.become(quarantinedWallet(state,
+                  new IllegalStateException("Wallet recovery marker blocks ordinary catch-up")))
+                pendingChainMessages = 0
+                unstashAll()
+              } else {
+                val receive = activeWallet(state)
+                val installed = historyReader.ifHolderAppliedFullTip(selectedTip) {
+                  if (armSelectedCatchUpScan(selectedTip, startHeight)) {
+                    context.become(receive)
+                    true
+                  } else false
+                }
+                if (installed.contains(true)) {
+                  pendingChainMessages = 0
+                  unstashAll()
+                } else scheduleFullChainProbeRetry()
+              }
+            }
+          },
+          _ => awaitSupersedingRollback(state,
+            s"wallet tip $walletTip is off the selected full chain during catch-up"),
+          (selectedTip, missingHeight) => historyReader.ifHolderAppliedFullTip(selectedTip) {
+            persistDeepForkQuarantine(state)
+          } match {
+            case Some(persisted) => finishDeepForkQuarantine(state,
+              s"selected full block body is missing at height $missingHeight", persisted)
+            case None => scheduleFullChainProbeRetry()
+          }
+        )
     }
   }
 
@@ -213,13 +277,19 @@ private[wallet] trait WalletForkRecovery { this: ErgoWalletActor =>
   /** Keep the prior registry for inspection, but never expose it as the selected chain. */
   protected[wallet] def quarantinedWallet(state: ErgoWalletState, reason: Throwable): Receive = {
     case GetWalletStatus =>
+      val rescanState = if (selectedRecoveryScanInProgress) WalletRescanState.InProgress
+      else state.storage.rescanRecoveryIntent match {
+        case Success(false) => WalletRescanState.Inactive
+        case _ => WalletRescanState.NeedsRecovery
+      }
       sender() ! WalletStatus(
         Try(state.secretIsSet(settings.walletSettings.testMnemonic)).getOrElse(false) ||
           Try(JsonSecretStorage.readFile(settings.walletSettings.secretStorage).isSuccess).getOrElse(false),
         false,
         None,
         retainedRollbackSourceHeight.getOrElse(Try(state.getWalletHeight).getOrElse(0)),
-        Some(reason.getMessage)
+        Some(reason.getMessage),
+        rescanState
       )
     case CloseWallet =>
       state.storage.close()
@@ -241,13 +311,50 @@ private[wallet] trait WalletForkRecovery { this: ErgoWalletActor =>
       mnemonic.erase()
       passOpt.foreach(_.erase())
       sender() ! Status.Failure(reason)
-    case RescanWallet(_) => sender() ! Failure(reason)
+    case RescanWallet(fromHeight) => beginQuarantinedRescan(state, fromHeight, sender())
+    case msg: ScanSelectedInThePast if selectedRecoveryScanInProgress =>
+      runSelectedRecoveryScan(state, msg)
     case GetPrivateKeyFromPath(_) => sender() ! Failure(reason)
     case GetFirstSecret => sender() ! FirstSecretResponse(Failure(reason))
     case UpdateChangeAddress(_) => sender() ! StatusReply.error(reason)
-    case _: ChangedState | _: ChangedMempool => () // do not touch the preserved registry
-    case _: ChangedHistory | ContinueFullChainProbe | RetryFullChainProbe => ()
-    case _: ScanOffChain | _: ScanOnChain | _: ScanInThePast | _: Rollback => ()
+    case ChangedState(reader: ErgoStateReader@unchecked)
+        if selectedRecoveryScanInProgress || rescanIntentPending(state) =>
+      captureRescanStateReader(state, reader) match {
+        case Success(updated) =>
+          context.become(quarantinedWallet(updated, reason))
+          retryRescanCompletion()
+        case Failure(t) => stopIncompleteRescanRecovery(state,
+          s"selected state reader could not be captured: ${t.getMessage}")
+      }
+    case ChangedMempool(reader: ErgoMemPoolReader@unchecked)
+        if selectedRecoveryScanInProgress || rescanIntentPending(state) =>
+      captureRescanMempoolReader(state, reader) match {
+        case Success(updated) =>
+          context.become(quarantinedWallet(updated, reason))
+          retryRescanCompletion()
+        case Failure(t) => stopIncompleteRescanRecovery(state,
+          s"selected mempool reader could not be captured: ${t.getMessage}")
+      }
+    case snapshot: ErgoWalletActor.RescanCurrentView =>
+      acceptRescanCurrentView(state, snapshot)
+    case CompleteRescanRecovery if selectedRecoveryScanInProgress =>
+      prepareRescanOffChainForCompletion(state) match {
+        case Success(updated) => completePendingRescanRecovery(updated)
+        case Failure(t) => stopIncompleteRescanRecovery(state,
+          s"unconfirmed wallet state could not be reconstructed: ${t.getMessage}")
+      }
+    case CompleteRescanRecovery => ()
+    case Rollback(version) if selectedRecoveryScanInProgress =>
+      // The holder can send this before it installs the shorter or rival tip.
+      // Do not discard the only rollback signal and retry an impossible probe.
+      stopIncompleteRescanRecovery(state,
+        s"holder rolled back to $version during wallet rescan")
+    case _: ChangedHistory if rescanCompletionIsPending => retryRescanCompletion()
+    case ScanOffChain(tx) if selectedRecoveryScanInProgress || rescanIntentPending(state) =>
+      deferRescanOffChain(state, tx)
+    case _: ChangedState | _: ChangedMempool | _: ChangedHistory => ()
+    case ContinueFullChainProbe | RetryFullChainProbe => ()
+    case _: ScanOffChain | _: ScanOnChain | _: ScanInThePast | _: ScanSelectedInThePast | _: Rollback => ()
     case LockWallet => ()
     case _ => sender() ! Status.Failure(reason)
   }

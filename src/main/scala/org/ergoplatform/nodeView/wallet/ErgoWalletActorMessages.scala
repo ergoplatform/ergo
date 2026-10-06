@@ -308,10 +308,26 @@ object ErgoWalletActorMessages {
    */
   case class RescanWallet(fromHeight: Int)
 
+  /** A rescan start rejected by its requested height or retained start boundary. */
+  final case class RescanStartInvalid(reason: String) extends IllegalArgumentException(reason)
+
+  /** A rescan start blocked by another wallet recovery operation. */
+  final case class RescanStartConflict(reason: String) extends IllegalStateException(reason)
+
+  /** The selected applied full-block tip is not yet available for a rescan. */
+  final case class RescanStartUnavailable(reason: String) extends IllegalStateException(reason)
+
   /**
    * Get wallet status
    */
   case object GetWalletStatus
+
+  sealed abstract class WalletRescanState(val value: String)
+  object WalletRescanState {
+    case object Inactive extends WalletRescanState("inactive")
+    case object InProgress extends WalletRescanState("in_progress")
+    case object NeedsRecovery extends WalletRescanState("needs_recovery")
+  }
 
   /**
    * Wallet status. To be sent in response to GetWalletStatus
@@ -325,7 +341,8 @@ object ErgoWalletActorMessages {
                           unlocked: Boolean,
                           changeAddress: Option[P2PKAddress],
                           height: Height,
-                          error: Option[String])
+                          error: Option[String],
+                          rescanState: WalletRescanState = WalletRescanState.Inactive)
 
   /**
    * Get root secret key (used in miner)

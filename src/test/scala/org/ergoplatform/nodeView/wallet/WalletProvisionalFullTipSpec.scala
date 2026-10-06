@@ -110,10 +110,7 @@ class WalletProvisionalFullTipSpec extends ErgoCorePropertyTest with WalletTestO
         actorSettings, parameters, new ErgoWalletServiceImpl(actorSettings), selector, history
       ) {
         private var injectOnce = true
-        override protected def probeSelectedFullChain(targetId: ModifierId,
-                                                      targetHeight: Int,
-                                                      cursor: Option[FullChainCursor]): FullChainProbe = {
-          val result = super.probeSelectedFullChain(targetId, targetHeight, cursor)
+        private def observe(result: FullChainProbe): FullChainProbe = {
           if (injectOnce && result == FullChainSelected(first.id)) {
             injectOnce = false
             history.recordHolderAppliedStateVersion(idToVersion(PreGenesisHeader.id))
@@ -121,6 +118,15 @@ class WalletProvisionalFullTipSpec extends ErgoCorePropertyTest with WalletTestO
           }
           result
         }
+        override protected def probeSelectedFullChain(targetId: ModifierId,
+                                                      targetHeight: Int,
+                                                      cursor: Option[FullChainCursor]): FullChainProbe = {
+          observe(super.probeSelectedFullChain(targetId, targetHeight, cursor))
+        }
+        override protected def probeSelectedFullChainBodies(targetId: ModifierId,
+                                                            targetHeight: Int,
+                                                            cursor: Option[FullChainCursor]): FullChainProbe =
+          observe(super.probeSelectedFullChainBodies(targetId, targetHeight, cursor))
       }))
       def closeActor(actor: akka.actor.ActorRef): Unit = {
         val probe = TestProbe()(w.actorSystem)

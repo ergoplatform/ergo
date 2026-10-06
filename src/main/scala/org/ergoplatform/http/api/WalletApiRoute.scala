@@ -1,6 +1,7 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
 import akka.pattern.ask
 import io.circe.syntax._
@@ -10,12 +11,13 @@ import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{RescanStartConflict, RescanStartInvalid, RescanStartUnavailable, WalletRescanState}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
 
@@ -286,12 +288,19 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def getWalletStatusR: Route = (path("status") & get) {
     withWallet(_.getWalletStatus) { walletStatus =>
+        val publicError = walletStatus.rescanState match {
+          case WalletRescanState.InProgress => "Wallet rescan is in progress"
+          case WalletRescanState.NeedsRecovery =>
+            "Wallet rescan requires retry or operator recovery; inspect node logs"
+          case WalletRescanState.Inactive => walletStatus.error.getOrElse("")
+        }
         Json.obj(
           "isInitialized" -> walletStatus.initialized.asJson,
           "isUnlocked" -> walletStatus.unlocked.asJson,
           "changeAddress" -> walletStatus.changeAddress.map(_.toString()).getOrElse("").asJson,
           "walletHeight" -> walletStatus.height.asJson,
-          "error" -> walletStatus.error.getOrElse("").asJson
+          "error" -> publicError.asJson,
+          "rescanState" -> walletStatus.rescanState.value.asJson
         )
     }
   }
@@ -478,8 +487,14 @@ case class WalletApiRoute(readersHolder: ActorRef,
   def rescanWalletR: Route = (path("rescan") & post & heightEntityField) { fromHeight =>
     withWalletOp(_.rescanWallet(fromHeight)) {
       _.fold(
-        e => BadRequest(e.getMessage),
-        _ => ApiResponse.toRoute(ApiResponse.OK)
+        {
+          case e: RescanStartInvalid => BadRequest(e.getMessage)
+          case e: RescanStartConflict => ApiError(StatusCodes.Conflict, "wallet.rescan.conflict")(e.getMessage)
+          case _: RescanStartUnavailable =>
+            ApiError(StatusCodes.ServiceUnavailable, "wallet.rescan.unavailable")("Selected full tip is unavailable")
+          case _ => InternalError("Wallet rescan could not be started")
+        },
+        _ => complete(StatusCodes.Accepted)
       )
     }
   }

@@ -238,7 +238,30 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     */
   def update(versionID: VersionID,
              toRemove: TraversableOnce[Array[Byte]],
-             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
+             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] =
+    updateWithOptions(versionID, toRemove, toUpdate, writeOptions)
+
+  /** Sync the undo and main writes before a caller clears its durable recovery intent.
+    * They are separate databases, so a failed main write can still leave a newer undo record.
+    */
+  def updateSync(versionID: VersionID,
+                 toRemove: TraversableOnce[Array[Byte]],
+                 toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] =
+    updateWithOptions(versionID, toRemove, toUpdate, new WriteOptions().sync(true))
+
+  private[db] def writeUpdateUndo(batch: WriteBatch, options: WriteOptions): Unit =
+    undo.write(batch, options)
+
+  private[db] def writeUpdateMain(batch: WriteBatch, options: WriteOptions): Unit =
+    db.write(batch, options)
+
+  private[db] def writeUpdatePruneUndo(batch: WriteBatch, options: WriteOptions): Unit =
+    undo.write(batch, options)
+
+  private def updateWithOptions(versionID: VersionID,
+                                toRemove: TraversableOnce[Array[Byte]],
+                                toUpdate: TraversableOnce[(Array[Byte], Array[Byte])],
+                                options: WriteOptions): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()
@@ -266,11 +289,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         if (lsn == lastLsn) { // no records were written for this version: generate dummy record
           undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
         }
-        undo.write(undoBatch, writeOptions)
+        writeUpdateUndo(undoBatch, options)
         if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
           versions += versionID
           versionLsn += lastLsn + 1 // first LSN for this version
-          cleanStart(keepVersions)
+          cleanStart(keepVersions, options)
         }
       } else {
         //keepVersions = 0
@@ -284,7 +307,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         }
       }
 
-      db.write(batch, writeOptions)
+      writeUpdateMain(batch, options)
       lastVersion = Some(versionID)
     } finally {
       // Make sure you close the batch to avoid resource leaks.
@@ -300,7 +323,9 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
 
   // Keep last "count"+1 versions and remove undo information for older versions
-  private def cleanStart(count: Int): Unit = {
+  private def cleanStart(count: Int): Unit = cleanStart(count, writeOptions)
+
+  private def cleanStart(count: Int, options: WriteOptions): Unit = {
     val deteriorated = versions.size - count - 1
     if (deteriorated >= 0) {
       val fromLsn = versionLsn(0)
@@ -310,7 +335,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         for (lsn <- fromLsn until tillLsn) {
           batch.delete(encodeLSN(lsn))
         }
-        undo.write(batch, writeOptions)
+        writeUpdatePruneUndo(batch, options)
       } finally {
         batch.close()
       }
@@ -318,7 +343,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
       if (count == 0) {
-        db.put(last_version_key, versions(0))
+        db.put(last_version_key, versions(0), options)
       }
     }
   }

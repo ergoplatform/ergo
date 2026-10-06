@@ -449,7 +449,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     history.recordHolderAppliedStateVersion(state.version)
 
-    val wallet = ErgoWallet.readOrGenerate(history.getReader, settings, settings.launchParameters)
+    val wallet = ErgoWallet.readOrGenerate(history.getReader, settings, settings.launchParameters,
+      Some(self))
 
     val memPool = ErgoMemPool.empty(settings)
 
@@ -474,7 +475,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         val wallet = ErgoWallet.readOrGenerate(
           history.getReader,
           settings,
-          state.parameters)
+          state.parameters,
+          Some(self))
         log.info("Wallet database read")
         Some((history, state, wallet, memPool))
       case Failure(ex) =>

@@ -142,6 +142,62 @@ trait ErgoHistoryReader
     }
   }
 
+  /** Check the selected applied branch's replayable body suffix in bounded ancestor batches.
+    * A missing body above the wallet checkpoint prevents catch-up, even when the
+    * persisted pruning floor has advanced past it.
+    */
+  def appliedFullChainBodyProbe(targetId: ModifierId,
+                                targetHeight: Height,
+                                previous: Option[ErgoHistoryReader.FullChainCursor] = None,
+                                maxHeaders: Int = 128): ErgoHistoryReader.FullChainProbe = synchronized {
+    import ErgoHistoryReader._
+    require(maxHeaders > 0 && maxHeaders <= 256, "Full-chain probe batch must contain 1 to 256 headers")
+    val preGenesisTarget = targetId == PreGenesisHeader.id && targetHeight == EmptyHistoryHeight
+    bestFullBlockIdOpt match {
+      case None => FullChainUnknown
+      case Some(fullTipId) =>
+        val start = previous.filter(c =>
+          c.fullTipId == fullTipId && c.targetId == targetId && c.targetHeight == targetHeight
+        ).orElse(typedModifierById[Header](fullTipId).map { tip =>
+          FullChainCursor(fullTipId, tip.id, tip.height, targetId, targetHeight)
+        })
+        start match {
+          case None => FullChainUnknown
+          case Some(cursor) if (!preGenesisTarget && targetHeight < GenesisHeight) ||
+            cursor.nextHeight < targetHeight =>
+            FullChainUnknown
+          case Some(cursor) =>
+            var nextId = cursor.nextId
+            var nextHeight = cursor.nextHeight
+            var read = 0
+            while (read < maxHeaders) {
+              typedModifierById[Header](nextId) match {
+                case None => return FullChainUnknown
+                case Some(header) if header.height != nextHeight => return FullChainUnknown
+                case Some(header) =>
+                  if (header.height > targetHeight && getFullBlock(header).isEmpty) {
+                    return if (isAppliedFullTip(fullTipId)) FullChainBodyMissing(fullTipId, header.height)
+                    else FullChainUnknown
+                  }
+                  if (preGenesisTarget && header.height == GenesisHeight) {
+                    if (header.parentId != targetId || !isAppliedFullTip(fullTipId)) return FullChainUnknown
+                    return FullChainSelected(fullTipId)
+                  }
+                  if (header.height == targetHeight) {
+                    if (!isAppliedFullTip(fullTipId)) return FullChainUnknown
+                    return if (header.id == targetId) FullChainSelected(fullTipId)
+                    else FullChainOther(fullTipId)
+                  }
+                  nextId = header.parentId
+                  nextHeight -= 1
+                  read += 1
+              }
+            }
+            FullChainPending(FullChainCursor(fullTipId, nextId, nextHeight, targetId, targetHeight))
+        }
+    }
+  }
+
   private def isAppliedFullTip(tip: ModifierId): Boolean =
     holderAppliedStateVersion.contains(idToVersion(tip)) &&
       bestFullBlockIdOpt.contains(tip) && bestFullBlockOpt.exists { block =>
@@ -692,6 +748,7 @@ object ErgoHistoryReader {
   sealed trait FullChainProbe
   final case class FullChainSelected(fullTipId: ModifierId) extends FullChainProbe
   final case class FullChainOther(fullTipId: ModifierId) extends FullChainProbe
+  final case class FullChainBodyMissing(fullTipId: ModifierId, height: Height) extends FullChainProbe
   final case class FullChainPending(cursor: FullChainCursor) extends FullChainProbe
   case object FullChainUnknown extends FullChainProbe
 

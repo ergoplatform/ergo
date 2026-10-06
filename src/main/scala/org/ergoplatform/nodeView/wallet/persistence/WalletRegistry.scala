@@ -257,18 +257,21 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param blockHeight - block height
     */
   def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
+    val result = Try {
+      // Capture the previous box and indexes before staging the replacement in cache.
+      val oldBoxes = scanResults.outputs.flatMap(b => getBox(b.box.id))
+      val previouslyPaid = oldBoxes.filter(_.scans.contains(PaymentsScanId)).map(_.boxId).toSet
+      val newlyPaidOutputs = scanResults.outputs.filter(b =>
+        b.scans.contains(PaymentsScanId) && !previouslyPaid.contains(b.boxId))
+      cache ++= scanResults.outputs.map(b => b.boxId -> b)
+      val bag1 = putBoxes(removeBoxes(KeyValuePairsBag.empty, oldBoxes), scanResults.outputs)
+      val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
-    // first, put newly created outputs and related transactions into key-value bag
-    cache ++= scanResults.outputs.map(b => b.boxId -> b)
-    val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
-    val bag2 = putTxs(bag1, scanResults.relatedTransactions)
+      // Process spent boxes and update the digest in the same block batch.
+      val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
+      val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
-    // process spent boxes
-    val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
-    val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
-
-    // and update wallet digest
-    updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
+      updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -279,7 +282,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
+      val receivedTokensAmt = newlyPaidOutputs
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -301,15 +304,18 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
           }
         }
 
-      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
+      val receivedAmt = newlyPaidOutputs.map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
         Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
       else
         Failure(new IllegalStateException("Balance could not be negative"))
-    }.flatMap { bag4 =>
-      bag4.transact(store, idToBytes(blockId))
-    }
+      }.flatMap { bag4 =>
+        bag4.transact(store, idToBytes(blockId))
+      }
+    }.flatten
+    if (result.isFailure) cache.clear()
+    result
   }
 
   def rollback(version: VersionTag): Try[Unit] = {
@@ -344,6 +350,27 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     }
     bytesToId(version) -> digest
   }
+
+  /** Make the rebuilt checkpoint durable in both registry databases before
+    * clearing the separate, durable rescan-recovery intent. The same-version
+    * digest write is nonempty so that a synchronous LevelDB write also fences
+    * the preceding asynchronous replay batches.
+    */
+  def syncCommittedCheckpoint(expectedTip: ModifierId, expectedHeight: Int): Try[Unit] =
+    committedVersionAndDigest.flatMap { case (tip, digest) =>
+      if (tip != expectedTip || digest.height != expectedHeight) {
+        Failure(new IllegalStateException("Wallet registry checkpoint differs from selected rescan tip"))
+      } else {
+        Try(store.get(RegistrySummaryKey).getOrElse(
+          throw new IllegalStateException("Wallet registry digest is missing")))
+          .flatMap(bytes => store.updateSync(idToBytes(expectedTip), Seq.empty,
+            Seq(RegistrySummaryKey -> bytes)))
+          .flatMap(_ => committedVersionAndDigest.flatMap {
+            case (`expectedTip`, checkedDigest) if checkedDigest == digest => Success(())
+            case _ => Failure(new IllegalStateException("Wallet registry checkpoint changed during sync"))
+          })
+      }
+    }
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.

@@ -5,7 +5,8 @@ import akka.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import org.ergoplatform.Pay2SAddress
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{Rollback => HolderRollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedState, Rollback => HolderRollback}
+import org.ergoplatform.nodeView.history.HistorySectionFault
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage
@@ -56,6 +57,30 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
       val forkAtSecondB = forkAtFirst.applyModifier(secondB)(_ => ()).get
       secondA.id should not equal secondB.id
 
+      // Seed the lagging registry while the holder's selected tip is still A1.
+      val actorSettings = w.settings.copy(
+        directory = new File(w.nodeViewDir, "deep-fork-wallet").getAbsolutePath,
+        nodeSettings = w.settings.nodeSettings.copy(keepVersions = 1, blocksToKeep = -1)
+      )
+      val ws = actorSettings.walletSettings
+      val selector = new ReplaceCompactCollectBoxSelector(ws.maxInputs, ws.optimalInputs, None)
+      val laggingSettings = actorSettings.copy(
+        directory = new File(w.nodeViewDir, "interior-gap-wallet").getAbsolutePath
+      )
+      val laggingActor = w.actorSystem.actorOf(Props(new ErgoWalletActor(
+        laggingSettings, parameters, new ErgoWalletServiceImpl(laggingSettings), selector, getHistory
+      )))
+      val laggingReader = new ErgoWalletReader { override val walletActor = laggingActor }
+      val laggingProbe = TestProbe()(w.actorSystem)
+      laggingProbe.watch(laggingActor)
+      laggingProbe.send(laggingActor, ScanOnChain(first))
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        val status = await(laggingReader.getWalletStatus)
+        status.height shouldBe first.height
+        status.error shouldBe None
+        await(laggingReader.confirmedBalances).walletBalance shouldBe initialBalance
+      }
+
       applyBlock(secondA) shouldBe 'success
       val externalA = secondA.blockTransactions.txs.flatMap(_.outputs)
         .find(_.ergoTree == TrueTree).get
@@ -80,12 +105,6 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
 
       // The holder retains enough state to select B4. Only the observed wallet
       // keeps one version, so its A1 common version is unavailable at rollback.
-      val actorSettings = w.settings.copy(
-        directory = new File(w.nodeViewDir, "deep-fork-wallet").getAbsolutePath,
-        nodeSettings = w.settings.nodeSettings.copy(keepVersions = 1, blocksToKeep = -1)
-      )
-      val ws = actorSettings.walletSettings
-      val selector = new ReplaceCompactCollectBoxSelector(ws.maxInputs, ws.optimalInputs, None)
       val actor = w.actorSystem.actorOf(Props(new ErgoWalletActor(
         actorSettings, parameters, new ErgoWalletServiceImpl(actorSettings), selector, getHistory
       )))
@@ -127,6 +146,7 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
       var actorClosed = false
       var retainedClosed = false
       var unmarkedClosed = false
+      var laggingClosed = false
       var secretlessSeedClosed = false
       var secretlessClosed = false
 
@@ -236,7 +256,6 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
             status.error.value.toLowerCase should include("quarantine")
           }
           Try(await(unmarkedReopenedReader.confirmedBalances)).isFailure shouldBe true
-          await(unmarkedReopenedReader.rescanWallet(1)).isFailure shouldBe true
         } finally {
           unmarkedReopenedProbe.send(unmarkedReopened, CloseWallet)
           unmarkedReopenedProbe.expectTerminated(unmarkedReopened, 5.seconds)
@@ -285,7 +304,6 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
         Try(await(reader.generateUnsignedTransaction(Seq(payment(oldBalance / 2))))).isFailure shouldBe true
         Try(await(reader.signTransaction(unsignedBeforeFork, Seq.empty, TransactionHintsBag.empty, None, None)))
           .isFailure shouldBe true
-        await(reader.rescanWallet(1)).isFailure shouldBe true
 
         actorProbe.send(actor, CloseWallet)
         actorProbe.expectTerminated(actor, 5.seconds)
@@ -315,7 +333,6 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
           }
           Try(await(restartedReader.confirmedBalances)).isFailure shouldBe true
           Try(await(restartedReader.generateUnsignedTransaction(Seq(payment(oldBalance / 2))))).isFailure shouldBe true
-          await(restartedReader.rescanWallet(1)).isFailure shouldBe true
         } finally {
           restartProbe.send(restarted, CloseWallet)
           restartProbe.expectTerminated(restarted, 5.seconds)
@@ -347,7 +364,6 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
             SecretString.create("local-test-pass"), SecretString.create("local test mnemonic"),
             None, usePre1627KeyDerivation = false
           )).isFailure shouldBe true
-          await(guardedReader.rescanWallet(1)).isFailure shouldBe true
         } finally {
           guardedProbe.send(guarded, CloseWallet)
           guardedProbe.expectTerminated(guarded, 5.seconds)
@@ -361,6 +377,52 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
           stillPreserved.registry.close()
           stillPreserved.storage.close()
         }
+
+        // B4 was applied by the real holder, then B3's transaction body disappears
+        // from the same history storage the wallet uses for catch-up.
+        getHistory.bestFullBlockAt(thirdB.height).map(_.id) shouldBe Some(thirdB.id)
+        getHistory.bestFullBlockAt(fourthB.height).map(_.id) shouldBe Some(fourthB.id)
+        HistorySectionFault.removeTransactionSection(getHistory, thirdB.header.transactionsId)
+        getHistory.bestFullBlockAt(thirdB.height) shouldBe None
+        getHistory.bestFullBlockOpt.map(_.id) shouldBe Some(fourthB.id)
+        getCurrentState.version shouldBe idToVersion(fourthB.id)
+        laggingProbe.send(laggingActor, ChangedState(getCurrentState))
+        laggingProbe.send(laggingActor, ScanOnChain(fourthB))
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          val status = await(laggingReader.getWalletStatus)
+          status.height shouldBe first.height
+          status.error.value.toLowerCase should include("quarantine")
+          Try(await(laggingReader.confirmedBalances)).isFailure shouldBe true
+        }
+        laggingProbe.send(laggingActor, CloseWallet)
+        laggingProbe.expectTerminated(laggingActor, 5.seconds)
+        laggingClosed = true
+        val laggingPreserved = ErgoWalletState.initial(laggingSettings, parameters).get
+        try {
+          laggingPreserved.registry.fetchDigest().height shouldBe first.height
+          laggingPreserved.registry.fetchDigest().walletBalance shouldBe initialBalance
+          laggingPreserved.storage.deepForkQuarantine.get shouldBe true
+        } finally {
+          laggingPreserved.registry.close()
+          laggingPreserved.storage.close()
+        }
+        val laggingRestart = w.actorSystem.actorOf(Props(new ErgoWalletActor(
+          laggingSettings, parameters, new ErgoWalletServiceImpl(laggingSettings), selector, getHistory
+        )))
+        val laggingRestartReader = new ErgoWalletReader { override val walletActor = laggingRestart }
+        val laggingRestartProbe = TestProbe()(w.actorSystem)
+        laggingRestartProbe.watch(laggingRestart)
+        try {
+          eventually(timeout(10.seconds), interval(100.millis)) {
+            val status = await(laggingRestartReader.getWalletStatus)
+            status.height shouldBe first.height
+            status.error.value.toLowerCase should include("quarantine")
+          }
+          Try(await(laggingRestartReader.confirmedBalances)).isFailure shouldBe true
+        } finally {
+          laggingRestartProbe.send(laggingRestart, CloseWallet)
+          laggingRestartProbe.expectTerminated(laggingRestart, 5.seconds)
+        }
       } finally {
         w.actorSystem.eventStream.unsubscribe(rollbackProbe.ref)
         if (!retainedClosed) {
@@ -370,6 +432,10 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
         if (!unmarkedClosed) {
           unmarkedProbe.send(unmarkedActor, CloseWallet)
           unmarkedProbe.expectTerminated(unmarkedActor, 5.seconds)
+        }
+        if (!laggingClosed) {
+          laggingProbe.send(laggingActor, CloseWallet)
+          laggingProbe.expectTerminated(laggingActor, 5.seconds)
         }
         if (!secretlessSeedClosed) {
           secretlessSeedProbe.send(secretlessSeedActor, CloseWallet)
@@ -400,7 +466,6 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
         Pay2SAddress(TrueTree)(w.settings.addressEncoder), initialBalance / 2, Array.empty, Map.empty
       )))).get
       val secondA = makeNextBlock(getUtxoState, Seq(secondATx))
-      applyBlock(secondA) shouldBe 'success
 
       val actorSettings = w.settings.copy(
         directory = new File(w.nodeViewDir, "lagging-selected-wallet").getAbsolutePath,
@@ -424,6 +489,7 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
           status.height shouldBe first.height
           status.error shouldBe None
         }
+        applyBlock(secondA) shouldBe 'success
 
         val (forkUtxo, boxHolder) = ValidBlocksGenerators.createUtxoState(w.settings)
         val forkAtSecondA = WrappedUtxoState(forkUtxo, boxHolder, w.settings)
@@ -686,8 +752,12 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
       probe.send(actor, ScanOnChain(first))
       probe.send(actor, ScanOnChain(second))
       probe.send(actor, ScanOnChain(third))
-      probe.send(actor, GetWalletStatus)
-      probe.expectMsgType[WalletStatus](5.seconds).height shouldBe third.height
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        probe.send(actor, GetWalletStatus)
+        val status = probe.expectMsgType[WalletStatus](1.second)
+        status.height shouldBe third.height
+        status.error shouldBe None
+      }
       // A stale rollback alone is ignored while the wallet remains selected.
       // Inject an inconsistent checkpoint to exercise marker-failure shutdown.
       failCheckpoint.set(true)

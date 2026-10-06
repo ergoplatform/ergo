@@ -11,7 +11,16 @@ import io.circe.{Decoder, Json}
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetReaders
-import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.UpdateChangeAddress
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{
+  GetWalletStatus,
+  RescanWallet,
+  RescanStartConflict,
+  RescanStartInvalid,
+  RescanStartUnavailable,
+  UpdateChangeAddress,
+  WalletRescanState,
+  WalletStatus
+}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
   ChangeAddressNotOwned,
   ChangeAddressValidationException,
@@ -30,7 +39,7 @@ import org.ergoplatform.wallet.{Constants => WalletConstants}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Try}
 import scala.concurrent.duration._
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.settings.Constants.FalseTree
@@ -87,6 +96,42 @@ class WalletApiRouteSpec extends AnyFlatSpec
             case Right(_) => sender() ! StatusReply.success(())
             case Left(error) => sender() ! StatusReply.error(error)
           }
+      }
+    }))
+    val walletReader = new ErgoWalletReader {
+      override val walletActor = walletActorRef
+    }
+    val readers = digestReaders.copy(w = walletReader)
+    val readersHolder = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetReaders => sender() ! readers
+      }
+    }))
+    Route.seal(WalletApiRoute(readersHolder, nodeViewRef, settings).route)
+  }
+
+  private def statusRoute(walletStatus: WalletStatus): Route = {
+    val walletActorRef = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetWalletStatus => sender() ! walletStatus
+      }
+    }))
+    val walletReader = new ErgoWalletReader {
+      override val walletActor = walletActorRef
+    }
+    val readers = digestReaders.copy(w = walletReader)
+    val readersHolder = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetReaders => sender() ! readers
+      }
+    }))
+    Route.seal(WalletApiRoute(readersHolder, nodeViewRef, settings).route)
+  }
+
+  private def rescanRoute(result: Try[Unit]): Route = {
+    val walletActorRef = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case RescanWallet(_) => sender() ! result
       }
     }))
     val walletReader = new ErgoWalletReader {
@@ -244,17 +289,38 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "rescan wallet post" in {
     Post(prefix + "/rescan") ~> route ~> check {
-      status shouldBe StatusCodes.OK
+      status shouldBe StatusCodes.Accepted
     }
   }
 
   it should "rescan wallet post with fromHeight" in {
     Post(prefix + "/rescan", Json.obj("fromHeight" -> 0.asJson)) ~> route ~> check {
-      status shouldBe StatusCodes.OK
+      status shouldBe StatusCodes.Accepted
     }
 
     Post(prefix + "/rescan", Json.obj("fromHeight" -> (-1).asJson)) ~> route ~> check {
       rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
+    }
+  }
+
+  it should "report a failed rescan marker write as a server error without exposing storage details" in {
+    val failure = Failure(new IllegalStateException("Wallet rescan recovery markers could not be persisted",
+      new java.io.IOException("private storage path")))
+    Post(prefix + "/rescan") ~> rescanRoute(failure) ~> check {
+      status shouldBe StatusCodes.InternalServerError
+      responseAs[Json].noSpaces should not include "private storage path"
+    }
+  }
+
+  it should "distinguish invalid, conflicting, and temporarily unavailable rescan starts" in {
+    Seq(
+      Failure(RescanStartInvalid("Invalid rescan height")) -> StatusCodes.BadRequest,
+      Failure(RescanStartConflict("Rescan already in progress")) -> StatusCodes.Conflict,
+      Failure(RescanStartUnavailable("No selected full tip")) -> StatusCodes.ServiceUnavailable
+    ).foreach { case (result, expected) =>
+      Post(prefix + "/rescan") ~> rescanRoute(result) ~> check {
+        status shouldBe expected
+      }
     }
   }
 
@@ -393,6 +459,38 @@ class WalletApiRouteSpec extends AnyFlatSpec
       val response = responseAs[Json]
       response.hcursor.downField("isUnlocked").as[Boolean] shouldBe Right(true)
       response.hcursor.downField("isInitialized").as[Boolean] shouldBe Right(true)
+      response.hcursor.downField("rescanState").as[String] shouldBe Right("inactive")
+    }
+  }
+
+  it should "expose pending and failed rescan states through wallet status" in {
+    Seq(
+      WalletRescanState.InProgress -> "in_progress",
+      WalletRescanState.NeedsRecovery -> "needs_recovery"
+    ).foreach { case (state, expected) =>
+      val walletStatus = WalletStatus(true, false, None, 1, Some("rescan pending"), state)
+      Get(prefix + "/status") ~> statusRoute(walletStatus) ~> check {
+        status shouldBe StatusCodes.OK
+        val response = responseAs[Json]
+        response.hcursor.downField("rescanState").as[String] shouldBe Right(expected)
+        val expectedError = if (state == WalletRescanState.InProgress)
+          "Wallet rescan is in progress"
+        else "Wallet rescan requires retry or operator recovery; inspect node logs"
+        response.hcursor.downField("error").as[String] shouldBe Right(expectedError)
+      }
+    }
+  }
+
+  it should "hide internal rescan failure details in wallet status" in {
+    Seq(WalletRescanState.InProgress, WalletRescanState.NeedsRecovery).foreach { state =>
+      val walletStatus = WalletStatus(true, false, None, 1,
+        Some("checkpoint failed at private-registry-marker"), state)
+      Get(prefix + "/status") ~> statusRoute(walletStatus) ~> check {
+        status shouldBe StatusCodes.OK
+        val detail = responseAs[Json].hcursor.downField("error").as[String].toOption.get
+        detail should not be empty
+        detail should not include "private-registry-marker"
+      }
     }
   }
 

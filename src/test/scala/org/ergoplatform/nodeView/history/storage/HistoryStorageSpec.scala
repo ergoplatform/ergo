@@ -73,4 +73,33 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     rentBoxIndexesInIndex(10) shouldBe Seq(2L)
   }
 
+  property("rent scan stops at the creation-height cutoff and skips foreign keys") {
+    val globalIndexes = Seq(100L, 200L, 300L)
+    val heights = Seq(10, 20, 30)
+    val rentRowIds = heights.zip(globalIndexes).map { case (h, gi) =>
+      val box = testBox(1000000000L, Constants.TrueTree, h)
+      val iEb = new IndexedErgoBox(h, None, None, None, box, gi)
+      val srb = StorageRentBox(iEb)
+      db.insertExtra(Array.empty, Array[ExtraIndex](iEb, srb))
+      srb.id
+    }
+    // a foreign 32-byte key starting with the marker byte, sorting between the
+    // height-20 and height-30 rent rows inside the marker namespace
+    val foreignKey = Array.fill(32)(0.toByte)
+    foreignKey(0) = StorageRentBox.KeyMarker
+    foreignKey(4) = 25.toByte // between height 20 (0x14) and 30 (0x1e) at the height's last byte
+    db.insertExtra(Array(foreignKey -> Array[Byte](1)), Array.empty)
+
+    try {
+      // the cutoff stops the scan at the first key in the namespace whose height
+      // bytes pass it - nothing eligible can sort after such a key
+      db.storageRentBoxesAtOrBefore(20, 10).map(_.globalIndex).toSeq shouldBe Seq(100L, 200L)
+      // the foreign key is skipped over (not returned, and not truncating the scan)
+      db.storageRentBoxesAtOrBefore(30, 10).map(_.globalIndex).toSeq shouldBe Seq(100L, 200L, 300L)
+    } finally {
+      // the spec's db is shared and persisted: leave no rows behind for other runs
+      db.removeExtra((rentRowIds :+ bytesToId(foreignKey)).toArray)
+    }
+  }
+
 }

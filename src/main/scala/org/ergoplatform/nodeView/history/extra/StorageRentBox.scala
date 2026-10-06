@@ -1,9 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{ExtraIndexTypeId, fastIdToBytes}
-import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ExtraIndexTypeId
 import scorex.util.{ModifierId, bytesToId}
-import scorex.util.serialization.{Reader, Writer}
 
 import java.nio.ByteBuffer
 
@@ -17,17 +15,15 @@ import java.nio.ByteBuffer
   * all unspent boxes old enough to be rent-eligible. The entry is inserted on output creation
   * and deleted on spend (rollback re-derives both from the unchanged [[IndexedErgoBox]] rows).
   *
+  * Rows carry no payload: everything the entry holds is already in the key, and the box
+  * itself (id, value, serialized size) is resolvable through the always-maintained
+  * [[NumericBoxIndex]] at claim time.
+  *
   * @param creationHeight - creation height of the box (its R3 height)
   * @param globalIndex    - serial number of the box counting from genesis box
-  * @param boxId          - id of the box
-  * @param value          - monetary value of the box
-  * @param bytesLen       - canonical serialized length of the box (needed for the storage fee)
   */
 class StorageRentBox(val creationHeight: Int,
-                     val globalIndex: Long,
-                     val boxId: ModifierId,
-                     val value: Long,
-                     val bytesLen: Int) extends ExtraIndex {
+                     val globalIndex: Long) extends ExtraIndex {
 
   override lazy val id: ModifierId = bytesToId(serializedId)
 
@@ -52,26 +48,15 @@ object StorageRentBox {
   def key(creationHeight: Int, globalIndex: Long): Array[Byte] =
     ByteBuffer.allocate(KeyLength).put(KeyMarker).putInt(creationHeight).putLong(globalIndex).array
 
+  /**
+    * Reconstruct an entry from its index key (the row value is empty, see class doc).
+    */
+  def fromKey(key: Array[Byte]): StorageRentBox = {
+    val bb = ByteBuffer.wrap(key)
+    bb.get() // marker
+    new StorageRentBox(bb.getInt, bb.getLong)
+  }
+
   def apply(box: IndexedErgoBox): StorageRentBox =
-    new StorageRentBox(box.box.creationHeight, box.globalIndex, box.id, box.box.value, box.box.bytes.length)
-}
-
-object StorageRentBoxSerializer extends ErgoSerializer[StorageRentBox] {
-
-  override def serialize(srb: StorageRentBox, w: Writer): Unit = {
-    w.putInt(srb.creationHeight)
-    w.putLong(srb.globalIndex)
-    w.putBytes(fastIdToBytes(srb.boxId))
-    w.putLong(srb.value)
-    w.putInt(srb.bytesLen)
-  }
-
-  override def parse(r: Reader): StorageRentBox = {
-    val creationHeight: Int = r.getInt()
-    val globalIndex: Long = r.getLong()
-    val boxId: ModifierId = bytesToId(r.getBytes(32))
-    val value: Long = r.getLong()
-    val bytesLen: Int = r.getInt()
-    new StorageRentBox(creationHeight, globalIndex, boxId, value, bytesLen)
-  }
+    new StorageRentBox(box.box.creationHeight, box.globalIndex)
 }

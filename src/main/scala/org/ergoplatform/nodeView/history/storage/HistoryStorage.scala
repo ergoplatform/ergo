@@ -146,9 +146,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           key(0) == StorageRentBox.KeyMarker &&
           java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight,
       continueScan = key => key.nonEmpty && key(0) == StorageRentBox.KeyMarker
-    ).map { case (_, bytes) =>
-      ExtraIndexSerializer.parseBytes(bytes).asInstanceOf[StorageRentBox]
-    }
+    ).map { case (key, _) => StorageRentBox.fromKey(key) }
   }
 
   /**

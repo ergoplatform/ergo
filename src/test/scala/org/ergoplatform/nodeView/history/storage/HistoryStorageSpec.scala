@@ -51,26 +51,26 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     iEb
   }
 
-  private def rentBoxIdsInIndex(limit: Int): Seq[ModifierId] =
-    db.storageRentBoxesUntil(Int.MaxValue, limit).map(_.boxId).toSeq
+  private def rentBoxIndexesInIndex(limit: Int): Seq[Long] =
+    db.storageRentBoxesUntil(Int.MaxValue, limit).map(_.globalIndex).toSeq
 
   property("storage rent entries are removable by box id") {
     val iEbs = (0L until 3).map(insertRentBox)
     val boxIds = iEbs.map(_.id)
-    rentBoxIdsInIndex(10).toSet shouldBe boxIds.toSet
+    rentBoxIndexesInIndex(10) shouldBe Seq(0L, 1L, 2L)
 
     // removing a subset removes exactly those entries, in key order for the rest
     db.removeStorageRentBoxes(boxIds.take(2))
-    rentBoxIdsInIndex(10) shouldBe Seq(boxIds(2))
+    rentBoxIndexesInIndex(10) shouldBe Seq(2L)
 
     // repeated removal is a no-op; unknown box ids are ignored
     db.removeStorageRentBoxes(boxIds.take(2) :+ bytesToId(Array.fill(32)(42.toByte)))
-    rentBoxIdsInIndex(10) shouldBe Seq(boxIds(2))
+    rentBoxIndexesInIndex(10) shouldBe Seq(2L)
 
     // an entry whose IndexedErgoBox is gone can not be located, so it is left in place
     db.removeExtra(Array(boxIds(2)))
     db.removeStorageRentBoxes(Seq(boxIds(2)))
-    rentBoxIdsInIndex(10) shouldBe Seq(boxIds(2))
+    rentBoxIndexesInIndex(10) shouldBe Seq(2L)
   }
 
 }

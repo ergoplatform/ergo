@@ -39,7 +39,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   implicit val segmentThreshold: Int = 8
 
   val system: ActorSystem = ActorSystem.create("indexer-test")
-  val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+  val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
 
   var _history: ErgoHistory = _
   def history: ErgoHistoryReader = _history.getReader
@@ -173,17 +173,15 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     }
     val rentEntries = history.storageRentBoxesUntil(Int.MaxValue, math.max(expected.length * 2, 100))
     rentEntries.length shouldBe expected.length
-    val byKey = expected.map(iEb => StorageRentBox(iEb).id -> iEb).toMap
+    val byGlobalIndex = expected.map(iEb => iEb.globalIndex -> iEb).toMap
     rentEntries.foreach { srb =>
-      byKey.get(srb.id) match {
+      byGlobalIndex.get(srb.globalIndex) match {
         case Some(iEb) =>
           srb.creationHeight shouldBe iEb.box.creationHeight
-          srb.globalIndex shouldBe iEb.globalIndex
-          srb.boxId shouldBe iEb.id
-          srb.value shouldBe iEb.box.value
-          srb.bytesLen shouldBe iEb.box.bytes.length
+          // the resolution the claim path uses must land on the same box
+          NumericBoxIndex.getBoxByNumber(history, srb.globalIndex).map(_.id) shouldBe Some(iEb.id)
         case None =>
-          fail(s"Unexpected storage-rent entry for box ${srb.boxId}")
+          fail(s"Unexpected storage-rent entry for global index ${srb.globalIndex}")
       }
     }
     // ascending order by (creationHeight, globalIndex); note globalIndex alone is NOT
@@ -245,15 +243,22 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       rentEntries.length shouldBe expected.size
     }
 
-    val actualIds = rentEntries.map(_.boxId).toSet
+    // rent rows carry no payload, so resolve the box id through the box-number index,
+    // exactly like the claim path in CandidateGenerator does
+    val resolved = rentEntries.flatMap(e => NumericBoxIndex.getBoxByNumber(history, e.globalIndex))
+    withClue("every rent row must resolve to a box: ") {
+      resolved.length shouldBe rentEntries.length
+    }
+    val actualIds = resolved.map(_.id).toSet
     withClue("rent index must cover exactly the boxes unspent on the best chain: ") {
       actualIds shouldBe expected.keySet
     }
 
     // creation height is part of the key, so it must match the box exactly
     rentEntries.foreach { e =>
-      expected.get(e.boxId).foreach { case (creationHeight, _) =>
-        e.creationHeight shouldBe creationHeight
+      NumericBoxIndex.getBoxByNumber(history, e.globalIndex).foreach { iEb =>
+        e.creationHeight shouldBe iEb.box.creationHeight
+        iEb.isSpent shouldBe false
       }
     }
 
@@ -265,14 +270,6 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     withClue("rent rows must be strictly ascending by (creationHeight, globalIndex): ") {
       keys shouldBe keys.sorted
       keys.distinct.length shouldBe keys.length
-    }
-
-    // the value/size fields are what the claim builder needs to price the storage rent
-    rentEntries.foreach { e =>
-      history.typedExtraIndexById[IndexedErgoBox](e.boxId).foreach { iEb =>
-        e.value shouldBe iEb.box.value
-        e.bytesLen shouldBe iEb.box.bytes.length
-      }
     }
 
   }
@@ -461,6 +458,17 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
+  property("required schema version is gated by the storage rent collection flag") {
+    // the rescan decision in ErgoHistory.readOrGenerate: rescan happens only when the
+    // stored schema is older than the required version, so:
+    // - flag off: schema 6 (base, no rent index) is accepted as-is and NOT bumped,
+    //   so enabling the flag later still triggers the rescan
+    // - flag on: schema 6 forces a rescan to 7 (rent index needs historical rows)
+    ExtraIndexer.requiredSchemaVersion(storageRentCollection = false) shouldBe ExtraIndexer.BaseVersion
+    ExtraIndexer.requiredSchemaVersion(storageRentCollection = true) shouldBe ExtraIndexer.NewestVersion
+    ExtraIndexer.BaseVersion should be < ExtraIndexer.NewestVersion
+  }
+
   property("storage rent eligibility index") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
@@ -481,12 +489,14 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     before.length should be > 2
 
     // remove the first two entries by box id, as CandidateGenerator does for a rejected claim
-    val toRemove = before.take(2).map(_.boxId)
+    val toRemove = before.take(2)
+      .flatMap(e => NumericBoxIndex.getBoxByNumber(history, e.globalIndex)).map(_.id)
+    toRemove.length shouldBe 2
     history.removeStorageRentBoxes(toRemove)
 
     val after = history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue)
     after.length shouldBe before.length - 2
-    after.map(_.boxId).toSet shouldBe before.drop(2).map(_.boxId).toSet
+    after.map(_.globalIndex).toSet shouldBe before.drop(2).map(_.globalIndex).toSet
 
     // removing again is a no-op: the boxes are still indexed, but the entries are gone
     history.removeStorageRentBoxes(toRemove)
@@ -497,6 +507,17 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     history.storageRentBoxesUntil(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
 
     indexer ! Reset()
+  }
+
+  property("rent index rows are not written when rent collection is off") {
+    val noRentIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(false)))
+    noRentIndexer ! CreateDB(HEIGHT)
+    noRentIndexer ! Index()
+    lock.lock()
+    done.await()
+    // the extra index is fully built, but no storage-rent rows are written
+    history.storageRentBoxesUntil(Int.MaxValue, 1000) shouldBe empty
+    noRentIndexer ! Reset()
   }
 
   property("rent index is trimmed to the unspent set after a rollback") {

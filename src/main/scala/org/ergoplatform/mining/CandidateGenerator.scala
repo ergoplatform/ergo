@@ -17,6 +17,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
+import org.ergoplatform.nodeView.history.extra.NumericBoxIndex
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
@@ -83,24 +84,6 @@ class CandidateGenerator(
       newBlock.mandatoryBlockSections
     }
     sectionsToApply.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
-  }
-
-  /**
-    * Drop storage-rent eligibility entries of boxes spent by rent-claim transactions of an
-    * applied block, so a freshly generated candidate can not pick them up again. The extra
-    * indexer would remove the same entries on its own, but it processes blocks
-    * asynchronously; doing it here closes the window between block application and indexing.
-    * Applies to blocks mined by us and by other miners alike.
-    */
-  private def dropSpentRentBoxEntries(history: ErgoHistoryReader, header: Header): Unit = {
-    history.getFullBlock(header).foreach { block =>
-      val spentBoxIds = rentClaimSpentBoxIds(block.transactions)
-      if (spentBoxIds.nonEmpty) {
-        log.debug(s"Removing ${spentBoxIds.length} storage-rent eligibility entries " +
-          s"spent by rent claims of block ${header.id}")
-        history.removeStorageRentBoxes(spentBoxIds)
-      }
-    }
   }
 
   /**
@@ -192,7 +175,6 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
-      dropSpentRentBoxEntries(state.hr, header)
       val stateWithAppliedTxs =
         state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet))
       if (needNewCandidate(state.cachedCandidate, header)) {
@@ -719,9 +701,12 @@ object CandidateGenerator extends ScorexLogging {
           val upcomingHeight = upcomingContext.currentHeight
           val threshold = upcomingHeight - Constants.StoragePeriod
           if (threshold > 0) {
+            // rent entries carry no payload, so resolve the box through the box-number
+            // index; entries whose box row is gone resolve to nothing and are skipped
             val scanned = history.storageRentBoxesUntil(threshold, StorageRentClaimBuilder.MaxClaims)
               .toSeq
-              .flatMap(entry => state.boxById(ADKey @@ idToBytes(entry.boxId)))
+              .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
+              .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
             // boxes at or below the minimum allowed value (or with a minimum value wrapping
             // non-positive in 32-bit arithmetic) can not be charged or recreated; they are
             // broken eligibility entries, so drop them from the index right away

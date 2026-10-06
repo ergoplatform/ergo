@@ -183,12 +183,21 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     buildAndValidate(Seq(b)).isDefined shouldBe true
   }
 
-  property("box with a whitelisted token is never burned") {
-    val b = burnableBox(Constants.StoragePeriod, withToken = true)
-    // whitelisted: skipped entirely, left for sponsors
-    buildAndValidate(Seq(b), whitelist = Set(WhitelistedTokenId)) shouldBe None
-    // not whitelisted: burned once rent-eligible
-    buildAndValidate(Seq(b), whitelist = Set.empty).isDefined shouldBe true
+  property("whitelisted tokens of a burned box are salvaged into its proceeds output") {
+    val b = burnableBox(Constants.StoragePeriod, withToken = true) // carries token 7
+    val tx = buildAndValidate(Seq(b), whitelist = Set(WhitelistedTokenId)).get
+
+    tx.inputs.length shouldBe 1
+    tx.outputCandidates.length shouldBe 1 // only the proceeds output
+    val proceeds = tx.outputCandidates.head
+    proceeds.value shouldBe b.value
+    proceeds.ergoTree shouldBe MinerTree
+    // the whitelisted token rides along to the miner instead of being burned
+    proceeds.additionalTokens.toArray.map(e => e._1.toModifierId -> e._2).toMap shouldBe
+      Map(WhitelistedTokenId -> 5L)
+    // without the whitelist the same token is burned with the box
+    val txNoWhitelist = buildAndValidate(Seq(b), whitelist = Set.empty).get
+    outputTokenIds(txNoWhitelist) shouldBe empty
   }
 
   property("too young box is skipped") {
@@ -368,21 +377,23 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val burnBoxes = (0 until 3).map(burnBoxAt)
     val tx = buildAndValidate(recreateBoxes ++ burnBoxes).get
 
-    val nRecreated = recreateBoxes.length
-    val indices = var127Indices(tx)
+    // identity mapping: output i belongs to input i; the fee output is last and unnamed
+    var127Indices(tx) shouldBe (0 until tx.inputs.length)
+    tx.outputCandidates.length shouldBe tx.inputs.length + 1
 
-    // recreated boxes are the first `nRecreated` outputs, per-burn proceeds come right
-    // after, the fee output is last and unnamed: the two branches occupy disjoint index
-    // ranges, which is what keeps the var #127 values distinct
-    indices.take(nRecreated) should contain theSameElementsAs (0 until nRecreated)
-    indices.drop(nRecreated) should contain theSameElementsAs
-      (nRecreated until nRecreated + burnBoxes.length)
-    tx.outputCandidates.length shouldBe nRecreated + burnBoxes.length + 1
+    recreateBoxes.indices.foreach { i =>
+      tx.outputCandidates(i).ergoTree shouldBe recreateBoxes(i).ergoTree // its recreation
+    }
+    burnBoxes.indices.foreach { j =>
+      val out = tx.outputCandidates(recreateBoxes.length + j)
+      out.value shouldBe burnBoxes(j).value // its own proceeds output
+      out.ergoTree shouldBe MinerTree
+    }
   }
 
   property("every burned box gets its own proceeds output with its full value") {
     // more boxes than MaxClaims are offered, so this also pins the cap in the burn branch
-    val burnBoxes = (0 until 20).map { i =>
+    val burnBoxes = (0 until StorageRentClaimBuilder.MaxClaims + 10).map { i =>
       burnableBox(Constants.StoragePeriod + i, withToken = false)
     }
     val tx = buildAndValidate(burnBoxes).get
@@ -450,25 +461,29 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     outputTokenIds(tx) shouldBe Set(tokenIdOf(recreateToken))
   }
 
-  property("a whitelisted token keeps the whole box, and its tokens, out of the claim") {
-    // Burning destroys every token of the box, so a box carrying a whitelisted token must
-    // be left untouched rather than partially burned.
+  property("only whitelisted tokens are salvaged from a burned box, the rest burn") {
+    // Burning destroys every token of the box except the whitelisted ones, which ride
+    // along in the proceeds output to the miner.
     val b = burnCandidateWithTokens(Seq(7.toByte, 11.toByte))
 
-    buildAndValidate(Seq(b), whitelist = Set(tokenIdOf(7.toByte))) shouldBe None
+    val tx = buildAndValidate(Seq(b), whitelist = Set(tokenIdOf(7.toByte))).get
+    tx.inputs.map(_.boxId) should contain(b.id)
+    outputTokens(tx) shouldBe Map(tokenIdOf(7.toByte) -> 5L)
+    tx.outputCandidates.head.ergoTree shouldBe MinerTree
   }
 
-  property("only the whitelisted token is spared: other burned boxes are still burnt") {
+  property("whitelisted tokens are salvaged from every burned box in a claim") {
     val whitelisted = burnCandidateWithTokens(Seq(7.toByte))
     val ordinary = burnCandidateWithTokens(Seq(11.toByte))
 
     val tx = buildAndValidate(Seq(whitelisted, ordinary),
       whitelist = Set(tokenIdOf(7.toByte))).get
 
-    // the whitelisted box is not an input at all, so it is neither burned nor recreated
-    tx.inputs.map(_.boxId) should not contain whitelisted.id
+    // both boxes are burned; the whitelisted token of the first is salvaged, the
+    // non-whitelisted token of the second is burned
+    tx.inputs.map(_.boxId) should contain(whitelisted.id)
     tx.inputs.map(_.boxId) should contain(ordinary.id)
-    outputTokenIds(tx) shouldBe empty // the ordinary box's token is burnt
+    outputTokens(tx) shouldBe Map(tokenIdOf(7.toByte) -> 5L)
   }
 
   property("a recreated box keeps all of its tokens, whitelisted or not") {

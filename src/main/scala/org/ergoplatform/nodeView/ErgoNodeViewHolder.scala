@@ -8,6 +8,7 @@ import org.ergoplatform.core._
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, TransactionsCarryingBlockSection}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
@@ -240,6 +241,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                 if (modToApply.modifierTypeId == ErgoFullBlock.modifierTypeId) {
                   val fullBlock = modToApply.asInstanceOf[ErgoFullBlock]
                   val txIds = fullBlock.blockTransactions.transactions.map(_.id)
+                  // boxes spent by storage-rent claims of this block are no longer eligible:
+                  // drop their index entries right away, while the block's transactions are
+                  // still in memory, instead of re-reading them later in CandidateGenerator
+                  // or waiting for the (asynchronous) extra indexer
+                  if (settings.nodeSettings.storageRentCollection) {
+                    val claimedBoxIds =
+                      CandidateGenerator.rentClaimSpentBoxIds(fullBlock.blockTransactions.transactions)
+                    if (claimedBoxIds.nonEmpty) {
+                      log.debug(s"Removing ${claimedBoxIds.length} storage-rent eligibility entries " +
+                        s"spent by rent claims of block ${fullBlock.header.id}")
+                      newHis.removeStorageRentBoxes(claimedBoxIds)
+                    }
+                  }
                   val event = if (local) {
                     LocalBlockApplied(fullBlock.header, txIds)
                   } else {

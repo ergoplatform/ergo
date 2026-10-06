@@ -4,7 +4,8 @@ import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
-import sigma.Colls
+import sigma.{Coll, Colls}
+import sigma.Extensions.CollBytesOps
 import sigma.ast.{ErgoTree, ShortConstant}
 import sigma.data.ProveDlog
 import sigma.interpreter.{ContextExtension, ProverResult}
@@ -24,12 +25,12 @@ import scala.collection.mutable.ArrayBuffer
   * - a box which can cover its storage fee is recreated: the output preserves
   *   script/tokens/registers, sits at the current height, and carries the box value minus
   *   the storage fee; the miner keeps the fee;
-  * - a box which can not cover its storage fee is fully consumed (destroyed), its tokens
-  *   are burned with it - never when the box carries a token from the configured whitelist
-  *   (such boxes are left for sponsors);
-  * - every claimed box names its own output in var-127 (indices must be unique across all
-  *   inputs): recreated boxes one output each, burned boxes one P2PK output each. Rent fees
-  *   go to a separate, unnamed P2PK output.
+  * - a box which can not cover its storage fee is fully consumed (destroyed): its tokens
+  *   are burned with it, except tokens from the configured whitelist, which are salvaged
+  *   into the box's proceeds output;
+  * - every claimed box names its own output in var-127: output i belongs to input i.
+  *   Recreated boxes name their recreation, burned boxes name a P2PK output carrying the
+  *   box's value. Rent fees go to a separate, unnamed P2PK output appended last.
   *
   * The builder is pure (no I/O): callers pass resolved eligible boxes and get back a
   * transaction ready for block-assembly validation. A box is silently skipped when claiming
@@ -45,9 +46,9 @@ object StorageRentClaimBuilder extends ScorexLogging {
 
   /**
     * Max boxes one claim transaction may sweep. Keeps the claim's cost and size well under
-    * block limits (a 10-input claim costs well below 1M cost units).
+    * block limits
     */
-  val MaxClaims: Int = 10
+  val MaxClaims: Int = 100
 
   private val DummyTxId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
@@ -78,8 +79,9 @@ object StorageRentClaimBuilder extends ScorexLogging {
     *                             emission/fee rule, not a rent rule)
     * @param reemissionTokenIdOpt - re-emission token id on EIP-27 networks; boxes still
     *                             carrying it are skipped (consensus-unclaimable)
-    * @param tokenWhitelist       - tokens which may never be burned: boxes carrying them are
-    *                             never fully consumed (left for sponsors)
+    * @param tokenWhitelist       - tokens which are never burned: when a box carrying them
+    *                             is fully consumed, they are carried over to the miner's
+    *                             proceeds output
     */
   def buildClaim(eligible: Seq[ErgoBox],
                  currentHeight: Int,
@@ -89,10 +91,9 @@ object StorageRentClaimBuilder extends ScorexLogging {
                  tokenWhitelist: Set[ModifierId]): Option[ErgoTransaction] = {
 
     val minerTree = ErgoTree.fromSigmaBoolean(minerPk)
-    val recreated = ArrayBuffer.empty[ErgoBoxCandidate]
-    val burnBoxes = ArrayBuffer.empty[ErgoBox]
-    // every claimed box, in order; the flag marks the recreate branch
-    val claimed = ArrayBuffer.empty[(ErgoBox, Boolean)]
+    // every claimed box, in order, with the output it will name in var #127: output i
+    // belongs to input i, so no index bookkeeping is needed
+    val claimed = ArrayBuffer.empty[(ErgoBox, Boolean, ErgoBoxCandidate)]
     // recreation fees collected so far (burned values go to per-box outputs directly)
     var sweptFees = 0L
 
@@ -100,7 +101,6 @@ object StorageRentClaimBuilder extends ScorexLogging {
       val age = currentHeight - box.creationHeight
       val oldEnough = age >= Constants.StoragePeriod
       val carriesReemissionToken = reemissionTokenIdOpt.exists(box.tokens.contains(_))
-      val carriesWhitelistedToken = tokenWhitelist.exists(box.tokens.contains(_))
       // minimum allowed value in 32-bit arithmetic; like the storage fee below, it can
       // wrap to non-positive for huge boxes - such boxes can not be charged safely
       // (the recreated output's dust floor would be mispriced), so they are skipped
@@ -117,7 +117,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
           if (afterFee > 0) {
             // recreate branch: output preserves script/tokens/registers, sits at the current
             // height, carries the value minus the storage fee; the miner keeps the fee
-            val outputIndex = recreated.length.toShort
+            val outputIndex = claimed.length.toShort
             // the recreated box may need a few nanoERG more than the after-fee value when
             // the dust rule prices its serialization; bumping the value can lengthen the
             // VLQ encoding of the value itself, so iterate to the fixpoint
@@ -130,20 +130,25 @@ object StorageRentClaimBuilder extends ScorexLogging {
               dust = dustLimit(recreatedBox, outputIndex, parameters)
             }
             if (recreatedBox.value <= box.value && boxSize(recreatedBox, outputIndex) <= ErgoBox.MaxBoxSize) {
-              recreated += recreatedBox
               sweptFees += box.value - recreatedBox.value
-              claimed += ((box, true))
+              claimed += ((box, true, recreatedBox))
             }
-          } else if (!carriesWhitelistedToken) {
+          } else {
             // full-consume branch: the box can not cover its storage fee - it is destroyed
-            // and its tokens are burned with it. The box gets its own proceeds output
-            // carrying exactly its value to the miner's P2PK, which the input later names
-            // in var #127. A box whose value does not clear the dust floor for such an
-            // output can not be claimed at all and is left behind.
-            val burnOutput = p2pkCandidate(box.value, minerTree, currentHeight)
-            if (box.value >= dustLimit(burnOutput, 0, parameters)) {
-              burnBoxes += box
-              claimed += ((box, false))
+            // and its non-whitelisted tokens are burned with it; whitelisted tokens are
+            // salvaged into the proceeds output. The box gets its own proceeds output
+            // carrying exactly its value (plus the salvaged tokens) to the miner's P2PK.
+            // A box whose value does not clear the dust floor for such an output can not
+            // be claimed at all and is left behind.
+            val salvagedTokens: Coll[(ErgoBox.TokenId, Long)] =
+              if (tokenWhitelist.isEmpty) {
+                Colls.emptyColl // nothing can be salvaged - skip filtering altogether
+              } else {
+                box.additionalTokens.filter(t => tokenWhitelist.contains(t._1.toModifierId))
+              }
+            val burnOutput = new ErgoBoxCandidate(box.value, minerTree, currentHeight, salvagedTokens, Map.empty)
+            if (box.value >= dustLimit(burnOutput, claimed.length.toShort, parameters)) {
+              claimed += ((box, false, burnOutput))
             }
           }
         }
@@ -153,10 +158,11 @@ object StorageRentClaimBuilder extends ScorexLogging {
     if (claimed.isEmpty) {
       None
     } else {
-      // Recreation fees collect in a separate, unnamed P2PK output. When they do not clear
-      // the dust floor they can not be paid out, so the recreations producing them are not
-      // claimed either (they stay eligible for a later candidate with more proceeds); burns
-      // are unaffected, their outputs carry the burned values themselves.
+      // Recreation fees collect in a separate, unnamed P2PK output appended after the
+      // per-box outputs. When they do not clear the dust floor they can not be paid out,
+      // so the recreations producing them are not claimed either (they stay eligible for
+      // a later candidate with more proceeds); burns are unaffected, their outputs carry
+      // the burned values themselves.
       val feeDust = dustLimit(p2pkCandidate(0L, minerTree, currentHeight), 0, parameters)
       val dropRecreations = sweptFees > 0 && sweptFees < feeDust
       val finalClaimed = if (dropRecreations) claimed.filter(!_._2) else claimed
@@ -164,26 +170,12 @@ object StorageRentClaimBuilder extends ScorexLogging {
       if (finalClaimed.isEmpty) {
         None
       } else {
-        val finalRecreated = if (dropRecreations) IndexedSeq.empty[ErgoBoxCandidate] else recreated.toIndexedSeq
-        val burnOutputs = burnBoxes.map(b => p2pkCandidate(b.value, minerTree, currentHeight)).toIndexedSeq
         val feeOutputs =
           if (!dropRecreations && sweptFees > 0) IndexedSeq(p2pkCandidate(sweptFees, minerTree, currentHeight))
           else IndexedSeq.empty
-        val outputCandidates = finalRecreated ++ burnOutputs ++ feeOutputs
+        val outputCandidates = finalClaimed.toIndexedSeq.map(_._3) ++ feeOutputs
 
-        var recreateIdx = 0
-        var burnIdx = 0
-        val inputs = finalClaimed.toIndexedSeq.map { case (box, isRecreate) =>
-          val outputIndex =
-            if (isRecreate) {
-              val idx = recreateIdx
-              recreateIdx += 1
-              idx
-            } else {
-              val idx = finalRecreated.length + burnIdx
-              burnIdx += 1
-              idx
-            }
+        val inputs = finalClaimed.toIndexedSeq.zipWithIndex.map { case ((box, _, _), outputIndex) =>
           Input(box.id, ProverResult(
             Array.emptyByteArray,
             ContextExtension(Map(Constants.StorageIndexVarId -> ShortConstant(outputIndex.toShort)))

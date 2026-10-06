@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, SchemaVersionKey, getIndex, requiredSchemaVersion, versionBytes}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.ErgoSettings
@@ -267,10 +267,16 @@ object ErgoHistory extends ScorexLogging {
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema
       val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
-      if (schemaVersion != NewestVersion) {
+      // a rescan is forced only when the stored schema is older than what the current
+      // configuration needs: nodes not collecting storage rent keep working on the
+      // base schema, and their stored version is left untouched so that enabling rent
+      // collection later still triggers the rescan
+      val requiredVersion: Int =
+        requiredSchemaVersion(ergoSettings.nodeSettings.storageRentCollection)
+      if (schemaVersion < requiredVersion) {
         if(getIndex(IndexedHeightKey, db).getInt > 0)
           db = db.deleteExtraDB(ergoSettings) // older schema -> delete and reopen db
-        db.insertExtra(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty) // update version key
+        db.insertExtra(Array((SchemaVersionKey, versionBytes(requiredVersion))), Array.empty) // update version key
       }
     }
 

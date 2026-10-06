@@ -5,29 +5,34 @@ import scorex.util.bytesToId
 import scorex.util.encode.Base16
 
 /**
-  * Unit pins for the storage-rent eligibility index entry: serialization round-trip through
-  * [[ExtraIndexSerializer]], and the lexicographic key ordering by (creationHeight,
-  * globalIndex) that the range scan relies on.
+  * Unit pins for the storage-rent eligibility index entry: key-based reconstruction (rows
+  * carry no payload), and the lexicographic key ordering by (creationHeight, globalIndex)
+  * that the range scan relies on.
   */
 class StorageRentBoxSpec extends ErgoCorePropertyTest {
 
   private def entry(creationHeight: Int, globalIndex: Long): StorageRentBox =
-    new StorageRentBox(creationHeight, globalIndex,
-      bytesToId(Array.fill(32)(1.toByte)), 1000000000L, 76)
+    new StorageRentBox(creationHeight, globalIndex)
 
-  property("serialization roundtrip via ExtraIndexSerializer") {
+  property("row value is just the type byte, entry is reconstructed from the key") {
     val srb = entry(123456, 789012345L)
-    val bytes = ExtraIndexSerializer.toBytes(srb)
-    val parsed = ExtraIndexSerializer.parseBytes(bytes)
-    parsed.isInstanceOf[StorageRentBox] shouldBe true
-    val parsedSrb = parsed.asInstanceOf[StorageRentBox]
-    parsedSrb.creationHeight shouldBe srb.creationHeight
-    parsedSrb.globalIndex shouldBe srb.globalIndex
-    parsedSrb.boxId shouldBe srb.boxId
-    parsedSrb.value shouldBe srb.value
-    parsedSrb.bytesLen shouldBe srb.bytesLen
-    parsedSrb.serializedId shouldBe srb.serializedId
-    parsedSrb.id shouldBe srb.id
+    // the serialized row is the type byte only - no payload
+    ExtraIndexSerializer.toBytes(srb).toSeq shouldBe Seq(StorageRentBox.extraIndexTypeId)
+    // the scan side reconstructs the entry from the key
+    val parsed = StorageRentBox.fromKey(srb.serializedId)
+    parsed.creationHeight shouldBe srb.creationHeight
+    parsed.globalIndex shouldBe srb.globalIndex
+    parsed.serializedId shouldBe srb.serializedId
+    parsed.id shouldBe srb.id
+  }
+
+  property("value-based parsing of a rent row degrades to Failure, not a thrown Error") {
+    // the row value alone can not reconstruct the entry, but a misbehaving reader (or a
+    // corrupted store) must hit the same NonFatal failure path as any other parse error,
+    // so Try-based callers (getExtraIndex) get None with a log instead of a crash
+    val srb = entry(123456, 789012345L)
+    val res = ExtraIndexSerializer.parseBytesTry(ExtraIndexSerializer.toBytes(srb))
+    res.isFailure shouldBe true
   }
 
   property("keys order lexicographically by (creationHeight, globalIndex)") {
@@ -61,9 +66,6 @@ class StorageRentBoxSpec extends ErgoCorePropertyTest {
     val srb = StorageRentBox(iEb)
     srb.creationHeight shouldBe box.creationHeight
     srb.globalIndex shouldBe iEb.globalIndex
-    srb.boxId shouldBe iEb.id
-    srb.value shouldBe box.value
-    srb.bytesLen shouldBe box.bytes.length
   }
 
 }

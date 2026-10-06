@@ -83,9 +83,18 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
   protected val segments: mutable.HashMap[ModifierId, Segment[_]] = mutable.HashMap.empty[ModifierId, Segment[_]]
 
   /**
+    * Whether the storage-rent eligibility index is maintained (`storageRentCollection`
+    * setting). When off, no rent rows are written at all; the schema-version check in
+    * `ErgoHistory.readOrGenerate` then also requires only the base schema, and turning
+    * the flag on later forces a rescan which builds the rows from scratch.
+    */
+  protected val rentIndexEnabled: Boolean
+
+  /**
     * Storage-rent eligibility index buffers: upserts and deletions keyed by the entry id
     * (the index key). A box created and spent within the same buffer window is removed from
     * the upserts only; a box created in an already-flushed batch gets a deletion marker.
+    * Unused when [[rentIndexEnabled]] is off.
     */
   protected val rentBoxes: mutable.HashMap[ModifierId, StorageRentBox] = mutable.HashMap.empty[ModifierId, StorageRentBox]
   protected val rentBoxDeletes: mutable.HashSet[ModifierId] = mutable.HashSet.empty[ModifierId]
@@ -168,9 +177,11 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
     * Delete the storage-rent eligibility entry of a box being spent (see [[rentBoxes]]).
     */
   private def markRentBoxSpent(iEb: IndexedErgoBox): Unit = {
-    val srb = StorageRentBox(iEb)
-    if (rentBoxes.remove(srb.id).isEmpty) {
-      rentBoxDeletes += srb.id
+    if (rentIndexEnabled) {
+      val srb = StorageRentBox(iEb)
+      if (rentBoxes.remove(srb.id).isEmpty) {
+        rentBoxDeletes += srb.id
+      }
     }
   }
 
@@ -366,8 +377,10 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         outputs(i) = iEb.globalIndex
 
         // unspent box by creation height (storage-rent eligibility index)
-        val srb = StorageRentBox(iEb)
-        rentBoxes.put(srb.id, srb)
+        if (rentIndexEnabled) {
+          val srb = StorageRentBox(iEb)
+          rentBoxes.put(srb.id, srb)
+        }
 
         // box by address
         findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
@@ -446,7 +459,9 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
           template.findAndModBox(iEb.globalIndex, history)
 
-          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address, template, StorageRentBox(iEb)) ++ address.buffer.values ++ template.buffer.values)
+          val rentRow: Array[ExtraIndex] =
+            if (rentIndexEnabled) Array[ExtraIndex](StorageRentBox(iEb)) else Array.empty
+          historyStorage.insertExtra(Array.empty, Array[ExtraIndex](iEb, address, template) ++ rentRow ++ address.buffer.values ++ template.buffer.values)
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
             history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
@@ -484,7 +499,7 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
         }
         toRemove += iEb.id // box by id
         toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number
-        toRemove += StorageRentBox(iEb).id // unspent box by creation height
+        if (rentIndexEnabled) toRemove += StorageRentBox(iEb).id // unspent box by creation height
         newState = newState.decrementBoxIndex
       }
       newState = newState.incrementBoxIndex
@@ -607,11 +622,14 @@ trait ExtraIndexerBase extends Actor with Stash with ScorexLogging {
 /**
   * Actor that constructs an index of database elements.
   *
-  * @param cacheSettings - cacheSettings to use for saveLimit size
-  * @param ae            - ergo address encoder to use for handling addresses
+  * @param cacheSettings     - cacheSettings to use for saveLimit size
+  * @param ae                - ergo address encoder to use for handling addresses
+  * @param rentIndexEnabled  - whether to maintain the storage-rent eligibility index
+  *                            (`storageRentCollection` setting)
   */
 class ExtraIndexer(cacheSettings: CacheSettings,
-                   ae: ErgoAddressEncoder)
+                   ae: ErgoAddressEncoder,
+                   override protected val rentIndexEnabled: Boolean)
   extends ExtraIndexerBase {
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
@@ -716,7 +734,25 @@ object ExtraIndexer {
     * Current newest database schema version. Used to force extra database resync.
     */
   val NewestVersion: Int = 7
-  val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
+
+  /**
+    * Schema version without the storage-rent eligibility index. Sufficient when
+    * `storageRentCollection` is off: the indexer keeps maintaining rent rows for new
+    * blocks regardless of the flag, so a schema-6 database is only missing historical
+    * rent rows, which do not matter until the flag is turned on (which then forces
+    * a rescan via [[requiredSchemaVersion]]).
+    */
+  val BaseVersion: Int = 6
+
+  /**
+    * Schema version the extra database must have. A rescan is only forced when the stored
+    * schema is older than this. With rent collection off, schema [[BaseVersion]] is enough,
+    * so nodes not collecting storage rent are not forced into a rescan they do not need.
+    */
+  def requiredSchemaVersion(storageRentCollection: Boolean): Int =
+    if (storageRentCollection) NewestVersion else BaseVersion
+
+  def versionBytes(version: Int): Array[Byte] = ByteBuffer.allocate(4).putInt(version).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
   val GlobalTxIndexKey: Array[Byte] = Algos.hash("txns height")
@@ -733,8 +769,9 @@ object ExtraIndexer {
     getIndex(key, history.historyStorage)
   }
 
-  def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings)(implicit system: ActorSystem): ActorRef = {
-    val props = Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder)
+  def apply(chainSettings: ChainSettings, cacheSettings: CacheSettings, rentIndexEnabled: Boolean)(implicit system: ActorSystem): ActorRef = {
+    val props = Props.create(classOf[ExtraIndexer], cacheSettings, chainSettings.addressEncoder,
+      Boolean.box(rentIndexEnabled))
     system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
   }
 }

@@ -14,7 +14,9 @@ import java.io.File
 import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 
-class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexerBase with FileUtils {
+class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
+                            override protected val rentIndexEnabled: Boolean = true)
+  extends ExtraIndexerBase with FileUtils {
 
   override def receive: Receive = {
     case test.CreateDB(blockCount: Int) => createDB(blockCount)
@@ -93,6 +95,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     trees.clear()
     tokens.clear()
     segments.clear()
+    rentBoxes.clear()
+    rentBoxDeletes.clear()
     context.become(receive.orElse(loaded(IndexerState(0, 0, 0, 0, caughtUp = false))))
   }
 

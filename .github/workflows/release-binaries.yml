@@ -1,27 +1,235 @@
 name: Publish release-binaries
 
+# CI builds the release jar: do not upload one by hand, neither to the draft nor after publishing.
+# A hand-built jar is the plain jar and never matches the stripped jar built here, so the jar job
+# fails and no bundles are built (see the `replace` input below for a deliberate overwrite).
+
 on:
   release:
     types: [published]
+  # Re-run for an existing release (e.g. after a failure). Note: the release-jar
+  # job's checkout uses the tag as ref, so a dispatch run builds the jar from the
+  # tagged commit, not the dispatching branch. The release-binaries job runs the
+  # packaging script from the dispatching branch.
+  # Assets already on the release are kept; a different jar is never replaced
+  # silently. Set `replace` to overwrite existing assets on purpose.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag, e.g. v6.1.7"
+        required: true
+      replace:
+        description: "Replace assets that already exist on the release (jar, .sha256, bundles)"
+        type: boolean
+        default: false
 
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions:
+  contents: write
 
 jobs:
+  check-versions:
+    # Fails the run (a red run, which notifies the release publisher if they have Actions
+    # notifications on) when appVersion or the openapi version does not match the tag, without
+    # blocking the jar or the bundles: no other job needs this one.
+    # appVersion is what the node announces to peers; the openapi version is what its API docs
+    # show (/info reports the tag version).
+    name: Check appVersion and openapi version against the tag
+    runs-on: ubuntu-latest
+    env:
+      ERGO_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.ERGO_RELEASE_TAG }}
+          persist-credentials: false
+      - name: Compare versions
+        run: |
+          set -eu
+          V="${ERGO_RELEASE_TAG#v}"
+          FAILED=false
+          CONF_VERSION=$(grep "appVersion =" src/main/resources/application.conf | cut -d '=' -f2 | tr -d '[:space:]' || true)
+          OPENAPI_LINE=$(grep 'version:' src/main/resources/api/openapi.yaml || true)
+          OPENAPI_VERSION=$(printf '%s' "$OPENAPI_LINE" | tr '\n' ' ' | awk -F '"' '{print $2}')
+          check() {
+            file="$1"
+            value="$2"
+            ok=false
+            # The tag version must equal the value, or continue after it with a
+            # non-digit (6.0.4RC2, 6.0.2.1); compared as plain strings, so dots are literal.
+            if [ -n "$value" ]; then
+              case "$V" in
+                "$value"*)
+                  rest="${V#"$value"}"
+                  if [ -z "$rest" ] || [[ ! "$rest" =~ ^[0-9] ]]; then
+                    ok=true
+                  fi
+                  ;;
+                *) ;;
+              esac
+            fi
+            if [ "$ok" != true ]; then
+              echo "::error::$file version ($value) does not match release tag $ERGO_RELEASE_TAG"
+              FAILED=true
+            fi
+          }
+          check application.conf "$CONF_VERSION"
+          check openapi.yaml "$OPENAPI_VERSION"
+          if [ "$FAILED" = true ]; then
+            exit 1
+          fi
+          echo "appVersion and openapi version match $ERGO_RELEASE_TAG"
+
+  release-jar:
+    name: Build and attach ergo node jar
+    runs-on: ubuntu-latest
+    env:
+      ERGO_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      REPLACE_ASSETS: ${{ inputs.replace == true }}
+    steps:
+      # Full history and tags are required: sbt-dynver derives the version
+      # (and hence the jar name) from `git describe`.
+      # refs/tags/ because release branches share names with tags and checkout prefers a branch.
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.ERGO_RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Java and sbt
+        uses: coursier/setup-action@v3
+        with:
+          jvm: temurin:8
+          apps: sbt
+
+      - name: Cache sbt
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.sbt
+            ~/.ivy2/cache
+            ~/.coursier/cache/v1
+            ~/.cache/coursier/v1
+            ~/AppData/Local/Coursier/Cache/v1
+            ~/Library/Caches/Coursier/v1
+          key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
+
+      - name: Build fat jar
+        run: sbt assembly
+
+      - name: Attach jar and sha256 to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # This is the same stripped build the Docker image uses (the image builds it on Temurin 11,
+        # this job on JDK 8, so the two files are not byte-identical). Its class files are
+        # identical to the plain jar's; sbt-reproducible-builds normalizes the zip metadata (entry
+        # timestamps, manifest order).
+        run: |
+          set -eu
+          cd target/scala-2.12/stripped
+          JARS=$(ls ergo-*.jar 2>/dev/null || true)
+          COUNT=$(printf '%s\n' "$JARS" | grep -c . || true)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly one ergo-*.jar in target/scala-2.12/stripped, found $COUNT: $JARS"
+            exit 1
+          fi
+          EXPECTED="ergo-${ERGO_RELEASE_TAG#v}.jar"
+          if [ "$JARS" != "$EXPECTED" ]; then
+            echo "::error::Jar name mismatch: expected $EXPECTED, found $JARS (dynver named the jar from another version: is $ERGO_RELEASE_TAG on the checked-out commit, and is it the only v* tag there?)"
+            exit 1
+          fi
+          LOCAL_SHA=$(sha256sum "$JARS" | cut -d ' ' -f1)
+          sha256sum "$JARS" > "$JARS.sha256"
+          cat "$JARS.sha256"
+
+          # Look at what the release already holds (jar names contain only [A-Za-z0-9._-]).
+          if ! RELEASE_JSON=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ERGO_RELEASE_TAG"); then
+            echo "::error::No published release with tag $ERGO_RELEASE_TAG in $GITHUB_REPOSITORY (a draft release cannot be looked up by tag; publish it first)"
+            exit 1
+          fi
+          HAS_JAR=$(printf '%s' "$RELEASE_JSON" | jq -r --arg n "$JARS" '[.assets[] | select(.name == $n)] | length')
+          HAS_SHA=$(printf '%s' "$RELEASE_JSON" | jq -r --arg n "$JARS.sha256" '[.assets[] | select(.name == $n)] | length')
+
+          if [ "$HAS_JAR" -eq 0 ]; then
+            # Nothing to compare with. A stale .sha256 describes a jar that is not there, so it may be overwritten.
+            if [ "$HAS_SHA" -eq 0 ]; then
+              gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "$JARS" "$JARS.sha256"
+            else
+              echo "::notice::Replacing $JARS.sha256 on $ERGO_RELEASE_TAG: the release has no $JARS"
+              gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "$JARS" "$JARS.sha256" --clobber
+            fi
+            exit 0
+          fi
+
+          REMOTE_SHA=$(printf '%s' "$RELEASE_JSON" | jq -r --arg n "$JARS" '[.assets[] | select(.name == $n) | .digest // empty][0] // empty')
+          REMOTE_SHA="${REMOTE_SHA#sha256:}"
+          if [ -z "$REMOTE_SHA" ]; then
+            # Older assets may have no digest: download the one jar and hash it.
+            TMP=$(mktemp -d)
+            gh release download "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" -p "$JARS" -D "$TMP"
+            REMOTE_SHA=$(sha256sum "$TMP/$JARS" | cut -d ' ' -f1)
+            rm -rf "$TMP"
+          fi
+
+          if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
+            echo "::notice::$JARS already attached with the same sha256, keeping it"
+            REMOTE_SHA_FILE=$(printf '%s' "$RELEASE_JSON" | jq -r --arg n "$JARS.sha256" '[.assets[] | select(.name == $n) | .digest // empty][0] // empty')
+            if [ "$HAS_SHA" -eq 0 ]; then
+              gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "$JARS.sha256"
+            elif [ -n "$REMOTE_SHA_FILE" ] && [ "${REMOTE_SHA_FILE#sha256:}" != "$(sha256sum "$JARS.sha256" | cut -d ' ' -f1)" ]; then
+              echo "::notice::$JARS.sha256 on $ERGO_RELEASE_TAG does not match this jar, replacing it"
+              gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "$JARS.sha256" --clobber
+            fi
+          elif [ "$REPLACE_ASSETS" = "true" ]; then
+            echo "::notice::Replacing $JARS on $ERGO_RELEASE_TAG: old sha256 $REMOTE_SHA, new sha256 $LOCAL_SHA"
+            gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "$JARS" "$JARS.sha256" --clobber
+          else
+            echo "::error::$JARS is already attached to $ERGO_RELEASE_TAG with sha256 $REMOTE_SHA, but this build produced $LOCAL_SHA. Not replacing it. To replace it deliberately, run this workflow manually with tag=$ERGO_RELEASE_TAG and replace=true. Or delete the attached jar and re-run this run."
+            exit 1
+          fi
+
   release-binaries:
     name: Publish release binaries
+    needs: release-jar
     runs-on: macos-latest
     env:
       ERGO_RELEASE_PLATFORM: macos-x64
-      ERGO_RELEASE_TAG: ${{ github.event.release.tag_name }}
+      ERGO_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      REPLACE_ASSETS: ${{ inputs.replace == true }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v7
       - name: Download ergo node jar 
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo $GITHUB_REF
-          gh release download $ERGO_RELEASE_TAG -p "ergo*"
+          gh release download "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" -p "ergo-[0-9]*.jar"
       - name: Create release binary files
         run: python ci/release-binaries.py
       - name: Put binary files into release
-        run: gh release upload $ERGO_RELEASE_TAG $(echo $(find release -name "ergo-node-*"))
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          EXISTING=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$ERGO_RELEASE_TAG" --jq '.assets[].name')
+          TO_UPLOAD=()
+          while IFS= read -r f; do
+            if [ "$REPLACE_ASSETS" = "true" ]; then
+              TO_UPLOAD+=("$f")
+            elif grep -qxF -- "$(basename "$f")" <<< "$EXISTING"; then
+              echo "::notice::$(basename "$f") already attached, keeping it"
+            else
+              TO_UPLOAD+=("$f")
+            fi
+          done < <(find release -name "ergo-node-*")
+          if [ "${#TO_UPLOAD[@]}" -eq 0 ]; then
+            echo "Nothing to upload"
+            exit 0
+          fi
+          if [ "$REPLACE_ASSETS" = "true" ]; then
+            gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "${TO_UPLOAD[@]}" --clobber
+          else
+            gh release upload "$ERGO_RELEASE_TAG" -R "$GITHUB_REPOSITORY" "${TO_UPLOAD[@]}"
+          fi

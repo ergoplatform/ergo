@@ -17,7 +17,7 @@ import scorex.util.serialization.{Reader, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Try}
 
 case class ADProofs(headerId: ModifierId,
                     proofBytes: SerializedAdProof,
@@ -50,25 +50,16 @@ case class ADProofs(headerId: ModifierId,
       changes.operations.flatMap(o => verifier.performOneOperation(o).get)
     }
 
-    val verifier = new BatchAVLVerifier[Digest32, HF](previousHash, proofBytes, ADProofs.KL,
-      None, maxNumOperations = Some(changes.operations.size))
+    val verifier = new CanonicalBatchAVLVerifier(previousHash, proofBytes, changes.operations.size)
 
     applyChanges(verifier, changes).flatMap { oldValues =>
       verifier.digest match {
         case Some(digest) =>
           if (java.util.Arrays.equals(digest, expectedHash)) {
-            // Reject proofs with bytes past the last direction bit consumed by the
-            // verifier — without this, a malicious miner can append garbage to a
-            // canonical proof and have the block accepted by digest-mode peers while
-            // utxo-mode peers (which regenerate the proof) reject it.
-            val consumedBits = ADProofs.directionsIndexField.getInt(verifier)
-            val consumedBytes = (consumedBits + 7) / 8
-            if (consumedBytes == proofBytes.length) {
-              Success(oldValues)
-            } else {
-              val msg = s"ADProof has ${proofBytes.length - consumedBytes} trailing byte(s)"
-              Failure(new IllegalArgumentException(msg))
-            }
+            // scrypto's verifier accepts proofs padded in ways that change their hash, while
+            // utxo-mode nodes regenerate the proof and compare its hash with header.ADProofsRoot.
+            // Digest-mode nodes must accept the same proofs as them, so only the canonical one is valid.
+            verifier.checkCanonicalForm().map(_ => oldValues)
           } else {
             val msg = s"Unexpected result digest: ${Algos.encode(digest)} != ${Algos.encode(expectedHash)}"
             Failure(new IllegalArgumentException(msg))
@@ -85,16 +76,6 @@ object ADProofs extends ApiCodecs {
   val modifierTypeId: NetworkObjectTypeId.Value = ProofsTypeId.value
 
   val KL = 32
-
-  // scrypto's BatchAVLVerifier tracks the number of direction bits consumed
-  // from the proof bytes in a `private var directionsIndex: Int`. We need it
-  // in `verify` to detect trailing bytes. Until scrypto exposes a public accessor,
-  // reach it via reflection. Cached as a static field so the JVM only does the lookup once.
-  private[history] val directionsIndexField: java.lang.reflect.Field = {
-    val f = classOf[BatchAVLVerifier[_, _]].getDeclaredField("directionsIndex")
-    f.setAccessible(true)
-    f
-  }
 
   def proofDigest(proofBytes: SerializedAdProof): Digest32 = Algos.hash(proofBytes)
 

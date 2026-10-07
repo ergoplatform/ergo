@@ -181,9 +181,10 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  // Without the trailing-bytes check in ADProofs.verify a miner can append garbage to a proof and
-  // set header.ADProofsRoot to its hash, splitting digest peers off the utxo peers' chain.
-  property("validateTransactions() - proof with trailing bytes is rejected") {
+  // A miner can pad a proof so that it still replays to the declared state root, and set header.ADProofsRoot
+  // to the hash of the padded proof. Utxo-mode nodes regenerate the proof and reject the block, so
+  // digest-mode nodes have to reject it as well, or they are split off from the chain.
+  property("validateTransactions() - padded proof is rejected") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh, parameters)
       val ds = createDigestState(us.version, us.rootDigest)
@@ -193,11 +194,27 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
       val txs = block.blockTransactions.txs
       val expectedHash = block.header.stateRoot
 
-      ds.validateTransactions(txs, expectedHash, origProofs, emptyStateContext) shouldBe 'success
+      def validate(proofBytes: Array[Byte]) = {
+        val proof = ADProofs(origProofs.headerId, SerializedAdProof @@ proofBytes)
+        ds.validateTransactions(txs, expectedHash, proof, emptyStateContext)
+      }
 
-      val tamperedBytes = SerializedAdProof @@ (origProofs.proofBytes :+ 't'.toByte)
-      val tamperedProof = ADProofs(origProofs.headerId, tamperedBytes)
-      ds.validateTransactions(txs, expectedHash, tamperedProof, emptyStateContext) shouldBe 'failure
+      validate(origProofs.proofBytes) shouldBe 'success
+
+      val withTrailingByte = validate(origProofs.proofBytes :+ 't'.toByte)
+      withTrailingByte shouldBe 'failure
+      withTrailingByte.failed.get.getMessage should include("bytes, but")
+
+      // flipping any bit of the last byte either changes what the proof means or is a padding bit,
+      // in both cases the block is invalid
+      (0 to 7).foreach { bit =>
+        val flipped = origProofs.proofBytes.clone()
+        flipped(flipped.length - 1) = (flipped.last ^ (1 << bit)).toByte
+        validate(flipped) shouldBe 'failure
+      }
+
+      ds.close()
+      us.closeStorage()
     }
   }
 

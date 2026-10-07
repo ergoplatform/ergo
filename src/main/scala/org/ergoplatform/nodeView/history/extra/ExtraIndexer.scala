@@ -921,6 +921,16 @@ object ExtraIndexer {
   val IndexedHeaderIdKey: Array[Byte] = Algos.hash("indexed header id")
   val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
 
+  /**
+    * Marker key recording that the extra index contains storage-rent eligibility rows.
+    * Rent rows are written only while `storageRentCollection` is on, which the schema
+    * version can not capture: turning the flag back on after an off period must force a
+    * rebuild (blocks indexed while off have no rent rows), turning it off must not destroy
+    * the index. `ErgoHistory.readOrGenerate` maintains this marker accordingly.
+    */
+  val RentIndexEnabledKey: Array[Byte] = Algos.hash("rent index enabled")
+  val RentIndexEnabledBytes: Array[Byte] = Array(1.toByte)
+
   def getIndex(key: Array[Byte], history: HistoryStorage): ByteBuffer =
     ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8) {
       0

@@ -160,15 +160,15 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
         key.length == StorageRentBox.KeyLength &&
           key(0) == StorageRentBox.KeyMarker &&
           java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight,
-      // stop at the first key in the marker namespace whose height bytes pass the cutoff.
-      // Any such key sorts after every key with height bytes <= cutoff, so no eligible
+      // stop when the marker byte changes (the iterator left the rent namespace) or at
+      // the first in-namespace key whose height bytes pass the cutoff. Any key with height
+      // bytes > cutoff sorts after every key with height bytes <= cutoff, so no eligible
       // rent row can come after it; foreign 32-byte ids sharing the marker byte are
-      // skipped over (excluded by keyFilter) when their height bytes are within the
-      // cutoff, and end the scan when beyond it - so the tail of the namespace is never
-      // walked once everything eligible is collected.
+      // skipped over (excluded by keyFilter) while their height bytes are within the
+      // cutoff, and end the scan when beyond it.
       continueScan = key =>
-        key.length < 5 || key(0) != StorageRentBox.KeyMarker ||
-          java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight
+        key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
+          (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight)
     ).map { case (key, _) => StorageRentBox.fromKey(key) }
   }
 

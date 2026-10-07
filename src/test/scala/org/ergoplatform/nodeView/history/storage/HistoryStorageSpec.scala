@@ -101,6 +101,12 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     foreignKey(0) = StorageRentBox.KeyMarker
     foreignKey(4) = 25.toByte // between height 20 (0x14) and 30 (0x1e) at the height's last byte
     db.insertExtra(Array(foreignKey -> Array[Byte](1)), Array.empty)
+    // keys past the rent namespace: a rent-shaped key with the next marker byte and one
+    // far away - they must never leak into results (the scan stops at the marker change)
+    val laterMarkerKey = StorageRentBox.key(15, 150L)
+    laterMarkerKey(0) = (StorageRentBox.KeyMarker + 1).toByte
+    val farKey = Array.fill(32)(0xff.toByte)
+    db.insertExtra(Array(laterMarkerKey -> Array[Byte](1), farKey -> Array[Byte](1)), Array.empty)
 
     try {
       // the cutoff stops the scan at the first key in the namespace whose height
@@ -108,9 +114,13 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
       db.storageRentBoxesAtOrBefore(20, 10).map(_.globalIndex).toSeq shouldBe Seq(100L, 200L)
       // the foreign key is skipped over (not returned, and not truncating the scan)
       db.storageRentBoxesAtOrBefore(30, 10).map(_.globalIndex).toSeq shouldBe Seq(100L, 200L, 300L)
+      // out-of-namespace keys never appear even with an unlimited cutoff; the trailing
+      // row (globalIndex 2, height 1002) is the one the sibling property leaves in place
+      db.storageRentBoxesAtOrBefore(Int.MaxValue, 10).map(_.globalIndex).toSeq shouldBe
+        Seq(100L, 200L, 300L, 2L)
     } finally {
       // the spec's db is shared and persisted: leave no rows behind for other runs
-      db.removeExtra((rentRowIds :+ bytesToId(foreignKey)).toArray)
+      db.removeExtra((rentRowIds ++ Seq(foreignKey, laterMarkerKey, farKey).map(bytesToId)).toArray)
     }
   }
 

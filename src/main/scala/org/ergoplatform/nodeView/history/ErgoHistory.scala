@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
-  IndexedHeightKey, NewestVersion, NewestVersionBytes, RollbackToKey, SchemaVersionKey, getIndex}
+  IndexedHeightKey, NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey, getIndex}
 import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
@@ -481,11 +481,48 @@ object ErgoHistory extends ScorexLogging {
             error)
           Failure(error)
         }.get
-        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty).recoverWith { case error =>
+        val rentMarkerEntry: Array[(Array[Byte], Array[Byte])] =
+          if (ergoSettings.nodeSettings.storageRentCollection) {
+            Array(RentIndexEnabledKey -> RentIndexEnabledBytes)
+          } else {
+            Array.empty
+          }
+        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)) ++ rentMarkerEntry, Array.empty).recoverWith { case error =>
           Try(freshDb.close()).failed.foreach(error.addSuppressed)
           Failure(error)
         }.get
         db = freshDb
+      }
+
+      // Rent rows are written only while storageRentCollection is on, which the schema
+      // version can not capture (see ExtraIndexer.RentIndexEnabledKey): turning the flag
+      // on after an off period must rebuild the index (blocks indexed while off have no
+      // rent rows); turning it off just clears the marker, keeping the index intact.
+      val rentEnabledStored = db.modifierBytesById(bytesToId(RentIndexEnabledKey))
+        .exists(_.sameElements(RentIndexEnabledBytes))
+      if (ergoSettings.nodeSettings.storageRentCollection && !rentEnabledStored) {
+        log.warn("storageRentCollection is on but the extra index has no rent rows, rebuilding it")
+        val freshDb = db.deleteExtraDBTry(ergoSettings).recoverWith { case error =>
+          val extraIndexPath = new File(s"${ergoSettings.directory}/history/extra").getAbsolutePath
+          log.error(
+            "Extra index rebuild failed; node startup is aborting. Operator recovery: " +
+              "1) stop every Ergo node process using this data directory; " +
+              "2) inspect the preceding exception and correct its cause, such as disk space, permissions, or open handles; " +
+              s"3) move or remove only '$extraIndexPath'; " +
+              "4) verify that directory no longer exists; 5) restart the node to retry the extra index rebuild. " +
+              "Do not remove the history/index or history/objects directories.",
+            error)
+          Failure(error)
+        }.get
+        freshDb.insertExtraTry(Array(
+          (SchemaVersionKey, NewestVersionBytes),
+          (RentIndexEnabledKey, RentIndexEnabledBytes)), Array.empty).recoverWith { case error =>
+          Try(freshDb.close()).failed.foreach(error.addSuppressed)
+          Failure(error)
+        }.get
+        db = freshDb
+      } else if (!ergoSettings.nodeSettings.storageRentCollection && rentEnabledStored) {
+        db.removeExtra(Array(bytesToId(RentIndexEnabledKey)))
       }
     }
 

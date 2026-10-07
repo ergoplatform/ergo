@@ -2337,8 +2337,22 @@ class WalletFullChainProbeInterleaveSpec
       val attemptingHistory = new CountDownLatch(1)
       val enteredHistory = new CountDownLatch(1)
       val releaseScan = new CountDownLatch(1)
+      val releaseHistoryAdvance = new CountDownLatch(1)
+      val enteredReplay = new CountDownLatch(1)
+      val releaseReplay = new CountDownLatch(1)
+      val service = new ErgoWalletServiceImpl(actorSettings) {
+        override def scanBlockUpdate(state: ErgoWalletState,
+                                     block: ErgoFullBlock,
+                                     dustLimit: Option[Long]): Try[ErgoWalletState] = {
+          if (block.id == second.id) {
+            enteredReplay.countDown()
+            require(releaseReplay.await(30, TimeUnit.SECONDS), "test did not release selected bootstrap replay")
+          }
+          super.scanBlockUpdate(state, block, dustLimit)
+        }
+      }
       val actor = w.actorSystem.actorOf(Props(new ErgoWalletActor(
-        actorSettings, parameters, new ErgoWalletServiceImpl(actorSettings), selector, getHistory
+        actorSettings, parameters, service, selector, getHistory
       ) {
         private var held = false
         override protected[wallet] def armSelectedCatchUpScan(tip: ModifierId,
@@ -2364,14 +2378,25 @@ class WalletFullChainProbeInterleaveSpec
           getHistory.ifHolderAppliedFullTip(second.id) {
             enteredHistory.countDown()
           }
+          require(releaseHistoryAdvance.await(20, TimeUnit.SECONDS),
+            "test did not release history advance")
           applyBlock(third)
         }(scala.concurrent.ExecutionContext.global)
         attemptingHistory.await(5, TimeUnit.SECONDS) shouldBe true
         val enteredBeforeInstall = enteredHistory.await(1, TimeUnit.SECONDS)
         releaseScan.countDown()
-        scala.concurrent.Await.result(advanced, 5.seconds) shouldBe 'success
         enteredBeforeInstall shouldBe false
-        getHistory.bestFullBlockIdOpt shouldBe Some(third.id)
+        enteredHistory.await(5, TimeUnit.SECONDS) shouldBe true
+        enteredReplay.await(5, TimeUnit.SECONDS) shouldBe true
+        // Keep the independent wallet in its first selected scan until the holder
+        // has applied the newer tip, so this checks reproof rather than event timing.
+        releaseHistoryAdvance.countDown()
+        scala.concurrent.Await.result(advanced, 5.seconds) shouldBe 'success
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          getHistory.bestFullBlockIdOpt shouldBe Some(third.id)
+          getHistory.ifHolderAppliedFullTip(third.id)(true) shouldBe Some(true)
+        }
+        releaseReplay.countDown()
         eventually(timeout(10.seconds), interval(100.millis)) {
           val status = await(reader.getWalletStatus)
           status.height shouldBe third.height
@@ -2379,6 +2404,8 @@ class WalletFullChainProbeInterleaveSpec
         }
       } finally {
         releaseScan.countDown()
+        releaseHistoryAdvance.countDown()
+        releaseReplay.countDown()
         probe.send(actor, CloseWallet)
         probe.expectTerminated(actor, 5.seconds)
       }

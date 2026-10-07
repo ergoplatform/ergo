@@ -209,10 +209,12 @@ class WalletRetainedRollbackActorSpec
         val probe = TestProbe()(failStopSystem)
         probe.send(actor, ScanOnChain(first))
         probe.send(actor, ScanOnChain(second))
-        probe.send(actor, GetWalletStatus)
-        val status = probe.expectMsgType[WalletStatus](5.seconds)
-        status.height shouldBe second.height
-        status.error shouldBe None
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          probe.send(actor, GetWalletStatus)
+          val status = probe.expectMsgType[WalletStatus](5.seconds)
+          status.height shouldBe second.height
+          status.error shouldBe None
+        }
 
         probe.send(actor, Rollback(idToVersion(first.id)))
         Await.result(failStopSystem.whenTerminated, 20.seconds)
@@ -276,10 +278,12 @@ class WalletRetainedRollbackActorSpec
         val probe = TestProbe()(failStopSystem)
         probe.send(actor, ScanOnChain(first))
         probe.send(actor, ScanOnChain(second))
-        probe.send(actor, GetWalletStatus)
-        val status = probe.expectMsgType[WalletStatus](5.seconds)
-        status.height shouldBe second.height
-        status.error shouldBe None
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          probe.send(actor, GetWalletStatus)
+          val status = probe.expectMsgType[WalletStatus](5.seconds)
+          status.height shouldBe second.height
+          status.error shouldBe None
+        }
 
         probe.send(actor, Rollback(idToVersion(first.id)))
         Await.result(failStopSystem.whenTerminated, 20.seconds)

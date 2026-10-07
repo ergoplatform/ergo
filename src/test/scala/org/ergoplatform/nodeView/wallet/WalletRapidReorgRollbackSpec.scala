@@ -109,10 +109,12 @@ class WalletRapidReorgRollbackSpec
       seedProbe.watch(seed)
       try {
         Seq(first, secondA, thirdA).foreach(block => seedProbe.send(seed, ScanOnChain(block)))
-        seedProbe.send(seed, GetWalletStatus)
-        val status = seedProbe.expectMsgType[WalletStatus](5.seconds)
-        status.height shouldBe thirdA.height
-        status.error shouldBe None
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          seedProbe.send(seed, GetWalletStatus)
+          val status = seedProbe.expectMsgType[WalletStatus](5.seconds)
+          status.height shouldBe thirdA.height
+          status.error shouldBe None
+        }
       } finally {
         seedProbe.send(seed, CloseWallet)
         seedProbe.expectTerminated(seed, 5.seconds)

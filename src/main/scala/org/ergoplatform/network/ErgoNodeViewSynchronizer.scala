@@ -124,6 +124,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val OptimisticMaxTransactionCost = 2000000
 
+  // One request must remain possible even if an operator raises the validation limit
+  // above the per-peer budget; in that case only one transaction may be in flight.
+  private val ReservedTransactionCost = math.min(MempoolPeerCostPerBlock.toLong,
+    math.max(OptimisticMaxTransactionCost, settings.nodeSettings.maxTransactionCost).toLong)
+
 
   /**
     * Dictionary (tx id -> checking time), which is storing transactions declined by the mempool, as mempool is not
@@ -144,6 +149,84 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * processed.
     */
   private val perPeerCost = mutable.Map[ConnectedPeer, IncomingTxInfo]()
+
+  /** Transactions requested, received, cached or awaiting a mempool result. */
+  private case class TxReservation(peer: ConnectedPeer, received: Boolean)
+  private val txReservations = mutable.Map[ModifierId, TxReservation]()
+
+  // An inventory can advertise more transactions than the cost budget can request at once.
+  // Keep only a bounded tail, so a released reservation can make progress without a new Inv.
+  private val MaxDeferredTxInvs = InvSpec.maxInvObjects
+  private val MaxDeferredTxInvsPerPeer = 32
+  private val deferredTxInvs = mutable.LinkedHashMap[ModifierId, ConnectedPeer]()
+  private case object DrainDeferredTxInvs
+  private var drainDeferredTxInvsScheduled = false
+
+  private def isSameConnection(a: ConnectedPeer, b: ConnectedPeer): Boolean =
+    a.connectionId == b.connectionId && a.handlerRef == b.handlerRef
+
+  private def enqueueDeferredTxInv(id: ModifierId, peer: ConnectedPeer): Unit = {
+    val peerEntries = deferredTxInvs.valuesIterator.count(isSameConnection(_, peer))
+    deferredTxInvs.get(id) match {
+      case Some(owner) if isSameConnection(owner, peer) => ()
+      // A later announcer may replace the owner, but cannot bypass its own quota.
+      case Some(_) if peerEntries < MaxDeferredTxInvsPerPeer => deferredTxInvs.update(id, peer)
+      case None if deferredTxInvs.size < MaxDeferredTxInvs &&
+        peerEntries < MaxDeferredTxInvsPerPeer => deferredTxInvs.put(id, peer)
+      case _ => ()
+    }
+  }
+
+  private def scheduleDeferredTxInvDrain(): Unit = {
+    if (deferredTxInvs.nonEmpty && !drainDeferredTxInvsScheduled) {
+      drainDeferredTxInvsScheduled = true
+      self ! DrainDeferredTxInvs
+    }
+  }
+
+  private def completedTxCost(info: IncomingTxInfo): Long =
+    info.acceptedCost.toLong + info.declinedCost + info.invalidatedCost
+
+  private def reservedTxCost(peer: ConnectedPeer): Long =
+    txReservations.valuesIterator.count(_.peer == peer).toLong * ReservedTransactionCost
+
+  private def canTransferTxReservation(peer: ConnectedPeer): Boolean =
+    completedTxCost(perPeerCost.getOrElse(peer, IncomingTxInfo.empty())) +
+      reservedTxCost(peer) + ReservedTransactionCost <= MempoolPeerCostPerBlock
+
+  private def txSlotsFor(peer: ConnectedPeer): Int = {
+    val globalRemaining = MempoolCostPerBlock.toLong - completedTxCost(interblockCost) -
+      txReservations.size.toLong * ReservedTransactionCost
+    val peerRemaining = MempoolPeerCostPerBlock.toLong -
+      completedTxCost(perPeerCost.getOrElse(peer, IncomingTxInfo.empty())) - reservedTxCost(peer)
+    (math.max(0L, math.min(globalRemaining, peerRemaining)) / ReservedTransactionCost).toInt
+  }
+
+  private def canAcceptTxInv(hr: ErgoHistory, peer: ConnectedPeer): Boolean = {
+    val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
+    settings.nodeSettings.stateType.holdsUtxoSet &&
+      hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) &&
+      hr.fullBlockHeight == hr.headersHeight &&
+      interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 &&
+      peerCost <= MempoolPeerCostPerBlock * 3 / 2 &&
+      txProcessingCache.size <= MaxProcessingTransactionsCacheSize &&
+      declined.size < MaxDeclined
+  }
+
+  private def drainDeferredTxInvs(hr: ErgoHistory,
+                                  mp: ErgoMemPool,
+                                  blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+    deferredTxInvs.toVector.foreach { case (id, peer) =>
+      if (deliveryTracker.status(id, ErgoTransaction.modifierTypeId, Seq(mp)) != ModifiersStatus.Unknown ||
+        txReservations.contains(id) || mp.isInvalidated(id) ||
+        blockAppliedTxsCache.mightContain(id) || declined.contains(id)) {
+        deferredTxInvs -= id
+      } else if (canAcceptTxInv(hr, peer) && txSlotsFor(peer) > 0) {
+        deferredTxInvs -= id
+        requestBlockSection(ErgoTransaction.modifierTypeId, Seq(id), peer)
+      }
+    }
+  }
 
   /**
     * Cache which contains bytes of transactions we received but not parsed and processed yet
@@ -194,8 +277,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def processFirstTxProcessingCacheRecord(): Unit = {
     txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
       txProcessingCache -= txId
+      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
     }
   }
 
@@ -213,6 +296,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     val cost = costOpt.getOrElse(FallbackCostValue)
+
+    val id = processingResult.transaction.id
+    if (processingResult.transaction.source.exists(peer =>
+      txReservations.get(id).exists(_.peer == peer))) {
+      txReservations -= id
+    }
 
     val newInterblockCost = processingResult match {
       case _: FailedTransaction => interblockCost.copy(invalidatedCost = interblockCost.invalidatedCost + cost)
@@ -246,6 +335,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (withinGlobalLimit && withinPeerLimit) {
       processFirstTxProcessingCacheRecord()
     }
+    scheduleDeferredTxInvDrain()
   }
 
   /**
@@ -577,17 +667,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                           modifierIds: Seq[ModifierId],
                           peer: ConnectedPeer,
                           checksDone: Int = 0): Unit = {
-    log.debug(s"Requesting block sections of type $modifierTypeId : $modifierIds")
-    if (checksDone > 0 && modifierIds.length > 1) {
-      log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
+    val isTransaction = modifierTypeId == ErgoTransaction.modifierTypeId
+    val idsToRequest = if (isTransaction) {
+      modifierIds.distinct.filterNot(txReservations.contains).take(txSlotsFor(peer))
+    } else modifierIds
+    log.debug(s"Requesting block sections of type $modifierTypeId : $idsToRequest")
+    if (checksDone > 0 && idsToRequest.length > 1) {
+      log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $idsToRequest of type $modifierTypeId")
     }
-    val msg = Message(RequestModifierSpec, Right(InvData(modifierTypeId, modifierIds)), None)
-    val stn = SendToNetwork(msg, SendToPeer(peer))
-    networkControllerRef ! stn
-
-    modifierIds.foreach { modifierId =>
-      deliveryTracker.setRequested(modifierTypeId, modifierId, peer, checksDone) { deliveryCheck =>
-        context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+    if (idsToRequest.nonEmpty) {
+      if (isTransaction) idsToRequest.foreach(id => txReservations.put(id, TxReservation(peer, received = false)))
+      val msg = Message(RequestModifierSpec, Right(InvData(modifierTypeId, idsToRequest)), None)
+      networkControllerRef ! SendToNetwork(msg, SendToPeer(peer))
+      idsToRequest.foreach { modifierId =>
+        deliveryTracker.setRequested(modifierTypeId, modifierId, peer, checksDone) { deliveryCheck =>
+          context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
+        }
+        if (isTransaction && !deliveryTracker.getRequestedInfo(modifierTypeId, modifierId)
+          .exists(_.peer == peer)) txReservations -= modifierId
       }
     }
   }
@@ -697,26 +794,58 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  private def authenticatesTransactionId(id: ModifierId, bytes: Array[Byte]): Boolean =
+    bytes.length <= settings.nodeSettings.maxTransactionSize &&
+      VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(
+        ErgoTransactionSerializer.parseBytesTry(bytes)).toOption.exists(_.id == id)
+
   private def transactionsFromRemote(requestedModifiers: Map[ModifierId, Array[Byte]],
                                      mp: ErgoMemPool,
                                      remote: ConnectedPeer): Unit = {
-    // filter out transactions already in the mempool
-    val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
+    val admitted = requestedModifiers.filter { case (id, bytes) =>
+      txReservations.get(id) match {
+        case Some(_) if mp.contains(id) =>
+          deliveryTracker.setHeld(id, ErgoTransaction.modifierTypeId)
+          txReservations -= id
+          scheduleDeferredTxInvDrain()
+          false
+        case Some(reservation) =>
+          // An announced transaction may arrive from a different peer. Charge the actual sender.
+          val sameConnection = isSameConnection(reservation.peer, remote)
+          if (reservation.peer != remote && !canTransferTxReservation(remote)) {
+            false
+          } else if (!sameConnection && !authenticatesTransactionId(id, bytes)) {
+            // A bad reply from another connection cannot consume the active request or its budget.
+            penalizeMisbehavingPeer(remote)
+            false
+          } else {
+            deliveryTracker.setReceived(id, ErgoTransaction.modifierTypeId, remote)
+            if (deliveryTracker.status(id, ErgoTransaction.modifierTypeId, Seq.empty) ==
+              ModifiersStatus.Received) {
+              txReservations.update(id, TxReservation(remote, received = true))
+              true
+            } else false
+          }
+        case None => false
+      }
+    }
     val peerCost = perPeerCost.getOrElse(remote, IncomingTxInfo.empty()).totalCost
 
     val (toProcess, toPutIntoCache) =
-      if (peerCost < MempoolPeerCostPerBlock && interblockCost.totalCost < MempoolCostPerBlock) {
+      if (admitted.isEmpty) {
+        (None, Map.empty[ModifierId, Array[Byte]])
+      } else if (peerCost < MempoolPeerCostPerBlock && interblockCost.totalCost < MempoolCostPerBlock) {
         // if we are within peer and total per-block limits, parse and process first transaction
-        (notInThePool.headOption, notInThePool.tail)
+        (admitted.headOption, admitted.tail)
       } else {
-        (None, notInThePool)
+        (None, admitted)
       }
 
-    toProcess.foreach { case (txId, txBytes) =>
-      parseAndProcessTransaction(txId, txBytes, remote)
-    }
     toPutIntoCache.foreach { case (txId, txBytes) =>
       txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
+    }
+    toProcess.foreach { case (txId, txBytes) =>
+      parseAndProcessTransaction(txId, txBytes, remote)
     }
   }
 
@@ -785,9 +914,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
       deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
+      txReservations -= id
+      scheduleDeferredTxInvDrain()
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
+      processFirstTxProcessingCacheRecord()
     } else {
       // actual tree version is properly set in ErgoTreeSerializer inside
       val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
@@ -796,10 +928,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val utx = UnconfirmedTransaction(tx, bytes, Some(remote))
           viewHolderRef ! TransactionFromRemote(utx)
         case _ =>
-          // Penalize peer and do nothing - it will be switched to correct state on CheckDelivery
+          // Penalize the peer and release this request so a valid peer can announce it again.
+          deliveryTracker.setUnknown(id, ErgoTransaction.modifierTypeId)
+          txReservations -= id
+          scheduleDeferredTxInvDrain()
           penalizeMisbehavingPeer(remote)
           log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} " +
                     s"from ${remote.toString}, reason: ${parseResult.map(_.id)}")
+          processFirstTxProcessingCacheRecord()
       }
     }
   }
@@ -1109,29 +1245,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
 
-    val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
-
-    // We download transactions only if following conditions met:
-    def txAcceptanceFilter: Boolean = {
-      settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
-        hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
-        hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
-      interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-      peerCost <= MempoolPeerCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-      txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
-        declined.size < MaxDeclined // the node is not stormed by transactions is has to decline
-    }
-
     val modifierTypeId = invData.typeId
 
     val newModifierIds = modifierTypeId match {
       case ErgoTransaction.modifierTypeId =>
-
-        if (txAcceptanceFilter) {
+        drainDeferredTxInvs(hr, mp, blockAppliedTxsCache)
+        if (canAcceptTxInv(hr, peer)) {
           val unknownMods = {
             // check that transaction is not in the mempool already or invalidated earlier
             invData.ids.filter{mid =>
               deliveryTracker.status(mid, modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown &&
+                !txReservations.contains(mid) &&
                 !mp.isInvalidated(mid)
             }
           }
@@ -1139,10 +1263,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           val notApplied = unknownMods.filterNot(blockAppliedTxsCache.mightContain)
           // filter out transactions previously declined
           val notDeclined = notApplied.filter(id => !declined.contains(id))
+          val candidates = notDeclined.distinct
+          val txsToAsk = txSlotsFor(peer)
+          val selected = candidates.take(txsToAsk)
+          selected.foreach(id => deferredTxInvs -= id)
+          candidates.drop(txsToAsk).foreach(enqueueDeferredTxInv(_, peer))
           log.info(s"Processing ${invData.ids.length} tx invs from $peer, " +
-            s"${unknownMods.size} of them are unknown, requesting $notDeclined")
-          val txsToAsk = (MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost
-          notDeclined.take(txsToAsk)
+            s"${unknownMods.size} of them are unknown, requesting $selected")
+          selected
         } else {
           Seq.empty
         }
@@ -1257,12 +1385,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * re-request modifier from a different random peer, if our node does not know a peer who have it
     */
   protected def checkDelivery(hr: ErgoHistory): Receive = {
-    case CheckDelivery(peer, modifierTypeId, modifierId) =>
-      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested) {
+    case CheckDelivery(peer, modifierTypeId, modifierId, requestId) =>
+      // Cancellation cannot retract an expiration already queued for an earlier request.
+      if (deliveryTracker.status(modifierId, modifierTypeId, Seq.empty) == ModifiersStatus.Requested &&
+        deliveryTracker.getRequestedInfo(modifierTypeId, modifierId).exists(_.requestId == requestId)) {
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
         if (modifierTypeId == ErgoTransaction.modifierTypeId) {
           deliveryTracker.clearStatusForModifier(modifierId, modifierTypeId, ModifiersStatus.Requested)
+          txReservations -= modifierId
+          scheduleDeferredTxInvDrain()
         } else {
           // A block section is not delivered on time.
           log.info(s"Peer ${peer.toString} has not delivered network object " +
@@ -1359,6 +1491,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      deferredTxInvs.iterator.collect {
+        case (id, peer) if isSameConnection(peer, connectedPeer) => id
+      }.toVector.foreach(deferredTxInvs -= _)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -1452,6 +1587,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
+      scheduleDeferredTxInvDrain()
 
     // Peer-received block applied - broadcast to our peers
     case RemoteBlockApplied(header, _) =>
@@ -1465,19 +1601,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
+      scheduleDeferredTxInvDrain()
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction
+      // A local acceptance of the same ID must not release remote validation already in progress.
+      val remoteValidationPending =
+        txReservations.get(tx.id).exists(_.received) && !txProcessingCache.contains(tx.id)
+      if (!remoteValidationPending) txReservations -= tx.id
       deliveryTracker.setHeld(tx.id, ErgoTransaction.modifierTypeId)
+      txProcessingCache -= tx.id
       processMempoolResult(st)
       broadcastModifierInv(tx)
 
     case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
       declined.put(utx.id, System.currentTimeMillis())
+      if (utx.source.exists(peer => txReservations.get(utx.id).exists(_.peer == peer))) {
+        deliveryTracker.setUnknown(utx.id, ErgoTransaction.modifierTypeId)
+      }
       processMempoolResult(dt)
 
     case ft@FailedTransaction(utx, error) =>
       val id = utx.id
+      if (utx.source.exists(peer => txReservations.get(id).exists(_.peer == peer))) {
+        deliveryTracker.setUnknown(id, ErgoTransaction.modifierTypeId)
+      }
       processMempoolResult(ft)
 
       utx.source.foreach { peer =>
@@ -1528,9 +1676,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
       context.become(initialized(newHistoryReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
+      scheduleDeferredTxInvDrain()
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
+      scheduleDeferredTxInvDrain()
+
+    case DrainDeferredTxInvs =>
+      drainDeferredTxInvsScheduled = false
+      drainDeferredTxInvs(historyReader, mempoolReader, blockAppliedTxsCache)
 
     case ChangedState(reader: ErgoStateReader) =>
       activatedScriptVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
@@ -1572,6 +1726,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case ChainIsStuck(error) =>
       if (historyReader.fullBlockHeight > 0) {
         log.warn(s"Chain is stuck! $error\nDelivery tracker State:\n$deliveryTracker\nSync tracker state:\n$syncTracker")
+        txReservations.iterator.collect { case (id, reservation) if !reservation.received => id }
+          .toVector.foreach(txReservations -= _)
+        deferredTxInvs.clear()
         deliveryTracker.reset()
       } else {
         log.debug("Got ChainIsStuck signal when no full-blocks applied yet")

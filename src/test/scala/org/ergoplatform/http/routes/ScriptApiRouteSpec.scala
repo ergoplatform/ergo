@@ -33,6 +33,15 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val route: Route = ScriptApiRoute(digestReadersRef, settings).route
 
+  val settingsWithAuth: ErgoSettings = settings.copy(
+    scorexSettings = settings.scorexSettings.copy(
+      restApi = settings.scorexSettings.restApi.copy(
+        apiKeyHash = Some("e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10")
+      )
+    )
+  )
+  val routeWithAuth: Route = ScriptApiRoute(digestReadersRef, settingsWithAuth).route
+
   val scriptSource: String =
     """
       |{
@@ -259,6 +268,18 @@ class ScriptApiRouteSpec extends AnyFlatSpec
       val tree = addressEncoder.fromString(addressStr).get.script
       // P2SH always uses version 0
       tree.bytes.head shouldEqual 0
+    }
+  }
+
+  it should "generate p2sAddress without api_key when auth is enabled" in {
+    Post(prefix + "/p2sAddress", Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> routeWithAuth ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "generate p2shAddress without api_key when auth is enabled" in {
+    Post(prefix + "/p2shAddress", Json.obj("source" -> scriptSource.asJson, "treeVersion" -> 0.asJson)) ~> routeWithAuth ~> check {
+      status shouldBe StatusCodes.OK
     }
   }
 

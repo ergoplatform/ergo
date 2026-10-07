@@ -7,7 +7,6 @@ import scorex.crypto.authds.merkle.{BatchMerkleProof, Leaf, MerkleProof, MerkleT
 import scorex.crypto.hash.Digest32
 import scorex.util.ModifierId
 import scala.annotation.nowarn
-import scala.collection.mutable
 /**
   * Extension block section with header id not provided
   *
@@ -49,9 +48,8 @@ class ExtensionCandidate(val fields: Seq[(Array[Byte], Array[Byte])]) {
     val indices = keys.flatMap(key => fields.find(_._1 sameElements key)
       .map(Extension.kvToLeaf)
       .map(kv => Leaf[Digest32](LeafData @@ kv)(Algos.hash).hash)
-      .flatMap(leafData => interlinksMerkleTree.elementsHashIndex.get(
-        new mutable.WrappedArray.ofByte(leafData))))
-    if (indices.isEmpty) None else interlinksMerkleTree.proofByIndices(indices)(Algos.hash)
+      .flatMap(leafData => interlinksMerkleTree.indexByElementHash(leafData)))
+    if (indices.isEmpty) None else interlinksMerkleTree.proofByIndices(indices)
   }
 }
 

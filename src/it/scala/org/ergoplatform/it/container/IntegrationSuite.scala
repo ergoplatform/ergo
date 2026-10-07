@@ -20,7 +20,9 @@ trait IntegrationSuite
 
   implicit def executionContext: ExecutionContext = ErgoTestHelpers.defaultExecutionContext
 
-  val tempDir: String = System.getenv("TMPDIR")
+  val tempDir: String = Option(System.getenv("TMPDIR"))
+    .filter(_.nonEmpty)
+    .getOrElse(System.getProperty("java.io.tmpdir"))
 
   protected val localDataDir: String = s"$tempDir/ergo-${Random.nextInt(Int.MaxValue)}"
 

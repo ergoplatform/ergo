@@ -2,6 +2,9 @@ package org.ergoplatform.nodeView.history.extra
 
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
+import org.ergoplatform.modifiers.ErgoNodeViewModifier
+import org.ergoplatform.modifiers.history.header.Header
+import scorex.util.{ModifierId, bytesToId}
 
 /**
  * An immutable state for extra indexer
@@ -10,12 +13,14 @@ import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
  * @param globalBoxIndex - Indexed box count
  * @param rollbackTo - blockheight to rollback to, 0 if no rollback is in progress
  * @param caughtUp - flag to indicate if the indexer is caught up with the chain and is listening for updates
+ * @param indexedHeaderId - id of the last block represented by the extra index
  */
 case class IndexerState(indexedHeight: Int,
                         globalTxIndex: Long,
                         globalBoxIndex: Long,
                         rollbackTo: Int,
-                        caughtUp: Boolean) {
+                        caughtUp: Boolean,
+                        indexedHeaderId: Option[ModifierId] = None) {
 
   def rollbackInProgress: Boolean = rollbackTo > 0
 
@@ -37,12 +42,22 @@ object IndexerState {
     val globalTxIndex = getIndex(GlobalTxIndexKey, history).getLong
     val globalBoxIndex = getIndex(GlobalBoxIndexKey, history).getLong
     val rollbackTo = getIndex(RollbackToKey, history).getInt
+    val indexedHeaderId = history.historyStorage
+      .modifierBytesById(bytesToId(IndexedHeaderIdKey))
+      .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+      .map(bytesToId)
+      .filter(id => history.historyStorage.modifierById(id).exists {
+        case header: Header => header.id == id && header.height == indexedHeight
+        case _ => false
+      })
     IndexerState(
       indexedHeight,
       globalTxIndex,
       globalBoxIndex,
       rollbackTo,
-      caughtUp = indexedHeight == history.fullBlockHeight
+      caughtUp = indexedHeight == history.fullBlockHeight &&
+        (indexedHeight == 0 || indexedHeaderId.isDefined),
+      indexedHeaderId = indexedHeaderId
     )
   }
 

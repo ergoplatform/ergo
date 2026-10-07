@@ -105,9 +105,11 @@ object ErgoNodeViewSynchronizerMessages {
       * Use LocalBlockApplied or RemoteBlockApplied for specific cases.
       *
       * @param header - full block's header
+      * @param txIds  - ids of transactions included into the full block applied
       */
     sealed trait FullBlockApplied extends ModificationOutcome {
       def header: Header
+      def txIds: Seq[ModifierId]
     }
 
     object FullBlockApplied {
@@ -119,13 +121,13 @@ object ErgoNodeViewSynchronizerMessages {
       * The block was already broadcast via NewBlockMined, so no additional
       * inv broadcast is needed.
       */
-    case class LocalBlockApplied(header: Header) extends FullBlockApplied
+    case class LocalBlockApplied(header: Header, txIds: Seq[ModifierId]) extends FullBlockApplied
 
     /**
       * Signal sent when a peer-received full block is applied to state.
       * An inv broadcast should be sent to propagate the block to our peers.
       */
-    case class RemoteBlockApplied(header: Header) extends FullBlockApplied
+    case class RemoteBlockApplied(header: Header, txIds: Seq[ModifierId]) extends FullBlockApplied
 
     /**
       * Signal sent by CandidateGenerator when a new block is mined locally.

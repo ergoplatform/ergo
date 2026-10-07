@@ -120,9 +120,9 @@ trait IntegrationTestConstants {
      """.stripMargin
   )
 
-  val localOnlyConfig: Config = ConfigFactory.parseString(
+  val allowLocalConfig: Config = ConfigFactory.parseString(
     """
-      |scorex.network.localOnly = true
+      |scorex.network.allowLocal = true
     """.stripMargin
   )
 }

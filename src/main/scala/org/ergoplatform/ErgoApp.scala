@@ -175,7 +175,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
   private val indexerOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.extraIndex) {
-      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings))
+      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings, nodeViewHolderRef))
     } else {
       None
     }
@@ -192,7 +192,7 @@ class ErgoApp(args: Args) extends ScorexLogging {
       scorexSettings.restApi
     ),
     InfoApiRoute(statsCollectorRef, scorexSettings.restApi),
-    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
+    BlocksApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings)(actorSystem),
     NipopowApiRoute(nodeViewHolderRef, readersHolderRef, ergoSettings),
     TransactionsApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),
     WalletApiRoute(readersHolderRef, nodeViewHolderRef, ergoSettings),

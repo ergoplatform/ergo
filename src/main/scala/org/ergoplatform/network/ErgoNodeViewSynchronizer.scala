@@ -1,7 +1,7 @@
 package org.ergoplatform.network
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
-import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, Cancellable, DeathPactException, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoNodeViewModifier, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
@@ -86,6 +86,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
+
+  // After this many failed delivery checks, fallback to Equal/Older peers instead of the same peer
+  private val FallbackToEqualPeerThreshold = 5
 
   // It could be the case that adversarial peers are sending sync messages to the node to cause
   // resource exhaustion. To prevent it, we do not provide an answer for sync message, if previous one was sent
@@ -511,16 +514,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // when the header has already been applied to history.
       val headerStatus = deliveryTracker.status(continuationHeader.id, Header.modifierTypeId, Seq(history))
       if (headerStatus == ModifiersStatus.Unknown) {
-        // Header not yet tracked — transition through Requested to Received
-        // (we already have the full object from the sync message, so no download needed).
+        // Header not yet tracked — set as Received immediately since we already
+        // have the full object from the sync message (no download needed).
         // This allows the delivery tracker to properly manage the modifier lifecycle:
-        // Unknown -> Requested -> Received -> Held (on success) or
-        // Unknown -> Requested -> Received -> Unknown (on recoverable failure).
+        // Unknown -> Received -> Held (on success) or
+        // Unknown -> Received -> Unknown (on recoverable failure).
         log.info(s"Applying valid syncInfoV2 header ${continuationHeader.encodedId}")
-        deliveryTracker.setRequested(Header.modifierTypeId, continuationHeader.id, peer, checksDone = 0) { _ =>
-          Cancellable.alreadyCancelled
-        }
-        deliveryTracker.setReceived(continuationHeader.id, Header.modifierTypeId, peer)
+        deliveryTracker.setReceivedDirectly(continuationHeader.id, Header.modifierTypeId, peer)
         viewHolderRef ! ModifiersFromRemote(Seq(continuationHeader))
         val modifiersToDownload = history.requiredModifiersForHeader(continuationHeader)
         log.info(s"Downloading block sections for header ${continuationHeader.encodedId}")
@@ -1147,8 +1147,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           Seq.empty
         }
       case _ =>
-        log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
-        invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+        // During UTXO set snapshot bootstrap, ignore block-section invs (extension, transactions, ADProofs)
+        // until the snapshot is applied. Headers and snapshot-related types are still processed.
+        val utxoBootstrapInProgress =
+          settings.nodeSettings.utxoSettings.utxoBootstrap &&
+            !hr.isUtxoSnapshotApplied &&
+            modifierTypeId != Header.modifierTypeId &&
+            modifierTypeId != ManifestTypeId.value &&
+            modifierTypeId != UtxoSnapshotChunkTypeId.value
+
+        if (utxoBootstrapInProgress) {
+          log.debug(s"Ignoring ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer: UTXO snapshot bootstrap in progress")
+          Seq.empty
+        } else {
+          log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
+          invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)
+        }
     }
 
     if (newModifierIds.nonEmpty) {
@@ -1286,7 +1300,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
               }
               val newPeer = if (newPeerCandidates.isEmpty) {
-                if (checksDone > 5) {
+                if (checksDone > FallbackToEqualPeerThreshold) {
                   // after many failed attempts, try Equal peers instead of the same peer
                   val equalPeers = syncTracker.peersByStatus.getOrElse(Equal, Seq.empty)
                   val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
@@ -1429,7 +1443,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
     // Locally mined block applied - skip broadcast (already done via NewBlockMined)
-    case LocalBlockApplied(header) =>
+    case LocalBlockApplied(header, _) =>
       log.debug(
         s"Local block applied at height ${header.height}, " +
         s"header id: ${header.encodedId}, skipping broadcast"
@@ -1440,7 +1454,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       processFirstTxProcessingCacheRecord() // resume cache processing
 
     // Peer-received block applied - broadcast to our peers
-    case RemoteBlockApplied(header) =>
+    case RemoteBlockApplied(header, _) =>
       if (header.isNew(2.hours)) {
         broadcastModifierInv(Header.modifierTypeId, header.id)
         header.sectionIds.foreach { case (mtId, id) =>
@@ -1451,10 +1465,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord() // resume cache processing
-      log.debug(
-        s"Remote block applied at height ${header.height}, " +
-        s"header id: ${header.encodedId}"
-      )
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction
@@ -1493,7 +1503,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       e match {
         case phError: ParentHeaderNotFoundError =>
           // For missing parent header, request the parent header from peers if not already known
-          val parentId = phError.parentHeaderId
+          val parentId = phError.parentId
           if (deliveryTracker.status(parentId, Header.modifierTypeId, Seq(historyReader)) == ModifiersStatus.Unknown) {
             val olderPeers = syncTracker.peersByStatus.getOrElse(Older, Seq.empty)
             if (olderPeers.nonEmpty) {

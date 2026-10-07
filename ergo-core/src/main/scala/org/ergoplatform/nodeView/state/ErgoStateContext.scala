@@ -41,6 +41,11 @@ case class UpcomingStateContext(override val lastHeaders: Seq[Header],
   extends ErgoStateContext(lastHeaders, lastExtensionOpt, genesisStateDigest, currentParameters,
                             validationSettings, votingData)(chainSettings) {
 
+  if (lastHeaders.size > Constants.LastHeadersInContext - 1) {
+    log.error(s"UpcomingStateContext created with ${lastHeaders.size} last headers, " +
+              s"expected at most ${Constants.LastHeadersInContext - 1}")
+  }
+
   override def sigmaPreHeader: sigma.PreHeader = PreHeader.toSigma(predictedHeader)
 
   override def sigmaLastHeaders: Coll[sigma.Header] = {
@@ -129,8 +134,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val (calculatedParams, updated) =
       currentParameters.update(height, forkVote, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
-    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
-                          calculatedValidationSettings, votingData)
+    UpcomingStateContext(
+      lastHeaders.take(Constants.LastHeadersInContext - 1),
+      lastExtensionOpt,
+      upcomingHeader,
+      genesisStateDigest,
+      calculatedParams,
+      calculatedValidationSettings,
+      votingData
+    )
   }
 
   /**
@@ -149,8 +161,15 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val (calculatedParams, updated) =
       currentParameters.update(height, forkVote = false, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
     val calculatedValidationSettings = validationSettings.updated(updated)
-    UpcomingStateContext(lastHeaders, lastExtensionOpt, upcomingHeader, genesisStateDigest, calculatedParams,
-      calculatedValidationSettings, votingData)
+    UpcomingStateContext(
+      lastHeaders.take(Constants.LastHeadersInContext - 1),
+      lastExtensionOpt,
+      upcomingHeader,
+      genesisStateDigest,
+      calculatedParams,
+      calculatedValidationSettings,
+      votingData
+    )
   }
 
   protected def checkForkVote(height: Height): Unit = {

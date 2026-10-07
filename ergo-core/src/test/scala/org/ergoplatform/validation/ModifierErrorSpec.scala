@@ -27,7 +27,6 @@ class ModifierErrorSpec extends ErgoCorePropertyTest {
   property("ParentHeaderNotFoundError should store parent header id") {
     forAll(modifierIdGen, modifierIdGen, modifierTypeIdGen) { (parentId: ModifierId, modifierId: ModifierId, modifierTypeId: NetworkObjectTypeId.Value) =>
       val error = new ParentHeaderNotFoundError(parentId, modifierId, modifierTypeId)
-      error.parentHeaderId shouldBe parentId
       error.parentId shouldBe parentId
     }
   }

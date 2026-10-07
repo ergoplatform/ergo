@@ -42,7 +42,9 @@ class OffChainRegistrySpec
 
 
       //check remove-offchain flag
-      boxes.filter(_.scans.size > 1).flatMap(_.scans).find(_ != Constants.PaymentsScanId).map { scanId =>
+      // Only test scanIds > PaymentsScanId because single-scan boxes with scanId <= PaymentsScanId
+      // are always removed by regardless of removeOffchain flag
+      boxes.filter(_.scans.size > 1).flatMap(_.scans).find(id => id != Constants.PaymentsScanId && id > Constants.PaymentsScanId).map { scanId =>
         val p = EqualsScanningPredicate(ErgoBox.R1, ByteArrayConstant(TrueTree.bytes))
         val scan = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = false)
         val filtered = boxes.filter(tb => tb.scans.contains(scanId))

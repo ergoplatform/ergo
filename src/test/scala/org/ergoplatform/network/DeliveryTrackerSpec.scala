@@ -14,6 +14,7 @@ import org.ergoplatform.consensus.ContainsModifiers
 class DeliveryTrackerSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ConnectedPeerGenerators._
+  import org.ergoplatform.utils.generators.ErgoCoreGenerators.defaultHeaderGen
 
   property("tracker should accept requested modifiers, turn them into received and clear them") {
     forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
@@ -79,9 +80,10 @@ class DeliveryTrackerSpec extends ErgoCorePropertyTest {
     val mTypeId: NetworkObjectTypeId.Value = NetworkObjectTypeId.fromByte(104)
 
     // Create a mock ContainsModifiers that reports the modifier as held
+    val mockHeader = defaultHeaderGen.sample.get
     val mockHistory = new ContainsModifiers[Header] {
       override def modifierById(modifierId: ModifierId): Option[Header] =
-        if (modifierId == mid) Some(null) else None
+        if (modifierId == mid) Some(mockHeader) else None
     }
 
     // Without history, modifier should be Unknown
@@ -91,8 +93,10 @@ class DeliveryTrackerSpec extends ErgoCorePropertyTest {
     tracker.status(mid, mTypeId, Seq(mockHistory)) shouldBe Held
 
     // If modifier is in received cache, it should take precedence over Held
-    tracker.setReceived(mid, mTypeId, null)
-    tracker.status(mid, mTypeId, Seq(mockHistory)) shouldBe Received
+    forAll(connectedPeerGen(ActorRef.noSender)) { peer =>
+      tracker.setReceived(mid, mTypeId, peer)
+      tracker.status(mid, mTypeId, Seq(mockHistory)) shouldBe Received
+    }
   }
 
   property("tracker should return correct status precedence") {

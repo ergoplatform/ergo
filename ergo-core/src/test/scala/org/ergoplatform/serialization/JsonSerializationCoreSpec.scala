@@ -1,7 +1,7 @@
 package org.ergoplatform.serialization
 
 import io.circe.syntax._
-import io.circe.ACursor
+import io.circe.{ACursor, Json}
 import org.ergoplatform.ErgoBox
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
 import org.ergoplatform.http.api.ApiCodecs
@@ -14,6 +14,9 @@ import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import cats.syntax.either._
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
+import sigmastate.interpreter.SecretProven
+
+import scala.util.Try
 
 class JsonSerializationCoreSpec extends ErgoCorePropertyTest
   with ApiCodecs {
@@ -58,6 +61,26 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       val json = wrappedSecret.asJson
       val parsedSecret = json.as[DhtSecretKey].toOption.get
       parsedSecret shouldBe wrappedSecret
+    }
+  }
+
+  property("secret proof decoder should reject invalid hex without throwing") {
+    val pubkey = proveDlogGen.sample.get
+    val pubkeyJson = Json.obj("op" -> pubkey.opCode.toByte.asJson, "h" -> pubkey.value.asJson)
+
+    Seq("zz" -> "00", "00" -> "zz").foreach { case (challenge, proof) =>
+      val json = Json.obj(
+        "hint" -> "proofReal".asJson,
+        "challenge" -> challenge.asJson,
+        "pubkey" -> pubkeyJson,
+        "proof" -> proof.asJson,
+        "position" -> "0".asJson
+      )
+
+      val decoded = Try(json.as[SecretProven])
+      decoded.isSuccess shouldBe true
+      decoded.get.isLeft shouldBe true
+      decoded.get.left.get.message.toLowerCase should include ("hex")
     }
   }
 

@@ -105,7 +105,7 @@ trait NodeViewSynchronizerTests[ST <: ErgoState[ST]] extends AnyPropSpec
   property("NodeViewSynchronizer: SemanticallySuccessfulModifier") {
     withFixture { ctx =>
       import ctx._
-      node ! RemoteBlockApplied(mod.asInstanceOf[Header]) //todo: fix
+      node ! RemoteBlockApplied(mod.asInstanceOf[Header], Seq.empty) //todo: fix
       ncProbe.fishForMessage(3 seconds) { case m => m.isInstanceOf[SendToNetwork] }
     }
   }

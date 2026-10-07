@@ -40,6 +40,7 @@ case class ErgoSettings(directory: String,
     } else if (networkType == NetworkType.TestNet) {
       TestnetLaunchParameters
     } else if (networkType == NetworkType.Tests) {
+      // synthetic network type for tests. Currently parameters here match testnet but could be different in future
       MainnetLaunchParameters
     } else {
       MainnetLaunchParameters

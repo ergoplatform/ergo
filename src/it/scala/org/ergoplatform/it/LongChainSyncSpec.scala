@@ -13,10 +13,10 @@ class LongChainSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val minerConfig: Config = shortInternalMinerPollingInterval
     .withFallback(nodeSeedConfigs.head)
-    .withFallback(localOnlyConfig)
+    .withFallback(allowLocalConfig)
 
   val nonGeneratingConfig: Config =
-    nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1)).withFallback(localOnlyConfig)
+    nonGeneratingPeerConfig.withFallback(nodeSeedConfigs(1)).withFallback(allowLocalConfig)
 
   val miner: Node = docker.startDevNetNode(minerConfig).get
 

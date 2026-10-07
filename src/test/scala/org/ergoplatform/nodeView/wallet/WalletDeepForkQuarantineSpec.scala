@@ -5,7 +5,9 @@ import akka.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
 import org.ergoplatform.Pay2SAddress
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.PreGenesisHeader
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedState, Rollback => HolderRollback}
+import org.ergoplatform.nodeView.history.ErgoHistoryReader.{FullChainCursor, FullChainProbe, FullChainSelected}
 import org.ergoplatform.nodeView.history.HistorySectionFault
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
@@ -21,6 +23,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.scalatest.concurrent.Eventually
 import scorex.db.LDBKVStore
+import scorex.util.ModifierId
 
 import java.io.{File, IOException}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -473,9 +476,29 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
       )
       val ws = actorSettings.walletSettings
       val selector = new ReplaceCompactCollectBoxSelector(ws.maxInputs, ws.optimalInputs, None)
+      val history = getHistory
+      val driftArmed = new AtomicBoolean(false)
+      val driftObserved = TestProbe()(w.actorSystem)
       val actor = w.actorSystem.actorOf(Props(new ErgoWalletActor(
-        actorSettings, parameters, new ErgoWalletServiceImpl(actorSettings), selector, getHistory
-      )))
+        actorSettings, parameters, new ErgoWalletServiceImpl(actorSettings), selector, history
+      ) {
+        private var walletTipProofSelected = false
+
+        override protected def probeSelectedFullChain(targetId: ModifierId,
+                                                      targetHeight: Int,
+                                                      cursor: Option[FullChainCursor]): FullChainProbe = {
+          val result = super.probeSelectedFullChain(targetId, targetHeight, cursor)
+          if (driftArmed.get() && result.isInstanceOf[FullChainSelected]) {
+            if (targetId == first.id) walletTipProofSelected = true
+            else if (targetId == secondA.id && walletTipProofSelected &&
+                     driftArmed.compareAndSet(true, false)) {
+              history.recordHolderAppliedStateVersion(idToVersion(PreGenesisHeader.id))
+              driftObserved.ref ! secondA.id
+            }
+          }
+          result
+        }
+      }))
       val reader = new ErgoWalletReader { override val walletActor = actor }
       val probe = TestProbe()(w.actorSystem)
       probe.watch(actor)
@@ -584,7 +607,16 @@ class WalletDeepForkQuarantineSpec extends ErgoCorePropertyTest with WalletTestO
           emptyReopenedProbe.expectTerminated(emptyReopened, 5.seconds)
         }
 
+        driftArmed.set(true)
         probe.send(actor, Rollback(idToVersion(holderRollback.branchPoint)))
+        val (statusBeforeReplay, balanceBeforeReplay) = try {
+          driftObserved.expectMsg(secondA.id)
+          await(reader.getWalletStatus) -> Try(await(reader.confirmedBalances))
+        } finally {
+          driftArmed.set(false)
+          history.recordHolderAppliedStateVersion(idToVersion(fifthB.id))
+        }
+        (statusBeforeReplay.error.isDefined, balanceBeforeReplay.isFailure) shouldBe ((true, true))
         Seq(thirdB, fourthB, fifthB).foreach(block => probe.send(actor, ScanOnChain(block)))
         eventually(timeout(10.seconds), interval(100.millis)) {
           val status = await(reader.getWalletStatus)

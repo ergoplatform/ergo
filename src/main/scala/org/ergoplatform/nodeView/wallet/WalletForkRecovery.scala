@@ -33,10 +33,15 @@ private[wallet] trait WalletForkRecovery { this: ErgoWalletActor =>
                   if (previousTip.exists(_ != selectedTip)) {
                     verifyMissingRollback(state, version)
                   } else {
-                    log.info(s"Wallet is behind rollback version $version on the selected full chain")
-                    context.become(loadedWallet(state))
-                    pendingChainMessages = 0
-                    unstashAll()
+                    historyReader.ifHolderAppliedFullTip(selectedTip) {
+                      log.info(s"Wallet is behind rollback version $version on the selected full chain")
+                      context.become(loadedWallet(state))
+                      pendingChainMessages = 0
+                      unstashAll()
+                    } match {
+                      case Some(_) => ()
+                      case None => scheduleFullChainProbeRetry()
+                    }
                   }
                 },
                 _ => awaitSupersedingRollback(state,

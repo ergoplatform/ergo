@@ -24,10 +24,14 @@ import scala.util.{Failure, Success, Try}
   *
   * @param dir - folder to store data
   * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
+  * @param createIfMissing - whether to create the main and undo databases when absent.
   *
   */
-class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
+class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int,
+                        createIfMissing: Boolean)
   extends KVStoreReader with ScorexLogging {
+
+  def this(dir: File, initialKeepVersions: Int) = this(dir, initialKeepVersions, true)
 
   type VersionID = Array[Byte]
 
@@ -37,10 +41,28 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
   private var keepVersions: Int = initialKeepVersions
 
-  override val db: DB = createDB(dir, "ldb_main") // storage for main data
+  private val databases: (DB, DB) = {
+    val mainDir = new File(dir, "ldb_main")
+    val undoDir = new File(dir, "ldb_undo")
+    if (!createIfMissing && (!mainDir.isDirectory || !undoDir.isDirectory)) {
+      throw new IllegalStateException("Both wallet registry databases must already exist")
+    }
+    val main = createDB(mainDir)
+    try {
+      (main, createDB(undoDir))
+    }
+    catch {
+      case t: Throwable =>
+        try main.close()
+        catch { case closeError: Throwable => t.addSuppressed(closeError) }
+        throw t
+    }
+  }
+
+  override val db: DB = databases._1 // storage for main data
   override val lock = new ReentrantReadWriteLock()
 
-  private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
+  private val undo: DB = databases._2 // storage for undo data
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
 
@@ -52,11 +74,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
 
-  private def createDB(dir: File, storeName: String): DB = {
+  private def createDB(storeDir: File): DB = {
     val op = new Options()
-    op.createIfMissing(true)
+    op.createIfMissing(createIfMissing)
     op.paranoidChecks(true)
-    factory.open(new File(dir, storeName), op)
+    factory.open(storeDir, op)
   }
 
   /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */

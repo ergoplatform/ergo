@@ -8,13 +8,46 @@ import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.g
 
 import scala.collection.mutable
 import scala.util.Random
-import java.io.IOException
+import java.io.{File, IOException}
 
 //todo: rollbacks and pruning are checked in VersionedStoreSpec, merge both tests?
 class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
 
   private val dir = getRandomTempDir
   private val store = new LDBVersionedStore(dir, 100)
+
+  property("opening an existing store requires both database directories") {
+    val incompleteDir = getRandomTempDir
+    val mainDir = new File(incompleteDir, "ldb_main")
+    val undoDir = new File(incompleteDir, "ldb_undo")
+    mainDir.mkdir() shouldBe true
+
+    intercept[IllegalStateException] {
+      new LDBVersionedStore(incompleteDir, 10, createIfMissing = false)
+    }
+    mainDir.list().toSeq shouldBe empty
+    undoDir.exists() shouldBe false
+
+    val inverseDir = getRandomTempDir
+    val inverseMain = new File(inverseDir, "ldb_main")
+    val inverseUndo = new File(inverseDir, "ldb_undo")
+    inverseUndo.mkdir() shouldBe true
+    intercept[IllegalStateException] {
+      new LDBVersionedStore(inverseDir, 10, createIfMissing = false)
+    }
+    inverseMain.exists() shouldBe false
+    inverseUndo.list().toSeq shouldBe empty
+
+    val completeDir = getRandomTempDir
+    val version = Longs.toByteArray(1L)
+    val created = new LDBVersionedStore(completeDir, 10)
+    try created.update(version, Seq.empty, Seq.empty).get
+    finally created.close()
+
+    val reopened = new LDBVersionedStore(completeDir, 10, createIfMissing = false)
+    try reopened.lastVersionID.get.sameElements(version) shouldBe true
+    finally reopened.close()
+  }
 
   property("last version correct && versionIdExists && rollbackVersions") {
     val versionNum = Random.nextInt().toLong

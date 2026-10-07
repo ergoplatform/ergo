@@ -326,9 +326,14 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
   /** Retained rollback used with a durable intent in WalletStorage. */
   def rollbackDurably(version: VersionTag): Try[Unit] = {
     cache.clear()
-    store.rollbackToSync(org.ergoplatform.core.versionToBytes(version)).flatMap { _ =>
-      committedVersionAndDigest.flatMap { case (committedVersion, _) =>
-        if (committedVersion == org.ergoplatform.core.versionToId(version)) Success(())
+    val targetBytes = org.ergoplatform.core.versionToBytes(version)
+    val alreadyAtTarget = store.lastVersionID.exists(_.sameElements(targetBytes))
+    store.rollbackToSync(targetBytes).flatMap { _ =>
+      committedVersionAndDigest.flatMap { case (committedVersion, digest) =>
+        if (committedVersion == org.ergoplatform.core.versionToId(version)) {
+          if (alreadyAtTarget) syncCommittedCheckpoint(committedVersion, digest.height)
+          else Success(())
+        }
         else Failure(new IllegalStateException("Wallet rollback committed a different version"))
       }
     }
@@ -351,18 +356,21 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     bytesToId(version) -> digest
   }
 
-  /** Make the rebuilt checkpoint durable in both registry databases before
-    * clearing the separate, durable rescan-recovery intent. The same-version
-    * digest write is nonempty so that a synchronous LevelDB write also fences
-    * the preceding asynchronous replay batches.
+  /** Make a checkpoint durable in both registry databases before clearing a
+    * recovery intent. The same-version digest write is nonempty so that a
+    * synchronous LevelDB write also fences preceding asynchronous batches.
     */
   def syncCommittedCheckpoint(expectedTip: ModifierId, expectedHeight: Int): Try[Unit] =
     committedVersionAndDigest.flatMap { case (tip, digest) =>
       if (tip != expectedTip || digest.height != expectedHeight) {
         Failure(new IllegalStateException("Wallet registry checkpoint differs from selected rescan tip"))
       } else {
-        Try(store.get(RegistrySummaryKey).getOrElse(
-          throw new IllegalStateException("Wallet registry digest is missing")))
+        Try(store.get(RegistrySummaryKey) match {
+          case Some(bytes) => bytes
+          case None if tip == PreGenesisHeader.id && digest == WalletDigest.empty =>
+            WalletDigestSerializer.toBytes(WalletDigest.empty)
+          case None => throw new IllegalStateException("Wallet registry digest is missing")
+        })
           .flatMap(bytes => store.updateSync(idToBytes(expectedTip), Seq.empty,
             Seq(RegistrySummaryKey -> bytes)))
           .flatMap(_ => committedVersionAndDigest.flatMap {
@@ -518,6 +526,25 @@ object WalletRegistry {
         }
       case store =>
         Success(new WalletRegistry(store)(settings.walletSettings))
+    }
+
+  /** Open a retained-rollback registry without seeding a missing pre-genesis checkpoint. */
+  def openExistingForRecovery(settings: ErgoSettings): Try[WalletRegistry] =
+    Try(new LDBVersionedStore(registryFolder(settings), settings.nodeSettings.keepVersions,
+      createIfMissing = false)).flatMap { store =>
+      val validated = Try {
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        val (version, _) = registry.committedVersionAndDigest.get
+        if (store.get(RegistrySummaryKey).isEmpty && version != PreGenesisHeader.id) {
+          throw new IllegalStateException("Wallet registry digest is missing")
+        }
+        registry
+      }
+      validated.recoverWith { case error =>
+        try store.close()
+        catch { case closeError: Throwable => error.addSuppressed(closeError) }
+        Failure(error)
+      }
     }
 
   private val BoxKeyPrefix: Byte = 0x01

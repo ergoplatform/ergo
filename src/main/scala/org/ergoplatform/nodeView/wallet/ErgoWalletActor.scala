@@ -109,6 +109,7 @@ class ErgoWalletActor(protected val settings: ErgoSettings,
 
   private def emptyWallet: Receive = {
     case ReadWallet(state) =>
+      if (!handlePendingRetainedRollbackOnStart(state)) {
       state.storage.rescanRecoveryIntent match {
         case Success(true) =>
           context.become(quarantinedWallet(state,
@@ -184,9 +185,87 @@ class ErgoWalletActor(protected val settings: ErgoSettings,
             new IllegalStateException("Wallet deep-fork quarantine marker is unreadable", t)))
         }
       }
+      }
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
+  }
+
+  /** A completed rollback may be reopened, but no wallet message can pass the
+    * startup fence until the target is proved on the holder's applied chain.
+    */
+  private def handlePendingRetainedRollbackOnStart(state: ErgoWalletState): Boolean =
+    state.storage.retainedRollbackIntent match {
+      case Success(None) => false
+      case Failure(t) =>
+        context.become(quarantinedWallet(state,
+          new IllegalStateException("Wallet retained-rollback intent is unreadable", t)))
+        true
+      case Success(Some(intent)) =>
+        if (intent.source == intent.target) {
+          context.become(quarantinedWallet(state,
+            new IllegalStateException("Pending same-version wallet rollback cannot be resumed")))
+          return true
+        }
+        registryCheckpoint(state) match {
+          case Success((tip, height)) if tip == intent.target && tip == PreGenesisHeader.id =>
+            completeStartupRetainedRollback(state, intent.source, intent.target, height, None)
+          case Success((tip, height)) if tip == intent.target =>
+            // Defer holder rollback messages until the old, completed intent is
+            // cleared. Normal startup will then inspect the current applied tip.
+            retainedRollbackSourceHeight = Some(
+              Try(historyReader.heightOf(intent.source)).toOption.flatten.getOrElse(height))
+            beginFullChainProbe(state, tip, height)(
+              selectedTip => completeStartupRetainedRollback(state,
+                intent.source, intent.target, height, Some(selectedTip)),
+              otherTip => completeStartupRetainedRollback(state,
+                intent.source, intent.target, height, Some(otherTip))
+            )
+          case _ =>
+            context.become(quarantinedWallet(state,
+              new IllegalStateException("Wallet retained-rollback checkpoint differs from its target")))
+        }
+        true
+    }
+
+  private def completeStartupRetainedRollback(state: ErgoWalletState,
+                                              source: ModifierId,
+                                              target: ModifierId,
+                                              targetHeight: Int,
+                                              selectedTip: Option[ModifierId]): Unit = {
+    registryCheckpoint(state) match {
+      case Success((`target`, `targetHeight`)) =>
+        val clearResult = selectedTip match {
+          case Some(tip) => historyReader.ifHolderAppliedFullTip(tip) {
+            syncRetainedRollbackCheckpoint(state, target, targetHeight)
+              .flatMap(_ => clearRetainedRollbackIntent(state, source, target))
+          }
+          case None => Some(syncRetainedRollbackCheckpoint(state, target, targetHeight)
+            .flatMap(_ => clearRetainedRollbackIntent(state, source, target)))
+        }
+        clearResult match {
+          case Some(Success(_)) =>
+            // Recheck the current applied chain from normal startup. A holder
+            // rollback arrives before the holder installs its new state, so a
+            // queued supersedingRollback must survive this handoff.
+            retainedRollbackSourceHeight = None
+            context.become(emptyWallet)
+            self ! ReadWallet(state)
+          case Some(Failure(t)) =>
+            context.become(quarantinedWallet(state,
+              new IllegalStateException("Wallet retained-rollback intent could not be cleared", t)))
+            unstashAll()
+          case None =>
+            beginFullChainProbe(state, target, targetHeight)(
+              tip => completeStartupRetainedRollback(state, source, target, targetHeight, Some(tip)),
+              tip => completeStartupRetainedRollback(state, source, target, targetHeight, Some(tip))
+            )
+        }
+      case _ =>
+        context.become(quarantinedWallet(state,
+          new IllegalStateException("Wallet retained-rollback checkpoint changed before intent clear")))
+        unstashAll()
+    }
   }
 
   protected[wallet] def loadedWallet(state: ErgoWalletState): Receive =
@@ -214,6 +293,11 @@ class ErgoWalletActor(protected val settings: ErgoSettings,
                                             source: ModifierId,
                                             target: ModifierId): Try[Unit] =
     state.storage.clearRetainedRollback(source, target)
+
+  protected def syncRetainedRollbackCheckpoint(state: ErgoWalletState,
+                                               target: ModifierId,
+                                               height: Int): Try[Unit] =
+    state.registry.syncCommittedCheckpoint(target, height)
 
   private def readWalletState(state: ErgoWalletState): ErgoWalletState = {
     val ws = settings.walletSettings

@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.boxes.{BoxSelector, TrackedBox}
 import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import scorex.util.ScorexLogging
 
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 case class ErgoWalletState(
     storage: WalletStorage,
@@ -144,34 +144,48 @@ object ErgoWalletState {
 
   def initial(ergoSettings: ErgoSettings, parameters: Parameters): Try[ErgoWalletState] = {
     Try(WalletStorage.readOrCreate(ergoSettings)).flatMap { ergoStorage =>
-      val result = ergoStorage.retainedRollbackIntent.flatMap {
-        case Some(_) =>
-          Failure(new IllegalStateException("Pending wallet retained rollback requires recovery"))
-        case None =>
-          WalletRegistry.apply(ergoSettings).flatMap { registry =>
-            Try {
-              val offChainRegistry = OffChainRegistry.init(registry)
-              val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
-              val maxInputsToUse = ergoSettings.walletSettings.maxInputs
-              ErgoWalletState(
-                ergoStorage,
-                secretStorageOpt = None,
-                registry,
-                offChainRegistry,
-                outputsFilter = None,
-                walletVars,
-                stateReaderOpt = None,
-                mempoolReaderOpt = None,
-                utxoStateReaderOpt = None,
-                parameters,
-                maxInputsToUse,
-                rescanInProgress = false
-              )
-            }.recoverWith { case t =>
-              Try(registry.close())
-              Failure(t)
+      val result = ergoStorage.retainedRollbackIntent.flatMap { pending =>
+        val registryResult = pending match {
+          case Some(intent) if intent.source == intent.target =>
+            Failure(new IllegalStateException(
+              "Pending same-version wallet rollback cannot prove its prior durability"))
+          case Some(intent) =>
+            WalletRegistry.openExistingForRecovery(ergoSettings).flatMap { registry =>
+              registry.committedVersionAndDigest.flatMap {
+                case (tip, _) if tip == intent.target => Success(registry)
+                case _ => Failure(new IllegalStateException(
+                  "Pending wallet retained rollback has not committed its target"))
+              }.recoverWith { case t =>
+                Try(registry.close())
+                Failure(t)
+              }
             }
+          case None => WalletRegistry.apply(ergoSettings)
+        }
+        registryResult.flatMap { registry =>
+          Try {
+            val offChainRegistry = OffChainRegistry.init(registry)
+            val walletVars = WalletVars.apply(ergoStorage, ergoSettings)
+            val maxInputsToUse = ergoSettings.walletSettings.maxInputs
+            ErgoWalletState(
+              ergoStorage,
+              secretStorageOpt = None,
+              registry,
+              offChainRegistry,
+              outputsFilter = None,
+              walletVars,
+              stateReaderOpt = None,
+              mempoolReaderOpt = None,
+              utxoStateReaderOpt = None,
+              parameters,
+              maxInputsToUse,
+              rescanInProgress = false
+            )
+          }.recoverWith { case t =>
+            Try(registry.close())
+            Failure(t)
           }
+        }
       }
       if (result.isFailure) Try(ergoStorage.close())
       result

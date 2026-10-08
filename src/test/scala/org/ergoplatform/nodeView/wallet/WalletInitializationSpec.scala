@@ -1,7 +1,9 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.{File, IOException}
+import java.nio.channels.FileChannel
 import java.nio.file.{Files, LinkOption, Path}
+import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.{BasicFileAttributes, PosixFileAttributeView}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicInteger
@@ -212,6 +214,76 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
         reopened.stateContext.bytes.toSeq shouldBe oldContext
         val loaded = new ErgoWalletServiceImpl(settings).readWallet(reopened, None, None, settings.walletSettings.secretStorage)
         loaded.secretStorageOpt.isDefined shouldBe true
+        loaded.secretStorageOpt.get.unlock(password).get
+        loaded.secretStorageOpt.get.lock()
+      } finally close(reopened)
+    }
+  }
+
+  property("initialization refuses a busy selection lock before creating a secret and can retry") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val descriptor = WalletInitialization.descriptor(settings)
+      val lockFolder = descriptor.getParent.resolve("selection-lock")
+      Files.createDirectories(lockFolder)
+      val channel = FileChannel.open(lockFolder.resolve(".ergo-secret-staging-wallet-selection.lock"),
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+      val lock = channel.lock()
+      var secretCreations = 0
+      val create: SecretStorageSettings => JsonSecretStorage = secretSettings => {
+        secretCreations += 1
+        createSecret(secretSettings)
+      }
+      try {
+        initialization.initialize(old, settings, create).failed.get shouldBe a[IOException]
+        WalletInitialization.selected(settings) shouldBe None
+        secretCreations shouldBe 0
+      } finally {
+        lock.release()
+        channel.close()
+      }
+      val selected = initialization.initialize(old, settings, create).get
+      try {
+        WalletInitialization.selected(settings) shouldBe selected.generation
+        secretCreations shouldBe 1
+      } finally close(selected)
+    }
+  }
+
+  property("selection lock directory does not become a legacy secret in a shared wallet directory") {
+    withSettings { original =>
+      val secretDir = new File(original.directory, "wallet").getPath
+      val settings = original.copy(walletSettings = original.walletSettings.copy(
+        secretStorage = original.walletSettings.secretStorage.copy(secretDir = secretDir)))
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val selected = new WalletInitialization().initialize(old, settings, createSecret).get
+      try {
+        WalletInitialization.selected(settings) shouldBe selected.generation
+      } finally close(selected)
+      val reopened = ErgoWalletState.initial(settings, parameters).get
+      try {
+        val loaded = new ErgoWalletServiceImpl(settings).readWallet(reopened, None, None,
+          settings.walletSettings.secretStorage)
+        loaded.secretStorageOpt.get.unlock(password).get
+        loaded.secretStorageOpt.get.lock()
+      } finally close(reopened)
+    }
+  }
+
+  property("a secret directory equal to the lock directory ignores the reserved lock file") {
+    withSettings { original =>
+      val secretDir = new File(original.directory, "wallet/selection-lock").getPath
+      val settings = original.copy(walletSettings = original.walletSettings.copy(
+        secretStorage = original.walletSettings.secretStorage.copy(secretDir = secretDir)))
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val selected = new WalletInitialization().initialize(old, settings, createSecret).get
+      try WalletInitialization.selected(settings) shouldBe selected.generation
+      finally close(selected)
+      val reopened = ErgoWalletState.initial(settings, parameters).get
+      try {
+        val loaded = new ErgoWalletServiceImpl(settings).readWallet(reopened, None, None,
+          settings.walletSettings.secretStorage)
         loaded.secretStorageOpt.get.unlock(password).get
         loaded.secretStorageOpt.get.lock()
       } finally close(reopened)
@@ -643,6 +715,33 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
       } finally close(active)
       val reopened = ErgoWalletState.initial(settings, parameters).get
       try reopened.generation shouldBe previous finally close(reopened)
+    }
+  }
+
+  property("rescan publication refuses a busy selection lock and can retry after release") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val descriptor = WalletInitialization.descriptor(settings)
+      val previousBytes = Files.readAllBytes(descriptor)
+      val channel = FileChannel.open(descriptor.getParent.resolve("selection-lock")
+        .resolve(".ergo-secret-staging-wallet-selection.lock"),
+        StandardOpenOption.WRITE)
+      val lock = channel.lock()
+      try {
+        val error = initialization.publishRescan(active, candidate, settings).failed.get
+        error shouldBe a[IOException]
+        Files.readAllBytes(descriptor).toSeq shouldBe previousBytes.toSeq
+        candidate.registry.fetchDigest()
+      } finally {
+        lock.release()
+        channel.close()
+      }
+      val selected = initialization.publishRescan(active, candidate, settings).get
+      try WalletInitialization.selected(settings) shouldBe selected.generation
+      finally close(selected)
     }
   }
 

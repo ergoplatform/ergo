@@ -1,10 +1,13 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.{File, FileOutputStream, IOException}
+import java.nio.channels.{FileChannel, FileLock, OverlappingFileLockException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{FileVisitResult, Files, LinkOption, NoSuchFileException, Path, SimpleFileVisitor, StandardCopyOption}
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.{FileVisitResult, Files, LinkOption, NoSuchFileException, Path, SimpleFileVisitor, StandardCopyOption, StandardOpenOption}
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
@@ -61,8 +64,61 @@ private[wallet] class WalletInitialization extends ScorexLogging {
       generation = Some(generation))
   }
 
+  private def withSelectionLock[A](settings: ErgoSettings)(body: => A): A = {
+    val folder = descriptor(settings).getParent.resolve("selection-lock")
+    Files.createDirectories(folder)
+    val lockFile = folder.resolve(".ergo-secret-staging-wallet-selection.lock")
+    if (!Files.exists(lockFile, LinkOption.NOFOLLOW_LINKS))
+      try Files.createFile(lockFile) catch { case _: FileAlreadyExistsException => () }
+    val attributes = Files.readAttributes(lockFile, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS)
+    if (!attributes.isRegularFile || attributes.isSymbolicLink || attributes.isOther)
+      throw new IOException("Wallet selection lock is not a regular file")
+    val path = lockFile.toRealPath()
+    // Do not open a second channel in this JVM: closing it may release an existing file lock.
+    if (selectionReservations.putIfAbsent(path, java.lang.Boolean.TRUE) != null)
+      throw new IOException("Wallet selection is already in progress")
+    var channel: FileChannel = null
+    var lock: FileLock = null
+    var operationError: Throwable = null
+    try {
+      channel = FileChannel.open(path, StandardOpenOption.WRITE)
+      lock = try channel.tryLock(0L, 1L, false) catch {
+        case error: OverlappingFileLockException =>
+          throw new IOException("Wallet selection is already in progress", error)
+      }
+      if (lock == null) throw new IOException("Wallet selection is already in progress")
+      body
+    } catch {
+      case error: Throwable =>
+        operationError = error
+        throw error
+    } finally {
+      def close(closeAction: => Unit): Unit = try closeAction catch {
+        case NonFatal(error) if operationError != null =>
+          if (error ne operationError) operationError.addSuppressed(error)
+        case NonFatal(error) => log.warn("Wallet selection completed; lock cleanup failed", error)
+      }
+      if (lock != null) close(lock.release())
+      var channelClosed = channel == null
+      if (channel != null) try {
+        channel.close()
+        channelClosed = true
+      } catch {
+        case NonFatal(error) if operationError != null =>
+          if (error ne operationError) operationError.addSuppressed(error)
+        case NonFatal(error) => log.warn("Wallet selection completed; channel close failed", error)
+      }
+      if (channelClosed) selectionReservations.remove(path)
+      else log.error("Wallet selection channel could not close; retaining in-process reservation")
+    }
+  }
+
   def initialize(state: ErgoWalletState, settings: ErgoSettings,
-                  createSecret: SecretStorageSettings => JsonSecretStorage): Try[ErgoWalletState] = Try {
+                  createSecret: SecretStorageSettings => JsonSecretStorage): Try[ErgoWalletState] =
+    Try(withSelectionLock(settings)(initializeLocked(state, settings, createSecret)))
+
+  private def initializeLocked(state: ErgoWalletState, settings: ErgoSettings,
+                               createSecret: SecretStorageSettings => JsonSecretStorage): ErgoWalletState = {
     require(state.secretStorageOpt.isEmpty && selected(settings).isEmpty, "Wallet is already initialized")
     JsonSecretStorage.readFile(settings.walletSettings.secretStorage) match {
       case Failure(_: JsonSecretStorage.SecretFileNotFoundException) => ()
@@ -192,7 +248,11 @@ private[wallet] class WalletInitialization extends ScorexLogging {
 
   /** Reopen the complete candidate before atomically changing the selected descriptor. */
   def publishRescan(active: ErgoWalletState, candidate: ErgoWalletState,
-                    settings: ErgoSettings): Try[ErgoWalletState] = Try {
+                    settings: ErgoSettings): Try[ErgoWalletState] =
+    Try(withSelectionLock(settings)(publishRescanLocked(active, candidate, settings)))
+
+  private def publishRescanLocked(active: ErgoWalletState, candidate: ErgoWalletState,
+                                  settings: ErgoSettings): ErgoWalletState = {
     val previous = active.generation.getOrElse(
       throw new IllegalStateException("Staged rescan requires a selected wallet generation"))
     val replacement = candidate.generation.getOrElse(
@@ -293,6 +353,7 @@ private[wallet] class WalletInitialization extends ScorexLogging {
 }
 
 private[wallet] object WalletInitialization {
+  private val selectionReservations = new ConcurrentHashMap[Path, java.lang.Boolean]()
   private val Format = "ergo-wallet-generation-v1"
   private val RescanFormat = "ergo-wallet-generation-v2"
   // #2507 excludes this prefix from legacy secret discovery, including inactive directories.

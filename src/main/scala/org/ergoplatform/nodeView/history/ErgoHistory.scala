@@ -324,15 +324,18 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  // check if there is possible database corruption when there is header after
-  // recognized blockchain tip marked as invalid
+  // A retained alternative fork may continue above the selected full-block tip.
+  // Only an explicitly invalid continuation is safe to remove on startup.
   protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
-      log.warn("Found suspicious continuation, clearing it...")
+    val invalidContinuations = afterHeaders.nonEmpty &&
+      afterHeaders.forall(id => history.isSemanticallyValid(id) == ModifierSemanticValidity.Invalid)
+
+    if (bestHeaderHeight == bestFullBlockHeight && invalidContinuations) {
+      log.warn("Found invalid continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }

@@ -39,6 +39,7 @@ private[wallet] class WalletInitialization extends ScorexLogging {
   protected def openStorage(settings: ErgoSettings, folder: File): WalletStorage = WalletStorage.openAt(settings, folder)
   protected def closeRegistry(registry: WalletRegistry): Unit = registry.close()
   protected def closeStorage(storage: WalletStorage): Unit = storage.close()
+  protected def initRescanOffChainRegistry(registry: WalletRegistry): OffChainRegistry = OffChainRegistry.init(registry)
   protected def readDescriptor(path: Path): Array[Byte] = Files.readAllBytes(path)
   protected def moveDescriptor(staging: Path, target: Path): Unit = {
     Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
@@ -150,8 +151,19 @@ private[wallet] class WalletInitialization extends ScorexLogging {
     val folder = candidateGeneration.registryFolder(settings)
     require(!Files.exists(folder.toPath), "Rescan registry candidate already exists")
     val registry = openRegistry(settings, folder)
-    state.copy(registry = registry, offChainRegistry = OffChainRegistry.init(registry),
-      outputsFilter = None, rescanInProgress = true, generation = Some(candidateGeneration))
+    try {
+      state.copy(registry = registry, offChainRegistry = initRescanOffChainRegistry(registry),
+        outputsFilter = None, rescanInProgress = true, generation = Some(candidateGeneration))
+    } catch {
+      case t: Throwable =>
+        val candidateClose = Try(closeRegistry(registry))
+        candidateClose.failed.foreach { closeError =>
+          if (closeError ne t) t.addSuppressed(closeError)
+        }
+        throw reconcileFailedRescan(t, descriptor(settings), encode(selectedGeneration),
+          candidateGeneration, settings, candidateClose.isSuccess,
+          reopenedClosed = true, published = false)
+    }
   }
 
   private def reconcileFailedRescan(failure: Throwable, target: Path, previousBytes: Array[Byte],

@@ -229,13 +229,19 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
           Seq(Files.write(root, bytes))
         } else {
           Files.createDirectories(root)
-          val names = inventory match {
-            case "ambiguous" => Seq("first.json", "second.json")
-            case "mixed-legacy" => Seq("legacy-wallet", "current.json")
-            case _ => Seq("first", "second")
+          if (inventory == "mixed-legacy") {
+            val original = createSecret(settings.walletSettings.secretStorage)
+            Seq(Files.move(original.secretFile.toPath, root.resolve("legacy-wallet")),
+              Files.write(root.resolve("current.json"), bytes))
+          } else {
+            val names = inventory match {
+              case "ambiguous" => Seq("first.json", "second.json")
+              case _ => Seq("first", "second")
+            }
+            names.map(name => Files.write(root.resolve(name), bytes))
           }
-          names.map(name => Files.write(root.resolve(name), bytes))
         }
+        val retainedBytes = retained.map(path => path -> Files.readAllBytes(path))
         var openedRegistries = 0
         var openedStores = 0
         var createdSecrets = 0
@@ -260,7 +266,7 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
           openedStores shouldBe 0
           createdSecrets shouldBe 0
           WalletInitialization.selected(settings) shouldBe None
-          retained.foreach(path => Files.readAllBytes(path) shouldBe bytes)
+          retainedBytes.foreach { case (path, originalBytes) => Files.readAllBytes(path) shouldBe originalBytes }
           assertPopulated(old)
         } finally close(old)
       }
@@ -540,6 +546,78 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
         error shouldBe a[WalletInitialization.OutcomeUnknown]
         error.getCause.getMessage shouldBe "Wallet selection changed before rescan"
         candidateCount shouldBe before
+      } finally {
+        Files.write(descriptor, previousBytes)
+        close(active)
+      }
+    }
+  }
+
+  property("rescan preparation failure closes the candidate before guarded cleanup") {
+    for (closeFails <- Seq(false, true)) withSettings { settings =>
+      val fault = new IOException("off-chain registry setup failed")
+      val closeError = new IOException("candidate registry close failed")
+      var preparing = false
+      val closeAttempts = new AtomicInteger()
+      val initialization = new WalletInitialization {
+        override protected def initRescanOffChainRegistry(registry: WalletRegistry): OffChainRegistry = {
+          if (preparing) throw fault
+          super.initRescanOffChainRegistry(registry)
+        }
+        override protected def closeRegistry(registry: WalletRegistry): Unit = {
+          if (preparing) closeAttempts.incrementAndGet()
+          super.closeRegistry(registry)
+          if (preparing && closeFails) throw closeError
+        }
+      }
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val active = initialization.initialize(old, settings, createSecret).get
+      val generationFolder = WalletInitialization.dataFolder(settings, active.generation.get.id)
+      def candidates: Int = Option(generationFolder.listFiles()).toSeq.flatten.count(_.getName.startsWith("registry-"))
+      val before = candidates
+      preparing = true
+      try {
+        val error = initialization.prepareRescan(active, settings).failed.get
+        error shouldBe fault
+        closeAttempts.get() shouldBe 1
+        error.getSuppressed.toSeq.contains(closeError) shouldBe closeFails
+        candidates shouldBe (before + (if (closeFails) 1 else 0))
+        WalletInitialization.selected(settings) shouldBe active.generation
+        active.registry.fetchDigest()
+      } finally close(active)
+    }
+  }
+
+  property("rescan preparation retains its candidate when selection changes after registry open") {
+    withSettings { settings =>
+      val fault = new IOException("off-chain registry setup failed")
+      var preparing = false
+      var otherBytes = Array.emptyByteArray
+      val initialization = new WalletInitialization {
+        override protected def initRescanOffChainRegistry(registry: WalletRegistry): OffChainRegistry = {
+          if (preparing) {
+            Files.write(WalletInitialization.descriptor(settings), otherBytes)
+            throw fault
+          }
+          super.initRescanOffChainRegistry(registry)
+        }
+      }
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val active = initialization.initialize(old, settings, createSecret).get
+      val descriptor = WalletInitialization.descriptor(settings)
+      val previousBytes = Files.readAllBytes(descriptor)
+      val generation = active.generation.get
+      val other = generation.copy(id = java.util.UUID.randomUUID().toString)
+      otherBytes = s"ergo-wallet-generation-v1\n${other.id}\n${other.secretFile}\n".getBytes(UTF_8)
+      val generationFolder = WalletInitialization.dataFolder(settings, generation.id)
+      def candidates: Int = Option(generationFolder.listFiles()).toSeq.flatten.count(_.getName.startsWith("registry-"))
+      val before = candidates
+      preparing = true
+      try {
+        val error = initialization.prepareRescan(active, settings).failed.get
+        error shouldBe a[WalletInitialization.OutcomeUnknown]
+        error.getCause shouldBe fault
+        candidates shouldBe before + 1
       } finally {
         Files.write(descriptor, previousBytes)
         close(active)

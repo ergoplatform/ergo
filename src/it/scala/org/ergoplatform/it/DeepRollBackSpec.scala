@@ -165,6 +165,9 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       // 2. Let nodeB mine `chainLength` blocks in isolation
       Async.await(minerBIsolated.waitForHeight(chainLength, 100.millis))
 
+      Async.await(minerAIsolated.connectedPeers) shouldBe empty
+      Async.await(minerBIsolated.connectedPeers) shouldBe empty
+
       log.info("Mining phase done")
 
       val minerABestHeight = Async.await(minerAIsolated.fullHeight)

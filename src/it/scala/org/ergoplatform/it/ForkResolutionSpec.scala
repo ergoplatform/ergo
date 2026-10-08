@@ -84,8 +84,10 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
         clearPeerDatabases()
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
       }
+      Async.await(Future.traverse(isolatedNodes)(_.connectedPeers)).foreach(_ shouldBe empty)
       val forkHeight = initMaxHeight + commonChainLength + forkLength
       Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
+      Async.await(Future.traverse(isolatedNodes)(_.connectedPeers)).foreach(_ shouldBe empty)
       val regularNodes = Async.await {
         isolatedNodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()

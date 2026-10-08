@@ -38,7 +38,9 @@ trait IntegrationTestConstants {
   }
 
   def isolatedPeersConfig: ExtraConfig = { (_, _) =>
-    Some(knownPeersConfig(Seq.empty))
+    // An empty configured peer list does not suppress peers retained in the database.
+    Some(ConfigFactory.parseString("scorex.network.maxConnections = 0")
+      .withFallback(knownPeersConfig(Seq.empty)))
   }
 
   def nodeNameFromConfig(nodeConfig: Config): String = {

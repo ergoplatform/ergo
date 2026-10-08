@@ -3,8 +3,10 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
+import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoCorePropertyTest, ErgoNodeTestConstants}
 import org.ergoplatform.utils.generators.ChainGenerator.{applyBlock, genChain, nextBlock}
@@ -15,7 +17,8 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import ErgoNodeTestConstants.initSettings
 
-  private def withFork(withSibling: Boolean)(check: (ErgoHistory, ErgoFullBlock, ErgoFullBlock,
+  private def withFork(withSibling: Boolean, stateType: StateType = StateType.Digest)(
+      check: (ErgoHistory, ErgoFullBlock, ErgoFullBlock,
       Option[ErgoFullBlock], org.ergoplatform.settings.ErgoSettings) => Unit): Unit = {
     val initDiff = BigInt(2)
     val settings = initSettings.copy(
@@ -26,7 +29,7 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
         initialDifficultyHex = Base16.encode(initDiff.toByteArray)
       ),
       nodeSettings = initSettings.nodeSettings.copy(
-        stateType = StateType.Digest,
+        stateType = stateType,
         verifyTransactions = true,
         blocksToKeep = 100,
         extraIndex = false
@@ -101,6 +104,19 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
   property("startup removes only an explicitly invalid continuation") {
     withFork(withSibling = false) { (history, a8, b7, _, settings) =>
       invalidate(history, a8)
+      val requiredSectionIds = history.requiredModifiersForHeader(a8.header).map(_._2)
+      val invalidSectionIds = Seq(a8.header.ADProofsId, a8.header.transactionsId)
+      requiredSectionIds should not be empty
+      requiredSectionIds.foreach { id =>
+        withClue(s"Required section $id must exist before repair: ") {
+          history.historyStorage.contains(id) shouldBe true
+        }
+      }
+      invalidSectionIds.foreach { id =>
+        withClue(s"Invalidated section $id must carry its marker before repair: ") {
+          history.isSemanticallyValid(id) shouldBe ModifierSemanticValidity.Invalid
+        }
+      }
       history.isSemanticallyValid(a8.id) shouldBe ModifierSemanticValidity.Invalid
       history.bestFullBlockIdOpt shouldBe Some(b7.id)
       history.closeStorage()
@@ -109,6 +125,56 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
         reopened.headerIdsAtHeight(a8.height) should not contain a8.id
         reopened.historyStorage.modifierTypeAndBytesById(a8.id) shouldBe None
         reopened.isSemanticallyValid(a8.id) shouldBe ModifierSemanticValidity.Absent
+        requiredSectionIds.foreach { id =>
+          withClue(s"Required section $id must be removed with its invalid header: ") {
+            reopened.historyStorage.contains(id) shouldBe false
+            reopened.isSemanticallyValid(id) shouldBe ModifierSemanticValidity.Absent
+          }
+        }
+        reopened.bestFullBlockIdOpt shouldBe Some(b7.id)
+      } finally reopened.closeStorage()
+    }
+  }
+
+  property("startup removes stored proof, transactions and extension in UTXO mode") {
+    withFork(withSibling = false, stateType = StateType.Utxo) { (history, a8, b7, _, settings) =>
+      invalidate(history, a8)
+      val sectionIds = a8.header.sectionIds.map(_._2)
+      sectionIds.foreach(id => history.historyStorage.contains(id) shouldBe true)
+      history.closeStorage()
+      val reopened = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        sectionIds.foreach { id =>
+          withClue(s"Stored section $id must be removed with its invalid header: ") {
+            reopened.historyStorage.contains(id) shouldBe false
+            reopened.isSemanticallyValid(id) shouldBe ModifierSemanticValidity.Absent
+          }
+        }
+        reopened.bestFullBlockIdOpt shouldBe Some(b7.id)
+      } finally reopened.closeStorage()
+    }
+  }
+
+  property("startup does not delete another header's sections for a mis-keyed invalid row") {
+    withFork(withSibling = false) { (history, a8, b7, _, settings) =>
+      invalidate(history, a8)
+      val survivingSections = b7.header.sectionIds.map(_._2)
+      survivingSections.foreach(id => history.historyStorage.contains(id) shouldBe true)
+      history.closeStorage()
+      val disk = HistoryStorage(settings)
+      try {
+        disk.insert(a8.header.serializedId, HistoryModifierSerializer.toBytes(b7.header)).get
+        disk.modifierById(a8.id).map(_.id) shouldBe Some(b7.id)
+      } finally disk.close()
+      val reopened = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        reopened.headerIdsAtHeight(a8.height) should not contain a8.id
+        reopened.historyStorage.contains(a8.id) shouldBe false
+        survivingSections.foreach { id =>
+          withClue(s"A different header's section $id must remain: ") {
+            reopened.historyStorage.contains(id) shouldBe true
+          }
+        }
         reopened.bestFullBlockIdOpt shouldBe Some(b7.id)
       } finally reopened.closeStorage()
     }

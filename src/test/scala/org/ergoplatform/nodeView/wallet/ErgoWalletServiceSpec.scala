@@ -433,19 +433,17 @@ class ErgoWalletServiceSpec
 
   property("it should lock/unlock wallet") {
     withInitializationFixture { fixture =>
-      val walletState = fixture.state.copy(
-        walletVars = WalletVars(Some(defaultProver), Seq.empty, None)(fixture.settings), maxInputsToUse = 1000)
       val walletService = fixture.service
       val pass = Random.nextString(10)
       val initializedState = fixture.retain(walletService.initWallet(
-        walletState, fixture.settings, SecretString.create(pass), Option.empty).get._2)
+        fixture.state, fixture.settings, SecretString.create(pass), Option.empty).get._2)
 
-      // Wallet unlocked after init, so we're locking it
       val initLockedWalletState = fixture.retain(walletService.lockWallet(initializedState))
       initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
       initLockedWalletState.walletVars.proverOpt shouldBe empty
 
-      val unlockedWalletState = fixture.retain(walletService.unlockWallet(initLockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get)
+      val unlockedWalletState = fixture.retain(walletService.unlockWallet(
+        initLockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get)
       unlockedWalletState.secretStorageOpt.get.isLocked shouldBe false
       unlockedWalletState.storage.readAllKeys().size shouldBe 1
       unlockedWalletState.walletVars.proverOpt shouldNot be(empty)
@@ -454,7 +452,8 @@ class ErgoWalletServiceSpec
       lockedWalletState.secretStorageOpt.get.isLocked shouldBe true
       lockedWalletState.walletVars.proverOpt shouldBe empty
 
-      val finalUnlockedState = fixture.retain(walletService.unlockWallet(lockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get)
+      val finalUnlockedState = fixture.retain(walletService.unlockWallet(
+        lockedWalletState, SecretString.create(pass), usePreEip3Derivation = true).get)
       finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
       finalUnlockedState.storage.readAllKeys().size shouldBe 1
       finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
@@ -577,11 +576,9 @@ class ErgoWalletServiceSpec
       val mnemonic = "edge talent poet tortoise trumpet dose"
 
       val walletService = fixture.service
-      val ws1 = fixture.state.copy(
-        walletVars = WalletVars(Some(defaultProver), Seq.empty, None)(fixture.settings), maxInputsToUse = 1000)
       val ws2 = fixture.retain(walletService.initWallet(
-        ws1, fixture.settings, pass, Some(SecretString.create(mnemonic))).get._2)
-      ws2.secretStorageOpt.get.unlock(pass)
+        fixture.state, fixture.settings, pass, Some(SecretString.create(mnemonic))).get._2)
+      ws2.secretStorageOpt.get.unlock(pass).get
 
       val path = DerivationPath.fromEncoded("m/44/1/1/0/0").get
       val sk = ws2.secretStorageOpt.get.secret.get
@@ -594,20 +591,11 @@ class ErgoWalletServiceSpec
   property("key derivation after init wallet") {
     withInitializationFixture { fixture =>
       val wpass = SecretString.create("y")
-      val prover = ErgoProvingInterpreter(defaultRootSecret, parameters)
-      val walletState = fixture.state.copy(
-        walletVars = WalletVars(Some(prover), Seq.empty, None)(fixture.settings), maxInputsToUse = 1000)
       val walletService = fixture.service
-      val ws = fixture.retain(walletService.initWallet(
-        walletState,
-        fixture.settings,
-        walletPass = wpass,
-        None
-      ).get._2)
+      val ws = fixture.retain(walletService.initWallet(fixture.state, fixture.settings, walletPass = wpass, None).get._2)
 
-      ws.secretStorageOpt.get.unlock(wpass)
-      ws.walletVars.trackedPubKeys.size shouldBe 1
-      val uws = ws
+      val uws = fixture.retain(walletService.unlockWallet(ws, wpass, usePreEip3Derivation = true).get)
+      uws.walletVars.trackedPubKeys.size shouldBe 1
 
       val uws2 = fixture.retain(walletService.deriveNextKey(uws, usePreEip3Derivation = true).get._2)
       uws2.walletVars.trackedPubKeys.size shouldBe 2
@@ -620,22 +608,13 @@ class ErgoWalletServiceSpec
   property("key derivation after restoring wallet") {
     withInitializationFixture { fixture =>
       val wpass = SecretString.create("y")
-      val prover = ErgoProvingInterpreter(defaultRootSecret, parameters)
-      val walletState = fixture.state.copy(
-        walletVars = WalletVars(Some(prover), Seq.empty, None)(fixture.settings), maxInputsToUse = 1000)
       val walletService = fixture.service
-      val ws = fixture.retain(walletService.restoreWallet(
-        walletState,
-        fixture.settings,
-        mnemonic = SecretString.create("x"),
-        mnemonicPassOpt = None,
-        walletPass = wpass,
-        usePre1627KeyDerivation = false
-      ).get)
+      val ws = fixture.retain(walletService.restoreWallet(fixture.state, fixture.settings,
+        mnemonic = SecretString.create("x"), mnemonicPassOpt = None, walletPass = wpass,
+        usePre1627KeyDerivation = false).get)
 
-      ws.secretStorageOpt.get.unlock(wpass)
-      ws.walletVars.trackedPubKeys.size shouldBe 1
-      val uws = ws
+      val uws = fixture.retain(walletService.unlockWallet(ws, wpass, usePreEip3Derivation = true).get)
+      uws.walletVars.trackedPubKeys.size shouldBe 1
 
       val uws2 = fixture.retain(walletService.deriveNextKey(uws, false).get._2)
       uws2.walletVars.trackedPubKeys.size shouldBe 2

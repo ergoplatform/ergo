@@ -2,7 +2,8 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
-import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
+import com.google.common.primitives.Longs
+import org.ergoplatform.{AutolykosSolution, InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.util.ScorexLogging
@@ -25,6 +26,9 @@ class ErgoMiningThread(
 
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val NonceStep = 1000
+  private val PollCandidate = GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None)
+  // solutions sent and not answered yet: an error reply while one is outstanding answers a solution, otherwise a poll
+  private var solutionsAwaitingReply = 0
 
   override def preStart(): Unit = {
     log.info(s"Starting miner thread: ${self.path.name}")
@@ -33,7 +37,7 @@ class ErgoMiningThread(
       1.second,
       ergoSettings.nodeSettings.internalMinerPollingInterval,
       candidateGenerator,
-      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None)
+      PollCandidate
     )(context.dispatcher, self)
   }
 
@@ -55,7 +59,7 @@ class ErgoMiningThread(
   }
 
   def mining(
-    nonce: Int,
+    nonce: Long,
     candidateBlock: CandidateBlock,
     parameters: Parameters,
     solvedBlocksCount: Int
@@ -66,21 +70,29 @@ class ErgoMiningThread(
         context.become(mining(nonce = 0, cb, newParameters, solvedBlocksCount))
         self ! MineCmd
       }
-    case StatusReply.Error(ex) =>
-      log.error(s"Accepting solution or preparing candidate did not succeed", ex)
-      context.become(mining(nonce + 1, candidateBlock, parameters, solvedBlocksCount))
+    case StatusReply.Error(ex) if solutionsAwaitingReply > 0 =>
+      solutionsAwaitingReply -= 1
+      log.error(s"Accepting solution did not succeed", ex)
+      // the generator may have dropped this candidate: poll now (a new candidate replaces this one), and meanwhile
+      // resume after the rejected solution's nonce (recorded when it was found) instead of resubmitting it
+      candidateGenerator ! PollCandidate
       self ! MineCmd
+    case StatusReply.Error(ex) =>
+      log.error(s"Preparing candidate did not succeed", ex)
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
+      solutionsAwaitingReply = math.max(0, solutionsAwaitingReply - 1)
       context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount + 1))
     case MineCmd =>
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
           log.info(s"Found solution for ordering block, sending it for validation")
+          solutionSent(newBlock.header.powSolution, candidateBlock, parameters, solvedBlocksCount)
           candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
         case InputBlockFound(newBlock) =>
           log.info(s"Found solution for input block, sending it for validation")
+          solutionSent(newBlock.header.powSolution, candidateBlock, parameters, solvedBlocksCount)
           candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
@@ -91,6 +103,15 @@ class ErgoMiningThread(
       }
     case GetSolvedBlocksCount =>
       sender() ! SolvedBlocksCount(solvedBlocksCount)
+  }
+
+  // the search resumes after the found nonce if the solution is rejected
+  private def solutionSent(solution: AutolykosSolution,
+                           candidateBlock: CandidateBlock,
+                           parameters: Parameters,
+                           solvedBlocksCount: Int): Unit = {
+    solutionsAwaitingReply += 1
+    context.become(mining(Longs.fromByteArray(solution.n) + 1, candidateBlock, parameters, solvedBlocksCount))
   }
 
 }

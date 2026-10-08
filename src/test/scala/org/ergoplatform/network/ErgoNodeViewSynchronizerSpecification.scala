@@ -301,6 +301,80 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  private def checkEarlySnapshotOfferRecovery(snapshotOnlyProviders: Boolean): Unit = {
+    withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
+      import ctx._
+
+      val blocksToKeep = if (snapshotOnlyProviders) ModePeerFeature.UTXOSetBootstrapped
+                         else ModePeerFeature.AllBlocksKept
+      val mode = ModePeerFeature(StateType.Utxo, verifyingTransactions = true,
+        nipopowBootstrapped = None, blocksToKeep = blocksToKeep)
+      val providerInfo = peer.peerInfo.map(info =>
+        info.copy(peerSpec = info.peerSpec.copy(features = Seq(mode))))
+      val firstPeer = peer.copy(peerInfo = providerInfo)
+      val secondHandler = TestProbe("SecondEarlySnapshotHandler")
+      val secondPeer = firstPeer.copy(
+        connectionId = firstPeer.connectionId.copy(
+          remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+
+      val parent = ctx.chain.last
+      val nextHeader = powScheme.prove(
+        Some(parent), Header.InitialVersion, settings.chainSettings.initialNBits,
+        parent.stateRoot, EmptyDigest32, EmptyDigest32, parent.timestamp + 120000L,
+        EmptyDigest32, Array.fill(3)(0: Byte), defaultMinerSecretNumber).get
+      val manifest = Digest32 @@ splitDigest(nextHeader.stateRoot)._1
+      val infoBytes = SnapshotsInfoSpec.toBytes(
+        new SnapshotsInfo(Map(nextHeader.height -> manifest)))
+
+      val barrier = TestProbe("EarlySnapshotOfferBarrier")
+      barrier.send(synchronizerMockRef, HandshakedPeer(firstPeer))
+      barrier.send(synchronizerMockRef, HandshakedPeer(secondPeer))
+      barrier.send(synchronizerMockRef, Message(SnapshotsInfoSpec, Left(infoBytes), Some(firstPeer)))
+      barrier.send(synchronizerMockRef, Message(SnapshotsInfoSpec, Left(infoBytes), Some(secondPeer)))
+      barrier.send(synchronizerMockRef, Identify("early-offers-processed"))
+      barrier.expectMsgType[ActorIdentity].correlationId shouldBe "early-offers-processed"
+      ncProbe.receiveWhile(200.millis) { case message => message }
+
+      ctx.updHistory.bestHeaderAtHeight(nextHeader.height) shouldBe None
+      ctx.updHistory.append(nextHeader).get
+      ctx.updHistory.setHeadersChainSynced()
+      barrier.send(synchronizerMockRef, ChangedHistory(ctx.updHistory))
+      barrier.send(synchronizerMockRef, ErgoNodeViewSynchronizer.CheckModifiersToDownload)
+
+      val postHeaderRequests = ncProbe.receiveWhile(2.seconds, 250.millis) {
+        case message => message
+      }
+      val metadataRetried = postHeaderRequests.exists {
+        case sent: SendToNetwork if sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+          sent.sendingStrategy match {
+            case targets: scorex.core.network.SendToPeers =>
+              targets.chosenPeers.map(_.handlerRef).toSet ==
+                Set(firstPeer.handlerRef, secondPeer.handlerRef)
+            case _ => false
+          }
+        case _ => false
+      }
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(infoBytes), Some(firstPeer))
+      synchronizerMockRef ! Message(SnapshotsInfoSpec, Left(infoBytes), Some(secondPeer))
+      ncProbe.fishForMessage(3.seconds) {
+        case sent: SendToNetwork => sent.message.spec.messageCode == GetManifestSpec.messageCode
+        case _ => false
+      }
+      withClue(s"snapshotOnlyProviders=$snapshotOnlyProviders: ") {
+        metadataRetried shouldBe true
+      }
+    }
+  }
+
+  property("early snapshot offers recover after header sync with all-block providers") {
+    checkEarlySnapshotOfferRecovery(snapshotOnlyProviders = false)
+  }
+
+  property("early snapshot offers recover after header sync with snapshot-only providers") {
+    checkEarlySnapshotOfferRecovery(snapshotOnlyProviders = true)
+  }
+
   property("snapshot manifest timeout refreshes offers before another dedicated request") {
     withUtxoBootstrapFixture(utxoBootstrap = true, isolatedHistory = true) { ctx =>
       import ctx._

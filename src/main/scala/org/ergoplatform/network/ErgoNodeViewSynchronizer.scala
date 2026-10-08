@@ -1615,12 +1615,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val now = System.currentTimeMillis()
       if (now - lastCheckForModifiersToDownload >= 50) { // do not process command more often than every 50 ms
         lastCheckForModifiersToDownload = now
-        requestDownload(
-          maxModifiers = deliveryTracker.modifiersToDownload,
-          minModifiersPerBucket,
-          maxModifiersPerBucket
-        )(getPeersForDownloadingBlocks) { howManyPerType =>
-          historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
+        // Snapshot metadata can be served by peers that do not keep full blocks.
+        // Check this request before selecting peers for ordinary block downloads.
+        val needsSnapshotsInfo = deliveryTracker.modifiersToDownload > 0 &&
+          settings.nodeSettings.utxoSettings.utxoBootstrap &&
+          historyReader.bestFullBlockOpt.isEmpty &&
+          historyReader.nextModifiersToDownload(1, downloadRequired(historyReader)).keySet == Set(SnapshotsInfoTypeId.value)
+        if (needsSnapshotsInfo) {
+          requestSnapshotsInfo()
+        } else {
+          requestDownload(
+            maxModifiers = deliveryTracker.modifiersToDownload,
+            minModifiersPerBucket,
+            maxModifiersPerBucket
+          )(getPeersForDownloadingBlocks) { howManyPerType =>
+            historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
+          }
         }
       }
 

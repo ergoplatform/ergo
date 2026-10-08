@@ -5,12 +5,13 @@ import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
+import com.google.common.primitives.Longs
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, RemoteBlockApplied, SemanticallyFailedModification}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -1610,6 +1611,65 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       testProbe.fishForMessage(blockValidationDelay) {
         case StatusReply.Success(()) => true
         case StatusReply.Error(e)    => fail(s"next solution rejected: ${e.getMessage}")
+        case _                       => false
+      }
+      system.terminate()
+    }
+
+  it should "keep the solved block when the block-applied event that arrives is for its parent" in
+    new TestKit(ActorSystem()) {
+      val testProbe = new TestProbe(system)
+      system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+      val settings: ErgoSettings =
+        defaultSettings.copy(directory = s"${defaultSettings.directory}-solved-keep-${System.currentTimeMillis()}")
+      val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
+      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+      val candidateGenerator: ActorRef =
+        CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
+
+      def candidate(optPk: Option[ProveDlog]): Candidate = {
+        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = optPk), testProbe.ref)
+        testProbe.fishForMessage(newBlockDelay) { case StatusReply.Success(_: Candidate) => true; case _ => false } match {
+          case StatusReply.Success(c: Candidate) => c
+        }
+      }
+      def solve(c: Candidate): ErgoFullBlock =
+        settings.chainSettings.powScheme.proveCandidate(c.candidateBlock, defaultMinerSecret.w, 0, 1000).get
+      // fake PoW always finds nonce 0; another solution for the same candidate needs another nonce
+      def solveAt(c: Candidate, nonce: Long): ErgoFullBlock = {
+        val s = solve(c).header.powSolution
+        CandidateGenerator.completeBlock(c.candidateBlock, s.copy(n = Longs.toByteArray(nonce)))
+      }
+
+      // the parent is not mined by this generator (a block from a peer): it goes to the node view directly
+      val first = candidate(None)
+      system.eventStream.unsubscribe(candidateGenerator, classOf[FullBlockApplied])
+      val parent = solve(first)
+      viewHolderRef ! LocallyGeneratedModifier(parent.header)
+      parent.mandatoryBlockSections.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+      testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == parent.id; case _ => false }
+
+      // a candidate on the new block is generated, and solved, before the generator sees that block's applied event
+      val otherPk = DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes())).publicImage
+      val onParent = candidate(Some(otherPk))
+      onParent.candidateBlock.parentOpt.map(_.id) shouldBe Some(parent.id)
+      val solved = solve(onParent)
+      candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(blockValidationDelay) {
+        case StatusReply.Success(()) => true
+        case StatusReply.Error(e)    => fail(s"solution rejected: ${e.getMessage}")
+        case _                       => false
+      }
+
+      // the parent's applied event arrives now: the solved block's parent is the applied block, so it stays solved
+      candidateGenerator ! RemoteBlockApplied(parent.header, parent.blockTransactions.transactions.map(_.id))
+      val second = solveAt(onParent, 1)
+      second.id should not be solved.id
+      candidateGenerator.tell(second.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(blockValidationDelay) {
+        case StatusReply.Error(e)    => e.getMessage should include(s"Block already solved : Some(${solved.id})"); true
+        case StatusReply.Success(()) => fail("a second solution at the solved block's height was accepted")
         case _                       => false
       }
       system.terminate()

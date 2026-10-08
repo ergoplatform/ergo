@@ -999,6 +999,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     lock.lock()
     done.await()
     // the extra index is fully built, but no storage-rent rows are written
+    IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
     history.storageRentBoxesAtOrBefore(Int.MaxValue, 1000) shouldBe empty
     noRentIndexer ! Reset()
   }
@@ -1010,9 +1011,11 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     done.await()
     checkRentIndexAgainstChain(HEIGHT)
 
-    // rolling back discards the blocks that created some boxes, so those rows must go
+    // rolling back discards the blocks that created some boxes, so those rows must go;
+    // ForceRollback is needed: a plain Rollback is ignored while the indexed tip remains
+    // on the best chain, so `done` would never fire
     val back = BRANCHPOINT
-    indexer ! Rollback(history.bestHeaderIdAtHeight(back).get)
+    indexer ! ForceRollback(back)
     lock.lock()
     done.await()
 
@@ -1031,7 +1034,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     // forward again is separate (the chain generator cannot extend a rolled-back chain,
     // so this covers successive rollbacks, as rollbackWithPattern does)
     Seq(HEIGHT - 10, BRANCHPOINT, 8, 1).foreach { back =>
-      indexer ! Rollback(history.bestHeaderIdAtHeight(back).get)
+      indexer ! ForceRollback(back)
       lock.lock()
       done.await()
       checkRentIndexAgainstChain(back)

@@ -176,7 +176,10 @@ object StorageRentClaimBuilder extends ScorexLogging {
                 box.additionalTokens.filter(t => tokenWhitelist.contains(t._1.toModifierId))
               }
             val burnOutput = new ErgoBoxCandidate(box.value, minerTree, currentHeight, salvagedTokens, Map.empty)
-            if (box.value >= dustLimit(burnOutput, claimed.length.toShort, parameters)) {
+            // salvaged tokens enlarge the output: a near-max box could tip the proceeds
+            // output past the box size cap, making the whole claim invalid
+            if (box.value >= dustLimit(burnOutput, claimed.length.toShort, parameters) &&
+              boxSize(burnOutput, claimed.length.toShort) <= ErgoBox.MaxBoxSize) {
               claimed += ((box, false, burnOutput))
             } else {
               onPermanentlySkipped(box)

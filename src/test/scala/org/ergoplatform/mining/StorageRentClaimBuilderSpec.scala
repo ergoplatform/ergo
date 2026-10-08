@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings.{Constants, ErgoValidationSettingsUpdate, Parameters, ValidationRules}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
 import scorex.util.{ModifierId, bytesToId}
 import sigma.Colls
 import sigma.ast.{ErgoTree, ShortConstant}
@@ -462,6 +462,32 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
       reemissionTokenId = Some(reemissionId), skippedSink = sink)
 
     skipped.map(b => bytesToId(b.id)).toSet shouldBe Set(reemBox.id, atMin.id, feeWrapBox.id).map(bytesToId)
+  }
+
+  property("burn whose salvaged proceeds output exceeds the box size cap is skipped and reported") {
+    // a near-max box: its own serialization fits MaxBoxSize, but the miner-P2PK proceeds
+    // output (a longer script than TrueTree) carrying the salvaged whitelisted tokens does
+    // not - without a size guard the whole claim would be invalid
+    val tokenIds = (0 until 122).map(_.toByte)
+    // burn branch: value at the (32-bit, wrapping) storage fee, so the box can not cover it
+    var b = boxWithTokens(10000000000L, Constants.StoragePeriod, tokenIds)
+    while (b.value - (parameters.storageFeeFactor * b.bytes.length).toLong > 0) {
+      b = boxWithTokens((parameters.storageFeeFactor * b.bytes.length).toLong,
+        Constants.StoragePeriod, tokenIds)
+    }
+    val whitelist = tokenIds.map(tokenIdOf).toSet
+    b.bytes.length should be <= ErgoBox.MaxBoxSize // sanity: the box itself is legal
+    val proceedsLike = new ErgoBoxCandidate(b.value, MinerTree, H, b.additionalTokens, Map.empty)
+    proceedsLike.toBox(bytesToId(Array.fill(32)(0.toByte)), 0).bytes.length should be > ErgoBox.MaxBoxSize
+
+    val skipped = mutable.ArrayBuffer.empty[ErgoBox]
+    buildAndValidate(Seq(b), whitelist = whitelist, skippedSink = skipped += _) shouldBe None
+    skipped.map(bx => bytesToId(bx.id)) shouldBe Seq(bytesToId(b.id))
+
+    // control: fewer tokens fit the cap (and the fee does not wrap), so the burn goes
+    // through with tokens salvaged
+    val fits = burnCandidateWithTokens(tokenIds.take(40))
+    buildAndValidate(Seq(fits), whitelist = whitelist).isDefined shouldBe true
   }
 
   /** Every token id present in any output of `tx`. */

@@ -204,6 +204,18 @@ object JsonSecretStorage {
     init(seed, encryptionPass, usePre1627KeyDerivation)(settings)
   }
 
+  private def isLegacySecret(file: File): Boolean = {
+    val input = new BufferedInputStream(Files.newInputStream(file.toPath))
+    val bytes = try {
+      Iterator.continually(input.read()).take(MaxLegacySecretBytes + 1)
+        .takeWhile(_ != -1).map(_.toByte).toArray
+    } finally input.close()
+    if (bytes.length > MaxLegacySecretBytes) {
+      throw new IOException("Possible legacy wallet exceeds the discovery limit")
+    }
+    decode[EncryptedSecret](new String(bytes, UTF_8)).isRight
+  }
+
   def readFile(settings: SecretStorageSettings): Try[JsonSecretStorage] = Try {
     val entries = storageEntries(settings)
     // Node data directories are not secret files. An unrecognized file may be a
@@ -213,19 +225,15 @@ object JsonSecretStorage {
     }
     val files = entries.filter(_.isFile)
     files.filter(_.getName.contains(".json")) match {
-      case Seq(file) => new JsonSecretStorage(file, settings.encryption)
+      case Seq(file) =>
+        if (files.filterNot(_ == file).exists(isLegacySecret)) {
+          throw new IOException("Wallet secret directory contains a JSON and legacy wallet")
+        }
+        new JsonSecretStorage(file, settings.encryption)
       case Seq() => files match {
         case Seq(file) if entries.size == 1 => new JsonSecretStorage(file, settings.encryption)
         case Seq(file) =>
-          val input = new BufferedInputStream(Files.newInputStream(file.toPath))
-          val bytes = try {
-            Iterator.continually(input.read()).take(MaxLegacySecretBytes + 1)
-              .takeWhile(_ != -1).map(_.toByte).toArray
-          } finally input.close()
-          if (bytes.length > MaxLegacySecretBytes) {
-            throw new IOException("Possible legacy wallet exceeds the discovery limit")
-          }
-          if (decode[EncryptedSecret](new String(bytes, UTF_8)).isLeft) {
+          if (!isLegacySecret(file)) {
             throw new IOException("Shared secret directory contains an invalid legacy wallet candidate")
           }
           new JsonSecretStorage(file, settings.encryption)

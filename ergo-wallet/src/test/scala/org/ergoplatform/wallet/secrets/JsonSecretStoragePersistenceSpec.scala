@@ -333,6 +333,25 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     Files.readAllBytes(json) shouldBe contents.getBytes(UTF_8)
   }
 
+  property("wallet discovery refuses a second valid legacy wallet beside a JSON wallet") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val current = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create("synthetic current password"), false)(settings)
+    val legacyDir = createTempDir
+    val legacySettings = SecretStorageSettings(legacyDir.getAbsolutePath, encryption)
+    val legacySource = JsonSecretStorage.init(Array.fill[Byte](32)(2),
+      SecretString.create("synthetic legacy password"), false)(legacySettings)
+    val legacy = Files.copy(legacySource.secretFile.toPath, dir.toPath.resolve("legacy-wallet"))
+    val legacyStorage = new JsonSecretStorage(legacy.toFile, encryption)
+    legacyStorage.unlock(SecretString.create("synthetic legacy password")) shouldBe 'success
+    legacyStorage.lock()
+
+    JsonSecretStorage.readFile(settings).failed.get shouldBe a[IOException]
+    Files.isRegularFile(current.secretFile.toPath) shouldBe true
+    Files.isRegularFile(legacy) shouldBe true
+  }
+
   property("wallet discovery reports a file used as the secret directory as an error") {
     val dir = createTempDir
     val occupied = Files.write(dir.toPath.resolve("occupied"), contents.getBytes(UTF_8))

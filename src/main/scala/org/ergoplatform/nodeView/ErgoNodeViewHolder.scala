@@ -462,7 +462,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
+    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history).flatMap { state =>
+      val repairRequired = settings.nodeSettings.extraIndex &&
+        settings.nodeSettings.stateType == StateType.Utxo &&
+        history.bestFullBlockIdOpt.contains(versionToId(state.version))
+      if (repairRequired) history.repairAppliedFullChainValidity(versionToId(state.version)).map(_ => state)
+      else Success(state)
+    } match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(

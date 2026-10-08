@@ -29,6 +29,16 @@ class ErgoMiningThread(
   private val PollCandidate = GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None)
   // solutions sent and not answered yet: an error reply while one is outstanding answers a solution, otherwise a poll
   private var solutionsAwaitingReply = 0
+  // true while a MineCmd is queued: at most one is ever in the mailbox, so a new candidate or an error reply cannot
+  // start a second chain of MineCmd steps beside the running one (MineCmd is private, so no other sender can either)
+  private var mineCmdPending = false
+
+  private def enqueueMineCmdIfIdle(): Unit = {
+    if (!mineCmdPending) {
+      mineCmdPending = true
+      self ! MineCmd
+    }
+  }
 
   override def preStart(): Unit = {
     log.info(s"Starting miner thread: ${self.path.name}")
@@ -53,7 +63,7 @@ class ErgoMiningThread(
     case StatusReply.Success(Candidate(candidateBlock, _, _, parameters)) =>
       log.info(s"Initiating block mining")
       context.become(mining(nonce = 0, candidateBlock, parameters, solvedBlocksCount = 0))
-      self ! MineCmd
+      enqueueMineCmdIfIdle()
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
   }
@@ -68,7 +78,7 @@ class ErgoMiningThread(
       // if we get new candidate instead of a cached one, mine it
       if (cb.timestamp != candidateBlock.timestamp) {
         context.become(mining(nonce = 0, cb, newParameters, solvedBlocksCount))
-        self ! MineCmd
+        enqueueMineCmdIfIdle()
       }
     case StatusReply.Error(ex) if solutionsAwaitingReply > 0 =>
       solutionsAwaitingReply -= 1
@@ -76,7 +86,7 @@ class ErgoMiningThread(
       // the generator may have dropped this candidate: poll now (a new candidate replaces this one), and meanwhile
       // resume after the rejected solution's nonce (recorded when it was found) instead of resubmitting it
       candidateGenerator ! PollCandidate
-      self ! MineCmd
+      enqueueMineCmdIfIdle()
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
     case StatusReply.Success(()) =>
@@ -84,6 +94,7 @@ class ErgoMiningThread(
       solutionsAwaitingReply = math.max(0, solutionsAwaitingReply - 1)
       context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount + 1))
     case MineCmd =>
+      mineCmdPending = false
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
@@ -97,7 +108,7 @@ class ErgoMiningThread(
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
           context.become(mining(lastNonceToCheck, candidateBlock, parameters, solvedBlocksCount))
-          self ! MineCmd
+          enqueueMineCmdIfIdle()
         case _ =>
           //todo : rework ProveBlockResult hierarchy to avoid this branch
       }
@@ -118,7 +129,7 @@ class ErgoMiningThread(
 
 object ErgoMiningThread {
 
-  case object MineCmd
+  private case object MineCmd
   case object GetSolvedBlocksCount // metric just for testing purposes for now
   case class SolvedBlocksCount(count: Int)
 

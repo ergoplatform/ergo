@@ -4,7 +4,9 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.io.Tcp
 import akka.testkit.{ExplicitlyTriggeredScheduler, TestActorRef, TestProbe}
 import com.typesafe.config.ConfigFactory
+import org.ergoplatform.it.container.Docker
 import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.RandomPeerExcluding
 import org.ergoplatform.settings.ScorexSettings
 import org.ergoplatform.utils.ErgoNodeTestConstants.settings
@@ -19,10 +21,23 @@ import scala.concurrent.duration._
 
 class DeepRollBackIsolationSpec extends AnyFlatSpec with Matchers {
   "Isolated rollback mining" should "disable automatic peer selection and reject incoming connections" in {
-    val ordinaryConfig = ConfigFactory.load()
-    val isolatedNetwork = ScorexSettings.fromConfig(
-      DeepRollBackSpec.isolatedMiningConfig.withFallback(ordinaryConfig).resolve()).network
+    val ordinaryConfig = ConfigFactory.parseString(
+      """
+        |scorex.network.knownPeers = ["127.0.0.2:9000"]
+        |scorex.network.maxConnections = 8
+      """.stripMargin).withFallback(ConfigFactory.load())
+    val isolatedConfig = Docker.isolatedPeersConfig(null, ordinaryConfig).get
+      .withFallback(ordinaryConfig).resolve()
+    val isolatedNetwork = ScorexSettings.fromConfig(isolatedConfig).network
     ScorexSettings.fromConfig(ordinaryConfig).network.maxConnections should be > 0
+    isolatedNetwork.maxConnections shouldBe 0
+    isolatedNetwork.knownPeers shouldBe empty
+
+    val rememberedPeerAddress = new InetSocketAddress("127.0.0.2", 9000)
+    val rememberedPeer = PeerInfo.fromAddress(rememberedPeerAddress)
+    RandomPeerExcluding(Seq.empty).choose(
+      Map(rememberedPeerAddress -> rememberedPeer), Seq.empty,
+      ScorexContext(Seq.empty, None, None)) shouldBe Some(rememberedPeer)
 
     implicit val system: ActorSystem = ActorSystem("RollbackIsolation", ConfigFactory.parseString(
       "akka.scheduler.implementation = akka.testkit.ExplicitlyTriggeredScheduler"))

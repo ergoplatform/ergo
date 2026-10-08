@@ -11,6 +11,7 @@ import java.io.{File, IOException, Writer}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{FileAlreadyExistsException, Files, Path}
 import java.nio.file.attribute.{PosixFileAttributeView, PosixFilePermissions}
+import scala.util.Try
 
 class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with FileUtils {
   private val encryption = EncryptionSettings("HmacSHA256", 1, 256)
@@ -182,6 +183,52 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     JsonSecretStorage.readFile(settings).get.secretFile.toPath shouldBe legacy
   }
 
+  property("a legacy wallet beside node directories is not treated as absent") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val original = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create("synthetic original password"), false)(settings)
+    val legacy = Files.move(original.secretFile.toPath, dir.toPath.resolve("opaque-legacy-wallet"))
+    val legacyBytes = Files.readAllBytes(legacy)
+    Seq("history", "state", "peers").foreach(name => Files.createDirectory(dir.toPath.resolve(name)))
+    val unrelated = Files.write(dir.toPath.resolve("unrelated.txt"), contents.getBytes(UTF_8))
+    val originalEntries = entries(dir)
+
+    val discovery = JsonSecretStorage.readFile(settings)
+    val seed = Array.fill[Byte](32)(2)
+    val reinitialization = Try(JsonSecretStorage.init(seed,
+      SecretString.create("synthetic second password"), false)(settings))
+
+    withClue(s"discovery=$discovery, reinitialization=$reinitialization: ") {
+      discovery.failed.toOption.exists(
+        _.isInstanceOf[JsonSecretStorage.SecretFileNotFoundException]) shouldBe false
+      reinitialization.isFailure shouldBe true
+      entries(dir) shouldBe originalEntries
+      Files.readAllBytes(legacy) shouldBe legacyBytes
+      Files.readAllBytes(unrelated) shouldBe contents.getBytes(UTF_8)
+      seed shouldBe Array.fill[Byte](32)(0)
+    }
+  }
+
+  property("a valid legacy wallet remains usable beside node directories") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val original = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create("synthetic original password"), false)(settings)
+    val legacy = Files.move(original.secretFile.toPath, dir.toPath.resolve("opaque-legacy-wallet"))
+    Seq("history", "state", "peers").foreach(name => Files.createDirectory(dir.toPath.resolve(name)))
+
+    val reopened = JsonSecretStorage.readFile(settings).get
+    reopened.secretFile.toPath shouldBe legacy
+    reopened.unlock(SecretString.create("synthetic original password")) shouldBe 'success
+    reopened.lock()
+    val seed = Array.fill[Byte](32)(2)
+    intercept[FileAlreadyExistsException] {
+      JsonSecretStorage.init(seed, SecretString.create("synthetic next password"), false)(settings)
+    }
+    seed shouldBe Array.fill[Byte](32)(0)
+  }
+
   property("wallet discovery rejects ambiguous files instead of choosing directory order") {
     val dir = createTempDir
     Files.write(dir.toPath.resolve("first.json"), contents.getBytes(UTF_8))
@@ -213,19 +260,53 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     seed shouldBe Array.fill[Byte](32)(0)
   }
 
-  property("initialization recovers a directory with node data and no discoverable wallet") {
+  property("initialization permits node data directories with no secret file") {
     val dir = createTempDir
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
     Seq("history", "state", "peers").foreach(name => Files.createDirectory(dir.toPath.resolve(name)))
-    val unrelated = Files.write(dir.toPath.resolve("unrelated.txt"), contents.getBytes(UTF_8))
     JsonSecretStorage.readFile(settings).failed.get shouldBe a[JsonSecretStorage.SecretFileNotFoundException]
 
     val seed = Array.fill[Byte](32)(1)
     val storage = JsonSecretStorage.init(seed, SecretString.create("test password"), false)(settings)
     seed shouldBe Array.fill[Byte](32)(0)
-    Files.readAllBytes(unrelated) shouldBe contents.getBytes(UTF_8)
-    entries(dir) shouldBe Set("history", "state", "peers", "unrelated.txt", storage.secretFile.getName)
+    entries(dir) shouldBe Set("history", "state", "peers", storage.secretFile.getName)
     JsonSecretStorage.readFile(settings).get.secretFile shouldBe storage.secretFile
+  }
+
+  property("initialization refuses an invalid legacy candidate beside node data") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    Seq("history", "state", "peers").foreach(name => Files.createDirectory(dir.toPath.resolve(name)))
+    val possibleLegacy = Files.write(dir.toPath.resolve("unrelated.txt"), contents.getBytes(UTF_8))
+
+    val discovery = JsonSecretStorage.readFile(settings).failed.get
+    discovery shouldBe a[IOException]
+    discovery should not be a[JsonSecretStorage.SecretFileNotFoundException]
+    val seed = Array.fill[Byte](32)(1)
+    intercept[IOException] {
+      JsonSecretStorage.init(seed, SecretString.create("test password"), false)(settings)
+    }
+    seed shouldBe Array.fill[Byte](32)(0)
+    Files.readAllBytes(possibleLegacy) shouldBe contents.getBytes(UTF_8)
+    entries(dir) shouldBe Set("history", "state", "peers", "unrelated.txt")
+  }
+
+  property("discovery bounds an oversized legacy candidate in a shared directory") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    Files.createDirectory(dir.toPath.resolve("history"))
+    val oversized = Files.write(dir.toPath.resolve("legacy-wallet"), Array.fill[Byte](65537)(1))
+
+    val discovery = JsonSecretStorage.readFile(settings).failed.get
+    discovery shouldBe a[IOException]
+    discovery should not be a[JsonSecretStorage.SecretFileNotFoundException]
+    val seed = Array.fill[Byte](32)(2)
+    intercept[IOException] {
+      JsonSecretStorage.init(seed, SecretString.create("synthetic next password"), false)(settings)
+    }
+    seed shouldBe Array.fill[Byte](32)(0)
+    Files.size(oversized) shouldBe 65537L
+    entries(dir) shouldBe Set("history", "legacy-wallet")
   }
 
   property("initialization preserves unrelated staging material and explicitly restricts POSIX permissions") {

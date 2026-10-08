@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.File
+import java.nio.file.Files
 
 import org.ergoplatform.ErgoBox.{NonMandatoryRegisterId, R1}
 import org.ergoplatform._
@@ -452,6 +453,28 @@ class ErgoWalletServiceSpec
       finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
       finalUnlockedState.storage.readAllKeys().size shouldBe 1
       finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+    }
+  }
+
+  property("wallet service does not load an invalid shared legacy candidate") {
+    withInitializationFixture { fixture =>
+      val storageSettings = fixture.settings.walletSettings.secretStorage
+      val directory = new File(storageSettings.secretDir)
+      Files.createDirectories(directory.toPath)
+      Seq("history", "state", "peers").foreach(name => Files.createDirectory(directory.toPath.resolve(name)))
+      val invalidCandidate = Files.write(directory.toPath.resolve("unrelated.txt"), Array[Byte](1, 2, 3))
+      val originalBytes = Files.readAllBytes(invalidCandidate)
+      val before = directory.listFiles().map(_.getName).toSet
+
+      fixture.service.readWallet(fixture.state, None, None, storageSettings)
+        .secretStorageOpt shouldBe None
+
+      val result = fixture.service.initWallet(fixture.state, fixture.settings,
+        SecretString.create("synthetic next password"), None)
+
+      result.failed.get shouldBe a[java.io.IOException]
+      directory.listFiles().map(_.getName).toSet shouldBe before
+      Files.readAllBytes(invalidCandidate) shouldBe originalBytes
     }
   }
 

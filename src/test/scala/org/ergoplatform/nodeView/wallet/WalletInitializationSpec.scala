@@ -1,8 +1,8 @@
 package org.ergoplatform.nodeView.wallet
 
 import java.io.{File, IOException}
-import java.nio.file.{Files, Path}
-import java.nio.file.attribute.PosixFileAttributeView
+import java.nio.file.{Files, LinkOption, Path}
+import java.nio.file.attribute.{BasicFileAttributes, PosixFileAttributeView}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -500,11 +500,15 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
       try {
         current = service.restoreWallet(old, settings, mnemonic, None, password, usePre1627KeyDerivation = false).get
         val selected = current.generation
-        current = service.recreateRegistry(current, settings).get
-        current = service.recreateStorage(current, settings).get
-        current.generation shouldBe selected
+        val prepared = service.recreateRegistry(current, settings).get
+        prepared.generation should not be selected
         WalletInitialization.selected(settings) shouldBe selected
-        WalletInitialization.validateReferences(selected.get, settings)
+        current = service.publishRegistryRescan(current, prepared, settings).get
+        current = service.recreateStorage(current, settings).get
+        current.generation.get.id shouldBe selected.get.id
+        current.generation.get.registryId.isDefined shouldBe true
+        WalletInitialization.selected(settings) shouldBe current.generation
+        WalletInitialization.validateReferences(current.generation.get, settings)
       } finally {
         mnemonic.erase()
         java.util.Arrays.fill(entropy, 0.toByte)
@@ -512,6 +516,317 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
       }
       val reopened = ErgoWalletState.initial(settings, parameters).get
       try reopened.generation shouldBe current.generation finally close(reopened)
+    }
+  }
+
+  property("service rescan refuses a changed descriptor before creating a candidate") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val active = new WalletInitialization().initialize(old, settings, createSecret).get
+      val service = new ErgoWalletServiceImpl(settings)
+      val generation = active.generation.get
+      val folder = WalletInitialization.dataFolder(settings, generation.id)
+      val descriptor = WalletInitialization.descriptor(settings)
+      val previousBytes = Files.readAllBytes(descriptor)
+      val other = generation.copy(id = java.util.UUID.randomUUID().toString)
+      val otherBytes = s"ergo-wallet-generation-v1\n${other.id}\n${other.secretFile}\n".getBytes(UTF_8)
+      def candidateCount: Int = Option(folder.listFiles()).toSeq.flatten.count(_.getName.startsWith("registry-"))
+      try {
+        WalletInitialization.matchesSelectedDescriptor(generation, settings).get shouldBe true
+        val before = candidateCount
+        Files.write(descriptor, otherBytes)
+        WalletInitialization.matchesSelectedDescriptor(generation, settings).get shouldBe false
+        val error = service.recreateRegistry(active, settings).failed.get
+        error shouldBe a[WalletInitialization.OutcomeUnknown]
+        error.getCause.getMessage shouldBe "Wallet selection changed before rescan"
+        candidateCount shouldBe before
+      } finally {
+        Files.write(descriptor, previousBytes)
+        close(active)
+      }
+    }
+  }
+
+  property("rescan does not serve a candidate when descriptor replacement reports success without selecting it") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization {
+        override protected def replaceDescriptor(staging: Path, target: Path): Unit = ()
+      }
+      val active = initialization.initialize(old, settings, createSecret).get
+      val previous = active.generation
+      val candidate = initialization.prepareRescan(active, settings).get
+      val candidateFolder = candidate.generation.get.registryFolder(settings).toPath
+      try {
+        initialization.publishRescan(active, candidate, settings).isFailure shouldBe true
+        Files.exists(candidateFolder) shouldBe false
+        WalletInitialization.selected(settings) shouldBe previous
+        active.registry.fetchDigest()
+      } finally close(active)
+      val reopened = ErgoWalletState.initial(settings, parameters).get
+      try reopened.generation shouldBe previous finally close(reopened)
+    }
+  }
+
+  property("preflight descriptor read failure cleans a closed candidate while v1 remains selected") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val readError = new IOException("preflight descriptor read unavailable")
+      var failPreflight = false
+      val initialization = new WalletInitialization {
+        override protected def readDescriptor(path: Path): Array[Byte] =
+          if (failPreflight) throw readError else super.readDescriptor(path)
+      }
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val folder = candidate.generation.get.registryFolder(settings).toPath
+      failPreflight = true
+      try {
+        initialization.publishRescan(active, candidate, settings).failed.get shouldBe readError
+        Files.exists(folder) shouldBe false
+        WalletInitialization.selected(settings) shouldBe active.generation
+      } finally close(active)
+    }
+  }
+
+  property("preflight descriptor change to another generation has unknown outcome and retains the candidate") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val folder = candidate.generation.get.registryFolder(settings).toPath
+      val descriptor = WalletInitialization.descriptor(settings)
+      val previousBytes = Files.readAllBytes(descriptor)
+      val other = active.generation.get.copy(id = java.util.UUID.randomUUID().toString)
+      val otherBytes = s"ergo-wallet-generation-v1\n${other.id}\n${other.secretFile}\n".getBytes(UTF_8)
+      try {
+        Files.write(descriptor, otherBytes)
+        val error = initialization.publishRescan(active, candidate, settings).failed.get
+        error shouldBe a[WalletInitialization.OutcomeUnknown]
+        error.getCause.getMessage shouldBe "requirement failed: Wallet selection changed during rescan"
+        Files.isDirectory(folder) shouldBe true
+      } finally {
+        Files.write(descriptor, previousBytes)
+        close(active)
+      }
+    }
+  }
+
+  property("pre-move descriptor change has unknown outcome and retains the candidate") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      var armed = false
+      var reads = 0
+      var otherBytes = Array.emptyByteArray
+      val initialization = new WalletInitialization {
+        override protected def readDescriptor(path: Path): Array[Byte] = {
+          if (armed) {
+            reads += 1
+            if (reads == 2) Files.write(path, otherBytes)
+          }
+          super.readDescriptor(path)
+        }
+      }
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val folder = candidate.generation.get.registryFolder(settings).toPath
+      val descriptor = WalletInitialization.descriptor(settings)
+      val previousBytes = Files.readAllBytes(descriptor)
+      val other = active.generation.get.copy(id = java.util.UUID.randomUUID().toString)
+      otherBytes = s"ergo-wallet-generation-v1\n${other.id}\n${other.secretFile}\n".getBytes(UTF_8)
+      armed = true
+      try {
+        val error = initialization.publishRescan(active, candidate, settings).failed.get
+        reads shouldBe 2
+        error shouldBe a[WalletInitialization.OutcomeUnknown]
+        error.getCause.getMessage shouldBe "requirement failed: Wallet selection changed during rescan"
+        Files.isDirectory(folder) shouldBe true
+      } finally {
+        Files.write(descriptor, previousBytes)
+        close(active)
+      }
+    }
+  }
+
+  property("failed reopened registry close retains the candidate and original publication error") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val closeError = new IOException("reopened registry close failed")
+      var candidateRegistry: Option[WalletRegistry] = None
+      val initialization = new WalletInitialization {
+        override protected def replaceDescriptor(staging: Path, target: Path): Unit = ()
+        override protected def closeRegistry(registry: WalletRegistry): Unit = {
+          super.closeRegistry(registry)
+          if (candidateRegistry.exists(_ ne registry)) throw closeError
+        }
+      }
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      candidateRegistry = Some(candidate.registry)
+      val folder = candidate.generation.get.registryFolder(settings).toPath
+      try {
+        val error = initialization.publishRescan(active, candidate, settings).failed.get
+        error.getMessage shouldBe "Wallet rescan selection was not published"
+        error.getSuppressed.toSeq should contain(closeError)
+        Files.isDirectory(folder) shouldBe true
+        WalletInitialization.selected(settings) shouldBe active.generation
+      } finally close(active)
+    }
+  }
+
+  property("unknown rescan selection retains its candidate when descriptor readback fails") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val moveError = new IOException("descriptor replacement result unavailable")
+      val readError = new IOException("descriptor readback unavailable")
+      var moveAttempted = false
+      val initialization = new WalletInitialization {
+        override protected def replaceDescriptor(staging: Path, target: Path): Unit = {
+          moveAttempted = true
+          throw moveError
+        }
+        override protected def readDescriptor(path: Path): Array[Byte] =
+          if (moveAttempted) throw readError else super.readDescriptor(path)
+      }
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val folder = candidate.generation.get.registryFolder(settings).toPath
+      try {
+        val error = initialization.publishRescan(active, candidate, settings).failed.get
+        error shouldBe a[WalletInitialization.OutcomeUnknown]
+        error.getCause shouldBe moveError
+        error.getSuppressed.toSeq should contain(readError)
+        Files.isDirectory(folder) shouldBe true
+        WalletInitialization.selected(settings) shouldBe active.generation
+      } finally close(active)
+    }
+  }
+
+  property("a closed unselected rescan candidate is removed without affecting the selected registry") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val generation = candidate.generation.get
+      val folder = generation.registryFolder(settings).toPath
+      candidate.registry.close()
+      try {
+        Files.isDirectory(folder) shouldBe true
+        WalletInitialization.discardUnselectedRescanCandidate(generation, settings).get
+        Files.exists(folder) shouldBe false
+        WalletInitialization.selected(settings) shouldBe active.generation
+        active.registry.fetchDigest()
+      } finally close(active)
+    }
+  }
+
+  property("rescan candidate cleanup retains data when selection cannot be read or identity is invalid") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val generation = candidate.generation.get
+      val folder = generation.registryFolder(settings).toPath
+      candidate.registry.close()
+      val descriptor = WalletInitialization.descriptor(settings)
+      val previousBytes = Files.readAllBytes(descriptor)
+      try {
+        Files.delete(descriptor)
+        WalletInitialization.discardUnselectedRescanCandidate(generation, settings).isFailure shouldBe true
+        Files.isDirectory(folder) shouldBe true
+        Files.write(descriptor, previousBytes)
+        WalletInitialization.discardUnselectedRescanCandidate(
+          generation.copy(registryId = Some("../outside")), settings).isFailure shouldBe true
+        Files.isDirectory(folder) shouldBe true
+      } finally {
+        if (!Files.exists(descriptor)) Files.write(descriptor, previousBytes)
+        close(active)
+      }
+    }
+  }
+
+  property("rescan candidate cleanup rejects a symbolic link inside its registry") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val generation = candidate.generation.get
+      val folder = generation.registryFolder(settings).toPath
+      candidate.registry.close()
+      val outside = Files.createTempFile("wallet-rescan-outside", ".txt")
+      try {
+        val link = folder.resolve("outside-link")
+        val created = Try(Files.createSymbolicLink(link, outside))
+        assume(created.isSuccess, "Symbolic links are unavailable in this test environment")
+        WalletInitialization.discardUnselectedRescanCandidate(generation, settings).isFailure shouldBe true
+        Files.isDirectory(folder) shouldBe true
+        Files.exists(outside) shouldBe true
+      } finally {
+        Files.deleteIfExists(outside)
+        close(active)
+      }
+    }
+  }
+
+  property("rescan candidate cleanup rejects a Windows junction without visiting its target") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val initialization = new WalletInitialization
+      val active = initialization.initialize(old, settings, createSecret).get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val generation = candidate.generation.get
+      val folder = generation.registryFolder(settings).toPath
+      candidate.registry.close()
+      val outside = Files.createDirectories(new File(settings.directory, "outside-junction-target").toPath)
+      val sentinel = Files.write(outside.resolve("sentinel.txt"), Array[Byte](1))
+      val junction = folder.resolve("outside-junction")
+      try {
+        assume(System.getProperty("os.name").startsWith("Windows"), "Junction test requires Windows")
+        val command = "mklink /J \"" + junction + "\" \"" + outside + "\""
+        val process = new ProcessBuilder("cmd", "/c", command).start()
+        assume(process.waitFor() == 0, "Could not create a disposable NTFS junction")
+        val attrs = Files.readAttributes(junction, classOf[BasicFileAttributes], LinkOption.NOFOLLOW_LINKS)
+        attrs.isOther shouldBe true
+        WalletInitialization.discardUnselectedRescanCandidate(generation, settings).isFailure shouldBe true
+        Files.isRegularFile(sentinel) shouldBe true
+        Files.isDirectory(folder) shouldBe true
+      } finally {
+        Files.deleteIfExists(junction)
+        close(active)
+      }
+    }
+  }
+
+  property("a failure after rescan selection has an unknown outcome and cold reopens the candidate") {
+    withSettings { settings =>
+      val old = ErgoWalletState.initial(settings, parameters).get
+      val fault = new IOException("post-selection fault")
+      val initialization = new WalletInitialization {
+        override protected def afterRescanSelection(): Unit = throw fault
+      }
+      val active = initialization.initialize(old, settings, createSecret).get
+      val previous = active.generation.get
+      val candidate = initialization.prepareRescan(active, settings).get
+      val candidateFolder = candidate.generation.get.registryFolder(settings).toPath
+      candidate.registry.updateScans(Set(PaymentsScanId), ErgoNodeTestConstants.genesisBoxes.head).get
+      val outcome = initialization.publishRescan(active, candidate, settings).failed.get
+      outcome shouldBe a[WalletInitialization.OutcomeUnknown]
+      outcome.getCause shouldBe fault
+      WalletInitialization.selected(settings) shouldBe candidate.generation
+      Files.isDirectory(candidateFolder) shouldBe true
+      WalletInitialization.discardUnselectedRescanCandidate(candidate.generation.get, settings).isFailure shouldBe true
+      Files.isDirectory(candidateFolder) shouldBe true
+      candidate.generation should not be Some(previous)
+      close(active)
+      val reopened = ErgoWalletState.initial(settings, parameters).get
+      try {
+        reopened.generation shouldBe candidate.generation
+        reopened.registry.getBox(ErgoNodeTestConstants.genesisBoxes.head.id).isDefined shouldBe true
+      } finally close(reopened)
     }
   }
 

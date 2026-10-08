@@ -107,12 +107,16 @@ trait ErgoWalletService {
   ): Try[Unit]
 
   /**
-    * Close it, recursively delete registryFolder from filesystem if present and create new registry
+    * Prepare a sibling registry for a selected generation; legacy wallets retain their old path.
     * @param state current wallet state
     * @param settings settings read from config file
     * @return Try of new wallet state
     */
   def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState]
+
+  /** Publish a fully replayed selected-generation registry after a cold reopen. */
+  def publishRegistryRescan(active: ErgoWalletState, candidate: ErgoWalletState,
+                            settings: ErgoSettings): Try[ErgoWalletState]
 
   /**
     * Close it, recursively delete storageFolder from filesystem if present and create new storage
@@ -289,7 +293,6 @@ object ErgoWalletService {
 }
 
 class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends ErgoWalletService with ErgoWalletSupport with FileUtils {
-
   private[wallet] val walletInitialization: WalletInitialization = new WalletInitialization
 
   override def readWallet(state: ErgoWalletState,
@@ -411,16 +414,20 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   }
 
   override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
-    val registryFolder = WalletInitialization.registryFolder(state, settings)
-    log.info(s"Removing the registry folder $registryFolder")
-    state.registry.close()
-
-    deleteRecursive(registryFolder)
-
-    WalletRegistry.openAt(settings, registryFolder).map { reg =>
-      state.copy(registry = reg)
+    if (state.generation.isDefined) {
+      walletInitialization.prepareRescan(state, settings)
+    } else {
+      val registryFolder = WalletInitialization.registryFolder(state, settings)
+      log.info(s"Removing the legacy registry folder $registryFolder")
+      state.registry.close()
+      deleteRecursive(registryFolder)
+      WalletRegistry.openAt(settings, registryFolder).map(reg => state.copy(registry = reg))
     }
   }
+
+  override def publishRegistryRescan(active: ErgoWalletState, candidate: ErgoWalletState,
+                                     settings: ErgoSettings): Try[ErgoWalletState] =
+    walletInitialization.publishRescan(active, candidate, settings)
 
   override def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
     Try {

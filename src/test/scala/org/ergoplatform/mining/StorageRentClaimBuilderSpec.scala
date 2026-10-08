@@ -13,6 +13,8 @@ import sigma.Extensions.CollBytesOps
 import sigma.data.{Digest32Coll, ProveDlog}
 import sigmastate.helpers.TestingHelpers._
 
+import scala.collection.mutable
+
 /**
   * Pins `StorageRentClaimBuilder` against the real consensus validator: every claim the
   * builder produces must pass `statefulValidity` through the storage-rent interpreter path,
@@ -98,8 +100,9 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
 
   private def buildAndValidate(boxes: Seq[ErgoBox],
                                reemissionTokenId: Option[ModifierId] = None,
-                               whitelist: Set[ModifierId] = Set.empty): Option[ErgoTransaction] = {
-    val txOpt = StorageRentClaimBuilder.buildClaim(boxes, H, parameters, minerPk, reemissionTokenId, whitelist)
+                               whitelist: Set[ModifierId] = Set.empty,
+                               skippedSink: ErgoBox => Unit = _ => ()): Option[ErgoTransaction] = {
+    val txOpt = StorageRentClaimBuilder.buildClaim(boxes, H, parameters, minerPk, reemissionTokenId, whitelist, skippedSink)
     txOpt.foreach { tx =>
       val fb0 = invalidErgoFullBlockGen.sample.get
       val fakeHeader = fb0.header.copy(height = H - 1)
@@ -435,23 +438,30 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     tx.inputs.map(_.boxId) shouldBe good.map(_.id)
   }
 
-  property("isPermanentlyUnclaimable marks junk and spares claimable boxes") {
-    // value at or below the minimum
-    CandidateGenerator.isPermanentlyUnclaimable(atMinValueBox(Constants.StoragePeriod), parameters, None) shouldBe true
-    // storage fee wrapping non-positive in 32-bit arithmetic
-    val tokens = (0 until 70).map(i =>
-      (Digest32Coll @@ Colls.fromArray(Array.fill(32)(i.toByte))) -> 1L)
-    val feeWrapBox = testBox(10000000000L, Constants.TrueTree, H - Constants.StoragePeriod, tokens, Map.empty)
-    parameters.storageFeeFactor * feeWrapBox.bytes.length should be < 0 // sanity
-    CandidateGenerator.isPermanentlyUnclaimable(feeWrapBox, parameters, None) shouldBe true
-    // carrying the re-emission token on an EIP-27 network
+  property("permanent skips are reported, transient ones and claimable boxes are not") {
+    val skipped = mutable.ArrayBuffer.empty[ErgoBox]
+    val sink: ErgoBox => Unit = skipped += _
+
+    // re-emission token on an EIP-27 network: permanently unclaimable
     val reemissionId = tokenIdOf(9.toByte)
     val reemBox = boxWithTokens(10000000000L, Constants.StoragePeriod, Seq(9.toByte))
-    CandidateGenerator.isPermanentlyUnclaimable(reemBox, parameters, Some(reemissionId)) shouldBe true
-    // same box is claimable on a network without EIP-27
-    CandidateGenerator.isPermanentlyUnclaimable(reemBox, parameters, None) shouldBe false
-    // an ordinary rent-eligible box is claimable
-    CandidateGenerator.isPermanentlyUnclaimable(agedBox(10000000000L), parameters, None) shouldBe false
+    // value at or below the minimum: permanently unclaimable
+    val atMin = atMinValueBox(Constants.StoragePeriod)
+    // fee wrapping non-positive: permanently unclaimable
+    val feeWrapBox = {
+      val tokens = (0 until 70).map(i =>
+        (Digest32Coll @@ Colls.fromArray(Array.fill(32)(i.toByte))) -> 1L)
+      testBox(10000000000L, Constants.TrueTree, H - Constants.StoragePeriod, tokens, Map.empty)
+    }
+    // too young: transient (can not arrive from the cutoff-bounded scan), not reported
+    val young = tokenizedBox(10000000000L, Constants.StoragePeriod - 1, withToken = false)
+    // an ordinary rent-eligible box: claimed, not reported
+    val good = agedBox(10000000000L)
+
+    buildAndValidate(Seq(reemBox, atMin, feeWrapBox, young, good),
+      reemissionTokenId = Some(reemissionId), skippedSink = sink)
+
+    skipped.map(b => bytesToId(b.id)).toSet shouldBe Set(reemBox.id, atMin.id, feeWrapBox.id).map(bytesToId)
   }
 
   /** Every token id present in any output of `tx`. */

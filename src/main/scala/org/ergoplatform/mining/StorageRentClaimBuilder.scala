@@ -92,13 +92,21 @@ object StorageRentClaimBuilder extends ScorexLogging {
     * @param tokenWhitelist       - tokens which are never burned: when a box carrying them
     *                             is fully consumed, they are carried over to the miner's
     *                             proceeds output
+    * @param onPermanentlySkipped - called for every examined box that can never be claimed
+    *                             (re-emission token, min value or fee wrapping, value at or
+    *                             below the minimum, undustable output, oversize box); the
+    *                             caller uses it to evict such boxes from the eligibility
+    *                             index so the scan window keeps advancing. Too-young boxes
+    *                             and recreations dropped for dusty aggregate fees are
+    *                             transient and are NOT reported.
     */
   def buildClaim(eligible: Seq[ErgoBox],
                  currentHeight: Int,
                  parameters: Parameters,
                  minerPk: ProveDlog,
                  reemissionTokenIdOpt: Option[ModifierId],
-                 tokenWhitelist: Set[ModifierId]): Option[ErgoTransaction] = {
+                 tokenWhitelist: Set[ModifierId],
+                 onPermanentlySkipped: ErgoBox => Unit = _ => ()): Option[ErgoTransaction] = {
 
     val minerTree = ErgoTree.fromSigmaBoolean(minerPk)
     // every claimed box, in order, with the output it will name in var #127: output i
@@ -122,7 +130,12 @@ object StorageRentClaimBuilder extends ScorexLogging {
       // a box at or below the minimum allowed value can neither be charged nor recreated;
       // it is skipped (the caller drops such broken eligibility entries from the index)
       val aboveMinValue = minValue > 0 && box.value > minValue.toLong
-      if (oldEnough && !carriesReemissionToken && aboveMinValue) {
+      if (!oldEnough) {
+        // transient (can not even arrive from the caller's cutoff-bounded scan): not
+        // reported as permanently skipped
+      } else if (carriesReemissionToken || !aboveMinValue) {
+        onPermanentlySkipped(box)
+      } else {
         // storage fee in 32-bit arithmetic, exactly as the consensus interpreter computes it;
         // a non-positive fee means the box is consensus-uncollectable and must be skipped
         val storageFee = parameters.storageFeeFactor * box.bytes.length
@@ -146,6 +159,8 @@ object StorageRentClaimBuilder extends ScorexLogging {
             if (recreatedBox.value <= box.value && boxSize(recreatedBox, outputIndex) <= ErgoBox.MaxBoxSize) {
               sweptFees += box.value - recreatedBox.value
               claimed += ((box, true, recreatedBox))
+            } else {
+              onPermanentlySkipped(box)
             }
           } else {
             // full-consume branch: the box can not cover its storage fee - it is destroyed
@@ -163,8 +178,12 @@ object StorageRentClaimBuilder extends ScorexLogging {
             val burnOutput = new ErgoBoxCandidate(box.value, minerTree, currentHeight, salvagedTokens, Map.empty)
             if (box.value >= dustLimit(burnOutput, claimed.length.toShort, parameters)) {
               claimed += ((box, false, burnOutput))
+            } else {
+              onPermanentlySkipped(box)
             }
           }
+        } else {
+          onPermanentlySkipped(box)
         }
       }
     }

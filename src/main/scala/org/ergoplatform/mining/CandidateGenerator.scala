@@ -38,6 +38,7 @@ import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -425,26 +426,6 @@ object CandidateGenerator extends ScorexLogging {
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
-
-  /**
-    * Whether a box can never be claimed by storage-rent collection, so its eligibility
-    * entry should be deleted from the index when encountered: value at or below the
-    * minimum allowed value (can neither be charged nor recreated), minimum value or
-    * storage fee wrapping non-positive in 32-bit arithmetic (mispriced/uncollectable), or
-    * carrying the re-emission token on EIP-27 networks (consensus-unclaimable outright).
-    * Boxes failing these checks are skipped by [[StorageRentClaimBuilder]] anyway; this
-    * predicate only decides which skipped rows may be dropped permanently.
-    */
-  def isPermanentlyUnclaimable(box: ErgoBox,
-                               parameters: Parameters,
-                               reemissionTokenIdOpt: Option[ModifierId]): Boolean = {
-    val minValue = parameters.minValuePerByte * box.bytes.length
-    val storageFee = parameters.storageFeeFactor * box.bytes.length
-    minValue <= 0 || box.value <= minValue.toLong ||
-      storageFee <= 0 ||
-      reemissionTokenIdOpt.exists(box.tokens.contains(_))
-  }
-
   /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
@@ -707,9 +688,9 @@ object CandidateGenerator extends ScorexLogging {
             // rent entries carry no payload, so resolve the box through the box-number
             // index; entries whose box row is gone resolve to nothing and are skipped.
             // The scan window is wider than the claim cap: the builder stops at
-            // MaxClaims CLAIMED boxes, so permanently-unclaimable rows in the window do
-            // not starve later claimable ones - and they are deleted below on encounter,
-            // so the window advances across candidates.
+            // MaxClaims CLAIMED boxes, so junk rows do not starve later claimable ones -
+            // and permanently unclaimable boxes are evicted from the index below, so the
+            // window advances across candidates.
             val scanned = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
               .toSeq
               .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
@@ -717,21 +698,22 @@ object CandidateGenerator extends ScorexLogging {
             val params = upcomingContext.currentParameters
             val reemissionTokenIdOpt =
               Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
-            val (unclaimable, eligible) = scanned.partition(b =>
-              isPermanentlyUnclaimable(b, params, reemissionTokenIdOpt))
-            if (unclaimable.nonEmpty) {
-              log.warn(s"Removing ${unclaimable.length} storage-rent eligibility entries " +
-                s"for permanently unclaimable boxes: ${unclaimable.map(b => bytesToId(b.id))}")
-              history.removeStorageRentBoxes(unclaimable.map(b => bytesToId(b.id)))
-            }
-            StorageRentClaimBuilder.buildClaim(
-              eligible,
+            val permanentlySkipped = mutable.ArrayBuffer.empty[ModifierId]
+            val claimTxs = StorageRentClaimBuilder.buildClaim(
+              scanned,
               upcomingHeight,
               params,
               minerPk,
               reemissionTokenIdOpt,
-              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet
+              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet,
+              b => permanentlySkipped += bytesToId(b.id)
             ).toSeq
+            if (permanentlySkipped.nonEmpty) {
+              log.warn(s"Removing ${permanentlySkipped.length} storage-rent eligibility entries " +
+                s"for permanently unclaimable boxes: $permanentlySkipped")
+              history.removeStorageRentBoxes(permanentlySkipped.toSeq)
+            }
+            claimTxs
           } else {
             Seq.empty
           }

@@ -86,7 +86,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def stagedRescan(active: ErgoWalletState, candidate: ErgoWalletState,
-                           targetHeight: Int, lastBlockId: Option[ModifierId],
+                           fromHeight: Int, targetHeight: Int, lastBlockId: Option[ModifierId],
                            stagedSpentIds: Set[EncodedBoxId] = Set.empty,
                            phase: RescanPhase = Replaying, snapshotId: Long = 0L): Receive = {
     case AppliedTipReply(id, result) if id == snapshotId && phase == AwaitingInitialTip =>
@@ -112,8 +112,9 @@ class ErgoWalletActor(settings: ErgoSettings,
       } match {
         case Failure(error) => failStagedRescan(active, candidate, error)
         case Success((appliedHeight, nextActive, nextCandidate)) =>
-          context.become(stagedRescan(nextActive, nextCandidate, appliedHeight, lastBlockId, stagedSpentIds))
-          self ! ReplayRescan(GenesisHeight)
+          context.become(stagedRescan(nextActive, nextCandidate, fromHeight, appliedHeight,
+            lastBlockId, stagedSpentIds))
+          self ! ReplayRescan(Math.max(GenesisHeight, Math.min(fromHeight, appliedHeight)))
       }
 
     case AppliedTipReply(id, result) if id == snapshotId && phase == AwaitingFinalTip =>
@@ -156,7 +157,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Failure(error) => failStagedRescan(active, candidate, error)
           case Success(_) =>
             val id = requestAppliedTip()
-            context.become(stagedRescan(active, candidate, targetHeight, lastBlockId,
+            context.become(stagedRescan(active, candidate, fromHeight, targetHeight, lastBlockId,
               stagedSpentIds, AwaitingFinalTip, id))
         }
       } else {
@@ -171,7 +172,8 @@ class ErgoWalletActor(settings: ErgoSettings,
           case Success(Some(block)) =>
             Try(ergoWalletService.scanBlockUpdate(candidate, block, settings.walletSettings.dustLimit)).flatten match {
               case Success(updated) =>
-                context.become(stagedRescan(active, updated, targetHeight, Some(block.id), stagedSpentIds))
+                context.become(stagedRescan(active, updated, fromHeight, targetHeight,
+                  Some(block.id), stagedSpentIds))
                 self ! ReplayRescan(height + 1)
               case Failure(error) => failStagedRescan(active, candidate, error)
             }
@@ -186,7 +188,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case LockWallet =>
       val lockedActive = ergoWalletService.lockWallet(active)
       val lockedCandidate = ergoWalletService.lockWallet(candidate)
-      context.become(stagedRescan(lockedActive, lockedCandidate, targetHeight, lastBlockId,
+      context.become(stagedRescan(lockedActive, lockedCandidate, fromHeight, targetHeight, lastBlockId,
         stagedSpentIds, phase, snapshotId))
 
     case UnlockWallet(walletPass) =>
@@ -232,7 +234,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       } match {
         case Failure(error) => failStagedRescan(active, candidate, error)
         case Success((nextActive, nextCandidate)) =>
-          context.become(stagedRescan(nextActive, nextCandidate, targetHeight, lastBlockId,
+          context.become(stagedRescan(nextActive, nextCandidate, fromHeight, targetHeight, lastBlockId,
             stagedSpentIds, phase, snapshotId))
       }
     case ChangedMempool(mr: ErgoMemPoolReader@unchecked) =>
@@ -243,7 +245,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       } match {
         case Failure(error) => failStagedRescan(active, candidate, error)
         case Success((nextActive, nextCandidate)) =>
-          context.become(stagedRescan(nextActive, nextCandidate, targetHeight, lastBlockId,
+          context.become(stagedRescan(nextActive, nextCandidate, fromHeight, targetHeight, lastBlockId,
             stagedSpentIds, phase, snapshotId))
       }
     case ScanOffChain(tx) =>
@@ -256,7 +258,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       } match {
         case Failure(error) => failStagedRescan(active, candidate, error)
         case Success((updated, inputs)) =>
-          context.become(stagedRescan(updated, candidate, targetHeight, lastBlockId,
+          context.become(stagedRescan(updated, candidate, fromHeight, targetHeight, lastBlockId,
             stagedSpentIds ++ inputs, phase, snapshotId))
       }
     case change @ ScanOnChain(block) if block.height <= targetHeight =>
@@ -706,7 +708,7 @@ class ErgoWalletActor(settings: ErgoSettings,
             val targetHeight = state.fullHeight
             val snapshotId = requestAppliedTip()
             context.become(stagedRescan(state.copy(rescanInProgress = true), candidate,
-              targetHeight, None, phase = AwaitingInitialTip, snapshotId = snapshotId))
+              fromHeight, targetHeight, None, phase = AwaitingInitialTip, snapshotId = snapshotId))
             sender() ! Success(())
           case Success(newState) =>
             context.become(loadedWallet(newState.copy(rescanInProgress = true)))

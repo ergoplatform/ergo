@@ -17,17 +17,18 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
+import org.ergoplatform.nodeView.history.extra.NumericBoxIndex
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
-import scorex.crypto.authds.{ADDigest, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -37,6 +38,7 @@ import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -424,7 +426,6 @@ object CandidateGenerator extends ScorexLogging {
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
-
   /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
@@ -677,6 +678,53 @@ object CandidateGenerator extends ScorexLogging {
 
       val emissionTxs = emissionTxOpt.toSeq
 
+      // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
+      // bypassing the mempool (goes into the block right after the prioritized transactions)
+      val rentClaimTxs: Seq[ErgoTransaction] =
+        if (ergoSettings.nodeSettings.storageRentCollection) {
+          val upcomingHeight = upcomingContext.currentHeight
+          val threshold = upcomingHeight - Constants.StoragePeriod
+          if (threshold > 0) {
+            // rent entries carry no payload, so resolve the box through the box-number
+            // index; entries whose box row is gone resolve to nothing and are skipped.
+            // The scan window is wider than the claim cap: the builder stops at
+            // MaxClaims CLAIMED boxes, so junk rows do not starve later claimable ones -
+            // and permanently unclaimable boxes are evicted from the index below, so the
+            // window advances across candidates.
+            val scanned = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
+              .toSeq
+              .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
+              .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
+            val params = upcomingContext.currentParameters
+            val reemissionTokenIdOpt =
+              Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
+            val permanentlySkipped = mutable.ArrayBuffer.empty[ModifierId]
+            val claimTxs = StorageRentClaimBuilder.buildClaim(
+              scanned,
+              upcomingHeight,
+              params,
+              minerPk,
+              reemissionTokenIdOpt,
+              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet,
+              b => permanentlySkipped += bytesToId(b.id)
+            ).toSeq
+            if (permanentlySkipped.nonEmpty) {
+              log.warn(s"Removing ${permanentlySkipped.length} storage-rent eligibility entries " +
+                s"for permanently unclaimable boxes: $permanentlySkipped")
+              history.removeStorageRentBoxes(permanentlySkipped.toSeq)
+            }
+            claimTxs
+          } else {
+            Seq.empty
+          }
+        } else {
+          Seq.empty
+        }
+
+      if (rentClaimTxs.nonEmpty) {
+        log.debug(s"Storage-rent claim transactions injected into the candidate: ${rentClaimTxs.map(_.id)}")
+      }
+
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
@@ -688,14 +736,29 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      def collectPoolTxs: (Seq[ErgoTransaction], Seq[ModifierId]) = collectTxs(
-        minerPk,
-        state.stateContext.currentParameters.maxBlockCost - safeGap,
-        state.stateContext.currentParameters.maxBlockSize,
-        state,
-        upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
-      )
+      // A storage-rent claim rejected during candidate assembly gets its input boxes dropped
+      // from the storage-rent index, so a broken eligibility entry is not retried in every
+      // candidate. Removal is idempotent, so a claim re-rejected by the retry pass below is
+      // handled by the same code without any extra bookkeeping.
+      def collectPoolTxs: (Seq[ErgoTransaction], Seq[ModifierId]) = {
+        val res = collectTxs(
+          minerPk,
+          state.stateContext.currentParameters.maxBlockCost - safeGap,
+          state.stateContext.currentParameters.maxBlockSize,
+          state,
+          upcomingContext,
+          emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
+        )
+        val rejectedRentClaimTxIds = res._2.filter(id => rentClaimTxs.exists(_.id == id))
+        if (rejectedRentClaimTxIds.nonEmpty) {
+          val boxIds = rentClaimTxs.filter(tx => rejectedRentClaimTxIds.contains(tx.id))
+            .flatMap(tx => tx.inputs.map(in => bytesToId(in.boxId)))
+          log.warn(s"Storage-rent claim transactions $rejectedRentClaimTxIds rejected during candidate assembly, " +
+            s"removing their ${boxIds.length} input boxes from the storage-rent index")
+          history.removeStorageRentBoxes(boxIds)
+        }
+        res
+      }
 
       val (txs, toEliminate) = collectPoolTxs
 

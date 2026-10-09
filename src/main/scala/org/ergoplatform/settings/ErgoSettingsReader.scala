@@ -188,6 +188,10 @@ object ErgoSettingsReader extends ScorexLogging
       failWithError(s"p2pUtxoSnapshots <= 0, must be 1 at least")
     } else if (settings.nodeSettings.extraIndex && settings.nodeSettings.isFullBlocksPruned) {
       failWithError(s"Extra indexes could be enabled only if there is no blockchain pruning")
+    } else if (nodeSettings.storageRentCollection && !(nodeSettings.extraIndex)) {
+      // rent collection enumerates eligible boxes via the extra index and injects claims
+      // into own block candidates, so it silently does nothing without both
+      failWithError("nodeSettings.storageRentCollection requires extraIndex = true")
     } else if (nodeSettings.nipopowSettings.nipopowBootstrap &&
       !(nodeSettings.utxoSettings.utxoBootstrap || nodeSettings.blocksToKeep >= 0)) {
       failWithError("nodeSettings.popowBootstrap can be set only if " +

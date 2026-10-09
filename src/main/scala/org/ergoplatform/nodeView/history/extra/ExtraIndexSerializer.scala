@@ -28,8 +28,10 @@ object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
         case m: IndexedToken =>
           w.put(IndexedToken.extraIndexTypeId)
           IndexedTokenSerializer.serialize(m, w)
+        case _: StorageRentBox =>
+          w.put(StorageRentBox.extraIndexTypeId) // key-only row, no payload
         case m =>
-          throw new Error(s"Serialization for unknown index: $m")
+          throw new IllegalStateException(s"Serialization for unknown index: $m")
       }
     }
 
@@ -49,8 +51,12 @@ object ExtraIndexSerializer  extends ErgoSerializer[ExtraIndex]{
           NumericBoxIndexSerializer.parse(r)
         case IndexedToken.`extraIndexTypeId` =>
           IndexedTokenSerializer.parse(r)
+        case StorageRentBox.`extraIndexTypeId` =>
+          // key-only row: everything is in the key, reconstruct via StorageRentBox.fromKey
+          throw new IllegalStateException(
+            "StorageRentBox rows carry no payload; reconstruct from the key via StorageRentBox.fromKey")
         case m =>
-          throw new Error(s"Deserialization for unknown type byte: $m")
+          throw new IllegalStateException(s"Deserialization for unknown type byte: $m")
       }
     }
   }

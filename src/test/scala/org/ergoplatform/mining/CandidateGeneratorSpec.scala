@@ -1564,4 +1564,38 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "start and serve a candidate when the chain has a single block" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val settings: ErgoSettings =
+      defaultSettings.copy(directory = s"${defaultSettings.directory}-single-block-${System.currentTimeMillis()}")
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    def candidateFrom(generator: ActorRef): Candidate = {
+      generator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None), testProbe.ref)
+      testProbe.fishForMessage(newBlockDelay) { case StatusReply.Success(_: Candidate) => true; case _ => false } match {
+        case StatusReply.Success(c: Candidate) => c
+      }
+    }
+
+    // mine the first block
+    val first = CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
+    val genesis = settings.chainSettings.powScheme
+      .proveCandidate(candidateFrom(first).candidateBlock, defaultMinerSecret.w, 0, 1000).get
+    first.tell(genesis.header.powSolution, testProbe.ref)
+    testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == genesis.id; case _ => false }
+    // the first generator is fully stopped before the next one starts, so only one reads the node view at a time
+    val deathWatch = TestProbe()
+    deathWatch.watch(first)
+    system.stop(first)
+    deathWatch.expectTerminated(first, newBlockDelay)
+
+    // a generator started now (as on a node restart) initializes from a history holding one header
+    val restarted = CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
+    candidateFrom(restarted).candidateBlock.parentOpt.map(_.id) shouldBe Some(genesis.id)
+    system.terminate()
+  }
+
 }

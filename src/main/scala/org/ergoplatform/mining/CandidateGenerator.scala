@@ -412,9 +412,13 @@ object CandidateGenerator extends ScorexLogging {
     val miningTimes =
       timestamps.sorted
         .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
+        .collect { case IndexedSeq(prev, next) => next - prev }
         .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    if (miningTimes.nonEmpty) {
+      Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    } else {
+      1000.millis
+    }
   }
 
   /** Get average count of transactions per block */

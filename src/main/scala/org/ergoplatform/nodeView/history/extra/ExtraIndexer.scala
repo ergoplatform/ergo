@@ -368,15 +368,14 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         (GlobalBoxIndexKey, ByteBuffer.allocate(8).putLong(state.globalBoxIndex).array),
         (RollbackToKey, ByteBuffer.allocate(4).putInt(state.rollbackTo).array)
       ) ++ indexedHeaderEntry,
-      objects
+      objects,
+      // spent storage-rent rows are deleted in the same batch as the progress marker,
+      // so a crash can not leave them behind an advanced checkpoint
+      rentBoxDeletes.toArray
     ).recoverWith { case error =>
       historyStorage.invalidateExtraCache(objects.iterator.map(_.id).toSeq)
       Failure(error)
     }.get
-
-    // delete spent storage-rent eligibility entries from db
-    if (rentBoxDeletes.nonEmpty) historyStorage.removeExtraTry(rentBoxDeletes.toArray).get
-
 
     log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
 

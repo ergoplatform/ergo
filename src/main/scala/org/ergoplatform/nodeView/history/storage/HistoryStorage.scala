@@ -219,7 +219,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   }
 
   def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
-                     objectsToInsert: Array[ExtraIndex]): Try[Unit] = {
+                     objectsToInsert: Array[ExtraIndex]): Try[Unit] =
+    insertExtraTry(indexesToInsert, objectsToInsert, Array.empty)
+
+  /**
+    * Insert indexes and objects and remove `indexesToRemove` in a single store batch, so a
+    * crash can not leave inserts (e.g. the indexer progress marker) committed without the
+    * removals (e.g. spent storage-rent rows) or vice versa.
+    */
+  def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
+                     objectsToInsert: Array[ExtraIndex],
+                     indexesToRemove: Array[ModifierId]): Try[Unit] = {
     val objectIds = objectsToInsert.iterator.flatMap(obj => Try(obj.id).toOption).toArray
     Try {
       val keys = objectsToInsert.map(_.serializedId) ++ indexesToInsert.map(_._1)
@@ -227,8 +237,9 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       keys -> values
     }.flatMap { case (keys, values) =>
       withExtraCacheWriteLock {
-        extraStore.insert(keys, values).map { _ =>
+        extraStore.update(keys, values, indexesToRemove.map(idToBytes)).map { _ =>
           objectIds.foreach(extraCache.invalidate)
+          cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
         }
       }
     }.recoverWith { case error =>

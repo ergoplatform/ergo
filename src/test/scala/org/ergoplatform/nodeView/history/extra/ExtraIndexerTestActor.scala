@@ -177,7 +177,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
         LDBFactory.createKvDb(s"${dir.getAbsolutePath}/history/extra"),
         dbSettings.cacheSettings
       ) {
-        override def insertExtraTry(entries: Array[(Array[Byte], Array[Byte])], objects: Array[ExtraIndex]): Try[Unit] = {
+        override def insertExtraTry(entries: Array[(Array[Byte], Array[Byte])], objects: Array[ExtraIndex],
+                                    removals: Array[ModifierId]): Try[Unit] = {
           val marker = entries.find(_._1.sameElements(ExtraIndexer.RollbackToKey)).map(e => ByteBuffer.wrap(e._2).getInt)
           val shouldFail = writeFailurePhase match {
             case "forward" => marker.contains(0)
@@ -193,9 +194,11 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
               writeFailureProbe.foreach(_ ! pendingIds)
             }
             Failure(new IllegalStateException(s"injected $writeFailurePhase write failure"))
-          } else super.insertExtraTry(entries, objects).map { _ =>
+          } else super.insertExtraTry(entries, objects, removals).map { _ =>
             if (writeFailurePhase.nonEmpty) {
               completedWriteKinds += marker.map(m => if (m > 0) "marked" else "unmarked").getOrElse("rows")
+              // rent-row removals ride the same batch since saveProgress was made atomic
+              if (removals.nonEmpty) completedWriteKinds += "remove"
             }
           }
         }

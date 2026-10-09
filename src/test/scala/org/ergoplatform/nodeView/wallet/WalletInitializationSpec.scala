@@ -290,7 +290,7 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
     }
   }
 
-  for (inventory <- Seq("ambiguous", "mixed-legacy", "not-directory", "unrecognized")) {
+  for (inventory <- Seq("ambiguous", "mixed-legacy", "not-directory", "malformed-generated")) {
     property(s"initialization rejects $inventory secret inventory before preparing any generation") {
       withSettings { settings =>
         val old = populated(settings)
@@ -301,16 +301,20 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
           Seq(Files.write(root, bytes))
         } else {
           Files.createDirectories(root)
-          if (inventory == "mixed-legacy") {
-            val original = createSecret(settings.walletSettings.secretStorage)
-            Seq(Files.move(original.secretFile.toPath, root.resolve("legacy-wallet")),
-              Files.write(root.resolve("current.json"), bytes))
+          if (inventory == "malformed-generated") {
+            Seq(Files.write(root.resolve("00000000-0000-0000-0000-000000000001.json"), bytes))
           } else {
-            val names = inventory match {
-              case "ambiguous" => Seq("first.json", "second.json")
-              case _ => Seq("first", "second")
-            }
-            names.map(name => Files.write(root.resolve(name), bytes))
+            val original = createSecret(settings.walletSettings.secretStorage)
+            val otherSettings = settings.walletSettings.secretStorage.copy(
+              secretDir = root.getParent.resolve("other-keystore").toString)
+            val other = JsonSecretStorage.init(Array.fill[Byte](32)(2), password,
+              usePre1627KeyDerivation = false)(otherSettings)
+            val first = if (inventory == "mixed-legacy")
+              Files.move(original.secretFile.toPath, root.resolve("legacy-wallet"))
+            else original.secretFile.toPath
+            val second = Files.move(other.secretFile.toPath,
+              root.resolve(if (inventory == "mixed-legacy") "current.json" else other.secretFile.getName))
+            Seq(first, second)
           }
         }
         val retainedBytes = retained.map(path => path -> Files.readAllBytes(path))

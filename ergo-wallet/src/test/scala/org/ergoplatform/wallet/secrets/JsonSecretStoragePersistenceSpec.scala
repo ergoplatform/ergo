@@ -9,15 +9,24 @@ import org.scalatest.propspec.AnyPropSpec
 
 import java.io.{File, IOException, Writer}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{FileAlreadyExistsException, Files, Path}
+import java.nio.file.{FileAlreadyExistsException, Files, LinkOption, Path}
 import java.nio.file.attribute.{PosixFileAttributeView, PosixFilePermissions}
 import scala.util.Try
 
 class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with FileUtils {
   private val encryption = EncryptionSettings("HmacSHA256", 1, 256)
   private val contents = """{"test":"checked persistence"}"""
+  private val candidatePassword = "synthetic candidate password"
 
   private def entries(dir: File): Set[String] = dir.listFiles().map(_.getName).toSet
+
+  private def encryptedWalletBytes(seedValue: Byte): Array[Byte] = {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val storage = JsonSecretStorage.init(Array.fill[Byte](32)(seedValue),
+      SecretString.create(candidatePassword), false)(settings)
+    Files.readAllBytes(storage.secretFile.toPath)
+  }
 
   property("wallet discovery ignores an unpublished staging file") {
     val dir = createTempDir
@@ -56,7 +65,7 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
 
   property("wallet discovery preserves a sole legacy filename alongside staging files") {
     val dir = createTempDir
-    val legacy = Files.createFile(dir.toPath.resolve("legacy-wallet"))
+    val legacy = Files.write(dir.toPath.resolve("legacy-wallet"), encryptedWalletBytes(1))
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
 
     JsonSecretStorage.readFile(settings).get.secretFile.toPath shouldBe legacy
@@ -172,13 +181,14 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
 
   property("initialization refuses a legacy filename and leaves it unchanged") {
     val dir = createTempDir
-    val legacy = Files.write(dir.toPath.resolve("legacy-wallet"), contents.getBytes(UTF_8))
+    val legacyBytes = encryptedWalletBytes(1)
+    val legacy = Files.write(dir.toPath.resolve("legacy-wallet"), legacyBytes)
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
     val seed = Array.fill[Byte](32)(1)
     intercept[FileAlreadyExistsException] {
       JsonSecretStorage.init(seed, SecretString.create("test password"), false)(settings)
     }
-    Files.readAllBytes(legacy) shouldBe contents.getBytes(UTF_8)
+    Files.readAllBytes(legacy) shouldBe legacyBytes
     seed shouldBe Array.fill[Byte](32)(0)
     JsonSecretStorage.readFile(settings).get.secretFile.toPath shouldBe legacy
   }
@@ -200,8 +210,9 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
       SecretString.create("synthetic second password"), false)(settings))
 
     withClue(s"discovery=$discovery, reinitialization=$reinitialization: ") {
-      discovery.failed.toOption.exists(
-        _.isInstanceOf[JsonSecretStorage.SecretFileNotFoundException]) shouldBe false
+      discovery.get.secretFile.toPath shouldBe legacy
+      discovery.get.unlock(SecretString.create("synthetic original password")) shouldBe 'success
+      discovery.get.lock()
       reinitialization.isFailure shouldBe true
       entries(dir) shouldBe originalEntries
       Files.readAllBytes(legacy) shouldBe legacyBytes
@@ -231,8 +242,8 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
 
   property("wallet discovery rejects ambiguous files instead of choosing directory order") {
     val dir = createTempDir
-    Files.write(dir.toPath.resolve("first.json"), contents.getBytes(UTF_8))
-    Files.write(dir.toPath.resolve("second.json"), contents.getBytes(UTF_8))
+    Files.write(dir.toPath.resolve("first.json"), encryptedWalletBytes(1))
+    Files.write(dir.toPath.resolve("second.json"), encryptedWalletBytes(2))
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
     JsonSecretStorage.readFile(settings) shouldBe 'failure
     val seed = Array.fill[Byte](32)(1)
@@ -260,6 +271,130 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     seed shouldBe Array.fill[Byte](32)(0)
   }
 
+  property("wallet discovery loads a JSON wallet beside an oversized node file") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val storage = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create(candidatePassword), false)(settings)
+    val log = Files.write(dir.toPath.resolve("ergo.log"), Array.fill[Byte](65537)(1))
+
+    val reopened = JsonSecretStorage.readFile(settings).get
+    reopened.secretFile shouldBe storage.secretFile
+    reopened.unlock(SecretString.create(candidatePassword)) shouldBe 'success
+    reopened.lock()
+    Files.size(log) shouldBe 65537L
+    val seed = Array.fill[Byte](32)(2)
+    intercept[FileAlreadyExistsException] {
+      JsonSecretStorage.init(seed, SecretString.create("second password"), false)(settings)
+    }
+    seed shouldBe Array.fill[Byte](32)(0)
+  }
+
+  property("wallet discovery ignores names with a nonterminal JSON extension") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val storage = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create(candidatePassword), false)(settings)
+    Files.write(dir.toPath.resolve("wallet.json.bak"), contents.getBytes(UTF_8))
+    Files.write(dir.toPath.resolve("x.jsonl"), contents.getBytes(UTF_8))
+
+    JsonSecretStorage.readFile(settings).get.secretFile shouldBe storage.secretFile
+  }
+
+  property("wallet discovery tolerates an identical backup but rejects a distinct secret") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val storage = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create(candidatePassword), false)(settings)
+    // This terminal JSON name sorts before every generated hexadecimal UUID.
+    Files.copy(storage.secretFile.toPath, dir.toPath.resolve("0-backup.json"))
+
+    JsonSecretStorage.readFile(settings).get.secretFile shouldBe storage.secretFile
+    Files.write(dir.toPath.resolve("other.json.bak"), encryptedWalletBytes(2))
+    JsonSecretStorage.readFile(settings).failed.get shouldBe a[IOException]
+    val seed = Array.fill[Byte](32)(3)
+    intercept[IOException] {
+      JsonSecretStorage.init(seed, SecretString.create("third password"), false)(settings)
+    }
+    seed shouldBe Array.fill[Byte](32)(0)
+  }
+
+  property("wallet discovery ignores a non-file sibling without losing a JSON wallet") {
+    val dir = createTempDir
+    if (Files.getFileAttributeView(dir.toPath, classOf[PosixFileAttributeView]) != null) {
+      val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+      val storage = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+        SecretString.create(candidatePassword), false)(settings)
+      Files.createSymbolicLink(dir.toPath.resolve("dangling"), dir.toPath.resolve("missing"))
+
+      JsonSecretStorage.readFile(settings).get.secretFile shouldBe storage.secretFile
+    }
+  }
+
+  property("a dangling generated wallet filename blocks reinitialization") {
+    val dir = createTempDir
+    if (Files.getFileAttributeView(dir.toPath, classOf[PosixFileAttributeView]) != null) {
+      val walletName = "123e4567-e89b-32d3-a456-426614174000.json"
+      val link = Files.createSymbolicLink(dir.toPath.resolve(walletName),
+        dir.toPath.resolve("missing-wallet"))
+      val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+      val discoveryError = JsonSecretStorage.readFile(settings).failed.get
+      discoveryError shouldBe a[IOException]
+      discoveryError should not be a[JsonSecretStorage.SecretFileNotFoundException]
+      val seed = Array.fill[Byte](32)(1)
+
+      intercept[IOException] {
+        JsonSecretStorage.init(seed, SecretString.create("new password"), false)(settings)
+      }
+      seed shouldBe Array.fill[Byte](32)(0)
+      Files.exists(link, LinkOption.NOFOLLOW_LINKS) shouldBe true
+      entries(dir) shouldBe Set(walletName)
+    }
+  }
+
+  property("a generated wallet filename occupied by a directory blocks reinitialization") {
+    val dir = createTempDir
+    val walletName = "123e4567-e89b-32d3-a456-426614174000.json"
+    val occupied = Files.createDirectory(dir.toPath.resolve(walletName))
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val discoveryError = JsonSecretStorage.readFile(settings).failed.get
+    discoveryError shouldBe a[IOException]
+    discoveryError should not be a[JsonSecretStorage.SecretFileNotFoundException]
+    val seed = Array.fill[Byte](32)(1)
+
+    intercept[IOException] {
+      JsonSecretStorage.init(seed, SecretString.create("new password"), false)(settings)
+    }
+    seed shouldBe Array.fill[Byte](32)(0)
+    Files.isDirectory(occupied) shouldBe true
+    entries(dir) shouldBe Set(walletName)
+  }
+
+  property("wallet discovery preserves a sole linked wallet and blocks a second init") {
+    val dir = createTempDir
+    if (Files.getFileAttributeView(dir.toPath, classOf[PosixFileAttributeView]) != null) {
+      val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+      val outside = createTempDir
+      val outsideSettings = SecretStorageSettings(outside.getAbsolutePath, encryption)
+      val external = JsonSecretStorage.init(Array.fill[Byte](32)(2),
+        SecretString.create(candidatePassword), false)(outsideSettings)
+      val original = Files.readAllBytes(external.secretFile.toPath)
+      val link = Files.createSymbolicLink(dir.toPath.resolve("linked-wallet"), external.secretFile.toPath)
+
+      val discovered = JsonSecretStorage.readFile(settings).get
+      discovered.secretFile.toPath shouldBe link
+      discovered.unlock(SecretString.create(candidatePassword)) shouldBe 'success
+      discovered.lock()
+      val seed = Array.fill[Byte](32)(3)
+      intercept[FileAlreadyExistsException] {
+        JsonSecretStorage.init(seed, SecretString.create("second password"), false)(settings)
+      }
+      seed shouldBe Array.fill[Byte](32)(0)
+      entries(dir) shouldBe Set("linked-wallet")
+      Files.readAllBytes(external.secretFile.toPath) shouldBe original
+    }
+  }
+
   property("initialization permits node data directories with no secret file") {
     val dir = createTempDir
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
@@ -273,40 +408,35 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     JsonSecretStorage.readFile(settings).get.secretFile shouldBe storage.secretFile
   }
 
-  property("initialization refuses an invalid legacy candidate beside node data") {
+  property("initialization permits unrelated files beside node data") {
     val dir = createTempDir
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
     Seq("history", "state", "peers").foreach(name => Files.createDirectory(dir.toPath.resolve(name)))
     val possibleLegacy = Files.write(dir.toPath.resolve("unrelated.txt"), contents.getBytes(UTF_8))
+    val unrelatedJson = Files.write(dir.toPath.resolve("config.json"), contents.getBytes(UTF_8))
 
-    val discovery = JsonSecretStorage.readFile(settings).failed.get
-    discovery shouldBe a[IOException]
-    discovery should not be a[JsonSecretStorage.SecretFileNotFoundException]
+    JsonSecretStorage.readFile(settings).failed.get shouldBe a[JsonSecretStorage.SecretFileNotFoundException]
     val seed = Array.fill[Byte](32)(1)
-    intercept[IOException] {
-      JsonSecretStorage.init(seed, SecretString.create("test password"), false)(settings)
-    }
+    val storage = JsonSecretStorage.init(seed, SecretString.create("test password"), false)(settings)
     seed shouldBe Array.fill[Byte](32)(0)
     Files.readAllBytes(possibleLegacy) shouldBe contents.getBytes(UTF_8)
-    entries(dir) shouldBe Set("history", "state", "peers", "unrelated.txt")
+    Files.readAllBytes(unrelatedJson) shouldBe contents.getBytes(UTF_8)
+    entries(dir) shouldBe Set("history", "state", "peers", "unrelated.txt", "config.json", storage.secretFile.getName)
   }
 
-  property("discovery bounds an oversized legacy candidate in a shared directory") {
+  property("discovery ignores an oversized unrelated file in a shared directory") {
     val dir = createTempDir
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
     Files.createDirectory(dir.toPath.resolve("history"))
     val oversized = Files.write(dir.toPath.resolve("legacy-wallet"), Array.fill[Byte](65537)(1))
 
-    val discovery = JsonSecretStorage.readFile(settings).failed.get
-    discovery shouldBe a[IOException]
-    discovery should not be a[JsonSecretStorage.SecretFileNotFoundException]
+    JsonSecretStorage.readFile(settings).failed.get shouldBe a[JsonSecretStorage.SecretFileNotFoundException]
     val seed = Array.fill[Byte](32)(2)
-    intercept[IOException] {
-      JsonSecretStorage.init(seed, SecretString.create("synthetic next password"), false)(settings)
-    }
+    val storage = JsonSecretStorage.init(seed,
+      SecretString.create("synthetic next password"), false)(settings)
     seed shouldBe Array.fill[Byte](32)(0)
     Files.size(oversized) shouldBe 65537L
-    entries(dir) shouldBe Set("history", "legacy-wallet")
+    entries(dir) shouldBe Set("history", "legacy-wallet", storage.secretFile.getName)
   }
 
   property("initialization preserves unrelated staging material and explicitly restricts POSIX permissions") {
@@ -326,11 +456,34 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
   property("wallet discovery selects the single JSON wallet among other files") {
     val dir = createTempDir
     val legacy = Files.write(dir.toPath.resolve("legacy-wallet"), contents.getBytes(UTF_8))
-    val json = Files.write(dir.toPath.resolve("current.json"), contents.getBytes(UTF_8))
+    val config = Files.write(dir.toPath.resolve("config.json"), contents.getBytes(UTF_8))
+    val jsonBytes = encryptedWalletBytes(1)
+    val json = Files.write(dir.toPath.resolve("current.json"), jsonBytes)
     val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
     JsonSecretStorage.readFile(settings).get.secretFile.toPath shouldBe json
     Files.readAllBytes(legacy) shouldBe contents.getBytes(UTF_8)
-    Files.readAllBytes(json) shouldBe contents.getBytes(UTF_8)
+    Files.readAllBytes(config) shouldBe contents.getBytes(UTF_8)
+    Files.readAllBytes(json) shouldBe jsonBytes
+  }
+
+  property("wallet discovery refuses malformed or oversized generated wallet names before init") {
+    for (raw <- Seq(contents.getBytes(UTF_8), Array.fill[Byte](65537)(1))) {
+      val dir = createTempDir
+      val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+      val walletName = "123e4567-e89b-32d3-a456-426614174000.json"
+      val candidate = Files.write(dir.toPath.resolve(walletName), raw)
+      val discoveryError = JsonSecretStorage.readFile(settings).failed.get
+      discoveryError shouldBe a[IOException]
+      discoveryError should not be a[JsonSecretStorage.SecretFileNotFoundException]
+      val seed = Array.fill[Byte](32)(2)
+
+      intercept[IOException] {
+        JsonSecretStorage.init(seed, SecretString.create("next password"), false)(settings)
+      }
+      seed shouldBe Array.fill[Byte](32)(0)
+      Files.readAllBytes(candidate) shouldBe raw
+      entries(dir) shouldBe Set(walletName)
+    }
   }
 
   property("wallet discovery refuses a second valid legacy wallet beside a JSON wallet") {
@@ -367,8 +520,8 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     JsonSecretStorage.readFile(settings).failed.get shouldBe a[JsonSecretStorage.SecretFileNotFoundException]
     Files.createDirectory(new File(settings.secretDir).toPath)
     JsonSecretStorage.readFile(settings).failed.get shouldBe a[JsonSecretStorage.SecretFileNotFoundException]
-    Files.write(new File(settings.secretDir).toPath.resolve("one.json"), contents.getBytes(UTF_8))
-    Files.write(new File(settings.secretDir).toPath.resolve("two.json"), contents.getBytes(UTF_8))
+    Files.write(new File(settings.secretDir).toPath.resolve("one.json"), encryptedWalletBytes(1))
+    Files.write(new File(settings.secretDir).toPath.resolve("two.json"), encryptedWalletBytes(2))
     JsonSecretStorage.readFile(settings).failed.get should not be a[JsonSecretStorage.SecretFileNotFoundException]
   }
 
@@ -382,7 +535,7 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
       JsonSecretStorage.readFile(settings).failed.get should not be a[JsonSecretStorage.SecretFileNotFoundException]
       Files.createDirectory(missing)
       JsonSecretStorage.readFile(settings).failed.get shouldBe a[JsonSecretStorage.SecretFileNotFoundException]
-      val wallet = Files.write(missing.resolve("wallet.json"), contents.getBytes(UTF_8))
+      val wallet = Files.write(missing.resolve("wallet.json"), encryptedWalletBytes(1))
       JsonSecretStorage.readFile(settings).get.secretFile.toPath.toRealPath() shouldBe wallet.toRealPath()
     }
   }

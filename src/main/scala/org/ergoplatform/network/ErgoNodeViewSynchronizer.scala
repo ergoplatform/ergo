@@ -101,7 +101,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   /**
     * No more than this number of unparsed transactions can be cached
     */
-  private val MaxProcessingTransactionsCacheSize = 50
+  private[network] val MaxProcessingTransactionsCacheSize = 50
 
   /**
     * Max cost of transactions we are going to process between blocks
@@ -120,9 +120,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
 
   /**
-    * Ids of transactions declined by the mempool, as the mempool is not storing this information. We keep them for
-    * few blocks just, as a declined transaction could become acceptable with time. The table is bounded, see
-    * `MaxDeclined` and `addDeclined`
+    * Ids of transactions declined by the mempool, as the mempool is not storing this information. The table is
+    * cleared on every applied block, as a declined transaction could become acceptable after application. The table is
+    * bounded, see `MaxDeclined` and `addDeclined`
     */
   private val declined = mutable.HashSet[ModifierId]()
 
@@ -184,12 +184,37 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   /**
-    * To be called when the node is synced and new block arrives, to resume transaction bytes cache processing
+    * A cached transaction is worth processing only if its source peer is still within its per-block budget
+    * and the transaction is not known to the node already (in the mempool, invalidated, or declined)
     */
-  private def processFirstTxProcessingCacheRecord(): Unit = {
-    txProcessingCache.headOption.foreach { case (txId, processingCacheRecord) =>
-      parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
+  private def cacheRecordProcessable(txId: ModifierId,
+                                     record: TransactionProcessingCacheRecord,
+                                     mp: ErgoMemPool): Boolean = {
+    val peerCost = perPeerCost.getOrElse(record.source, IncomingTxInfo.empty()).totalCost
+    peerCost < MempoolPeerCostPerBlock &&
+      !mp.contains(txId) && !mp.isInvalidated(txId) && !declined.contains(txId)
+  }
+
+  /**
+    * Resume transaction bytes cache processing: forward the first processable record to the mempool,
+    * dropping records of over-budget peers and of transactions not worth re-checking, so that a peer
+    * which exhausted its budget cannot stall transaction intake of the whole node via the shared cache.
+    * Dropped records are set back to `Unknown` in the delivery tracker, so they can be requested again
+    * when announced by another peer.
+    */
+  private def processFirstTxProcessingCacheRecord(mp: ErgoMemPool): Unit = {
+    var forwarded = false
+    while (!forwarded && txProcessingCache.nonEmpty) {
+      val (txId, processingCacheRecord) = txProcessingCache.head
       txProcessingCache -= txId
+      if (cacheRecordProcessable(txId, processingCacheRecord, mp)) {
+        parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
+        forwarded = true
+      } else {
+        log.info(s"Dropping cached transaction ${encoder.encodeId(txId)} from ${processingCacheRecord.source} " +
+          "without processing (its peer is over the per-block budget, or the transaction is known already)")
+        deliveryTracker.setUnknown(txId, ErgoTransaction.modifierTypeId)
+      }
     }
   }
 
@@ -197,7 +222,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * To be called when mempool reporting on finished transaction validation.
     * This method adds validation cost to counter and send another
     */
-  private def processMempoolResult(processingResult: InitialTransactionCheckOutcome): Unit = {
+  private def processMempoolResult(processingResult: InitialTransactionCheckOutcome, mp: ErgoMemPool): Unit = {
     val FallbackCostValue = 5000
 
     val costOpt = processingResult.transaction.lastCost
@@ -236,16 +261,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         log.debug(s"Old peer ${peer.connectionId} cost info: ${peerTxInfo.totalCost}, " +
           s"new: $newPeerCost, tx processing cache size: ${txProcessingCache.size}")
+        if (peerTxInfo.totalCost < MempoolPeerCostPerBlock && newPeerCost.totalCost >= MempoolPeerCostPerBlock) {
+          log.info(s"Peer ${peer.connectionId} exhausted its per-block transaction processing budget " +
+            s"($MempoolPeerCostPerBlock), throttling it until the next block")
+        }
         perPeerCost.put(peer, newPeerCost)
       case _ => log.debug("No peer set, perPeerCost not updated.")
     }
 
     val withinGlobalLimit = interblockCost.totalCost < MempoolCostPerBlock
-    val withinPeerLimit = peerOpt.isEmpty || (peerOpt.isDefined &&
-      perPeerCost.getOrElse(peerOpt.get, IncomingTxInfo.empty()).totalCost < MempoolPeerCostPerBlock)
 
-    if (withinGlobalLimit && withinPeerLimit) {
-      processFirstTxProcessingCacheRecord()
+    if (withinGlobalLimit) {
+      processFirstTxProcessingCacheRecord(mp)
     }
   }
 
@@ -717,7 +744,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       parseAndProcessTransaction(txId, txBytes, remote)
     }
     toPutIntoCache.foreach { case (txId, txBytes) =>
-      txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
+      // never grow the cache past its limit; a transaction which does not fit is dropped and its delivery
+      // status cleared, so that it can be requested again when re-announced (e.g. by another peer)
+      if (txProcessingCache.size < MaxProcessingTransactionsCacheSize) {
+        txProcessingCache.put(txId, new TransactionProcessingCacheRecord(txBytes, remote))
+      } else {
+        deliveryTracker.clearStatusForModifier(txId, ErgoTransaction.modifierTypeId, ModifiersStatus.Requested)
+      }
     }
   }
 
@@ -1118,7 +1151,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
       interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-      peerCost <= MempoolPeerCostPerBlock * 3 / 2 && // we can download some extra to fill cache
+      peerCost < MempoolPeerCostPerBlock &&
       txProcessingCache.size <= MaxProcessingTransactionsCacheSize // txs processing cache is not overfull
     }
 
@@ -1378,17 +1411,27 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private[network] def declinedTxsCount: Int = declined.size
 
+  /**
+    * Number of transactions currently cached for later processing, exposed for tests
+    */
+  private[network] def txProcessingCacheSize: Int = txProcessingCache.size
+
   // add transaction id to the table of declined transactions, keeping the table size bounded
   private def addDeclined(id: ModifierId): Unit = {
-    while (declined.size >= MaxDeclined) {
-      declined -= declined.head
+    // skip ids already in the table: evicting an entry to make room for a duplicate would forget
+    // a declined transaction for no reason
+    if (!declined.contains(id)) {
+      while (declined.size >= MaxDeclined) {
+        declined -= declined.head
+      }
+      declined += id
     }
-    declined += id
   }
 
   // clear declined transactions when new block is applied, so the node may ask peers for them again;
   // a declined transaction is worth re-evaluating once a block arrives, as its double-spend winner may be
-  // mined by now, mempool may have free capacity, etc.
+  // mined by now, mempool may have free capacity, etc. This replaces the previous time-based (TTL)
+  // suppression of declined transactions.
   private def clearDeclined(): Unit = {
     if (declined.nonEmpty) {
       log.debug(s"Clearing ${declined.size} declined transactions on block applied")
@@ -1462,7 +1505,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearDeclined()
       clearInterblockCost()
       perPeerCost.clear()
-      processFirstTxProcessingCacheRecord() // resume cache processing
+      processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
 
     // Peer-received block applied - broadcast to our peers
     case RemoteBlockApplied(header, _) =>
@@ -1475,21 +1518,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearDeclined()
       clearInterblockCost()
       perPeerCost.clear()
-      processFirstTxProcessingCacheRecord() // resume cache processing
+      processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction
       deliveryTracker.setHeld(tx.id, ErgoTransaction.modifierTypeId)
-      processMempoolResult(st)
+      processMempoolResult(st, mempoolReader)
       broadcastModifierInv(tx)
 
     case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
-      addDeclined(utx.id)
-      processMempoolResult(dt)
+      // declines of invalidated transactions (e.g. rent or re-emission prefilter rejections) are already
+      // blocked from re-request by the `isInvalidated` check in `processInv`, so there is no need
+      // to spend slots of the declined table on them
+      if (!mempoolReader.isInvalidated(utx.id)) {
+        addDeclined(utx.id)
+      }
+      processMempoolResult(dt, mempoolReader)
 
     case ft@FailedTransaction(utx, error) =>
       val id = utx.id
-      processMempoolResult(ft)
+      processMempoolResult(ft, mempoolReader)
 
       utx.source.foreach { peer =>
         // no need to call deliveryTracker.setInvalid, as mempool will consider invalidated tx in contains()
@@ -1697,10 +1745,11 @@ object ErgoNodeViewSynchronizer {
 
   /**
     * Minimal cost charged to a peer for a transaction declined by the mempool (1000 cost units ~ 1 ms of CPU).
-    * The cheapest declines (min fee not met, double spend loser, re-emission or storage rent prefilter) are made
-    * before scripts are executed, so their measured cost is close to zero and they are not throttled by
-    * `MempoolPeerCostPerBlock` at all. With this floor, every decline costs (at least) 200 ms of the peer's budget,
-    * so no peer is able to send an unlimited number of them.
+    * The cheapest declines (min fee not met, re-emission or storage rent prefilter) are made before scripts are
+    * executed, so their measured cost is as low as 1,000 units, and 10,000 of them would be needed to exhaust
+    * `MempoolPeerCostPerBlock` - more than an honest peer relays in an inter-block interval. With this floor,
+    * every decline costs the peer at least 200 ms of its budget, so it is throttled after
+    * `MempoolPeerCostPerBlock` / `MinDeclinedTxCost` = 50 declines per block.
     *
     * The floor is applied to the per-peer counter only (never to the global one), so that the global transaction
     * intake protection stays proportional to the real work done by the node.

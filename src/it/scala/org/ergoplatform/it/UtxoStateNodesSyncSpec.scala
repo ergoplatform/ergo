@@ -2,7 +2,7 @@ package org.ergoplatform.it
 
 import com.typesafe.config.Config
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
-import org.ergoplatform.it.util.ConvergenceObservations
+import org.ergoplatform.it.util.{ConvergenceObservations, NoProgressException, StallWatch}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.concurrent.duration._
@@ -31,6 +31,7 @@ class UtxoStateNodesSyncSpec extends AnyFlatSpec with IntegrationSuite {
     val deadline = 15.minutes.fromNow
     val observations = new ConvergenceObservations
     @volatile var recent = Vector.empty[String]
+    val stall = new StallWatch[Seq[String]]()
     val result = for {
       initHeight <- Future.traverse(nodes)(_.fullHeight).map(x => math.max(x.max, 1))
       _          <- Future.traverse(nodes)(_.waitForHeight(initHeight + blocksQty))
@@ -54,12 +55,29 @@ class UtxoStateNodesSyncSpec extends AnyFlatSpec with IntegrationSuite {
               }
               result.toOption.getOrElse(Seq.empty)
             }
+          }.flatMap { headers =>
+            // a failed probe yields no ids, and a sample with a gap is never progress
+            val complete = headers.forall(_.nonEmpty)
+            val quiet    = stall.record(if (complete) Some(headers.map(_.head)) else None)
+            if (!ConvergenceObservations.selectedHeadersAgree(headers) &&
+                quiet >= StallWatch.DefaultLimit) {
+              docker.describeNodes(nodes).flatMap { described =>
+                Future.failed(new NoProgressException(
+                  s"Selected headers at height $height do not all agree (a failed " +
+                    s"probe counts as no answer) and none changed for " +
+                    s"${quiet.toSeconds} s; nodes: $described; " +
+                    s"recent observations: ${recent.mkString("; ")}"))
+              }
+            } else {
+              Future.successful(headers)
+            }
           }
         }(ConvergenceObservations.selectedHeadersAgree)(
           s"Selected headers did not converge at height $height; recent observations: ${recent.mkString("; ")}")
       }
     } yield {
-      log.info(s"Selected header convergence: ${recent.mkString("; ")}")
+      log.info(s"Selected header convergence (longest quiet period " +
+        s"${stall.longestQuietPeriod.toMillis} ms): ${recent.mkString("; ")}")
       // `/blocks/at/{height}` returns *every* header id known at the given height, with the
       // best-chain one first (see `HeadersProcessor.headerIdsAtHeight`). Nodes are in sync
       // when their best-chain header at that height matches; a node may legitimately also

@@ -7,7 +7,7 @@ import io.circe.Json
 import org.ergoplatform.it.api.NodeApi.{NodeInfo, nodeInfoDecoder}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
-import org.ergoplatform.it.util.ConvergenceObservations
+import org.ergoplatform.it.util.{ConvergenceObservations, NoProgressException, StallWatch}
 import org.scalatest.freespec.AnyFreeSpec
 import scala.async.Async
 import scala.concurrent.{Await, Future}
@@ -111,14 +111,34 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
     minHeight: Int,
     timeout: FiniteDuration
   ): Future[(NodeInfo, NodeInfo)] = {
-    observations.until(timeout.fromNow, 1.second, 5.seconds)(
-      budget => observeNodes("convergence", nodeA, nodeB, budget)
-    ) { case (a, b) =>
-      a.info.exists(infoA => b.info.exists(infoB => ConvergenceObservations.sameBestBlock(infoA, infoB, minHeight)))
-    }(
+    def infos(pair: (NodeSnapshot, NodeSnapshot)): Option[(NodeInfo, NodeInfo)] =
+      for (infoA <- pair._1.info; infoB <- pair._2.info) yield (infoA, infoB)
+    def converged(pair: (NodeSnapshot, NodeSnapshot)): Boolean = infos(pair).exists {
+      case (a, b) => ConvergenceObservations.sameBestBlock(a, b, minHeight)
+    }
+    // mining is off, so only the switch to the better chain changes either node's /info
+    val stall = new StallWatch[(NodeInfo, NodeInfo)]()
+    observations.until(timeout.fromNow, 1.second, 5.seconds) { budget =>
+      observeNodes("convergence", nodeA, nodeB, budget).flatMap { pair =>
+        val quiet = stall.record(infos(pair))
+        if (!converged(pair) && quiet >= StallWatch.DefaultLimit) {
+          docker.describeNodes(Seq(nodeA, nodeB)).flatMap { nodes =>
+            Future.failed(new NoProgressException(
+              s"Nodes stopped converging to the same best full block at height >= " +
+                s"$minHeight: no tip change observed for ${quiet.toSeconds} s; nodes: " +
+                s"$nodes; recent observations: $lastObservation"))
+          }
+        } else {
+          Future.successful(pair)
+        }
+      }
+    }(converged)(
       s"Nodes did not converge to the same best full block at height >= $minHeight; " +
         s"recent observations: $lastObservation"
-    ).map { case (a, b) => (a.info.get, b.info.get) }
+    ).map { case (a, b) =>
+      log.info(s"Converged, longest quiet period ${stall.longestQuietPeriod.toMillis} ms")
+      (a.info.get, b.info.get)
+    }
   }
 
   "Deep rollback handling" in {

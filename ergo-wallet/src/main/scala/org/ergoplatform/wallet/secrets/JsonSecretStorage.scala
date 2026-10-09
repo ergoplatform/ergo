@@ -93,9 +93,14 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
 
 object JsonSecretStorage {
 
-  private val MaxLegacySecretBytes = 64 * 1024
+  private val MaxSecretCandidateBytes = 64 * 1024
 
   private val StagingPrefix = ".ergo-secret-staging-"
+
+  // init has always published UUID-named JSON files. A damaged one must not
+  // turn into an apparent empty wallet, even in a shared node directory.
+  private val GeneratedSecretFileName = java.util.regex.Pattern.compile(
+    "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.json")
 
   /** No discoverable wallet; ambiguous or unreadable inventories use other failures. */
   final class SecretFileNotFoundException extends FileNotFoundException("Wallet secret file not found")
@@ -204,44 +209,44 @@ object JsonSecretStorage {
     init(seed, encryptionPass, usePre1627KeyDerivation)(settings)
   }
 
-  private def isLegacySecret(file: File): Boolean = {
-    val input = new BufferedInputStream(Files.newInputStream(file.toPath))
-    val bytes = try {
-      Iterator.continually(input.read()).take(MaxLegacySecretBytes + 1)
-        .takeWhile(_ != -1).map(_.toByte).toArray
-    } finally input.close()
-    if (bytes.length > MaxLegacySecretBytes) {
-      throw new IOException("Possible legacy wallet exceeds the discovery limit")
+  private def secretCandidate(file: File): Option[EncryptedSecret] = {
+    if (Files.size(file.toPath) > MaxSecretCandidateBytes) None
+    else {
+      val input = new BufferedInputStream(Files.newInputStream(file.toPath))
+      val bytes = try {
+        Iterator.continually(input.read()).take(MaxSecretCandidateBytes + 1)
+          .takeWhile(_ != -1).map(_.toByte).toArray
+      } finally input.close()
+      if (bytes.length > MaxSecretCandidateBytes) None
+      else decode[EncryptedSecret](new String(bytes, UTF_8)).fold(_ => None, Some(_))
     }
-    decode[EncryptedSecret](new String(bytes, UTF_8)).isRight
   }
 
   def readFile(settings: SecretStorageSettings): Try[JsonSecretStorage] = Try {
     val entries = storageEntries(settings)
-    // Node data directories are not secret files. An unrecognized file may be a
-    // legacy wallet even when the directory is shared with node data.
-    if (entries.exists(entry => !entry.isDirectory && !entry.isFile)) {
-      throw new IOException("Wallet secret directory contains an unsupported entry")
+    entries.find(file => GeneratedSecretFileName.matcher(file.getName).matches() &&
+      !Files.isRegularFile(file.toPath)).foreach { file =>
+      throw new IOException(s"Invalid wallet secret file: ${file.getName}")
     }
-    val files = entries.filter(_.isFile)
-    files.filter(_.getName.contains(".json")) match {
-      case Seq(file) =>
-        if (files.filterNot(_ == file).exists(isLegacySecret)) {
-          throw new IOException("Wallet secret directory contains a JSON and legacy wallet")
-        }
-        new JsonSecretStorage(file, settings.encryption)
-      case Seq() => files match {
-        case Seq(file) if entries.size == 1 => new JsonSecretStorage(file, settings.encryption)
-        case Seq(file) =>
-          if (!isLegacySecret(file)) {
-            throw new IOException("Shared secret directory contains an invalid legacy wallet candidate")
-          }
-          new JsonSecretStorage(file, settings.encryption)
-        case Seq() => throw new SecretFileNotFoundException
-        case _ => throw new IOException("Wallet secret directory contains multiple possible wallet files")
+    // Follow links to regular wallet files, as earlier discovery did, while
+    // ignoring dangling links and non-file entries in a shared directory.
+    val files = entries.filter(file => Files.isRegularFile(file.toPath)).sortBy(_.getName)
+    val candidates = files.flatMap { file =>
+      val candidate = secretCandidate(file)
+      if (candidate.isEmpty && GeneratedSecretFileName.matcher(file.getName).matches()) {
+        throw new IOException(s"Invalid wallet secret file: ${file.getName}")
       }
-      case _ => throw new IOException("Wallet secret directory contains multiple JSON wallet files")
+      candidate.map(file -> _)
     }
+    if (candidates.isEmpty) throw new SecretFileNotFoundException
+    if (candidates.map(_._2).distinct.size > 1) {
+      throw new IOException(s"Wallet secret directory contains distinct wallet files: ${candidates.map(_._1.getName).mkString(", ")}")
+    }
+    val preferred = candidates.find(candidate =>
+      GeneratedSecretFileName.matcher(candidate._1.getName).matches())
+      .orElse(candidates.find(_._1.getName.endsWith(".json")))
+      .getOrElse(candidates.head)
+    new JsonSecretStorage(preferred._1, settings.encryption)
   }
 
 }

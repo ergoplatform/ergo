@@ -25,6 +25,7 @@ import org.ergoplatform.wallet.boxes.{ErgoBoxSerializer, ReplaceCompactCollectBo
 import org.ergoplatform.wallet.crypto.ErgoSignature
 import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
 import org.ergoplatform.wallet.mnemonic.Mnemonic
+import org.ergoplatform.wallet.secrets.JsonSecretStorage
 import org.scalacheck.Gen
 import org.scalatest.BeforeAndAfterAll
 import scorex.db.{LDBKVStore, LDBVersionedStore}
@@ -456,7 +457,7 @@ class ErgoWalletServiceSpec
     }
   }
 
-  property("wallet service does not load an invalid shared legacy candidate") {
+  property("wallet service initializes beside unrelated shared files") {
     withInitializationFixture { fixture =>
       val storageSettings = fixture.settings.walletSettings.secretStorage
       val directory = new File(storageSettings.secretDir)
@@ -472,9 +473,27 @@ class ErgoWalletServiceSpec
       val result = fixture.service.initWallet(fixture.state, fixture.settings,
         SecretString.create("synthetic next password"), None)
 
-      result.failed.get shouldBe a[java.io.IOException]
-      directory.listFiles().map(_.getName).toSet shouldBe before
+      val initialized = fixture.retain(result.get._2)
+      initialized.secretStorageOpt shouldBe defined
+      directory.listFiles().map(_.getName).toSet shouldBe
+        (before + initialized.secretStorageOpt.get.secretFile.getName)
       Files.readAllBytes(invalidCandidate) shouldBe originalBytes
+    }
+  }
+
+  property("wallet service loads a shared JSON wallet beside a large node file") {
+    withInitializationFixture { fixture =>
+      val storageSettings = fixture.settings.walletSettings.secretStorage
+      val original = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+        SecretString.create("synthetic wallet password"), false)(storageSettings)
+      val directory = new File(storageSettings.secretDir)
+      val log = Files.write(directory.toPath.resolve("ergo.log"), Array.fill[Byte](65537)(1))
+
+      val loaded = fixture.retain(
+        fixture.service.readWallet(fixture.state, None, None, storageSettings))
+      loaded.secretStorageOpt.get.secretFile shouldBe original.secretFile
+      loaded.secretStorageOpt.get.unlock(SecretString.create("synthetic wallet password")) shouldBe 'success
+      Files.size(log) shouldBe 65537L
     }
   }
 

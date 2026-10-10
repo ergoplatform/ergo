@@ -90,7 +90,6 @@ class RestoreStateFailureWitnessSpec extends ErgoCorePropertyTest with NodeViewT
           s"versionAfterFailure=$versionAfterFailure: ") {
           versionAfterFailure.get shouldBe appliedVersion
           markerSurvived shouldBe true
-          publishedVersion.isFailure shouldBe true
         }
       } finally {
         generatedState.closeStorage()

@@ -71,7 +71,7 @@ trait ToDownloadProcessor
             val toDownload = headersAtThisHeight.flatMap(requiredModifiersForHeader).filter { case (mtid, mid) => condition(mtid, mid) }
             // add new modifiers to download to accumulator
             val newAcc = toDownload.foldLeft(acc) { case (newAcc, (mType, mId)) => newAcc.adjust(mType)(_.fold(Vector(mId))(_ :+ mId)) }
-            continuation(height + 1, newAcc, maxHeight)
+            if (height == maxHeight) newAcc else continuation(height + 1, newAcc, maxHeight)
           } else {
             acc
           }
@@ -79,17 +79,39 @@ trait ToDownloadProcessor
       }
     }
 
+    // Include the ancestor itself in the bounded walk; a truncated walk is not an ancestor.
+    def commonAncestorOf(fb: ErgoFullBlock): Option[Header] = if (isInBestChain(fb.id)) {
+      None
+    } else {
+      val parentSteps = Math.max(0L, nodeSettings.keepVersions.toLong)
+      val limit = Math.min(fb.height.toLong, parentSteps + 1L).toInt
+      headerChainBack(limit, fb.header, h => isInBestChain(h.id)).headOption
+        .filter(h => isInBestChain(h.id))
+    }
+
     bestFullBlockOpt match {
       case _ if !isHeadersChainSynced || !nodeSettings.verifyTransactions =>
         // do not download full blocks if no headers-chain synced yet or SPV mode
         Map.empty
       case Some(fb) if farAwayFromBeingSynced(fb) =>
-        // when far away from blockchain tip
-        continuation(fb.height + 1, Map.empty, fb.height + FullBlocksToDownloadAhead)
+        // A heavier headers-chain can need sections below the old full-chain tip.
+        val fromHeight = commonAncestorOf(fb)
+          .map(h => Math.max(minimalFullBlockHeight, h.height + 1))
+          .getOrElse(fb.height + 1)
+        // Scanning backward must not shorten the forward window.
+        val maxHeight = Math.min(fb.height.toLong + FullBlocksToDownloadAhead, Int.MaxValue.toLong).toInt
+        continuation(fromHeight, Map.empty, maxHeight)
       case Some(fb) =>
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
-        val minHeight = Math.max(1, fb.header.height - 100)
+        val lookbackHeight = Math.max(1, fb.header.height - 100)
+        val minHeight = if (lookbackHeight > minimalFullBlockHeight) {
+          commonAncestorOf(fb)
+            .map(h => Math.max(minimalFullBlockHeight, h.height + 1))
+            .fold(lookbackHeight)(Math.min(lookbackHeight, _))
+        } else {
+          lookbackHeight
+        }
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case None if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) =>
         // if bootstrapping with UTXO set snapshot is chosen, and no snapshot applied yet, ask peers for snapshots

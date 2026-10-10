@@ -451,8 +451,9 @@ object WalletRegistry {
 
   def registryFolder(settings: ErgoSettings): File = new File(s"${settings.directory}/wallet/registry")
 
-  def apply(settings: ErgoSettings): Try[WalletRegistry] = Try {
-      val dir = registryFolder(settings)
+  def apply(settings: ErgoSettings): Try[WalletRegistry] = openAt(settings, registryFolder(settings))
+
+  private[wallet] def openAt(settings: ErgoSettings, dir: File): Try[WalletRegistry] = Try {
       dir.mkdirs()
       new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
     }.flatMap {
@@ -460,6 +461,9 @@ object WalletRegistry {
         // Create pre-genesis state checkpoint
         store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).map { _ =>
           new WalletRegistry(store)(settings.walletSettings)
+        }.recoverWith { case error =>
+          Try(store.close()).failed.foreach { closeError => if (closeError ne error) error.addSuppressed(closeError) }
+          Failure(error)
         }
       case store =>
         Success(new WalletRegistry(store)(settings.walletSettings))

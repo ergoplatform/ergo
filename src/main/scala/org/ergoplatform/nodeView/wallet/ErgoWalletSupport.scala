@@ -45,7 +45,12 @@ trait ErgoWalletSupport extends ScorexLogging {
   protected def addSecretToStorage(state: ErgoWalletState, secret: ExtendedSecretKey): Try[ErgoWalletState] =
     state.walletVars.withExtendedKey(secret).flatMap { newWalletVars =>
       state.storage.addPublicKey(secret.publicKey).flatMap { _ =>
-        newWalletVars.stateCacheOpt.get.withNewPubkey(secret.publicKey).map { updCache =>
+        val cache = newWalletVars.stateCacheProvided match {
+          case Some(provided) => provided.withNewPubkey(secret.publicKey)
+          // The computed cache was already built from the prover containing the new key.
+          case None => Success(newWalletVars.stateCacheOpt.get)
+        }
+        cache.map { updCache =>
           state.copy(walletVars = newWalletVars.copy(stateCacheProvided = Some(updCache))(newWalletVars.settings))
         }
       }

@@ -382,8 +382,11 @@ class Docker(
     stopNode(node.containerId, secondsToWait)
 
   def stopNode(containerId: String, secondsToWait: Int = 5): Unit = {
-    nodeRepository.find(_.containerId == containerId).foreach(_.close())
-    nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
+    // synchronized so that several nodes can be stopped in parallel
+    synchronized {
+      nodeRepository.find(_.containerId == containerId).foreach(_.close())
+      nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
+    }
     client.stopContainerCmd(containerId).withTimeout(secondsToWait).exec()
   }
 

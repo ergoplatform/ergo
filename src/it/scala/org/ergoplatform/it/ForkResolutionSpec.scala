@@ -79,8 +79,17 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     val result = Async.async {
       val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))
       Async.await(Future.traverse(nodes)(_.waitForHeight(initMaxHeight + commonChainLength, 100.millis)))
+      // Isolated followers can't mine while headers are 6+ blocks ahead of full blocks, so close the
+      // gap and stop all nodes at once (a sequential stop lets it reopen)
+      Async.await(Future.traverse(nodes.tail) { node =>
+        node.waitFor[Int](
+          n => n.headersHeight.flatMap(h => n.fullHeight.map(h - _)),
+          _ < 3,
+          100.millis
+        )
+      })
       val isolatedNodes = Async.await {
-        nodes.foreach(node => docker.stopNode(node.containerId))
+        Await.result(Future.traverse(nodes)(node => Future(docker.stopNode(node.containerId))), 1.minute)
         clearPeerDatabases()
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
       }

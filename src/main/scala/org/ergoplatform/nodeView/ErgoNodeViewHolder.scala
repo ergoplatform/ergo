@@ -462,7 +462,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history).flatMap { state =>
+    val storedState = ErgoState.readOrGenerate(settings).asInstanceOf[State]
+    val consistentState = restoreConsistentState(storedState, history)
+    consistentState.flatMap { state =>
       val repairRequired = settings.nodeSettings.extraIndex &&
         settings.nodeSettings.stateType == StateType.Utxo &&
         history.bestFullBlockIdOpt.contains(versionToId(state.version))
@@ -479,8 +481,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
         log.error("Failed to recover state, try to resync from genesis manually", ex)
+        Try(history.closeStorage()).failed.foreach { closeError =>
+          if (closeError ne ex) ex.addSuppressed(closeError)
+        }
+        consistentState.toOption.filter(_.store ne storedState.store).foreach { state =>
+          Try(state.closeStorage()).failed.foreach { closeError =>
+            if (closeError ne ex) ex.addSuppressed(closeError)
+          }
+        }
+        Try(storedState.closeStorage()).failed.foreach { closeError =>
+          if (closeError ne ex) ex.addSuppressed(closeError)
+        }
+        // Stop the whole node; propagating the error alone may leave REST/P2P running without a Holder.
         ErgoApp.shutdownSystem()(context.system)
-        None
+        throw ex
     }
   }
 

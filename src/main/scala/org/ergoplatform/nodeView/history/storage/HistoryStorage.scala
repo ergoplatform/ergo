@@ -133,14 +133,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     }
   }
 
-  def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] = withIndexCacheReadLock {
+  def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] =
     Option(indexCache.getIfPresent(id)).orElse {
-      indexStore.get(id.data).map { value =>
-        indexCache.put(id, value)
-        value
+      withIndexCacheReadLock {
+        Option(indexCache.getIfPresent(id)).orElse {
+          indexStore.get(id.data).map { value =>
+            indexCache.put(id, value)
+            value
+          }
+        }
       }
     }
-  }
 
   /**
     * @return object with `id` if it is in the objects database
@@ -248,12 +251,14 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
 
       objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
         cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i))}
-        withIndexCacheWriteLock {
-          indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
-            cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i))}
-            ()
+        if (indicesToRemove.nonEmpty) {
+          withIndexCacheWriteLock {
+            indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
+              cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i))}
+              ()
+            }
           }
-        }
+        } else Success(())
       }
   }
 

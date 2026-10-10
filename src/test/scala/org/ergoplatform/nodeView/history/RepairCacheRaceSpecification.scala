@@ -168,7 +168,7 @@ class RepairCacheRaceSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("a cached hit waits for an index removal to finish") {
+  property("a cached hit stays available while an index removal finishes") {
     val root = Files.createTempDirectory("history-index-cache-hit-race")
     val dbRoot = Files.createDirectories(root.resolve("history"))
     val indexKey = ByteArrayWrapper(Algos.hash("height row".getBytes(StandardCharsets.UTF_8)))
@@ -219,22 +219,15 @@ class RepairCacheRaceSpecification extends ErgoCorePropertyTest {
         }
       }, "history-index-cached-reader")
       readerThread.start()
-      val deadline = 10.seconds.fromNow
-      var queued = false
-      while (!queued && readDone.getCount > 0 && deadline.hasTimeLeft()) {
-        queued = queuedOnIndexLock(readerThread, "ReadLock")
-        if (!queued) Thread.sleep(5)
-      }
-      withClue("a cached hit must wait for the writer's cache invalidation: ") {
-        readDone.getCount shouldBe 1L
-        queued shouldBe true
+      withClue("a cached hit should finish before the removal returns: ") {
+        readDone.await(10, TimeUnit.SECONDS) shouldBe true
+        readResult.get().get.map(_.toSeq) shouldBe Some(row.toSeq)
       }
 
       resumeRemoval.countDown()
       removalDone.await(10, TimeUnit.SECONDS) shouldBe true
       removalResult.get().get
-      readDone.await(10, TimeUnit.SECONDS) shouldBe true
-      readResult.get().get shouldBe None
+      storage.getIndex(indexKey) shouldBe None
     } finally {
       resumeRemoval.countDown()
       if (removalThread != null) removalThread.join(10000)

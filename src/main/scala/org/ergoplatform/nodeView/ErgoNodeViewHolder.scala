@@ -22,10 +22,11 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, S
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import spire.syntax.all.cfor
 
 import java.io.File
+import java.util.UUID
 import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
@@ -69,6 +70,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
   private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+
+  // Readers share mutable storage. Invalidate in-flight checks before mutation,
+  // including attempts which fail or roll back to the same state version.
+  private var stateRevision: UUID = UUID.randomUUID()
 
   /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
   private var chainProgress: Option[ChainProgress] = None
@@ -187,6 +192,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                                   progressInfo: ProgressInfo[BlockSection],
                                   suffixApplied: IndexedSeq[BlockSection],
                                   local: Boolean = false): (ErgoHistory, Try[State], Seq[BlockSection]) = {
+    stateRevision = UUID.randomUUID()
     requestDownloads(progressInfo)
 
     val (stateToApplyTry: Try[State], suffixTrimmed: IndexedSeq[BlockSection]) = if (progressInfo.chainSwitchingNeeded) {
@@ -302,6 +308,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot(height, blockId) =>
       if (!history().isUtxoSnapshotApplied) {
+        stateRevision = UUID.randomUUID()
         val store = minimalState().store
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
@@ -551,7 +558,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   // we can check mempool transactions only in "utxo" mode
                   newMinState match {
                     case utxoStateReader: UtxoStateReader if headersHeight == fullBlockHeight =>
-                      val recheckCommand = RecheckMempool(utxoStateReader, newMemPool)
+                      val recheckCommand = RecheckMempool(utxoStateReader, newMemPool, stateRevision)
                       context.system.eventStream.publish(recheckCommand)
                     case _ =>
                   }
@@ -702,9 +709,34 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
-    case RecheckedTransactions(unconfirmedTxs) =>
-      val updatedPool = memoryPool().put(unconfirmedTxs)
-      updateNodeView(updatedMempool = Some(updatedPool))
+    case RecheckedTransactions(revision, originals, unconfirmedTxs, invalidatedIds) if revision == stateRevision =>
+      val currentPool = memoryPool()
+      // Candidate generation can remove a parent while its child remains in the pool.
+      // Refreshing that child from the old snapshot would defer its next validity check.
+      val originalOutputs = originals.iterator.flatMap(_.transaction.outputs).map(b => bytesToId(b.id)).toSet
+      val currentOutputs = currentPool.getAll.iterator.flatMap(_.transaction.outputs).map(b => bytesToId(b.id)).toSet
+      val eligibleIds = originals.iterator.filter { original =>
+        currentPool.getAll(Seq(original.id)).headOption.exists(_ eq original) && {
+          val tx = original.transaction
+          val dependencies = tx.inputs.iterator.map(i => bytesToId(i.boxId)) ++
+            tx.dataInputs.iterator.map(i => bytesToId(i.boxId))
+          dependencies.forall(id => originalOutputs.contains(id) == currentOutputs.contains(id))
+        }
+      }.map(_.id).toSet
+      val toEliminate = invalidatedIds.filter(eligibleIds.contains)
+      val refreshed = unconfirmedTxs.filter(tx => eligibleIds.contains(tx.id))
+      if (refreshed.nonEmpty || toEliminate.nonEmpty) {
+        val updatedPool = toEliminate.foldLeft(currentPool.put(refreshed)) { case (pool, id) => pool.invalidate(id) }
+        updateNodeView(updatedMempool = Some(updatedPool))
+        val e = new Exception("Became invalid")
+        toEliminate.foreach(id => context.system.eventStream.publish(FailedOnRecheckTransaction(id, e)))
+      }
+      val skipped = unconfirmedTxs.size + invalidatedIds.size - refreshed.size - toEliminate.size
+      log.debug(s"Mempool cleanup result: refreshed=${refreshed.size}, eliminated=${toEliminate.size}, skipped=$skipped")
+    case RecheckedTransactions(_, _, unconfirmedTxs, invalidatedIds) =>
+      val skipped = unconfirmedTxs.size + invalidatedIds.size
+      log.debug(s"Mempool cleanup result discarded after state revision change: " +
+        s"refreshed=0, eliminated=0, skipped=$skipped")
     case EliminateTransactions(ids) =>
       val updatedPool = ids.foldLeft(memoryPool()) { case (pool, txId) => pool.invalidate(txId) }
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -804,7 +836,10 @@ object ErgoNodeViewHolder {
       * Wrapper for transactions which sit in mempool for long enough time, so `CleanWorker` is re-checking their
       * validity and then sending via this message to update the mempool
       */
-    case class RecheckedTransactions(unconfirmedTxs: Iterable[UnconfirmedTransaction])
+    case class RecheckedTransactions(stateRevision: UUID,
+                                     originals: Seq[UnconfirmedTransaction],
+                                     unconfirmedTxs: Seq[UnconfirmedTransaction],
+                                     invalidatedIds: Seq[ModifierId])
 
     case class EliminateTransactions(ids: Seq[ModifierId])
 

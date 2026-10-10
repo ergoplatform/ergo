@@ -588,6 +588,27 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: full V2 sync info is sent to a peer after receiving a header from it") {
+    withFixture { ctx =>
+      import ctx._
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+
+      // the sync info consists of the headers at offsets 0, 16, 128 and 512 from our tip, not only of the tip
+      ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          val msg = stn.message
+          msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+            msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length
+        case _ => false
+      }
+    }
+  }
+
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - unknown peer") {
     withFixture { ctx =>
       import ctx._

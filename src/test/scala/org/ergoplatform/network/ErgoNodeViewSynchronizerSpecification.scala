@@ -588,6 +588,35 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: full V2 sync info is sent after a reduced one at the same headers height") {
+    withFixture { ctx =>
+      import ctx._
+
+      def syncInfoSent(headersQty: Int): Unit = {
+        ncProbe.fishForMessage(3 seconds) {
+          case stn: SendToNetwork =>
+            val msg = stn.message
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+              msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == headersQty
+          case _ => false
+        }
+      }
+
+      // receiving a header makes the node send a reduced sync info (last header only)
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+      syncInfoSent(1)
+
+      // our headers height is the same, but the sync info sent to an older peer must be the full one
+      val msgBytes = ErgoSyncInfoMessageSpec.toBytes(ErgoSyncInfoV2(Seq(chain.last)))
+      synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
+      syncInfoSent(ErgoHistoryReader.FullV2SyncOffsets.length)
+    }
+  }
+
   property("NodeViewSynchronizer: Message: SyncInfoSpec V2 - unknown peer") {
     withFixture { ctx =>
       import ctx._

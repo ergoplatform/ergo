@@ -325,17 +325,22 @@ object ErgoHistory extends ScorexLogging {
   }
 
   // A retained alternative fork may continue above the selected full-block tip.
-  // Only an explicitly invalid continuation is safe to remove on startup.
+  // Only an invalid or truly missing continuation is safe to remove during repair.
   protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    val invalidContinuations = afterHeaders.nonEmpty &&
-      afterHeaders.forall(id => history.isSemanticallyValid(id) == ModifierSemanticValidity.Invalid)
+    val removableContinuations = afterHeaders.nonEmpty && afterHeaders.forall { id =>
+      history.isSemanticallyValid(id) match {
+        case ModifierSemanticValidity.Invalid => true
+        case ModifierSemanticValidity.Absent => !history.historyStorage.contains(id)
+        case _ => false
+      }
+    }
 
-    if (bestHeaderHeight == bestFullBlockHeight && invalidContinuations) {
-      log.warn("Found invalid continuation, clearing it...")
+    if (bestHeaderHeight == bestFullBlockHeight && removableContinuations) {
+      log.warn("Found invalid or missing continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }

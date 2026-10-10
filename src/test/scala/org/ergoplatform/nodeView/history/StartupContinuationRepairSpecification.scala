@@ -136,6 +136,41 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
     }
   }
 
+  property("startup removes a continuation row left behind by interrupted header cleanup") {
+    withFork(withSibling = false) { (history, a8, b7, _, settings) =>
+      invalidate(history, a8)
+      history.forgetHeader(a8.id).get
+      history.headerIdsAtHeight(a8.height) should contain(a8.id)
+      history.historyStorage.contains(a8.id) shouldBe false
+      history.isSemanticallyValid(a8.id) shouldBe ModifierSemanticValidity.Absent
+      history.closeStorage()
+      val reopened = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        reopened.headerIdsAtHeight(a8.height) should not contain a8.id
+        reopened.bestFullBlockIdOpt shouldBe Some(b7.id)
+        reopened.historyStorage.contains(b7.id) shouldBe true
+      } finally reopened.closeStorage()
+    }
+  }
+
+  property("startup retains a stored continuation with a malformed validity marker") {
+    withFork(withSibling = false) { (history, a8, b7, _, settings) =>
+      history.historyStorage.insert(
+        Array(history.validityKey(a8.id) -> Array(2.toByte)),
+        BlockSection.emptyArray
+      ).get
+      history.historyStorage.contains(a8.id) shouldBe true
+      history.isSemanticallyValid(a8.id) shouldBe ModifierSemanticValidity.Absent
+      history.closeStorage()
+      val reopened = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        reopened.headerIdsAtHeight(a8.height) should contain(a8.id)
+        reopened.historyStorage.contains(a8.id) shouldBe true
+        reopened.bestFullBlockIdOpt shouldBe Some(b7.id)
+      } finally reopened.closeStorage()
+    }
+  }
+
   property("startup removes stored proof, transactions and extension in UTXO mode") {
     withFork(withSibling = false, stateType = StateType.Utxo) { (history, a8, b7, _, settings) =>
       invalidate(history, a8)

@@ -291,7 +291,7 @@ trait ErgoHistory
     * @return
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = typedModifierById[Header](headerId)
+    val hOpt = historyStorage.modifierById(headerId).collect { case h: Header if h.id == headerId => h }
       val hRes = historyStorage.remove(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
@@ -299,7 +299,7 @@ trait ErgoHistory
     log.info(s"Result of removing header $headerId: " + hRes)
 
     hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
+      h.sectionIds.foreach { case (_, mId) =>
         val mRes = historyStorage.remove(
           indicesToRemove = Array(validityKey(mId)),
           idsToRemove = Array(mId)
@@ -324,15 +324,23 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  // check if there is possible database corruption when there is header after
-  // recognized blockchain tip marked as invalid
+  // A retained alternative fork may continue above the selected full-block tip.
+  // Only an invalid or truly missing continuation is safe to remove during repair.
   protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
-      log.warn("Found suspicious continuation, clearing it...")
+    val removableContinuations = afterHeaders.nonEmpty && afterHeaders.forall { id =>
+      history.isSemanticallyValid(id) match {
+        case ModifierSemanticValidity.Invalid => true
+        case ModifierSemanticValidity.Absent => !history.historyStorage.contains(id)
+        case _ => false
+      }
+    }
+
+    if (bestHeaderHeight == bestFullBlockHeight && removableContinuations) {
+      log.warn("Found invalid or missing continuation, clearing it...")
       afterHeaders.map { hId =>
         history.forgetHeader(hId)
       }

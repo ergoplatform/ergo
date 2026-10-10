@@ -1,6 +1,6 @@
 package scorex.db
 
-import org.iq80.leveldb.DB
+import org.iq80.leveldb.{DB, WriteOptions}
 import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
@@ -48,6 +48,16 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
   def insert(id: K,  value: V): Try[Unit] = {
     try {
       db.put(id, value)
+      Success(())
+    } catch {
+      case t: Throwable => Failure(t)
+    }
+  }
+
+  /** Persist a single key before returning to the caller. */
+  def insertSync(id: K, value: V): Try[Unit] = {
+    try {
+      db.put(id, value, new WriteOptions().sync(true))
       Success(())
     } catch {
       case t: Throwable => Failure(t)

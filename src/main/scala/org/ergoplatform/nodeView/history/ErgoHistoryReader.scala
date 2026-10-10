@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.NodeViewComponent
+import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.consensus.{ContainsModifiers, Equal, Fork, ModifierSemanticValidity, Older, PeerChainStatus, Unknown, Younger}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -41,6 +42,14 @@ trait ErgoHistoryReader
   private val Valid = 1.toByte
   private val Invalid = 0.toByte
 
+  // Only the node-view holder can publish the state it has installed. A
+  // historical Valid marker cannot identify the branch applied right now.
+  @volatile private var holderAppliedStateVersion: Option[VersionTag] = None
+
+  private[nodeView] def recordHolderAppliedStateVersion(version: VersionTag): Unit = synchronized {
+    holderAppliedStateVersion = Some(version)
+  }
+
   override val historyReader = this
 
   /**
@@ -61,6 +70,146 @@ trait ErgoHistoryReader
     */
   def bestFullBlockOpt: Option[ErgoFullBlock] =
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
+
+  /**
+    * Resolve a wallet checkpoint against the selected full-block tip rather than
+    * the best-header height index or optional per-block chain-status markers.
+    * Each call reads at most `maxHeaders` ancestors under the history lock.
+    * The caller must resume a Pending cursor until it reaches a decision, and
+    * must treat Unknown as unavailable rather than as a different chain.
+    */
+  def selectedFullChainProbe(targetId: ModifierId,
+                             targetHeight: Height,
+                             previous: Option[ErgoHistoryReader.FullChainCursor] = None,
+                             maxHeaders: Int = 128): ErgoHistoryReader.FullChainProbe = synchronized {
+    import ErgoHistoryReader._
+
+    require(maxHeaders > 0 && maxHeaders <= 256, "Full-chain probe batch must contain 1 to 256 headers")
+    bestFullBlockIdOpt match {
+      case None => FullChainUnknown
+      case Some(fullTipId) =>
+        val start = previous.filter(c =>
+          c.fullTipId == fullTipId && c.targetId == targetId && c.targetHeight == targetHeight
+        ).orElse {
+          typedModifierById[Header](fullTipId).map { tip =>
+            FullChainCursor(fullTipId, tip.id, tip.height, targetId, targetHeight)
+          }
+        }
+        start match {
+          case None => FullChainUnknown
+          case Some(cursor) if targetHeight < GenesisHeight || cursor.nextHeight < targetHeight =>
+            FullChainUnknown
+          case Some(cursor) =>
+            var nextId = cursor.nextId
+            var nextHeight = cursor.nextHeight
+            var read = 0
+            while (read < maxHeaders) {
+              typedModifierById[Header](nextId) match {
+                case None => return FullChainUnknown
+                case Some(header) if header.height != nextHeight => return FullChainUnknown
+                case Some(header) if header.height == targetHeight =>
+                  return if (header.id == targetId) FullChainSelected(fullTipId)
+                  else FullChainOther(fullTipId)
+                case Some(header) =>
+                  nextId = header.parentId
+                  nextHeight -= 1
+                  read += 1
+              }
+            }
+            FullChainPending(FullChainCursor(fullTipId, nextId, nextHeight, targetId, targetHeight))
+        }
+    }
+  }
+
+  /**
+    * The best-full-block pointer can move before State accepts its block. A
+    * wallet must not durably reject a checkpoint on that provisional branch.
+    * Full-block section validity is recorded after successful State application.
+    * Keep the pointer, validity check, and ancestry probe under one history lock.
+    */
+  def appliedFullChainProbe(targetId: ModifierId,
+                            targetHeight: Height,
+                            previous: Option[ErgoHistoryReader.FullChainCursor] = None,
+                            maxHeaders: Int = 128): ErgoHistoryReader.FullChainProbe = synchronized {
+    import ErgoHistoryReader._
+    val result = selectedFullChainProbe(targetId, targetHeight, previous, maxHeaders)
+    result match {
+      case FullChainSelected(tip) =>
+        if (isAppliedFullTip(tip)) result else FullChainUnknown
+      case FullChainOther(tip) =>
+        if (isAppliedFullTip(tip)) result else FullChainUnknown
+      case _ => result
+    }
+  }
+
+  /** Check the selected applied branch's replayable body suffix in bounded ancestor batches.
+    * A missing body above the wallet checkpoint prevents catch-up, even when the
+    * persisted pruning floor has advanced past it.
+    */
+  def appliedFullChainBodyProbe(targetId: ModifierId,
+                                targetHeight: Height,
+                                previous: Option[ErgoHistoryReader.FullChainCursor] = None,
+                                maxHeaders: Int = 128): ErgoHistoryReader.FullChainProbe = synchronized {
+    import ErgoHistoryReader._
+    require(maxHeaders > 0 && maxHeaders <= 256, "Full-chain probe batch must contain 1 to 256 headers")
+    val preGenesisTarget = targetId == PreGenesisHeader.id && targetHeight == EmptyHistoryHeight
+    bestFullBlockIdOpt match {
+      case None => FullChainUnknown
+      case Some(fullTipId) =>
+        val start = previous.filter(c =>
+          c.fullTipId == fullTipId && c.targetId == targetId && c.targetHeight == targetHeight
+        ).orElse(typedModifierById[Header](fullTipId).map { tip =>
+          FullChainCursor(fullTipId, tip.id, tip.height, targetId, targetHeight)
+        })
+        start match {
+          case None => FullChainUnknown
+          case Some(cursor) if (!preGenesisTarget && targetHeight < GenesisHeight) ||
+            cursor.nextHeight < targetHeight =>
+            FullChainUnknown
+          case Some(cursor) =>
+            var nextId = cursor.nextId
+            var nextHeight = cursor.nextHeight
+            var read = 0
+            while (read < maxHeaders) {
+              typedModifierById[Header](nextId) match {
+                case None => return FullChainUnknown
+                case Some(header) if header.height != nextHeight => return FullChainUnknown
+                case Some(header) =>
+                  if (header.height > targetHeight && getFullBlock(header).isEmpty) {
+                    return if (isAppliedFullTip(fullTipId)) FullChainBodyMissing(fullTipId, header.height)
+                    else FullChainUnknown
+                  }
+                  if (preGenesisTarget && header.height == GenesisHeight) {
+                    if (header.parentId != targetId || !isAppliedFullTip(fullTipId)) return FullChainUnknown
+                    return FullChainSelected(fullTipId)
+                  }
+                  if (header.height == targetHeight) {
+                    if (!isAppliedFullTip(fullTipId)) return FullChainUnknown
+                    return if (header.id == targetId) FullChainSelected(fullTipId)
+                    else FullChainOther(fullTipId)
+                  }
+                  nextId = header.parentId
+                  nextHeight -= 1
+                  read += 1
+              }
+            }
+            FullChainPending(FullChainCursor(fullTipId, nextId, nextHeight, targetId, targetHeight))
+        }
+    }
+  }
+
+  private def isAppliedFullTip(tip: ModifierId): Boolean =
+    holderAppliedStateVersion.contains(idToVersion(tip)) &&
+      bestFullBlockIdOpt.contains(tip) && bestFullBlockOpt.exists { block =>
+      block.id == tip &&
+        isSemanticallyValid(block.blockTransactions.id) == ModifierSemanticValidity.Valid &&
+        block.blockSections.forall(s => isSemanticallyValid(s.id) == ModifierSemanticValidity.Valid)
+    }
+
+  /** Fence a durable wallet decision against a concurrent history selection. */
+  private[nodeView] def ifHolderAppliedFullTip[A](tip: ModifierId)(action: => A): Option[A] = synchronized {
+    if (isAppliedFullTip(tip)) Some(action) else None
+  }
 
   /**
     * @param id - modifier id
@@ -596,6 +745,19 @@ trait ErgoHistoryReader
 }
 
 object ErgoHistoryReader {
+  sealed trait FullChainProbe
+  final case class FullChainSelected(fullTipId: ModifierId) extends FullChainProbe
+  final case class FullChainOther(fullTipId: ModifierId) extends FullChainProbe
+  final case class FullChainBodyMissing(fullTipId: ModifierId, height: Height) extends FullChainProbe
+  final case class FullChainPending(cursor: FullChainCursor) extends FullChainProbe
+  case object FullChainUnknown extends FullChainProbe
+
+  final case class FullChainCursor(fullTipId: ModifierId,
+                                   nextId: ModifierId,
+                                   nextHeight: Height,
+                                   targetId: ModifierId,
+                                   targetHeight: Height)
+
   // When we need to help other peer to find a common block when its status is unknown,
   // we send headers with offsets (from the blockchain tip) from below
   val FullV2SyncOffsets = Array(0, 16, 128, 512)

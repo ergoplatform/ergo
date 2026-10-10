@@ -1,18 +1,53 @@
 package scorex.db
 
 import com.google.common.primitives.Longs
+import org.iq80.leveldb.{WriteBatch, WriteOptions}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
 import scorex.crypto.authds.avltree.batch.benchmark.LDBVersionedStoreBenchmark.getRandomTempDir
 
 import scala.collection.mutable
 import scala.util.Random
+import java.io.{File, IOException}
 
 //todo: rollbacks and pruning are checked in VersionedStoreSpec, merge both tests?
 class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
 
   private val dir = getRandomTempDir
   private val store = new LDBVersionedStore(dir, 100)
+
+  property("opening an existing store requires both database directories") {
+    val incompleteDir = getRandomTempDir
+    val mainDir = new File(incompleteDir, "ldb_main")
+    val undoDir = new File(incompleteDir, "ldb_undo")
+    mainDir.mkdir() shouldBe true
+
+    intercept[IllegalStateException] {
+      new LDBVersionedStore(incompleteDir, 10, createIfMissing = false)
+    }
+    mainDir.list().toSeq shouldBe empty
+    undoDir.exists() shouldBe false
+
+    val inverseDir = getRandomTempDir
+    val inverseMain = new File(inverseDir, "ldb_main")
+    val inverseUndo = new File(inverseDir, "ldb_undo")
+    inverseUndo.mkdir() shouldBe true
+    intercept[IllegalStateException] {
+      new LDBVersionedStore(inverseDir, 10, createIfMissing = false)
+    }
+    inverseMain.exists() shouldBe false
+    inverseUndo.list().toSeq shouldBe empty
+
+    val completeDir = getRandomTempDir
+    val version = Longs.toByteArray(1L)
+    val created = new LDBVersionedStore(completeDir, 10)
+    try created.update(version, Seq.empty, Seq.empty).get
+    finally created.close()
+
+    val reopened = new LDBVersionedStore(completeDir, 10, createIfMissing = false)
+    try reopened.lastVersionID.get.sameElements(version) shouldBe true
+    finally reopened.close()
+  }
 
   property("last version correct && versionIdExists && rollbackVersions") {
     val versionNum = Random.nextInt().toLong
@@ -104,4 +139,144 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.update(version3, Seq.empty, Seq(k1 -> v1)).get
     store.versionIdExists(version3) shouldBe true
    }
+
+  property("synced rollback reports a failed undo write after main was changed") {
+    val rollbackDir = getRandomTempDir
+    val first = Longs.toByteArray(101L)
+    val second = Longs.toByteArray(102L)
+    val key = Longs.toByteArray(103L)
+    val oldValue = Longs.toByteArray(104L)
+    val newValue = Longs.toByteArray(105L)
+    var failUndo = false
+    var mainSynced = false
+    var undoSynced = false
+    val faulted = new LDBVersionedStore(rollbackDir, 10) {
+      override private[db] def writeRollbackMain(batch: WriteBatch, options: WriteOptions): Unit = {
+        mainSynced = options.sync()
+        super.writeRollbackMain(batch, options)
+      }
+
+      override private[db] def writeRollbackUndo(batch: WriteBatch, options: WriteOptions): Unit = {
+        undoSynced = options.sync()
+        if (failUndo) throw new IOException("injected undo rollback write failure")
+        super.writeRollbackUndo(batch, options)
+      }
+    }
+    try {
+      faulted.update(first, Seq.empty, Seq(key -> oldValue)).get
+      faulted.update(second, Seq.empty, Seq(key -> newValue)).get
+      failUndo = true
+      faulted.rollbackToSync(first).isFailure shouldBe true
+      mainSynced shouldBe true
+      undoSynced shouldBe true
+      faulted.get(key).get.sameElements(oldValue) shouldBe true
+      faulted.lastVersionID.get.sameElements(second) shouldBe true
+    } finally faulted.close()
+
+    val reopened = new LDBVersionedStore(rollbackDir, 10)
+    try {
+      reopened.get(key).get.sameElements(oldValue) shouldBe true
+      reopened.lastVersionID.get.sameElements(second) shouldBe true
+      reopened.versionIdExists(second) shouldBe true
+    } finally reopened.close()
+  }
+
+  property("synced update reports isolated undo and main write failures") {
+    val updateDir = getRandomTempDir
+    val first = Longs.toByteArray(201L)
+    val second = Longs.toByteArray(202L)
+    val third = Longs.toByteArray(203L)
+    val key = Longs.toByteArray(204L)
+    val firstValue = Longs.toByteArray(205L)
+    val secondValue = Longs.toByteArray(206L)
+    var writes = Vector.empty[(String, Boolean)]
+    var failMain = false
+    val faulted = new LDBVersionedStore(updateDir, 10) {
+      override private[db] def writeUpdateUndo(batch: WriteBatch, options: WriteOptions): Unit = {
+        writes :+= ("undo" -> options.sync())
+        super.writeUpdateUndo(batch, options)
+      }
+
+      override private[db] def writeUpdateMain(batch: WriteBatch, options: WriteOptions): Unit = {
+        writes :+= ("main" -> options.sync())
+        if (failMain) throw new IOException("injected main update write failure")
+        super.writeUpdateMain(batch, options)
+      }
+    }
+    try {
+      faulted.update(first, Seq.empty, Seq(key -> firstValue)).get
+      writes shouldBe Vector("undo" -> false, "main" -> false)
+      writes = Vector.empty
+
+      faulted.updateSync(second, Seq.empty, Seq(key -> secondValue)).get
+      writes shouldBe Vector("undo" -> true, "main" -> true)
+      faulted.get(key).get.sameElements(secondValue) shouldBe true
+      writes = Vector.empty
+      failMain = true
+
+      val failed = faulted.updateSync(third, Seq.empty, Seq(key -> firstValue))
+      failed.isFailure shouldBe true
+      failed.failed.get.getMessage should include("injected main update write failure")
+      writes shouldBe Vector("undo" -> true, "main" -> true)
+      faulted.get(key).get.sameElements(secondValue) shouldBe true
+      faulted.lastVersionID.get.sameElements(second) shouldBe true
+    } finally faulted.close()
+
+    val reopened = new LDBVersionedStore(updateDir, 10)
+    try reopened.get(key).get.sameElements(secondValue) shouldBe true
+    finally reopened.close()
+
+    val undoDir = getRandomTempDir
+    var undoWrites = Vector.empty[(String, Boolean)]
+    var failUndo = false
+    val undoFaulted = new LDBVersionedStore(undoDir, 10) {
+      override private[db] def writeUpdateUndo(batch: WriteBatch, options: WriteOptions): Unit = {
+        undoWrites :+= ("undo" -> options.sync())
+        if (failUndo) throw new IOException("injected undo update write failure")
+        super.writeUpdateUndo(batch, options)
+      }
+
+      override private[db] def writeUpdateMain(batch: WriteBatch, options: WriteOptions): Unit = {
+        undoWrites :+= ("main" -> options.sync())
+        super.writeUpdateMain(batch, options)
+      }
+    }
+    try {
+      undoFaulted.update(first, Seq.empty, Seq(key -> firstValue)).get
+      undoWrites = Vector.empty
+      failUndo = true
+
+      val undoFailed = undoFaulted.updateSync(second, Seq.empty, Seq(key -> secondValue))
+      undoFailed.isFailure shouldBe true
+      undoFailed.failed.get.getMessage should include("injected undo update write failure")
+      undoWrites shouldBe Vector("undo" -> true)
+      undoFaulted.get(key).get.sameElements(firstValue) shouldBe true
+      undoFaulted.lastVersionID.get.sameElements(first) shouldBe true
+    } finally undoFaulted.close()
+
+    val undoReopened = new LDBVersionedStore(undoDir, 10)
+    try undoReopened.get(key).get.sameElements(firstValue) shouldBe true
+    finally undoReopened.close()
+  }
+
+  property("synced update also syncs its undo pruning write") {
+    val updateDir = getRandomTempDir
+    val key = Longs.toByteArray(301L)
+    var pruneSync = Vector.empty[Boolean]
+    val store = new LDBVersionedStore(updateDir, 1) {
+      override private[db] def writeUpdatePruneUndo(batch: WriteBatch, options: WriteOptions): Unit = {
+        pruneSync :+= options.sync()
+        super.writeUpdatePruneUndo(batch, options)
+      }
+    }
+    try {
+      store.update(Longs.toByteArray(302L), Seq.empty, Seq(key -> Longs.toByteArray(1L))).get
+      store.update(Longs.toByteArray(303L), Seq.empty, Seq(key -> Longs.toByteArray(2L))).get
+      pruneSync = Vector.empty
+
+      store.updateSync(Longs.toByteArray(304L), Seq.empty, Seq(key -> Longs.toByteArray(3L))).get
+      pruneSync shouldBe Vector(true)
+      store.get(key).get.sameElements(Longs.toByteArray(3L)) shouldBe true
+    } finally store.close()
+  }
 }

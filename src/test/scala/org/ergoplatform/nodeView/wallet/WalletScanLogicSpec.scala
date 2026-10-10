@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
-import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
+import WalletScanLogic.{ScanResults, SpentInputData, extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
@@ -9,11 +9,17 @@ import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanR
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.core.VersionTag
 import org.scalacheck.Gen
+import scorex.util.idToBytes
+import scorex.util.encode.Base16
 import sigma.ast.{ByteArrayConstant, ErgoTree}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
+import scorex.db.LDBVersionedStore
+import scorex.util.ModifierId
 
 import scala.util.Random
+import scala.util.Failure
 
 class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTestOps {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
@@ -237,6 +243,138 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
         off = o4
       }
     }
+  }
+
+  property("maturity failure before the block batch retains the old Mining box and checkpoint after reopen") {
+    val dir = createTempDir
+    val shortSettings = s.copy(chainSettings = s.chainSettings.copy(
+      monetary = s.chainSettings.monetary.copy(minerRewardDelay = 1)))
+    val walletVars = WalletVars(Some(prover), Seq.empty, None)(shortSettings)
+    val rewardScript = WalletCache.miningScripts(pubkeys, shortSettings).head
+    val creatingTx = new ErgoTransaction(fakeInputs, IndexedSeq.empty,
+      IndexedSeq(new ErgoBoxCandidate(1000, rewardScript, creationHeight = 1)))
+    val miningBox = extractWalletOutputs(creatingTx, Some(1), walletVars, None).head
+    miningBox.scans shouldBe Set(Constants.MiningScanId)
+    val checkpointId = modIdGen.sample.get
+    val maturityId = modIdGen.sample.get
+    val store = new LDBVersionedStore(dir, 10)
+    var failMaturity = false
+    val registry = new WalletRegistry(store)(shortSettings.walletSettings) {
+      override def updateOnBlock(results: ScanResults, blockId: ModifierId, height: Int): scala.util.Try[Unit] =
+        if (failMaturity) Failure(new IllegalStateException("injected failure before the block batch"))
+        else super.updateOnBlock(results, blockId, height)
+    }
+    try {
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 1, checkpointId,
+        Seq(creatingTx), None, None, WalletProfile.User).get
+      registry.unspentBoxes(Constants.MiningScanId).map(_.boxId) should contain (miningBox.boxId)
+      failMaturity = true
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 2,
+        maturityId, Seq.empty, None, None, WalletProfile.User).isFailure shouldBe true
+    } finally registry.close()
+
+    val reopened = new WalletRegistry(new LDBVersionedStore(dir, 10))(shortSettings.walletSettings)
+    try {
+      reopened.fetchDigest().height shouldBe 1
+      reopened.unspentBoxes(Constants.MiningScanId).map(_.boxId) should contain (miningBox.boxId)
+      reopened.getBox(miningBox.box.id).map(_.scans) shouldBe Some(Set(Constants.MiningScanId))
+    } finally reopened.close()
+  }
+
+  property("maturity atomically preserves external scans, same-height spend, and rollback") {
+    val shortSettings = s.copy(chainSettings = s.chainSettings.copy(
+      monetary = s.chainSettings.monetary.copy(minerRewardDelay = 1)))
+    val rewardScript = WalletCache.miningScripts(pubkeys, shortSettings).head
+    val miningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(rewardScript.bytes))
+    val external = ScanRequest("Mining detector", miningPredicate,
+      Some(ScanWalletInteraction.Shared), None).toScan(scanId).get
+    val walletVars = WalletVars(Some(prover), Seq(external), None)(shortSettings)
+    val creatingTx = new ErgoTransaction(fakeInputs, IndexedSeq.empty,
+      IndexedSeq(new ErgoBoxCandidate(1000, rewardScript, creationHeight = 1)))
+    val miningBox = extractWalletOutputs(creatingTx, Some(1), walletVars, None).head
+    miningBox.scans shouldBe Set(Constants.MiningScanId, scanId)
+    val checkpointId = modIdGen.sample.get
+    val maturityId = modIdGen.sample.get
+    val spentId = modIdGen.sample.get
+    val height = 2
+    val registry = new WalletRegistry(new LDBVersionedStore(createTempDir, 10))(
+      shortSettings.walletSettings.copy(keepSpentBoxes = true))
+    try {
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 1, checkpointId,
+        Seq(creatingTx), None, None, WalletProfile.User).get
+      registry.fetchDigest().walletBalance shouldBe 0
+
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, height, maturityId,
+        Seq.empty, None, None, WalletProfile.User).get
+      registry.fetchDigest().walletBalance shouldBe 1000
+      registry.unspentBoxes(Constants.MiningScanId) shouldBe empty
+      registry.walletUnspentBoxes().map(_.boxId) should contain (miningBox.boxId)
+      registry.unspentBoxes(scanId).map(_.boxId) should contain (miningBox.boxId)
+      registry.getBox(miningBox.box.id).map(_.scans) shouldBe
+        Some(Set(Constants.PaymentsScanId, scanId))
+
+      registry.rollback(VersionTag @@ Base16.encode(idToBytes(checkpointId))).get
+      registry.fetchDigest().walletBalance shouldBe 0
+      registry.unspentBoxes(Constants.MiningScanId).map(_.boxId) should contain (miningBox.boxId)
+      registry.walletUnspentBoxes() shouldBe empty
+      registry.unspentBoxes(scanId).map(_.boxId) should contain (miningBox.boxId)
+
+      val spendingTx = ErgoTransaction(IndexedSeq(Input(miningBox.box.id, emptyProverResult)),
+        IndexedSeq.empty, IndexedSeq(new ErgoBoxCandidate(1000, FalseTree, creationHeight = height)))
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, height, spentId,
+        Seq(spendingTx), None, None, WalletProfile.User).get
+      registry.fetchDigest().walletBalance shouldBe 0
+      registry.unspentBoxes(Constants.MiningScanId) shouldBe empty
+      registry.walletUnspentBoxes() shouldBe empty
+      registry.getBox(miningBox.box.id).map(_.scans) shouldBe
+        Some(Set(Constants.PaymentsScanId, scanId))
+      registry.walletSpentBoxes().map(_.boxId) should contain (miningBox.boxId)
+      registry.getBox(miningBox.box.id).flatMap(_.spendingHeightOpt) shouldBe Some(height)
+    } finally registry.close()
+  }
+
+  property("maturity does not credit a reward already associated with Payments") {
+    val shortSettings = s.copy(chainSettings = s.chainSettings.copy(
+      monetary = s.chainSettings.monetary.copy(minerRewardDelay = 1)))
+    val walletVars = WalletVars(Some(prover), Seq.empty, None)(shortSettings)
+    val rewardScript = WalletCache.miningScripts(pubkeys, shortSettings).head
+    val creatingTx = new ErgoTransaction(fakeInputs, IndexedSeq.empty,
+      IndexedSeq(new ErgoBoxCandidate(1000, rewardScript, creationHeight = 1)))
+    val miningBox = extractWalletOutputs(creatingTx, Some(1), walletVars, None).head
+    val dualBox = miningBox.copy(scans = Set(Constants.MiningScanId, Constants.PaymentsScanId))
+    val registry = new WalletRegistry(new LDBVersionedStore(createTempDir, 10))(shortSettings.walletSettings)
+    try {
+      registry.updateOnBlock(ScanResults(Seq(dualBox), Seq.empty, Seq.empty), modIdGen.sample.get, 1).get
+      registry.fetchDigest().walletBalance shouldBe 1000
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 2, modIdGen.sample.get,
+        Seq.empty, None, None, WalletProfile.User).get
+      registry.fetchDigest().walletBalance shouldBe 1000
+      registry.unspentBoxes(Constants.MiningScanId) shouldBe empty
+      registry.walletUnspentBoxes().map(_.boxId) should contain (dualBox.boxId)
+    } finally registry.close()
+  }
+
+  property("maturity update failure does not leave a staged box in registry cache") {
+    val walletVars = WalletVars(Some(prover), Seq.empty, None)(s)
+    val paymentScript = ErgoTree.fromSigmaBoolean(pubkeys.head.key)
+    def paymentBox(value: Long) = {
+      val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(value, paymentScript, creationHeight = 2)))
+      extractWalletOutputs(tx, Some(2), walletVars, None).head
+    }
+    val staged = paymentBox(1000)
+    val overspent = paymentBox(2000)
+    val registry = new WalletRegistry(new LDBVersionedStore(createTempDir, 10))(
+      s.walletSettings.copy(testMnemonic = None))
+    try {
+      registry.updateOnBlock(ScanResults(Seq.empty, Seq.empty, Seq.empty), modIdGen.sample.get, 1).get
+      val blockId = modIdGen.sample.get
+      registry.updateOnBlock(ScanResults(Seq(staged), Seq(SpentInputData(blockId, overspent)), Seq.empty),
+        blockId, 2).isFailure shouldBe true
+      registry.fetchDigest().height shouldBe 1
+      registry.getBox(staged.box.id) shouldBe None
+      registry.walletUnspentBoxes() shouldBe empty
+    } finally registry.close()
   }
 
   property("external scan prioritized over payments one if walletInteraction = off, otherwise shared") {

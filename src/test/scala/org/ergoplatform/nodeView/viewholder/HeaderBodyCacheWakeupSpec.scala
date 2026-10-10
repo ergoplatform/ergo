@@ -5,6 +5,7 @@ import org.ergoplatform.core.idToVersion
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.BlockSectionsProcessingCacheUpdate
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote
+import org.ergoplatform.nodeView.history.ErgoHistoryReader.FullChainSelected
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps}
@@ -16,6 +17,39 @@ import scala.concurrent.duration._
 
 class HeaderBodyCacheWakeupSpec extends ErgoCorePropertyTest with NodeViewTestOps {
   import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
+
+  property("Digest holder keeps the applied full tip while only the best header advances") {
+    val fixture = new NodeViewFixture(
+      NodeViewTestConfig(StateType.Digest, verifyTransactions = true,
+        popowBootstrap = false).toSettings, parameters)
+    import fixture._
+    val (generationState, boxes) = createUtxoState(fixture.settings)
+    try {
+      val prefix = validFullBlock(None, generationState, boxes)
+      val afterPrefix = WrappedUtxoState(generationState, boxes, fixture.settings)
+        .applyModifier(prefix)(_ => ()).get
+      val next = validFullBlock(Some(prefix), afterPrefix)
+      applyBlock(prefix).isSuccess shouldBe true
+      applyHeader(next.header).isSuccess shouldBe true
+
+      val headerOnly = getCurrentView
+      headerOnly.history.bestHeaderIdOpt shouldBe Some(next.id)
+      headerOnly.history.bestFullBlockIdOpt shouldBe Some(prefix.id)
+      headerOnly.state.version shouldBe idToVersion(prefix.id)
+      headerOnly.history.appliedFullChainProbe(prefix.id, prefix.height) shouldBe
+        FullChainSelected(prefix.id)
+
+      applyPayload(next).isSuccess shouldBe true
+      val full = getCurrentView
+      full.history.bestFullBlockIdOpt shouldBe Some(next.id)
+      full.state.version shouldBe idToVersion(next.id)
+      full.history.appliedFullChainProbe(prefix.id, prefix.height) shouldBe
+        FullChainSelected(next.id)
+    } finally {
+      generationState.closeStorage()
+      Await.result(actorSystem.terminate(), 15.seconds)
+    }
+  }
 
   Seq(StateType.Utxo, StateType.Digest).foreach { stateType =>
     property(s"remote header wakes already cached block sections in $stateType state") {

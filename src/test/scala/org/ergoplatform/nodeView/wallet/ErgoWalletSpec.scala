@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.wallet
 
 import org.ergoplatform._
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
@@ -38,6 +39,17 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
   private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
+
+  private def signOnChainTx(tx: ErgoTransaction, boxesToSpend: Seq[ErgoBox])
+                           (implicit w: WalletFixture): ErgoTransaction = {
+    val unsignedTx = UnsignedErgoTransaction(tx.inputs, tx.dataInputs, tx.outputCandidates)
+    val signedTx = await(wallet.signTransaction(
+      unsignedTx, Seq.empty, TransactionHintsBag.empty, Some(boxesToSpend), None
+    )).get
+    signedTx.outputCandidates shouldBe tx.outputCandidates
+    signedTx.id shouldBe tx.id
+    signedTx
+  }
 
   property("assets in WalletDigest are deterministic against serialization") {
     forAll(Gen.listOfN(5, assetGen)) { preAssets =>
@@ -599,7 +611,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           val asset1ToReturn = randomLong(asset1Sum)
           val assets2Seq = Seq(decodedTokenId(asset1Token) -> asset1ToReturn, newAssetIdStub -> asset2Sum)
           val balanceToReturn = 1000 * parameters.minValuePerByte
-          val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq)
+          val spendingTx = signOnChainTx(
+            makeSpendingTx(boxesToSpend, address, balanceToReturn, assets2Seq), boxesToSpend
+          )
           val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
           applyBlock(spendingBlock) shouldBe 'success
           (asset1Token, asset1ToReturn, asset2Sum, spendingBlock)
@@ -636,7 +650,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           confirmedBalance should be > 0L
           confirmedBalance shouldBe balanceToSpend
 
-          val spendingTx = makeSpendingTx(boxesToSpend, address, 0, assetsWithRandom(boxesToSpend))
+          val spendingTx = signOnChainTx(
+            makeSpendingTx(boxesToSpend, address, 0, assetsWithRandom(boxesToSpend)), boxesToSpend
+          )
 
           val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
           applyBlock(spendingBlock) shouldBe 'success
@@ -673,7 +689,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           confirmedBalance shouldBe balanceToSpend
 
           val balanceToReturn = randomLong(balanceToSpend)
-          val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend))
+          val spendingTx = signOnChainTx(
+            makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsWithRandom(boxesToSpend)), boxesToSpend
+          )
           val assets = assetAmount(boxesAvailable(spendingTx, address.pubkey))
           assets should not be empty
           val spendingBlock = makeNextBlock(getUtxoState, Seq(spendingTx))
@@ -742,7 +760,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       // We need this second block to have something to rollback. Just spent some balance to anyone
       val balanceToSpend = randomLong(initialBalance)
-      val onchainSpendingTx = makeTx(initialBoxes, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(address.pubkey))
+      val onchainSpendingTx = signOnChainTx(
+        makeTx(initialBoxes, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(address.pubkey)),
+        initialBoxes
+      )
       val boxesToSpend = boxesAvailable(onchainSpendingTx, address.pubkey)
       val block = makeNextBlock(getUtxoState, Seq(onchainSpendingTx))
       applyBlock(block) shouldBe 'success
@@ -802,7 +823,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         eventually {
           val initialBalance = getConfirmedBalances.walletBalance
           val balanceToSpend = randomLong(balanceAmount(boxesToSpend))
-          val creationTx = makeTx(boxesToSpend, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(pubKey), randomNewAsset)
+          val creationTx = signOnChainTx(
+            makeTx(boxesToSpend, emptyProverResult, balanceToSpend, ErgoTree.fromSigmaBoolean(pubKey), randomNewAsset),
+            boxesToSpend
+          )
           val initialAssets = assetAmount(boxesAvailable(creationTx, pubKey))
           initialAssets should not be empty
           log.info(s"Initial balance: $initialBalance")
@@ -811,6 +835,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         }
 
       val block = makeNextBlock(getUtxoState, Seq(creationTx))
+      applyBlock(block) shouldBe 'success
+      eventually {
+        getCurrentState.version shouldBe idToVersion(block.id)
+      }
       wallet.scanPersistent(block)
       eventually {
         val historyHeight = getHistory.headersHeight
@@ -857,12 +885,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         eventually {
           val initialSnapshot = getConfirmedBalances
           log.info(s"Initial balance: $initialSnapshot")
-          val spendingTx = makeSpendingTx(boxesToSpend, address)
+          val spendingTx = signOnChainTx(makeSpendingTx(boxesToSpend, address), boxesToSpend)
           val block = makeNextBlock(getUtxoState, Seq(spendingTx))
           initialSnapshot.walletBalance shouldBe sumBalance
           initialSnapshot.walletAssetBalances shouldBe sumAssets
           (block, initialSnapshot)
         }
+      applyBlock(block) shouldBe 'success
+      eventually {
+        getCurrentState.version shouldBe idToVersion(block.id)
+      }
       wallet.scanPersistent(block)
 
       val confirmedBeforeRollback =
@@ -918,7 +950,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           val asset1Map = toAssetMap(sumAsset1)
           val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
           val assetsForSpending = randomNewAsset ++ assetToReturn
-          val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending)
+          val spendingTx = signOnChainTx(
+            makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending), boxesToSpend
+          )
           val block = makeNextBlock(getUtxoState, Seq(spendingTx))
           log.info(s"Initial balance: $initialSnapshot")
           log.info(s"Balance to spend: $sumBalance")
@@ -927,6 +961,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           initialSnapshot.walletAssetBalances.toMap shouldBe asset1Map
           (block, initialSnapshot, asset1Map, balanceToReturn)
         }
+      applyBlock(block) shouldBe 'success
+      eventually {
+        getCurrentState.version shouldBe idToVersion(block.id)
+      }
       wallet.scanPersistent(block)
 
       val totalBeforeRollback =
@@ -966,10 +1004,14 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val initialBoxes = boxesAvailable(genesisBlock, address.pubkey)
       applyBlock(genesisBlock) shouldBe 'success
       val initialState = getCurrentState
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
       val initialBalance = balanceAmount(initialBoxes)
 
       val balancePicked = randomLong(initialBalance)
-      val creationTx = makeTx(initialBoxes, emptyProverResult, balancePicked, ErgoTree.fromSigmaBoolean(address.pubkey), randomNewAsset)
+      val creationTx = signOnChainTx(
+        makeTx(initialBoxes, emptyProverResult, balancePicked, ErgoTree.fromSigmaBoolean(address.pubkey), randomNewAsset),
+        initialBoxes
+      )
       val boxesToSpend = boxesAvailable(creationTx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
 
@@ -983,11 +1025,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       val assetToReturn = sumAsset1.map { case (tokenId, tokenValue) => (tokenId, randomLong(tokenValue)) }
       val assetsForSpending = randomNewAsset ++ assetToReturn
-      val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending)
+      val spendingTx = signOnChainTx(
+        makeSpendingTx(boxesToSpend, address, balanceToReturn, assetsForSpending), boxesToSpend
+      )
       val block = makeNextBlock(getUtxoState, Seq(creationTx, spendingTx))
+      applyBlock(block) shouldBe 'success
+      eventually {
+        getCurrentState.version shouldBe idToVersion(block.id)
+      }
       wallet.scanPersistent(block)
 
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
       val totalBeforeRollback =
         eventually {
           val historyHeight = getHistory.headersHeight

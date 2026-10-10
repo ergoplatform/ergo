@@ -52,7 +52,20 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       .maximumSize(config.history.indexesCacheSize)
       .build[ByteArrayWrapper, Array[Byte]]
 
+  private val indexCacheLock = new ReentrantReadWriteLock()
   private val extraCacheLock = new ReentrantReadWriteLock()
+
+  private def withIndexCacheReadLock[A](body: => A): A = {
+    indexCacheLock.readLock().lock()
+    try body
+    finally indexCacheLock.readLock().unlock()
+  }
+
+  private def withIndexCacheWriteLock[A](body: => A): A = {
+    indexCacheLock.writeLock().lock()
+    try body
+    finally indexCacheLock.writeLock().unlock()
+  }
 
   private def withExtraCacheReadLock[A](body: => A): A = {
     extraCacheLock.readLock().lock()
@@ -122,9 +135,13 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
 
   def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] =
     Option(indexCache.getIfPresent(id)).orElse {
-      indexStore.get(id.data).map { value =>
-        indexCache.put(id, value)
-        value
+      withIndexCacheReadLock {
+        Option(indexCache.getIfPresent(id)).orElse {
+          indexStore.get(id.data).map { value =>
+            indexCache.put(id, value)
+            value
+          }
+        }
       }
     }
 
@@ -151,12 +168,14 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     ).flatMap { _ =>
       cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
       if (indexesToInsert.nonEmpty) {
-        indexStore.insert(
-          indexesToInsert.map(_._1.data),
-          indexesToInsert.map(_._2)
-        ).map { _ =>
-          cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
-            indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
+        withIndexCacheWriteLock {
+          indexStore.insert(
+            indexesToInsert.map(_._1.data),
+            indexesToInsert.map(_._2)
+          ).map { _ =>
+            cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
+              indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
+            }
           }
         }
       } else Success(())
@@ -232,10 +251,14 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
 
       objectsStore.remove(idsToRemove.map(idToBytes)).map { _ =>
         cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i))}
-        indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
-          cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i))}
-          ()
-        }
+        if (indicesToRemove.nonEmpty) {
+          withIndexCacheWriteLock {
+            indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
+              cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i))}
+              ()
+            }
+          }
+        } else Success(())
       }
   }
 

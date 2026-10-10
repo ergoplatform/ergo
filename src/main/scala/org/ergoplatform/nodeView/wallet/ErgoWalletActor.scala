@@ -232,6 +232,11 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       context.become(loadedWallet(newState))
 
+    // While a rescan runs it is the only historical scanner through fullHeight,
+    // so an ordinary catch-up is redundant whenever it was queued.
+    case ScanInThePast(_, false) if state.rescanInProgress =>
+      log.debug("Ignoring an ordinary catch-up scan while a wallet rescan is in progress")
+
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)

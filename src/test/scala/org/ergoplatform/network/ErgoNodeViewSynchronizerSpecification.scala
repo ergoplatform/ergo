@@ -1,18 +1,23 @@
 package org.ergoplatform.network
 
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
-import akka.testkit.TestProbe
+import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.Input
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
@@ -23,11 +28,15 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.crypto.authds.ADKey
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.testkit.utils.AkkaFixture
+import sigma.Colls
+import sigma.interpreter.{ContextExtension, ProverResult}
+import sigmastate.helpers.TestingHelpers._
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
@@ -1315,6 +1324,410 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         Some(peer))
 
       requestForModifierSent(ncProbe, Extension.modifierTypeId, unknownSectionId)
+    }
+  }
+
+  /*
+   * Anti-spam handling of transactions declined by the mempool.
+   *
+   * A single peer sending plenty of declined (and thus cheap to produce and to check) transactions must not be able to
+   * shut down transaction intake of the whole node. See `MaxDeclined`, `MinDeclinedTxCost`, `addDeclined` and
+   * `txAcceptanceFilter` in `ErgoNodeViewSynchronizer`.
+   */
+
+  private val BlocksInDeclinedChain = 10
+
+  /**
+    * Per-peer mempool processing budget between two applied blocks, `MempoolPeerCostPerBlock` in the synchronizer.
+    * A peer's transaction intake is stopped when the budget is reached, see `txAcceptanceFilter`.
+    */
+  private val PeerBudgetBetweenBlocks = 10000000
+
+  /**
+    * Number of the cheapest declines a peer has to send to exhaust its budget. Since every decline is
+    * charged with at least `MinDeclinedTxCost`, the real validation cost of such transactions (as low as
+    * 1,000 units, e.g. a min fee check) does not matter here.
+    */
+  private val DeclinesToThrottlePeer = PeerBudgetBetweenBlocks * 3 / 2 / MinDeclinedTxCost + 2
+
+  /**
+    * A transaction with a random id, no signing involved. The synchronizer reads only the id and the source of a
+    * transaction when it processes the corresponding `DeclinedTransaction` event, so the transaction may be dummy.
+    */
+  private def dummyDeclinedTx(): ErgoTransaction = {
+    val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
+    val inputs = IndexedSeq(Input(ADKey @@ scorex.utils.Random.randomBytes(32), proof))
+    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(TrueTree, Colls.emptyColl, Map(), parameters)
+    val outputs = IndexedSeq(testBox(minimalAmount, TrueTree, creationHeight = startHeight))
+    ErgoTransaction(inputs, outputs)
+  }
+
+  /**
+    * Fixture for the declined transactions properties. Unlike `SynchronizerFixture`, the history here has all the
+    * blocks applied, so that `hr.fullBlockHeight == hr.headersHeight` and `txAcceptanceFilter` may pass.
+    */
+  private class DeclinedTransactionsFixture extends AkkaFixture {
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    val ncProbe = TestProbe("NetworkControllerProbe")
+    val vhProbe = TestProbe("ViewHolderProbe")
+    val pchProbe = TestProbe("PeerHandlerProbe")
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+
+    private val emptyHistory = generateHistory(verifyTransactions = true, StateType.Utxo,
+      PoPoWBootstrap = false, blocksToKeep = -1)
+    // named `declinedHistory` and not `history` to avoid a clash with the class level `history` of this spec
+    val declinedHistory: ErgoHistory = applyChain(emptyHistory, genChain(BlocksInDeclinedChain, emptyHistory))
+    declinedHistory.fullBlockHeight shouldBe declinedHistory.headersHeight
+
+    // `TestActorRef` gives access to the underlying actor, needed to check the size of the declined transactions
+    // table, which is not observable from the outside otherwise
+    val synchronizerTestRef: TestActorRef[ErgoNodeViewSynchronizer] = TestActorRef(Props(
+      new SynchronizerMock(
+        ncProbe.ref,
+        vhProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker
+      )(ec)
+    ))
+
+    val synchronizerRef: ActorRef = synchronizerTestRef
+
+    synchronizerRef ! ChangedHistory(declinedHistory)
+    synchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+    def newPeer: ConnectedPeer = ConnectedPeer(
+      connectionIdGen.sample.get,
+      pchProbe.ref,
+      Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+    )
+
+    /**
+      * Simulate `txs` declined by the mempool after they were received from `peer`, each of them being checked with
+      * `cost` cost units (1000 is the cheapest possible check, e.g. a min fee check)
+      */
+    def declineTxs(peer: ConnectedPeer, txs: Seq[ErgoTransaction], cost: Int): Unit = {
+      txs.foreach { tx =>
+        synchronizerRef ! DeclinedTransaction(UnconfirmedTransaction(tx, Some(peer)).withCost(cost))
+      }
+    }
+
+    /** Simulate `count` distinct transactions declined by the mempool after they were received from `peer` */
+    def declineTxs(peer: ConnectedPeer, count: Int, cost: Int): Unit =
+      declineTxs(peer, Seq.fill(count)(dummyDeclinedTx()), cost)
+
+    /** `peer` announces `tx` via `Inv`, the node is expected to answer with `RequestModifier` */
+    def invTxAndExpectRequest(peer: ConnectedPeer, tx: ErgoTransaction): Unit = {
+      val invData = InvData(ErgoTransaction.modifierTypeId, Seq(tx.id))
+      synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+      ncProbe.fishForMessage(5.seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val requested = stn.message.data.get.asInstanceOf[InvData]
+            requested.typeId == ErgoTransaction.modifierTypeId && requested.ids.contains(tx.id)
+          case _ => false
+        }
+      }
+    }
+
+    /** `peer` announces `tx` via `Inv`, no `RequestModifier` for it is expected to be sent */
+    def invTxAndExpectNoRequest(peer: ConnectedPeer, tx: ErgoTransaction): Unit = {
+      val invData = InvData(ErgoTransaction.modifierTypeId, Seq(tx.id))
+      synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+      // any other message (sync, inv broadcast, etc.) may be sent to the network controller, so only
+      // `RequestModifier` messages are collected here
+      val deadline = System.currentTimeMillis() + 2.seconds.toMillis
+      while (System.currentTimeMillis() < deadline) {
+        ncProbe.receiveOne(100.millis) match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val requested = stn.message.data.get.asInstanceOf[InvData]
+            requested.ids should not contain tx.id
+          case _ => // not a request, ignore
+        }
+      }
+    }
+  }
+
+  private def withDeclinedTransactionsFixture(testCode: DeclinedTransactionsFixture => Any): Unit = {
+    val fixture = new DeclinedTransactionsFixture
+    try {
+      testCode(fixture)
+    }
+    finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  /**
+    * Regression test for the transaction intake denial of service: before the fix, the node stopped asking peers for
+    * transactions as soon as the table of declined transaction ids reached its max size, which any single peer was
+    * able to do with cheap (declinable) transactions. Now the table is only a bounded de-duplication cache.
+    */
+  property("NodeViewSynchronizer: declined transactions table at max size does not stop intake") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      // the cheapest declines, as the mempool rejects them before executing any script
+      declineTxs(attacker, count = MaxDeclined, cost = 1000)
+
+      // the node must still ask the other peers for transactions
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * The table of declined transactions is bounded, so that a peer sending plenty of declined transactions can not
+    * bloat node's memory. Entries are dropped one by one, so that the de-duplication is not lost entirely when
+    * the table overflows (as opposed to dropping the whole table at once).
+    */
+  property("NodeViewSynchronizer: declined transactions table is bounded") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      // twice as much as the table may hold, so that eviction definitely happens
+      declineTxs(attacker, count = 2 * MaxDeclined, cost = 1000)
+
+      // barrier: the response to this inv proves that all the declines above are already processed
+      // (messages from a single sender are processed in order)
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+
+      // the table is pinned at the limit rather than being emptied
+      synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe MaxDeclined
+    }
+  }
+
+  /**
+    * Cheapest declines are charged to the peer which sent them (with `MinDeclinedTxCost` floor), so a peer sending
+    * them in bulk stops being served, while other peers are not affected at all.
+    */
+  property("NodeViewSynchronizer: cheap declines throttle the sending peer only") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      declineTxs(attacker, count = DeclinesToThrottlePeer, cost = 1000)
+
+      // the attacker exhausted its own budget, its transaction invs are not served anymore
+      invTxAndExpectNoRequest(attacker, dummyDeclinedTx())
+
+      // other peers are not affected, and the global budget is not inflated with the floor price,
+      // as the real cost of the declines above is `DeclinesToThrottlePeer` cost units only
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * The per-peer cost is accumulated, so it must not overflow: an overflowed cost turns negative, and a negative
+    * cost passes every limit check, which silently disables the throttling of the peer.
+    *
+    * Note the declines below are counted in the global counter with their measured cost (1000 each), so the global
+    * budget is not exhausted here - this property is about the per-peer counter only.
+    */
+  property("NodeViewSynchronizer: per-peer cost does not overflow when a peer sends many declines") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+
+      // enough declines to overflow an `Int` accumulator, were the cost fields `Int` rather than `Long`
+      val declinesToOverflowInt = Int.MaxValue / MinDeclinedTxCost + 2
+      declineTxs(attacker, count = declinesToOverflowInt, cost = 1000)
+
+      // the peer is throttled, so the accumulated cost did not wrap around to a negative value
+      invTxAndExpectNoRequest(attacker, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * The peer budget, as well as the table of declined transactions, is reset when a new block is applied, so the
+    * throttling of a peer lasts no longer than one block.
+    */
+  property("NodeViewSynchronizer: throttled peer is served again when new block is applied") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+
+      declineTxs(peer, count = DeclinesToThrottlePeer, cost = 1000)
+      invTxAndExpectNoRequest(peer, dummyDeclinedTx())
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+
+      // the peer budget is reset on block application, so the peer is served again
+      invTxAndExpectRequest(peer, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * A declined transaction is worth re-evaluating once a new block is applied, as the reason of the decline may be
+    * gone by now (e.g. the transaction double-spending it lost to is mined, or mempool capacity is freed).
+    */
+  property("NodeViewSynchronizer: declined transactions table is reset when new block is applied") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+      val tx = dummyDeclinedTx()
+
+      declineTxs(peer, tx +: Seq.fill(9)(dummyDeclinedTx()), cost = 1000)
+      // the transaction is declined, so it is not asked for
+      invTxAndExpectNoRequest(peer, tx)
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+
+      // after a block is applied the transaction is asked for again
+      invTxAndExpectRequest(peer, tx)
+    }
+  }
+
+  /**
+    * Regression test for the shared processing cache stall: a peer which exhausted its per-block budget
+    * (via cheap declines charged with `MinDeclinedTxCost`) has its deliveries put into the shared
+    * `txProcessingCache`, which must neither grow unbounded nor stall transaction intake of other peers -
+    * over-budget peers' records are dropped from the cache when it is drained.
+    */
+  property("NodeViewSynchronizer: over-budget peer's cached transactions do not stall intake of other peers") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      // one decline short of the per-block budget (49 * MinDeclinedTxCost = 9.8M < 10M),
+      // so the attacker's invs are still served
+      declineTxs(attacker, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost - 1, cost = 1000)
+
+      // the attacker announces many transactions before delivering any; each inv is served
+      val txs = Seq.fill(60)(dummyDeclinedTx())
+      txs.foreach(tx => invTxAndExpectRequest(attacker, tx))
+
+      // the attacker delivers all of them at once: the first is sent for processing, up to
+      // `MaxProcessingTransactionsCacheSize` are cached, the rest are dropped
+      val modData = ModifiersData(ErgoTransaction.modifierTypeId, txs.map(tx => tx.id -> tx.bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(attacker))
+
+      // the first transaction of the delivery is being processed
+      vhProbe.fishForMessage(5.seconds) {
+        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case _ => false
+      }
+
+      // barrier: the response to this inv proves that the delivery above is fully processed
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe
+        synchronizerTestRef.underlyingActor.MaxProcessingTransactionsCacheSize
+
+      // the result for the transaction being processed comes in: the attacker is over its budget now
+      declineTxs(attacker, count = 1, cost = 1000)
+
+      // the cached records of the over-budget attacker are dropped, so other peers are still served
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 0
+
+      // nothing from the attacker's cached delivery was sent for processing
+      vhProbe.receiveWhile(1.second) { case m => m }.collect {
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => t
+      } shouldBe empty
+    }
+  }
+
+  /**
+    * The transaction processing cache is bounded: a delivery bigger than the cache is partially dropped
+    * (dropped transactions can be requested again when re-announced), and cache processing is resumed
+    * when a new block is applied.
+    */
+  property("NodeViewSynchronizer: transaction processing cache is bounded and drained on block applied") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+
+      val txs = Seq.fill(60)(dummyDeclinedTx())
+      txs.foreach(tx => invTxAndExpectRequest(peer, tx))
+
+      val modData = ModifiersData(ErgoTransaction.modifierTypeId, txs.map(tx => tx.id -> tx.bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+
+      // the first transaction is sent for processing
+      vhProbe.fishForMessage(5.seconds) {
+        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case _ => false
+      }
+
+      // barrier: the response to this inv proves that the delivery above is fully processed
+      invTxAndExpectRequest(peer, dummyDeclinedTx())
+      // the rest of the delivery is cached up to the limit, the remainder is dropped
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe
+        synchronizerTestRef.underlyingActor.MaxProcessingTransactionsCacheSize
+
+      // on block applied the cache processing is resumed: one more record is sent for processing
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      vhProbe.fishForMessage(5.seconds) {
+        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case _ => false
+      }
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe
+        synchronizerTestRef.underlyingActor.MaxProcessingTransactionsCacheSize - 1
+    }
+  }
+
+  /**
+    * The declined transactions table is a de-duplication cache: re-adding an id which is already in the full
+    * table must not evict another entry (which would forget a declined transaction for no reason).
+    */
+  property("NodeViewSynchronizer: duplicate declined transaction does not evict from the declined table") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+      val honest = newPeer
+
+      val txs = Seq.fill(MaxDeclined)(dummyDeclinedTx())
+      declineTxs(peer, txs, cost = 1000)
+      // decline one of the transactions once again - the table must not shrink
+      declineTxs(peer, Seq(txs.head), cost = 1000)
+
+      // barrier: the response to this inv proves that all the declines above are already processed
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+
+      synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe MaxDeclined
+    }
+  }
+
+  /**
+    * Declines of transactions invalidated by the mempool (e.g. rent or re-emission prefilter rejections) are
+    * already blocked from re-request by the `isInvalidated` check in `processInv`, so they are not stored
+    * in the declined transactions table.
+    */
+  property("NodeViewSynchronizer: decline of an invalidated transaction is not stored in the declined table") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+      val honest = newPeer
+      val tx = dummyDeclinedTx()
+
+      // simulate the mempool invalidating the transaction while declining it
+      synchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings).invalidate(UnconfirmedTransaction(tx, None)))
+
+      declineTxs(peer, Seq(tx), cost = 1000)
+
+      // barrier: the response to this inv proves that the decline above is already processed
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+
+      // the invalidated decline did not occupy a slot in the declined table
+      synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe 0
     }
   }
 

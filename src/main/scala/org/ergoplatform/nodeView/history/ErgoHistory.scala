@@ -1,22 +1,28 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 
 import java.io.File
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
+  IndexedHeightKey, NewestVersion, NewestVersionBytes, RollbackToKey, SchemaVersionKey, getIndex}
+import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.db.ByteArrayWrapper
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
+import scala.annotation.nowarn
+import scala.collection.mutable.BitSet
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -109,6 +115,85 @@ trait ErgoHistory
         historyStorage.insert(
           Array(validityKey(modifier.id) -> Array(1.toByte)),
           BlockSection.emptyArray).map(_ => this)
+    }
+  }
+
+  /**
+    * Repairs validity rows for the selected full-block suffix that the restored UTXO state proves was applied.
+    * The caller must verify that the applied state version is the selected full-block tip.
+    */
+  def repairAppliedFullChainValidity(appliedTip: ModifierId): Try[ErgoHistory] = synchronized {
+    bestFullBlockOpt match {
+      case Some(tip) if tip.id == appliedTip =>
+        val indexedHeight = getIndex(IndexedHeightKey, historyStorage).getInt
+        val firstHeight = math.max(1, math.max(minimalFullBlockHeight, indexedHeight + 1))
+        val missingValidityHeights = BitSet.empty
+        val validation = Try {
+          var currentId = appliedTip
+          var expectedHeight = tip.height
+          while (expectedHeight >= firstHeight) {
+            val header = typedModifierById[Header](currentId).getOrElse {
+              throw new IllegalStateException(
+                s"Applied full-chain header $currentId is unavailable at height $expectedHeight during validity repair")
+            }
+            if (header.height != expectedHeight ||
+                !FullBlockProcessor.isInBestFullChain(historyStorage, header.id)) {
+              throw new IllegalStateException(
+                s"Applied full-chain ancestry is inconsistent at block ${header.id}, height $expectedHeight")
+            }
+            val validity = (header.id +: header.sectionIds.map(_._2)).map(isSemanticallyValid)
+            if (validity.contains(ModifierSemanticValidity.Invalid)) {
+              throw new IllegalStateException(
+                s"Selected full block ${header.id} at height $expectedHeight contains an invalid section")
+            }
+            if (validity.contains(ModifierSemanticValidity.Unknown)) {
+              if (getFullBlock(header).isEmpty) {
+                throw new IllegalStateException(
+                  s"Selected full block body is unavailable at height $expectedHeight during validity repair")
+              }
+              missingValidityHeights += expectedHeight
+            }
+            currentId = header.parentId
+            expectedHeight -= 1
+          }
+          if (indexedHeight > 0 && firstHeight == indexedHeight + 1) {
+            val indexedHeaderId = historyStorage.modifierBytesById(bytesToId(IndexedHeaderIdKey))
+              .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+              .map(bytesToId)
+              .getOrElse(throw new IllegalStateException(
+                s"Extra-index checkpoint header is unavailable at height $indexedHeight during validity repair"))
+            if (currentId != indexedHeaderId) {
+              throw new IllegalStateException(
+                s"Applied full-chain ancestry does not extend the extra-index checkpoint at height $indexedHeight")
+            }
+          }
+        }
+        validation.flatMap { _ =>
+          Try {
+            var currentId = appliedTip
+            var expectedHeight = tip.height
+            var repairedHistory = this
+            while (expectedHeight >= firstHeight) {
+              val header = typedModifierById[Header](currentId).getOrElse {
+                throw new IllegalStateException(
+                  s"Applied full-chain header $currentId became unavailable during validity repair")
+              }
+              if (missingValidityHeights.contains(expectedHeight)) {
+                val fullBlock = getFullBlock(header).getOrElse {
+                  throw new IllegalStateException(
+                    s"Selected full block body ${header.id} became unavailable during validity repair")
+                }
+                repairedHistory = repairedHistory.reportModifierIsValid(fullBlock).get
+              }
+              currentId = header.parentId
+              expectedHeight -= 1
+            }
+            repairedHistory
+          }
+        }
+      case _ =>
+        Failure(new IllegalStateException(
+          s"Applied state tip $appliedTip does not match the selected full-block tip"))
     }
   }
 
@@ -261,16 +346,146 @@ object ErgoHistory extends ScorexLogging {
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
+  @nowarn("cat=unused")
   def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
     var db = HistoryStorage(ergoSettings)
 
     // ExtraIndexer db check
-    if(ergoSettings.nodeSettings.extraIndex) { // check db schema
-      val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
-      if (schemaVersion != NewestVersion) {
-        if(getIndex(IndexedHeightKey, db).getInt > 0)
-          db = db.deleteExtraDB(ergoSettings) // older schema -> delete and reopen db
-        db.insertExtra(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty) // update version key
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
+      def storedBytes(key: Array[Byte]): Option[Array[Byte]] = db.modifierBytesById(bytesToId(key))
+      def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
+        .filter(_.length == Integer.BYTES)
+        .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
+      def longValue(bytesOpt: Option[Array[Byte]]): Option[Long] = bytesOpt
+        .filter(_.length == java.lang.Long.BYTES)
+        .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getLong)
+
+      val schemaVersionBytesOpt = storedBytes(SchemaVersionKey)
+      val indexedHeightBytesOpt = storedBytes(IndexedHeightKey)
+      val globalTxIndexBytesOpt = storedBytes(GlobalTxIndexKey)
+      val globalBoxIndexBytesOpt = storedBytes(GlobalBoxIndexKey)
+      val rollbackToBytesOpt = storedBytes(RollbackToKey)
+      val schemaVersionOpt = intValue(schemaVersionBytesOpt)
+      val indexedHeightOpt = intValue(indexedHeightBytesOpt)
+      val globalTxIndexOpt = longValue(globalTxIndexBytesOpt)
+      val globalBoxIndexOpt = longValue(globalBoxIndexBytesOpt)
+      val rollbackToOpt = intValue(rollbackToBytesOpt)
+      val indexedHeight = indexedHeightOpt.getOrElse(0)
+      val globalTxIndex = globalTxIndexOpt.getOrElse(0L)
+      val globalBoxIndex = globalBoxIndexOpt.getOrElse(0L)
+      val rollbackTo = rollbackToOpt.getOrElse(0)
+      val indexedHeaderIdBytesOpt = db.modifierBytesById(bytesToId(IndexedHeaderIdKey))
+      val indexedHeaderOpt = indexedHeaderIdBytesOpt
+        .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+        .flatMap { idBytes =>
+        val id = bytesToId(idBytes)
+        val validityKey = ByteArrayWrapper(Algos.hash("validity".getBytes(StandardCharsets.UTF_8) ++ idToBytes(id)))
+        val isValid = db.getIndex(validityKey).exists(_.sameElements(Array(1.toByte)))
+        if (isValid && FullBlockProcessor.isInBestFullChain(db, id)) db.modifierById(id).collect {
+          case header: Header if header.height == indexedHeight && header.id == id => header
+        } else None
+      }
+      val terminalRowsMatchCheckpoint = schemaVersionOpt.contains(NewestVersion) && indexedHeaderOpt.exists { header =>
+        if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
+          false
+        } else {
+          db.modifierById(header.transactionsId).collect {
+            case transactions: BlockTransactions if transactions.headerId == header.id =>
+              val lastTx = transactions.txs.last
+              val lastTxIndex = globalTxIndex - 1
+              val firstTxBoxIndex = globalBoxIndex - lastTx.outputs.size
+              val expectedOutputNums = Array.tabulate(lastTx.outputs.size)(i => firstTxBoxIndex + i)
+              val expectedInputNumsOpt = if (header.height <= 1) {
+                Some(Array.fill[Long](lastTx.inputs.size)(0L))
+              } else {
+                val inputNums = lastTx.inputs.map { input =>
+                  val inputId = bytesToId(input.boxId)
+                  db.getExtraIndex(inputId).collect {
+                    case box: IndexedErgoBox
+                      if box.id == inputId && box.spendingTxIdOpt.contains(lastTx.id) &&
+                        box.spendingHeightOpt.contains(header.height) => box.globalIndex
+                  }
+                }
+                if (inputNums.forall(_.isDefined)) Some(inputNums.flatten.toArray) else None
+              }
+              val numericTxMatches = db.getExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex))).exists {
+                case NumericTxIndex(index, id) => index == lastTxIndex && id == lastTx.id
+                case _ => false
+              }
+              val indexedTxMatches = db.getExtraIndex(lastTx.id).exists {
+                case tx: IndexedErgoTransaction =>
+                  tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
+                    tx.blockId == header.id &&
+                    tx.index == transactions.txs.size - 1 && tx.size == lastTx.size &&
+                    expectedInputNumsOpt.exists(expected => tx.inputNums.sameElements(expected)) &&
+                    tx.outputNums.sameElements(expectedOutputNums) && tx.dataInputs.sameElements(lastTx.dataInputs)
+                case _ => false
+              }
+              val outputRowsMatch = expectedOutputNums.zip(lastTx.outputs).forall { case (boxIndex, output) =>
+                val boxId = bytesToId(output.id)
+                val numericBoxMatches = db.getExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex))).exists {
+                  case NumericBoxIndex(index, id) => index == boxIndex && id == boxId
+                  case _ => false
+                }
+                val indexedBoxMatches = db.getExtraIndex(boxId).exists {
+                  case box: IndexedErgoBox =>
+                    box.globalIndex == boxIndex && box.inclusionHeight == header.height && box.id == boxId &&
+                      box.spendingTxIdOpt.isEmpty && box.spendingHeightOpt.isEmpty && box.spendingProofOpt.isEmpty
+                  case _ => false
+                }
+                numericBoxMatches && indexedBoxMatches
+              }
+              numericTxMatches && indexedTxMatches && outputRowsMatch
+          }.contains(true)
+        }
+      }
+      val numericValuesAreWellFormed = Seq(
+        indexedHeightBytesOpt.forall(_.length == Integer.BYTES),
+        globalTxIndexBytesOpt.forall(_.length == java.lang.Long.BYTES),
+        globalBoxIndexBytesOpt.forall(_.length == java.lang.Long.BYTES),
+        rollbackToBytesOpt.forall(_.length == Integer.BYTES)
+      ).forall(identity)
+      val valuesAreNonNegative = indexedHeight >= 0 && globalTxIndex >= 0 && globalBoxIndex >= 0 && rollbackTo >= 0
+      val emptyCheckpoint = indexedHeight == 0 && globalTxIndex == 0 && globalBoxIndex == 0 &&
+        rollbackTo == 0 && indexedHeaderIdBytesOpt.isEmpty
+      val nonEmptyCheckpoint = indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
+        .forall(_.isDefined) && rollbackTo == 0 && terminalRowsMatchCheckpoint
+      val checkpointIsValid = schemaVersionOpt.contains(NewestVersion) && numericValuesAreWellFormed &&
+        valuesAreNonNegative && (emptyCheckpoint || nonEmptyCheckpoint)
+      if (!checkpointIsValid) {
+        val failedChecks = Seq(
+          !schemaVersionOpt.contains(NewestVersion) -> "schema version",
+          !numericValuesAreWellFormed -> "counter encoding",
+          !valuesAreNonNegative -> "negative counters",
+          (rollbackTo != 0) -> "rollback marker",
+          (indexedHeight == 0 && !emptyCheckpoint) -> "empty checkpoint shape",
+          (indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
+            .exists(_.isEmpty)) -> "missing checkpoint counters",
+          (indexedHeight > 0 && (globalTxIndex <= 0 || globalBoxIndex <= 0)) ->
+            "non-positive global index counters",
+          (indexedHeight > 0 && indexedHeaderOpt.isEmpty) -> "checkpoint header or validity",
+          (indexedHeight > 0 && schemaVersionOpt.contains(NewestVersion) && indexedHeaderOpt.isDefined &&
+            globalTxIndex > 0 && globalBoxIndex > 0 && !terminalRowsMatchCheckpoint) ->
+            "terminal transaction or box rows"
+        ).collect { case (true, name) => name }
+        log.warn(s"Rebuilding invalid extra index checkpoint: ${failedChecks.mkString(", ")}")
+        val freshDb = db.deleteExtraDBTry(ergoSettings).recoverWith { case error =>
+          val extraIndexPath = new File(s"${ergoSettings.directory}/history/extra").getAbsolutePath
+          log.error(
+            "Extra index rebuild failed; node startup is aborting. Operator recovery: " +
+              "1) stop every Ergo node process using this data directory; " +
+              "2) inspect the preceding exception and correct its cause, such as disk space, permissions, or open handles; " +
+              s"3) move or remove only '$extraIndexPath'; " +
+              "4) verify that directory no longer exists; 5) restart the node to retry the extra index rebuild. " +
+              "Do not remove the history/index or history/objects directories.",
+            error)
+          Failure(error)
+        }.get
+        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty).recoverWith { case error =>
+          Try(freshDb.close()).failed.foreach(error.addSuppressed)
+          Failure(error)
+        }.get
+        db = freshDb
       }
     }
 
@@ -314,8 +529,6 @@ object ErgoHistory extends ScorexLogging {
     }
 
     log.info("History database read")
-    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
-      context.system.eventStream.publish(StartExtraIndexer(history))
     history
   }
 

@@ -492,6 +492,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Try(storedState.closeStorage()).failed.foreach { closeError =>
           if (closeError ne ex) ex.addSuppressed(closeError)
         }
+        // Stop the whole node; propagating the error alone may leave REST/P2P running without a Holder.
         ErgoApp.shutdownSystem()(context.system)
         throw ex
     }

@@ -32,6 +32,9 @@ class ErgoMiningThread(
   // true while a MineCmd is queued: at most one is ever in the mailbox, so a new candidate or an error reply cannot
   // start a second chain of MineCmd steps beside the running one (MineCmd is private, so no other sender can either)
   private var mineCmdPending = false
+  // true from an error reply to a solution until a candidate reply: the generator may no longer hold this thread's
+  // candidate, and a hit on it would then be judged against the generator's next candidate and clear that one too
+  private var awaitingCandidate = false
 
   private def enqueueMineCmdIfIdle(): Unit = {
     if (!mineCmdPending) {
@@ -77,22 +80,29 @@ class ErgoMiningThread(
     case StatusReply.Success(Candidate(cb, _, _, newParameters)) =>
       // if we get new candidate instead of a cached one, mine it
       if (cb.timestamp != candidateBlock.timestamp) {
+        awaitingCandidate = false
         context.become(mining(nonce = 0, cb, newParameters, solvedBlocksCount))
+        enqueueMineCmdIfIdle()
+      } else if (awaitingCandidate) {
+        // the generator kept this candidate after the rejection: search on after the rejected nonce
+        awaitingCandidate = false
         enqueueMineCmdIfIdle()
       }
     case StatusReply.Error(ex) if solutionsAwaitingReply > 0 =>
       solutionsAwaitingReply -= 1
       log.error(s"Accepting solution did not succeed", ex)
-      // the generator may have dropped this candidate: poll now (a new candidate replaces this one), and meanwhile
-      // resume after the rejected solution's nonce (recorded when it was found) instead of resubmitting it
+      // the generator may have dropped this candidate: poll now and hash nothing until the reply says whether it
+      // has a new one or kept this one (then the search resumes after the rejected nonce, recorded when it was found)
+      awaitingCandidate = true
       candidateGenerator ! PollCandidate
-      enqueueMineCmdIfIdle()
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
       solutionsAwaitingReply = math.max(0, solutionsAwaitingReply - 1)
       context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount + 1))
+    case MineCmd if awaitingCandidate =>
+      mineCmdPending = false
     case MineCmd =>
       mineCmdPending = false
       val lastNonceToCheck = nonce + NonceStep

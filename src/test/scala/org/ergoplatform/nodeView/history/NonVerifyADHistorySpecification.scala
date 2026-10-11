@@ -157,10 +157,8 @@ class NonVerifyADHistorySpecification extends ErgoCorePropertyTest {
 
     leader.bestHeaderOpt.get.id shouldBe selectedTail.last.id
     leader.contains(sideTail(18).id) shouldBe true
-    var peer = genHistory()
-    peer = applyHeaderChain(peer, common)
-    peer = applyHeaderChain(peer, sideTail)
-    val currentSummary = peer.syncInfoV2(full = true)
+    // Explicit sparse locator: full sync info may also advertise a shared genesis anchor.
+    val currentSummary = ErgoSyncInfoV2(Seq(sideTail.last, sideTail(18)))
     currentSummary.lastHeaders.map(_.height) shouldBe Seq(44, 28)
     leader.compareV2(currentSummary) shouldBe Unknown
     leader.continuationIdsV2(currentSummary, 100) shouldBe empty

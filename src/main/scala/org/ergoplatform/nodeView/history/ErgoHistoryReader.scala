@@ -125,12 +125,12 @@ trait ErgoHistoryReader
   def applicable(modifier: BlockSection): Boolean = applicableTry(modifier).isSuccess
 
   /**
-    * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
-    * to our history
+    * For given headers (sorted in reverse chronological order), find the first one (most recent one)
+    * on our selected chain
     */
   private def commonPoint(headers: Seq[Header]): Option[Header] = {
     headers.find { h =>
-      contains(h.id)
+      isInBestChain(h.id)
     }
   }
 

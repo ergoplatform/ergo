@@ -7,6 +7,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
 import org.ergoplatform.consensus.ModifierSemanticValidity._
@@ -86,6 +87,98 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestHeaderOpt.get shouldBe a3.header
     history.bestFullBlockOpt.get.header shouldBe ancestor.header
     history.isInBestChain(history.bestFullBlockOpt.get.header) shouldBe true
+  }
+
+  private def isInBestFullChain(history: ErgoHistory, header: Header): Boolean =
+    FullBlockProcessor.isInBestFullChain(history.historyStorage, header.id)
+
+  property("a sibling block stored off the best-header chain is applied when a descendant block completes") {
+    var (history, _) = genHistory()
+
+    val commonChain = genChain(2, history)
+    history = applyChain(history, commonChain)
+    val ancestor = commonChain.last
+
+    val a3 = genChain(1, ancestor).tail.head
+    Thread.sleep(2)
+    val Seq(b3, b4) = genChain(2, ancestor).tail
+    b3.header.id should not be a3.header.id
+
+    history = applyHeaderChain(history, HeaderChain(Seq(a3.header)))
+    history = applyBlock(history, b3)
+
+    // b3 is stored but not applied, as a3 is the best header
+    history.bestHeaderOpt.get shouldBe a3.header
+    history.bestFullBlockOpt.get.header shouldBe ancestor.header
+    isInBestFullChain(history, b3.header) shouldBe false
+
+    // b4 makes the b-fork the best chain, and its body completes the chain b3 - b4
+    history = applyBlock(history, b4)
+
+    history.bestHeaderOpt.get shouldBe b4.header
+    history.bestFullBlockOpt.get.header shouldBe b4.header
+    isInBestFullChain(history, b3.header) shouldBe true
+    isInBestFullChain(history, a3.header) shouldBe false
+  }
+
+  /**
+    * Delivers headers and block sections of the given forks one by one, in the random order set by `seed`.
+    * A header is delivered after the header of its parent, sections are delivered after their header.
+    */
+  private def deliverInRandomOrder(historyIn: ErgoHistory,
+                                   forks: Seq[Seq[ErgoFullBlock]],
+                                   seed: Int)(afterStep: ErgoHistory => Unit): ErgoHistory = {
+    val rnd = new Random(seed)
+    var history = historyIn
+    var pending = for (f <- forks.indices; i <- forks(f).indices; isHeader <- Seq(true, false)) yield (f, i, isHeader)
+    var headersDelivered = Set.empty[(Int, Int)]
+    while (pending.nonEmpty) {
+      val ready = pending.filter { case (f, i, isHeader) =>
+        if (isHeader) i == 0 || headersDelivered((f, i - 1)) else headersDelivered((f, i))
+      }
+      val step @ (f, i, isHeader) = ready(rnd.nextInt(ready.size))
+      pending = pending.filterNot(_ == step)
+      val block = forks(f)(i)
+      if (isHeader) {
+        history = history.append(block.header).get._1
+        headersDelivered += ((f, i))
+      } else {
+        block.blockSections.foreach { section =>
+          if (!history.contains(section)) history = history.append(section).get._1
+        }
+      }
+      afterStep(history)
+    }
+    history
+  }
+
+  property("bestFullBlock is the best header whenever their heights are equal, for any arrival order") {
+    (1 to 30).foreach { seed =>
+      var (history, _) = genHistory()
+
+      val commonChain = genChain(2, history)
+      history = applyChain(history, commonChain)
+      val ancestor = commonChain.last
+
+      // two forks of the same length, so that they have the same score
+      val forkA = genChain(3, ancestor).tail
+      Thread.sleep(2)
+      val forkB = genChain(3, ancestor).tail
+      forkB.head.header.id should not be forkA.head.header.id
+
+      val finalHistory = deliverInRandomOrder(history, Seq(forkA, forkB), seed) { h =>
+        if (h.fullBlockHeight == h.headersHeight) {
+          withClue(s"seed $seed: ") {
+            h.bestFullBlockOpt.get.header shouldBe h.bestHeaderOpt.get
+          }
+        }
+      }
+
+      // all headers and sections are known now
+      finalHistory.fullBlockHeight shouldBe 5
+      finalHistory.headersHeight shouldBe 5
+      finalHistory.bestFullBlockOpt.get.header shouldBe finalHistory.bestHeaderOpt.get
+    }
   }
 
   property("ErgoModifiersCache.findCandidateKey() should find headers in case of forks") {

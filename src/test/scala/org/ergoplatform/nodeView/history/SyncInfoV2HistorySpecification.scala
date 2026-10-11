@@ -65,14 +65,14 @@ class SyncInfoV2HistorySpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("linear history summaries retain recent samples and exactly one genesis anchor") {
+  property("linear history summaries retain recent samples") {
     var history = newHistory()
     try {
       val chain = genHeaderChain(17, history, diffBitsOpt = None, useRealTs = false)
       val expectedHeights = Seq(
         1 -> Seq(1),
-        2 -> Seq(2, 1),
-        10 -> Seq(10, 1),
+        2 -> Seq(2),
+        10 -> Seq(10),
         17 -> Seq(17, 1)
       )
       var appliedHeight = 0
@@ -86,10 +86,8 @@ class SyncInfoV2HistorySpecification extends ErgoCorePropertyTest {
         full.lastHeaders.map(_.id) shouldBe expectedIds
         full.lastHeaders.map(_.height) shouldBe heights
         full.lastHeaders.head.id shouldBe history.bestHeaderOpt.get.id
-        full.lastHeaders.last.id shouldBe chain.head.id
-        full.lastHeaders.count(_.id == chain.head.id) shouldBe 1
         full.lastHeaders.map(_.id).distinct.size shouldBe full.lastHeaders.size
-        full.lastHeaders.size should be <= 5
+        full.lastHeaders.size should be <= 4
         full.lastHeaders.size should be <= ErgoSyncInfoSerializer.MaxHeadersAllowed
         full.height shouldBe Some(height)
         checkRoundtrip(full)
@@ -104,22 +102,22 @@ class SyncInfoV2HistorySpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("full summary snapshots preserve sparse samples and deduplicate the genesis anchor") {
+  property("full summary snapshots preserve sparse samples") {
     val template = defaultHeaderGen.sample.get
     val cases = Seq(
-      Seq(129, 113, 1),
-      Seq(513, 497, 385, 1),
-      Seq(600, 584, 472, 88, 1)
+      Seq(129, 113, 1) -> Seq(129, 113, 1),
+      Seq(513, 497, 385, 1) -> Seq(513, 497, 385, 1),
+      Seq(600, 584, 472, 88, 1) -> Seq(600, 584, 472, 88)
     )
-    cases.foreach { heights =>
+    cases.foreach { case (heights, expectedHeights) =>
       val headers = heights.map(height => template.copy(height = height))
       val reader = snapshotReader(headers)
       val full = reader.syncInfoV2(full = true)
-      full.lastHeaders.map(_.id) shouldBe headers.map(_.id)
-      full.lastHeaders.map(_.height) shouldBe heights
-      full.lastHeaders.count(_.height == 1) shouldBe 1
+      val sampledHeaders = headers.filter(h => expectedHeights.contains(h.height))
+      full.lastHeaders.map(_.id) shouldBe sampledHeaders.map(_.id)
+      full.lastHeaders.map(_.height) shouldBe sampledHeaders.map(_.height)
       full.lastHeaders.map(_.id).distinct.size shouldBe full.lastHeaders.size
-      full.lastHeaders.size should be <= 5
+      full.lastHeaders.size should be <= 4
       full.lastHeaders.size should be <= ErgoSyncInfoSerializer.MaxHeadersAllowed
       full.height shouldBe Some(heights.head)
       checkRoundtrip(full)

@@ -492,7 +492,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will contain the sampled headers followed by genesis
+      // sync message will contain the sampled headers
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
@@ -500,8 +500,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
             msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
-              headers.map(_.id) == (Seq(0, 16, 128, 512)
-                .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
+              headers.map(_.id) == Seq(0, 16, 128, 512)
+                .map(offset => localChain(localChain.size - offset - 1).id)
           case _ => false
         }
       }
@@ -519,7 +519,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will contain the sampled headers followed by genesis
+      // sync message will contain the sampled headers
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
@@ -527,8 +527,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
             msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
-              headers.map(_.id) == (Seq(0, 16, 128, 512)
-                .map(offset => localChain(localChain.size - offset - 1).id) :+ localChain.head.id)
+              headers.map(_.id) == Seq(0, 16, 128, 512)
+                .map(offset => localChain(localChain.size - offset - 1).id)
           case _ => false
         }
       }

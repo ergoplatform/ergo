@@ -75,9 +75,10 @@ object HeaderSerializer extends ErgoSerializer[Header] {
   }
 
   override def parse(r: Reader): Header = {
+    val startConsumed = r.consumed
     val headerWithoutPow = parseWithoutPow(r)
     val powSolution = AutolykosSolutionSerializer.parse(r, headerWithoutPow.version)
-    headerWithoutPow.toHeader(powSolution, Some(r.consumed))
+    headerWithoutPow.toHeader(powSolution, Some(r.consumed - startConsumed))
   }
 
 }

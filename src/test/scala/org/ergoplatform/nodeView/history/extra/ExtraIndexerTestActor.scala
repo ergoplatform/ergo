@@ -136,8 +136,12 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
     super.stopIndexer()
   }
 
-  override protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
-    val headerOpt = super.fullChainHeaderAtHeight(height)
+  /**
+    * Applies the header-lookup test seams (unavailable-header observation and one-shot
+    * non-extending header) to the best-chain header lookup.
+    */
+  private def withHeaderSeams(height: Int, headerLookup: => Option[Header]): Option[Header] = {
+    val headerOpt = headerLookup
     unavailableHeaderObserver.foreach { case (observedHeight, probe) =>
       if (height == observedHeight && headerOpt.isEmpty) {
         probe ! height
@@ -151,6 +155,9 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
       headerOpt
     }
   }
+
+  override protected def fullChainHeaderAtHeight(height: Int): Option[Header] =
+    withHeaderSeams(height, super.fullChainHeaderAtHeight(height))
 
   override protected def blockTransactionsForHeader(header: Header): Option[BlockTransactions] = {
     if (deferredTransactionsHeightOpt.contains(header.height)) {

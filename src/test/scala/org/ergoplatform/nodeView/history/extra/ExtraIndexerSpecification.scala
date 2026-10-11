@@ -5,7 +5,7 @@ import akka.testkit.TestProbe
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.http.api.SortDirection
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
@@ -25,6 +25,7 @@ import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
+import java.util.concurrent.TimeUnit
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import scala.collection.mutable
@@ -86,8 +87,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   def awaitCondition(condition: Condition): Unit = {
     lock.lock()
-    try condition.await()
-    finally lock.unlock()
+    try {
+      // bounded, so a fixture that never signals fails the test instead of hanging the suite
+      if (!condition.await(2.minutes.toMillis, TimeUnit.MILLISECONDS)) {
+        throw new AssertionError(s"Timed out waiting for the indexer fixture condition $condition")
+      }
+    } finally lock.unlock()
   }
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
@@ -1444,7 +1449,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   }
 
   property("requests only extra indexer stop when final removal fails after partial rollback writes") {
-    val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+    val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
     val lifecycleProbe = TestProbe()(system)
     lifecycleProbe.watch(failingIndexer)
 
@@ -1564,10 +1569,10 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("waits for startup repair before indexing a selected header with missing validity") {
+  property("indexes selected headers with missing validity marks during catch-up") {
     indexer ! CreateDB(6)
     awaitCondition(created)
-    val missingValidityHeaders = Seq(fullChainHeaderAt(3))
+    val missingValidityHeaders = Seq(fullChainHeaderAt(3), fullChainHeaderAt(4))
     missingValidityHeaders.foreach { header =>
       FullBlockProcessor.isInBestFullChain(_history.historyStorage, header.id) shouldBe true
       _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Valid
@@ -1580,58 +1585,108 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
     }
 
-    val probe = TestProbe()(system)
-    indexer ! ObserveUnavailableHeader(3, probe.ref)
-    indexer ! Index()
-    probe.expectMsg(3.seconds, 3)
-    IndexerState.fromHistory(_history).indexedHeight shouldBe 2
-
-    val appliedTip = fullChainHeaderAt(6)
-    _history.repairAppliedFullChainValidity(fullChainHeaderAt(5).id).isFailure shouldBe true
-    _history.isSemanticallyValid(missingValidityHeaders.head.id) shouldBe ModifierSemanticValidity.Unknown
-
-    val persistedCheckpoint = IndexerState.fromHistory(_history).indexedHeaderId.get
-    _history.historyStorage.insertExtraTry(
-      Array(ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(fullChainHeaderAt(1).id)),
-      Array.empty).get
-    _history.repairAppliedFullChainValidity(appliedTip.id).isFailure shouldBe true
-    _history.isSemanticallyValid(missingValidityHeaders.head.id) shouldBe ModifierSemanticValidity.Unknown
-    _history.historyStorage.insertExtraTry(
-      Array(ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(persistedCheckpoint)),
-      Array.empty).get
-
-    val competingTip = appliedTip.copy(timestamp = appliedTip.timestamp + 1)
-    val competingTransactions = fullChainTransactionsAt(6).copy(headerId = competingTip.id)
-    competingTransactions.id shouldBe competingTip.transactionsId
-    val tipHeightKey = ByteArrayWrapper(
-      org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(appliedTip.height).array))
-    _history.historyStorage.insert(
-      Array(
-        tipHeightKey -> (ExtraIndexer.fastIdToBytes(competingTip.id) ++ ExtraIndexer.fastIdToBytes(appliedTip.id)),
-        FullBlockProcessor.chainStatusKey(competingTip.id) -> FullBlockProcessor.BestChainMarker
-      ),
-      Array[org.ergoplatform.modifiers.BlockSection](competingTip, competingTransactions)
-    ).get
-    FullBlockProcessor.isInBestFullChain(_history.historyStorage, competingTip.id) shouldBe true
-    _history.isSemanticallyValid(competingTip.id) shouldBe ModifierSemanticValidity.Unknown
-
-    _history.repairAppliedFullChainValidity(appliedTip.id).get
-    _history.isSemanticallyValid(competingTip.id) shouldBe ModifierSemanticValidity.Unknown
     indexer ! Index()
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       IndexerState.fromHistory(_history).indexedHeight shouldBe 6
     }
+    // the indexer does not gate on semantic validity: indexed without touching the marks
+    missingValidityHeaders.foreach { header =>
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
+    }
+    // the blocks are indexed like any other best-chain block
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    expectedTxs.zipWithIndex.foreach { case (tx, num) =>
+      NumericTxIndex.getTxByNumber(history, num).map(_.id) shouldBe Some(tx.id)
+    }
+    indexer ! Reset()
+  }
 
+  property("does not index an invalid block during catch-up") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val invalidHeader = fullChainHeaderAt(4)
+    _history.historyStorage.insert(
+      Array(_history.validityKey(invalidHeader.id) -> Array(0.toByte)),
+      BlockSection.emptyArray
+    ).get
+    _history.isSemanticallyValid(invalidHeader.id) shouldBe ModifierSemanticValidity.Invalid
+
+    val probe = TestProbe()(system)
+    indexer ! ObserveUnavailableHeader(4, probe.ref)
+    indexer ! Index()
+    probe.expectMsg(3.seconds, 4)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    }
+    Thread.sleep(500)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    _history.isSemanticallyValid(invalidHeader.id) shouldBe ModifierSemanticValidity.Invalid
+    indexer ! Reset()
+  }
+
+  property("does not index an unknown-validity block with a missing body during catch-up") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val bodilessHeader = fullChainHeaderAt(4)
     _history.historyStorage.remove(
-      Array(_history.validityKey(appliedTip.id)), Array.empty[ModifierId]).get
-    probe.send(indexer, ReopenCheckpoint())
-    probe.expectMsgType[IndexerState].indexedHeight shouldBe 0
+      Array(_history.validityKey(bodilessHeader.id)),
+      Array(bodilessHeader.transactionsId)
+    ).get
+    _history.isSemanticallyValid(bodilessHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    history.getFullBlock(bodilessHeader) shouldBe None
+
+    // the header is selected (no validity gating), but the missing body blocks indexing
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    }
+    Thread.sleep(500)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    _history.isSemanticallyValid(bodilessHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    indexer ! Reset()
+  }
+
+  property("does not index a block outside the best full chain during catch-up") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val selectedBlock = history.getFullBlock(fullChainHeaderAt(4)).get
+    // section ids are derived from the header id, so a competing header needs its own sections
+    val competingHeader = selectedBlock.header.copy(timestamp = selectedBlock.header.timestamp + 1)
+    val competingSections: Seq[NonHeaderBlockSection] = Seq(
+      selectedBlock.adProofs.get.copy(headerId = competingHeader.id),
+      selectedBlock.blockTransactions.copy(headerId = competingHeader.id),
+      selectedBlock.extension.copy(headerId = competingHeader.id)
+    )
+    competingSections.map(_.id) shouldBe competingHeader.sectionIds.map(_._2).toSeq
+    val heightKey = ByteArrayWrapper(
+      org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(4).array))
+    // a complete block, neither selected nor marked valid or invalid
+    _history.historyStorage.insert(
+      Array(heightKey -> (ExtraIndexer.fastIdToBytes(competingHeader.id) ++
+        ExtraIndexer.fastIdToBytes(selectedBlock.header.id))),
+      (competingHeader +: competingSections).toArray[BlockSection]
+    ).get
+    _history.isSemanticallyValid(competingHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, competingHeader.id) shouldBe false
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, selectedBlock.header.id) shouldBe true
+    history.getFullBlock(competingHeader).isDefined shouldBe true
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+    // only the selected block is indexed, the orphan is left untouched
+    _history.isSemanticallyValid(competingHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    _history.isSemanticallyValid(selectedBlock.header.id) shouldBe ModifierSemanticValidity.Valid
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
     indexer ! Reset()
   }
 
   Seq("initial", "intermediate", "final").foreach { phase =>
     property(s"preserves recovery at the $phase rollback write failure") {
-      val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+      val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
       val probe = TestProbe()(system)
       probe.watch(failingIndexer)
       failingIndexer ! CreateDB(HEIGHT)

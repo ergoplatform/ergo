@@ -4,7 +4,7 @@ import akka.actor.{ActorSystem, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool, DisconnectedPeer, HandshakedPeer, SendLocalSyncInfo}
-import org.ergoplatform.network.message.{InvData, InvSpec, Message, ModifiersData, ModifiersSpec}
+import org.ergoplatform.network.message.{InvData, InvSpec, Message, MessageSerializer, ModifiersData, ModifiersSpec, RequestModifierSpec}
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -414,6 +414,109 @@ class V2BoundedProgressSpecification extends AnyPropSpec with Matchers {
         requestedIds should contain(fork.head.id)
         requestedIds should not contain selected.headers(400).id
       } finally responderHistory.closeStorage()
+    }
+  }
+
+  property("V2 scheduler retries a lost held-page cursor over serialized peer messages") {
+    val localHistory = applyHeaderChain(newHistory(), selected)
+    var peerHistory = applyHeaderChain(newHistory(), selected.take(450))
+    try {
+      val fork = genHeaderChain(550, Some(selected.headers(449)), peerHistory.difficultyCalculator,
+        extensionHash = Algos.hash(Array[Byte](5)), diffBitsOpt = None, useRealTs = false).tail
+      peerHistory = applyHeaderChain(peerHistory, fork)
+
+      implicit val system: ActorSystem = ActorSystem("bounded-progress-natural-retry")
+      val ec: scala.concurrent.ExecutionContext = system.dispatcher
+      try {
+        val localNetwork = TestProbe()
+        val peerNetwork = TestProbe()
+        val holder = TestProbe()
+        val peer = ConnectedPeer(connectionIdGen.sample.get, TestProbe().ref,
+          Some(PeerInfo(defaultPeerSpec, 0L)))
+        val localTracker = ErgoSyncTracker(settings.scorexSettings.network)
+        val peerTracker = ErgoSyncTracker(settings.scorexSettings.network)
+        val local = system.actorOf(Props(new ErgoNodeViewSynchronizer(localNetwork.ref, holder.ref,
+          ErgoSyncInfoMessageSpec, settings, localTracker, DeliveryTracker.empty(settings))(ec)))
+        val responder = TestActorRef(Props(new ErgoNodeViewSynchronizer(peerNetwork.ref, holder.ref,
+          ErgoSyncInfoMessageSpec, settings, peerTracker, DeliveryTracker.empty(settings))(ec) {
+          override def preStart(): Unit = ()
+        }))
+        val wire = new MessageSerializer(Seq(ErgoSyncInfoMessageSpec, InvSpec, RequestModifierSpec),
+          settings.scorexSettings.network.magicBytes)
+
+        def decoded(sent: SendToNetwork): Message[_] = {
+          val frame = wire.serialize(sent.message)
+          val message = wire.deserialize(frame, Some(peer)).get.get
+          message.messageLength shouldBe frame.length
+          message
+        }
+
+        def nextSent(network: TestProbe, timeout: FiniteDuration)
+                    (accept: SendToNetwork => Boolean): SendToNetwork = {
+          val deadline = timeout.fromNow
+          var result: Option[SendToNetwork] = None
+          while (result.isEmpty && deadline.hasTimeLeft()) {
+            network.receiveOne(deadline.timeLeft) match {
+              case sent: SendToNetwork if accept(sent) => result = Some(sent)
+              case _ =>
+            }
+          }
+          result.getOrElse(fail(s"No matching peer message within $timeout"))
+        }
+
+        local ! ChangedHistory(localHistory)
+        local ! ChangedMempool(ErgoMemPool.empty(settings))
+        local ! HandshakedPeer(peer)
+        responder ! ChangedHistory(peerHistory)
+        responder ! ChangedMempool(ErgoMemPool.empty(settings))
+        responder ! HandshakedPeer(peer)
+
+        // The first SyncInfo comes from preStart's actual SendLocalSyncInfo timer.
+        val initial = nextSent(localNetwork, 10.seconds)(_.message.spec == ErgoSyncInfoMessageSpec)
+        initial.sendingStrategy.choose(Seq(peer)) should contain(peer)
+        val initialInfo = ErgoSyncInfoMessageSpec.parseBytesTry(decoded(initial).dataBytes).get
+          .asInstanceOf[ErgoSyncInfoV2]
+        initialInfo.lastHeaders.head.id shouldBe selected.last.id
+        initialInfo.lastHeaders.last.id shouldBe selected.head.id
+        responder ! decoded(initial)
+
+        val first = nextSent(peerNetwork, 5.seconds)(_.message.spec == InvSpec)
+        first.sendingStrategy shouldBe SendToPeer(peer)
+        InvSpec.parseBytesTry(decoded(first).dataBytes).get.ids shouldBe firstPage
+        local ! decoded(first)
+        val immediate = nextSent(localNetwork, 5.seconds)(_.message.spec == ErgoSyncInfoMessageSpec)
+        immediate.sendingStrategy shouldBe SendToPeer(peer)
+        val cursor = ErgoSyncInfoMessageSpec.parseBytesTry(decoded(immediate).dataBytes).get
+          .asInstanceOf[ErgoSyncInfoV2]
+        cursor.lastHeaders.map(_.height) should contain(400)
+
+        // Lose this one frame at the transport boundary. The next cursor must be
+        // produced by the receiver's real periodic scheduler without a new Inv.
+        val retry = nextSent(localNetwork, 40.seconds)(_.message.spec == ErgoSyncInfoMessageSpec)
+        retry.sendingStrategy shouldBe SendToPeer(peer)
+        val retriedCursor = ErgoSyncInfoMessageSpec.parseBytesTry(decoded(retry).dataBytes).get
+          .asInstanceOf[ErgoSyncInfoV2]
+        retriedCursor.lastHeaders shouldBe cursor.lastHeaders
+        responder ! decoded(retry)
+
+        val continuation = nextSent(peerNetwork, 5.seconds)(_.message.spec == InvSpec)
+        continuation.sendingStrategy shouldBe SendToPeer(peer)
+        val continuationIds = InvSpec.parseBytesTry(decoded(continuation).dataBytes).get.ids
+        continuationIds.head shouldBe selected.headers(400).id
+        continuationIds should contain(fork.head.id)
+        local ! decoded(continuation)
+        val request = nextSent(localNetwork, 5.seconds) { sent =>
+          sent.message.spec == RequestModifierSpec &&
+            RequestModifierSpec.parseBytesTry(decoded(sent).dataBytes).get.ids.contains(fork.head.id)
+        }
+        request.sendingStrategy shouldBe SendToPeer(peer)
+        val requestedIds = RequestModifierSpec.parseBytesTry(decoded(request).dataBytes).get.ids
+        requestedIds should contain(fork.head.id)
+        requestedIds should not contain selected.headers(400).id
+      } finally Await.result(system.terminate(), 10.seconds)
+    } finally {
+      peerHistory.closeStorage()
+      localHistory.closeStorage()
     }
   }
 

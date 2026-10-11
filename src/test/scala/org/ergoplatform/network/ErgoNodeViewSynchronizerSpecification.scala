@@ -1339,7 +1339,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
   /**
     * Per-peer mempool processing budget between two applied blocks, `MempoolPeerCostPerBlock` in the synchronizer.
-oracle-core/settings/security_analysis    * A peer's transaction intake is stopped when the budget is reached, see `txAcceptanceFilter`.
+    * A peer's transaction intake is stopped when the budget is reached, see `txAcceptanceFilter`.
     */
   private val PeerBudgetBetweenBlocks = 10000000
 

@@ -140,4 +140,77 @@ class HistoryStorageFactorySpec extends ErgoCorePropertyTest with DBSpec {
     closed.toSeq shouldBe Seq(3, 2, 1)
     error.getSuppressed.toSeq shouldBe Seq(cleanup)
   }
+
+  for (failingStore <- Seq(3, 1, 2); kind <- Seq("io", "control")) {
+    property(s"normal close attempts every store after $kind failure in store $failingStore") {
+      val closed = ArrayBuffer.empty[Int]
+      val primary: Throwable = if (kind == "io") new IOException("history store close failed")
+        else new ControlThrowable {}
+      def store(id: Int): LDBKVStore = new LDBKVStore(null) {
+        override def close(): Unit = {
+          closed += id
+          if (id == failingStore) throw primary
+        }
+      }
+
+      val storage = new HistoryStorage(store(1), store(2), store(3), settings.cacheSettings)
+      intercept[Throwable](storage.close()) shouldBe primary
+      closed.toSeq shouldBe Seq(3, 1, 2)
+      primary.getSuppressed.toSeq shouldBe empty
+    }
+  }
+
+  property("normal close preserves the first error and suppresses a later close error") {
+    val closed = ArrayBuffer.empty[Int]
+    val primary = new IOException("extra store close failed")
+    val secondary = new ControlThrowable {}
+    def store(id: Int): LDBKVStore = new LDBKVStore(null) {
+      override def close(): Unit = {
+        closed += id
+        if (id == 3) throw primary
+        if (id == 1) throw secondary
+      }
+    }
+
+    val storage = new HistoryStorage(store(1), store(2), store(3), settings.cacheSettings)
+    intercept[Throwable](storage.close()) shouldBe primary
+    closed.toSeq shouldBe Seq(3, 1, 2)
+    primary.getSuppressed.toSeq shouldBe Seq(secondary)
+  }
+
+  property("normal close releases real LevelDB locks after one post-close failure") {
+    val root = createTempDir
+    val localSettings = settings.copy(directory = root.getPath)
+    val primary = new IOException("extra store reported a close error")
+    val opened = ArrayBuffer.empty[LDBKVStore]
+    def create(path: String): LDBKVStore = {
+      val dir = new File(path)
+      dir.mkdirs()
+      val role = dir.getName
+      val store = new LDBKVStore(LDBFactory.factory.open(dir, new Options().createIfMissing(true))) {
+        private var wasClosed = false
+        override def close(): Unit = if (!wasClosed) {
+          wasClosed = true
+          super.close()
+          if (role == "extra") throw primary
+        }
+      }
+      opened += store
+      store
+    }
+
+    try {
+      val storage = HistoryStorage.open(localSettings, create)
+      intercept[IOException](storage.close()) shouldBe primary
+      val registry = LDBFactory.factory.asInstanceOf[scorex.db.StoreRegistry]
+      Seq("extra", "index", "objects").foreach { role =>
+        val dir = new File(s"${localSettings.directory}/history/$role")
+        registry.map.contains(dir) shouldBe false
+        // Bypass the registry, which would otherwise return an existing handle.
+        val db = registry.factory.open(dir, new Options().createIfMissing(false))
+        try db.get(Array.fill[Byte](32)(51)) shouldBe null
+        finally db.close()
+      }
+    } finally opened.reverseIterator.foreach(store => Try(store.close()))
+  }
 }

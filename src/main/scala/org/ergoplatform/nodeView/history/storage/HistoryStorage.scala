@@ -259,9 +259,18 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
 
   override def close(): Unit = synchronized {
     log.warn("Closing history storage...")
-    extraStore.close()
-    indexStore.close()
-    objectsStore.close()
+    var failure: Throwable = null
+    def closeStore(store: LDBKVStore): Unit = {
+      try store.close() catch {
+        case error: Throwable =>
+          if (failure == null) failure = error
+          else if (error ne failure) failure.addSuppressed(error)
+      }
+    }
+    closeStore(extraStore)
+    closeStore(indexStore)
+    closeStore(objectsStore)
+    if (failure != null) throw failure
   }
 
   /**

@@ -960,8 +960,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   property("storage rent eligibility index") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
     checkRentIndex()
     checkRentIndexAgainstChain(HEIGHT)
     indexer ! Reset()
@@ -970,8 +969,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   property("rent index entries are removable by box id") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
 
     val before = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
     before.length should be > 2
@@ -1001,8 +999,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val noRentIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(false)))
     noRentIndexer ! CreateDB(HEIGHT)
     noRentIndexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
     // the extra index is fully built, but no storage-rent rows are written
     IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
     history.storageRentBoxesAtOrBefore(Int.MaxValue, 1000) shouldBe empty
@@ -1012,8 +1009,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   property("rent index is trimmed to the unspent set after a rollback") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
     checkRentIndexAgainstChain(HEIGHT)
 
     // rolling back discards the blocks that created some boxes, so those rows must go;
@@ -1021,8 +1017,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     // on the best chain, so `done` would never fire
     val back = BRANCHPOINT
     indexer ! ForceRollback(back)
-    lock.lock()
-    done.await()
+    awaitCondition(done)
 
     checkRentIndexAgainstChain(back)
     indexer ! Reset()
@@ -1031,8 +1026,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   property("rent index stays correct across repeated rollbacks") {
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    awaitCondition(done)
     checkRentIndexAgainstChain(HEIGHT)
 
     // each rollback must re-derive the rent rows of the surviving range only; rolling
@@ -1040,8 +1034,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     // so this covers successive rollbacks, as rollbackWithPattern does)
     Seq(HEIGHT - 10, BRANCHPOINT, 8, 1).foreach { back =>
       indexer ! ForceRollback(back)
-      lock.lock()
-      done.await()
+      awaitCondition(done)
       checkRentIndexAgainstChain(back)
     }
     indexer ! Reset()

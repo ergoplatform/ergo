@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
-import org.ergoplatform.nodeView.history.extra.NumericBoxIndex
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexer, NumericBoxIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
@@ -289,6 +289,14 @@ class CandidateGenerator(
 }
 
 object CandidateGenerator extends ScorexLogging {
+
+  /**
+    * Memoized extra-index sync flag for the storage-rent sweep in [[createCandidate]]: the
+    * sweep is skipped while the extra indexer is catching up with the chain; once caught up,
+    * the indexer tracks the chain continuously, so the flag is sticky and the index progress
+    * key is not read from the database again.
+    */
+  private var extraIndexSynced: Boolean = false
 
   /**
     * Holder for both candidate block and data for external miners derived from it
@@ -680,8 +688,21 @@ object CandidateGenerator extends ScorexLogging {
 
       // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
       // bypassing the mempool (goes into the block right after the prioritized transactions)
-      val rentClaimTxs: Seq[ErgoTransaction] =
-        if (ergoSettings.nodeSettings.storageRentCollection) {
+      val rentClaimTxs: Seq[ErgoTransaction] = {
+        // Collect rent only when the extra index is (almost) in sync with the chain: against
+        // a lagging index a temporarily unresolvable box would be mistaken for permanently
+        // unclaimable and evicted below. One block of lag is tolerated, as the indexer may
+        // simply not have processed the chain tip yet. The check is memoized: once synced,
+        // the indexer tracks the chain continuously and the database is not read again.
+        if (!extraIndexSynced) {
+          val indexedHeight = ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, history).getInt
+          val fullHeight = history.fullBlockHeight
+          extraIndexSynced = indexedHeight == fullHeight || indexedHeight + 1 == fullHeight
+          if (!extraIndexSynced) {
+            log.debug(s"Skipping storage-rent collection: extra index at $indexedHeight, chain at $fullHeight")
+          }
+        }
+        if (ergoSettings.nodeSettings.storageRentCollection && extraIndexSynced) {
           val upcomingHeight = upcomingContext.currentHeight
           val threshold = upcomingHeight - Constants.StoragePeriod
           if (threshold > 0) {
@@ -720,6 +741,7 @@ object CandidateGenerator extends ScorexLogging {
         } else {
           Seq.empty
         }
+      }
 
       if (rentClaimTxs.nonEmpty) {
         log.debug(s"Storage-rent claim transactions injected into the candidate: ${rentClaimTxs.map(_.id)}")

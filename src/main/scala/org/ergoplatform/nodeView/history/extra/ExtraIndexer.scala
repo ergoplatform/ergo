@@ -406,7 +406,6 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
     if (btOpt.isEmpty) {
       log.error(s"Could not read block $height / $chainHeight from database, waiting for new block until retrying")
-      System.err.println(s"DBGIDX index-noblock height=$height header=${header.encodedId} chainH=$chainHeight")
       return None
     }
 
@@ -621,7 +620,6 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   protected def beginRollback(state: IndexerState, targetHeader: Header, resume: Boolean = true): Unit = {
-    System.err.println(s"DBGIDX beginRollback from=${state.indexedHeight} to=${targetHeader.height} resume=$resume state=$state")
     resetTransientState()
     context.become(receive.orElse(loaded(state.copy(caughtUp = false, rollbackTo = targetHeader.height))))
     self ! RollbackToHeader(targetHeader, resume)
@@ -673,7 +671,6 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
             }
           } else if (!reconcileIndexedTip(state)) {
             log.info("Deferring catch-up because the next full-chain header does not extend the indexed tip")
-            System.err.println(s"DBGIDX defer-catchup state=$state nextHeader=${fullChainHeaderAtHeight(state.indexedHeight + 1).map(h => (h.encodedId, h.height))} chainH=$chainHeight")
             scheduleRetry()
           }
         }
@@ -741,14 +738,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       cancelRetry()
       if (state.rollbackInProgress) {
         log.warn(s"Rollback already in progress")
-        System.err.println(s"DBGIDX rollback-stash branchPoint=$branchPoint state=$state")
         stash()
       } else if (indexedTipIsOnBestFullChain(state)) {
         log.info(s"Ignoring rollback to $branchPoint because the indexed tip is already on the best full chain")
         if (!state.caughtUp) self ! Index()
       } else if (!reconcileIndexedTip(state)) {
         log.info(s"Deferring rollback to $branchPoint until the indexed tip can be reconciled with the best full chain")
-        System.err.println(s"DBGIDX rollback-defer branchPoint=$branchPoint state=$state")
         val newState = state.copy(caughtUp = false, rollbackTo = 0)
         context.become(receive.orElse(loaded(newState)))
         scheduleRetry()
@@ -764,16 +759,13 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           if (resume && !newState.caughtUp) self ! Index()
           caughtUpHook()
           log.info(s"Successfully rolled back indexes to ${targetHeader.height}")
-          System.err.println(s"DBGIDX rollback-done to=${targetHeader.height} resume=$resume newState=$newState")
           unstashAll()
         case Failure(error) =>
           log.error(s"Failed to roll back extra indexes to ${targetHeader.height}; stopping extra indexer until node restart", error)
-          System.err.println(s"DBGIDX rollback-FAILED to=${targetHeader.height} err=$error")
           stopIndexer()
       }
 
-    case RollbackToHeader(targetHeader, _) =>
-      System.err.println(s"DBGIDX rollback-ignore to=${targetHeader.height} state=$state")
+    case RollbackToHeader(_, _) =>
 
     case RetryIndex(generation) if generation == retryGeneration && !state.rollbackInProgress =>
       self ! Index()

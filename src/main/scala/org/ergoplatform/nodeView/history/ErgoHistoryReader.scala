@@ -402,7 +402,9 @@ trait ErgoHistoryReader
         ErgoHistoryReader.ReducedV2SyncOffsets
       }
 
-      val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+      val heights = offsets.map(h - _)
+      val locatorHeights = if (full) (heights :+ GenesisHeight).distinct else heights
+      val headers = locatorHeights.flatMap(bestHeaderAtHeight)
 
       ErgoSyncInfoV2(headers)
     }

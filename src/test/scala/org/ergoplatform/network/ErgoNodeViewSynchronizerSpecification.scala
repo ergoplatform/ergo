@@ -574,14 +574,14 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will consist of 4 recent headers plus the genesis locator
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 5
           case _ => false
         }
       }
@@ -599,14 +599,14 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we check that in case of neighbour with older history (it has more blocks),
       // sync message will be sent by our node (to get invs from the neighbour),
-      // sync message will consist of 4 headers
+      // sync message will consist of 4 recent headers plus the genesis locator
       synchronizer ! Message(ErgoSyncInfoMessageSpec, Left(msgBytes), Some(peer))
       ncProbe.fishForMessage(3 seconds) { case m =>
         m match {
           case stn: SendToNetwork =>
             val msg = stn.message
             val headers = msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders
-            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
+            msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 5
           case _ => false
         }
       }

@@ -175,6 +175,76 @@ class V2BoundedProgressSpecification extends AnyPropSpec with Matchers {
     }
   }
 
+  property("V2 held pages from competing peers are paced and a disconnected peer loses its turn") {
+    withFixture { f =>
+      val second = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      val third = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      Seq(second, third).foreach(p => f.tracker.updateStatus(p, org.ergoplatform.consensus.Fork, Some(1000)))
+
+      f.inventory(firstPage)
+      f.sync().lastHeaders.map(_.height) should contain(400)
+      f.inventory(firstPage, second)
+      f.inventory(firstPage, third)
+      f.actor ! DisconnectedPeer(third)
+
+      val next = f.network.expectMsgType[SendToNetwork](2.seconds)
+      next.sendingStrategy shouldBe SendToPeer(second)
+      f.network.expectNoMessage(400.millis)
+    }
+  }
+
+  property("V2 held-page queue gives every peer a turn despite another peer's new page") {
+    withFixture { f =>
+      val second = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      val third = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      Seq(second, third).foreach(p => f.tracker.updateStatus(p, org.ergoplatform.consensus.Fork, Some(1000)))
+
+      f.inventory(firstPage)
+      f.sync()
+      f.inventory(firstPage, second)
+      f.inventory(firstPage, third)
+      Thread.sleep(125) // let the original peer's admission lock expire before its next page
+      f.inventory(selected.headers.slice(2, 401).map(_.id))
+
+      val replies = f.network.receiveN(3, 2.seconds).map(_.asInstanceOf[SendToNetwork])
+      replies.map(_.sendingStrategy) shouldBe Seq(SendToPeer(second), SendToPeer(third), SendToPeer(f.peer))
+      ErgoSyncInfoMessageSpec.parseBytesTry(replies.last.message.dataBytes).get
+        .asInstanceOf[ErgoSyncInfoV2].lastHeaders.map(_.height) should contain(401)
+    }
+  }
+
+  property("V2 queued page replacement sends its reply to the current connection handler") {
+    withFixture { f =>
+      val second = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      val third = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      val old = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
+        Some(PeerInfo(defaultPeerSpec, 0L)))
+      val current = old.copy(handlerRef = TestProbe()(f.system).ref)
+      Seq(second, third, old).foreach(p =>
+        f.tracker.updateStatus(p, org.ergoplatform.consensus.Fork, Some(1000)))
+
+      f.inventory(firstPage)
+      f.sync()
+      f.inventory(firstPage, second)
+      f.inventory(firstPage, third)
+      f.inventory(firstPage, old)
+      Thread.sleep(125) // replace while the preceding two queued peers hold this slot back
+      f.inventory(selected.headers.slice(2, 401).map(_.id), current)
+
+      val replies = f.network.receiveN(3, 3.seconds).map(_.asInstanceOf[SendToNetwork])
+      replies.map(_.sendingStrategy) shouldBe Seq(SendToPeer(second), SendToPeer(third), SendToPeer(current))
+      replies.last.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer.handlerRef shouldBe current.handlerRef
+      ErgoSyncInfoMessageSpec.parseBytesTry(replies.last.message.dataBytes).get
+        .asInstanceOf[ErgoSyncInfoV2].lastHeaders.map(_.height) should contain(401)
+    }
+  }
+
   property("V2 header-triggered sync retains the peer's confirmed inventory cursor") {
     withFixture { f =>
       f.inventory(firstPage)

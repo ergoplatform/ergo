@@ -939,18 +939,23 @@ object ExtraIndexer {
     getIndex(key, history.historyStorage)
   }
 
-  def checkpointOnSelectedFullChain(history: ErgoHistoryReader): Boolean = {
+  /** Height of the indexed checkpoint when its header is still on the selected full chain. */
+  def selectedCheckpointHeight(history: ErgoHistoryReader): Option[Int] = {
     val indexedHeight = getIndex(IndexedHeightKey, history).getInt
-    if (indexedHeight == 0) true
+    if (indexedHeight == 0) Some(0)
     else history.historyStorage.modifierBytesById(bytesToId(IndexedHeaderIdKey))
       .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
       .map(bytesToId)
       .flatMap(history.typedModifierById[Header])
-      .exists { header =>
+      .filter { header =>
         header.height == indexedHeight &&
           FullBlockProcessor.isInBestFullChain(history.historyStorage, header.id)
       }
+      .map(_ => indexedHeight)
   }
+
+  def checkpointOnSelectedFullChain(history: ErgoHistoryReader): Boolean =
+    selectedCheckpointHeight(history).isDefined
 
   def apply(chainSettings: ChainSettings,
             cacheSettings: CacheSettings,

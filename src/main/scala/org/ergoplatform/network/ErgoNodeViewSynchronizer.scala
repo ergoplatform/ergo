@@ -75,7 +75,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
-  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+  private var syncInfoV2CacheByTipAndMode:
+    Option[((Int, Option[ModifierId], Boolean), ErgoSyncInfoV2)] = Option.empty
 
   // Only received, fully held contiguous pages can advance this per-peer locator.
   // A selected-chain duplicate is reusable while the exact selected tip is unchanged.
@@ -355,12 +356,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /** Get V2 sync info from cache or load it from history and add to cache */
   private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
-    val headersHeight = history.headersHeight
-    syncInfoV2CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+    val key = (history.headersHeight, history.bestHeaderIdOpt, full)
+    syncInfoV2CacheByTipAndMode
+      .collect { case (cachedKey, syncInfo) if cachedKey == key => syncInfo }
       .getOrElse {
         val v2SyncInfo = history.syncInfoV2(full)
-        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        syncInfoV2CacheByTipAndMode = Some(key -> v2SyncInfo)
         v2SyncInfo
       }
   }

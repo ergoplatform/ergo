@@ -30,7 +30,7 @@ import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
 import scorex.crypto.authds.ADKey
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
@@ -770,6 +770,63 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length
         case _ => false
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: periodic V2 sync follows a selected tip change at the same height") {
+    val baseA = generateHistory(verifyTransactions = true, StateType.Utxo,
+      PoPoWBootstrap = false, blocksToKeep = -1)
+    val baseB = generateHistory(verifyTransactions = true, StateType.Utxo,
+      PoPoWBootstrap = false, blocksToKeep = -1)
+    try withFixture2 { ctx =>
+      import ctx._
+
+      val common = genHeaderChain(16, baseA, diffBitsOpt = None, useRealTs = false)
+      val commonA = applyHeaderChain(baseA, common)
+      val commonB = applyHeaderChain(baseB, common)
+      val selectedA = applyHeaderChain(commonA,
+        genHeaderChain(1, commonA, diffBitsOpt = None, useRealTs = false).tail)
+      val selectedB = applyHeaderChain(commonB,
+        genHeaderChain(1, commonB, diffBitsOpt = None, useRealTs = false).tail)
+      selectedA.headersHeight shouldBe selectedB.headersHeight
+      selectedA.bestHeaderIdOpt should not be selectedB.bestHeaderIdOpt
+
+      def nextV2SyncInfo(expectedPeer: ConnectedPeer): ErgoSyncInfoV2 = {
+        var received: Option[ErgoSyncInfoV2] = None
+        ncProbe.fishForMessage(3 seconds) {
+          case SendToNetwork(message, SendToPeers(peers))
+            if peers.contains(expectedPeer) && message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode =>
+            received = Some(message.data.get.asInstanceOf[ErgoSyncInfoV2])
+            true
+          case _ => false
+        }
+        received.get
+      }
+
+      val peerB = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis())))
+      synchronizerMockRef ! ChangedHistory(selectedA)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+      synchronizerMockRef ! HandshakedPeer(peer)
+      synchronizerMockRef ! SendLocalSyncInfo
+      val syncA = nextV2SyncInfo(peer)
+      syncA.lastHeaders.length shouldBe 2
+      syncA.height shouldBe Some(selectedA.headersHeight)
+      syncA.lastHeaders.head.id shouldBe selectedA.bestHeaderIdOpt.get
+      syncA.lastHeaders.last.id shouldBe common.head.id
+
+      // A newly eligible peer must receive the selected B branch, not the cached A summary.
+      synchronizerMockRef ! ChangedHistory(selectedB)
+      synchronizerMockRef ! HandshakedPeer(peerB)
+      synchronizerMockRef ! SendLocalSyncInfo
+      val syncB = nextV2SyncInfo(peerB)
+      syncB.lastHeaders.length shouldBe 2
+      syncB.height shouldBe Some(selectedB.headersHeight)
+      syncB.lastHeaders.head.id shouldBe selectedB.bestHeaderIdOpt.get
+      syncB.lastHeaders.last.id shouldBe common.head.id
+    } finally {
+      baseA.closeStorage()
+      baseB.closeStorage()
     }
   }
 

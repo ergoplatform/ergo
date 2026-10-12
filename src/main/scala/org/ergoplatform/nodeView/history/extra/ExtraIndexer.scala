@@ -107,7 +107,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * Height up to which the best full chain is applied: the height of the applied tip while
     * that tip is on the best full chain, 0 otherwise (nothing applied yet, or history has
     * switched to a branch of which the state has not reported a block yet). The indexer does
-    * not go above it; the next `FullBlockApplied` raises it.
+    * not go above it; the next `FullBlockApplied` sets it.
     */
   private def appliedHeight: Int = appliedTipOnBestFullChain.fold(0)(_.height)
 
@@ -118,7 +118,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * for the old one. No parent links are walked: the best-chain markers form a single chain,
     * so while the applied tip carries the marker every marked header at or below its height
     * is the tip or its ancestor. The markers are read under the history lock, which their
-    * writers (`append`, `reportModifierIsInvalid`) hold, so a switch is never seen half-written.
+    * writers (`append`, `reportModifierIsInvalid`) hold, so a switch is never seen half-written
+    * for the store; the index cache is filled by unlocked readers too.
     */
   private def appliedFullChainHeaderAtHeight(height: Int): Option[Header] = _history.synchronized {
     appliedTipOnBestFullChain.filter(_.height >= height).flatMap(_ => fullChainHeaderAtHeight(height))
@@ -694,7 +695,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   /**
-    * Every `FullBlockApplied` raises the applied tip before it is handled, whatever the
+    * Every `FullBlockApplied` sets the applied tip before it is handled, whatever the
     * indexer is busy with (caught up, catching up, persistence pending, rollback in progress,
     * where the event is stashed and recorded once more when replayed).
     */
@@ -766,7 +767,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       if (modCount == 0 || persistBuffered(state)) {
         blockCache.clear()
         caughtUpHook()
-        log.info("Indexer caught up with chain")
+        log.info(s"Indexer is at the applied tip: indexed ${state.indexedHeight}, best full block $chainHeight")
       }
 
     case Index() if state.rollbackInProgress =>
@@ -786,7 +787,14 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           case Some(newState) =>
             context.become(receive.orElse(loaded(newState)))
             if (newState.caughtUp) {
-              if (persistBuffered(newState)) caughtUpHook(header.height)
+              // While history holds blocks above this one further events are likely to follow:
+              // the block stays buffered, as during catch-up, and the retry timer writes the
+              // buffer if no event arrives.
+              if (chainHeight <= header.height || modCount >= saveLimit) {
+                if (persistBuffered(newState)) caughtUpHook(header.height)
+              } else {
+                scheduleRetry()
+              }
             } else {
               self ! Index()
             }
@@ -820,7 +828,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         stash()
       } else if (indexedTipIsOnBestFullChain(state)) {
         log.info(s"Ignoring rollback to $branchPoint because the indexed tip is already on the best full chain")
-        if (!state.caughtUp) self ! Index()
+        // the retry timer cancelled above may have been the one due to write buffered blocks
+        if (!state.caughtUp || modCount > 0) self ! Index()
       } else if (!reconcileIndexedTip(state)) {
         log.info(s"Deferring rollback to $branchPoint until the indexed tip can be reconciled with the best full chain")
         val newState = state.copy(caughtUp = false, rollbackTo = 0)
@@ -917,8 +926,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
       _history = history
       // The state version is the id of the last block the state applied. At genesis it is
       // not a header id: nothing counts as applied until the first FullBlockApplied.
-      val appliedIdOpt = stateVersionOpt.map(versionToId).orElse(history.bestFullBlockIdOpt)
-      lastAppliedHeaderOpt = appliedIdOpt.flatMap(id => history.typedModifierById[Header](id))
+      lastAppliedHeaderOpt = stateVersionOpt.map(versionToId).flatMap(id => history.typedModifierById[Header](id))
       val state = IndexerState.fromHistory(history)
       context.become(receive.orElse(loaded(state)))
       log.info(s"Started extra indexer at height ${state.indexedHeight}, applied tip is ${lastAppliedHeaderOpt.map(h => s"${h.id} at height ${h.height}")}")
@@ -938,10 +946,10 @@ object ExtraIndexer {
       *
       * @param history         - handle to database
       * @param stateVersionOpt - version of the state taken together with `history`, which is the id
-      *                          of the last block the state applied. If absent (a history handed over
-      *                          without a state), the best full block of `history` counts as applied.
+      *                          of the last block the state applied. If absent, nothing counts as
+      *                          applied until the first `FullBlockApplied`.
       */
-    case class StartExtraIndexer(history: ErgoHistory, stateVersionOpt: Option[VersionTag] = None)
+    case class StartExtraIndexer(history: ErgoHistory, stateVersionOpt: Option[VersionTag])
 
     /**
       * Retreive the currently used segment treshold

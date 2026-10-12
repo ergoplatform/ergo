@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorIdentity, ActorRef, ActorSystem, Identify, Props,
 import akka.testkit.TestProbe
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.BlockTransactions
@@ -16,10 +17,13 @@ import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.createDigestState
 import scorex.util.{ModifierId, bytesToId}
 import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
@@ -880,18 +884,34 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       Some(viewHolderProbe.ref),
       true
     )))
-    viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+    val request = viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+      .asInstanceOf[GetDataFromCurrentView[ErgoStateReader, Any]]
     val thresholdProbe = TestProbe()(system)
     thresholdProbe.send(productionIndexer, GetSegmentThreshold)
     thresholdProbe.expectMsg(512)
+    // the state of the snapshot is two blocks behind the best full block of history
+    val applied = history.bestHeaderAtHeight(history.fullBlockHeight - 2).get
+    val notApplied = (applied.height + 1 to history.fullBlockHeight).map(history.bestFullBlockAt(_).get)
     productionIndexer ! RemoteBlockApplied(
-      history.bestFullBlockOpt.get.header, history.bestFullBlockOpt.get.blockTransactions.txs.map(_.id))
+      applied, history.getFullBlock(applied).get.blockTransactions.txs.map(_.id))
     val probe = TestProbe()(system)
     probe.send(productionIndexer, Identify("started"))
     probe.expectMsg(ActorIdentity("started", Some(productionIndexer)))
-    viewHolderProbe.send(productionIndexer,
-      ExtraIndexer.ReceivableMessages.StartExtraIndexer(history))
+    val appliedState = createDigestState(idToVersion(applied.id), applied.stateRoot)
+    try viewHolderProbe.send(productionIndexer, request.f(CurrentView[ErgoStateReader](history, appliedState, null, null)))
+    finally appliedState.close()
 
+    // the indexer catches up with the state of the snapshot and stops there
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
+    }
+    Thread.sleep(1000) // nothing above it follows
+    IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
+    IndexerState.fromHistory(history).indexedHeight shouldBe applied.height
+
+    notApplied.foreach { block =>
+      productionIndexer ! RemoteBlockApplied(block.header, block.blockTransactions.txs.map(_.id))
+    }
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       val state = IndexerState.fromHistory(history)
       state.indexedHeight shouldBe history.fullBlockHeight
@@ -1145,7 +1165,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       probe.watch(restartedIndexer)
       try {
         probe.send(restartedIndexer,
-          ExtraIndexer.ReceivableMessages.StartExtraIndexer(_history))
+          ExtraIndexer.ReceivableMessages.StartExtraIndexer(_history, Some(idToVersion(_history.bestFullBlockIdOpt.get))))
 
         org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
           val state = IndexerState.fromHistory(_history)

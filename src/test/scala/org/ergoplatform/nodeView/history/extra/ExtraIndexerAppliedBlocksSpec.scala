@@ -2,30 +2,40 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{ActorRef, Props}
 import akka.testkit.TestProbe
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate}
+import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.AppenderBase
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.RemoteBlockApplied
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentThreshold
+import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
+import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
+import org.ergoplatform.nodeView.history.extra.SegmentSerializer.boxSegmentId
 import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType, UtxoStateReader}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createDigestState, createUtxoState, validFullBlock}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, untilTimeout}
+import org.slf4j.LoggerFactory
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, bytesToId}
 import sigma.Colls
+import sigma.interpreter.ProverResult
 import sigmastate.eval.Extensions._
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
+import scala.reflect.ClassTag
 import scala.util.Try
 
 /**
@@ -34,7 +44,9 @@ import scala.util.Try
   * History marks every block of a batch as best chain at append; the state applies the blocks
   * afterwards, one by one, and can reject one of them. These tests run the production indexer
   * against a real node view holder (history and UTXO state), hand the node blocks in orders the
-  * P2P layer can produce, and compare the whole index with the chain the state has applied.
+  * P2P layer can produce, and compare the index with the chain the state has applied: checkpoint,
+  * transaction and box rows, their numbering, spent flags and spending heights, address balances,
+  * the box lists of contract-template rows, token rows with their box lists, storage-rent rows.
   * Proof of work is not modelled: the node-view test settings use a fake PoW scheme.
   */
 class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTestOps {
@@ -62,6 +74,11 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     txs.init :+ txs.last.copy(inputs = txs.last.inputs.head.copy(boxId = ADKey @@ unknownId) +: txs.last.inputs.tail)
   }
 
+  /** The last transaction lists its first input twice. */
+  private val spendsSameBoxTwice: Shape = { (_, txs) =>
+    txs.init :+ txs.last.copy(inputs = txs.last.inputs :+ txs.last.inputs.head)
+  }
+
   /** The block ends with a copy of the last transaction of its parent. */
   private val replaysParentsLastTx: Shape = (parent, txs) => txs :+ parent.blockTransactions.txs.last
 
@@ -76,6 +93,33 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     txs :+ ErgoTransaction(IndexedSeq.empty, IndexedSeq.empty, IndexedSeq(minting))
   }
 
+  /**
+    * The block ends with a transaction which mints the token of `mint`, a transaction of the
+    * applied chain, once more: its first input is the first input of `mint`, a box which is
+    * already spent, and its output carries the token.
+    */
+  private def mintsAgain(mint: ErgoTransaction): Shape = { (_, txs) =>
+    val out = txs.last.outputs.head
+    val tokenId = mint.inputs.head.boxId.toTokenId
+    val minting = new ErgoBoxCandidate(out.value, out.ergoTree, out.creationHeight, Colls.fromArray(Array((tokenId, 7L))))
+    txs :+ ErgoTransaction(IndexedSeq(mint.inputs.head), IndexedSeq.empty, IndexedSeq(minting))
+  }
+
+  /** Ids and amounts of the tokens a box carries. */
+  private def tokensOf(box: ErgoBoxCandidate): Seq[(ModifierId, Long)] =
+    box.additionalTokens.toArray.toSeq.map(token => bytesToId(token._1.toArray) -> token._2)
+
+  /** Id of the token the transaction mints, if it mints one: the id of its first input. */
+  private def mintedTokenOf(tx: ErgoTransaction): Option[ModifierId] =
+    tx.inputs.headOption.map(input => bytesToId(input.boxId))
+      .filter(id => tx.outputs.exists(out => tokensOf(out).exists(_._1 == id)))
+
+  /** Box numbers a template or token row lists, in its segments and in the row; negative if spent. */
+  private def listedBoxes[T <: Segment[T] : ClassTag](history: ErgoHistory, row: T): Seq[Long] =
+    (0 until row.boxSegmentCount).flatMap { n =>
+      history.typedExtraIndexById[T](row.factory(boxSegmentId(row.id, n)).id).toSeq.flatMap(_.boxes)
+    } ++ row.boxes
+
   /** Child of `parent` with valid headers and sections, whose transactions the state rejects. */
   private def rejectedChild(parent: ErgoFullBlock, stateAfterParent: WrappedUtxoState, shape: Shape): ErgoFullBlock = {
     val valid = validFullBlock(Some(parent), stateAfterParent)
@@ -89,8 +133,10 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
   }
 
   /**
-    * Compares the whole index with the chain the state has applied: checkpoint, transaction and
-    * box rows, their numbering, spent flags, address balances and storage-rent rows.
+    * Compares the index with the chain the state has applied: checkpoint, transaction and box
+    * rows, their numbering, spent flags and spending heights, address balances, the box lists of
+    * contract-template rows, token rows with their box lists, and storage-rent rows. The
+    * transaction and box lists of address rows are not compared.
     *
     * @param chain   - blocks the state has applied, from height 1
     * @param foreign - transactions of blocks which are not on that chain
@@ -112,6 +158,9 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     // the indexer does not process the inputs of the block at height 1
     val spender: Map[ModifierId, ModifierId] = txs.collect { case (tx, block) if block.header.height > 1 =>
       inputIds(tx).map(_ -> tx.id)
+    }.flatten.toMap
+    val spendingHeight: Map[ModifierId, Int] = txs.collect { case (tx, block) if block.header.height > 1 =>
+      inputIds(tx).map(_ -> block.header.height)
     }.flatten.toMap
 
     val checkpoint = IndexerState.fromHistory(history)
@@ -147,16 +196,22 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         case Some(row) =>
           check(row.globalIndex == number, s"box $id is #$number, its row says #${row.globalIndex}")
           check(row.spendingTxIdOpt == spender.get(id), s"box $id (#$number) is spent by ${spender.get(id)}, its row says ${row.spendingTxIdOpt}")
+          check(row.spendingHeightOpt == spendingHeight.get(id),
+            s"box $id (#$number) is spent at height ${spendingHeight.get(id)}, its row says ${row.spendingHeightOpt}")
         case None =>
           diffs += s"box $id (#$number) has no row"
       }
       check(NumericBoxIndex.getBoxByNumber(history, number).exists(_.id == id), s"box number $number does not resolve to $id")
     }
 
+    val chainTokens: Set[ModifierId] = created.flatMap(box => tokensOf(box).map(_._1)).toSet
     foreign.filterNot(tx => txIds.contains(tx.id)).foreach { tx =>
       check(history.typedExtraIndexById[IndexedErgoTransaction](tx.id).isEmpty, s"transaction ${tx.id} is not on the applied chain and has a row")
       tx.outputs.map(out => bytesToId(out.id)).filterNot(createdIds.contains).foreach { id =>
         check(history.typedExtraIndexById[IndexedErgoBox](id).isEmpty, s"box $id of transaction ${tx.id} is not on the applied chain and has a row")
+      }
+      tx.outputs.flatMap(out => tokensOf(out).map(_._1)).filterNot(chainTokens.contains).foreach { id =>
+        check(history.typedExtraIndexById[IndexedToken](uniqueId(id)).isEmpty, s"token $id of transaction ${tx.id} is not on the applied chain and has a row")
       }
     }
 
@@ -165,6 +220,35 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
       val expected = boxes.filter(unspentInIndex).map(_.value).sum
       val indexed = history.typedExtraIndexById[IndexedErgoAddress](address).flatMap(_.balanceInfo).map(_.nanoErgs)
       check(indexed.contains(expected), s"address $address holds $expected nanoErg, its row says $indexed")
+    }
+
+    // box numbers as template and token rows list them: negative if the index has the box as spent
+    val listed: Seq[(ErgoBox, Long)] = created.zipWithIndex.map { case (box, number) =>
+      box -> (if (unspentInIndex(box)) number.toLong else -number.toLong)
+    }
+    listed.groupBy(entry => hashTreeTemplate(entry._1.ergoTree)).foreach { case (template, entries) =>
+      val expected = entries.map(_._2)
+      val indexed = history.typedExtraIndexById[IndexedContractTemplate](template).map(row => listedBoxes(history, row))
+      check(indexed.contains(expected), s"contract template $template: boxes of the chain missing from its row " +
+        s"${expected.diff(indexed.getOrElse(Seq.empty))}, entries of its row which are not boxes of the chain ${indexed.map(_.diff(expected))}")
+    }
+
+    txs.foreach { case (tx, _) =>
+      mintedTokenOf(tx).foreach { tokenId =>
+        val minted = tx.outputs.flatMap(out => tokensOf(out).filter(_._1 == tokenId).map(token => bytesToId(out.id) -> token._2))
+        val expected = listed.collect { case (box, number) if tokensOf(box).exists(_._1 == tokenId) => number }
+        history.typedExtraIndexById[IndexedToken](uniqueId(tokenId)) match {
+          case Some(row) =>
+            check(row.tokenId == tokenId && row.boxId.contains(minted.head._1) && row.amount.contains(minted.map(_._2).sum),
+              s"token $tokenId is minted in box ${minted.head._1}, amount ${minted.map(_._2).sum}, by transaction ${tx.id}; " +
+                s"its row says box ${row.boxId}, amount ${row.amount}")
+            val indexed = listedBoxes(history, row)
+            check(indexed == expected, s"token $tokenId: boxes of the chain missing from its row ${expected.diff(indexed)}, " +
+              s"entries of its row which are not boxes of the chain ${indexed.diff(expected)}")
+          case None =>
+            diffs += s"token $tokenId minted by transaction ${tx.id} has no row"
+        }
+      }
     }
 
     val rentRows = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).map(_.globalIndex).sorted.toSeq
@@ -262,6 +346,25 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
 
     /**
+      * One more valid block whose last transaction mints a token, handed over the usual way
+      * and applied.
+      *
+      * @return the minting transaction
+      */
+    def extendWithMint(): ErgoTransaction = {
+      val txs = validFullBlock(Some(chain.last), tipState).blockTransactions.txs
+      val spent = txs.last.outputs.head
+      val tokens = spent.additionalTokens.toArray :+ ((spent.id.toTokenId, 1000L))
+      val minting = new ErgoBoxCandidate(spent.value, spent.ergoTree, spent.creationHeight, Colls.fromArray(tokens))
+      val mint = ErgoTransaction(IndexedSeq(Input(spent.id, ProverResult.empty)), IndexedSeq.empty, IndexedSeq(minting))
+      val block = validFullBlock(Some(chain.last), tipState, txs :+ mint)
+      deliver(block)
+      awaitApplied(block)
+      accept(Seq(block -> tipState.applyModifier(block)(_ => ()).get))
+      mint
+    }
+
+    /**
       * Hands the node a valid block together with a child the state rejects, the child first.
       *
       * @return the valid block, which the state applies, and the rejected child
@@ -291,8 +394,34 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
   private def withNode(startIndexer: Boolean = true)(test: (NodeViewFixture, IndexedNode) => Unit): Unit =
     new NodeViewFixture(indexedSettings, parameters).apply { fixture =>
       val node = new IndexedNode(fixture, startIndexer)
-      try test(fixture, node) finally node.stopIndexer()
+      try test(fixture, node) finally {
+        node.stopIndexer()
+        node.tipState.closeStorage() // all copies of the state share one store
+      }
     }
+
+  /**
+    * Runs `body` with a counter of the writes of buffered index rows to the database. A write
+    * is not visible from outside the indexer other than by the debug message it logs.
+    */
+  private def countingFlushes[T](body: AtomicInteger => T): T = {
+    val flushes = new AtomicInteger(0)
+    val logger = LoggerFactory.getLogger(classOf[ExtraIndexer].getPackage.getName).asInstanceOf[LogbackLogger]
+    val levelBefore = logger.getLevel
+    val appender = new AppenderBase[ILoggingEvent] {
+      override def append(event: ILoggingEvent): Unit =
+        if (String.valueOf(event.getFormattedMessage).contains("inserted them to database")) flushes.incrementAndGet()
+    }
+    appender.setContext(logger.getLoggerContext)
+    appender.start()
+    logger.setLevel(Level.DEBUG)
+    logger.addAppender(appender)
+    try body(flushes) finally {
+      logger.detachAppender(appender)
+      logger.setLevel(levelBefore)
+      appender.stop()
+    }
+  }
 
   /**
     * A valid block and a child the state rejects reach the node child-first, `attempts` times in
@@ -312,8 +441,9 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     withNode() { (_, node) =>
       (1 to 2).foreach { _ =>
         val (good, bad) = node.deliverWithRejectedChild(spendsSpentBox)
-        // after a rejection no event reaches the indexer until the next block is applied,
-        // so the index has to be right already
+        // after a rejection no event reaches the indexer until the next block is applied:
+        // the index has to get to the valid block without one, and to stay there
+        untilTimeout(settleTimeout, 20.millis)(node.checkpoint.indexedHeaderId shouldBe Some(good.id))
         Thread.sleep(2500)
         val checkpoint = node.checkpoint
         checkpoint.indexedHeight shouldBe node.history.fullBlockHeight
@@ -342,6 +472,24 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
 
   property("a rejected block spending an unknown box leaves the index intact") {
     rejectedChildLeavesIndexIntact(spendsUnknownBox, attempts = 2)
+  }
+
+  property("a rejected block with a transaction listing the same input twice leaves the index intact") {
+    rejectedChildLeavesIndexIntact(spendsSameBoxTwice, attempts = 3)
+  }
+
+  property("a rejected block minting a token of the applied chain once more leaves the index intact") {
+    withNode() { (_, node) =>
+      (1 to 2).foreach { _ =>
+        val mint = node.extendWithMint()
+        node.indexDifferences() shouldBe empty
+
+        val (_, bad) = node.deliverWithRejectedChild(mintsAgain(mint))
+        node.extend()
+        node.indexDifferences(bad.blockTransactions.txs) shouldBe empty
+        node.indexerRestarts.get shouldBe 0
+      }
+    }
   }
 
   property("a single rejected block on the tip, sections in the usual order, leaves the index intact") {
@@ -384,6 +532,42 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
 
       node.extend()
       node.indexDifferences() shouldBe empty
+    }
+  }
+
+  property("a burst of blocks is written to the index in fewer writes than blocks, and completely") {
+    withNode() { (_, node) =>
+      // all blocks valid: the last event names the best full block of history
+      val valid = node.build(12)
+      val writesForValid = countingFlushes { writes =>
+        node.deliverChildFirst(valid.map(_._1))
+        node.awaitApplied(valid.last._1)
+        node.accept(valid)
+        // no further event follows
+        untilTimeout(5.seconds, 20.millis)(node.checkpoint.indexedHeaderId shouldBe Some(valid.last._1.id))
+        node.checkpoint.indexedHeight shouldBe node.history.fullBlockHeight
+        writes.get
+      }
+      info(s"${valid.size} valid blocks taken in one step, index writes: $writesForValid")
+      writesForValid should be < valid.size
+      node.indexDifferences() shouldBe empty
+
+      // the state rejects the last block: no event names a block history has nothing above
+      val applied = node.build(10)
+      val bad = rejectedChild(applied.last._1, applied.last._2, spendsSpentBox)
+      val writesForApplied = countingFlushes { writes =>
+        node.deliverChildFirst(applied.map(_._1) :+ bad)
+        node.awaitApplied(applied.last._1)
+        node.awaitRejected(bad)
+        node.accept(applied)
+        // no further event follows
+        untilTimeout(5.seconds, 20.millis)(node.checkpoint.indexedHeaderId shouldBe Some(applied.last._1.id))
+        writes.get
+      }
+      info(s"${applied.size} valid blocks and a rejected one taken in one step, index writes: $writesForApplied")
+      writesForApplied should be < applied.size
+      node.indexDifferences(bad.blockTransactions.txs) shouldBe empty
+      node.indexerRestarts.get shouldBe 0
     }
   }
 
@@ -476,6 +660,9 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         val state = createDigestState(idToVersion(applied.id), applied.header.stateRoot)
         try viewHolder.send(indexer, request.f(CurrentView[ErgoStateReader](history, state, null, null)))
         finally state.close()
+        // the indexer answers this once it has taken the snapshot
+        viewHolder.send(indexer, GetSegmentThreshold)
+        viewHolder.expectMsg(512)
         indexer
       }
       def stopAndWait(indexer: ActorRef): Unit = {
@@ -504,6 +691,9 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         awaitIndexedExactly(forkPoint)
 
         indexer ! RemoteBlockApplied(b1.header, b1.blockTransactions.txs.map(_.id))
+        // the node publishes the rollback of a chain switch after the blocks of the new branch;
+        // b1 is still buffered then, as history holds b2 above it, and has to be written
+        indexer ! Rollback(forkPoint.id)
         awaitIndexedExactly(b1)
         b2.blockTransactions.txs.foreach { tx =>
           history.typedExtraIndexById[IndexedErgoTransaction](tx.id) shouldBe None

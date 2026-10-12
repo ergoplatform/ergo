@@ -256,7 +256,7 @@ class UnknownMessageCodeReceptionSpec extends ErgoCorePropertyTest {
     }
   }
 
-  property("malformed unknown envelopes retain permanent-penalty handling") {
+  property("malformed unknown envelopes receive permanent penalties, including bad checksums") {
     val malformed = Seq(
       frame(UnknownCode, magic = wrongMagic),
       frame(UnknownCode, Array[Byte](1), checksum = Some(Array[Byte](0, 0, 0, 0))),

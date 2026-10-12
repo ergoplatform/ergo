@@ -1677,6 +1677,114 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
+  property("rollback of an indexed then rejected block with unknown input leaves the index intact") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+
+    // valid PoW, spending a nonexistent box, never applied to the state - the best-full-chain
+    // marker is set at append, semantic validity stays Unknown
+    val forged = ChainGenerator.forgeUnvalidatedBlock(_history, Seq(scorex.utils.Random.randomBytes(32)))
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, forged.header.id) shouldBe true
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    // the state rejects the block: markers flip, the indexer reconciles on its next message
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    // the index is exactly as if the rejected block never existed
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("rollback of an indexed then rejected block double-spending a box leaves the index intact") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+
+    // a box already spent on the valid chain
+    val spendingTx = fullChainTransactionsAt(2).txs.find(_.inputs.nonEmpty).get
+    val spentBoxId = spendingTx.inputs.head.boxId
+
+    val forged = ChainGenerator.forgeUnvalidatedBlock(_history, Seq(spentBoxId))
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    // while indexed, the original spend record must not be overwritten by the unvalidated block
+    history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
+      .spendingTxIdOpt shouldBe Some(spendingTx.id)
+
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    // the box stays spent by its original, valid spending transaction
+    val spentBox = history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
+    spentBox.spendingTxIdOpt shouldBe Some(spendingTx.id)
+    spentBox.spendingHeightOpt shouldBe Some(2)
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("box by number lookup tolerates a missing number row") {
+    indexer ! CreateDB(2)
+    awaitCondition(created)
+    NumericBoxIndex.getBoxByNumber(history, 1000000L) shouldBe None
+    indexer ! Reset()
+  }
+
   Seq("initial", "intermediate", "final").foreach { phase =>
     property(s"preserves recovery at the $phase rollback write failure") {
       val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))

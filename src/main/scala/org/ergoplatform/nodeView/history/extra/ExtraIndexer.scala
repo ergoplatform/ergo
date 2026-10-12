@@ -220,22 +220,34 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * @return whether the box was found in buffer or database -> should always return true
     */
   private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int, spendingProof: ProverResult): Boolean = {
-    boxes.get(id).map(box => {
-      box.asSpent(txId, height, spendingProof).box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
+    def recordTokens(iEb: IndexedErgoBox): Unit =
+      iEb.box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
         inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
       }
-      return true
-    })
-    history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
-      case Some(x) => // box found in DB, update
-        boxes.put(id, x.asSpent(txId, height, spendingProof))
-        x.box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
-          inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
-        }
+    // A spend recorded by another transaction is never overwritten: the block doing the
+    // overwrite can still be rejected by the state, and rolling it back would otherwise
+    // erase the original spend record.
+    def alreadySpentElsewhere(iEb: IndexedErgoBox): Boolean = iEb.spendingTxIdOpt.exists(_ != txId)
+    boxes.get(id) match {
+      case Some(box) if !alreadySpentElsewhere(box) =>
+        recordTokens(box.asSpent(txId, height, spendingProof))
         true
-      case None => // box not found at all (this shouldn't happen)
-        log.warn(s"Unknown box used as input: $id")
+      case Some(box) =>
+        log.warn(s"Box $id already spent by ${box.spendingTxIdOpt}, not spending it again in $txId")
         false
+      case None =>
+        history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
+          case Some(x) if !alreadySpentElsewhere(x) => // box found in DB, update
+            recordTokens(x.asSpent(txId, height, spendingProof))
+            boxes.put(id, x)
+            true
+          case Some(x) =>
+            log.warn(s"Box $id already spent by ${x.spendingTxIdOpt}, not spending it again in $txId")
+            false
+          case None => // box not found at all (this shouldn't happen)
+            log.warn(s"Unknown box used as input: $id")
+            false
+        }
     }
   }
 
@@ -520,7 +532,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       newState = newState.decrementTxIndex
       while (newState.globalTxIndex > txTarget) {
         val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, newState.globalTxIndex).get
-        tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach { iEb => // undo all spendings
+        // undo only spendings recorded by this transaction: inputs the index never resolved
+        // are stored as 0, and a rejected block can also reference boxes spent by other,
+        // valid transactions - unspending those would resurrect boxes this block never spent
+        tx.inputNums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
+          .filter(_.spendingTxIdOpt.contains(tx.id))
+          .foreach { iEb => // undo spendings
 
           iEb.spendingHeightOpt = None
           iEb.spendingTxIdOpt = None

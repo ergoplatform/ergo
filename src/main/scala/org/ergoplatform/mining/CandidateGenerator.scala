@@ -291,10 +291,7 @@ class CandidateGenerator(
 object CandidateGenerator extends ScorexLogging {
 
   /**
-    * Memoized extra-index sync flag for the storage-rent sweep in [[createCandidate]]: the
-    * sweep is skipped while the extra indexer is catching up with the chain; once caught up,
-    * the indexer tracks the chain continuously, so the flag is sticky and the index progress
-    * key is not read from the database again.
+    * Memoized extra-index sync flag for the storage-rent in [[createCandidate]]
     */
   private var extraIndexSynced: Boolean = false
 

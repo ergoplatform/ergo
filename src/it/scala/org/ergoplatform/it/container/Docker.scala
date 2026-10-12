@@ -1,7 +1,8 @@
 package org.ergoplatform.it.container
 
-import java.io.{File, FileOutputStream}
+import java.io.{ByteArrayOutputStream, File, FileOutputStream}
 import java.net.InetAddress
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -23,6 +24,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigRenderOptions}
 import net.ceedubs.ficus.Ficus._
 import org.apache.commons.io.FileUtils
 import org.asynchttpclient.Dsl.{config, _}
+import org.ergoplatform.it.api.NodeApi.WaitPolicy
 import org.ergoplatform.settings.NetworkType.{DevNet, DevNet60, MainNet, TestNet, Tests}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, NetworkType}
 import scorex.util.ScorexLogging
@@ -32,7 +34,7 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.util.control.NonFatal
-import scala.util.{Failure, Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 
 class Docker(
   suiteConfig: Config                = ConfigFactory.empty,
@@ -68,6 +70,10 @@ class Docker(
     DockerClientImpl.getInstance(configStandart, httpDockerClient)
   private var nodeRepository                    = Seq.empty[Node]
   private val isStopped                         = new AtomicBoolean(false)
+  // every container started and not force-removed, as (id, "NN-nodeXX") in start order;
+  // close() saves their logs, stopped nodes' included, before removing them
+  private var startedContainers                 = Vector.empty[(String, String)]
+  private var startCount                        = 0
 
   // This should be called after client is ready but before network created.
   // This allows resource cleanup for the network if we are running out of them
@@ -140,7 +146,21 @@ class Docker(
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
     Try {
-      val containerId     = containerBuilder.withName(containerName).exec().getId
+      val containerId = containerBuilder.withName(containerName).exec().getId
+      // a scenario can outlive its suite's timed-out Await, and close() removes only the
+      // containers registered before it
+      val registered = synchronized {
+        !isStopped.get && {
+          startCount += 1
+          val label = f"$startCount%02d-$configuredNodeName"
+          startedContainers = startedContainers :+ (containerId -> label)
+          true
+        }
+      }
+      if (!registered) {
+        Try(client.removeContainerCmd(containerId).withForce(true).exec())
+        throw new IllegalStateException(s"$tag: not starting $configuredNodeName, closed")
+      }
       val attachedNetwork = connectToNetwork(containerId, ip)
       client.startContainerCmd(containerId).exec()
 
@@ -157,9 +177,15 @@ class Docker(
         containerId          = containerId
       )
 
-      log.info(s"Started node: $nodeInfo")
+      log.info(s"Started node ${label(containerId)}: $nodeInfo")
 
-      val node = new Node(settings, nodeInfo, http)
+      val node = new Node(
+        settings,
+        nodeInfo,
+        http,
+        WaitPolicy.forNetwork(networkType),
+        () => containerProblem(containerId)
+      )
       nodeRepository = nodeRepository :+ node
       node
     } recoverWith {
@@ -365,6 +391,7 @@ class Docker(
     nodeRepository.find(_.containerId == containerId).foreach(_.close())
     nodeRepository = nodeRepository.filterNot(_.containerId == containerId)
     client.removeContainerCmd(containerId).withForce(true).exec()
+    synchronized { startedContainers = startedContainers.filterNot(_._1 == containerId) }
   }
 
   def removeFromMountedVolume(
@@ -395,7 +422,7 @@ class Docker(
     val waitCallback = waitContainer(cleanupContainerId)
     try {
       client.startContainerCmd(cleanupContainerId).exec()
-      val exitCode = waitCallback.awaitStatusCode()
+      val exitCode = waitCallback.awaitStatusCode(60, TimeUnit.SECONDS)
       if (exitCode != 0) {
         throw new IllegalStateException(
           s"Volume cleanup failed for $targetPath with exit code $exitCode"
@@ -408,21 +435,32 @@ class Docker(
   }
 
   override def close(): Unit = {
-    if (isStopped.compareAndSet(false, true)) {
+    if (synchronized(isStopped.compareAndSet(false, true))) {
       log.info("Stopping containers")
       nodeRepository foreach { node =>
         node.close()
-        client.stopContainerCmd(node.containerId).withTimeout(0).exec()
+        containerProblem(node.containerId) match {
+          case Some(problem) =>
+            log.warn(s"Node was not running at the end of $tag: $problem")
+          case None =>
+            attempt(s"stop ${label(node.containerId)}") {
+              client.stopContainerCmd(node.containerId).withTimeout(0).exec()
+            }
+        }
       }
-      http.close()
+      attempt("close the HTTP client")(http.close())
 
-      saveNodeLogs()
-
-      nodeRepository foreach { node =>
-        client.removeContainerCmd(node.containerId).withForce(true).exec()
+      val containers = synchronized(startedContainers).map(_._1)
+      containers.foreach { id =>
+        attempt(s"save the log of ${label(id)}")(saveLogs(id, tag))
       }
-      client.removeNetworkCmd(innerNetwork.getId).exec()
-      client.close()
+      containers.foreach { id =>
+        attempt(s"remove ${label(id)}") {
+          client.removeContainerCmd(id).withForce(true).exec()
+        }
+      }
+      attempt("remove the network")(client.removeNetworkCmd(innerNetwork.getId).exec())
+      attempt("close the Docker client")(client.close())
 
       localDataVolumeOpt.foreach { path =>
         val dataVolume = new File(path)
@@ -431,11 +469,76 @@ class Docker(
     }
   }
 
+  /** Teardown goes on after a failed step, so that the remaining logs are still saved. */
+  private def attempt(action: String)(f: => Any): Unit =
+    try f
+    catch { case NonFatal(e) => log.warn(s"$tag: could not $action: $e") }
+
+  /** Each node's /info summary and, unless its container is running, the container's
+    * state: evidence for a failure message. */
+  def describeNodes(nodes: Seq[Node]): Future[String] =
+    Future
+      .traverse(nodes) { node =>
+        node.infoSummary.flatMap { info =>
+          Future(blocking(containerProblem(node.containerId))).map { problem =>
+            s"${node.nodeLabel}: $info${problem.fold("")(p => s", $p")}"
+          }
+        }
+      }
+      .map(_.mkString("; "))
+
+  private def label(containerId: String): String =
+    synchronized(startedContainers)
+      .find(_._1 == containerId)
+      .fold(containerId.take(12))(_._2)
+
+  /** None while the container is running, otherwise its state and last log lines. A
+    * failed inspection is no evidence that the node died, so it yields None too. */
+  def containerProblem(containerId: String): Option[String] =
+    Try(client.inspectContainerCmd(containerId).exec().getState) match {
+      case Success(state) if isTrue(state.getRunning) && !isTrue(state.getPaused) => None
+      case Success(state) =>
+        Some(
+          s"container ${label(containerId)} status=${state.getStatus} " +
+          s"exitCode=${state.getExitCodeLong} oomKilled=${state.getOOMKilled} " +
+          s"error='${Option(state.getError).getOrElse("")}', last log lines:\n" +
+          logTail(containerId, lines = 30)
+        )
+      case Failure(_: NotFoundException) =>
+        Some(s"container ${label(containerId)} was removed")
+      case Failure(_) => None
+    }
+
+  private def isTrue(flag: java.lang.Boolean): Boolean =
+    java.lang.Boolean.TRUE.equals(flag)
+
+  private def logTail(containerId: String, lines: Int): String = {
+    val out = new ByteArrayOutputStream()
+    val callback = new ResultCallback.Adapter[Frame] {
+      override def onNext(frame: Frame): Unit = out.write(frame.getPayload)
+    }
+    try {
+      client
+        .logContainerCmd(containerId)
+        .withStdOut(true)
+        .withStdErr(true)
+        .withTail(lines)
+        .exec(callback)
+        .awaitCompletion(5, TimeUnit.SECONDS)
+      new String(out.toByteArray, StandardCharsets.UTF_8)
+    } catch {
+      case NonFatal(e) => s"<log unavailable: $e>"
+    } finally {
+      callback.close()
+    }
+  }
+
   private def saveLogs(containerId: String, tag: String): Unit = {
     val logDir: Path = Paths.get(System.getProperty("user.dir"), "target", "logs")
     Files.createDirectories(logDir)
 
-    val fileName: String = if (tag.isEmpty) containerId else s"$tag-$containerId"
+    val nodeLog          = s"${label(containerId)}-${containerId.take(12)}"
+    val fileName: String = if (tag.isEmpty) nodeLog else s"$tag-$nodeLog"
     val logFile: File    = logDir.resolve(s"$fileName.log").toFile
     log.info(s"Writing logs of $fileName to ${logFile.getAbsolutePath}")
 
@@ -459,13 +562,6 @@ class Docker(
     } finally {
       callback.close()
       fileStream.close()
-    }
-  }
-
-  private def saveNodeLogs(): Unit = {
-    nodeRepository.foreach { node =>
-      import node.nodeInfo.containerId
-      saveLogs(containerId, tag)
     }
   }
 

@@ -772,7 +772,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
             val syncInfo = if (syncV2Supported(remote)) {
-              getV2SyncInfo(hr, full = false)
+              // full, not reduced (last header only) sync info, otherwise a node on a fork never tells where
+              // its chain branches off while the peer keeps delivering headers: every reduced sync info sent
+              // postpones the periodic sync, which carries the older headers
+              getV2SyncInfo(hr, full = true)
             } else {
               getV1SyncInfo(hr)
             }

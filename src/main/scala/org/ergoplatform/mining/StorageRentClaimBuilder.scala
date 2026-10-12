@@ -92,13 +92,13 @@ object StorageRentClaimBuilder extends ScorexLogging {
     * @param tokenWhitelist       - tokens which are never burned: when a box carrying them
     *                             is fully consumed, they are carried over to the miner's
     *                             proceeds output
-    * @param onPermanentlySkipped - called for every examined box that can never be claimed
-    *                             (re-emission token, min value or fee wrapping, value at or
-    *                             below the minimum, undustable output, oversize box); the
-    *                             caller uses it to evict such boxes from the eligibility
-    *                             index so the scan window keeps advancing. Too-young boxes
-    *                             and recreations dropped for dusty aggregate fees are
-    *                             transient and are NOT reported.
+    * @param onPermanentlySkipped - optional diagnostic callback for an examined box excluded
+    *                             from this claim (re-emission token, value or fee limit,
+    *                             output dust or size). Despite the historical parameter name,
+    *                             parameters and whitelist policy may change; a skip does not
+    *                             prove the box was spent and must not delete its rent eligibility.
+    *                             Too-young boxes and recreations dropped for dusty aggregate
+    *                             fees are not reported through this callback.
     */
   def buildClaim(eligible: Iterable[ErgoBox],
                  currentHeight: Int,
@@ -131,12 +131,11 @@ object StorageRentClaimBuilder extends ScorexLogging {
       // wrap to non-positive for huge boxes - such boxes can not be charged safely
       // (the recreated output's dust floor would be mispriced), so they are skipped
       val minValue = parameters.minValuePerByte * box.bytes.length
-      // a box at or below the minimum allowed value can neither be charged nor recreated;
-      // it is skipped (the caller drops such broken eligibility entries from the index)
+      // this builder skips a box at or below the current input minimum; preserve
+      // its eligibility for later attempts under changed parameters
       val aboveMinValue = minValue > 0 && box.value > minValue.toLong
       if (!oldEnough) {
-        // transient (can not even arrive from the caller's cutoff-bounded scan): not
-        // reported as permanently skipped
+        // can not arrive from the caller's cutoff-bounded scan; not reported
       } else if (carriesReemissionToken || !aboveMinValue) {
         onPermanentlySkipped(box)
       } else {

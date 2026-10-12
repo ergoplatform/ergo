@@ -28,7 +28,7 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
+import scorex.util.{ModifierId, ScorexLogging, idToBytes}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -38,7 +38,6 @@ import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -705,11 +704,10 @@ object CandidateGenerator extends ScorexLogging {
       // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
       // bypassing the mempool (goes into the block right after the prioritized transactions)
       val rentClaimTxs: Seq[ErgoTransaction] = {
-        // Collect rent only when the extra index is (almost) in sync with the chain: against
-        // a lagging index a temporarily unresolvable box would be mistaken for permanently
-        // unclaimable and evicted below. One block of lag is tolerated, as the indexer may
-        // simply not have processed the chain tip yet. The check is memoized: once synced,
-        // the indexer tracks the chain continuously and the database is not read again.
+        // Collect rent only when the extra index is (almost) in sync with the chain.
+        // One block of lag is tolerated, as the indexer may simply not have processed
+        // the chain tip yet. The check is memoized: once synced, the indexer tracks
+        // the chain continuously and the database is not read again.
         if (!extraIndexSynced) {
           val indexedHeight = ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, history).getInt
           val fullHeight = history.fullBlockHeight
@@ -740,21 +738,14 @@ object CandidateGenerator extends ScorexLogging {
             val params = upcomingContext.currentParameters
             val reemissionTokenIdOpt =
               Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
-            val permanentlySkipped = mutable.ArrayBuffer.empty[ModifierId]
             val claimTxs = StorageRentClaimBuilder.buildClaim(
               scanned,
               upcomingHeight,
               params,
               minerPk,
               reemissionTokenIdOpt,
-              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet,
-              b => permanentlySkipped += bytesToId(b.id)
+              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet
             ).toSeq
-            if (permanentlySkipped.nonEmpty) {
-              log.warn(s"Removing ${permanentlySkipped.length} storage-rent eligibility entries " +
-                s"for permanently unclaimable boxes: $permanentlySkipped")
-              history.removeStorageRentBoxes(permanentlySkipped.toSeq)
-            }
             claimTxs
           } else {
             Seq.empty

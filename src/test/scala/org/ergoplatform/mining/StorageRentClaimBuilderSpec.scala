@@ -424,7 +424,7 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
   }
 
   property("the claim cap counts claimed boxes, not examined ones") {
-    // MaxClaims permanently-skipped boxes (reemission) followed by MaxClaims claimable
+    // MaxClaims boxes skipped for this claim (reemission) followed by MaxClaims claimable
     // ones: the builder must walk past the junk and claim all of the good boxes
     // (capping examined inputs instead would produce no claim at all)
     val reemissionId = tokenIdOf(9.toByte)
@@ -438,16 +438,16 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     tx.inputs.map(_.boxId) shouldBe good.map(_.id)
   }
 
-  property("permanent skips are reported, transient ones and claimable boxes are not") {
+  property("current-claim skips are reported, too-young and claimable boxes are not") {
     val skipped = mutable.ArrayBuffer.empty[ErgoBox]
     val sink: ErgoBox => Unit = skipped += _
 
-    // re-emission token on an EIP-27 network: permanently unclaimable
+    // re-emission token on an EIP-27 network: excluded from this claim
     val reemissionId = tokenIdOf(9.toByte)
     val reemBox = boxWithTokens(10000000000L, Constants.StoragePeriod, Seq(9.toByte))
-    // value at or below the minimum: permanently unclaimable
+    // value at or below the current input minimum: skipped by this builder
     val atMin = atMinValueBox(Constants.StoragePeriod)
-    // fee wrapping non-positive: permanently unclaimable
+    // fee wrapping non-positive under current parameters: skipped
     val feeWrapBox = {
       val tokens = (0 until 70).map(i =>
         (Digest32Coll @@ Colls.fromArray(Array.fill(32)(i.toByte))) -> 1L)

@@ -3,13 +3,21 @@ package org.ergoplatform.mining
 import java.lang.reflect.{InvocationHandler, Method, Proxy}
 import java.nio.ByteBuffer
 
+import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.StatusReply
+import akka.testkit.{TestKit, TestProbe}
+import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
+import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexer, IndexedErgoBox, NumericBoxIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, UtxoState, VotingData}
+import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.utils.TestFileUtils
@@ -18,11 +26,111 @@ import scorex.util.{ModifierId, bytesToId, idToBytes}
 import sigmastate.helpers.TestingHelpers._
 
 import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
+import scala.concurrent.duration._
 
 /** A rejected batch claim must not erase eligibility of independent unspent boxes. */
 class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUtils {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants.{settings => baseSettings}
+
+  property("actor retains rent cursor across forced candidate regeneration") {
+    new TestKit(ActorSystem()) {
+      val height = 3 * Constants.StoragePeriod
+      val threshold = height - Constants.StoragePeriod
+      val eligibleBoxes = (0 to StorageRentClaimBuilder.MaxClaims).map { index =>
+        testBox(10000000000L + index, Constants.TrueTree, threshold, Seq.empty, Map.empty)
+      }
+      val fixtureSettings = baseSettings.copy(
+        directory = createTempDir.getAbsolutePath,
+        nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
+      val baseState = UtxoState.fromBoxHolder(BoxHolder(eligibleBoxes), None,
+        createTempDir, fixtureSettings, parameters)
+      val block = invalidErgoFullBlockGen.sample.get
+      val parentHeader = block.header.copy(height = height - 1)
+      val parentBlock = block.copy(parentHeader)
+      val agedContext = new ErgoStateContext(Seq(parentHeader), None,
+        genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(fixtureSettings.chainSettings)
+      val state = new UtxoState(baseState.persistentProver, baseState.version,
+        baseState.store, fixtureSettings) {
+        override def stateContext: ErgoStateContext = agedContext
+        override def emissionBoxOpt: Option[ErgoBox] = None
+      }
+      val storage = HistoryStorage(fixtureSettings)
+      eligibleBoxes.zipWithIndex.foreach { case (box, index) =>
+        val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, index.toLong)
+        storage.insertExtra(Array.empty[(Array[Byte], Array[Byte])],
+          Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
+      }
+      storage.insertExtra(Array(ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4)
+        .putInt(height - 1).array), Array.empty[ExtraIndex])
+      val history = Proxy.newProxyInstance(
+        classOf[ErgoHistoryReader].getClassLoader,
+        Array[Class[_]](classOf[ErgoHistoryReader]),
+        new InvocationHandler {
+          override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
+            method.getName match {
+              case "lastHeaders$default$2" => Int.box(0)
+              case "lastHeaders" => HeaderChain.empty
+              case "bestFullBlockOpt" => Some(parentBlock)
+              case "fullBlockHeight" => Int.box(parentHeader.height)
+              case "historyStorage" => storage
+              case "typedExtraIndexById" => storage.getExtraIndex(args(0).asInstanceOf[ModifierId])
+              case "storageRentBoxesAtOrBefore" =>
+                storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
+                  args(2).asInstanceOf[Option[StorageRentBox]])
+              case "removeStorageRentBoxes" => fail("candidate generation must retain unspent rent rows")
+              case "typedModifierById" => None
+              case "requiredDifficultyAfter" => parentHeader.requiredDifficulty
+              case other => throw new UnsupportedOperationException(s"unexpected history read: $other")
+            }
+        }
+      ).asInstanceOf[ErgoHistoryReader]
+
+      try {
+        val readersProbe = TestProbe()
+        val viewHolderProbe = TestProbe()
+        val replyProbe = TestProbe()
+        val wallet = new ErgoWalletReader {
+          val walletActor: ActorRef = system.deadLetters
+        }
+        val generator = CandidateGenerator(defaultMinerPk, readersProbe.ref, viewHolderProbe.ref, fixtureSettings)
+        readersProbe.expectMsg(GetReaders)
+        // The actor's automatic empty request cannot scan: there is no mempool or emission transaction.
+        readersProbe.reply(Readers(history, state, ErgoMemPool.empty(fixtureSettings), wallet))
+        val conflictingSpend = ErgoTransaction(
+          IndexedSeq(Input(eligibleBoxes.head.id, emptyProverResult)), IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(eligibleBoxes.head.value, Constants.TrueTree, height)))
+        val firstClaim = StorageRentClaimBuilder.buildClaim(eligibleBoxes.take(StorageRentClaimBuilder.MaxClaims),
+          height, parameters, defaultMinerPk, None, Set.empty[ModifierId]).get
+        val laterClaim = StorageRentClaimBuilder.buildClaim(Seq(eligibleBoxes.last),
+          height, parameters, defaultMinerPk, None, Set.empty[ModifierId]).get
+        def nextCandidate(): Candidate = {
+          generator.tell(GenerateCandidate(Seq(conflictingSpend), reply = true, forced = true), replyProbe.ref)
+          replyProbe.expectMsgPF(10.seconds) {
+            case StatusReply.Success(candidate: Candidate) => candidate
+          }
+        }
+        val first = nextCandidate()
+        first.candidateBlock.transactions.map(_.id) should contain(conflictingSpend.id)
+        first.candidateBlock.transactions.map(_.id) should not contain firstClaim.id
+        first.candidateBlock.transactions.flatMap(_.inputs.map(in => bytesToId(in.boxId))) should not contain
+          bytesToId(eligibleBoxes.last.id)
+        viewHolderProbe.expectMsgType[EliminateTransactions](10.seconds).ids should contain(firstClaim.id)
+        val second = nextCandidate()
+        second.candidateBlock.transactions.map(_.id) should contain(laterClaim.id)
+        val third = nextCandidate()
+        third.candidateBlock.transactions.map(_.id) should contain(laterClaim.id)
+        // No candidate was applied: all 101 persistent rows and UTXOs remain available.
+        storage.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
+          .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
+        eligibleBoxes.foreach(box => state.boxById(box.id) shouldBe Some(box))
+      } finally {
+        TestKit.shutdownActorSystem(system)
+        storage.close()
+        state.closeStorage()
+      }
+    }
+  }
 
   property("prioritized owner spend does not drop other boxes in a rejected rent claim") {
     val height = 3 * Constants.StoragePeriod

@@ -22,7 +22,7 @@ class ExtraIndexerRestartSpec extends ErgoCorePropertyTest with TestFileUtils {
   private class RestartProbeIndexer(cacheSettings: CacheSettings,
                                     addressEncoder: ErgoAddressEncoder,
                                     nodeViewHolderRef: ActorRef)
-    extends ExtraIndexer(cacheSettings, addressEncoder, Some(nodeViewHolderRef)) {
+    extends ExtraIndexer(cacheSettings, addressEncoder, Some(nodeViewHolderRef), true) {
     override def receive: Receive = super.receive.orElse {
       case IsInitialized => sender() ! (_history ne null)
       case FailOnce => throw new IllegalStateException("injected actor failure")

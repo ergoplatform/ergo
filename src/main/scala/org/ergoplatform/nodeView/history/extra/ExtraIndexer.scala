@@ -2,7 +2,6 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash, Timers}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
-import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -75,11 +74,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
   protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
+    // No semantic-validity check: Unknown marks are transient (the best-chain marker can be
+    // persisted before validation finishes), Invalid modifiers are already filtered out by
+    // typedModifierById, and invalidation of a best-chain block flips its markers and is
+    // handled by the rollback/reconciliation machinery like any reorg.
     _history.headerIdsAtHeight(height)
-      .find { id =>
-        FullBlockProcessor.isInBestFullChain(historyStorage, id) &&
-          _history.isSemanticallyValid(id) == ModifierSemanticValidity.Valid
-      }
+      .find(id => FullBlockProcessor.isInBestFullChain(historyStorage, id))
       .flatMap(id => _history.typedModifierById[Header](id))
   }
 
@@ -133,6 +133,23 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected val templates: mutable.HashMap[ModifierId, IndexedContractTemplate] = mutable.HashMap.empty[ModifierId, IndexedContractTemplate]
   protected val tokens: mutable.HashMap[ModifierId, IndexedToken] = mutable.HashMap.empty[ModifierId, IndexedToken]
   protected val segments: mutable.HashMap[ModifierId, Segment[_]] = mutable.HashMap.empty[ModifierId, Segment[_]]
+
+  /**
+    * Whether the storage-rent eligibility index is maintained (`storageRentCollection`
+    * setting). When off, no rent rows are written at all; the schema-version check in
+    * `ErgoHistory.readOrGenerate` then also requires only the base schema, and turning
+    * the flag on later forces a rescan which builds the rows from scratch.
+    */
+  protected val rentIndexEnabled: Boolean
+
+  /**
+    * Storage-rent eligibility index buffers: upserts and deletions keyed by the entry id
+    * (the index key). A box created and spent within the same buffer window is removed from
+    * the upserts only; a box created in an already-flushed batch gets a deletion marker.
+    * Unused when [[rentIndexEnabled]] is off.
+    */
+  protected val rentBoxes: mutable.HashMap[ModifierId, StorageRentBox] = mutable.HashMap.empty[ModifierId, StorageRentBox]
+  protected val rentBoxDeletes: mutable.HashSet[ModifierId] = mutable.HashSet.empty[ModifierId]
 
   /**
     * Input tokens in a transaction, cleared after every transaction
@@ -223,6 +240,18 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   /**
+    * Delete the storage-rent eligibility entry of a box being spent (see [[rentBoxes]]).
+    */
+  private def markRentBoxSpent(iEb: IndexedErgoBox): Unit = {
+    if (rentIndexEnabled) {
+      val srb = StorageRentBox(iEb)
+      if (rentBoxes.remove(srb.id).isEmpty) {
+        rentBoxDeletes += srb.id
+      }
+    }
+  }
+
+  /**
     * Add or subtract a box from an address in the buffer or in database.
     *
     * @param id             - hash of the (ergotree) address
@@ -301,7 +330,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   /**
     * @return number of indexes in all buffers
     */
-  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size
+  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size +
+    rentBoxes.size + rentBoxDeletes.size
 
   /**
     * Write buffered indexes to database and clear buffers.
@@ -310,6 +340,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     persistencePending = true
     val start: Long = System.currentTimeMillis
 
+    // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
@@ -318,6 +349,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       template.buffer.values.foreach(seg => segments.put(seg.id, seg))
       template.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
+
+    // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       token.buffer.values.foreach(seg => segments.put(seg.id, seg))
       token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
@@ -326,8 +359,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     val indexedHeaderEntry = state.indexedHeaderId.map { id =>
       IndexedHeaderIdKey -> fastIdToBytes(id)
     }.toArray
-    val objects = (general.iterator ++ boxes.valuesIterator ++ trees.valuesIterator ++
-      templates.valuesIterator ++ tokens.valuesIterator ++ segments.valuesIterator).toArray
+    val objects = ((((((general ++= boxes.values) ++= trees.values)
+      ++= templates.values) ++= tokens.values) ++= segments.values) ++= rentBoxes.values).toArray
     historyStorage.insertExtraTry(
       Array(
         (IndexedHeightKey, ByteBuffer.allocate(4).putInt(state.indexedHeight).array),
@@ -335,19 +368,26 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         (GlobalBoxIndexKey, ByteBuffer.allocate(8).putLong(state.globalBoxIndex).array),
         (RollbackToKey, ByteBuffer.allocate(4).putInt(state.rollbackTo).array)
       ) ++ indexedHeaderEntry,
-      objects
+      objects,
+      // spent storage-rent rows are deleted in the same batch as the progress marker,
+      // so a crash can not leave them behind an advanced checkpoint
+      rentBoxDeletes.toArray
     ).recoverWith { case error =>
       historyStorage.invalidateExtraCache(objects.iterator.map(_.id).toSeq)
       Failure(error)
     }.get
 
     log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
+
+    // clear buffers for next batch
     general.clear()
     boxes.clear()
     trees.clear()
     templates.clear()
     tokens.clear()
     segments.clear()
+    rentBoxes.clear()
+    rentBoxDeletes.clear()
     persistencePending = false
   }
 
@@ -390,6 +430,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           val spendingProof = tx.inputs(i).spendingProof
           if (findAndSpendBox(boxId, tx.id, height, spendingProof)) { // spend box and add tx
             val iEb = boxes(boxId)
+            markRentBoxSpent(iEb)
             findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
             findAndUpdateTemplate(hashTreeTemplate(iEb.box.ergoTree), Left(iEb))
               cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -408,6 +449,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         boxes.put(iEb.id, iEb) // box by id
         general += NumericBoxIndex(newState.globalBoxIndex, iEb.id) // box id by global box number
         outputs(i) = iEb.globalIndex
+
+        // unspent box by creation height (storage-rent eligibility index)
+        if (rentIndexEnabled) {
+          val srb = StorageRentBox(iEb)
+          rentBoxes.put(srb.id, srb)
+        }
 
         // box by address
         findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
@@ -485,7 +532,9 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
           template.findAndModBox(iEb.globalIndex, history)
 
-          historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](iEb, address, template) ++ address.buffer.values ++ template.buffer.values).get
+          val rentRow: Array[ExtraIndex] =
+            if (rentIndexEnabled) Array[ExtraIndex](StorageRentBox(iEb)) else Array.empty
+          historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](iEb, address, template) ++ rentRow ++ address.buffer.values ++ template.buffer.values).get
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
             history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
@@ -523,6 +572,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         }
         toRemove += iEb.id // box by id
         toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number
+        if (rentIndexEnabled) toRemove += StorageRentBox(iEb).id // unspent box by creation height
         newState = newState.decrementBoxIndex
       }
       newState = newState.incrementBoxIndex
@@ -738,12 +788,15 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 /**
   * Actor that constructs an index of database elements.
   *
-  * @param cacheSettings - cacheSettings to use for saveLimit size
-  * @param ae            - ergo address encoder to use for handling addresses
+  * @param cacheSettings     - cacheSettings to use for saveLimit size
+  * @param ae                - ergo address encoder to use for handling addresses
+  * @param rentIndexEnabled  - whether to maintain the storage-rent eligibility index
+  *                            (`storageRentCollection` setting)
   */
 class ExtraIndexer(cacheSettings: CacheSettings,
                    ae: ErgoAddressEncoder,
-                   nodeViewHolderRefOpt: Option[ActorRef] = None)
+                   nodeViewHolderRefOpt: Option[ActorRef],
+                   override protected val rentIndexEnabled: Boolean)
   extends ExtraIndexerBase {
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
@@ -857,7 +910,7 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 8
+  val NewestVersion: Int = 7
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
@@ -866,6 +919,16 @@ object ExtraIndexer {
   val RollbackToKey: Array[Byte] = Algos.hash("rollback to")
   val IndexedHeaderIdKey: Array[Byte] = Algos.hash("indexed header id")
   val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
+
+  /**
+    * Marker key recording that the extra index contains storage-rent eligibility rows.
+    * Rent rows are written only while `storageRentCollection` is on, which the schema
+    * version can not capture: turning the flag back on after an off period must force a
+    * rebuild (blocks indexed while off have no rent rows), turning it off must not destroy
+    * the index. `ErgoHistory.readOrGenerate` maintains this marker accordingly.
+    */
+  val RentIndexEnabledKey: Array[Byte] = Algos.hash("rent index enabled")
+  val RentIndexEnabledBytes: Array[Byte] = Array(1.toByte)
 
   def getIndex(key: Array[Byte], history: HistoryStorage): ByteBuffer =
     ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8) {
@@ -891,8 +954,8 @@ object ExtraIndexer {
 
   def apply(chainSettings: ChainSettings,
             cacheSettings: CacheSettings,
-            nodeViewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef = {
-    val props = Props(new ExtraIndexer(cacheSettings, chainSettings.addressEncoder, Some(nodeViewHolderRef)))
+            nodeViewHolderRef: ActorRef)(implicit system: ActorSystem, rentIndexEnabled: Boolean): ActorRef = {
+    val props = Props(new ExtraIndexer(cacheSettings, chainSettings.addressEncoder, Some(nodeViewHolderRef), rentIndexEnabled))
     system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
   }
 }

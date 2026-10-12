@@ -47,11 +47,19 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   val minimalSuffix = 2
   val txCostLimit: Height = initSettings.nodeSettings.maxTransactionCost
   val txSizeLimit: Height = initSettings.nodeSettings.maxTransactionSize
-  val startTime: Long = System.currentTimeMillis() - ((5000 - 1) * blockInterval.toMillis)
+  // Fresh chains must stay within the node's freshness window (blockInterval * headerChainDiff)
+  // for their sections to be accepted, so the base timestamp is recomputed for every generated
+  // chain - a value fixed at class-loading goes stale while a long test suite is running.
+  private var startTime: Long = freshStartTime()
+
+  private def freshStartTime(): Long = System.currentTimeMillis() - ((5000 - 1) * blockInterval.toMillis)
 
   var endTime: Long = 0
 
   def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): UtxoState = {
+    // Refresh the base timestamp only for a fresh chain: an extension continues from the
+    // timestamps of the chain being extended.
+    if (stateOpt.isEmpty) startTime = freshStartTime()
     val state = stateOpt.getOrElse {
         val stateDir = new File(s"${dir.getAbsolutePath}/state")
         stateDir.mkdirs()
@@ -94,8 +102,16 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       val candidate = genCandidate(defaultProver.hdPubKeys.head.key, last, time, txs, state)(history)
       val block = proveCandidate(candidate.get)
 
-      assert(history.append(block.header).isSuccess)
-      block.blockSections.foreach(s => if (!history.contains(s)) assert(history.append(s).isSuccess))
+      val headerAppend = history.append(block.header)
+      assert(headerAppend.isSuccess,
+        s"append of header ${block.header.encodedId} at height ${block.header.height} failed: ${headerAppend.failed.map(_.toString)}")
+      block.blockSections.foreach { s =>
+        if (!history.contains(s)) {
+          val res = history.append(s)
+          assert(res.isSuccess,
+            s"append of section ${s.encodedId} of block ${block.encodedId} at height ${block.header.height} failed: ${res.failed.map(_.toString)}")
+        }
+      }
 
       val outToPassNext = if (last.isEmpty) {
         block.transactions.flatMap(_.outputs).find(_.ergoTree == minerProp)

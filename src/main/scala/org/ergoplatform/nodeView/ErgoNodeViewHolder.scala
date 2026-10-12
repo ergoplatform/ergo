@@ -68,7 +68,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * state (result of log's modifiers application to pre-historical(genesis) state,
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
-  private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+  private var nodeView: NodeView = Try(restoreState().getOrElse(genesisState)).recover { case ex =>
+    log.error("Failed to initialize node view, shutting down the node", ex)
+    Try(ErgoApp.shutdownSystem()(context.system)).failed.foreach { shutdownError =>
+      if (shutdownError ne ex) ex.addSuppressed(shutdownError)
+    }
+    throw ex
+  }.get
 
   /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
   private var chainProgress: Option[ChainProgress] = None
@@ -459,16 +465,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   def restoreState(): Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
-    val history = Try(ErgoHistory.readOrGenerate(settings)).recover { case ex =>
-      log.error("Failed to open history, shutting down the node", ex)
-      // Constructor failure alone stops the Holder, but can leave REST/P2P running.
-      ErgoApp.shutdownSystem()(context.system)
-      throw ex
-    }.get
+    val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    val storedState = ErgoState.readOrGenerate(settings).asInstanceOf[State]
-    val consistentState = restoreConsistentState(storedState, history)
+    val storedState = Try(ErgoState.readOrGenerate(settings).asInstanceOf[State])
+    val consistentState = storedState.flatMap(state => Try(restoreConsistentState(state, history)).flatten)
     consistentState match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
@@ -483,16 +484,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Try(history.closeStorage()).failed.foreach { closeError =>
           if (closeError ne ex) ex.addSuppressed(closeError)
         }
-        consistentState.toOption.filter(_.store ne storedState.store).foreach { state =>
+        storedState.toOption.foreach { state =>
           Try(state.closeStorage()).failed.foreach { closeError =>
             if (closeError ne ex) ex.addSuppressed(closeError)
           }
         }
-        Try(storedState.closeStorage()).failed.foreach { closeError =>
-          if (closeError ne ex) ex.addSuppressed(closeError)
-        }
-        // Stop the whole node; propagating the error alone may leave REST/P2P running without a Holder.
-        ErgoApp.shutdownSystem()(context.system)
         throw ex
     }
   }

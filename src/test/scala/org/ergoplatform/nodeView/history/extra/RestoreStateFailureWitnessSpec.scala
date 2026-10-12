@@ -1,8 +1,7 @@
 package org.ergoplatform.nodeView.history.extra
 
-import org.ergoplatform.consensus.ModifierSemanticValidity.Invalid
 import org.ergoplatform.core.idToVersion
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, RandomWrapper}
@@ -15,7 +14,7 @@ class RestoreStateFailureWitnessSpec extends ErgoCorePropertyTest with NodeViewT
   import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
   import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState, validFullBlockWithBoxHolder}
 
-  property("failed startup validity repair retains the persisted UTXO state") {
+  property("failed startup state replay retains the persisted UTXO state") {
     val defaults = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
       .toSettings
     val settings = defaults.copy(nodeSettings = defaults.nodeSettings.copy(extraIndex = true))
@@ -29,7 +28,7 @@ class RestoreStateFailureWitnessSpec extends ErgoCorePropertyTest with NodeViewT
       try {
         val (ancestor, remainingBoxes) = validFullBlockWithBoxHolder(None, generatedState, boxes, new RandomWrapper)
         applyBlock(ancestor).get
-        val (tip, _) = validFullBlockWithBoxHolder(
+        val (tip, tipBoxes) = validFullBlockWithBoxHolder(
           Some(ancestor), getCurrentState.asInstanceOf[UtxoState], remainingBoxes, new RandomWrapper)
         applyBlock(tip).get
         val appliedVersion = idToVersion(tip.id)
@@ -39,30 +38,40 @@ class RestoreStateFailureWitnessSpec extends ErgoCorePropertyTest with NodeViewT
         stopNodeViewHolder()
         startNodeViewHolder()
         getCurrentState.version shouldBe appliedVersion
+
+        // Persist a selected successor before state application, as at an interrupted startup.
+        // Its sections are complete, but its declared state root cannot follow these transactions.
+        val (validSuccessor, _) = validFullBlockWithBoxHolder(
+          Some(tip), getCurrentState.asInstanceOf[UtxoState], tipBoxes, new RandomWrapper)
+        validSuccessor.header.stateRoot.toSeq should not be tip.header.stateRoot.toSeq
+        val rejectedHeader = validSuccessor.header.copy(stateRoot = tip.header.stateRoot)
+        val rejectedSuccessor = ErgoFullBlock(
+          rejectedHeader,
+          validSuccessor.blockTransactions.copy(headerId = rejectedHeader.id),
+          validSuccessor.extension.copy(headerId = rejectedHeader.id),
+          validSuccessor.adProofs.map(_.copy(headerId = rejectedHeader.id)))
         stopNodeViewHolder()
 
-        // Keep the selected tip readable, but invalidate an ancestor section.
-        // The startup validity repair must walk that ancestor and return Failure.
         val history = ErgoHistory.readOrGenerate(fixture.settings)(null)
         try {
-          history.historyStorage.insert(
-            Array(history.validityKey(ancestor.blockTransactions.id) -> Array(0.toByte)),
-            BlockSection.emptyArray
-          ).get
-          history.bestFullBlockIdOpt shouldBe Some(tip.id)
-          history.bestFullBlockOpt.map(_.id) shouldBe Some(tip.id)
-          history.isSemanticallyValid(ancestor.blockTransactions.id) shouldBe Invalid
-          history.repairAppliedFullChainValidity(tip.id).isFailure shouldBe true
+          rejectedSuccessor.toSeq.foreach(section => history.append(section).get)
+          history.bestFullBlockIdOpt shouldBe Some(rejectedSuccessor.id)
+          history.bestFullBlockOpt.map(_.id) shouldBe Some(rejectedSuccessor.id)
         } finally {
           history.closeStorage()
         }
 
         val reopenedHistory = ErgoHistory.readOrGenerate(fixture.settings)(null)
         try {
-          reopenedHistory.bestFullBlockIdOpt shouldBe Some(tip.id)
-          reopenedHistory.bestFullBlockOpt.map(_.id) shouldBe Some(tip.id)
-          reopenedHistory.isSemanticallyValid(ancestor.blockTransactions.id) shouldBe Invalid
-          reopenedHistory.repairAppliedFullChainValidity(tip.id).isFailure shouldBe true
+          reopenedHistory.bestFullBlockIdOpt shouldBe Some(rejectedSuccessor.id)
+          val persistedSuccessor = reopenedHistory.bestFullBlockOpt.get
+          persistedSuccessor.id shouldBe rejectedSuccessor.id
+          val replayState = UtxoState.create(ErgoState.stateDir(fixture.settings), fixture.settings)
+          try {
+            replayState.version shouldBe appliedVersion
+            replayState.applyModifier(persistedSuccessor, reopenedHistory.estimatedTip())(_ => ()).isFailure shouldBe true
+            replayState.rootDigest.toSeq shouldBe tip.header.stateRoot.toSeq
+          } finally replayState.closeStorage()
         } finally {
           reopenedHistory.closeStorage()
         }

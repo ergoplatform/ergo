@@ -1,5 +1,7 @@
 package org.ergoplatform.network
 
+import java.net.InetSocketAddress
+
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.Input
@@ -7,6 +9,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
@@ -24,9 +27,9 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
-import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.crypto.authds.ADKey
 import scorex.util.bytesToId
@@ -356,6 +359,167 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: wrong-version transaction section does not poison its canonical id") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("HeaderFirstSynchronizerStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("HeaderFirstHolderProbe")
+      val synchronizer = system.actorOf(Props(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker)))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(history, blocks.head)
+      val withHeader = withParent.append(blocks.last.header).get._1
+      synchronizer ! ChangedHistory(withHeader)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val canonical = blocks.last.blockTransactions
+      val wrongVersion = canonical.copy(blockVersion = Header.Interpreter50Version, sizeOpt = None)
+      val wrongBytes = wrongVersion.bytes
+      val parsedWrongVersion = BlockTransactionsSerializer.parseBytes(wrongBytes)
+      canonical.id shouldBe blocks.last.header.transactionsId
+      parsedWrongVersion.id shouldBe canonical.id
+      parsedWrongVersion.blockVersion should not be blocks.last.header.version
+
+      val differentId = BlockTransactionsSerializer.parseBytes(wrongBytes)
+      val proof = differentId.txs.head.inputs.head.spendingProof.proof
+      proof(0) = (proof(0) ^ 1).toByte
+      val differentIdBytes = differentId.bytes
+      val parsedDifferentId = BlockTransactionsSerializer.parseBytes(differentIdBytes)
+      differentId.id should not be canonical.id
+      differentId.id should not be blocks.last.header.transactionsId
+      parsedDifferentId.id shouldBe differentId.id
+      parsedDifferentId.blockVersion shouldBe parsedWrongVersion.blockVersion
+      deliveryTracker.setRequested(differentId.modifierTypeId, differentId.id, peer)(_ => Cancellable.alreadyCancelled)
+      val differentIdData = ModifiersData(differentId.modifierTypeId, Map(differentId.id -> differentIdBytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(differentIdData)), Some(peer))
+      eventually {
+        deliveryTracker.status(differentId.id, differentId.modifierTypeId, Seq.empty) shouldBe
+          scorex.core.network.ModifiersStatus.Invalid
+      }
+      ncProbe.fishForMessage(3.seconds) {
+        case _: PenalizePeer => true
+        case _ => false
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+
+      deliveryTracker.setRequested(canonical.modifierTypeId, canonical.id, peer)(_ => Cancellable.alreadyCancelled)
+      val wrongData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> wrongBytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(wrongData)), Some(peer))
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      holderProbe.expectNoMessage(300.millis)
+      ncProbe.fishForMessage(3.seconds) {
+        case _: PenalizePeer => true
+        case _ => false
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.PermanentPenalty)
+      ncProbe.expectNoMessage(300.millis)
+
+      val otherPeer = ConnectedPeer(
+        connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("192.0.2.2", 9030)),
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+      )
+      otherPeer.connectionId.remoteAddress.getAddress should not be peer.connectionId.remoteAddress.getAddress
+      val announced = InvData(canonical.modifierTypeId, Seq(canonical.id))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(announced)), Some(otherPeer))
+      requestForModifierSent(ncProbe, canonical.modifierTypeId, canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      val canonicalData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> canonical.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(canonicalData)), Some(otherPeer))
+      val forwarded = holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote]
+      forwarded.modifiers.map(_.id) should contain (canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
+      }
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: transaction section received before header remains downloadable") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("OriginalSynchronizerStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("SectionHolderProbe")
+      val synchronizer = system.actorOf(Props(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker)))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(history, blocks.head)
+      synchronizer ! ChangedHistory(withParent)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val canonical = blocks.last.blockTransactions
+      val wrongVersion = canonical.copy(blockVersion = Header.Interpreter50Version, sizeOpt = None)
+      val wrongBytes = wrongVersion.bytes
+      val parsedWrongVersion = BlockTransactionsSerializer.parseBytes(wrongBytes)
+      canonical.id shouldBe blocks.last.header.transactionsId
+      parsedWrongVersion.id shouldBe canonical.id
+      parsedWrongVersion.blockVersion should not be blocks.last.header.version
+
+      deliveryTracker.setRequested(canonical.modifierTypeId, canonical.id, peer)(_ => Cancellable.alreadyCancelled)
+      val wrongData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> wrongBytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(wrongData)), Some(peer))
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      holderProbe.expectNoMessage(300.millis)
+      ncProbe.expectNoMessage(300.millis)
+
+      val withHeader = withParent.append(blocks.last.header).get._1
+      synchronizer ! ChangedHistory(withHeader)
+      val otherPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+          StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))),
+          System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(otherPeer, org.ergoplatform.consensus.Older, Some(blocks.last.header.height))
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(canonical.modifierTypeId -> Seq(canonical.id)))
+      requestForModifierSent(ncProbe, canonical.modifierTypeId, canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      val canonicalData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> canonical.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(canonicalData)), Some(otherPeer))
+      val forwarded = holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote]
+      forwarded.modifiers.map(_.id) should contain (canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
+      }
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
   property("NodeViewSynchronizer: apply continuation header from syncV2 and download its block") {
     withFixture2 { ctx =>
       import ctx._
@@ -584,6 +748,27 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 5
           case _ => false
         }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: full V2 sync info is sent to a peer after receiving a header from it") {
+    withFixture { ctx =>
+      import ctx._
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+
+      // the sync info consists of the headers at offsets 0, 16, 128 and 512 from our tip, not only of the tip
+      ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          val msg = stn.message
+          msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+            msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length
+        case _ => false
       }
     }
   }

@@ -1,5 +1,8 @@
 package org.ergoplatform.modifiers.history
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
+
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProof, PoPowHeader, PoPowParams}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.scalacheck.Gen
@@ -12,10 +15,44 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
-  private val poPowParams = PoPowParams(30, 30, continuous = false)
+  private val poPowParams = PoPowParams(30, 30, continuous = false).get
   private val ChainLength = 10
 
   private def toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
+
+  property("PoPowParams rejects invalid minimum chain lengths") {
+    PoPowParams.isValid(0, 1) shouldBe false
+    PoPowParams.isValid(1, 0) shouldBe false
+    PoPowParams.isValid(Int.MaxValue, 1) shouldBe false
+
+    PoPowParams(0, 1, continuous = false) shouldBe 'failure
+    PoPowParams(1, 0, continuous = false) shouldBe 'failure
+    PoPowParams(Int.MaxValue, 1, continuous = false) shouldBe 'failure
+
+    PoPowParams.isValid(Int.MaxValue - 1, 1) shouldBe true
+    PoPowParams(1, 1, continuous = false).get.minChainLength shouldBe 2
+  }
+
+  property("bestArg rejects a non-positive security parameter without looping") {
+    val algos = nipopowAlgos
+    val completed = new CountDownLatch(1)
+    val error = new AtomicReference[Throwable]()
+    val worker = new Thread(new Runnable {
+      override def run(): Unit =
+        try {
+          algos.bestArg(Seq.empty)(0)
+        } catch {
+          case t: Throwable => error.set(t)
+        } finally {
+          completed.countDown()
+        }
+    })
+    worker.setDaemon(true)
+    worker.start()
+
+    completed.await(2, TimeUnit.SECONDS) shouldBe true
+    error.get() shouldBe a[IllegalArgumentException]
+  }
 
   property("updateInterlinks") {
     val chain = genChain(ChainLength)
@@ -144,7 +181,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   }
 
   property("isBetterThan - a disconnected prefix chain should not win") {
-    val smallPoPowParams = PoPowParams(50, 1, continuous = false)
+    val smallPoPowParams = PoPowParams(50, 1, continuous = false).get
     val size = 100
     val chain = toPoPoWChain(genChain(size))
     val proof = nipopowAlgos.prove(chain)(smallPoPowParams).get
@@ -158,7 +195,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   }
 
   property("hasValidConnections - ensures a connected prefix chain") {
-    val smallPoPowParams = PoPowParams(5, 5, continuous = false)
+    val smallPoPowParams = PoPowParams(5, 5, continuous = false).get
     val sizes = Seq(100, 200)
     sizes.foreach { size =>
       val chain = toPoPoWChain(genChain(size))
@@ -172,7 +209,7 @@ class PoPowAlgosSpec extends AnyPropSpec with Matchers {
   }
 
   property("hasValidConnections - ensures a connected suffix chain") {
-    val smallPoPowParams = PoPowParams(5, 5, continuous = false)
+    val smallPoPowParams = PoPowParams(5, 5, continuous = false).get
     val sizes = Seq(100, 200)
 
     sizes.foreach { size =>

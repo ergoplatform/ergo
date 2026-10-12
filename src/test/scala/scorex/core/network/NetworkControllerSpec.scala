@@ -3,6 +3,7 @@ package scorex.core.network
 import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -24,6 +25,8 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
     implicit val actorSystem = system
 
     val scorexContext: ScorexContext = ScorexContext(Seq.empty, None, None)
+
+    case class EstablishedConnection(connectionProbe: TestProbe, handlerRef: ActorRef)
 
     def createController(maxConnections: Int): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
       val peerManagerProbe = TestProbe("PeerManager")
@@ -56,6 +59,33 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       peerManagerProbe: TestProbe,
       remoteAddress: InetSocketAddress
     ): InetSocketAddress = {
+      beginIncomingConnection(controller, peerManagerProbe, remoteAddress)
+      remoteAddress
+    }
+
+    def establishIncomingConnectionWithHandler(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): EstablishedConnection = {
+      val connectionProbe = beginIncomingConnection(
+        controller,
+        peerManagerProbe,
+        remoteAddress
+      )
+
+      val handlerRef = connectionProbe.expectMsgType[Tcp.Register].handler
+      connectionProbe.expectMsg(Tcp.ResumeReading)
+      connectionProbe.expectMsgType[Tcp.Write]
+
+      EstablishedConnection(connectionProbe, handlerRef)
+    }
+
+    private def beginIncomingConnection(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): TestProbe = {
       val localAddress = settings.scorexSettings.network.bindAddress
       val connectionProbe = TestProbe("Connection")
 
@@ -66,7 +96,34 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
           controller ! ConnectionConfirmed(ConnectionId(remoteAddress, localAddress, Incoming), handlerRef)
       }
 
-      remoteAddress
+      connectionProbe
+    }
+
+    def beginPendingConnection(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress,
+      localAddress: InetSocketAddress = settings.scorexSettings.network.bindAddress
+    ): (TestProbe, ConfirmConnection) = {
+      val connection = TestProbe("PendingConnection")
+      connection.send(controller, Tcp.Connected(remoteAddress, localAddress))
+      val request = peerManagerProbe.expectMsgType[ConfirmConnection]
+      request.handlerRef shouldBe connection.ref
+      request.connectionId.remoteAddress shouldBe remoteAddress
+      (connection, request)
+    }
+
+    def confirmConnection(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      connection: TestProbe,
+      request: ConfirmConnection
+    ): ActorRef = {
+      peerManagerProbe.send(controller, ConnectionConfirmed(request.connectionId, request.handlerRef))
+      val handler = connection.expectMsgType[Tcp.Register].handler
+      connection.expectMsg(Tcp.ResumeReading)
+      connection.expectMsgType[Tcp.Write]
+      handler
     }
 
     def establishOutgoingConnection(
@@ -191,6 +248,97 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
     }
   }
 
+  property("blacklisting should close exactly the live connections for the banned IP") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
+      val disconnectProbe = TestProbe("DisconnectedPeers")
+      f.system.eventStream.subscribe(disconnectProbe.ref, classOf[DisconnectedPeer])
+
+      val firstAddress = new InetSocketAddress("192.0.2.10", 9101)
+      val secondAddress = new InetSocketAddress("192.0.2.10", 9102)
+      val unrelatedAddress = new InetSocketAddress("198.51.100.20", 9201)
+      val first = f.establishIncomingConnectionWithHandler(
+        controller,
+        peerManagerProbe,
+        firstAddress
+      )
+      val second = f.establishIncomingConnectionWithHandler(
+        controller,
+        peerManagerProbe,
+        secondAddress
+      )
+      val unrelated = f.establishIncomingConnectionWithHandler(
+        controller,
+        peerManagerProbe,
+        unrelatedAddress
+      )
+
+      peerManagerProbe.send(controller, Blacklisted(firstAddress))
+
+      first.connectionProbe.expectMsg(Tcp.Abort)
+      second.connectionProbe.expectMsg(Tcp.Abort)
+      unrelated.connectionProbe.expectNoMessage(200.millis)
+
+      val duplicateBeforeTermination = TestProbe("DuplicateBeforeTermination")
+      duplicateBeforeTermination.send(
+        controller,
+        Tcp.Connected(secondAddress, settings.scorexSettings.network.bindAddress)
+      )
+      duplicateBeforeTermination.expectMsg(Tcp.Close)
+
+      first.connectionProbe.watch(first.handlerRef)
+      second.connectionProbe.watch(second.handlerRef)
+      first.connectionProbe.send(first.handlerRef, Tcp.Aborted)
+      second.connectionProbe.send(second.handlerRef, Tcp.Aborted)
+      first.connectionProbe.expectTerminated(first.handlerRef)
+      second.connectionProbe.expectTerminated(second.handlerRef)
+
+      val disconnectedAddresses = disconnectProbe.receiveN(2, 2.seconds).collect {
+        case DisconnectedPeer(peer) => peer.connectionId.remoteAddress
+      }.toSet
+      disconnectedAddresses shouldBe Set(firstAddress, secondAddress)
+
+      val replacement = TestProbe("ReplacementConnection")
+      replacement.send(
+        controller,
+        Tcp.Connected(secondAddress, settings.scorexSettings.network.bindAddress)
+      )
+      peerManagerProbe.expectMsgPF(1.second) {
+        case ConfirmConnection(connectionId, connectionRef) =>
+          connectionId.remoteAddress shouldBe secondAddress
+          connectionRef shouldBe replacement.ref
+      }
+
+      val unrelatedDuplicate = TestProbe("UnrelatedDuplicate")
+      unrelatedDuplicate.send(
+        controller,
+        Tcp.Connected(unrelatedAddress, settings.scorexSettings.network.bindAddress)
+      )
+      unrelatedDuplicate.expectMsg(Tcp.Close)
+    }
+  }
+
+  property("blacklisting should match by IP when the exact socket is absent") {
+    withFixture { f =>
+      val (controller, peerManagerProbe, _) = f.createController(maxConnections = 30)
+      val siblingAddress = new InetSocketAddress("192.0.2.30", 9301)
+      val missingSocketAddress = new InetSocketAddress("192.0.2.30", 9399)
+      val sibling = f.establishIncomingConnectionWithHandler(
+        controller,
+        peerManagerProbe,
+        siblingAddress
+      )
+
+      peerManagerProbe.send(controller, Blacklisted(missingSocketAddress))
+
+      sibling.connectionProbe.expectMsg(Tcp.Abort)
+      sibling.connectionProbe.watch(sibling.handlerRef)
+      sibling.connectionProbe.send(sibling.handlerRef, Tcp.Aborted)
+      sibling.connectionProbe.expectTerminated(sibling.handlerRef)
+    }
+  }
+
   property("outgoing connection should be accepted when total below maxConnections") {
     withFixture { f =>
       val (controller, peerManagerProbe, tcpManagerProbe) = f.createController(maxConnections = 10)
@@ -268,6 +416,100 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
       connectionProbe.send(controller, Tcp.Connected(remoteAddress, localAddress))
       connectionProbe.expectMsg(Tcp.Close)
+    }
+  }
+
+  property("pending incoming confirmations should count toward the incoming limit") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManager, _) = f.createController(maxConnections = 10)
+      val pending = (1 to 5).map { i =>
+        f.beginPendingConnection(controller, peerManager, new InetSocketAddress(s"203.0.113.$i", 9000 + i))
+      }
+      // Confirmation transfers a slot; it does not free capacity for another socket.
+      val (first, request) = pending.head
+      f.confirmConnection(controller, peerManager, first, request)
+      val overflow = TestProbe()
+      overflow.send(controller, Tcp.Connected(new InetSocketAddress("198.51.100.1", 9999),
+        settings.scorexSettings.network.bindAddress))
+      overflow.expectMsg(Tcp.Close)
+      peerManager.expectNoMessage(200.millis)
+    }
+  }
+
+  property("denial should release exactly its pending slot despite stale replies") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManager, _) = f.createController(maxConnections = 4)
+      val address = new InetSocketAddress("203.0.113.10", 9010)
+      val (first, request) = f.beginPendingConnection(controller, peerManager, address)
+      f.beginPendingConnection(controller, peerManager, new InetSocketAddress("203.0.113.11", 9011))
+      peerManager.send(controller, ConnectionDenied(request.connectionId, request.handlerRef))
+      first.expectMsg(Tcp.Close)
+      val (replacement, replacementRequest) = f.beginPendingConnection(controller, peerManager, address)
+      peerManager.send(controller, ConnectionDenied(request.connectionId, request.handlerRef))
+      first.expectMsg(Tcp.Close)
+      peerManager.send(controller, ConnectionConfirmed(request.connectionId, request.handlerRef))
+      first.expectMsg(Tcp.Close)
+      val overflow = TestProbe()
+      overflow.send(controller, Tcp.Connected(new InetSocketAddress("198.51.100.2", 9998),
+        settings.scorexSettings.network.bindAddress))
+      overflow.expectMsg(Tcp.Close)
+      f.confirmConnection(controller, peerManager, replacement, replacementRequest)
+    }
+  }
+
+  property("raw actor termination should release its pending slot and reject late confirmation") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManager, _) = f.createController(maxConnections = 2)
+      val address = new InetSocketAddress("203.0.113.20", 9020)
+      val (first, request) = f.beginPendingConnection(controller, peerManager, address)
+      val watcher = TestProbe()
+      watcher.watch(first.ref)
+      f.system.stop(first.ref)
+      watcher.expectTerminated(first.ref)
+      // DeathWatch delivery is asynchronous; wait for the controller's watched
+      // raw actor to disappear before sending its delayed PeerManager reply.
+      val (replacement, next) = watcher.awaitAssert {
+        val replacement = TestProbe()
+        replacement.send(controller, Tcp.Connected(address, settings.scorexSettings.network.bindAddress))
+        val next = peerManager.expectMsgType[ConfirmConnection](200.millis)
+        (replacement, next)
+      }
+      peerManager.send(controller, ConnectionConfirmed(request.connectionId, request.handlerRef))
+      val handler = f.confirmConnection(controller, peerManager, replacement, next)
+      val events = TestProbe()
+      f.system.eventStream.subscribe(events.ref, classOf[DisconnectedPeer])
+      watcher.watch(handler)
+      f.system.stop(handler)
+      watcher.expectTerminated(handler)
+      events.expectMsgType[DisconnectedPeer].peer.connectionId.remoteAddress shouldBe address
+    }
+  }
+
+  property("confirming the same remote endpoint twice should preserve its first handler") {
+    withFixture { f =>
+      implicit val system = f.system
+      val (controller, peerManager, _) = f.createController(maxConnections = 4)
+      val address = new InetSocketAddress("203.0.113.30", 9030)
+      val (first, firstRequest) = f.beginPendingConnection(controller, peerManager, address,
+        new InetSocketAddress("192.0.2.1", 9030))
+      val (second, secondRequest) = f.beginPendingConnection(controller, peerManager, address,
+        new InetSocketAddress("192.0.2.2", 9030))
+      val handler = f.confirmConnection(controller, peerManager, first, firstRequest)
+      peerManager.send(controller, ConnectionConfirmed(secondRequest.connectionId, secondRequest.handlerRef))
+      second.expectMsg(Tcp.Close)
+      val events = TestProbe()
+      f.system.eventStream.subscribe(events.ref, classOf[DisconnectedPeer])
+      first.watch(handler)
+      // A close event sent by a non-pending actor must not remove the
+      // controller's watch on the established handler.
+      controller.tell(Tcp.PeerClosed, handler)
+      f.system.stop(handler)
+      first.expectTerminated(handler)
+      events.expectMsgType[DisconnectedPeer].peer.handlerRef shouldBe handler
+      f.beginPendingConnection(controller, peerManager, new InetSocketAddress("203.0.113.31", 9031))
     }
   }
 

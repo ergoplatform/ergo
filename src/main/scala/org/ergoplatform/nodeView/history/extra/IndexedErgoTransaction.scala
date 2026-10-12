@@ -20,6 +20,7 @@ import spire.implicits.cfor
   * @param globalIndex - serial number of this transaction counting from block 1
   * @param inputNums   - list of transaction inputs
   * @param outputNums  - list of transaction outputs
+  * @param blockId     - exact full-chain header indexed with this transaction
   */
 case class IndexedErgoTransaction(txid: ModifierId,
                                   index: Int,
@@ -28,19 +29,18 @@ case class IndexedErgoTransaction(txid: ModifierId,
                                   globalIndex: Long,
                                   inputNums: Array[Long],
                                   outputNums: Array[Long],
-                                  dataInputs: Array[DataInput]) extends ExtraIndex {
+                                  dataInputs: Array[DataInput],
+                                  blockId: ModifierId) extends ExtraIndex {
 
   override lazy val id: ModifierId = txid
   override def serializedId: Array[Byte] = fastIdToBytes(id)
 
-  private var _blockId: ModifierId = ModifierId @@ ""
   private var _inclusionHeight: Int = 0
   private var _timestamp: Header.Timestamp = 0L
   private var _numConfirmations: Int = 0
   private var _inputs: IndexedSeq[IndexedErgoBox] = IndexedSeq.empty[IndexedErgoBox]
   private var _outputs: IndexedSeq[IndexedErgoBox] = IndexedSeq.empty[IndexedErgoBox]
 
-  def blockId: ModifierId = _blockId
   def inclusionHeight: Int = _inclusionHeight
   def timestamp: Header.Timestamp = _timestamp
   def numConfirmations: Int = _numConfirmations
@@ -54,9 +54,8 @@ case class IndexedErgoTransaction(txid: ModifierId,
     */
   def retrieveBody(history: ErgoHistoryReader): IndexedErgoTransaction = {
 
-    val header: Header = history.typedModifierById[Header](history.bestHeaderIdAtHeight(height).get).get
+    val header: Header = history.typedModifierById[Header](blockId).filter(_.height == height).get
 
-    _blockId = header.id
     _inclusionHeight = height
     _timestamp = header.timestamp
     _numConfirmations = history.fullBlockHeight - height
@@ -82,6 +81,7 @@ object IndexedErgoTransactionSerializer extends ErgoSerializer[IndexedErgoTransa
     cfor(0)(_ < iTx.outputNums.length, _ + 1) { i => w.putLong(iTx.outputNums(i)) }
     w.putUShort(iTx.dataInputs.length)
     cfor(0)(_ < iTx.dataInputs.length, _ + 1) { i => w.putBytes(iTx.dataInputs(i).boxId) }
+    w.putBytes(fastIdToBytes(iTx.blockId))
   }
 
   override def parse(r: Reader): IndexedErgoTransaction = {
@@ -100,13 +100,20 @@ object IndexedErgoTransactionSerializer extends ErgoSerializer[IndexedErgoTransa
     val dataInputsCount = r.getUShort()
     val dataInputs: Array[DataInput] = Array.ofDim[DataInput](dataInputsCount)
     cfor(0)(_ < dataInputsCount, _ + 1) { i => dataInputs(i) = DataInput(ADKey @@ r.getBytes(32)) }
-    IndexedErgoTransaction(id, index, height, size, globalIndex, inputNums, outputNums, dataInputs)
+    val blockId = bytesToId(r.getBytes(32))
+    IndexedErgoTransaction(id, index, height, size, globalIndex, inputNums, outputNums, dataInputs, blockId)
   }
 }
 
 object IndexedErgoTransaction {
   val extraIndexTypeId: ExtraIndexTypeId = 10.toByte
 
-  def fromTx(tx: ErgoTransaction, index: Int, height: Int, globalIndex: Long, inputs: Array[Long], outputs: Array[Long]): IndexedErgoTransaction =
-    IndexedErgoTransaction(tx.id, index, height, tx.size, globalIndex, inputs, outputs, tx.dataInputs.toArray)
+  def fromTx(tx: ErgoTransaction,
+             index: Int,
+             height: Int,
+             globalIndex: Long,
+             inputs: Array[Long],
+             outputs: Array[Long],
+             blockId: ModifierId): IndexedErgoTransaction =
+    IndexedErgoTransaction(tx.id, index, height, tx.size, globalIndex, inputs, outputs, tx.dataInputs.toArray, blockId)
 }

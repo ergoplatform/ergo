@@ -4,9 +4,8 @@ import sbt._
 logLevel := Level.Debug
 
 // this values should be in sync with ergo-wallet/build.sbt
-val scala211 = "2.11.12"
 val scala212 = "2.12.20"
-val scala213 = "2.13.16"
+val scala213 = "2.13.18"
 
 lazy val commonSettings = Seq(
   organization := "org.ergoplatform",
@@ -39,11 +38,11 @@ lazy val commonSettings = Seq(
 
 publishArtifact in (Compile, packageDoc) := false
 
-val circeVersion = "0.13.0"
+val circeVersion = "0.14.15"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
-val sigmaStateVersion = "6.0.3"
+val sigmaStateVersion = "6.0.7"
 val ficusVersion = "1.4.7"
 
 // for testing current sigmastate build (see sigmastate-ergo-it jenkins job)
@@ -229,14 +228,14 @@ Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
 lazy val avldb = (project in file("avldb"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
+    crossScalaVersions := Seq(scala213, scalaVersion.value),
     commonSettings,
     name := "avldb",
     // set bytecode version to 8 to fix NoSuchMethodError for various ByteBuffer methods
     // see https://github.com/eclipse/jetty.project/issues/3244
     // these options applied only in "compile" task since scalac crashes on scaladoc compilation with "-release 8"
     // see https://github.com/scala/community-builds/issues/796#issuecomment-423395500
-    Compile / compile / scalacOptions ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
+    Compile / compile / scalacOptions ++= Seq("-release", "8"),
     Compile / compile / scalacOptions --= scalacOpts,
     Compile / compile / javacOptions ++= javacReleaseOption,
     libraryDependencies ++= Seq(
@@ -270,7 +269,7 @@ lazy val ergoCore = (project in file("ergo-core"))
   .dependsOn(avldb % "test->test;compile->compile")
   .dependsOn(ergoWallet % "test->test;compile->compile")
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
+    crossScalaVersions := Seq(scala213, scalaVersion.value),
     commonSettings,
     name := "ergo-core",
     libraryDependencies ++= Seq(
@@ -278,7 +277,7 @@ lazy val ergoCore = (project in file("ergo-core"))
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),
-    Compile / compile / scalacOptions ++= (if (scalaBinaryVersion.value == "2.11") Seq() else Seq("-release", "8")),
+    Compile / compile / scalacOptions ++= Seq("-release", "8"),
     Compile / compile / scalacOptions --= scalacOpts,
     Test / parallelExecution := false,
   )
@@ -286,18 +285,14 @@ lazy val ergoCore = (project in file("ergo-core"))
 lazy val ergoWallet = (project in file("ergo-wallet"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions
   .settings(
-    crossScalaVersions := Seq(scala213, scalaVersion.value, scala211),
+    crossScalaVersions := Seq(scala213, scalaVersion.value),
     commonSettings,
     name := "ergo-wallet",
     libraryDependencies ++= Seq(
       effectiveSigma,
       (effectiveSigma % Test).classifier("tests")
     ),
-    Compile / compile / scalacOptions ++= (if(scalaBinaryVersion.value == "2.11")
-        Seq.empty
-      else
-        Seq("-release", "8")
-      ),
+    Compile / compile / scalacOptions ++= Seq("-release", "8"),
   )
 
 lazy val It2Test = config("it2") extend (IntegrationTest, Test)
@@ -336,7 +331,7 @@ lazy val ergo = (project in file("."))
       "com.github.scopt" %% "scopt" % "4.1.0",
 
       // API dependencies
-      "de.heikoseeberger" %% "akka-http-circe" % "1.20.0",
+      "de.heikoseeberger" %% "akka-http-circe" % "1.39.2",
 
       // app dependencies
       // jaxb-api is included only to avoid a runtime exception

@@ -4,15 +4,20 @@ import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
-import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec, Version}
 import org.ergoplatform.network.Version.Eip37ForkVersion
-import scorex.core.app.ScorexContext
-import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
-import scorex.core.network.PeerConnectionHandler.ReceivableMessages
+import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec, Version}
+import org.ergoplatform.network.message.MessageConstants.{
+  ChecksumLength,
+  HeaderLength,
+  MaxMessageSize
+}
 import org.ergoplatform.network.message.MessageSerializer
 import org.ergoplatform.network.message.MessageSerializer.UnknownMessageCodeException
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import org.ergoplatform.settings.ScorexSettings
+import scorex.core.app.ScorexContext
+import scorex.core.network.NetworkController.ReceivableMessages.{Handshaked, PenalizePeer}
+import scorex.core.network.PeerConnectionHandler.ReceivableMessages
 import scorex.util.ScorexLogging
 
 import scala.annotation.tailrec
@@ -28,6 +33,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   extends Actor with ScorexLogging {
 
   import PeerConnectionHandler.ReceivableMessages._
+  import PeerConnectionHandler.{MaxBufferedOutboundBytes, MaxBufferedOutboundMessages}
 
   private val networkSettings = scorexSettings.network
   private val connection = connectionDescription.connection
@@ -50,6 +56,8 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   private var loggedUnknownMessageCodes: Set[Byte] = Set.empty
 
   private var outMessagesBuffer: TreeMap[Long, ByteString] = TreeMap.empty
+
+  private var outMessagesBufferBytes: Long = 0L
 
   private var outMessagesCounter: Long = 0
 
@@ -182,7 +190,10 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
       writeFirst()
 
     case ReceivableMessages.Ack(id) =>
-      outMessagesBuffer -= id
+      outMessagesBuffer.get(id).foreach { msg =>
+        outMessagesBuffer -= id
+        outMessagesBufferBytes -= msg.length
+      }
       if (outMessagesBuffer.nonEmpty){
         writeFirst()
       } else {
@@ -238,7 +249,22 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   }
 
   private def buffer(id: Long, msg: ByteString): Unit = {
-    outMessagesBuffer += id -> msg
+    val previousMessage = outMessagesBuffer.get(id)
+    val previousLength = previousMessage.fold(0)(_.length)
+    val candidateBytes = outMessagesBufferBytes - previousLength + msg.length
+    val candidateMessages = outMessagesBuffer.size + previousMessage.fold(1)(_ => 0)
+    if (candidateBytes > MaxBufferedOutboundBytes ||
+        candidateMessages > MaxBufferedOutboundMessages) {
+      log.warn(s"Buffered outbound data for $connectionId would exceed its limit " +
+        s"($candidateMessages messages, $candidateBytes bytes), aborting the connection")
+      outMessagesBuffer = TreeMap.empty
+      outMessagesBufferBytes = 0L
+      connection ! Abort
+      context.stop(self)
+    } else {
+      outMessagesBuffer += id -> msg
+      outMessagesBufferBytes = candidateBytes
+    }
   }
 
   private def writeFirst(): Unit = {
@@ -270,6 +296,14 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 }
 
 object PeerConnectionHandler {
+
+  // Keep one maximum serialized frame per peer. Backpressured snapshot transfers
+  // retry instead of retaining their entire application-level in-flight window.
+  private[network] val MaxBufferedOutboundBytes: Long =
+    MaxMessageSize.toLong + HeaderLength + ChecksumLength
+
+  // Independently bound collection overhead from small messages.
+  private[network] val MaxBufferedOutboundMessages: Int = 64
 
   object ReceivableMessages {
     

@@ -10,12 +10,12 @@ import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
-import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.{BoxResolutionException, ChangeAddressValidationException}
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
-import org.ergoplatform.wallet.interpreter.ErgoProvingInterpreter
+import org.ergoplatform.wallet.interpreter.{ErgoProvingInterpreter, TransactionHintsBag}
 import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
 import scorex.util.encode.Base16
@@ -25,7 +25,6 @@ import java.nio.ByteBuffer
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-import scala.util.control.NonFatal
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.sdk.SecretString
 
@@ -232,7 +231,7 @@ case class WalletApiRoute(readersHolder: ActorRef,
       case Failure(e) => invalidExternalBoxes(e)
       case Success((extInputsOpt, extDataInputsOpt)) =>
         withWalletOp(_.generateCommitmentsFor(utx, externalSecretsOpt, extInputsOpt, extDataInputsOpt).map(_.response)) {
-          case Failure(e) => BadRequest(s"Bad request $gcr. ${Option(e.getMessage).getOrElse(e.toString)}")
+          case Failure(_) => BadRequest("Unable to generate commitments")
           case Success(thb) => ApiResponse(thb)
         }
     }
@@ -274,29 +273,24 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
     val hints = tsr.hints
 
-    def signWithReaders(r: Readers): Future[Try[ErgoTransaction]] = {
-      val decodedBoxes = for {
-        boxesToSpendOpt <- parseExternalBoxes(tsr.inputs, tx.inputs.map(_.boxId), "Input")
-        dataBoxesOpt <- parseExternalBoxes(tsr.dataInputs, tx.dataInputs.map(_.boxId), "Data input")
-      } yield boxesToSpendOpt -> dataBoxesOpt
+    val decodedBoxes = for {
+      boxesToSpendOpt <- parseExternalBoxes(tsr.inputs, tx.inputs.map(_.boxId), "Input")
+      dataBoxesOpt <- parseExternalBoxes(tsr.dataInputs, tx.dataInputs.map(_.boxId), "Data input")
+    } yield boxesToSpendOpt -> dataBoxesOpt
 
-      decodedBoxes match {
-        case Success((boxesToSpendOpt, dataBoxesOpt)) =>
-          r.w.signTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt)
-        case Failure(e) =>
-          Future(Failure(new Exception("Invalid external boxes", e)))
-      }
-    }
-
-    onSuccess {
-      (readersHolder ? GetReaders)
-        .mapTo[Readers]
-        .flatMap(r => signWithReaders(r))
-    } {
-      _.fold(
-        e => BadRequest(s"Malformed request: ${e.getMessage}"),
-        tx => ApiResponse(tx.asJson)
-      )
+    decodedBoxes match {
+      case Failure(e) => invalidExternalBoxes(e)
+      case Success((boxesToSpendOpt, dataBoxesOpt)) =>
+        onSuccess {
+          (readersHolder ? GetReaders)
+            .mapTo[Readers]
+            .flatMap(r => r.w.signTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt))
+        } {
+          _.fold(
+            e => BadRequest(s"Malformed request: ${e.getMessage}"),
+            tx => ApiResponse(tx.asJson)
+          )
+        }
     }
   }
 
@@ -530,11 +524,11 @@ case class WalletApiRoute(readersHolder: ActorRef,
       case Success((extInputsOpt, extDataInputsOpt)) =>
         withWalletOp { w =>
           w.extractHints(her.tx, her.real, her.simulated, extInputsOpt, extDataInputsOpt)
-            .map(result => Try(result.transactionHintsBag))
-            .recover { case NonFatal(e) => Failure(e) }
+            .map[Either[BoxResolutionException, TransactionHintsBag]](result => Right(result.transactionHintsBag))
+            .recover { case e: BoxResolutionException => Left(e) }
         } {
-          case Failure(e) => BadRequest(s"Unable to resolve transaction boxes: ${Option(e.getMessage).getOrElse(e.toString)}")
-          case Success(hints) => ApiResponse(hints)
+          case Left(e) => BadRequest(s"Unable to resolve transaction boxes: ${e.getMessage}")
+          case Right(hints) => ApiResponse(hints)
         }
     }
   }

@@ -12,7 +12,7 @@ import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.ErgoReadersHolder.GetReaders
-import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.UpdateChangeAddress
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{ExtractHints, UpdateChangeAddress}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
   ChangeAddressNotOwned,
   ChangeAddressValidationException,
@@ -26,8 +26,10 @@ import org.ergoplatform.nodeView.wallet.{
 }
 import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
-import org.ergoplatform.{ErgoAddress, Pay2SAddress}
+import org.ergoplatform.{DataInput, ErgoAddress, Pay2SAddress}
 import org.ergoplatform.wallet.{Constants => WalletConstants}
+import org.ergoplatform.wallet.interpreter.TransactionHintsBag
+import org.ergoplatform.wallet.utils.WalletGenerators.ergoBoxGen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -36,6 +38,8 @@ import scala.concurrent.duration._
 import akka.http.scaladsl.server.MissingQueryParamRejection
 import org.ergoplatform.settings.Constants.FalseTree
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators
+import scorex.util.encode.Base16
+import scorex.db.ByteArrayWrapper
 
 class WalletApiRouteSpec extends AnyFlatSpec
   with Matchers
@@ -100,6 +104,35 @@ class WalletApiRouteSpec extends AnyFlatSpec
       }
     }))
     Route.seal(WalletApiRoute(readersHolder, nodeViewRef, settings).route)
+  }
+
+  private def failingHintRoute(error: Throwable): Route = {
+    val walletActorRef = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case _: ExtractHints => sender() ! akka.actor.Status.Failure(error)
+      }
+    }))
+    val walletReader = new ErgoWalletReader {
+      override val walletActor = walletActorRef
+    }
+    val readers = digestReaders.copy(w = walletReader)
+    val readersHolder = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetReaders => sender() ! readers
+      }
+    }))
+    Route.seal(WalletApiRoute(readersHolder, nodeViewRef, settings).route)
+  }
+
+  private def signedHintRequest(): HintExtractionRequest = {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    var signedTx: Option[ErgoTransaction] = None
+    Post(prefix + "/transaction/sign", tsr.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      signedTx = Some(responseAs[ErgoTransaction])
+    }
+    val realSigners = tsr.dlogs.map(_.privateInput.publicImage)
+    HintExtractionRequest(signedTx.get, realSigners, Seq.empty, tsr.inputs, tsr.dataInputs)
   }
 
 
@@ -186,7 +219,30 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
     Post(prefix + "/transaction/sign", request) ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String] shouldBe
+        Right("Invalid external boxes: requirement failed: Input box at index 0 does not match transaction")
     }
+  }
+
+  it should "sign with dataInputsRaw alone when input boxes are wallet-resolved" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get
+    val dataBox = ergoBoxGen.sample.get
+    utxoState.versionedBoxHolder.get(ByteArrayWrapper(dataBox.id)) shouldBe None
+    val request = tsr.copy(
+      unsignedTx = tsr.unsignedTx.copy(dataInputs = IndexedSeq(DataInput(dataBox.id))),
+      inputs = None,
+      dataInputs = Some(Seq(Base16.encode(dataBox.bytes)))
+    )
+
+    Post(prefix + "/transaction/sign", request.asJson) ~> utxoRoute ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[ErgoTransaction].id shouldBe request.unsignedTx.id
+    }
+
+    Post(prefix + "/transaction/sign", request.copy(dataInputs = None).asJson) ~>
+      utxoRoute ~> check {
+        status shouldBe StatusCodes.BadRequest
+      }
   }
 
   it should "reject invalid external box bytes in commitment request" in {
@@ -218,6 +274,28 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "generate commitments with matching external boxes" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val request = GenerateCommitmentsRequest(
+      tsr.unsignedTx, Some(tsr.externalSecrets), tsr.inputs, tsr.dataInputs)
+
+    Post(prefix + "/generateCommitments", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "not echo external secrets in a commitment failure" in {
+    val tsr = ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get
+    val request = GenerateCommitmentsRequest(
+      tsr.unsignedTx, Some(tsr.externalSecrets), None, None)
+
+    Post(prefix + "/generateCommitments", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String] shouldBe
+        Right("Unable to generate commitments")
+    }
+  }
+
   it should "reject invalid external box bytes in hint extraction request" in {
     val tx = ErgoNodeTransactionGenerators.validErgoTransactionGen.sample.get._2
     val request = HintExtractionRequest(tx, Seq.empty, Seq.empty, Some(Seq("zz")), None)
@@ -237,6 +315,28 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
     Get(prefix + "/balances") ~> route ~> check {
       status shouldBe StatusCodes.OK
+    }
+  }
+
+  it should "extract hints through the real wallet service with matching boxes" in {
+    val request = signedHintRequest()
+
+    Post(prefix + "/extractHints", request.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[TransactionHintsBag].publicHints(0).hints should not be empty
+    }
+  }
+
+  it should "not report non-box hint extraction failures as bad requests" in {
+    val request = signedHintRequest()
+
+    Seq(
+      new IllegalArgumentException("synthetic non-box service failure"),
+      new IllegalStateException("synthetic service failure")
+    ).foreach { error =>
+      Post(prefix + "/extractHints", request.asJson) ~> failingHintRoute(error) ~> check {
+        status shouldBe StatusCodes.InternalServerError
+      }
     }
   }
 

@@ -131,8 +131,12 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
     val forkVote = votes.contains(Parameters.SoftFork)
     val height = ErgoHistoryUtils.heightOf(lastHeaderOpt) + 1
-    val (calculatedParams, updated) =
+    // Like process, project parameter and validation-rule changes only at an epoch boundary.
+    val (calculatedParams, updated) = if (height > 0 && height % votingEpochLength == 0) {
       currentParameters.update(height, forkVote, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
+    } else {
+      currentParameters -> ErgoValidationSettingsUpdate.empty
+    }
     val calculatedValidationSettings = validationSettings.updated(updated)
     UpcomingStateContext(
       lastHeaders.take(Constants.LastHeadersInContext - 1),
@@ -156,20 +160,7 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     val timestamp = lastHeaderOpt.map(_.timestamp + 1).getOrElse(System.currentTimeMillis())
     val votes = Array.emptyByteArray
     val proposedUpdate = ErgoValidationSettingsUpdate.empty
-    val upcomingHeader = PreHeader(lastHeaderOpt, version, minerPk, timestamp, nBits, votes)
-    val height = ErgoHistoryUtils.heightOf(lastHeaderOpt) + 1
-    val (calculatedParams, updated) =
-      currentParameters.update(height, forkVote = false, ArraySeq.unsafeWrapArray(votingData.epochVotes), proposedUpdate, votingSettings)
-    val calculatedValidationSettings = validationSettings.updated(updated)
-    UpcomingStateContext(
-      lastHeaders.take(Constants.LastHeadersInContext - 1),
-      lastExtensionOpt,
-      upcomingHeader,
-      genesisStateDigest,
-      calculatedParams,
-      calculatedValidationSettings,
-      votingData
-    )
+    upcoming(minerPk, timestamp, nBits, votes, proposedUpdate, version)
   }
 
   protected def checkForkVote(height: Height): Unit = {

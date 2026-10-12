@@ -14,6 +14,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor.SnapshotCheckpointMismatch
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
@@ -300,15 +301,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * signal to pull Utxo set snapshot from database and recreate UTXO set from it
     */
   def processStateSnapshot: Receive = {
-    case InitStateFromSnapshot(height, blockId) =>
+    case InitStateFromSnapshot(height, blockId, sessionId) =>
       if (!history().isUtxoSnapshotApplied) {
         val store = minimalState().store
-        history().createPersistentProver(store, history(), height, blockId) match {
+        history().createPersistentProver(store, history(), height, blockId, sessionId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+          case Failure(t: SnapshotCheckpointMismatch) =>
+            log.warn("UTXO set snapshot checkpoint changed before import: ", t)
+            context.system.eventStream.publish(SnapshotApplicationRejected(sessionId))
           case Failure(t) =>
             log.error("UTXO set snapshot application failed: ", t)
         }

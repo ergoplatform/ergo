@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -184,6 +185,22 @@ class UpcomingParametersSpec extends ErgoCorePropertyTest with TestFileUtils {
     val (pool, validOutcome) = ErgoMemPool.empty(settings).process(UnconfirmedTransaction(validTx, None), us)
     validOutcome shouldBe a[ProcessingOutcome.Accepted]
     pool.contains(validTx.id) shouldBe true
+  }
+
+  property("candidate assembly leaves out an output below the current dust limit in the middle of a voting epoch") {
+    val ctx = contextBefore(midEpochHeight)
+    val us = utxoStateWith(ctx)
+    val upcoming = upcomingContexts(ctx).last // the `upcoming()` flavour, the one createCandidate uses
+    val limits = ctx.currentParameters
+
+    val (included, invalid) = CandidateGenerator.collectTxs(defaultMinerPk, limits.maxBlockCost,
+      limits.maxBlockSize, us, upcoming, Seq(betweenLimitsTx))
+    included shouldBe empty
+    invalid shouldBe Seq(betweenLimitsTx.id)
+
+    val (includedValid, _) = CandidateGenerator.collectTxs(defaultMinerPk, limits.maxBlockCost,
+      limits.maxBlockSize, us, upcoming, Seq(validTx))
+    includedValid.map(_.id) shouldBe Seq(validTx.id)
   }
 
   property("upcoming context applies voted parameter changes on the first block of a voting epoch") {

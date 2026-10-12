@@ -174,8 +174,10 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
     * Parameters and activated validation settings update for a block at `height` following this context.
     *
     * Votes for parameters change are applied by the first block of a voting epoch only (see `process`), so for
-    * any other block current parameters are carried over, with no parameter changed or added. Only soft-fork
-    * voting data is recalculated for such a block.
+    * any other block current parameters are carried over, with no parameter changed or added. Soft-fork voting
+    * data is still recalculated for such a block, as before: unlike `process`, which keeps it until the next
+    * epoch start, an upcoming context counts votes of the current epoch in (`VotingSpecification` relies on
+    * that). Nothing in the node reads it from an upcoming context.
     */
   private def upcomingParameters(height: Height,
                                  forkVote: Boolean,

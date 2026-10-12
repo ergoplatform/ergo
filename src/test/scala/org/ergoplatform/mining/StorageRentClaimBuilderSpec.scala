@@ -679,15 +679,15 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val updContext = inContext
       .appendFullBlock(fb0.copy(fb0.header.copy(height = H, parentId = parent.id, votes = noVotes))).get
 
-    // the increase is applied on the first block of the next epoch only
-    updContext.currentParameters.storageFeeFactor shouldBe parameters.storageFeeFactor
-    upcomingContext.currentParameters.storageFeeFactor shouldBe parameters.storageFeeFactor
-
     val b = agedBox(10000000000L)
     val tx = StorageRentClaimBuilder
       .buildClaim(Seq(b), H, upcomingContext.currentParameters, minerPk, None, Set.empty).get
     tx.outputCandidates.head.value shouldBe b.value - feeOf(b)
     tx.statefulValidity(IndexedSeq(b), emptyDataBoxes, updContext)(
       ErgoInterpreter(updContext.currentParameters)).isSuccess shouldBe true
+
+    // the increase is applied on the first block of the next epoch only
+    updContext.currentParameters.storageFeeFactor shouldBe parameters.storageFeeFactor
+    upcomingContext.currentParameters.storageFeeFactor shouldBe parameters.storageFeeFactor
   }
 }

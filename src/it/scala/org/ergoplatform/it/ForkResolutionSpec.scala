@@ -3,6 +3,7 @@ package org.ergoplatform.it
 import java.io.File
 import cats.implicits._
 import com.typesafe.config.Config
+import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.Docker.{ExtraConfig, noExtraConfig}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.concurrent.Eventually
@@ -82,8 +83,34 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       val commonHeads = Async.await(Future.traverse(nodes)(_.headerIdsByHeight(initMaxHeight + commonChainLength)))
         .map(_.headOption.value)
       commonHeads.distinct.size shouldBe 1
+
+      // Stop producing the common chain before disconnecting its followers. A follower can
+      // have headers ahead of applied blocks; isolated mining cannot fill that gap without peers.
+      docker.stopNode(nodes.head.containerId)
+      val quiescedMiner = startNodesWithBinds(List(nonGeneratingPeerConfig.withFallback(minerConfig))).head
+      val quiescedNodes = quiescedMiner +: nodes.tail
+      val commonHeight = initMaxHeight + commonChainLength
+      val appliedCommonTip = Async.await(quiescedMiner.waitForProgress(
+        "all nodes to share a fully applied tip before isolation",
+        _ => Future.traverse(quiescedNodes)(_.info),
+        (infos: List[NodeInfo]) => infos.forall { info =>
+          info.isMining.contains(false) &&
+            info.bestBlockHeightOpt.exists(_ >= commonHeight) &&
+            info.bestHeaderHeightOpt == info.bestBlockHeightOpt &&
+            info.bestBlockIdOpt.nonEmpty &&
+            info.bestHeaderIdOpt == info.bestBlockIdOpt
+        } && infos.map(_.bestBlockIdOpt).distinct.size == 1,
+        100.millis
+      )(
+        infos => Some(infos.map(info =>
+          (info.bestBlockHeightOpt, info.bestHeaderHeightOpt, info.bestBlockIdOpt, info.bestHeaderIdOpt))),
+        infos => infos.map(info =>
+          s"full=${info.bestBlockHeightOpt} header=${info.bestHeaderHeightOpt} " +
+            s"fullId=${info.bestBlockIdOpt} headerId=${info.bestHeaderIdOpt} mining=${info.isMining}").mkString("; ")
+      ))
+      log.info(s"Fully applied common tip before isolation: ${appliedCommonTip.head.bestBlockIdOpt.value}")
       val isolatedNodes = Async.await {
-        nodes.foreach(node => docker.stopNode(node.containerId))
+        quiescedNodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
       }

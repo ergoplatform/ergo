@@ -100,7 +100,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
     *                             and recreations dropped for dusty aggregate fees are
     *                             transient and are NOT reported.
     */
-  def buildClaim(eligible: Seq[ErgoBox],
+  def buildClaim(eligible: Iterable[ErgoBox],
                  currentHeight: Int,
                  parameters: Parameters,
                  minerPk: ProveDlog,
@@ -118,7 +118,11 @@ object StorageRentClaimBuilder extends ScorexLogging {
     // so unclaimable boxes can not starve later claimable ones out of the claim
     var examined = 0
 
-    eligible.iterator.takeWhile(_ => claimed.length < MaxClaims).foreach { box =>
+    val boxes = eligible.iterator
+    // Check the claim cap before fetching another row: callers may advance an index
+    // cursor while resolving this iterator, including rows absent from the UTXO state.
+    while (claimed.length < MaxClaims && boxes.hasNext) {
+      val box = boxes.next()
       examined += 1
       val age = currentHeight - box.creationHeight
       val oldEnough = age >= Constants.StoragePeriod

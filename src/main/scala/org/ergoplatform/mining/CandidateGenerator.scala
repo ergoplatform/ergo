@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
-import org.ergoplatform.nodeView.history.extra.{ExtraIndexer, NumericBoxIndex}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexer, NumericBoxIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
@@ -57,6 +57,8 @@ class CandidateGenerator(
 
   private val candidateGenInterval =
     ergoSettings.nodeSettings.blockCandidateGenerationInterval
+
+  private val storageRentScan = new StorageRentScan
 
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
@@ -213,7 +215,8 @@ class CandidateGenerator(
           effectiveMinerPk,
           txsToInclude,
           state.lastAppliedBlockTxs,
-          ergoSettings
+          ergoSettings,
+          storageRentScan
         ) match {
           case Some(Failure(ex)) =>
             log.error(s"Candidate generation failed", ex)
@@ -289,6 +292,11 @@ class CandidateGenerator(
 }
 
 object CandidateGenerator extends ScorexLogging {
+
+  /** Ephemeral progress owned by one generator, retained across ordinary tip changes. */
+  final class StorageRentScan {
+    private[mining] var after: Option[StorageRentBox] = None
+  }
 
   /**
     * Memoized extra-index sync flag for the storage-rent in [[createCandidate]]
@@ -473,7 +481,8 @@ object CandidateGenerator extends ScorexLogging {
     pk: ProveDlog,
     txsToInclude: Seq[ErgoTransaction],
     lastAppliedBlockTxs: Option[(ModifierId, Set[ModifierId])],
-    ergoSettings: ErgoSettings
+    ergoSettings: ErgoSettings,
+    storageRentScan: StorageRentScan = new StorageRentScan
   ): Option[Try[(Candidate, EliminateTransactions)]] = {
     // mandatory transactions to include into next block taken from the previous candidate
     val stateWithMandatoryTxs = s.withTransactions(txsToInclude)
@@ -515,6 +524,7 @@ object CandidateGenerator extends ScorexLogging {
       } else {
         ergoSettings.votingTargets.desiredUpdate
       }
+      var proposedRentAfter = storageRentScan.after
       val candidateAttempt = createCandidate(
         pk,
         h,
@@ -523,7 +533,9 @@ object CandidateGenerator extends ScorexLogging {
         poolTransactions,
         emissionTxOpt,
         unspentTxsToInclude,
-        ergoSettings
+        ergoSettings,
+        storageRentScan.after,
+        next => proposedRentAfter = next
       )
       if (!chainSynced) {
         log.debug(
@@ -532,6 +544,10 @@ object CandidateGenerator extends ScorexLogging {
         )
         None
       } else {
+        // Commit only an ordinary successful assembly against the still-selected tip.
+        // Failed proofs, discarded candidates and accepted unmined claims retain their
+        // starting cursor; createCandidate proposes progress only for omitted claims.
+        if (candidateAttempt.isSuccess) storageRentScan.after = proposedRentAfter
         Some(candidateAttempt)
       }
     }
@@ -608,7 +624,9 @@ object CandidateGenerator extends ScorexLogging {
                        poolTxs: Seq[UnconfirmedTransaction],
                        emissionTxOpt: Option[ErgoTransaction],
                        prioritizedTransactions: Seq[ErgoTransaction],
-                       ergoSettings: ErgoSettings
+                       ergoSettings: ErgoSettings,
+                       rentScanAfter: Option[StorageRentBox] = None,
+                       onRentScanProposed: Option[StorageRentBox] => Unit = _ => ()
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
@@ -682,6 +700,7 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val emissionTxs = emissionTxOpt.toSeq
+      var nextRentAfter = rentScanAfter
 
       // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
       // bypassing the mempool (goes into the block right after the prioritized transactions)
@@ -705,14 +724,19 @@ object CandidateGenerator extends ScorexLogging {
           if (threshold > 0) {
             // rent entries carry no payload, so resolve the box through the box-number
             // index; entries whose box row is gone resolve to nothing and are skipped.
-            // The scan window is wider than the claim cap: the builder stops at
-            // MaxClaims CLAIMED boxes, so junk rows do not starve later claimable ones -
-            // and permanently unclaimable boxes are evicted from the index below, so the
-            // window advances across candidates.
-            val scanned = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
-              .toSeq
-              .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
-              .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
+            // One bounded suffix per candidate. Move past examined rows even when the
+            // claim is later rejected, without deleting their eligibility. An empty
+            // suffix wraps on the next candidate, never within this claim.
+            val entries = history.storageRentBoxesAtOrBefore(
+              threshold, 4 * StorageRentClaimBuilder.MaxClaims, rentScanAfter)
+            if (entries.isEmpty) nextRentAfter = None
+            val scanned = new Iterable[ErgoBox] {
+              override def iterator: Iterator[ErgoBox] = entries.iterator.flatMap { entry =>
+                nextRentAfter = Some(entry)
+                NumericBoxIndex.getBoxByNumber(history, entry.globalIndex)
+                  .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
+              }
+            }
             val params = upcomingContext.currentParameters
             val reemissionTokenIdOpt =
               Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
@@ -805,7 +829,13 @@ object CandidateGenerator extends ScorexLogging {
 
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
-          Success(mkCandidate(txs, adProof, adDigest, eliminateTransactions))
+          val candidate = mkCandidate(txs, adProof, adDigest, eliminateTransactions)
+          // An included claim has not been mined: offer its still-unspent inputs again
+          // on regeneration. Only an omitted claim or all-skipped page proposes progress.
+          if (!rentClaimTxs.exists(claim => txs.exists(_.id == claim.id))) {
+            onRentScanProposed(nextRentAfter)
+          }
+          Success(candidate)
         case Failure(t: Throwable) =>
           // A likely reason of the failure is a state update (new block applied) between
           // collectTxs and proofsForTransactions. Re-collect transactions against the current

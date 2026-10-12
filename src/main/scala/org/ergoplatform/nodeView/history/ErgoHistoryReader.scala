@@ -125,6 +125,12 @@ trait ErgoHistoryReader
   def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] =
     historyStorage.storageRentBoxesAtOrBefore(creationHeight, limit)
 
+  /** Continue an eligibility scan strictly after the previous examined row. */
+  def storageRentBoxesAtOrBefore(creationHeight: Int,
+                                 limit: Int,
+                                 after: Option[StorageRentBox]): Array[StorageRentBox] =
+    historyStorage.storageRentBoxesAtOrBefore(creationHeight, limit, after)
+
   /**
     * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
     * transaction spending them failed validation during block assembly.

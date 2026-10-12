@@ -124,6 +124,32 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     }
   }
 
+  property("rent scan resumes exclusively after an existing or deleted cursor row") {
+    val localSettings = settings.copy(directory = Files.createTempDirectory("rent-scan-cursor").toString)
+    val storage = HistoryStorage(localSettings)
+    val rows = Array(new StorageRentBox(10, 1L), new StorageRentBox(10, 2L),
+      new StorageRentBox(20, 3L), new StorageRentBox(30, 4L))
+    try {
+      storage.insertExtra(Array.empty, rows.map(row => row: ExtraIndex))
+      // A foreign 32-byte key inside the rent marker namespace must not truncate
+      // the resumed suffix between its height-10 and height-20 eligibility rows.
+      val foreignKey = StorageRentBox.key(15, 0L) ++ Array.fill[Byte](19)(0)
+      storage.insertExtra(Array(foreignKey -> Array[Byte](1)), Array.empty)
+      def scan(cutoff: Int, limit: Int, after: StorageRentBox): Seq[Long] =
+        storage.storageRentBoxesAtOrBefore(cutoff, limit, Some(after)).map(_.globalIndex).toSeq
+
+      scan(30, 1, rows(0)) shouldBe Seq(2L)
+      scan(20, 10, rows(0)) shouldBe Seq(2L, 3L)
+      storage.removeExtra(Array(rows(0).id))
+      scan(20, 10, rows(0)) shouldBe Seq(2L, 3L)
+      scan(10, 10, rows(2)) shouldBe empty
+      scan(30, 10, rows.last) shouldBe empty
+      scan(30, 0, rows(0)) shouldBe empty
+    } finally {
+      storage.close()
+    }
+  }
+
   property("recursive extra index deletion propagates a file failure") {
     val root = Files.createTempDirectory("extra-index-delete-failure")
     val sentinel = Files.createFile(root.resolve("sentinel"))

@@ -2,12 +2,14 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorIdentity, ActorRef, ActorSystem, Identify, Props, Terminated}
 import akka.testkit.TestProbe
-import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.http.api.SortDirection
+import org.ergoplatform.mining.{CandidateGenerator, StorageRentClaimBuilder}
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentThreshold, Index}
 import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
@@ -18,13 +20,15 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.settings.{ErgoSettings, NetworkType}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, UtxoState, VotingData}
+import org.ergoplatform.settings.{Constants, ErgoSettings, NetworkType}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.{ModifierId, bytesToId}
 import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
+import java.lang.reflect.{InvocationHandler, Method, Proxy}
 import java.util.concurrent.TimeUnit
 import java.nio.ByteBuffer
 import java.nio.file.Files
@@ -1021,6 +1025,115 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
     checkRentIndexAgainstChain(back)
     indexer ! Reset()
+  }
+
+  property("rent cursor revisits an older row restored by the indexer rollback") {
+    import org.ergoplatform.utils.ErgoCoreTestConstants._
+    import sigmastate.helpers.TestingHelpers.testBox
+
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    val sharedStorage = _history.historyStorage
+    val scanLimit = 4 * StorageRentClaimBuilder.MaxClaims
+    val firstPage = sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, scanLimit)
+    firstPage should not be empty
+    val cursorRow = firstPage.last
+    val beforeRollback = IndexerState.fromHistory(_history)
+    val miningHeight = Constants.StoragePeriod + HEIGHT + 1
+    val target = (0L until beforeRollback.globalBoxIndex)
+      .flatMap(NumericBoxIndex.getBoxByNumber(history, _))
+      .find { box =>
+        val behindCursor = box.box.creationHeight < cursorRow.creationHeight ||
+          (box.box.creationHeight == cursorRow.creationHeight && box.globalIndex < cursorRow.globalIndex)
+        box.inclusionHeight <= BRANCHPOINT && box.spendingHeightOpt.exists(_ > BRANCHPOINT) &&
+          behindCursor && StorageRentClaimBuilder.buildClaim(Seq(box.box), miningHeight,
+            parameters, defaultMinerPk, None, Set.empty).isDefined
+      }.getOrElse(fail("fixture needs a claimable pre-branch box spent after the rollback target"))
+    sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, Int.MaxValue).map(_.id) should not contain StorageRentBox(target).id
+    target.isSpent shouldBe true
+
+    // Age and UTXO contents are synthetic so this short chain can exercise rent claims.
+    // Index reads and rollback writes use the same real store; no rent rows are injected.
+    val miningSettings = initSettings.copy(directory = Files.createTempDirectory("rent-rollback-candidate").toString,
+      nodeSettings = initSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
+    val freshBox = testBox(12000000000L, Constants.TrueTree, miningHeight - 1)
+    val baseState = UtxoState.fromBoxHolder(BoxHolder(Seq(target.box, freshBox)), None,
+      Files.createTempDirectory("rent-rollback-state").toFile, miningSettings, parameters)
+    val parentBlock = history.bestFullBlockOpt.get
+    val agedParent = parentBlock.header.copy(height = miningHeight - 1)
+    val agedContext = new ErgoStateContext(Seq(agedParent), None,
+      genesisStateDigest, parameters, validationSettingsNoIl, VotingData.empty)(miningSettings.chainSettings)
+    val miningState = new UtxoState(baseState.persistentProver, baseState.version, baseState.store, miningSettings) {
+      override def stateContext: ErgoStateContext = agedContext
+      override def emissionBoxOpt: Option[ErgoBox] = None
+    }
+    val scanStarts = mutable.ArrayBuffer.empty[Option[ModifierId]]
+    val scanSizes = mutable.ArrayBuffer.empty[Int]
+    val miningHistory = Proxy.newProxyInstance(classOf[ErgoHistoryReader].getClassLoader,
+      Array[Class[_]](classOf[ErgoHistoryReader]), new InvocationHandler {
+        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef = method.getName match {
+          case "bestFullBlockOpt" => Some(parentBlock.copy(agedParent))
+          // Keep the real index progress for the sync gate; only the mining age is lifted.
+          case "fullBlockHeight" => Int.box(IndexerState.fromHistory(_history).indexedHeight)
+          case "historyStorage" => sharedStorage
+          case "typedExtraIndexById" => sharedStorage.getExtraIndex(args(0).asInstanceOf[ModifierId])
+          case "storageRentBoxesAtOrBefore" =>
+            val after = args(2).asInstanceOf[Option[StorageRentBox]]
+            val rows = sharedStorage.storageRentBoxesAtOrBefore(
+              args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], after)
+            scanStarts += after.map(_.id)
+            scanSizes += rows.length
+            rows
+          case "removeStorageRentBoxes" => fail("candidate must not delete this fixture's rent rows")
+          case "typedModifierById" => None
+          case "requiredDifficultyAfter" => agedParent.requiredDifficulty
+          case other => throw new UnsupportedOperationException(s"unexpected mining history read: $other")
+        }
+      }).asInstanceOf[ErgoHistoryReader]
+    val independentSpend = ErgoTransaction(IndexedSeq(Input(freshBox.id, emptyProverResult)), IndexedSeq.empty,
+      IndexedSeq(new ErgoBoxCandidate(freshBox.value, Constants.TrueTree, miningHeight)))
+    val scan = new CandidateGenerator.StorageRentScan
+    def candidateInputs(): Set[ModifierId] = {
+      val result = CandidateGenerator.generateCandidate(miningHistory, miningState,
+        ErgoMemPool.empty(miningSettings), defaultMinerPk, Seq(independentSpend), None, miningSettings, scan)
+      result should not be None
+      withClue(result.toString) { result.get.isSuccess shouldBe true }
+      result.get.get._1.candidateBlock.transactions.flatMap(_.inputs.map(in => bytesToId(in.boxId))).toSet
+    }
+
+    try {
+      candidateInputs() shouldBe Set(bytesToId(freshBox.id))
+      scanStarts.toSeq shouldBe Seq(None)
+      scanSizes.toSeq shouldBe Seq(firstPage.length)
+
+      // ForceRollback invokes production beginRollback/removeAfter, but intentionally
+      // leaves selected history and the synthetic UTXO unchanged and disables catch-up.
+      indexer ! ForceRollback(BRANCHPOINT)
+      org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+        IndexerState.fromHistory(_history).indexedHeight shouldBe BRANCHPOINT
+        history.typedExtraIndexById[IndexedErgoBox](target.id).get.isSpent shouldBe false
+        sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, Int.MaxValue).map(_.id) should contain(StorageRentBox(target).id)
+      }
+      (_history.historyStorage eq sharedStorage) shouldBe true
+      val remainingRows = sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, Int.MaxValue).length
+      val maxAttempts = (remainingRows + scanLimit - 1) / scanLimit + 2
+      var included = false
+      var attempts = 0
+      while (!included && attempts < maxAttempts) {
+        included = candidateInputs().contains(target.id)
+        attempts += 1
+      }
+      included shouldBe true
+      scanStarts(1) shouldBe Some(cursorRow.id)
+      scanSizes.drop(1) should contain(0)
+      scanStarts.drop(1) should contain(None)
+      all(scanSizes) should be <= scanLimit
+      sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, Int.MaxValue).map(_.id) should contain(StorageRentBox(target).id)
+    } finally {
+      miningState.closeStorage()
+      indexer ! Reset()
+    }
   }
 
   property("rent index stays correct across repeated rollbacks") {

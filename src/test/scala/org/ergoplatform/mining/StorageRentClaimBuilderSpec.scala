@@ -25,8 +25,6 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
-  private implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
-
   private val minerPk: ProveDlog = defaultMinerPk
   private val MinerTree: ErgoTree = ErgoTree.fromSigmaBoolean(minerPk)
 
@@ -101,20 +99,21 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
   private def buildAndValidate(boxes: Seq[ErgoBox],
                                reemissionTokenId: Option[ModifierId] = None,
                                whitelist: Set[ModifierId] = Set.empty,
-                               skippedSink: ErgoBox => Unit = _ => ()): Option[ErgoTransaction] = {
-    val txOpt = StorageRentClaimBuilder.buildClaim(boxes, H, parameters, minerPk, reemissionTokenId, whitelist, skippedSink)
+                               skippedSink: ErgoBox => Unit = _ => (),
+                               claimParameters: Parameters = parameters): Option[ErgoTransaction] = {
+    val txOpt = StorageRentClaimBuilder.buildClaim(boxes, H, claimParameters, minerPk, reemissionTokenId, whitelist, skippedSink)
     txOpt.foreach { tx =>
       val fb0 = invalidErgoFullBlockGen.sample.get
       val fakeHeader = fb0.header.copy(height = H - 1)
       val fb = fb0.copy(fb0.header.copy(height = H, parentId = fakeHeader.id))
       val updContext = {
-        val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, parameters,
+        val inContext = new ErgoStateContext(Seq(fakeHeader), None, genesisStateDigest, claimParameters,
           validationSettingsNoIl, VotingData.empty)(settings.chainSettings)
         inContext.appendFullBlock(fb).get
       }
       withClue("built claim must pass consensus validation: ") {
         tx.statefulValidity(boxes.filter(b => tx.inputs.map(_.boxId).contains(b.id)).toIndexedSeq,
-          emptyDataBoxes, updContext).isSuccess shouldBe true
+          emptyDataBoxes, updContext)(ErgoInterpreter(claimParameters)).isSuccess shouldBe true
       }
     }
     txOpt
@@ -147,6 +146,71 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val recreated = tx.outputCandidates.head
     recreated.additionalTokens.length shouldBe 1 // tokens preserved
     recreated.value shouldBe b.value - parameters.storageFeeFactor * b.bytes.length
+  }
+
+  /** Freeze parameters so the actual nonzero fee output is exactly at its minimum. */
+  private def feeMinimumFixture(): (ErgoBox, Parameters) = {
+    val box = agedBox(10000000000L)
+    val minValuePerByte = box.bytes.length
+    def feeBoxSize(factor: Int): Int = {
+      val fee = box.bytes.length.toLong * factor
+      new ErgoBoxCandidate(fee, MinerTree, H).toBox(bytesToId(box.id), 1).bytes.length
+    }
+    var factor = feeBoxSize(1)
+    while (factor != feeBoxSize(factor)) factor = feeBoxSize(factor)
+    val boundaryParameters = Parameters(0, Parameters.DefaultParameters ++ Map(
+      Parameters.MinValuePerByteIncrease -> minValuePerByte,
+      Parameters.StorageFeeFactorIncrease -> factor), ErgoValidationSettingsUpdate.empty)
+    (box, boundaryParameters)
+  }
+
+  property("recreation fees below the actual final fee output minimum produce no claim") {
+    val (box, boundaryParameters) = feeMinimumFixture()
+    val lowParameters = Parameters(0, boundaryParameters.parametersTable +
+      (Parameters.StorageFeeFactorIncrease -> (boundaryParameters.storageFeeFactor - 1)),
+      ErgoValidationSettingsUpdate.empty)
+    val fee = box.bytes.length.toLong * lowParameters.storageFeeFactor
+    val zeroFeeBox = new ErgoBoxCandidate(0L, MinerTree, H).toBox(bytesToId(box.id), 0)
+    val finalFeeBox = new ErgoBoxCandidate(fee, MinerTree, H).toBox(bytesToId(box.id), 1)
+    fee should be >= (zeroFeeBox.bytes.length.toLong * lowParameters.minValuePerByte)
+    fee should be < (finalFeeBox.bytes.length.toLong * lowParameters.minValuePerByte)
+    StorageRentClaimBuilder.buildClaim(Seq(box), H, lowParameters, minerPk, None, Set.empty) shouldBe None
+  }
+
+  property("recreation fees at and above the actual final fee output minimum validate") {
+    val (box, boundaryParameters) = feeMinimumFixture()
+    Seq(0, 1).foreach { increment =>
+      val claimParameters = Parameters(0, boundaryParameters.parametersTable +
+        (Parameters.StorageFeeFactorIncrease -> (boundaryParameters.storageFeeFactor + increment)),
+        ErgoValidationSettingsUpdate.empty)
+      val tx = buildAndValidate(Seq(box), claimParameters = claimParameters).get
+      tx.inputs.length shouldBe 1
+      tx.outputCandidates.length shouldBe 2
+      val feeBox = tx.outputs.last
+      val actualMinimum = feeBox.bytes.length.toLong * claimParameters.minValuePerByte
+      if (increment == 0) feeBox.value shouldBe actualMinimum
+      else feeBox.value should be > actualMinimum
+      tx.outputCandidates.map(_.value).sum shouldBe box.value
+      tx.inputs.head.spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
+    }
+  }
+
+  property("dropping dusty recreation fees preserves burn proceeds and final output indexes") {
+    val (box, boundaryParameters) = feeMinimumFixture()
+    val lowParameters = Parameters(0, boundaryParameters.parametersTable +
+      (Parameters.StorageFeeFactorIncrease -> (boundaryParameters.storageFeeFactor - 1)),
+      ErgoValidationSettingsUpdate.empty)
+    var burned = tokenizedBox(10000000000L, Constants.StoragePeriod, withToken = true)
+    while (burned.value > lowParameters.storageFeeFactor.toLong * burned.bytes.length) {
+      burned = tokenizedBox(lowParameters.storageFeeFactor.toLong * burned.bytes.length,
+        Constants.StoragePeriod, withToken = true)
+    }
+    val tx = buildAndValidate(Seq(box, burned), claimParameters = lowParameters).get
+    tx.inputs.map(_.boxId) shouldBe IndexedSeq(burned.id)
+    tx.outputCandidates.length shouldBe 1
+    tx.outputCandidates.head.value shouldBe burned.value
+    tx.outputCandidates.head.ergoTree shouldBe MinerTree
+    tx.inputs.head.spendingProof.extension.values(Constants.StorageIndexVarId) shouldBe ShortConstant(0)
   }
 
   property("recreated output below the dust floor is bumped up to it") {

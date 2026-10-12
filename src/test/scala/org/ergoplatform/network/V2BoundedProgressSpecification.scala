@@ -534,7 +534,27 @@ class V2BoundedProgressSpecification extends AnyPropSpec with Matchers {
     }
   }
 
-  property("V2 bounded progress remains peer-specific and drops its cursor on a same-height reorganization") {
+  property("V2 bounded progress survives a selected-chain extension") {
+    withFixture { f =>
+      f.inventory(firstPage)
+      f.sync().lastHeaders.map(_.height) should contain(400)
+
+      val oldTip = f.history.bestHeaderOpt.get
+      val extension = genHeaderChain(2, Some(oldTip), f.history.difficultyCalculator,
+        extensionHash = Algos.hash(Array[Byte](6)), diffBitsOpt = None, useRealTs = false).tail
+      val extended = applyHeaderChain(f.history, extension)
+      extended.bestHeaderIdOpt shouldBe Some(extension.last.id)
+      extended.isInBestChain(oldTip.id) shouldBe true
+
+      f.actor ! ChangedHistory(extended)
+      f.periodic()
+      val advertised = f.sync()
+      advertised.lastHeaders.head.id shouldBe extension.last.id
+      advertised.lastHeaders.map(_.height) should contain(400)
+    }
+  }
+
+  property("V2 bounded progress drops its cursor when the former selected branch remains stored") {
     withFixture { f =>
       val second = ConnectedPeer(connectionIdGen.sample.get, TestProbe()(f.system).ref,
         Some(PeerInfo(defaultPeerSpec, 0L)))
@@ -548,18 +568,23 @@ class V2BoundedProgressSpecification extends AnyPropSpec with Matchers {
       otherPeer.sendingStrategy.choose(Seq(second)) should contain(second)
       ErgoSyncInfoMessageSpec.parseBytesTry(otherPeer.message.dataBytes).get
         .asInstanceOf[ErgoSyncInfoV2].lastHeaders.map(_.height) should not contain 400
-      var replacement = applyHeaderChain(newHistory(), selected.take(1))
-      try {
-        val fork = genHeaderChain(999, Some(selected.head), replacement.difficultyCalculator,
-          extensionHash = Algos.hash(Array[Byte](6)), diffBitsOpt = None, useRealTs = false).tail
-        replacement = applyHeaderChain(replacement, fork)
-        replacement.headersHeight shouldBe f.history.headersHeight
-        f.actor ! ChangedHistory(replacement)
-        f.periodic()
-        val advertised = f.sync()
-        advertised.lastHeaders.head.id shouldBe replacement.bestHeaderIdOpt.get
-        advertised.lastHeaders.map(_.height) should not contain 400
-      } finally replacement.closeStorage()
+
+      val oldTip = f.history.bestHeaderOpt.get
+      val cursor = selected.headers(399)
+      val fork = genHeaderChain(1001, Some(selected.head), f.history.difficultyCalculator,
+        extensionHash = Algos.hash(Array[Byte](7)), diffBitsOpt = None, useRealTs = false).tail
+      val replacement = applyHeaderChain(f.history, fork)
+      replacement.bestHeaderIdOpt shouldBe Some(fork.last.id)
+      replacement.contains(oldTip.id) shouldBe true
+      replacement.isInBestChain(oldTip.id) shouldBe false
+      replacement.contains(cursor.id) shouldBe true
+      replacement.isInBestChain(cursor.id) shouldBe false
+
+      f.actor ! ChangedHistory(replacement)
+      f.periodic()
+      val advertised = f.sync()
+      advertised.lastHeaders.head.id shouldBe fork.last.id
+      advertised.lastHeaders.map(_.id) should not contain cursor.id
     }
   }
 }

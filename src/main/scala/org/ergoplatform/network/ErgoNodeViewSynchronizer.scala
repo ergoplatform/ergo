@@ -376,6 +376,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val summary = history.syncInfoV2(full = true)
     headerInventoryProgress.get(peer) match {
       case Some(progress) if summary.lastHeaders.nonEmpty &&
+        history.isInBestChain(progress.tipId) &&
         history.typedModifierById[Header](progress.cursor.id).isDefined =>
         ErgoNodeViewSynchronizer.withHeaderInventoryCursor(summary, progress.cursor)
       case _ =>

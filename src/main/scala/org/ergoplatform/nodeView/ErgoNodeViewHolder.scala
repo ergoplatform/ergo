@@ -459,7 +459,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   def restoreState(): Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
     None
   } else {
-    val history = ErgoHistory.readOrGenerate(settings)
+    val history = Try(ErgoHistory.readOrGenerate(settings)).recover { case ex =>
+      log.error("Failed to open history, shutting down the node", ex)
+      // Constructor failure alone stops the Holder, but can leave REST/P2P running.
+      ErgoApp.shutdownSystem()(context.system)
+      throw ex
+    }.get
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
     val storedState = ErgoState.readOrGenerate(settings).asInstanceOf[State]

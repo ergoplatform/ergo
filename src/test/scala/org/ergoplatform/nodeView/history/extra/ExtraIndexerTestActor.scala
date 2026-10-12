@@ -159,6 +159,11 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
   override protected def fullChainHeaderAtHeight(height: Int): Option[Header] =
     withHeaderSeams(height, super.fullChainHeaderAtHeight(height))
 
+  // The fixture drives the indexer over a history without a state: every block on the
+  // history's best full chain counts as applied.
+  override protected def appliedTipOpt: Option[Header] =
+    _history.bestFullBlockIdOpt.flatMap(historyStorage.modifierById).collect { case header: Header => header }
+
   override protected def blockTransactionsForHeader(header: Header): Option[BlockTransactions] = {
     if (deferredTransactionsHeightOpt.contains(header.height)) {
       deferredTransactionsHeightOpt = None

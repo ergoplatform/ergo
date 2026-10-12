@@ -762,14 +762,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
       synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
 
-      // the sync info consists of the headers at offsets 0, 16, 128 and 512 from our tip, not only of the tip
-      ncProbe.fishForMessage(3 seconds) {
+      // Full sync includes the four recent locators and the selected genesis header.
+      val fullSyncMessage = ncProbe.fishForMessage(3 seconds) {
         case stn: SendToNetwork =>
           val msg = stn.message
           msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
-            msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length
+            msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length + 1
         case _ => false
-      }
+      }.asInstanceOf[SendToNetwork]
+      val fullSyncInfo = fullSyncMessage.message.data.get.asInstanceOf[ErgoSyncInfoV2]
+      fullSyncInfo.lastHeaders.last.id shouldBe localChain.head.id
     }
   }
 

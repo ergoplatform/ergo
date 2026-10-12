@@ -1047,7 +1047,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         val behindCursor = box.box.creationHeight < cursorRow.creationHeight ||
           (box.box.creationHeight == cursorRow.creationHeight && box.globalIndex < cursorRow.globalIndex)
         box.inclusionHeight <= BRANCHPOINT && box.spendingHeightOpt.exists(_ > BRANCHPOINT) &&
-          behindCursor && StorageRentClaimBuilder.buildClaim(Seq(box.box), miningHeight,
+          behindCursor && StorageRentClaimBuilder.buildClaim(Iterator(box.box), miningHeight,
             parameters, defaultMinerPk, None, Set.empty).isDefined
       }.getOrElse(fail("fixture needs a claimable pre-branch box spent after the rollback target"))
     sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, Int.MaxValue).map(_.id) should not contain StorageRentBox(target).id

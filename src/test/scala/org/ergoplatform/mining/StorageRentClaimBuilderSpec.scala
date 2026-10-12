@@ -102,7 +102,7 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
                                reemissionTokenId: Option[ModifierId] = None,
                                whitelist: Set[ModifierId] = Set.empty,
                                skippedSink: ErgoBox => Unit = _ => ()): Option[ErgoTransaction] = {
-    val txOpt = StorageRentClaimBuilder.buildClaim(boxes, H, parameters, minerPk, reemissionTokenId, whitelist, skippedSink)
+    val txOpt = StorageRentClaimBuilder.buildClaim(boxes.iterator, H, parameters, minerPk, reemissionTokenId, whitelist, skippedSink)
     txOpt.foreach { tx =>
       val fb0 = invalidErgoFullBlockGen.sample.get
       val fakeHeader = fb0.header.copy(height = H - 1)
@@ -240,7 +240,7 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
         (Parameters.MinValuePerByteIncrease -> (Int.MaxValue / b.bytes.length + 1)),
       ErgoValidationSettingsUpdate.empty)
     hugeMinValueParams.minValuePerByte * b.bytes.length should be < 0 // sanity: wraps negative
-    StorageRentClaimBuilder.buildClaim(Seq(b), H, hugeMinValueParams, minerPk, None, Set.empty) shouldBe None
+    StorageRentClaimBuilder.buildClaim(Iterator(b), H, hugeMinValueParams, minerPk, None, Set.empty) shouldBe None
   }
 
   property("reemission-token box is skipped on EIP-27 networks") {

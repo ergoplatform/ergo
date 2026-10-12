@@ -33,17 +33,18 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants.{settings => baseSettings}
 
-  property("actor retains rent cursor across forced candidate regeneration") {
+  property("actor rotates retained rent rows across forced candidate regeneration") {
     new TestKit(ActorSystem()) {
       val height = 3 * Constants.StoragePeriod
       val threshold = height - Constants.StoragePeriod
       val eligibleBoxes = (0 to StorageRentClaimBuilder.MaxClaims).map { index =>
         testBox(10000000000L + index, Constants.TrueTree, threshold, Seq.empty, Map.empty)
       }
+      val independentBox = testBox(12000000000L, Constants.TrueTree, height, Seq.empty, Map.empty)
       val fixtureSettings = baseSettings.copy(
         directory = createTempDir.getAbsolutePath,
         nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
-      val baseState = UtxoState.fromBoxHolder(BoxHolder(eligibleBoxes), None,
+      val baseState = UtxoState.fromBoxHolder(BoxHolder(eligibleBoxes :+ independentBox), None,
         createTempDir, fixtureSettings, parameters)
       val block = invalidErgoFullBlockGen.sample.get
       val parentHeader = block.header.copy(height = height - 1)
@@ -100,26 +101,32 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
         val conflictingSpend = ErgoTransaction(
           IndexedSeq(Input(eligibleBoxes.head.id, emptyProverResult)), IndexedSeq.empty,
           IndexedSeq(new ErgoBoxCandidate(eligibleBoxes.head.value, Constants.TrueTree, height)))
-        val firstClaim = StorageRentClaimBuilder.buildClaim(eligibleBoxes.take(StorageRentClaimBuilder.MaxClaims),
+        val independentSpend = ErgoTransaction(
+          IndexedSeq(Input(independentBox.id, emptyProverResult)), IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(independentBox.value, Constants.TrueTree, height)))
+        val firstClaim = StorageRentClaimBuilder.buildClaim(eligibleBoxes.take(StorageRentClaimBuilder.MaxClaims).iterator,
           height, parameters, defaultMinerPk, None, Set.empty[ModifierId]).get
-        val laterClaim = StorageRentClaimBuilder.buildClaim(Seq(eligibleBoxes.last),
+        val laterClaim = StorageRentClaimBuilder.buildClaim(Iterator(eligibleBoxes.last),
           height, parameters, defaultMinerPk, None, Set.empty[ModifierId]).get
-        def nextCandidate(): Candidate = {
-          generator.tell(GenerateCandidate(Seq(conflictingSpend), reply = true, forced = true), replyProbe.ref)
+        def nextCandidate(prioritized: ErgoTransaction): Candidate = {
+          generator.tell(GenerateCandidate(Seq(prioritized), reply = true, forced = true), replyProbe.ref)
           replyProbe.expectMsgPF(10.seconds) {
             case StatusReply.Success(candidate: Candidate) => candidate
           }
         }
-        val first = nextCandidate()
+        val first = nextCandidate(conflictingSpend)
         first.candidateBlock.transactions.map(_.id) should contain(conflictingSpend.id)
         first.candidateBlock.transactions.map(_.id) should not contain firstClaim.id
         first.candidateBlock.transactions.flatMap(_.inputs.map(in => bytesToId(in.boxId))) should not contain
           bytesToId(eligibleBoxes.last.id)
         viewHolderProbe.expectMsgType[EliminateTransactions](10.seconds).ids should contain(firstClaim.id)
-        val second = nextCandidate()
+        val second = nextCandidate(independentSpend)
         second.candidateBlock.transactions.map(_.id) should contain(laterClaim.id)
-        val third = nextCandidate()
-        third.candidateBlock.transactions.map(_.id) should contain(laterClaim.id)
+        val third = nextCandidate(independentSpend)
+        third.candidateBlock.transactions.map(_.id) should contain(firstClaim.id)
+        third.candidateBlock.transactions.map(_.id) should not contain laterClaim.id
+        val fourth = nextCandidate(independentSpend)
+        fourth.candidateBlock.transactions.map(_.id) should contain(laterClaim.id)
         // No candidate was applied: all 101 persistent rows and UTXOs remain available.
         storage.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
           .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
@@ -194,7 +201,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       val threshold = height - Constants.StoragePeriod
       val before = history.storageRentBoxesAtOrBefore(threshold, StorageRentClaimBuilder.MaxClaims)
       before.map(_.globalIndex).toSet shouldBe Set(0L, 1L)
-      val batch = StorageRentClaimBuilder.buildClaim(Seq(spentByOwner, stillUnspent),
+      val batch = StorageRentClaimBuilder.buildClaim(Iterator(spentByOwner, stillUnspent),
         height, parameters, defaultMinerPk, None, Set.empty[ModifierId]).get
       batch.inputs.map(in => bytesToId(in.boxId)).toSet shouldBe
         Set(bytesToId(spentByOwner.id), bytesToId(stillUnspent.id))
@@ -315,7 +322,8 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       scan.after.map(_.globalIndex) shouldBe Some(scanLimit.toLong - 1)
       candidateInputs() should contain(bytesToId(laterBox.id))
       scanRowCounts.toSeq shouldBe Seq(scanLimit, unresolvedCount + 1 - scanLimit)
-      candidateInputs() should contain(bytesToId(laterBox.id))
+      scan.after shouldBe None
+      candidateInputs() shouldBe Set(bytesToId(freshBox.id))
       scan.after.map(_.globalIndex) shouldBe Some(scanLimit.toLong - 1)
       storage.storageRentBoxesAtOrBefore(threshold, unresolvedCount + 1).map(_.globalIndex).toSeq shouldBe before
       state.boxById(laterBox.id) shouldBe Some(laterBox)
@@ -329,11 +337,9 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       storage.insertExtra(Array.empty, Array[ExtraIndex](restored,
         NumericBoxIndex(restored.globalIndex, restored.id), StorageRentBox(restored)))
       candidateInputs() shouldBe Set(bytesToId(freshBox.id))
-      scan.after.map(_.globalIndex) shouldBe Some(unresolvedCount.toLong - 1)
-      candidateInputs() shouldBe Set(bytesToId(freshBox.id))
       scan.after shouldBe None
       candidateInputs() should contain(bytesToId(restoredBox.id))
-      scan.after shouldBe None
+      scan.after.map(_.globalIndex) shouldBe Some(scanLimit.toLong - 2)
     } finally {
       storage.close()
       state.closeStorage()
@@ -424,9 +430,13 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
         .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
 
-      // The accepted claim is still unmined and must be offered again on regeneration.
-      candidateInputs() should contain(laterBoxId)
+      // The accepted but unmined claim does not pin the cursor: the next
+      // regeneration revisits the first batch, then rotates back to the later row.
+      scan.after shouldBe None
+      candidateInputs() should not contain laterBoxId
       scan.after.map(_.globalIndex) shouldBe Some(StorageRentClaimBuilder.MaxClaims.toLong - 1)
+      candidateInputs() should contain(laterBoxId)
+      scan.after shouldBe None
       history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
         .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
     } finally {

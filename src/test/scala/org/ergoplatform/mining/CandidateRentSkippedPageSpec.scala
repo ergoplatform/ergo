@@ -46,7 +46,7 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
     skippedBoxes.foreach { box =>
       box.value shouldBe parameters.minValuePerByte.toLong * box.bytes.length
     }
-    StorageRentClaimBuilder.buildClaim(skippedBoxes, height, parameters,
+    StorageRentClaimBuilder.buildClaim(skippedBoxes.iterator, height, parameters,
       defaultMinerPk, None, Set.empty[ModifierId]) shouldBe None
     val laterBox = testBox(11000000000L, Constants.TrueTree, threshold, Seq.empty, Map.empty)
     val freshBox = testBox(12000000000L, Constants.TrueTree, height - 1, Seq.empty, Map.empty)
@@ -171,12 +171,12 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
       recreation.toBox(bytesToId(box.id), 0).bytes.length shouldBe size
     }
     val builderSkips = scala.collection.mutable.ArrayBuffer.empty[ErgoBox]
-    StorageRentClaimBuilder.buildClaim(overflowBoxes, height, parameters,
+    StorageRentClaimBuilder.buildClaim(overflowBoxes.iterator, height, parameters,
       defaultMinerPk, None, Set.empty[ModifierId], b => builderSkips += b) shouldBe None
     builderSkips shouldBe empty
 
     val laterBox = testBox(11000000000L, Constants.TrueTree, threshold, Seq.empty, Map.empty)
-    StorageRentClaimBuilder.buildClaim(Seq(laterBox), height, parameters,
+    StorageRentClaimBuilder.buildClaim(Iterator(laterBox), height, parameters,
       defaultMinerPk, None, Set.empty[ModifierId]).isDefined shouldBe true
     val freshBox = testBox(12000000000L, Constants.TrueTree, height - 1, Seq.empty, Map.empty)
     val rentBoxes = overflowBoxes :+ laterBox

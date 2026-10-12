@@ -105,7 +105,7 @@ class CandidateRentMaxBoxIndexSpec extends ErgoCorePropertyTest with TestFileUti
       // With fewer protected tokens, the same UTXO now has a valid burn claim.
       val narrowSettings = fixtureSettings.copy(nodeSettings =
         fixtureSettings.nodeSettings.copy(storageRentTokenWhitelist = Seq.empty))
-      val directClaim = StorageRentClaimBuilder.buildClaim(Seq(box), height,
+      val directClaim = StorageRentClaimBuilder.buildClaim(Iterator(box), height,
         parameters, defaultMinerPk, None, Set.empty)
       directClaim.isDefined shouldBe true
 

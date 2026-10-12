@@ -80,8 +80,8 @@ object StorageRentClaimBuilder extends ScorexLogging {
     * to the miner's P2PK. Returns `None` when no box is claimable, or when the claim would
     * consist only of recreations whose fees do not clear the dust floor.
     *
-    * @param eligible             - candidate boxes (e.g. from the storage-rent eligibility index,
-    *                             resolved against the UTXO state)
+    * @param eligible             - one-shot stream of candidate boxes (e.g. from the
+    *                             storage-rent eligibility index, resolved against the UTXO state)
     * @param currentHeight        - height of the block being assembled
     * @param parameters           - consensus parameters of the block being assembled
     * @param minerPk              - miner's public key; rent proceeds go to its plain P2PK box
@@ -100,7 +100,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
     *                             Too-young boxes and recreations dropped for dusty aggregate
     *                             fees are not reported through this callback.
     */
-  def buildClaim(eligible: Iterable[ErgoBox],
+  def buildClaim(eligible: Iterator[ErgoBox],
                  currentHeight: Int,
                  parameters: Parameters,
                  minerPk: ProveDlog,
@@ -118,7 +118,7 @@ object StorageRentClaimBuilder extends ScorexLogging {
     // so unclaimable boxes can not starve later claimable ones out of the claim
     var examined = 0
 
-    val boxes = eligible.iterator
+    val boxes = eligible
     // Check the claim cap before fetching another row: callers may advance an index
     // cursor while resolving this iterator, including rows absent from the UTXO state.
     while (claimed.length < MaxClaims && boxes.hasNext) {

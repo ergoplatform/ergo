@@ -544,9 +544,13 @@ object CandidateGenerator extends ScorexLogging {
         None
       } else {
         // Commit only an ordinary successful assembly against the still-selected tip.
-        // Failed proofs, discarded candidates and accepted unmined claims retain their
-        // starting cursor; createCandidate proposes progress only for omitted claims.
-        if (candidateAttempt.isSuccess) storageRentScan.after = proposedRentAfter
+        // Failed proofs and discarded candidates retain their starting cursor.
+        if (candidateAttempt.isSuccess) {
+          if (storageRentScan.after.nonEmpty && proposedRentAfter.isEmpty) {
+            log.info("Storage-rent eligibility scan wrapped to its first row")
+          }
+          storageRentScan.after = proposedRentAfter
+        }
         Some(candidateAttempt)
       }
     }
@@ -722,18 +726,19 @@ object CandidateGenerator extends ScorexLogging {
           if (threshold > 0) {
             // rent entries carry no payload, so resolve the box through the box-number
             // index; entries whose box row is gone resolve to nothing and are skipped.
-            // One bounded suffix per candidate. Move past examined rows even when the
-            // claim is later rejected, without deleting their eligibility. An empty
-            // suffix wraps on the next candidate, never within this claim.
+            // One bounded suffix per candidate. Successful candidates rotate past
+            // examined rows, whether the claim is included or rejected. Eligibility
+            // remains indexed until a selected-chain spend, so rows return on wrap.
+            val scanLimit = 4 * StorageRentClaimBuilder.MaxClaims
             val entries = history.storageRentBoxesAtOrBefore(
-              threshold, 4 * StorageRentClaimBuilder.MaxClaims, rentScanAfter)
+              threshold, scanLimit, rentScanAfter)
             if (entries.isEmpty) nextRentAfter = None
-            val scanned = new Iterable[ErgoBox] {
-              override def iterator: Iterator[ErgoBox] = entries.iterator.flatMap { entry =>
-                nextRentAfter = Some(entry)
-                NumericBoxIndex.getBoxByNumber(history, entry.globalIndex)
-                  .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
-              }
+            var consumedLast = false
+            val scanned: Iterator[ErgoBox] = entries.iterator.flatMap { entry =>
+              nextRentAfter = Some(entry)
+              consumedLast = entry eq entries.last
+              NumericBoxIndex.getBoxByNumber(history, entry.globalIndex)
+                .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
             }
             val params = upcomingContext.currentParameters
             val reemissionTokenIdOpt =
@@ -746,6 +751,11 @@ object CandidateGenerator extends ScorexLogging {
               reemissionTokenIdOpt,
               ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet
             ).toSeq
+            // A short page is the end of this bounded scan only if the builder
+            // consumed its last row; the claim cap may leave fetched rows unread.
+            if (entries.nonEmpty && entries.length < scanLimit && consumedLast) {
+              nextRentAfter = None
+            }
             claimTxs
           } else {
             Seq.empty
@@ -782,6 +792,14 @@ object CandidateGenerator extends ScorexLogging {
           upcomingContext,
           emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
         )
+      }
+
+      def warnRejectedRentClaims(invalidIds: Seq[ModifierId]): Unit = {
+        val rejected = rentClaimTxs.map(_.id).filter(invalidIds.contains)
+        if (rejected.nonEmpty) {
+          log.warn(s"Storage-rent claim rejected during candidate assembly: $rejected; " +
+            "retaining its eligibility rows for a later attempt")
+        }
       }
 
       val (txs, toEliminate) = collectPoolTxs
@@ -821,11 +839,8 @@ object CandidateGenerator extends ScorexLogging {
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
           val candidate = mkCandidate(txs, adProof, adDigest, eliminateTransactions)
-          // An included claim has not been mined: offer its still-unspent inputs again
-          // on regeneration. Only an omitted claim or all-skipped page proposes progress.
-          if (!rentClaimTxs.exists(claim => txs.exists(_.id == claim.id))) {
-            onRentScanProposed(nextRentAfter)
-          }
+          warnRejectedRentClaims(toEliminate)
+          onRentScanProposed(nextRentAfter)
           Success(candidate)
         case Failure(t: Throwable) =>
           // A likely reason of the failure is a state update (new block applied) between
@@ -842,6 +857,8 @@ object CandidateGenerator extends ScorexLogging {
                 s"Proof generation failed once (${t.getMessage}), " +
                 s"recovered on retry with ${retryTxs.size} transactions"
               )
+              warnRejectedRentClaims(retryToEliminate)
+              onRentScanProposed(nextRentAfter)
               Success(mkCandidate(retryTxs, adProof, adDigest, retryEliminate))
             case Failure(ex: Throwable) =>
               // We can not produce a block for some reason, so print out an error

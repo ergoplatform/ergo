@@ -660,4 +660,34 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     tx.inputs.length shouldBe 2
     outputTokens(tx) shouldBe (whitelisted.tokens ++ ordinary.tokens)
   }
+
+  property("claim priced with upcoming parameters in the middle of a voting epoch passes block validation") {
+    val votingLength = settings.chainSettings.voting.votingLength
+    (H % votingLength) should not be 0
+    val noVotes = Array.fill(3)(Parameters.NoParameter)
+
+    // a majority of blocks of the epoch has voted for the storage fee factor increase already
+    val votingData = VotingData(Array(Parameters.StorageFeeFactorIncrease -> (votingLength / 2 + 1)))
+    val fb0 = invalidErgoFullBlockGen.sample.get
+    val parent = fb0.header.copy(height = H - 1)
+    val inContext = new ErgoStateContext(Seq(parent), None, genesisStateDigest, parameters,
+      validationSettingsNoIl, votingData)(settings.chainSettings)
+
+    // the context the block candidate is assembled with, and the one the block is validated with
+    val upcomingContext = inContext.upcoming(minerPk.value, parent.timestamp + 1, parent.nBits, noVotes,
+      ErgoValidationSettingsUpdate.empty, parent.version)
+    val updContext = inContext
+      .appendFullBlock(fb0.copy(fb0.header.copy(height = H, parentId = parent.id, votes = noVotes))).get
+
+    // the increase is applied on the first block of the next epoch only
+    updContext.currentParameters.storageFeeFactor shouldBe parameters.storageFeeFactor
+    upcomingContext.currentParameters.storageFeeFactor shouldBe parameters.storageFeeFactor
+
+    val b = agedBox(10000000000L)
+    val tx = StorageRentClaimBuilder
+      .buildClaim(Seq(b), H, upcomingContext.currentParameters, minerPk, None, Set.empty).get
+    tx.outputCandidates.head.value shouldBe b.value - feeOf(b)
+    tx.statefulValidity(IndexedSeq(b), emptyDataBoxes, updContext)(
+      ErgoInterpreter(updContext.currentParameters)).isSuccess shouldBe true
+  }
 }

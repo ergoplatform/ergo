@@ -1038,6 +1038,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val scanLimit = 4 * StorageRentClaimBuilder.MaxClaims
     val firstPage = sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, scanLimit)
     firstPage should not be empty
+    firstPage.length should be < scanLimit
     val cursorRow = firstPage.last
     val beforeRollback = IndexerState.fromHistory(_history)
     val miningHeight = Constants.StoragePeriod + HEIGHT + 1
@@ -1125,9 +1126,11 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         attempts += 1
       }
       included shouldBe true
-      scanStarts(1) shouldBe Some(cursorRow.id)
-      scanSizes.drop(1) should contain(0)
-      scanStarts.drop(1) should contain(None)
+      // The first short page was fully examined, so its cursor already wrapped;
+      // rollback restores the older row in time for the next candidate.
+      attempts shouldBe 1
+      scanStarts(1) shouldBe None
+      scanSizes(1) should be > 0
       all(scanSizes) should be <= scanLimit
       sharedStorage.storageRentBoxesAtOrBefore(HEIGHT, Int.MaxValue).map(_.id) should contain(StorageRentBox(target).id)
     } finally {

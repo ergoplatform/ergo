@@ -19,7 +19,8 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
 
   val nodesQty: Int = 4
 
-  val commonChainLength: Int = 5
+  // Sync V2 includes a header 16 below a forked tip; keep that anchor common.
+  val commonChainLength: Int = 16
   val forkLength: Int = 5
   val syncLength: Int = 15
 
@@ -65,11 +66,10 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   }
 
   // Testing scenario:
-  // 1. Start up {nodesQty} nodes and let them mine common chain of length {initialCommonChainLength};
-  // 2. Kill all nodes when they are done, make them offline generating, clear known peers and restart them;
-  // 3. Let them mine another {forkLength} blocks offline in order to create {nodesQty} forks;
-  // 4. Kill all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
-  // 5. Check that nodes reached consensus on created forks;
+  // 1. Mine a common chain, then stop its miner and wait for all nodes to apply the same tip;
+  // 2. Stop all nodes, clear peers and restart with isolated mining;
+  // 3. Confirm each node mines a distinct fork without connections;
+  // 4. Restart with known peers, then check convergence on the selected fork;
   it should "Fork resolution after isolated mining" in {
 
     log.info(minerConfig.toString)
@@ -115,8 +115,7 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
         Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
       }
       Async.await(Future.traverse(isolatedNodes)(_.connectedPeers)).foreach(_ shouldBe empty)
-      // Shutdown is sequential and the common miner can advance while a slower peer catches up.
-      // Choose a height beyond every persisted isolated tip, rather than a height mined before isolation.
+      // Use the persisted heights after restart so the fork target is above every isolated tip.
       val forkHeight = Async.await(Future.traverse(isolatedNodes)(_.fullHeight)).max + forkLength
       Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
       Async.await(Future.traverse(isolatedNodes)(_.connectedPeers)).foreach(_ shouldBe empty)

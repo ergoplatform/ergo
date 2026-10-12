@@ -37,16 +37,19 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
     case test.Reload() => reload()
     case test.FailNextRollbackRemoval(probe) => failNextRollbackRemoval(probe)
     case test.PauseBufferedCatchUpAt(height, limit, probe) => pauseBufferedCatchUpAt(height, limit, probe)
-    case test.ConfigureWriteFailure(phase, probe) =>
+    case test.ConfigureWriteFailure(phase, probe, observeAttempts) =>
       writeFailurePhase = phase
       writeFailureProbe = Some(probe)
       writeFailureObserved = false
+      observeCheckpointAttempts = observeAttempts
+      checkpointWriteAttempts.clear()
       completedWriteKinds.clear()
       configuredSaveLimit = Int.MaxValue
       probe ! "configured"
     case test.AllowWrites() =>
       writeFailurePhase = ""
       sender ! "writes-allowed"
+    case test.GetCheckpointWriteAttempts() => sender ! checkpointWriteAttempts.toVector
     case test.ReopenCheckpoint() =>
       resetTransientState()
       _history.closeStorage()
@@ -105,6 +108,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
   private var writeFailurePhase = ""
   private var writeFailureProbe: Option[ActorRef] = None
   private var writeFailureObserved = false
+  private var observeCheckpointAttempts = false
+  private val checkpointWriteAttempts = mutable.ArrayBuffer.empty[test.CheckpointWriteAttempt]
   private val completedWriteKinds = mutable.ArrayBuffer.empty[String]
 
   override protected def index(state: IndexerState, header: Header, targetHeight: Int): Option[IndexerState] = {
@@ -187,6 +192,11 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
         override def insertExtraTry(entries: Array[(Array[Byte], Array[Byte])], objects: Array[ExtraIndex],
                                     removals: Array[ModifierId]): Try[Unit] = {
           val marker = entries.find(_._1.sameElements(ExtraIndexer.RollbackToKey)).map(e => ByteBuffer.wrap(e._2).getInt)
+          if (observeCheckpointAttempts && marker.contains(0)) {
+            checkpointWriteAttempts += test.CheckpointWriteAttempt(
+              objects.iterator.map(_.id).toVector,
+              objects.collect { case row: StorageRentBox => row.id }.toVector)
+          }
           val shouldFail = writeFailurePhase match {
             case "forward" => marker.contains(0)
             case "initial" => marker.exists(_ > 0)
@@ -260,6 +270,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
     writeFailurePhase = ""
     writeFailureProbe = None
     writeFailureObserved = false
+    observeCheckpointAttempts = false
+    checkpointWriteAttempts.clear()
     context.become(receive.orElse(loaded(IndexerState(0, 0, 0, 0, caughtUp = false))))
   }
 

@@ -106,6 +106,14 @@ class RentIndexMarkerSpec extends ErgoCorePropertyTest with TestFileUtils {
       }
     }
 
+    val registeredPaths = LDBFactory.factory.asInstanceOf[StoreRegistry].map.keySet
+    val storagePaths = Seq("index", "objects", "extra").map { name =>
+      new File(s"$dir/history/$name")
+    }
+    storagePaths.foreach { path =>
+      registeredPaths should contain(path)
+    }
+
     val attempt = Try(ErgoHistory.readOrGenerateWithStorage(settingsFor(dir, rentCollection = false), storage)(null))
     attempt.foreach(_.closeStorage())
     try {
@@ -113,9 +121,8 @@ class RentIndexMarkerSpec extends ErgoCorePropertyTest with TestFileUtils {
       closedByStartup shouldBe true
 
       // The registry must no longer hold any of the three LevelDB handles.
-      val registeredPaths = LDBFactory.factory.asInstanceOf[StoreRegistry].map.keySet
-      Seq("index", "objects", "extra").foreach { name =>
-        registeredPaths should not contain new File(s"$dir/history/$name")
+      storagePaths.foreach { path =>
+        registeredPaths should not contain path
       }
 
       // The failed startup must release the LevelDB lock so a later restart can retry.

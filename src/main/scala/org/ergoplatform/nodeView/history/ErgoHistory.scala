@@ -451,6 +451,11 @@ object ErgoHistory extends ScorexLogging {
         db = freshDb
       } else if (!ergoSettings.nodeSettings.storageRentCollection && rentEnabledStored) {
         Try(db.removeExtraTry(Array(bytesToId(RentIndexEnabledKey)))).flatten.recoverWith { case error =>
+          log.error(
+            "Rent-index marker removal failed; node startup is aborting. " +
+              "Correct the storage failure and restart, or set " +
+              "storageRentCollection = true and restart.",
+            error)
           Try(db.close()).failed.foreach(error.addSuppressed)
           Failure(error)
         }.get

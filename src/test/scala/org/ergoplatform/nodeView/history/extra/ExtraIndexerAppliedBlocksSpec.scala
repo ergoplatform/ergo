@@ -546,10 +546,12 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         // no further event follows
         untilTimeout(5.seconds, 20.millis)(node.checkpoint.indexedHeaderId shouldBe Some(valid.last._1.id))
         node.checkpoint.indexedHeight shouldBe node.history.fullBlockHeight
+        // the checkpoint is in the store a moment before the write is logged
+        untilTimeout(5.seconds, 20.millis)(writes.get should be >= 1)
         writes.get
       }
       info(s"${valid.size} valid blocks taken in one step, index writes: $writesForValid")
-      writesForValid should be < valid.size
+      writesForValid should (be >= 1 and be < valid.size)
       node.indexDifferences() shouldBe empty
 
       // the state rejects the last block: no event names a block history has nothing above
@@ -562,10 +564,11 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         node.accept(applied)
         // no further event follows
         untilTimeout(5.seconds, 20.millis)(node.checkpoint.indexedHeaderId shouldBe Some(applied.last._1.id))
+        untilTimeout(5.seconds, 20.millis)(writes.get should be >= 1)
         writes.get
       }
       info(s"${applied.size} valid blocks and a rejected one taken in one step, index writes: $writesForApplied")
-      writesForApplied should be < applied.size
+      writesForApplied should (be >= 1 and be < applied.size)
       node.indexDifferences(bad.blockTransactions.txs) shouldBe empty
       node.indexerRestarts.get shouldBe 0
     }

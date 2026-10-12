@@ -550,12 +550,13 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("preserves a valid non-empty checkpoint across storage reopen") {
+  property("preserves a valid schema 8 checkpoint across storage reopen with rent collection disabled") {
     val dbDir = Files.createTempDirectory("extra-indexer-valid-checkpoint").toFile
     val dbSettings = initSettings.copy(
       directory = dbDir.getAbsolutePath,
       networkType = NetworkType.TestNet,
-      nodeSettings = initSettings.nodeSettings.copy(extraIndex = true, headerChainDiff = 5000)
+      nodeSettings = initSettings.nodeSettings.copy(
+        extraIndex = true, headerChainDiff = 5000, storageRentCollection = false)
     )
     val generationSettings = dbSettings.copy(
       nodeSettings = dbSettings.nodeSettings.copy(extraIndex = false)
@@ -602,7 +603,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         val numericTx = NumericTxIndex(lastTxIndex, lastTx.id)
         val numericBox = numericBoxes.last
         val checkpointMetadata = Array(
-          ExtraIndexer.SchemaVersionKey -> ByteBuffer.allocate(4).putInt(ExtraIndexer.NewestVersion).array,
+          // Pin the previously written schema independently of the current reader version.
+          ExtraIndexer.SchemaVersionKey -> ByteBuffer.allocate(4).putInt(8).array,
           ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(header.height).array,
           ExtraIndexer.GlobalTxIndexKey -> ByteBuffer.allocate(8).putLong(txCount).array,
           ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(boxCount).array,

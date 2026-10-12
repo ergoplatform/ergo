@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.state
 
 import java.io.File
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{CriticalSystemException, ErgoBox}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.history.header.Header
@@ -16,7 +16,7 @@ import org.ergoplatform.core._
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.crypto.authds.ADDigest
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 
 import scala.util.{Failure, Success, Try}
 
@@ -36,6 +36,14 @@ class DigestState protected(override val version: VersionTag,
     .foreach(id => require(version == bytesToVersion(id), "version should always be equal to store.lastVersionID"))
 
   private lazy val nodeSettings = ergoSettings.nodeSettings
+
+  override val fullBlockBodyFrontier: Option[ModifierId] = store.get(DigestState.BodyFrontierKey)
+    .map { bytes =>
+      if (bytes.length != Constants.HashLength) {
+        throw CriticalSystemException("Persisted Digest body certificate has an invalid length")
+      }
+      bytesToId(bytes)
+    }
 
   private[state] def validateTransactions(transactions: Seq[ErgoTransaction],
                                           expectedHash: ADDigest,
@@ -89,7 +97,7 @@ class DigestState protected(override val version: VersionTag,
   override def rollbackTo(version: VersionTag): Try[DigestState] = {
     log.info(s"Rollback Digest State to version ${Algos.encoder.encode(version)}")
     val versionBytes = org.ergoplatform.core.versionToBytes(version)
-    Try(store.rollbackTo(versionBytes)).map { _ =>
+    store.rollbackTo(versionBytes).map { _ =>
       store.clean(nodeSettings.keepVersions)
       val rootHash = ADDigest @@ store.get(versionBytes).get
       log.info(s"Rollback to version ${Algos.encoder.encode(version)} with roothash ${Algos.encoder.encode(rootHash)}")
@@ -109,7 +117,16 @@ class DigestState protected(override val version: VersionTag,
         .flatMap { _ =>
           val version: VersionTag = idToVersion(fb.header.id)
           stateContext.appendFullBlock(fb) match {
-            case Success(sc) => update(version, fb.header.stateRoot, sc)
+            case Success(sc) =>
+              val extendsFrontier = fullBlockBodyFrontier.contains(fb.header.parentId) &&
+                this.version == idToVersion(fb.header.parentId) &&
+                stateContext.lastHeaderOpt.exists(h =>
+                  h.id == fb.header.parentId && rootDigest.sameElements(h.stateRoot))
+              val startsFrontier = fullBlockBodyFrontier.isEmpty && isGenesis &&
+                this.version == ErgoState.genesisStateVersion &&
+                fb.header.isGenesis && fb.header.parentId == Header.GenesisParentId
+              val frontier = if (extendsFrontier || startsFrontier) Some(fb.id) else fullBlockBodyFrontier
+              update(version, fb.header.stateRoot, sc, frontier)
             case Failure(e) =>
               log.error(s"Can't modify state context due to ${e.getMessage} ", e)
               Failure(e)
@@ -140,11 +157,13 @@ class DigestState protected(override val version: VersionTag,
 
   private def update(newVersion: VersionTag,
                      newRootHash: ADDigest,
-                     newStateContext: ErgoStateContext): Try[DigestState] = {
+                     newStateContext: ErgoStateContext,
+                     frontier: Option[ModifierId] = fullBlockBodyFrontier): Try[DigestState] = {
 
-    val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext)
+    val toUpdate = DigestState.metadata(newVersion, newRootHash, newStateContext, frontier)
+    val toRemove = if (frontier.isEmpty) Seq(DigestState.BodyFrontierKey) else Seq.empty
 
-    store.update(org.ergoplatform.core.versionToBytes(newVersion), Seq.empty, toUpdate).map { _ =>
+    store.update(org.ergoplatform.core.versionToBytes(newVersion), toRemove, toUpdate).map { _ =>
       new DigestState(newVersion, newRootHash, store, ergoSettings)
     }
   }
@@ -153,8 +172,11 @@ class DigestState protected(override val version: VersionTag,
 
 object DigestState extends ScorexLogging with ScorexEncoding {
 
+  private[state] val BodyFrontierKey: Array[Byte] = Algos.hash("digest full block body frontier")
+
   /**
     * Creates [[DigestState]] with provided `ErgoStateContext` instance corresponding to some version` and `rootHash`.
+    * Checkpoint context does not prove local full-body application, so recovery clears body provenance.
     */
   def recover(version: VersionTag,
               rootHash: ADDigest,
@@ -164,7 +186,7 @@ object DigestState extends ScorexLogging with ScorexEncoding {
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val toUpdate = DigestState.metadata(version, rootHash, stateContext)
 
-    store.update(org.ergoplatform.core.versionToBytes(version), Seq.empty, toUpdate).map { _ =>
+    store.update(org.ergoplatform.core.versionToBytes(version), Seq(BodyFrontierKey), toUpdate).map { _ =>
       new DigestState(version, rootHash, store, settings)
     }
   }
@@ -176,7 +198,10 @@ object DigestState extends ScorexLogging with ScorexEncoding {
              rootHashOpt: Option[ADDigest],
              dir: File,
              settings: ErgoSettings): DigestState = {
+    val readMode = versionOpt.isEmpty && rootHashOpt.isEmpty
+    val existingDirectoryContents = dir.exists() && Option(dir.listFiles()).forall(_.nonEmpty)
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val readingPersistedState = readMode && existingDirectoryContents
     Try {
       val context = ErgoStateReader.storageStateContext(store, settings)
       (versionOpt, rootHashOpt) match {
@@ -186,30 +211,39 @@ object DigestState extends ScorexLogging with ScorexEncoding {
           } else {
             val inVersion = store.lastVersionID.map(w => bytesToVersion(w)).getOrElse(version)
             new DigestState(inVersion, rootHash, store, settings)
-              .update(version, rootHash, context).get //sync store
+              .update(version, rootHash, context, None).get //sync store without body provenance
           }
           state.ensuring(bytesToVersion(store.lastVersionID.get) == version)
         case (None, None) if store.lastVersionID.isEmpty =>
+          require(!readingPersistedState, "Existing Digest state has no persisted version")
           ErgoState.generateGenesisDigestState(dir, settings)
         case _ =>
           val version = store.lastVersionID.get
           val rootHash = store.get(version).get
+          if (readMode) {
+            require(rootHash.length == settings.chainSettings.genesisStateDigest.length,
+              "Persisted Digest state root has an invalid length")
+          }
           new DigestState(bytesToVersion(version), ADDigest @@ rootHash, store, settings)
       }
     } match {
       case Success(state) => state
       case Failure(e) =>
-        store.close()
+        Try(store.close()).failed.foreach(e.addSuppressed)
         log.warn(s"Failed to create state with ${versionOpt.map(encoder.encode)} and ${rootHashOpt.map(encoder.encode)}", e)
+        if (readingPersistedState || e.isInstanceOf[CriticalSystemException]) {
+          throw CriticalSystemException("Failed to read persisted Digest state").initCause(e)
+        }
         ErgoState.generateGenesisDigestState(dir, settings)
     }
   }
 
   protected def metadata(newVersion: VersionTag,
                          newRootHash: ADDigest,
-                         newStateContext: ErgoStateContext): Seq[(Array[Byte], Array[Byte])] = Seq(
+                         newStateContext: ErgoStateContext,
+                         frontier: Option[ModifierId] = None): Seq[(Array[Byte], Array[Byte])] = Seq(
     org.ergoplatform.core.versionToBytes(newVersion) -> newRootHash,
     ErgoStateReader.ContextKey -> newStateContext.bytes
-  )
+  ) ++ frontier.toSeq.map(id => BodyFrontierKey -> org.ergoplatform.core.idToBytes(id))
 
 }

@@ -5,7 +5,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core._
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
@@ -246,6 +246,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     RemoteBlockApplied(fullBlock.header, txIds)
                   }
                   context.system.eventStream.publish(event)
+                  stateAfterApply match {
+                    case digest: DigestState =>
+                      context.system.eventStream.publish(
+                        DigestFullBlockApplied(fullBlock.header, digest.fullBlockBodyFrontier))
+                    case _ =>
+                  }
                 }
                 UpdateInformation(newHis, stateAfterApply, None, None, updateInfo.suffix :+ modToApply)
               }
@@ -457,12 +463,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   @SuppressWarnings(Array("AsInstanceOf"))
   def restoreState(): Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
+    val digestDirectory = ErgoState.stateDir(settings)
+    if (settings.nodeSettings.stateType == StateType.Digest && digestDirectory.exists() &&
+      Option(digestDirectory.listFiles()).forall(_.nonEmpty)) {
+      // No history can justify recreating an existing Digest store, including after a config change.
+      ErgoApp.shutdownSystem()(context.system)
+      throw CriticalSystemException("Persisted Digest state has no history during startup")
+    }
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
+    val stateIn = ErgoState.readOrGenerate(settings).asInstanceOf[State]
+    restoreConsistentState(stateIn, history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -473,6 +487,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
         log.error("Failed to recover state, try to resync from genesis manually", ex)
+        if (hasCertifiedDigestState(stateIn)) {
+          // Returning None here would enter genesisState and delete the certified state directory.
+          Try(stateIn.closeStorage()).failed.foreach(ex.addSuppressed)
+          Try(history.closeStorage()).failed.foreach(ex.addSuppressed)
+          ErgoApp.shutdownSystem()(context.system)
+          throw CriticalSystemException("Failed to recover certified Digest state").initCause(ex)
+        }
         ErgoApp.shutdownSystem()(context.system)
         None
     }
@@ -608,8 +629,34 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history.bestHeaderAtHeight(snapshotHeight)
       })
 
+  private def hasCertifiedDigestState(state: State): Boolean =
+    state.isInstanceOf[DigestState] && state.fullBlockBodyFrontier.nonEmpty
+
+  private def requiresCertifiedDigestRecovery(state: State): Boolean =
+    settings.nodeSettings.verifyTransactions && hasCertifiedDigestState(state)
+
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
+      case (_, _, digest: DigestState) if hasCertifiedDigestState(stateIn) && !settings.nodeSettings.verifyTransactions =>
+        Try {
+          val tip = history.bestHeaderOpt.getOrElse(
+            throw CriticalSystemException("Certified Digest state has no selected header"))
+          val certified = digest.fullBlockBodyFrontier.flatMap(history.typedModifierById[Header]).getOrElse(
+            throw CriticalSystemException("Certified Digest header is unavailable"))
+          require(digest.version == idToVersion(tip.id) &&
+            digest.stateContext.lastHeaderOpt.exists(_.id == tip.id) && digest.rootDigest.sameElements(tip.stateRoot),
+            "Unverified Digest state does not match the selected header tip")
+          require(certified.height <= tip.height && history.isInBestChain(certified) &&
+            history.chainToHeader(Some(certified), tip)._1.contains(certified.id) &&
+            history.getFullBlock(certified).isDefined,
+            "Unverified Digest certificate is not a retained selected ancestor")
+          // This accepts the persisted header context without replay or new body authority.
+          stateIn
+        }
+      case (_, Some(bestFullBlock), digest: DigestState) if requiresCertifiedDigestRecovery(stateIn) =>
+        restoreCertifiedDigestState(digest, bestFullBlock, history).map(_.asInstanceOf[State])
+      case (_, None, _) if hasCertifiedDigestState(stateIn) =>
+        Failure(CriticalSystemException("Certified Digest state has no selected full block in history"))
       case (ErgoState.genesisStateVersion, None, _) =>
         log.info("State and history are both empty on startup")
         Success(stateIn)
@@ -644,6 +691,61 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => self ! lm))
         }
     }
+  }
+
+  /** Replay retained bodies from a persisted certified context, including a header-only current version. */
+  private def restoreCertifiedDigestState(stateIn: DigestState,
+                                          bestFullBlock: ErgoFullBlock,
+                                          history: ErgoHistory): Try[DigestState] = Try {
+    val certifiedId = stateIn.fullBlockBodyFrontier.getOrElse(
+      throw CriticalSystemException("Digest recovery requires a body certificate"))
+    val certifiedHeader = history.typedModifierById[Header](certifiedId).getOrElse(
+      throw CriticalSystemException("Certified Digest header is unavailable"))
+    val (rollbackId, suffix) = history.chainToHeader(Some(certifiedHeader), bestFullBlock.header)
+    val anchorId = rollbackId.getOrElse(
+      throw CriticalSystemException("Certified Digest history has no common ancestor"))
+    val anchor = if (anchorId == Header.GenesisParentId) PreGenesisHeader else {
+      history.typedModifierById[Header](anchorId).getOrElse(
+        throw CriticalSystemException("Certified Digest recovery anchor is unavailable"))
+    }
+
+    // Preflight the exact selected suffix before changing the persisted state.
+    val finalHeader = suffix.headers.foldLeft(anchor) { (parent, header) =>
+      require(header.parentId == parent.id && header.height == parent.height + 1,
+        "Certified Digest recovery suffix is not contiguous")
+      header
+    }
+    require(finalHeader.id == bestFullBlock.id, "Certified Digest recovery suffix misses the selected tip")
+    suffix.headers.foreach { header =>
+      require(history.getFullBlock(header).isDefined, "Certified Digest recovery body is unavailable")
+    }
+    val restored = if (stateIn.version == idToVersion(anchorId)) stateIn else {
+      require(stateIn.rollbackVersions.exists(_ == idToVersion(anchorId)),
+        "Certified Digest recovery anchor is no longer rollbackable")
+      stateIn.rollbackTo(idToVersion(anchorId)).get
+    }
+    def requireCertifiedTip(state: DigestState, header: Header): Unit = {
+      if (header.id == Header.GenesisParentId) {
+        require(state.version == ErgoState.genesisStateVersion && state.fullBlockBodyFrontier.isEmpty &&
+          state.stateContext.lastHeaderOpt.isEmpty &&
+          state.rootDigest.sameElements(settings.chainSettings.genesisStateDigest),
+          "Digest recovery genesis version, context and root disagree")
+      } else {
+        require(state.version == idToVersion(header.id) && state.fullBlockBodyFrontier.contains(header.id) &&
+          state.stateContext.lastHeaderOpt.exists(_.id == header.id) && state.rootDigest.sameElements(header.stateRoot),
+          "Digest recovery version, certificate, context and root disagree")
+      }
+    }
+    requireCertifiedTip(restored, anchor)
+    val recovered = suffix.headers.foldLeft(restored) { (state, header) =>
+      val block = history.getFullBlock(header).getOrElse(
+        throw CriticalSystemException("Certified Digest recovery body disappeared during replay"))
+      val next = state.applyModifier(block, history.estimatedTip())(lm => self ! lm).get
+      requireCertifiedTip(next, block.header)
+      next
+    }
+    requireCertifiedTip(recovered, bestFullBlock.header)
+    recovered
   }
 
   /**

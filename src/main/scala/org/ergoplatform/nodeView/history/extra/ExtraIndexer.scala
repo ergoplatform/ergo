@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash, Timers}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
-import org.ergoplatform.core.{VersionTag, versionToId}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoApp, GlobalConstants, Pay2SAddress}
+import org.ergoplatform.core.{VersionTag, idToVersion, versionToId}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.ErgoNodeViewModifier
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FullBlockApplied, Rollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DigestFullBlockApplied, FullBlockApplied, RemoteBlockApplied, Rollback}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer._
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -17,7 +17,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
-import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.state.{DigestState, ErgoState, ErgoStateReader}
 import org.ergoplatform.settings.{Algos, CacheSettings, ChainSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import sigma.ast.ErgoTree
@@ -46,6 +46,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   private case class RollbackToHeader(header: Header, resume: Boolean)
   private var retryGeneration: Long = 0L
   private var persistencePending: Boolean = false
+  private var digestRefreshGeneration: Long = 0L
+  private var digestRefreshDirty: Boolean = false
 
   private implicit val ec: ExecutionContextExecutor = context.dispatcher
 
@@ -88,11 +90,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   /**
-    * Header of the last block the state has applied, as far as the indexer knows: the state
-    * version at start, then the header of every `FullBlockApplied`. It is not derived from
-    * the validity mark: a block can be applied and still be marked Unknown.
+    * Header up to which full bodies may be indexed. UTXO uses the state version at startup and
+    * FullBlockApplied afterwards; Digest uses only its persisted contiguous-body certificate.
     */
   protected var lastAppliedHeaderOpt: Option[Header] = None
+
+  protected var digestMode: Boolean = false
 
   /**
     * Applied tip the indexer may index up to. Overridden in tests which drive the indexer
@@ -109,7 +112,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * switched to a branch of which the state has not reported a block yet). The indexer does
     * not go above it; the next `FullBlockApplied` sets it.
     */
-  private def appliedHeight: Int = appliedTipOnBestFullChain.fold(0)(_.height)
+  protected def appliedHeight: Int = appliedTipOnBestFullChain.fold(0)(_.height)
 
   /**
     * Best-full-chain header at the given height, if the state has applied its block, that is
@@ -157,6 +160,23 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected def continueCatchUpAfterIndex(state: IndexerState): Boolean = true
 
   protected def stopIndexer(): Unit = context.stop(self)
+
+  /** The production actor asks the holder for a paired view; test indexers do not use Digest mode. */
+  protected def requestDigestAuthorityRefresh(generation: Long): Boolean = false
+
+  /** Keep existing rows unreadable until a verified extra-index rebuild removes this marker. */
+  protected def quarantineDigestIndex(reason: String): Unit = {
+    historyStorage.insertExtraTry(
+      Array(DigestFrontierQuarantineKey -> Array(1.toByte)),
+      Array.empty[ExtraIndex]
+    ) match {
+      case Success(_) => log.error(s"Quarantined extra index: $reason")
+      case Failure(error) =>
+        log.error("Could not quarantine unsafe Digest extra index; shutting down node", error)
+        ErgoApp.shutdownSystem()(context.system)
+    }
+    stopIndexer()
+  }
 
   protected def removeRollbackIndexes(ids: Array[ModifierId]): Try[Unit] =
     historyStorage.removeExtraTry(ids)
@@ -280,8 +300,9 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       case None =>
         history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
           case Some(x) if !alreadySpentElsewhere(x) => // box found in DB, update
-            recordTokens(x.asSpent(txId, height, spendingProof))
-            boxes.put(id, x)
+            val detached = detachedBox(x)
+            recordTokens(detached.asSpent(txId, height, spendingProof))
+            boxes.put(id, detached)
             true
           case Some(x) =>
             log.warn(s"Box $id already spent by ${x.spendingTxIdOpt}, not spending it again in $txId")
@@ -386,6 +407,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     */
   private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size +
     rentBoxes.size + rentBoxDeletes.size
+
+  // HistoryStorage caches boxes by reference. The indexer must not mutate that shared
+  // persisted view while a newly applied block is still only in its local batch.
+  private def detachedBox(box: IndexedErgoBox): IndexedErgoBox =
+    new IndexedErgoBox(box.inclusionHeight, box.spendingTxIdOpt, box.spendingHeightOpt,
+      box.spendingProofOpt, box.box, box.globalIndex)
 
   /**
     * Write buffered indexes to database and clear buffers.
@@ -579,6 +606,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         // valid transactions - unspending those would resurrect boxes this block never spent
         tx.inputNums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
           .filter(_.spendingTxIdOpt.contains(tx.id))
+          .map(detachedBox)
           .foreach { iEb => // undo spendings
 
           iEb.spendingHeightOpt = None
@@ -611,7 +639,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       // remove all box indexes, tokens and address balances
       newState = newState.decrementBoxIndex
       while (newState.globalBoxIndex > boxTarget) {
-        val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get
+        val iEb: IndexedErgoBox = detachedBox(NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get)
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
           history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
             if (token.boxId.get == iEb.id) { // token created, delete
@@ -695,20 +723,94 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   }
 
   /**
-    * Every `FullBlockApplied` sets the applied tip before it is handled, whatever the
-    * indexer is busy with (caught up, catching up, persistence pending, rollback in progress,
-    * where the event is stashed and recorded once more when replayed).
+    * Record the appropriate state-mode authority before handling an application event. Digest
+    * never treats a generic FullBlockApplied header as a contiguous-body certificate.
     */
   protected def loaded(state: IndexerState): Receive = {
     val behavior = loadedBehavior(state)
     val recordingAppliedTip: Receive = {
+      case _: FullBlockApplied if digestMode =>
       case applied: FullBlockApplied =>
         lastAppliedHeaderOpt = Some(applied.header)
         behavior(applied)
+      case _: DigestFullBlockApplied if digestMode && state.rollbackInProgress => stash()
+      case _: DigestFullBlockApplied if digestMode => suspendForDigestRefresh(state)
+      case _: DigestFullBlockApplied =>
+      case _: Rollback if digestMode && state.rollbackInProgress => stash()
+      case _: Rollback if digestMode => suspendForDigestRefresh(state)
       case other =>
         behavior(other)
     }
     recordingAppliedTip
+  }
+
+  private def suspendForDigestRefresh(state: IndexerState): Unit = {
+    cancelRetry()
+    beginDigestRefresh(state, 0)
+  }
+
+  private def beginDigestRefresh(state: IndexerState, retryCount: Int): Unit = {
+    digestRefreshGeneration += 1
+    digestRefreshDirty = false
+    val generation = digestRefreshGeneration
+    context.become(awaitingDigestRefresh(state, generation, retryCount))
+    if (!requestDigestAuthorityRefresh(generation)) {
+      log.error("Cannot refresh Digest index authority without a node-view holder")
+      stopIndexer()
+    }
+  }
+
+  private def awaitingDigestRefresh(state: IndexerState,
+                                    generation: Long,
+                                    retryCount: Int): Receive = {
+    case GetSegmentThreshold => sender() ! segmentThreshold
+    case _: DigestFullBlockApplied | _: Rollback => digestRefreshDirty = true
+    case DigestAuthorityRefreshed(`generation`, freshHistory, snapshotOpt) =>
+      if (digestRefreshDirty) beginDigestRefresh(state, 0)
+      else if (freshHistory ne _history) {
+        log.error("Digest history handle changed while refreshing extra-index authority; stopping indexer")
+        stopIndexer()
+      } else if (digestFrontierQuarantined(freshHistory)) {
+        log.error("Extra index became quarantined while refreshing Digest authority")
+        stopIndexer()
+      } else if (!digestIndexHasProvenance(freshHistory)) {
+        quarantineDigestIndex("Digest index provenance disappeared during authority refresh")
+      } else {
+        val persisted = IndexerState.fromHistory(freshHistory)
+        val authorityOpt = snapshotOpt.flatMap(digestIndexAuthority(freshHistory, _))
+        val verificationDisabled = snapshotOpt.exists(s => !s.verifyTransactions)
+        authorityOpt match {
+          case Some(authority) =>
+            val frontierHeight = authority.frontier.fold(0)(_.height)
+            if (!checkpointOnSelectedFullChain(freshHistory)) {
+              quarantineDigestIndex("persisted Digest checkpoint is no longer on the selected full chain")
+            } else if (persisted.indexedHeight > frontierHeight) {
+              quarantineDigestIndex(s"persisted indexed height ${persisted.indexedHeight} exceeds " +
+                s"fresh Digest body frontier $frontierHeight")
+            } else if (state.indexedHeight > frontierHeight || !indexedTipIsOnBestFullChain(state)) {
+              // Buffered rows may belong to a different block at the same height. They must
+              // never be flushed under a fresh certificate for another selected branch.
+              quarantineDigestIndex(s"buffered indexed tip ${state.indexedHeaderId} at " +
+                s"height ${state.indexedHeight} is outside the fresh Digest body frontier")
+            } else {
+              lastAppliedHeaderOpt = authority.frontier
+              context.become(receive.orElse(loaded(state.copy(caughtUp = false))))
+              unstashAll()
+              self ! Index()
+            }
+          case None if verificationDisabled =>
+            log.error("Digest transaction verification disabled; stopping extra indexer")
+            stopIndexer()
+          case None if !verificationDisabled && retryCount == 0 =>
+            beginDigestRefresh(state, retryCount + 1)
+          case None =>
+            log.error("Digest state has no coherent selected-chain body authority; stopping extra indexer")
+            stopIndexer()
+        }
+      }
+    case _: DigestAuthorityRefreshed => // superseded holder response
+    case _: FullBlockApplied | _: RemoteBlockApplied | Index() | _: RetryIndex =>
+    case _ => stash()
   }
 
   private def loadedBehavior(state: IndexerState): Receive = {
@@ -893,14 +995,39 @@ class ExtraIndexer(cacheSettings: CacheSettings,
 
   override implicit val addressEncoder: ErgoAddressEncoder = ae
 
-  override def preStart(): Unit = {
-    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
-    context.system.eventStream.subscribe(self, classOf[Rollback])
-    nodeViewHolderRefOpt.foreach { nodeViewHolderRef =>
-      nodeViewHolderRef ! GetDataFromCurrentView[ErgoStateReader, StartExtraIndexer] { view =>
-        StartExtraIndexer(view.history, Some(view.state.version))
+  private var startupSnapshotRetried = false
+
+  private def requestCurrentView(): Unit = nodeViewHolderRefOpt.foreach { nodeViewHolderRef =>
+    nodeViewHolderRef ! GetDataFromCurrentView[ErgoStateReader, StartExtraIndexer] { view =>
+      view.state match {
+        case digest: DigestState =>
+          StartExtraIndexer(view.history, None, digestMode = true,
+            digestSnapshotOpt = ExtraIndexer.digestIndexSnapshot(
+              digest, digest.ergoSettings.nodeSettings.verifyTransactions))
+        case state =>
+          StartExtraIndexer(view.history, Some(state.version))
       }
     }
+  }
+
+  override protected def requestDigestAuthorityRefresh(generation: Long): Boolean =
+    nodeViewHolderRefOpt.exists { nodeViewHolderRef =>
+      nodeViewHolderRef ! GetDataFromCurrentView[ErgoStateReader, DigestAuthorityRefreshed] { view =>
+        val snapshotOpt = view.state match {
+          case digest: DigestState => ExtraIndexer.digestIndexSnapshot(
+            digest, digest.ergoSettings.nodeSettings.verifyTransactions)
+          case _ => None
+        }
+        DigestAuthorityRefreshed(generation, view.history, snapshotOpt)
+      }
+      true
+    }
+
+  override def preStart(): Unit = {
+    context.system.eventStream.subscribe(self, classOf[FullBlockApplied])
+    context.system.eventStream.subscribe(self, classOf[DigestFullBlockApplied])
+    context.system.eventStream.subscribe(self, classOf[Rollback])
+    requestCurrentView()
   }
 
   override def postStop(): Unit = {
@@ -919,19 +1046,66 @@ class ExtraIndexer(cacheSettings: CacheSettings,
 
     case _: FullBlockApplied if _history == null => stash()
 
+    case _: DigestFullBlockApplied if _history == null => stash()
+
     case _: Rollback if _history == null => stash()
 
-    case StartExtraIndexer(history: ErgoHistory, stateVersionOpt) =>
+    case StartExtraIndexer(history: ErgoHistory, stateVersionOpt, isDigestMode, digestSnapshotOpt) =>
       log.info(s"Starting extra indexer")
-      _history = history
-      // The state version is the id of the last block the state applied. At genesis it is
-      // not a header id: nothing counts as applied until the first FullBlockApplied.
-      lastAppliedHeaderOpt = stateVersionOpt.map(versionToId).flatMap(id => history.typedModifierById[Header](id))
+      digestMode = isDigestMode
+      val digestAuthorityOpt = if (digestMode) {
+        digestSnapshotOpt.flatMap(ExtraIndexer.digestIndexAuthority(history, _))
+      } else None
+      // At genesis there is no header id. An absent Digest certificate also admits no body.
+      lastAppliedHeaderOpt = if (digestMode) digestAuthorityOpt.flatMap(_.frontier) else {
+        stateVersionOpt.map(versionToId).flatMap(id => history.typedModifierById[Header](id))
+      }
       val state = IndexerState.fromHistory(history)
-      context.become(receive.orElse(loaded(state)))
-      log.info(s"Started extra indexer at height ${state.indexedHeight}, applied tip is ${lastAppliedHeaderOpt.map(h => s"${h.id} at height ${h.height}")}")
-      self ! Index()
-      unstashAll()
+      val quarantined = ExtraIndexer.digestFrontierQuarantined(history)
+      val modeProvenanceValid = ExtraIndexer.indexModeHasProvenance(history, digestMode)
+      val missingDigestProvenance = digestMode && !modeProvenanceValid
+      val runtimeModeMismatch = !digestMode && !modeProvenanceValid
+      val invalidDigestAuthority = digestMode && digestAuthorityOpt.isEmpty
+      val verificationDisabled = digestSnapshotOpt.exists(s => !s.verifyTransactions)
+      val missingDigestCertificate = digestMode && digestAuthorityOpt.nonEmpty &&
+        state.indexedHeight > 0 && lastAppliedHeaderOpt.isEmpty
+      val certifiedHeight = lastAppliedHeaderOpt.fold(0)(_.height)
+      val beyondDigestFrontier = digestMode && digestAuthorityOpt.nonEmpty &&
+        state.indexedHeight > certifiedHeight
+      val invalidDigestCheckpoint = digestMode && !ExtraIndexer.checkpointOnSelectedFullChain(history)
+      if (runtimeModeMismatch) {
+        log.error("Extra index provenance does not match the runtime UTXO state; stopping indexer")
+        stopIndexer()
+      } else if (quarantined || missingDigestProvenance || missingDigestCertificate ||
+          beyondDigestFrontier || invalidDigestCheckpoint) {
+        _history = history
+        if (!quarantined) {
+          quarantineDigestIndex(s"Digest provenance present = ${!missingDigestProvenance}; " +
+            s"paired state valid = ${!invalidDigestAuthority}; indexed height ${state.indexedHeight}, " +
+            s"selected body frontier $certifiedHeight at startup")
+        } else {
+          log.error("Extra index remains quarantined until a verified rebuild")
+          stopIndexer()
+        }
+      } else if (verificationDisabled) {
+        log.error("Digest transaction verification disabled; stopping extra indexer")
+        stopIndexer()
+      } else if (invalidDigestAuthority) {
+        if (!verificationDisabled && !startupSnapshotRetried && nodeViewHolderRefOpt.nonEmpty) {
+          startupSnapshotRetried = true
+          log.warn("Digest state and selected history moved during extra-index startup; retrying current view once")
+          requestCurrentView()
+        } else {
+          log.error("Digest state has no coherent selected-chain body authority; stopping extra indexer")
+          stopIndexer()
+        }
+      } else {
+        _history = history
+        context.become(receive.orElse(loaded(state)))
+        log.info(s"Started extra indexer at height ${state.indexedHeight}, applied tip is ${lastAppliedHeaderOpt.map(h => s"${h.id} at height ${h.height}")}")
+        self ! Index()
+        unstashAll()
+      }
 
   }
 }
@@ -945,11 +1119,18 @@ object ExtraIndexer {
       * Initialize ExtraIndexer and start indexing.
       *
       * @param history         - handle to database
-      * @param stateVersionOpt - version of the state taken together with `history`, which is the id
-      *                          of the last block the state applied. If absent, nothing counts as
-      *                          applied until the first `FullBlockApplied`.
+      * @param stateVersionOpt - UTXO state version, taken together with `history`.
+      * @param digestMode      - require Digest certificate events instead of generic block events
+      * @param digestSnapshotOpt - paired Digest state snapshot captured while the holder owns the view
       */
-    case class StartExtraIndexer(history: ErgoHistory, stateVersionOpt: Option[VersionTag])
+    private[extra] case class StartExtraIndexer(history: ErgoHistory,
+                                                stateVersionOpt: Option[VersionTag],
+                                                digestMode: Boolean = false,
+                                                digestSnapshotOpt: Option[DigestIndexSnapshot] = None)
+
+    private[extra] case class DigestAuthorityRefreshed(generation: Long,
+                                                       history: ErgoHistory,
+                                                       snapshotOpt: Option[DigestIndexSnapshot])
 
     /**
       * Retreive the currently used segment treshold
@@ -1012,6 +1193,10 @@ object ExtraIndexer {
   val GlobalBoxIndexKey: Array[Byte] = Algos.hash("boxes height")
   val RollbackToKey: Array[Byte] = Algos.hash("rollback to")
   val IndexedHeaderIdKey: Array[Byte] = Algos.hash("indexed header id")
+  val DigestFrontierQuarantineKey: Array[Byte] = Algos.hash("digest frontier index quarantine")
+  val IndexModeProvenanceKey: Array[Byte] = Algos.hash("extra index state mode provenance")
+  val UtxoIndexProvenanceBytes: Array[Byte] = Array(0.toByte)
+  val DigestIndexProvenanceBytes: Array[Byte] = Array(1.toByte)
   val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
 
   /**
@@ -1033,9 +1218,80 @@ object ExtraIndexer {
     getIndex(key, history.historyStorage)
   }
 
+  def digestFrontierQuarantined(history: ErgoHistoryReader): Boolean =
+    history.historyStorage.modifierBytesById(bytesToId(DigestFrontierQuarantineKey)).isDefined
+
+  def indexModeHasProvenance(history: ErgoHistoryReader, digestMode: Boolean): Boolean =
+    history.historyStorage.modifierBytesById(bytesToId(IndexModeProvenanceKey))
+      .exists(_.sameElements(if (digestMode) DigestIndexProvenanceBytes else UtxoIndexProvenanceBytes))
+
+  def digestIndexHasProvenance(history: ErgoHistoryReader): Boolean =
+    indexModeHasProvenance(history, digestMode = true)
+
+  private[extra] case class DigestIndexSnapshot(stateVersion: VersionTag,
+                                               stateRoot: Array[Byte],
+                                               stateHeaderIdOpt: Option[ModifierId],
+                                               genesisRoot: Array[Byte],
+                                               bodyFrontierIdOpt: Option[ModifierId],
+                                               verifyTransactions: Boolean)
+
+  private[extra] case class DigestIndexAuthority(frontier: Option[Header])
+
+  private[extra] def digestIndexSnapshot(state: ErgoStateReader,
+                                         verifyTransactions: Boolean): Option[DigestIndexSnapshot] = Try {
+    val context = state.stateContext
+    DigestIndexSnapshot(state.version, state.rootDigest.clone(), context.lastHeaderOpt.map(_.id),
+      context.genesisStateDigest.clone(), state.fullBlockBodyFrontier, verifyTransactions)
+  }.toOption
+
+  /** A state version, context, root, and body certificate must name one selected chain. */
+  private[extra] def digestIndexAuthority(history: ErgoHistoryReader,
+                                          snapshot: DigestIndexSnapshot): Option[DigestIndexAuthority] = {
+    if (!snapshot.verifyTransactions) None
+    else Try {
+      snapshot.stateHeaderIdOpt match {
+        case Some(stateHeaderId) =>
+          history.typedModifierById[Header](stateHeaderId).filter { stateHeader =>
+            snapshot.stateVersion == idToVersion(stateHeader.id) &&
+              snapshot.stateRoot.sameElements(stateHeader.stateRoot) &&
+              history.isInBestChain(stateHeader)
+          }.flatMap { stateHeader =>
+            snapshot.bodyFrontierIdOpt match {
+              case Some(frontierId) =>
+                history.typedModifierById[Header](frontierId)
+                  .filter { frontier =>
+                    frontier.height <= stateHeader.height &&
+                      FullBlockProcessor.isInBestFullChain(history.historyStorage, frontier.id) &&
+                      history.bestHeaderIdAtHeight(frontier.height).contains(frontier.id)
+                  }
+                  .map(frontier => DigestIndexAuthority(Some(frontier)))
+              case None => Some(DigestIndexAuthority(None))
+            }
+          }
+        case None if snapshot.stateVersion == ErgoState.genesisStateVersion &&
+            snapshot.stateRoot.sameElements(snapshot.genesisRoot) &&
+            snapshot.bodyFrontierIdOpt.isEmpty =>
+          Some(DigestIndexAuthority(None))
+        case _ => None
+      }
+    }.toOption.flatten
+  }
+
+  /** Gate every Digest extra-index read against the paired state and its durable certificate. */
+  def checkpointOnCertifiedDigestFullChain(history: ErgoHistoryReader,
+                                           state: ErgoStateReader,
+                                           verifyTransactions: Boolean): Boolean = {
+    digestIndexHasProvenance(history) && checkpointOnSelectedFullChain(history) &&
+      digestIndexSnapshot(state, verifyTransactions)
+        .flatMap(digestIndexAuthority(history, _)).flatMap(_.frontier).exists { frontier =>
+        frontier.height >= getIndex(IndexedHeightKey, history).getInt
+      }
+  }
+
   def checkpointOnSelectedFullChain(history: ErgoHistoryReader): Boolean = {
     val indexedHeight = getIndex(IndexedHeightKey, history).getInt
-    if (indexedHeight == 0) true
+    if (digestFrontierQuarantined(history)) false
+    else if (indexedHeight == 0) true
     else history.historyStorage.modifierBytesById(bytesToId(IndexedHeaderIdKey))
       .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
       .map(bytesToId)

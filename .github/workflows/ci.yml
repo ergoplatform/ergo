@@ -22,21 +22,22 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.13.18, 2.12.20]
-        java: [adopt@1.8]
+        java: [temurin:8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: coursier/setup-action@v3
         with:
-          java-version: ${{ matrix.java }}
+          jvm: ${{ matrix.java }}
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
               ~/.sbt
@@ -65,21 +66,22 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.13.18, 2.12.20]
-        java: [adopt@1.8]
+        java: [temurin:8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: coursier/setup-action@v3
         with:
-          java-version: ${{ matrix.java }}
+          jvm: ${{ matrix.java }}
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.sbt
@@ -106,21 +108,22 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         scala: [2.12.20]
-        java: [adopt@1.8]
+        java: [temurin:8]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout current branch (full)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java and Scala
-        uses: olafurpg/setup-scala@v10
+        uses: coursier/setup-action@v3
         with:
-          java-version: ${{ matrix.java }}
+          jvm: ${{ matrix.java }}
+          apps: sbt
 
       - name: Cache sbt
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
               ~/.sbt
@@ -140,22 +143,25 @@ jobs:
        matrix:
          os: [ ubuntu-latest ]
          scala: [ 2.12.20 ]
-         java: [ adopt@1.8 ]
+         java: [ temurin:8 ]
      runs-on: ${{ matrix.os }}
+     # backstop; the test step has a shorter limit so that the log steps still run
+     timeout-minutes: 45
      steps:
        - name: Checkout current branch (full)
-         uses: actions/checkout@v4
+         uses: actions/checkout@v7
          with:
            path: it
            fetch-depth: 0
 
        - name: Setup Java and Scala
-         uses: olafurpg/setup-scala@v10
+         uses: coursier/setup-action@v3
          with:
-           java-version: ${{ matrix.java }}
+           jvm: ${{ matrix.java }}
+           apps: sbt
 
        - name: Cache sbt
-         uses: actions/cache@v4
+         uses: actions/cache@v6
          with:
            path: |
              ~/.sbt
@@ -167,7 +173,33 @@ jobs:
            key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
        - name: Runs it node tests
+         # above DeepRollBackSpec's 20 min Await started late in the run
+         timeout-minutes: 35
          run: |
            cd it
            mkdir tmp
            TMPDIR=$(pwd)/tmp sbt -Denv=test clean ++${{ matrix.scala }} it:test
+
+       # logs of the containers that Docker.close() did not save and remove, e.g. after the
+       # test step timed out (which does not stop sbt)
+       - name: Save leftover node container logs
+         if: failure() || cancelled()
+         timeout-minutes: 3
+         run: |
+           mkdir -p it/target/logs/containers
+           docker ps -a --filter name=ergo-itest- --format '{{.ID}} {{.Names}}' |
+             while read -r id name; do
+               docker inspect --format '{{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} finished={{.State.FinishedAt}}' "$id" || true
+               docker logs --timestamps "$id" > "it/target/logs/containers/$name.log" 2>&1 || true
+             done
+
+       - name: Upload IT logs
+         if: failure() || cancelled()
+         uses: actions/upload-artifact@v7
+         with:
+           name: it-logs-${{ matrix.scala }}-attempt-${{ github.run_attempt }}
+           path: |
+             it/target/logs/
+             it/target/it-reports/
+           if-no-files-found: ignore
+           retention-days: 30

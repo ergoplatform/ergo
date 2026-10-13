@@ -412,26 +412,38 @@ class Docker(
     )
 
     val targetPath = s"$remoteVolume/$relativePath"
+    runMountedCommand(localVolume, remoteVolume, Seq("rm", "-rf", targetPath),
+      s"Volume cleanup failed for $targetPath")
+  }
+
+  private[container] def runMountedCommand(
+    localVolume: String,
+    remoteVolume: String,
+    entrypoint: Seq[String],
+    failureContext: String
+  ): Unit = {
+    require(entrypoint.nonEmpty, "Mounted command must be non-empty")
     val hostConfig =
       new HostConfig().withBinds(new Bind(localVolume, new Volume(remoteVolume)))
     val cleanupContainerId = client
       .createContainerCmd(ErgoImageLatest)
       .withHostConfig(hostConfig)
-      .withEntrypoint("rm", "-rf", targetPath)
+      .withEntrypoint(entrypoint: _*)
       .exec()
       .getId
 
-    val waitCallback = waitContainer(cleanupContainerId)
     try {
       client.startContainerCmd(cleanupContainerId).exec()
-      val exitCode = waitCallback.awaitStatusCode(60, TimeUnit.SECONDS)
-      if (exitCode != 0) {
-        throw new IllegalStateException(
-          s"Volume cleanup failed for $targetPath with exit code $exitCode"
-        )
+      val waitCallback = waitContainer(cleanupContainerId)
+      try {
+        val exitCode = waitCallback.awaitStatusCode(60, TimeUnit.SECONDS)
+        if (exitCode != 0) {
+          throw new IllegalStateException(s"$failureContext with exit code $exitCode")
+        }
+      } finally {
+        waitCallback.close()
       }
     } finally {
-      waitCallback.close()
       client.removeContainerCmd(cleanupContainerId).withForce(true).exec()
     }
   }

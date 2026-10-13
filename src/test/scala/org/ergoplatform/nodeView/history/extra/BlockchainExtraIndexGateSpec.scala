@@ -7,7 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import org.ergoplatform.http.api.BlockchainApiRoute
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeaderIdKey, IndexedHeightKey, RollbackToKey}
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers

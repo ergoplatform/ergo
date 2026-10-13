@@ -4,13 +4,14 @@ import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
-import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, OutputsHolder, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.Constants
+import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
-import org.ergoplatform.utils.generators.ChainGenerator.applyChain
+import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genHeaderChain}
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState, validFullBlock, validTransactionsFromBoxHolder}
 import org.ergoplatform.{ErgoBoxCandidate, Input}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -69,6 +70,16 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
       Seq(transaction, invalidTransaction).map(UnconfirmedTransaction(_, None))
     )
     history = applyChain(history, Seq(root, a2))
+
+    // Publish the pool transaction in an input block on top of a2, so that the candidate
+    // generator picks it up as a previously collected (ordering block) transaction, and it
+    // lands in the transaction set the candidate's proofs are generated for.
+    private val inputBlockHeader = genHeaderChain(1, history, diffBitsOpt = None, useRealTs = false).last
+    private val inputBlock = InputBlockAnnouncement(1, inputBlockHeader, InputBlockFields.empty, None)
+    history.applyInputBlock(inputBlock) shouldBe None
+    private val (newBestInputBlocks, _) = history.applyInputBlockTransactions(inputBlock.id, Seq(transaction), state)
+    newBestInputBlocks should contain(inputBlock.id)
+
     private val beforeRace = assemble(state).get.get
     beforeRace._1.candidateBlock.transactions.map(_.id) should contain(transaction.id)
     beforeRace._2.ids should not contain transaction.id
@@ -89,8 +100,12 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
       ADDigest @@ wrongRoot, validB2.adProofs.get.proofBytes,
       validB2.blockTransactions.txs, validB2.header.timestamp,
       ExtensionCandidate(validB2.extension.fields), validB2.header.votes,
-      defaultMinerSecretNumber
-    ).get
+      defaultMinerSecretNumber, Long.MinValue, Long.MaxValue, parameters
+    ) match {
+      case org.ergoplatform.OrderingBlockFound(fb) => fb
+      case org.ergoplatform.InputBlockFound(fb)    => fb
+      case _ => throw new RuntimeException("Unexpected result from proveBlock")
+    }
     private val c3Transactions = validTransactionsFromBoxHolder(b2Pair._2, new RandomWrapper(Some(13)))._1
     val c3: ErgoFullBlock = validFullBlock(Some(b2), state, c3Transactions, Some(start + 5))
 
@@ -138,11 +153,12 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
           state.boxById(input.id) shouldBe None
         }
 
-        override def withTransactions(transactions: Seq[ErgoTransaction]): UtxoState = {
+        override def withTransactions(transactions: Seq[OutputsHolder]): UtxoState = {
           // The emission transaction has been selected, but the pool transaction
           // has not been checked yet. Rollback removes the latter's actual input.
-          val afterEmission = transactions.exists(_.id == emissionTransaction.id) &&
-            !transactions.exists(_.id == transaction.id)
+          val txIds = transactions.collect { case tx: ErgoTransaction => tx.id }
+          val afterEmission = txIds.contains(emissionTransaction.id) &&
+            !txIds.contains(transaction.id)
           if (first && rollbackDuringCollection && progress.isEmpty && afterEmission) {
             rollBackFork()
           }
@@ -160,7 +176,8 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
             if (rollbackDuringRetryCollection) {
               retryCollectionRolledBack shouldBe true
               txs.map(_.id) should contain(emissionTransaction.id)
-              txs.map(_.id) should not contain transaction.id
+              // Note: on weak-blocks `transaction` stays in the proof set via
+              // previously collected input-block transactions, regardless of the rollback.
             } else {
               txs.map(_.id) should contain(transaction.id)
               state = state.rollbackTo(idToVersion(root.id)).get
@@ -179,7 +196,8 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
               if (progress.isEmpty) rollBackFork()
               if (rollbackDuringCollection) {
                 txs.map(_.id) should contain(emissionTransaction.id)
-                txs.map(_.id) should not contain transaction.id
+                // `transaction` is still in the proof set (collected via an earlier input
+                // block), but its input was removed by the rollback, so the proof fails.
                 state.boxById(emissionTransaction.inputs.head.boxId) shouldBe None
               }
             } else {
@@ -194,7 +212,7 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
             if (returnToOriginal) {
               state.applyModifier(b2, None)(_ => ()).isFailure shouldBe true
               genuineBlockFailures += 1
-              val (updated, recovery) = history.reportModifierIsInvalid(b2, progress.get).get
+              val (updated, recovery) = history.reportModifierIsInvalid(b2).get
               history = updated
               history.bestFullBlockOpt.map(_.id) shouldBe Some(a2.id)
               recovery.branchPoint shouldBe Some(root.id)
@@ -244,8 +262,12 @@ class CandidateRetryReorgSpec extends AnyFlatSpec with Matchers {
       powScheme.proveBlock(
         block.parentOpt, block.version, block.nBits, block.stateRoot,
         block.adProofBytes, block.transactions, block.timestamp, block.extension,
-        block.votes, defaultMinerSecretNumber
-      ).get
+        block.votes, defaultMinerSecretNumber, Long.MinValue, Long.MaxValue, parameters
+      ) match {
+        case org.ergoplatform.OrderingBlockFound(fb) => fb
+        case org.ergoplatform.InputBlockFound(fb)    => fb
+        case _ => throw new RuntimeException("Unexpected result from proveBlock")
+      }
     }
 
     def close(): Unit = {

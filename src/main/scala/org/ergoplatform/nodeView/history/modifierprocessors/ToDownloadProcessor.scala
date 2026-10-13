@@ -1,4 +1,4 @@
-package org.ergoplatform.nodeView.history.storage.modifierprocessors
+package org.ergoplatform.nodeView.history.modifierprocessors
 
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, SnapshotsInfoTypeId}
@@ -107,10 +107,10 @@ trait ToDownloadProcessor
   /**
     * Checks whether it's time to download full chain, and returns toDownload modifiers
     */
-  protected def toDownload(header: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
+  protected def toDownload(header: Header): Map[NetworkObjectTypeId.Value, ModifierId] = {
     if (!nodeSettings.verifyTransactions) {
       // A regime that do not download and verify transaction
-      Nil
+      Map.empty
     } else if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) {
       // While bootstrapping from a UTXO set snapshot, do not download full block sections
       // until the snapshot has been applied. Block sections downloaded before the snapshot
@@ -122,14 +122,17 @@ trait ToDownloadProcessor
       // is derived from it (readMinimalFullBlockHeight() > GenesisHeight), so with blocksToKeep >= 0
       // it would flip to true with no snapshot applied and the snapshot would be skipped forever.
       markHeadersSyncedIfFresh(header)
-      Nil
+      Map.empty
     } else if (shouldDownloadBlockAtHeight(header.height)) {
       // Already synced and header is not too far back. Download required modifiers.
       requiredModifiersForHeader(header)
-    } else {
+    } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
-      markHeadersSyncedIfFresh(header, updateBestBlock = true)
-      Nil
+      updateBestFullBlock(header)
+      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+      Map.empty
+    } else {
+      Map.empty
     }
   }
 
@@ -153,9 +156,9 @@ trait ToDownloadProcessor
   /**
     * @return block sections needed to be downloaded after header `h` , and defined by the header
     */
-  def requiredModifiersForHeader(h: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)] = {
+  def requiredModifiersForHeader(h: Header): Map[NetworkObjectTypeId.Value, ModifierId] = {
     if (!nodeSettings.verifyTransactions) {
-      Nil // no block sections to be downloaded in SPV mode
+      Map.empty // no block sections to be downloaded in SPV mode
     } else if (nodeSettings.stateType.requireProofs) {
       h.sectionIds // download block transactions, extension and UTXO set transformations proofs in "digest" mode
     } else {

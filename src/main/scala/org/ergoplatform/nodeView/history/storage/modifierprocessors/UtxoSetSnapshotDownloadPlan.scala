@@ -20,6 +20,9 @@ import scorex.crypto.hash.Digest32
   *                             `expectedChunkIds` (true = downloaded)
   * @param downloadingChunks - number of UTXO set shapshot chunks the node is currently downloading
   * @param peersToDownload - peers UTXO set snapshot chunks can be downloaded from
+  * @param reservedChunkIndices - chunk positions currently assigned to delivery requests
+  * @param releasedChunkIndices - previously assigned positions available for another request
+  * @param quarantinedChunkIndices - failed positions awaiting a distinct snapshot provider
   */
 case class UtxoSetSnapshotDownloadPlan(createdTime: Long,
                                        latestUpdateTime: Long,
@@ -29,7 +32,10 @@ case class UtxoSetSnapshotDownloadPlan(createdTime: Long,
                                        expectedChunkIds: IndexedSeq[SubtreeId],
                                        downloadedChunkIds: IndexedSeq[Boolean],
                                        downloadingChunks: Int,
-                                       peersToDownload: Seq[ConnectedPeer]) {
+                                       peersToDownload: Seq[ConnectedPeer],
+                                       reservedChunkIndices: Set[Int] = Set.empty,
+                                       releasedChunkIndices: Set[Int] = Set.empty,
+                                       quarantinedChunkIndices: Set[Int] = Set.empty) {
 
   def id: Digest32 = utxoSetRootHash
 

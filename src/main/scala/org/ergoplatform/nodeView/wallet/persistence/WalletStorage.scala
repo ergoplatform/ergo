@@ -101,8 +101,9 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @param ctx - state context
     */
   def updateStateContext(ctx: ErgoStateContext): Try[Unit] = {
-    cachedStateContext = Some(ctx)
-    store.insert(StateContextKey, ctx.bytes)
+    store.insert(StateContextKey, ctx.bytes).map { _ =>
+      cachedStateContext = Some(ctx)
+    }
   }
 
   /**

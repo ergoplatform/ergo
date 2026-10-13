@@ -25,6 +25,14 @@ case class OffChainRegistry(height: Int,
   import org.ergoplatform.nodeView.wallet.IdUtils._
 
   /**
+    * Off-chain boxes belonging to the wallet itself, i.e. tracked by the wallet's payments scan
+    * (possibly along with other, external scans). Boxes tracked only by external scans are excluded,
+    * so that off-chain boxes belonging exclusively to a custom application scan are not mixed into
+    * the wallet's own (payments) box set used for spending / balance calculation.
+    */
+  def walletOffChainBoxes: Seq[TrackedBox] = offChainBoxes.filter(_.scans.contains(PaymentsScanId))
+
+  /**
     * Off-chain index considering on-chain balances.
     */
   lazy val digest: WalletDigest = {

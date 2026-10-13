@@ -10,7 +10,7 @@ import java.io.File
 import java.net.{InetSocketAddress, URL}
 import scala.concurrent.duration._
 
-case class LoggingSettings(level: String)
+case class LoggingSettings(level: String, stdoutLevel: Option[String] = None)
 
 case class RESTApiSettings(
   bindAddress: InetSocketAddress,

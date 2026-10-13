@@ -9,10 +9,11 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
-import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
+import org.ergoplatform.modifiers.history.{BlockTransactionsSerializer, HeaderChain}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -30,7 +31,7 @@ import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer}
 import scorex.crypto.authds.ADKey
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
@@ -770,6 +771,59 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length
         case _ => false
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: sync info follows the best header when it changes at the same height") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var history = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+      history.writeMinimalFullBlockHeight(GenesisHeight)
+      history.setHeadersChainSynced()
+      val commonChain = genChain(2, history)
+      history = applyChain(history, commonChain)
+      val ancestor = commonChain.last
+      val a3 = genChain(1, ancestor).tail.head
+      Thread.sleep(2)
+      val b3 = genChain(1, ancestor).tail.head
+
+      // a3 is the best header, its body is not here
+      history = applyHeaderChain(history, HeaderChain(Seq(a3.header)))
+      history.bestHeaderOpt.get shouldBe a3.header
+      synchronizerMockRef ! ChangedHistory(history)
+
+      val foreignSync = ErgoSyncInfoMessageSpec.toBytes(ErgoSyncInfoV2(Seq(genChain(1).head.header)))
+
+      // a peer sends its sync info, our sync info is sent back; it must have the header `tip`
+      def ownSyncInfoHas(remote: ConnectedPeer, tip: Header): Unit = {
+        synchronizerMockRef ! Message(ErgoSyncInfoMessageSpec, Left(foreignSync), Some(remote))
+        ncProbe.fishForMessage(3 seconds) {
+          case stn: SendToNetwork
+            if stn.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+              stn.sendingStrategy == SendToPeer(remote) =>
+            stn.message.data match {
+              case scala.util.Success(v2: ErgoSyncInfoV2) => v2.lastHeaders.exists(_.id == tip.id)
+              case _ => false
+            }
+          case _ => false
+        }
+      }
+
+      ownSyncInfoHas(peer, a3.header)
+
+      // the body of b3 arrives: b3 ties a3, the best header moves to b3, the height is the same
+      history = applyBlock(history, b3)
+      history.bestHeaderOpt.get shouldBe b3.header
+      history.headersHeight shouldBe 3
+      synchronizerMockRef ! ChangedHistory(history)
+
+      val peer2 = ConnectedPeer(
+        connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("192.0.2.3", 9030)),
+        pchProbe.ref,
+        Some(peerInfo)
+      )
+      ownSyncInfoHas(peer2, b3.header)
     }
   }
 

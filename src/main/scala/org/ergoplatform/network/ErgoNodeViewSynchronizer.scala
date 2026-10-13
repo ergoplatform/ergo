@@ -73,9 +73,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       Restart
   }
 
-  private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
+  // sync info caches are keyed by the best header, as the best header can change at the same height
+  private var syncInfoV1CacheByBestHeader: Option[((Int, Option[ModifierId]), ErgoSyncInfoV1)] = Option.empty
 
-  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+  private var syncInfoV2CacheByBestHeader: Option[((Int, Option[ModifierId]), ErgoSyncInfoV2)] = Option.empty
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -331,24 +332,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /** Get V1 sync info from cache or load it from history and add to cache */
   private def getV1SyncInfo(history: ErgoHistory): ErgoSyncInfoV1 = {
-    val headersHeight = history.headersHeight
-    syncInfoV1CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+    val cacheKey = history.headersHeight -> history.bestHeaderIdOpt
+    syncInfoV1CacheByBestHeader
+      .collect { case (key, syncInfo) if key == cacheKey => syncInfo }
       .getOrElse {
         val v1SyncInfo = history.syncInfoV1
-        syncInfoV1CacheByHeadersHeight = Some(headersHeight -> v1SyncInfo)
+        syncInfoV1CacheByBestHeader = Some(cacheKey -> v1SyncInfo)
         v1SyncInfo
       }
   }
 
   /** Get V2 sync info from cache or load it from history and add to cache */
   private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
-    val headersHeight = history.headersHeight
-    syncInfoV2CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+    val cacheKey = history.headersHeight -> history.bestHeaderIdOpt
+    syncInfoV2CacheByBestHeader
+      .collect { case (key, syncInfo) if key == cacheKey => syncInfo }
       .getOrElse {
         val v2SyncInfo = history.syncInfoV2(full)
-        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        syncInfoV2CacheByBestHeader = Some(cacheKey -> v2SyncInfo)
         v2SyncInfo
       }
   }

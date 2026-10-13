@@ -11,7 +11,6 @@ import scorex.util.ScorexLogging
 import scorex.util.encode.Base16
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -45,17 +44,24 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
 
     if (manifests.size > toStore) {
 
-      val lastManifestBytesOpt = store.get(manifests.last._2)
-      val lastManifestSubtrees =
-        lastManifestBytesOpt
-          .flatMap(bs => manifestSerializer.parseBytesTry(bs).toOption)
-          .map(_.subtreesIds)
-          .getOrElse(ArrayBuffer.empty)
-          .map(Algos.encode)
-          .toSet
-
       val toPrune = manifests.dropRight(toStore)
       val toLeave = manifests.takeRight(toStore)
+      // Resolve every retained reference before deleting anything. Missing references
+      // cannot be treated as an empty tree, since other snapshots may share its content.
+      val retainedKeys = Try {
+        toLeave.iterator.flatMap { case (_, manifestId) =>
+          val bytes = store.get(manifestId).getOrElse {
+            throw new IllegalStateException(s"Retained manifest ${Base16.encode(manifestId)} not found")
+          }
+          val manifest = manifestSerializer.parseBytesTry(bytes).get
+          Iterator(Algos.encode(manifestId)) ++ manifest.subtreesIds.iterator.map(Algos.encode)
+        }.toSet
+      } match {
+        case Success(keys) => keys
+        case Failure(e) =>
+          log.error("Can't resolve retained snapshots; skipping pruning", e)
+          return
+      }
 
       toPrune.foreach { case (h, manifestId) =>
         val pt0 = System.currentTimeMillis()
@@ -66,10 +72,12 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
                 val keys = mutable.ArrayBuilder.make[Array[Byte]]()
                 val subtrees = m.subtreesIds
                 keys.sizeHint(subtrees.size + 1)
-                keys += manifestId
-                // filter out subtrees which are the same in the latest version of tree snapshot
+                if (!retainedKeys.contains(Algos.encode(manifestId))) {
+                  keys += manifestId
+                }
+                // A fragment may be shared with any retained snapshot.
                 subtrees.foreach { subtreeId =>
-                  if (!lastManifestSubtrees.contains(Algos.encode(subtreeId))) {
+                  if (!retainedKeys.contains(Algos.encode(subtreeId))) {
                     keys += subtreeId
                   }
                 }
@@ -109,10 +117,9 @@ class SnapshotsDb(store: LDBKVStore) extends ScorexLogging {
                     height: Height,
                     expectedRootHash: Array[Byte],
                     manifestDepth: Byte = ManifestSerializer.MainnetManifestDepth): Try[Array[Byte]] = {
-    pullFrom.dumpSnapshot(store, manifestDepth, expectedRootHash).map { manifestId =>
+    pullFrom.dumpSnapshot(store, manifestDepth, expectedRootHash).flatMap { manifestId =>
       val si = readSnapshotsInfo.withNewManifest(height, Digest32 @@ manifestId)
-      writeSnapshotsInfo(si)
-      manifestId
+      writeSnapshotsInfo(si).map(_ => manifestId)
     }
   }
 

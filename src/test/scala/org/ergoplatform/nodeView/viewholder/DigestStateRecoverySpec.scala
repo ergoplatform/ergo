@@ -179,6 +179,46 @@ class DigestStateRecoverySpec extends ErgoCorePropertyTest with NodeViewTestOps 
     }
   }
 
+  property("verified startup recovers the body frontier before accepting a selected header's full block") {
+    val defaults = NodeViewTestConfig(StateType.Digest, verifyTransactions = true, popowBootstrap = false).toSettings
+    val indexedSettings = defaults.copy(nodeSettings = defaults.nodeSettings.copy(extraIndex = true))
+    new NodeViewFixture(indexedSettings, parameters).apply { fixture =>
+      import fixture._
+      val (sourceState, boxes) = createUtxoState(fixture.settings)
+      try {
+        var state = WrappedUtxoState(sourceState, boxes, fixture.settings)
+        val certified = validFullBlock(None, state)
+        state = state.applyModifier(certified)(_ => ()).get
+        applyBlock(certified).get
+        val headerOnly = validFullBlock(Some(certified), state)
+        val following = validFullBlock(Some(headerOnly), state.applyModifier(headerOnly)(_ => ()).get)
+        applyHeader(headerOnly.header).get
+        getHistory.bestFullBlockOpt.map(_.id) shouldBe Some(certified.id)
+        getHistory.bestHeaderOpt.map(_.id) shouldBe Some(headerOnly.id)
+
+        stopNodeViewHolder()
+        val directory = ErgoState.stateDir(fixture.settings)
+        val persisted = DigestState.create(None, None, directory, fixture.settings)
+        try {
+          // Model a header-only version persisted before verified startup, for example after a mode change.
+          val advanced = persisted.applyModifier(headerOnly.header, None)(_ => ()).get
+          advanced.version shouldBe idToVersion(headerOnly.id)
+          advanced.fullBlockBodyFrontier shouldBe Some(certified.id)
+        } finally persisted.close()
+
+        startNodeViewHolder()
+        val restored = getCurrentState.asInstanceOf[DigestState]
+        assertCertifiedTip(restored, certified)
+        getHistory.bestHeaderOpt.map(_.id) shouldBe Some(headerOnly.id)
+
+        applyHeader(following.header).get
+        getHistory.isHeadersChainSynced shouldBe true
+        applyPayload(headerOnly).get
+        assertCertifiedTip(getCurrentState.asInstanceOf[DigestState], headerOnly)
+      } finally sourceState.closeStorage()
+    }
+  }
+
   property("startup configuration rejects a present invalid proof after rollback without forging B12 certification") {
     withCertifiedChain { (fixture, chain) =>
       import fixture._

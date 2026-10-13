@@ -89,7 +89,7 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   }
 
   def getBoxesBinaryProof: Route =
-    (post & path("getBoxesBinaryProof") & entity(as[Seq[ErgoBox.BoxId]])) { boxes =>
+    (post & path("getBoxesBinaryProof") & withAuth & entity(as[Seq[ErgoBox.BoxId]])) { boxes =>
       ApiResponse(getState.map {
         case usr: UtxoStateReader =>
           Some(Base16.encode(usr.generateBatchProofForBoxes(boxes)))

@@ -7,11 +7,14 @@ import akka.util.Timeout
 import org.ergoplatform.network.PeerSpec
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
-import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
+import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PenaltyType}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
 import org.ergoplatform.settings.NetworkSettings
+import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 import shapeless.syntax.typeable._
+
+import java.net.InetSocketAddress
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -41,8 +44,8 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   private val peersSpec = new PeersSpec(settings.maxPeerSpecObjects)
 
   private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
-    case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
-      addNewPeers(peers)
+    case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, remote) if peers.cast[Seq[PeerSpec]].isDefined =>
+      addNewPeers(peers, remote)
 
     case (spec, _, remote) if spec.messageCode == GetPeersSpec.messageCode =>
       gossipPeers(remote)
@@ -74,8 +77,29 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
     *
     * @param peers sequence of peer specs describing a remote peers details
     */
-  private def addNewPeers(peers: Seq[PeerSpec]): Unit = {
-    peers.foreach(peerSpec => peerManager ! AddPeerIfEmpty(peerSpec))
+  private def addNewPeers(peers: Seq[PeerSpec], remote: ConnectedPeer): Unit = {
+    val sourceIp = Option(remote.connectionId.remoteAddress.getAddress)
+    def allowed(address: InetSocketAddress): Boolean =
+      Option(address.getAddress).exists { ip =>
+        !ip.isAnyLocalAddress && !ip.isMulticastAddress &&
+          (!NetworkUtils.isLocalIp(ip) || (settings.allowLocal && sourceIp.contains(ip)))
+      }
+
+    peers.foreach { peerSpec =>
+      val withoutLocalFeature = peerSpec.copy(
+        features = peerSpec.features.filterNot(_.isInstanceOf[LocalAddressPeerFeature])
+      )
+      peerSpec.declaredAddress.filter(allowed).foreach { address =>
+        peerManager ! AddPeerIfEmpty(withoutLocalFeature.copy(declaredAddress = Some(address)))
+      }
+      if (settings.allowLocal && sourceIp.exists(NetworkUtils.isLocalIp)) {
+        peerSpec.localAddressOpt.filter(allowed)
+          .filterNot(peerSpec.declaredAddress.contains)
+          .foreach { address =>
+            peerManager ! AddPeerIfEmpty(withoutLocalFeature.copy(declaredAddress = Some(address)))
+          }
+      }
+    }
   }
 
   /**
@@ -94,7 +118,9 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
       maxToSend
     }
 
-    (peerManager ? SeenPeers(peersToSend))
+    val recipientIsVerifiedLan = remote.connectionId.direction.isOutgoing &&
+      Option(remote.connectionId.remoteAddress.getAddress).exists(NetworkUtils.isLocalIp)
+    (peerManager ? SeenPeers(peersToSend, settings.allowLocal && recipientIsVerifiedLan))
       .mapTo[Seq[PeerInfo]]
       .foreach { peers =>
         val msg = Message(peersSpec, Right(peers.map(_.peerSpec)), None)

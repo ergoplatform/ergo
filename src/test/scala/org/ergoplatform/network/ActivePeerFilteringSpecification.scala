@@ -3,6 +3,7 @@ package org.ergoplatform.network
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.SeenPeers
+import scorex.core.network.{Incoming, Outgoing}
 
 import java.net.{InetAddress, InetSocketAddress}
 
@@ -16,7 +17,7 @@ class ActivePeerFilteringSpecification extends ErgoCorePropertyTest {
     val pi = PeerInfo(
       defaultPeerSpec.copy(declaredAddress = Some(addr)),
       System.currentTimeMillis() - lastHandshakeOffset,
-      None,
+      Some(Outgoing),
       System.currentTimeMillis() - lastHandshakeOffset
     )
     (addr, pi)
@@ -40,6 +41,14 @@ class ActivePeerFilteringSpecification extends ErgoCorePropertyTest {
 
     result.size shouldBe 2
     result shouldBe correct
+  }
+
+  property("recent activity does not promote inbound or unverified candidates") {
+    val (address, verified) = newPeer("2.3.4.1", 2341, 1000)
+    Seq(None, Some(Incoming)).foreach { direction =>
+      filter.choose(Map(address -> verified.copy(connectionType = direction)), Seq.empty, null) shouldBe empty
+    }
+    filter.choose(Map(address -> verified.copy(lastHandshake = 0L)), Seq.empty, null) shouldBe empty
   }
 
 }

@@ -64,6 +64,8 @@ class NetworkController(ergoSettings: ErgoSettings,
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
   private var pendingIncomingConnections = Set.empty[ActorRef]
+  private var supersededHandlers = Set.empty[ActorRef]
+  private var listeningPort = Option(networkSettings.bindAddress.getPort).filter(_ != 0)
 
   private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
@@ -105,8 +107,9 @@ class NetworkController(ergoSettings: ErgoSettings,
 
 
   private def bindingLogic: Receive = {
-    case Bound(_) =>
-      log.info("Successfully bound to the port " + networkSettings.bindAddress.getPort)
+    case Bound(actualAddress) =>
+      listeningPort = Some(actualAddress.getPort)
+      log.info("Successfully bound to the port " + actualAddress.getPort)
       scheduleConnectionToPeer()
       scheduleDroppingDeadConnections()
       scheduleEvictRandomConnections()
@@ -121,7 +124,8 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private def businessLogic: Receive = {
     // a message coming in from another peer
-    case msg@Message(spec, _, Some(remote)) =>
+    case msg@Message(spec, _, Some(remote))
+      if connections.get(remote.connectionId.remoteAddress).exists(_.handlerRef == remote.handlerRef) =>
       messageHandlers.get(spec.messageCode) match {
         case Some(handler) => handler ! msg // forward the message to the appropriate handler for processing
         case None => log.error(s"No handlers found for message $remote: " + spec.messageCode)
@@ -137,13 +141,19 @@ class NetworkController(ergoSettings: ErgoSettings,
           cp.peerInfo.foreach { peerInfo =>
             if ((now - peerInfo.lastStoredActivityTime) > activityDelta) {
               val peerInfoUpdated = peerInfo.copy(lastStoredActivityTime = now)
-              connections += remoteAddress -> cp.copy(peerInfo = Some(peerInfoUpdated))
-              peerManagerRef ! AddOrUpdatePeer(peerInfoUpdated)
+              val updatedPeer = cp.copy(peerInfo = Some(peerInfoUpdated))
+              connections += remoteAddress -> updatedPeer
+              outboundPeerInfo(updatedPeer).foreach { info =>
+                peerManagerRef ! AddVerifiedOutboundPeer(info, remoteAddress)
+              }
             }
           }
 
         case None => log.warn("Connection not found for a message got from: " + remoteAddress)
       }
+
+    case Message(_, _, Some(remote)) =>
+      log.debug(s"Ignoring message from a retired peer handler ${remote.handlerRef}")
 
     case SendToNetwork(message, sendingStrategy) =>
       filterConnections(sendingStrategy, message.spec.protocolVersion).foreach { connectedPeer =>
@@ -173,9 +183,24 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   private def connectionEvents: Receive = {
+    case Connected(remoteAddress, localAddress)
+      if isDialCompletion(remoteAddress, localAddress) &&
+        connectionForPeerAddress(remoteAddress).exists(_.connectionId.direction.isIncoming) =>
+      // An inbound socket at the same endpoint does not prove a pending dial.
+      // Retire its status before publishing the successfully dialed replacement.
+      connectionForPeerAddress(remoteAddress).foreach { inbound =>
+        if (inbound.peerInfo.nonEmpty) {
+          context.system.eventStream.publish(DisconnectedPeer(inbound))
+        }
+        supersededHandlers += inbound.handlerRef
+        inbound.handlerRef ! CloseConnection
+      }
+      connections -= remoteAddress
+      createPeerConnectionHandler(ConnectionId(remoteAddress, localAddress, Outgoing), sender())
+
     case Connected(remoteAddress, localAddress) if connectionForPeerAddress(remoteAddress).isEmpty =>
       val connectionDirection: ConnectionDirection =
-        if (unconfirmedConnections.contains(remoteAddress)) Outgoing else Incoming
+        if (isDialCompletion(remoteAddress, localAddress)) Outgoing else Incoming
       val connectionId = ConnectionId(remoteAddress, localAddress, connectionDirection)
       log.info(s"Unconfirmed connection: ($remoteAddress, $localAddress) => $connectionId")
       if (connectionDirection.isOutgoing) {
@@ -242,6 +267,9 @@ class NetworkController(ergoSettings: ErgoSettings,
         peerManagerRef ! RemovePeer(c.remoteAddress)
       }
 
+    case Terminated(ref) if supersededHandlers.contains(ref) =>
+      supersededHandlers -= ref
+
     case Terminated(ref) =>
       val wasPending = pendingIncomingConnections.contains(ref)
       pendingIncomingConnections -= ref
@@ -250,7 +278,9 @@ class NetworkController(ergoSettings: ErgoSettings,
           log.info(s"Terminating connection to $connectedPeer")
           val remoteAddress = connectedPeer.connectionId.remoteAddress
           connections -= remoteAddress
-          unconfirmedConnections -= remoteAddress
+          if (connectedPeer.connectionId.direction.isOutgoing) {
+            unconfirmedConnections -= remoteAddress
+          }
           context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
         case None if !wasPending =>
           log.warn(s"No connection found for $ref during termination")
@@ -267,6 +297,11 @@ class NetworkController(ergoSettings: ErgoSettings,
       context.unwatch(ref)
     }
   }
+
+  private def isDialCompletion(remoteAddress: InetSocketAddress,
+                               localAddress: InetSocketAddress): Boolean =
+    unconfirmedConnections.contains(remoteAddress) &&
+      listeningPort.exists(_ != localAddress.getPort)
 
   //calls from API / application
   private def interfaceCalls: Receive = {
@@ -300,7 +335,11 @@ class NetworkController(ergoSettings: ErgoSettings,
     context.system.scheduler.scheduleWithFixedDelay(5.seconds, 5.seconds) {
       () => if (connections.size < networkSettings.maxConnections) {
         log.debug(s"Looking for a new random connection")
-        val randomPeerF = peerManagerRef ? RandomPeerExcluding(connections.values.flatMap(_.peerInfo).toSeq)
+        val connectedOutbounds = connections.valuesIterator
+          .filter(_.connectionId.direction.isOutgoing)
+          .map(p => PeerInfo.fromAddress(p.connectionId.remoteAddress))
+          .toSeq
+        val randomPeerF = peerManagerRef ? RandomPeerExcluding(connectedOutbounds)
         randomPeerF.mapTo[Option[PeerInfo]].foreach { peerInfoOpt =>
           peerInfoOpt.foreach { peerInfo =>
             getPeerAddress(peerInfo).foreach { remote =>
@@ -405,9 +444,13 @@ class NetworkController(ergoSettings: ErgoSettings,
     val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature)
 
     val remoteAddress = connectionId.remoteAddress.getAddress
-    val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)
-    val maybeWithLocal = if (isLocal) {
-      val la = new InetSocketAddress(connectionId.localAddress.getAddress, networkSettings.bindAddress.getPort)
+    val localAddress = connectionId.localAddress.getAddress
+    // LocalAddressPeerFeature has a fixed four-byte IPv4 wire format.
+    val canAdvertiseLocalFeature = remoteAddress.isInstanceOf[Inet4Address] &&
+      localAddress.isInstanceOf[Inet4Address] && NetworkUtils.isLocalIp(remoteAddress)
+    val maybeWithLocal = if (canAdvertiseLocalFeature) {
+      val la = new InetSocketAddress(localAddress,
+        listeningPort.getOrElse(networkSettings.bindAddress.getPort))
       val localAddrFeature = LocalAddressPeerFeature(la)
       mandatoryFeatures :+ localAddrFeature
     } else {
@@ -435,18 +478,19 @@ class NetworkController(ergoSettings: ErgoSettings,
     context.watch(handler)
     val connectedPeer = ConnectedPeer(connectionId, handler, None)
     connections += connectionId.remoteAddress -> connectedPeer
-    unconfirmedConnections -= connectionId.remoteAddress
+    if (connectionId.direction.isOutgoing) {
+      unconfirmedConnections -= connectionId.remoteAddress
+    }
   }
 
   private def handleHandshake(peerInfo: PeerInfo, peerHandlerRef: ActorRef): Unit = {
     connectionForHandler(peerHandlerRef).foreach { connectedPeer =>
       val remoteAddress = connectedPeer.connectionId.remoteAddress
-      val peerAddress = peerInfo.peerSpec.address.getOrElse(remoteAddress)
       // Drop connection to self if occurred or peer already connected.
       // Decision whether connection is local or is from some other network is made
       // based on SessionIdPeerFeature if exists or in old way using isSelf() function
       val shouldDrop =
-        connectionForPeerAddress(peerAddress).exists(_.handlerRef != peerHandlerRef) ||
+        connectionForPeerAddress(remoteAddress).exists(_.handlerRef != peerHandlerRef) ||
         peerInfo.peerSpec.features.collectFirst {
           case SessionIdPeerFeature(networkMagic, sessionId) =>
             !networkMagic.sameElements(mySessionIdFeature.networkMagic) || sessionId == mySessionIdFeature.sessionId
@@ -454,13 +498,22 @@ class NetworkController(ergoSettings: ErgoSettings,
 
       if (shouldDrop) {
         connectedPeer.handlerRef ! CloseConnection
-        peerManagerRef ! RemovePeer(peerAddress)
+        if (connectedPeer.connectionId.direction.isOutgoing) {
+          peerManagerRef ! RemovePeer(remoteAddress)
+        }
         connections -= connectedPeer.connectionId.remoteAddress
       } else {
         val newPeerInfo = peerInfo.copy(lastStoredActivityTime = time())
-        peerManagerRef ! AddOrUpdatePeer(newPeerInfo)
-
         val updatedConnectedPeer = connectedPeer.copy(peerInfo = Some(newPeerInfo))
+        outboundPeerInfo(updatedConnectedPeer).foreach { info =>
+          peerManagerRef ! AddVerifiedOutboundPeer(info, remoteAddress)
+        }
+        inboundCandidateAddress(updatedConnectedPeer).foreach { address =>
+          peerManagerRef ! AddPeerIfEmpty(PeerInfo.fromAddress(address).peerSpec)
+        }
+        outboundClaimedAddress(updatedConnectedPeer).foreach { address =>
+          peerManagerRef ! AddPeerIfEmpty(PeerInfo.fromAddress(address).peerSpec)
+        }
         connections += remoteAddress -> updatedConnectedPeer
         context.system.eventStream.publish(HandshakedPeer(updatedConnectedPeer))
       }
@@ -499,8 +552,60 @@ class NetworkController(ergoSettings: ErgoSettings,
     */
   private def connectionForPeerAddress(peerAddress: InetSocketAddress): Option[ConnectedPeer] = {
     connections.values.find { connectedPeer =>
-      connectedPeer.connectionId.remoteAddress == peerAddress ||
-        connectedPeer.peerInfo.exists(peerInfo => getPeerAddress(peerInfo).contains(peerAddress))
+      connectedPeer.connectionId.remoteAddress == peerAddress
+    }
+  }
+
+  /** A successful outbound handshake verifies the dialed socket, not the
+    * address or local-address feature supplied by the peer in its handshake.
+    */
+  private def outboundPeerInfo(peer: ConnectedPeer): Option[PeerInfo] = {
+    if (peer.connectionId.direction.isOutgoing) {
+      peer.peerInfo.map { info =>
+        val spec = info.peerSpec.copy(
+          declaredAddress = Some(peer.connectionId.remoteAddress),
+          features = info.peerSpec.features.filterNot(_.isInstanceOf[LocalAddressPeerFeature])
+        )
+        info.copy(peerSpec = spec)
+      }
+    } else None
+  }
+
+  /** An inbound listening address is an unverified discovery candidate.
+    * A private address must match the observed source IP.
+    */
+  private def inboundCandidateAddress(peer: ConnectedPeer): Option[InetSocketAddress] = {
+    if (peer.connectionId.direction.isIncoming) {
+      peer.peerInfo.flatMap { info =>
+        val sourceIp = Option(peer.connectionId.remoteAddress.getAddress)
+        val matchingLocal = info.peerSpec.localAddressOpt.filter { address =>
+          sourceIp.contains(address.getAddress)
+        }
+        val sourceIsLocal = sourceIp.exists(NetworkUtils.isLocalIp)
+        val candidate = if (sourceIsLocal && networkSettings.allowLocal) {
+          matchingLocal.orElse(info.peerSpec.declaredAddress)
+        } else {
+          info.peerSpec.declaredAddress.orElse(matchingLocal)
+        }
+        candidate.filter(address => discoveryAddressAllowed(address, sourceIp))
+      }
+    } else None
+  }
+
+  private def outboundClaimedAddress(peer: ConnectedPeer): Option[InetSocketAddress] = {
+    if (peer.connectionId.direction.isOutgoing) {
+      peer.peerInfo.flatMap(_.peerSpec.declaredAddress).filter { address =>
+        address != peer.connectionId.remoteAddress &&
+          discoveryAddressAllowed(address, Option(peer.connectionId.remoteAddress.getAddress))
+      }
+    } else None
+  }
+
+  private def discoveryAddressAllowed(address: InetSocketAddress,
+                                      sourceIp: Option[InetAddress]): Boolean = {
+    Option(address.getAddress).exists { ip =>
+      !ip.isAnyLocalAddress && !ip.isMulticastAddress &&
+        (!NetworkUtils.isLocalIp(ip) || (networkSettings.allowLocal && sourceIp.contains(ip)))
     }
   }
 
@@ -512,24 +617,14 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   /**
-    * Returns local address of peer for local connections and WAN address of peer for
-    * external connections. When local address is not known, try to ask it at the UPnP gateway
+    * Dial the stored declared endpoint. Handshake features and an external-IP
+    * match cannot authorize a different private destination.
     *
     * @param peer - known information about peer
     * @return socket address of the peer
     */
   private def getPeerAddress(peer: PeerInfo): Option[InetSocketAddress] = {
-    (peer.peerSpec.localAddressOpt, peer.peerSpec.declaredAddress) match {
-      case (Some(localAddr), _) =>
-        Some(localAddr)
-
-      case (None, Some(declaredAddress))
-        if scorexContext.externalNodeAddress.exists(_.getAddress == declaredAddress.getAddress) =>
-
-        scorexContext.upnpGateway.flatMap(_.getLocalAddressForExternalPort(declaredAddress.getPort))
-
-      case _ => peer.peerSpec.declaredAddress
-    }
+    peer.peerSpec.declaredAddress
   }
 
   /**
@@ -545,12 +640,18 @@ class NetworkController(ergoSettings: ErgoSettings,
         Some(extAddr)
 
       case None =>
-        if (!localAddr.isSiteLocalAddress && !localAddr.isLoopbackAddress
-          && localSocketAddress.getPort == networkSettings.bindAddress.getPort) {
+        val bindIp = networkSettings.bindAddress.getAddress
+        val boundUla = networkSettings.allowLocal && NetworkUtils.isUniqueLocalIp(localAddr) &&
+          bindIp.isInstanceOf[Inet6Address] && (bindIp.isAnyLocalAddress || bindIp == localAddr)
+        if (boundUla && listeningPort.nonEmpty) {
+          Some(new InetSocketAddress(localAddr, listeningPort.get))
+        } else if (!NetworkUtils.isLocalIp(localAddr) && listeningPort.contains(localSocketAddress.getPort)) {
           Some(localSocketAddress)
         } else {
-          val listenAddrs = NetworkUtils.getListenAddresses(networkSettings.bindAddress)
-            .filterNot(addr => addr.getAddress.isSiteLocalAddress || addr.getAddress.isLoopbackAddress)
+          val boundAddress = new InetSocketAddress(bindIp,
+            listeningPort.getOrElse(networkSettings.bindAddress.getPort))
+          val listenAddrs = NetworkUtils.getListenAddresses(boundAddress)
+            .filterNot(addr => NetworkUtils.isLocalIp(addr.getAddress))
 
           listenAddrs.find(addr => localAddr == addr.getAddress).orElse(listenAddrs.headOption)
         }

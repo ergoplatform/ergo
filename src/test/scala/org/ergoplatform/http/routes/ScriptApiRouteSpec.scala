@@ -283,4 +283,14 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "return BadRequest for invalid source on both united address routes" in {
+    val badSource = "this is not valid ErgoScript {{{"
+    Seq("/p2sAddress", "/p2shAddress").foreach { suffix =>
+      val json = Json.obj("source" -> badSource.asJson, "treeVersion" -> 0.asJson)
+      Post(prefix + suffix, json) ~> route ~> check {
+        status shouldBe StatusCodes.BadRequest
+      }
+    }
+  }
+
 }

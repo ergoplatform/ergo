@@ -1248,39 +1248,45 @@ object ExtraIndexer {
   private[extra] def digestIndexAuthority(history: ErgoHistoryReader,
                                           snapshot: DigestIndexSnapshot): Option[DigestIndexAuthority] = {
     if (!snapshot.verifyTransactions) None
-    else Try {
-      snapshot.stateHeaderIdOpt match {
-        case Some(stateHeaderId) =>
-          history.typedModifierById[Header](stateHeaderId).filter { stateHeader =>
-            snapshot.stateVersion == idToVersion(stateHeader.id) &&
-              snapshot.stateRoot.sameElements(stateHeader.stateRoot) &&
-              history.isInBestChain(stateHeader)
-          }.flatMap { stateHeader =>
-            snapshot.bodyFrontierIdOpt match {
-              case Some(frontierId) =>
-                history.typedModifierById[Header](frontierId)
-                  .filter { frontier =>
-                    frontier.height <= stateHeader.height &&
-                      FullBlockProcessor.isInBestFullChain(history.historyStorage, frontier.id) &&
-                      history.bestHeaderIdAtHeight(frontier.height).contains(frontier.id)
-                  }
-                  .map(frontier => DigestIndexAuthority(Some(frontier)))
-              case None => Some(DigestIndexAuthority(None))
+    else history.synchronized {
+      // Header and full-chain markers are written under this lock; never mix two chain epochs.
+      Try {
+        snapshot.stateHeaderIdOpt match {
+          case Some(stateHeaderId) =>
+            history.typedModifierById[Header](stateHeaderId).filter { stateHeader =>
+              snapshot.stateVersion == idToVersion(stateHeader.id) &&
+                snapshot.stateRoot.sameElements(stateHeader.stateRoot)
+            }.flatMap { stateHeader =>
+              val stateOnBestHeaderChain = history.isInBestChain(stateHeader)
+              snapshot.bodyFrontierIdOpt match {
+                case Some(frontierId) =>
+                  history.typedModifierById[Header](frontierId)
+                    .filter { frontier =>
+                      frontier.height <= stateHeader.height &&
+                        FullBlockProcessor.isInBestFullChain(history.historyStorage, frontier.id) &&
+                        ((stateOnBestHeaderChain &&
+                          history.bestHeaderIdAtHeight(frontier.height).contains(frontier.id)) ||
+                          FullBlockProcessor.isInBestFullChain(history.historyStorage, stateHeader.id))
+                    }
+                    .map(frontier => DigestIndexAuthority(Some(frontier)))
+                case None if stateOnBestHeaderChain => Some(DigestIndexAuthority(None))
+                case None => None
+              }
             }
-          }
-        case None if snapshot.stateVersion == ErgoState.genesisStateVersion &&
-            snapshot.stateRoot.sameElements(snapshot.genesisRoot) &&
-            snapshot.bodyFrontierIdOpt.isEmpty =>
-          Some(DigestIndexAuthority(None))
-        case _ => None
-      }
-    }.toOption.flatten
+          case None if snapshot.stateVersion == ErgoState.genesisStateVersion &&
+              snapshot.stateRoot.sameElements(snapshot.genesisRoot) &&
+              snapshot.bodyFrontierIdOpt.isEmpty =>
+            Some(DigestIndexAuthority(None))
+          case _ => None
+        }
+      }.toOption.flatten
+    }
   }
 
   /** Gate every Digest extra-index read against the paired state and its durable certificate. */
   def checkpointOnCertifiedDigestFullChain(history: ErgoHistoryReader,
                                            state: ErgoStateReader,
-                                           verifyTransactions: Boolean): Boolean = {
+                                           verifyTransactions: Boolean): Boolean = history.synchronized {
     digestIndexHasProvenance(history) && checkpointOnSelectedFullChain(history) &&
       digestIndexSnapshot(state, verifyTransactions)
         .flatMap(digestIndexAuthority(history, _)).flatMap(_.frontier).exists { frontier =>

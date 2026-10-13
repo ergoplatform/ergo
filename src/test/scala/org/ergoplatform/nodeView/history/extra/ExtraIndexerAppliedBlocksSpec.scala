@@ -744,6 +744,71 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
   }
 
+  property("a Digest full block remains authoritative after only sibling headers become best") {
+    val defaults = NodeViewTestConfig(StateType.Digest, verifyTransactions = true,
+      popowBootstrap = false).toSettings
+    val digestSettings = defaults.copy(nodeSettings = defaults.nodeSettings.copy(extraIndex = true))
+    new NodeViewFixture(digestSettings, parameters).apply { fixture =>
+      import fixture._
+      val (sourceState, boxHolder) = createUtxoState(settings)
+      try {
+        var referenceState = WrappedUtxoState(sourceState, boxHolder, settings)
+        var parent = Option.empty[ErgoFullBlock]
+        (1 to 4).foreach { _ =>
+          val block = validFullBlock(parent, referenceState)
+          referenceState = referenceState.applyModifier(block)(_ => ()).get
+          applyBlock(block).get
+          parent = Some(block)
+        }
+        val a = validFullBlock(parent, referenceState)
+        val b1 = validFullBlock(parent, referenceState, a.header.timestamp + 1)
+        val afterB1 = referenceState.applyModifier(b1)(_ => ()).get
+        val b2 = validFullBlock(Some(b1), afterB1)
+
+        applyBlock(a).get
+        untilTimeout(settleTimeout, 20.millis) {
+          getHistory.bestFullBlockIdOpt shouldBe Some(a.id)
+          getCurrentState.version shouldBe idToVersion(a.id)
+        }
+        val snapshot = ExtraIndexer.digestIndexSnapshot(getCurrentState, verifyTransactions = true).get
+        val expected = Some(ExtraIndexer.DigestIndexAuthority(Some(a.header)))
+        ExtraIndexer.digestIndexAuthority(getHistory, snapshot) shouldBe expected
+
+        applyHeader(b1.header).get
+        applyHeader(b2.header).get
+        val history = getHistory
+        history.bestHeaderOpt.map(_.id) shouldBe Some(b2.id)
+        history.bestHeaderIdAtHeight(a.header.height) shouldBe Some(b1.id)
+        history.bestFullBlockIdOpt shouldBe Some(a.id)
+        val state = getCurrentState.asInstanceOf[DigestState]
+        state.version shouldBe idToVersion(a.id)
+        state.fullBlockBodyFrontier shouldBe Some(a.id)
+        state.stateContext.lastHeaderOpt.map(_.id) shouldBe Some(a.id)
+        ExtraIndexer.digestIndexAuthority(history,
+          ExtraIndexer.digestIndexSnapshot(state, verifyTransactions = true).get) shouldBe expected
+        val siblingState = snapshot.copy(stateVersion = idToVersion(b2.id),
+          stateRoot = b2.header.stateRoot, stateHeaderIdOpt = Some(b2.id))
+        ExtraIndexer.digestIndexAuthority(history, siblingState) shouldBe None
+
+        val indexer = actorSystem.actorOf(Props(new ExtraIndexer(settings.cacheSettings,
+          settings.chainSettings.addressEncoder, Some(nodeViewHolderRef), true)))
+        val watcher = TestProbe()(actorSystem)
+        watcher.watch(indexer)
+        try {
+          untilTimeout(settleTimeout, 20.millis) {
+            IndexerState.fromHistory(getHistory).indexedHeaderId shouldBe Some(a.id)
+          }
+          ExtraIndexer.digestFrontierQuarantined(getHistory) shouldBe false
+          ExtraIndexer.checkpointOnCertifiedDigestFullChain(getHistory, getCurrentState,
+            verifyTransactions = true) shouldBe true
+        } finally {
+          actorSystem.stop(indexer)
+          watcher.expectTerminated(indexer, settleTimeout)
+        }
+      } finally sourceState.closeStorage()
+    }
+  }
+
   property("a better branch with a block the state rejects is indexed up to its last applied block") {
     withNode() { (_, node) =>
       val (a, b1, afterB1) = fork(node)

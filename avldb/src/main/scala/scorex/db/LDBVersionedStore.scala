@@ -11,6 +11,7 @@ import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore.SnapshotReadInterface
 import scorex.util.ScorexLogging
 
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 
@@ -424,20 +425,34 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     val ro = new ReadOptions()
     try {
       lock.writeLock().lock()
-      ro.snapshot(db.getSnapshot)
-      lock.writeLock().unlock()
-
-      object readInterface extends SnapshotReadInterface {
-        def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+      val snapshot = try {
+        db.getSnapshot
+      } finally {
+        lock.writeLock().unlock()
       }
-      Success(logic(readInterface))
+      var processingFailure: Throwable = null
+      try {
+        ro.snapshot(snapshot)
+        object readInterface extends SnapshotReadInterface {
+          def get(key: Array[Byte]): Array[Byte] = db.get(key, ro)
+        }
+        Success(logic(readInterface))
+      } catch {
+        case t: Throwable =>
+          processingFailure = t
+          throw t
+      } finally {
+        try {
+          snapshot.close()
+        } catch {
+          case NonFatal(t) if processingFailure != null =>
+            if (t ne processingFailure) processingFailure.addSuppressed(t)
+        }
+      }
     } catch {
-      case t: Throwable =>
+      case NonFatal(t) =>
         log.info("Error during snapshot processing: ", t)
         Failure(t)
-    } finally {
-      // Close the snapshot to avoid resource leaks
-      ro.snapshot().close()
     }
   }
 

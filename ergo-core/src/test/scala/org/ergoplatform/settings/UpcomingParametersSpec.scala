@@ -22,6 +22,7 @@ class UpcomingParametersSpec extends ErgoCorePropertyTest {
     sc.upcoming(defaultMinerPkPoint, defaultTimestamp, defaultNBits, Array.emptyByteArray, proposal, version)
 
   private def checkParameters(actual: Parameters, expected: Parameters): Unit = {
+    // The epoch-start height is part of the projection even when its values are unchanged.
     actual.height shouldBe expected.height
     actual.parametersTable shouldBe expected.parametersTable
     actual.proposedUpdate shouldBe expected.proposedUpdate

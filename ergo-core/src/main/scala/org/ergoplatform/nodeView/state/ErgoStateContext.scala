@@ -120,7 +120,9 @@ class ErgoStateContext(val lastHeaders: Seq[Header],
   override def serializer: ErgoSerializer[M] = ErgoStateContextSerializer(chainSettings)
 
   /**
-    * @return state context corresponding to a block after last known one with fields provided
+    * @return state context for the block after the last known one. Between voting epoch
+    *         boundaries, parameters and validation settings remain those already accepted;
+    *         `Parameters.height` remains the height of their last epoch-start update.
     */
   def upcoming(minerPk: EcPointType,
                timestamp: Long,

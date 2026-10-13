@@ -3,8 +3,11 @@ package scorex.core.network
 import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
+import akka.util.ByteString
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer
+import org.ergoplatform.network.{Handshake, HandshakeSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message.{GetPeersSpec, Message}
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
@@ -199,6 +202,45 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
   // ============================================================================
   // EXAMPLE-BASED ACTOR TESTS
   // ============================================================================
+
+  property("targeted network sends reach only the current handshaked handler") {
+    withFixture { f =>
+      implicit val system = f.system
+      import NetworkController.ReceivableMessages.{GetConnectedPeers, SendToNetwork}
+
+      val (controller, peerManager, _) = f.createController(maxConnections = 30)
+      val address = new InetSocketAddress("192.0.2.90", 9090)
+      val connection = f.establishIncomingConnectionWithHandler(controller, peerManager, address)
+      val handshake = Handshake(
+        defaultPeerSpec.copy(declaredAddress = Some(address)),
+        System.currentTimeMillis()
+      )
+      connection.connectionProbe.send(connection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(handshake))))
+      connection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManager.expectMsgType[AddOrUpdatePeer]
+
+      val observer = TestProbe()
+      observer.send(controller, GetConnectedPeers)
+      val current = observer.expectMsgPF(1.second) {
+        case peers: Iterable[_] => peers.collectFirst { case peer: ConnectedPeer => peer }.get
+      }
+      val message = Message(GetPeersSpec, Right(()), None)
+
+      controller ! SendToNetwork(message, SendToPeer(current))
+      connection.connectionProbe.expectMsgType[Tcp.Write]
+
+      val retiredHandler = TestProbe("RetiredHandler")
+      val stale = current.copy(handlerRef = retiredHandler.ref)
+      controller ! SendToNetwork(message, SendToPeer(stale))
+      retiredHandler.expectNoMessage(200.millis)
+      connection.connectionProbe.expectNoMessage(200.millis)
+
+      controller ! SendToNetwork(message, SendToPeers(Seq(stale, current)))
+      connection.connectionProbe.expectMsgType[Tcp.Write]
+      retiredHandler.expectNoMessage(200.millis)
+    }
+  }
 
   property("incoming connection should be accepted when below limit") {
     withFixture { f =>

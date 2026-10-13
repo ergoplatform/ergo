@@ -434,7 +434,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     history().typedModifierById[Header](parentId) match {
       case Some(_) =>
         // apply header and extension section got from ordering block announcement
-        pmodModify(header, local = false)
+        pmodModify(
+          header,
+          local = false,
+          excludedDownloadTypes =
+            Set(BlockTransactions.modifierTypeId, Extension.modifierTypeId)
+        )
         val ext = Extension(header.id, oba.extensionFields)
         pmodModify(ext, local = false)
 
@@ -655,8 +660,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     *
     * @param pmod  Remote or local persistent modifier
     * @param local whether the modifier was generated locally or not
+    * @param excludedDownloadTypes section types supplied by the caller after this header
     */
-  protected def pmodModify(pmod: BlockSection, local: Boolean): Unit = {
+  protected def pmodModify(
+    pmod: BlockSection,
+    local: Boolean,
+    excludedDownloadTypes: Set[NetworkObjectTypeId.Value] = Set.empty
+  ): Unit = {
     if (!history().contains(pmod.id)) { // todo: .contains reads modifier pmod fully here if in db
 
       // if ADProofs block section generated locally, just dump it into the database
@@ -669,7 +679,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
 
         history().append(pmod) match {
-          case Success((historyBeforeStUpdate, progressInfo)) =>
+          case Success((historyBeforeStUpdate, appendedProgressInfo)) =>
+            val progressInfo = pmod match {
+              case _: Header if excludedDownloadTypes.nonEmpty =>
+                appendedProgressInfo.copy(
+                  toDownload = appendedProgressInfo.toDownload -- excludedDownloadTypes
+                )
+              case _ => appendedProgressInfo
+            }
             log.debug(s"Going to apply modifications to the state: $progressInfo , to apply: ")
             context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
 

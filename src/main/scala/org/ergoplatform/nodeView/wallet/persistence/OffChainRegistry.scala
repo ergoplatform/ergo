@@ -39,6 +39,13 @@ case class OffChainRegistry(height: Int,
   }
 
   /**
+    * Off-chain boxes belonging to the wallet itself (i.e. tracked by the payments scan),
+    * excluding boxes tracked by external application scans only, which must not be
+    * spent by wallet transactions (see #1905).
+    */
+  def walletOffChainBoxes: Seq[TrackedBox] = offChainBoxes.filter(_.scans.contains(PaymentsScanId))
+
+  /**
     * Update on receiving new off-chain transaction.
     */
   def updateOnTransaction(newBoxes: Seq[TrackedBox],

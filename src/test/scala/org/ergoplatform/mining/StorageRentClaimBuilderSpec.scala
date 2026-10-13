@@ -148,7 +148,12 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     recreated.value shouldBe b.value - parameters.storageFeeFactor * b.bytes.length
   }
 
-  /** Freeze parameters so the actual nonzero fee output is exactly at its minimum. */
+  /**
+    * Freeze synthetic parameters so the actual nonzero fee output is exactly at its minimum.
+    * Setting minValuePerByte to box.bytes.length makes the fee factor's fixpoint equal the
+    * final fee output's byte length, putting its value exactly on the minimum boundary.
+    * These values are not reachable by the current network voting steps.
+    */
   private def feeMinimumFixture(): (ErgoBox, Parameters) = {
     val box = agedBox(10000000000L)
     val minValuePerByte = box.bytes.length
@@ -174,7 +179,9 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
     val finalFeeBox = new ErgoBoxCandidate(fee, MinerTree, H).toBox(bytesToId(box.id), 1)
     fee should be >= (zeroFeeBox.bytes.length.toLong * lowParameters.minValuePerByte)
     fee should be < (finalFeeBox.bytes.length.toLong * lowParameters.minValuePerByte)
-    StorageRentClaimBuilder.buildClaim(Seq(box), H, lowParameters, minerPk, None, Set.empty) shouldBe None
+    val skipped = mutable.ArrayBuffer.empty[ErgoBox]
+    buildAndValidate(Seq(box), skippedSink = skipped += _, claimParameters = lowParameters) shouldBe None
+    skipped shouldBe empty
   }
 
   property("recreation fees at and above the actual final fee output minimum validate") {
@@ -205,7 +212,10 @@ class StorageRentClaimBuilderSpec extends ErgoCorePropertyTest {
       burned = tokenizedBox(lowParameters.storageFeeFactor.toLong * burned.bytes.length,
         Constants.StoragePeriod, withToken = true)
     }
-    val tx = buildAndValidate(Seq(box, burned), claimParameters = lowParameters).get
+    val skipped = mutable.ArrayBuffer.empty[ErgoBox]
+    val tx = buildAndValidate(Seq(box, burned), skippedSink = skipped += _,
+      claimParameters = lowParameters).get
+    skipped shouldBe empty
     tx.inputs.map(_.boxId) shouldBe IndexedSeq(burned.id)
     tx.outputCandidates.length shouldBe 1
     tx.outputCandidates.head.value shouldBe burned.value

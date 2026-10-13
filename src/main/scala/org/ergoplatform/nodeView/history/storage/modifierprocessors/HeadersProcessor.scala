@@ -206,6 +206,13 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   }
 
   /**
+    * Rows to storage, that make `h` the best header: the best header id and the header ids of the best chain
+    * (`h` and all its parents are first at their heights). Used when `h` is already stored as an orphan.
+    */
+  protected def bestHeaderRows(h: Header, score: Difficulty): Seq[(ByteArrayWrapper, Array[Byte])] =
+    (BestHeaderKey -> idToBytes(h.id)) +: bestBlockHeaderIdsRow(h, score)
+
+  /**
     * Update header ids to ensure, that this block id and ids of all parent blocks are in the first position of
     * header ids at this height
     */
@@ -213,7 +220,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     val prevHeight = headersHeight
     log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, Array[Byte]) =
-      heightIdsKey(h.height) -> (Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray
+      heightIdsKey(h.height) -> (Seq(h.id) ++ headerIdsAtHeight(h.height).filter(_ != h.id)).flatMap(idToBytes).toArray
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
     val forkHeaders = parentHeaderOpt.toSeq
       .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
@@ -322,7 +329,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     }
   }
 
-  private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
+  protected def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
 

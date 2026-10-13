@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, IndexedErgoBox, Segment, StorageRentBox}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
@@ -129,6 +129,50 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     }
 
   /**
+    * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
+    * transaction spending them failed validation during block assembly, so retrying the claim
+    * is futile. An entry whose [[IndexedErgoBox]] is not in the extra index can not be
+    * located and is left in place.
+    */
+  def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit = {
+    val keys = boxIds.flatMap { boxId =>
+      getExtraIndex(boxId) match {
+        case Some(iEb: IndexedErgoBox) => Some(StorageRentBox(iEb).id)
+        case _ =>
+          log.warn(s"Can not remove storage-rent eligibility entry of box $boxId, box not indexed")
+          None
+      }
+    }
+    if (keys.nonEmpty) removeExtra(keys.toArray)
+  }
+
+  /**
+    * Read up to `limit` storage-rent eligibility entries for currently-unspent boxes created
+    * at or before `creationHeight`, in ascending (creationHeight, globalIndex) order.
+    * Returns an empty array when the extra index is disabled or does not cover the height.
+    */
+  def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
+    val start = StorageRentBox.key(0, 0L)
+    extraStore.scanFrom(
+      start,
+      limit,
+      keyFilter = key =>
+        key.length == StorageRentBox.KeyLength &&
+          key(0) == StorageRentBox.KeyMarker &&
+          java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight,
+      // stop when the marker byte changes (the iterator left the rent namespace) or at
+      // the first in-namespace key whose height bytes pass the cutoff. Any key with height
+      // bytes > cutoff sorts after every key with height bytes <= cutoff, so no eligible
+      // rent row can come after it; foreign 32-byte ids sharing the marker byte are
+      // skipped over (excluded by keyFilter) while their height bytes are within the
+      // cutoff, and end the scan when beyond it.
+      continueScan = key =>
+        key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
+          (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight)
+    ).map { case (key, _) => StorageRentBox.fromKey(key) }
+  }
+
+  /**
     * @return object with `id` if it is in the objects database
     */
   def get(id: ModifierId): Option[Array[Byte]] = {
@@ -175,7 +219,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   }
 
   def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
-                     objectsToInsert: Array[ExtraIndex]): Try[Unit] = {
+                     objectsToInsert: Array[ExtraIndex]): Try[Unit] =
+    insertExtraTry(indexesToInsert, objectsToInsert, Array.empty)
+
+  /**
+    * Insert indexes and objects and remove `indexesToRemove` in a single store batch, so a
+    * crash can not leave inserts (e.g. the indexer progress marker) committed without the
+    * removals (e.g. spent storage-rent rows) or vice versa.
+    */
+  def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
+                     objectsToInsert: Array[ExtraIndex],
+                     indexesToRemove: Array[ModifierId]): Try[Unit] = {
     val objectIds = objectsToInsert.iterator.flatMap(obj => Try(obj.id).toOption).toArray
     Try {
       val keys = objectsToInsert.map(_.serializedId) ++ indexesToInsert.map(_._1)
@@ -183,8 +237,9 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       keys -> values
     }.flatMap { case (keys, values) =>
       withExtraCacheWriteLock {
-        extraStore.insert(keys, values).map { _ =>
+        extraStore.update(keys, values, indexesToRemove.map(idToBytes)).map { _ =>
           objectIds.foreach(extraCache.invalidate)
+          cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
         }
       }
     }.recoverWith { case error =>

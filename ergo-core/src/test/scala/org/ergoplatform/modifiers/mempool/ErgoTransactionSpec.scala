@@ -102,8 +102,12 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
       .map(ErgoTransaction.apply)
 
     txTry.isSuccess shouldBe false
-
-    txTry.toEither.left.get.isInstanceOf[NegativeArraySizeException] shouldBe true
+    txTry match {
+      case scala.util.Failure(ex) =>
+        ex.isInstanceOf[NegativeArraySizeException] shouldBe true
+      case scala.util.Success(_) =>
+        fail("Transaction signing should have failed with NegativeArraySizeException")
+    }
   }
 
   property("context extension with neg and pos ids") {
@@ -123,8 +127,12 @@ class ErgoTransactionSpec extends ErgoCorePropertyTest {
       .map(ErgoTransaction.apply)
 
     txTry.isSuccess shouldBe false
-
-    txTry.toEither.left.get.isInstanceOf[ArrayIndexOutOfBoundsException] shouldBe true
+    txTry match {
+      case scala.util.Failure(ex) =>
+        ex.isInstanceOf[ArrayIndexOutOfBoundsException] shouldBe true
+      case scala.util.Success(_) =>
+        fail("Transaction signing should have failed with ArrayIndexOutOfBoundsException")
+    }
   }
 
 }

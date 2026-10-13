@@ -26,8 +26,8 @@ class BurnTokensRequestEncoder extends Encoder[BurnTokensRequest] {
 class BurnTokensRequestDecoder extends Decoder[BurnTokensRequest] {
   def apply(cursor: HCursor): Decoder.Result[BurnTokensRequest] = {
     for {
-      assetsToBurn <- cursor.downField("assetsToBurn").as[Option[Seq[(ErgoBox.TokenId, Long)]]]
-    } yield BurnTokensRequest(assetsToBurn.toArray.flatten)
+      assetsToBurn <- WalletRequestCodecs.decodeTokenAmounts(cursor, "assetsToBurn")
+    } yield BurnTokensRequest(assetsToBurn)
   }
 
 }

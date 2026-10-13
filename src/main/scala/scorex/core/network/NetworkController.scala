@@ -591,6 +591,7 @@ object NetworkController {
 
   val ChildActorHandlingRetriesNr: Int = 10
 
+  /** Resolves each strategy choice to the same version-eligible live handler. */
   private[network] def selectEligibleConnections(sendingStrategy: SendingStrategy,
                                                   version: Version,
                                                   connections: Seq[ConnectedPeer]): Seq[ConnectedPeer] = {

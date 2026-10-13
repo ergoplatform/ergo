@@ -1,5 +1,8 @@
 package org.ergoplatform.mining
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
@@ -8,6 +11,7 @@ import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification}
@@ -25,7 +29,7 @@ import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState,
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genHeaderChain}
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
 import org.ergoplatform.validation.MalformedModifierError
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, Version}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
@@ -64,6 +68,36 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   }
 
   private val defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
+
+  it should "include node version in generated block extension" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    // ErgoNodeViewRef initializes local node state, so use an isolated data directory
+    // to avoid clashing with state possibly left behind by other tests.
+    val testSettings: ErgoSettings = defaultSettings.copy(
+      directory = Files.createTempDirectory("ergo-node-version-test").toFile.getAbsolutePath
+    )
+
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(testSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        testSettings
+      )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        val versionFields = candidate.candidateBlock.extension.fields
+          .filter { case (key, _) => key sameElements Extension.NodeVersionKey }
+        versionFields should have size 1
+        versionFields.head._2 shouldBe Version.VersionString.getBytes(StandardCharsets.UTF_8)
+    }
+    system.terminate()
+  }
 
   it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
     ActorSystem()

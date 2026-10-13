@@ -8,7 +8,7 @@ import org.ergoplatform.mining.AutolykosPowScheme.derivedHeaderFields
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history._
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -24,7 +24,7 @@ import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, 
 import org.ergoplatform.settings.{Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, Version}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -634,7 +634,7 @@ object CandidateGenerator extends ScorexLogging {
       val updInterlinks       = popowAlgos.updateInterlinks(bestHeaderOpt, bestExtensionOpt)
       val interlinksExtension = popowAlgos.interlinksToExtension(updInterlinks)
       val votingSettings      = ergoSettings.chainSettings.voting
-      val (extensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
+      val (baseExtensionCandidate, votes: Array[Byte], version: Byte) = bestHeaderOpt
         .map { header =>
           val newHeight     = header.height + 1
           val currentParams = stateContext.currentParameters
@@ -671,6 +671,15 @@ object CandidateGenerator extends ScorexLogging {
         .getOrElse(
           (interlinksExtension, Array(0: Byte, 0: Byte, 0: Byte), Header.InitialVersion)
         )
+
+      // Record the version of this node in the block extension section (issue #962).
+      // The field is optional metadata only: it is not part of the consensus protocol and is
+      // validated like any other unknown extension field (see ExtensionValidator).
+      // The candidate is assembled fresh for every block (interlinks, parameters, validation
+      // settings), so appending the field cannot create a duplicate key.
+      val extensionCandidate = baseExtensionCandidate ++ ExtensionCandidate(
+        Seq(Extension.nodeVersionField(Version.VersionString))
+      )
 
       val upcomingContext = state.stateContext.upcoming(
         minerPk.value,

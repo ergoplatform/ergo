@@ -1,6 +1,8 @@
 package org.ergoplatform.modifiers.history
 
-import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
+import java.nio.charset.StandardCharsets
+
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
@@ -45,5 +47,22 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
     val ext = ExtensionCandidate(fields)
     val proof = ext.batchProofFor(fields.map(_._1.clone).toArray: _*)
     proof shouldBe None
+  }
+
+  property("nodeVersionField should encode the node version under key 0x03/0x00") {
+    forAll { version: String =>
+      val (key, value) = Extension.nodeVersionField(version)
+      key shouldBe Array(0x03.toByte, 0x00.toByte)
+      key.lengthCompare(Extension.FieldKeySize) shouldBe 0
+      value.lengthCompare(Extension.FieldValueMaxSize) should be <= 0
+      value shouldBe version.getBytes(StandardCharsets.UTF_8).take(Extension.FieldValueMaxSize)
+    }
+  }
+
+  property("nodeVersionField should not collide with reserved key spaces") {
+    val (key, _) = Extension.nodeVersionField("6.0.6")
+    key.head should not be Extension.SystemParametersPrefix
+    key.head should not be Extension.InterlinksVectorPrefix
+    key.head should not be Extension.ValidationRulesPrefix
   }
 }

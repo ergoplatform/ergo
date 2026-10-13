@@ -60,7 +60,8 @@ object IndexedContractTemplateSerializer extends ErgoSerializer[IndexedContractT
     } catch {
       case _: Throwable =>
         log.error("Can't parse template for: " + tree.bytesHex)
-        bytesToId(Algos.hash(tree.bytes)) // just use tree bytes hash as fake template hash if we can't get template
+        // tree bytes hash is the id of the address index, so hash it with a suffix (as for tokens) to get a fake template hash
+        bytesToId(Algos.hash(IndexedErgoAddressSerializer.hashErgoTree(tree) + "template"))
     }
   }
 

@@ -62,8 +62,10 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
         storage.insertExtra(Array.empty[(Array[Byte], Array[Byte])],
           Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
       }
-      storage.insertExtra(Array(ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4)
-        .putInt(height - 1).array), Array.empty[ExtraIndex])
+      storage.insertExtra(Array(
+        ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
+        ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(eligibleBoxes.size.toLong).array
+      ), Array.empty[ExtraIndex])
       val history = Proxy.newProxyInstance(
         classOf[ErgoHistoryReader].getClassLoader,
         Array[Class[_]](classOf[ErgoHistoryReader]),
@@ -76,9 +78,12 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
               case "fullBlockHeight" => Int.box(parentHeader.height)
               case "historyStorage" => storage
               case "typedExtraIndexById" => storage.getExtraIndex(args(0).asInstanceOf[ModifierId])
+              case "storageRentScanPage" =>
+                storage.storageRentScanPage(args(0).asInstanceOf[Int], args(1).asInstanceOf[Long],
+                  args(2).asInstanceOf[Option[Array[Byte]]], args(3).asInstanceOf[Int])
               case "storageRentBoxesAtOrBefore" =>
-                storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
-                  args(2).asInstanceOf[Option[StorageRentBox]])
+                storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int],
+                  args(1).asInstanceOf[Int], args(2).asInstanceOf[Option[StorageRentBox]])
               case "removeStorageRentBoxes" => fail("candidate generation must retain unspent rent rows")
               case "typedModifierById" => None
               case "requiredDifficultyAfter" => parentHeader.requiredDifficulty
@@ -171,8 +176,10 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
         Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
     }
 
-    storage.insertExtra(Array(ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array),
-      Array.empty[ExtraIndex])
+    storage.insertExtra(Array(
+      ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
+      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(2L).array
+    ), Array.empty[ExtraIndex])
 
     val history = Proxy.newProxyInstance(
       classOf[ErgoHistoryReader].getClassLoader,
@@ -184,6 +191,9 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
             case "fullBlockHeight" => Int.box(parentHeader.height)
             case "historyStorage" => storage
             case "typedExtraIndexById" => storage.getExtraIndex(args(0).asInstanceOf[ModifierId])
+            case "storageRentScanPage" =>
+              storage.storageRentScanPage(args(0).asInstanceOf[Int], args(1).asInstanceOf[Long],
+                args(2).asInstanceOf[Option[Array[Byte]]], args(3).asInstanceOf[Int])
             case "storageRentBoxesAtOrBefore" =>
               storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
                 if (args.length > 2) args(2).asInstanceOf[Option[StorageRentBox]] else None)
@@ -276,8 +286,11 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       Seq[ExtraIndex](row, NumericBoxIndex(row.globalIndex, row.id), StorageRentBox(row))
     }
     val indexed = new IndexedErgoBox(threshold, None, None, None, laterBox, unresolvedCount.toLong)
-    storage.insertExtra(Array(ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4)
-      .putInt(height - 1).array), (unresolvedRows ++ Seq[ExtraIndex](indexed,
+    storage.insertExtra(Array(
+      ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
+      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8)
+        .putLong(unresolvedCount.toLong + 1).array
+    ), (unresolvedRows ++ Seq[ExtraIndex](indexed,
       NumericBoxIndex(indexed.globalIndex, indexed.id), StorageRentBox(indexed))).toArray)
     val scanRowCounts = scala.collection.mutable.ArrayBuffer.empty[Int]
     val history = Proxy.newProxyInstance(
@@ -290,11 +303,15 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
             case "fullBlockHeight" => Int.box(parentHeader.height)
             case "historyStorage" => storage
             case "typedExtraIndexById" => storage.getExtraIndex(args(0).asInstanceOf[ModifierId])
+            case "storageRentScanPage" =>
+              val page = storage.storageRentScanPage(args(0).asInstanceOf[Int],
+                args(1).asInstanceOf[Long], args(2).asInstanceOf[Option[Array[Byte]]],
+                args(3).asInstanceOf[Int])
+              scanRowCounts += page.entries.length
+              page
             case "storageRentBoxesAtOrBefore" =>
-              val rows = storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
-                args(2).asInstanceOf[Option[StorageRentBox]])
-              scanRowCounts += rows.length
-              rows
+              storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int],
+                args(1).asInstanceOf[Int], args(2).asInstanceOf[Option[StorageRentBox]])
             case "removeStorageRentBoxes" => fail("unresolved rent rows must not be evicted")
             case "typedModifierById" => None
             case "requiredDifficultyAfter" => parentHeader.requiredDifficulty
@@ -334,7 +351,8 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       storage.removeExtra(Array(StorageRentBox(indexed).id))
       val restored = new IndexedErgoBox(restoredBox.creationHeight, None, None, None,
         restoredBox, unresolvedCount.toLong + 1)
-      storage.insertExtra(Array.empty, Array[ExtraIndex](restored,
+      storage.insertExtra(Array(ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8)
+        .putLong(restored.globalIndex + 1).array), Array[ExtraIndex](restored,
         NumericBoxIndex(restored.globalIndex, restored.id), StorageRentBox(restored)))
       candidateInputs() shouldBe Set(bytesToId(freshBox.id))
       scan.after shouldBe None
@@ -375,8 +393,10 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       storage.insertExtra(Array.empty[(Array[Byte], Array[Byte])],
         Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
     }
-    storage.insertExtra(Array(ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4)
-      .putInt(height - 1).array), Array.empty[ExtraIndex])
+    storage.insertExtra(Array(
+      ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
+      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(eligibleBoxes.size.toLong).array
+    ), Array.empty[ExtraIndex])
 
     val history = Proxy.newProxyInstance(
       classOf[ErgoHistoryReader].getClassLoader,
@@ -388,6 +408,9 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
             case "fullBlockHeight" => Int.box(parentHeader.height)
             case "historyStorage" => storage
             case "typedExtraIndexById" => storage.getExtraIndex(args(0).asInstanceOf[ModifierId])
+            case "storageRentScanPage" =>
+              storage.storageRentScanPage(args(0).asInstanceOf[Int], args(1).asInstanceOf[Long],
+                args(2).asInstanceOf[Option[Array[Byte]]], args(3).asInstanceOf[Int])
             case "storageRentBoxesAtOrBefore" =>
               storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
                 if (args.length > 2) args(2).asInstanceOf[Option[StorageRentBox]] else None)

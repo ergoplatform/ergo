@@ -116,6 +116,28 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
     }
   }
 
+  property("scanPageFrom bounds rejected raw keys and resumes after them") {
+    withStore { store =>
+      val entries = (1 to 10).map(i => byteString(f"A$i%02d") -> byteString(s"v$i"))
+      seed(store, entries)
+      var visited = 0
+      val reject = (_: Array[Byte]) => {
+        visited += 1
+        false
+      }
+      val first = store.scanPageFrom(byteString("A"), 3, reject, _ => true, _ => None)
+      first.rows shouldBe empty
+      first.exhausted shouldBe false
+      visited shouldBe 3
+
+      val second = store.scanPageFrom(first.nextKey.get, 3, reject, _ => true, _ => None)
+      second.rows shouldBe empty
+      second.exhausted shouldBe false
+      visited shouldBe 6
+      keyOrder(second.nextKey.get) shouldBe keyOrder(byteString("A06") ++ Array(0.toByte))
+    }
+  }
+
   property("scanFrom stops early when continueScan fails") {
     withStore { store =>
       // single-digit suffixes only, so the last byte identifies the key unambiguously

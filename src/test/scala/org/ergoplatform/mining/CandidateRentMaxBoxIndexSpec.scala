@@ -78,8 +78,11 @@ class CandidateRentMaxBoxIndexSpec extends ErgoCorePropertyTest with TestFileUti
     }
     val storage = HistoryStorage(fixtureSettings)
     val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, 0L)
-    storage.insertExtra(Array(ExtraIndexer.IndexedHeightKey ->
-      java.nio.ByteBuffer.allocate(4).putInt(parentHeader.height).array),
+    storage.insertExtra(Array(
+      ExtraIndexer.IndexedHeightKey ->
+        java.nio.ByteBuffer.allocate(4).putInt(parentHeader.height).array,
+      ExtraIndexer.GlobalBoxIndexKey -> java.nio.ByteBuffer.allocate(8).putLong(1L).array
+    ),
       Array[ExtraIndex](indexed, NumericBoxIndex(0L, indexed.id), StorageRentBox(indexed)))
     val history = historyProxy(storage, parentBlock)
 
@@ -138,10 +141,13 @@ class CandidateRentMaxBoxIndexSpec extends ErgoCorePropertyTest with TestFileUti
             case "bestFullBlockOpt" => Some(parentBlock)
             case "isInSelectedFullChain" =>
               java.lang.Boolean.valueOf(args(0) == parentBlock.id)
+            case "storageRentScanPage" =>
+              storage.storageRentScanPage(args(0).asInstanceOf[Int],
+                args(1).asInstanceOf[Long], args(2).asInstanceOf[Option[Array[Byte]]],
+                args(3).asInstanceOf[Int])
             case "storageRentBoxesAtOrBefore" =>
-              storage.storageRentBoxesAtOrBefore(
-                args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
-                args(2).asInstanceOf[Option[StorageRentBox]])
+              storage.storageRentBoxesAtOrBefore(args(0).asInstanceOf[Int],
+                args(1).asInstanceOf[Int], args(2).asInstanceOf[Option[StorageRentBox]])
             case "removeStorageRentBoxes" =>
               storage.removeStorageRentBoxes(args(0).asInstanceOf[Seq[ModifierId]])
               ().asInstanceOf[AnyRef]

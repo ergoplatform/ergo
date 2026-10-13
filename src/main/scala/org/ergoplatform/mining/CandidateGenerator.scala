@@ -293,8 +293,17 @@ class CandidateGenerator(
 object CandidateGenerator extends ScorexLogging {
 
   /** Ephemeral progress owned by one generator, retained across ordinary tip changes. */
+  private[mining] final case class StorageRentProgress(
+    after: Option[StorageRentBox] = None,
+    nextKey: Option[Array[Byte]] = None,
+    cutoff: Int = 0,
+    maxGlobalIndex: Long = -1L,
+    parentId: Option[ModifierId] = None,
+    parentHeight: Int = 0)
+
   final class StorageRentScan {
-    private[mining] var after: Option[StorageRentBox] = None
+    private[mining] var progress: StorageRentProgress = StorageRentProgress()
+    private[mining] def after: Option[StorageRentBox] = progress.after
   }
 
   /**
@@ -523,7 +532,18 @@ object CandidateGenerator extends ScorexLogging {
       } else {
         ergoSettings.votingTargets.desiredUpdate
       }
-      var proposedRentAfter = storageRentScan.after
+      val parent = h.bestFullBlockOpt.map(_.header)
+      val oldProgress = storageRentScan.progress
+      val reorged = oldProgress.parentId.exists { id =>
+        parent.forall { current =>
+          current.id != id &&
+            (current.height <= oldProgress.parentHeight || !h.isInSelectedFullChain(id))
+        }
+      }
+      val startProgress = if (reorged) StorageRentProgress() else oldProgress
+      val parentProgress = startProgress.copy(
+        parentId = parent.map(_.id), parentHeight = parent.fold(0)(_.height))
+      var proposedRentProgress = parentProgress
       val candidateAttempt = createCandidate(
         pk,
         h,
@@ -533,8 +553,8 @@ object CandidateGenerator extends ScorexLogging {
         emissionTxOpt,
         unspentTxsToInclude,
         ergoSettings,
-        storageRentScan.after,
-        next => proposedRentAfter = next
+        parentProgress,
+        next => proposedRentProgress = next
       )
       if (!chainSynced) {
         log.debug(
@@ -546,10 +566,10 @@ object CandidateGenerator extends ScorexLogging {
         // Commit only an ordinary successful assembly against the still-selected tip.
         // Failed proofs and discarded candidates retain their starting cursor.
         if (candidateAttempt.isSuccess) {
-          if (storageRentScan.after.nonEmpty && proposedRentAfter.isEmpty) {
+          if (storageRentScan.after.nonEmpty && proposedRentProgress.after.isEmpty) {
             log.info("Storage-rent eligibility scan wrapped to its first row")
           }
-          storageRentScan.after = proposedRentAfter
+          storageRentScan.progress = proposedRentProgress
         }
         Some(candidateAttempt)
       }
@@ -628,8 +648,8 @@ object CandidateGenerator extends ScorexLogging {
                        emissionTxOpt: Option[ErgoTransaction],
                        prioritizedTransactions: Seq[ErgoTransaction],
                        ergoSettings: ErgoSettings,
-                       rentScanAfter: Option[StorageRentBox] = None,
-                       onRentScanProposed: Option[StorageRentBox] => Unit = _ => ()
+                       rentScanProgress: StorageRentProgress = StorageRentProgress(),
+                       onRentScanProposed: StorageRentProgress => Unit = _ => ()
   ): Try[(Candidate, EliminateTransactions)] =
     Try {
       val popowAlgos = new NipopowAlgos(ergoSettings.chainSettings)
@@ -703,7 +723,7 @@ object CandidateGenerator extends ScorexLogging {
       )
 
       val emissionTxs = emissionTxOpt.toSeq
-      var nextRentAfter = rentScanAfter
+      var nextRentProgress = rentScanProgress
 
       // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
       // bypassing the mempool (goes into the block right after the prioritized transactions)
@@ -726,17 +746,20 @@ object CandidateGenerator extends ScorexLogging {
           if (threshold > 0) {
             // rent entries carry no payload, so resolve the box through the box-number
             // index; entries whose box row is gone resolve to nothing and are skipped.
-            // One bounded suffix per candidate. Successful candidates rotate past
-            // examined rows, whether the claim is included or rejected. Eligibility
-            // remains indexed until a selected-chain spend, so rows return on wrap.
+            // Freeze both dimensions of the sweep. New outputs may carry an old R3
+            // creation height, so height alone cannot fence a moving suffix.
             val scanLimit = 4 * StorageRentClaimBuilder.MaxClaims
-            val entries = history.storageRentBoxesAtOrBefore(
-              threshold, scanLimit, rentScanAfter)
-            if (entries.isEmpty) nextRentAfter = None
-            var consumedLast = false
+            val sweep = if (rentScanProgress.cutoff > 0) rentScanProgress else {
+              rentScanProgress.copy(cutoff = threshold,
+                maxGlobalIndex = ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, history)
+                  .getLong - 1L)
+            }
+            val page = history.storageRentScanPage(
+              sweep.cutoff, sweep.maxGlobalIndex, sweep.nextKey, scanLimit)
+            val entries = page.entries
+            var lastConsumed: Option[StorageRentBox] = None
             val scanned: Iterator[ErgoBox] = entries.iterator.flatMap { entry =>
-              nextRentAfter = Some(entry)
-              consumedLast = entry eq entries.last
+              lastConsumed = Some(entry)
               NumericBoxIndex.getBoxByNumber(history, entry.globalIndex)
                 .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
             }
@@ -751,10 +774,15 @@ object CandidateGenerator extends ScorexLogging {
               reemissionTokenIdOpt,
               ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet
             ).toSeq
-            // A short page is the end of this bounded scan only if the builder
-            // consumed its last row; the claim cap may leave fetched rows unread.
-            if (entries.nonEmpty && entries.length < scanLimit && consumedLast) {
-              nextRentAfter = None
+            // The builder may stop at its claim cap before consuming every fetched
+            // row. Resume after the last row it actually requested in that case.
+            val consumedLast = entries.isEmpty || lastConsumed.exists(_ eq entries.last)
+            nextRentProgress = if (page.exhausted && consumedLast) {
+              sweep.copy(after = None, nextKey = None, cutoff = 0, maxGlobalIndex = -1L)
+            } else {
+              val nextKey = if (consumedLast) page.nextKey else
+                lastConsumed.map(_.serializedId ++ Array(0.toByte)).orElse(sweep.nextKey)
+              sweep.copy(after = lastConsumed.orElse(sweep.after), nextKey = nextKey)
             }
             claimTxs
           } else {
@@ -840,7 +868,7 @@ object CandidateGenerator extends ScorexLogging {
         case Success((adProof, adDigest)) =>
           val candidate = mkCandidate(txs, adProof, adDigest, eliminateTransactions)
           warnRejectedRentClaims(toEliminate)
-          onRentScanProposed(nextRentAfter)
+          onRentScanProposed(nextRentProgress)
           Success(candidate)
         case Failure(t: Throwable) =>
           // A likely reason of the failure is a state update (new block applied) between
@@ -858,7 +886,7 @@ object CandidateGenerator extends ScorexLogging {
                 s"recovered on retry with ${retryTxs.size} transactions"
               )
               warnRejectedRentClaims(retryToEliminate)
-              onRentScanProposed(nextRentAfter)
+              onRentScanProposed(nextRentProgress)
               Success(mkCandidate(retryTxs, adProof, adDigest, retryEliminate))
             case Failure(ex: Throwable) =>
               // We can not produce a block for some reason, so print out an error

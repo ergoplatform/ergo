@@ -18,6 +18,11 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.jdk.CollectionConverters.asScalaIteratorConverter
 
+/** One raw-work-bounded page of the storage-rent eligibility index. */
+final case class StorageRentScanPage(entries: Array[StorageRentBox],
+                                     nextKey: Option[Array[Byte]],
+                                     exhausted: Boolean)
+
 /**
   * Storage for Ergo history
   *
@@ -174,6 +179,36 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
         key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
           (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight)
     ).map { case (key, _) => StorageRentBox.fromKey(key) }
+  }
+
+  /**
+    * Scan one bounded page of a fixed rent sweep. Rows created after the sweep's global
+    * box-index watermark are excluded even when their R3 creation height is backdated.
+    */
+  def storageRentScanPage(creationHeight: Int,
+                          maxGlobalIndex: Long,
+                          firstKey: Option[Array[Byte]],
+                          limit: Int): StorageRentScanPage = {
+    val page = extraStore.scanPageFrom(
+      firstKey.getOrElse(StorageRentBox.key(0, 0L)),
+      limit,
+      keyFilter = key =>
+        key.length == StorageRentBox.KeyLength &&
+          key(0) == StorageRentBox.KeyMarker &&
+          java.nio.ByteBuffer.wrap(key, 5, 8).getLong <= maxGlobalIndex,
+      continueScan = key =>
+        key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
+          (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight),
+      skipTo = key =>
+        if (key.length == StorageRentBox.KeyLength &&
+            java.nio.ByteBuffer.wrap(key, 5, 8).getLong > maxGlobalIndex &&
+            java.nio.ByteBuffer.wrap(key, 1, 4).getInt < Int.MaxValue) {
+          val height = java.nio.ByteBuffer.wrap(key, 1, 4).getInt
+          Some(StorageRentBox.key(height + 1, 0L))
+        } else None
+    )
+    StorageRentScanPage(page.rows.map { case (key, _) => StorageRentBox.fromKey(key) },
+      page.nextKey, page.exhausted)
   }
 
   /**

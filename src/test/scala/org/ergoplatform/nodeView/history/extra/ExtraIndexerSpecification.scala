@@ -1098,13 +1098,13 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
           case "fullBlockHeight" => Int.box(IndexerState.fromHistory(_history).indexedHeight)
           case "historyStorage" => sharedStorage
           case "typedExtraIndexById" => sharedStorage.getExtraIndex(args(0).asInstanceOf[ModifierId])
-          case "storageRentBoxesAtOrBefore" =>
-            val after = args(2).asInstanceOf[Option[StorageRentBox]]
-            val rows = sharedStorage.storageRentBoxesAtOrBefore(
-              args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], after)
-            scanStarts += after.map(_.id)
-            scanSizes += rows.length
-            rows
+          case "storageRentScanPage" =>
+            val firstKey = args(2).asInstanceOf[Option[Array[Byte]]]
+            val page = sharedStorage.storageRentScanPage(args(0).asInstanceOf[Int],
+              args(1).asInstanceOf[Long], firstKey, args(3).asInstanceOf[Int])
+            scanStarts += firstKey.map(bytesToId)
+            scanSizes += page.entries.length
+            page
           case "removeStorageRentBoxes" => fail("candidate must not delete this fixture's rent rows")
           case "typedModifierById" => None
           case "requiredDifficultyAfter" => agedParent.requiredDifficulty

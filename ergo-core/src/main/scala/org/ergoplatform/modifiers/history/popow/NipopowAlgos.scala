@@ -68,8 +68,8 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
       val requiredTarget = org.ergoplatform.mining.q / DifficultySerializer.decodeCompactBits(header.nBits)
-      val realTarget = powScheme.powHit(header).doubleValue
-      val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
+      val realTarget = powScheme.powHit(header)
+      val level = log2(requiredTarget) - log2(realTarget)
       level.toInt
     } else {
       Int.MaxValue
@@ -166,7 +166,33 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
 
 object NipopowAlgos {
 
-  private def log2(x: Double): Double = math.log(x) / math.log(2)
+  // `BigInt.doubleValue` overflows to +Infinity at 2^1024, so a wider value is shifted
+  // down first and the shift count added back. 977 keeps a wide margin under that limit;
+  // any bound in ~64..1023 would work as well.
+  //
+  // No header reaches it: `maxLevelOf` passes the PoW hit and `q / target`, both bounded
+  // by the group order (256 bits). The branch is here so `log2` is total over BigInt, not
+  // because a block can trigger it.
+  private val Log2BigIntShiftThreshold = 977
+
+  private val Ln2: Double = math.log(2)
+
+  /** log2(BigInt), without overflowing when `x` exceeds Double's representable range.
+    *
+    * Not bit-reproducible across runtimes: `math.log` is specified to within 1 ulp, so a
+    * `maxLevelOf` input within a few hundred ulps of a level boundary can truncate to a
+    * different level on a different JDK or CPU architecture. No header to date is
+    * affected; see #2556 before touching this, and #1380 for the fork that would make it
+    * exact.
+    */
+  private[history] def log2(x: BigInt): Double =
+    if (x.signum == 0) Double.NegativeInfinity
+    else if (x.signum < 0) Double.NaN
+    else {
+      val blex = x.bitLength - Log2BigIntShiftThreshold
+      if (blex > 0) math.log((x >> blex).doubleValue) / Ln2 + blex
+      else math.log(x.doubleValue) / Ln2
+    }
 
   /**
     * Packs interlinks into key-value format of the block extension.

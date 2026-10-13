@@ -3,8 +3,10 @@ package org.ergoplatform.nodeView.history.modifierprocessors
 import com.google.common.io.Files.createTempDir
 import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.mining.InputBlockFields
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncement
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState}
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockAnnouncement
@@ -181,6 +183,168 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getOrderingBlockTipHeight(h.bestHeaderOpt.get.id) shouldBe 1
 
     h.bestInputBlocksChain() shouldBe Seq(childIb.id, parentIb.id)
+  }
+
+  private def withInputBlockFixture(test: (UtxoState, ErgoHistory, Header, Header) => Unit): Unit = {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir(), settings, parameters)
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    try {
+      val orderingChain = genChain(height = 2, history = h, stateOpt = Some(us)).toList
+      applyChain(h, orderingChain)
+      h.bestFullBlockOpt.get.id shouldBe orderingChain.last.id
+      test(us, h, h.bestHeaderOpt.get, orderingChain.head.header)
+    } finally {
+      try h.closeStorage()
+      finally us.closeStorage()
+    }
+  }
+
+  private def nextInputHeader(h: ErgoHistory, us: UtxoState, orderingParent: Header): Header = {
+    val header = genChain(2, h, stateOpt = Some(us)).tail.head.header
+    header.parentId shouldBe orderingParent.id
+    header
+  }
+
+  property("recover a three-block input chain when ancestors arrive in reverse order") {
+    def checkScenario(reverseOrder: Boolean): Unit = withInputBlockFixture { (us, h, orderingParent, _) =>
+      val rootHeader = nextInputHeader(h, us, orderingParent)
+      val childHeader = nextInputHeader(h, us, orderingParent)
+      val grandchildHeader = nextInputHeader(h, us, orderingParent)
+      Seq(rootHeader, childHeader, grandchildHeader)
+        .map(_.parentId) should contain only orderingParent.id
+
+      val rootIb = InputBlockAnnouncement(1, rootHeader, InputBlockFields.empty, None)
+      val childIb = InputBlockAnnouncement(
+        1, childHeader, parentOnly(idToBytes(rootIb.id)), None
+      )
+      val grandchildIb = InputBlockAnnouncement(
+        1, grandchildHeader, parentOnly(idToBytes(childIb.id)), None
+      )
+      val unresolvedParentIb = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, h.bestHeaderOpt.get), InputBlockFields.empty, None
+      )
+      val unresolvedIb = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, h.bestHeaderOpt.get), parentOnly(idToBytes(unresolvedParentIb.id)), None
+      )
+      childIb.prevInputBlockId shouldBe Some(rootIb.id)
+      grandchildIb.prevInputBlockId shouldBe Some(childIb.id)
+
+      if (reverseOrder) {
+        h.applyInputBlock(grandchildIb) shouldBe Some(childIb.id)
+        h.disconnectedWaitlist shouldBe Set(grandchildIb)
+        h.applyInputBlock(childIb) shouldBe Some(rootIb.id)
+        h.disconnectedWaitlist shouldBe Set(grandchildIb, childIb)
+        h.applyInputBlock(unresolvedIb) shouldBe Some(unresolvedParentIb.id)
+        h.disconnectedWaitlist shouldBe Set(grandchildIb, childIb, unresolvedIb)
+        h.inputBlocksTree().get.forks shouldBe empty
+        h.applyInputBlock(rootIb) shouldBe None
+      } else {
+        h.applyInputBlock(rootIb) shouldBe None
+        h.applyInputBlock(childIb) shouldBe None
+        h.applyInputBlock(grandchildIb) shouldBe None
+        h.disconnectedWaitlist shouldBe empty
+      }
+
+      val expectedWaitlist = if (reverseOrder) Set(unresolvedIb) else Set.empty[InputBlockAnnouncement]
+      h.disconnectedWaitlist shouldBe expectedWaitlist
+
+      val fullChain = Seq(rootIb.id, childIb.id, grandchildIb.id)
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe Seq(fullChain)
+
+      // Duplicate announcements must not recreate the recovered chain or requeue descendants.
+      h.applyInputBlock(childIb) shouldBe None
+      h.applyInputBlock(grandchildIb) shouldBe None
+      h.disconnectedWaitlist shouldBe expectedWaitlist
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe Seq(fullChain)
+
+      h.applyInputBlockTransactions(
+        grandchildIb.id, Seq.empty, us
+      ) shouldBe (Seq.empty -> Seq.empty)
+      h.applyInputBlockTransactions(
+        childIb.id, Seq.empty, us
+      ) shouldBe (Seq.empty -> Seq.empty)
+      h.applyInputBlockTransactions(
+        rootIb.id, Seq.empty, us
+      ) shouldBe (fullChain -> Seq.empty)
+      h.bestInputBlocksChain() shouldBe fullChain.reverse
+
+      if (reverseOrder) {
+        val originalProcessedBlocks = h.inputBlocksTree().get.forks.find(_.chain == fullChain).get.processedBlocks
+        h.applyInputBlock(unresolvedParentIb) shouldBe None
+        h.disconnectedWaitlist shouldBe empty
+        val orphanChain = Seq(unresolvedParentIb.id, unresolvedIb.id)
+        val recoveredForks = h.inputBlocksTree().get.forks
+        recoveredForks.map(_.chain).toSet shouldBe Set(fullChain, orphanChain)
+        recoveredForks.find(_.chain == fullChain).get.processedBlocks shouldBe originalProcessedBlocks
+        recoveredForks.find(_.chain == orphanChain).get.processedBlocks shouldBe empty
+        h.bestInputBlocksChain() shouldBe fullChain.reverse
+      }
+    }
+
+    checkScenario(reverseOrder = false)
+    checkScenario(reverseOrder = true)
+  }
+
+  property("attach a pending grandchild when its delayed non-root ancestor arrives") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+    val rootIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+    val childIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(rootIb.id)), None)
+    val grandchildIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(childIb.id)), None)
+
+    h.applyInputBlock(rootIb) shouldBe None
+    h.applyInputBlockTransactions(rootIb.id, Seq.empty, us) shouldBe (Seq(rootIb.id) -> Seq.empty)
+    val rootProcessedBlocks = h.inputBlocksTree().get.forks.map(_.processedBlocks)
+    h.applyInputBlock(grandchildIb) shouldBe Some(childIb.id)
+    h.disconnectedWaitlist shouldBe Set(grandchildIb)
+
+    h.applyInputBlock(childIb) shouldBe None
+    h.disconnectedWaitlist shouldBe empty
+    val recoveredForks = h.inputBlocksTree().get.forks
+    recoveredForks.map(_.chain) shouldBe Seq(Seq(rootIb.id, childIb.id, grandchildIb.id))
+    recoveredForks.map(_.processedBlocks) shouldBe rootProcessedBlocks
+    recoveredForks.map(_.processedIndex) shouldBe Seq(0)
+    h.bestInputBlocksChain() shouldBe Seq(rootIb.id)
+    }
+  }
+
+  property("retain an announcement whose known input parent belongs to another ordering block") {
+    withInputBlockFixture { (us, h, orderingParent, foreignOrderingParent) =>
+    val rootIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+    val foreignHeader = nextInputHeader(h, us, orderingParent).copy(parentId = foreignOrderingParent.id)
+    val foreignChild = InputBlockAnnouncement(1, foreignHeader, parentOnly(idToBytes(rootIb.id)), None)
+
+    foreignChild.header.parentId should not be orderingParent.id
+    h.applyInputBlock(foreignChild) shouldBe Some(rootIb.id)
+    h.disconnectedWaitlist shouldBe Set(foreignChild)
+    h.applyInputBlock(rootIb) shouldBe None
+    h.disconnectedWaitlist shouldBe Set(foreignChild)
+    h.inputBlocksTree().get.forks.map(_.chain) shouldBe Seq(Seq(rootIb.id))
+    }
+  }
+
+  property("create separate sibling forks for descendants of the same parent") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+    val rootIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+    val leftChild = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(rootIb.id)), None)
+    val rightChild = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(rootIb.id)), None)
+    val leftGrandchild = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(leftChild.id)), None)
+    val rightGrandchild = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(rightChild.id)), None)
+
+    h.applyInputBlock(leftGrandchild) shouldBe Some(leftChild.id)
+    h.applyInputBlock(leftChild) shouldBe Some(rootIb.id)
+    h.applyInputBlock(rightGrandchild) shouldBe Some(rightChild.id)
+    h.applyInputBlock(rightChild) shouldBe Some(rootIb.id)
+    h.disconnectedWaitlist shouldBe Set(leftChild, leftGrandchild, rightChild, rightGrandchild)
+    h.applyInputBlock(rootIb) shouldBe None
+    h.disconnectedWaitlist shouldBe empty
+    val forks = h.inputBlocksTree().get.forks
+    forks.length shouldBe 2
+    forks.map(_.chain).toSet shouldBe Set(
+      Seq(rootIb.id, leftChild.id, leftGrandchild.id),
+      Seq(rootIb.id, rightChild.id, rightGrandchild.id)
+    )
+    }
   }
 
   property("input block - fork switching - disjoint forks") {

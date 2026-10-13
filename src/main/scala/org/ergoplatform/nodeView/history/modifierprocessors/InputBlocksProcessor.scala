@@ -15,6 +15,7 @@ import spire.syntax.all.cfor
 
 import java.util.concurrent.TimeUnit
 import scala.annotation.tailrec
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -378,21 +379,39 @@ trait InputBlocksProcessor extends ScorexLogging {
        * @return Updated sequence of chains with any newly connected blocks
        */
       def applyDisconnected(acc: Seq[InputBlocksChain]): Seq[InputBlocksChain] = {
-        disconnectedWaitlist.foldLeft(acc) {
-          case (a, ib) =>
-            // Find the index of the chain whose tip matches the parent of the disconnected block
-            val idx = acc.indexWhere(_.chain.lastOption == ib.prevInputBlockId)
+        // The waitlist is shared by ordering-block trees. Work on a snapshot of this tree's entries.
+        val candidates = disconnectedWaitlist.toVector.filter(_.header.parentId == ibi.header.parentId)
 
-            if (idx > -1) {
-              // Found a chain to attach to, create fork if needed
-              val c         = a(idx)
-              val newChains = c.fork(ib)  // May create a fork if ib references an earlier block in the chain
-              a.updated(idx, newChains.head) ++ newChains.tail  // Update the chain with new forks
-            } else {
-              // No matching parent found, leave the chain unchanged
-              a
-            }
+        val childrenByParent = candidates.groupBy(_.prevInputBlockId)
+        val chainByInput = mutable.Map.empty[ModifierId, Int]
+        acc.zipWithIndex.foreach { case (chain, idx) =>
+          chain.chain.foreach { id =>
+            if (!chainByInput.contains(id)) chainByInput.put(id, idx)
+          }
         }
+        val readyParents = mutable.Queue.empty[ModifierId]
+        readyParents ++= chainByInput.keys
+        val attached = mutable.Set.empty[InputBlockAnnouncement]
+        var connected = acc
+
+        // Each parent is queued once. Descendants become reachable without rescanning the waitlist.
+        while (readyParents.nonEmpty) {
+          val parent = readyParents.dequeue()
+          childrenByParent.getOrElse(Some(parent), Vector.empty).foreach { ib =>
+            if (!chainByInput.contains(ib.id)) {
+              val idx = chainByInput(parent)
+              val forked = connected(idx).fork(ib)
+              val oldSize = connected.size
+              connected = connected.updated(idx, forked.head) ++ forked.tail
+              // fork returns either one extended chain or the original followed by its new branch.
+              chainByInput.put(ib.id, if (forked.size == 1) idx else oldSize)
+              readyParents.enqueue(ib.id)
+            }
+            attached += ib
+          }
+        }
+        disconnectedWaitlist --= attached
+        connected
       }
 
       val prevId = ibi.prevInputBlockId
@@ -660,13 +679,17 @@ trait InputBlocksProcessor extends ScorexLogging {
     def empty: InputBlocksTree = InputBlocksTree(Seq.empty)
   }
 
+  // The maps below are written by the node view holder and read from other actors' threads (e.g. the synchronizer's
+  // getInputBlock), so they are concurrent maps: a read finds every entry stored and not yet removed, whatever else is
+  // written meanwhile. Consistency across maps (a record visible before its tree update) is not implied.
+
   // dictionary which is storing ordering block -> best input block correspondence
-  private val inputBlockTrees = mutable.Map[ModifierId, InputBlocksTree]()
+  private val inputBlockTrees = TrieMap[ModifierId, InputBlocksTree]()
 
   /**
     * Input block id -> input block index
     */
-  private val inputBlockRecords = mutable.Map[ModifierId, InputBlockAnnouncement]()
+  private val inputBlockRecords = TrieMap[ModifierId, InputBlockAnnouncement]()
 
   /**
     * input block id -> input block transaction ids index
@@ -674,7 +697,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   // todo: transactions can be put here without input block received, ie PoW and difficulty checked
   // todo: and they wont be cleared on pruning and the so structure can be DoSed. Fix by putting such transactions
   // todo: into a special queue
-  private val inputBlockTransactions = mutable.Map[ModifierId, Seq[ModifierId]]()
+  private val inputBlockTransactions = TrieMap[ModifierId, Seq[ModifierId]]()
 
   /**
     * txid -> transaction index
@@ -695,7 +718,7 @@ trait InputBlocksProcessor extends ScorexLogging {
     * Transactions commited in an ordering block
     * Ordering (full) block -> transactions committed by it
     */
-  private val orderingBlockTransactions = mutable.Map[ModifierId, Seq[ErgoTransaction]]()
+  private val orderingBlockTransactions = TrieMap[ModifierId, Seq[ErgoTransaction]]()
 
   /**
     * Temporary cache of children which do not have parents downloaded yet
@@ -1079,7 +1102,8 @@ trait InputBlocksProcessor extends ScorexLogging {
     }
   }
 
-  private val orderingBlockAnnouncements = mutable.Map[ModifierId, OrderingBlockAnnouncement]()
+  // written by the synchronizer (storeOrderingBlockAnnouncement), pruned by the node view holder: concurrent, as above
+  private val orderingBlockAnnouncements = TrieMap[ModifierId, OrderingBlockAnnouncement]()
 
   /**
     * Stores an ordering block announcement for later retrieval.

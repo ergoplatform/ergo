@@ -49,14 +49,14 @@ case class WeakAutolykosSolution(pk: EcPointType, n: Array[Byte]) {
 
 object WeakAutolykosSolution extends ApiCodecs {
 
-  implicit val jsonEncoder: Encoder[WeakAutolykosSolution] = { s: WeakAutolykosSolution =>
+  implicit val jsonEncoder: Encoder[WeakAutolykosSolution] = Encoder.instance { s: WeakAutolykosSolution =>
     Map(
       "pk" -> s.pk.asJson,
       "n" -> Algos.encode(s.n).asJson
     ).asJson
   }
 
-  implicit val jsonDecoder: Decoder[WeakAutolykosSolution] = { c: HCursor =>
+  implicit val jsonDecoder: Decoder[WeakAutolykosSolution] = Decoder.instance { c: HCursor =>
     for {
       pkOpt <- c.downField("pk").as[Option[EcPointType]]
       n <- c.downField("n").as[Array[Byte]]

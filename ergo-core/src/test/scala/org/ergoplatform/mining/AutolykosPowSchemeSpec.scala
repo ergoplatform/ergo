@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import cats.syntax.either._
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}

@@ -24,7 +24,6 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import scorex.core.api.http.ApiResponse
 import scorex.util.{ModifierId, bytesToId}
 import sigma.ast.ErgoTree
-import spire.implicits.cfor
 
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, Future}
@@ -56,6 +55,24 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     * Total number of boxes/transactions that can be requested at once to avoid too heavy requests ([[BlocksApiRoute.MaxHeaders]])
     */
   private val MaxItems = 16384
+
+  private def validatePaging(offset: Int, limit: Int, itemName: String)(inner: => Route): Route =
+    if (offset < 0) {
+      BadRequest("Offset should be non-negative")
+    } else if (limit < 0) {
+      BadRequest("Limit should be non-negative")
+    } else if (limit > MaxItems) {
+      BadRequest(s"No more than $MaxItems $itemName can be requested")
+    } else {
+      inner
+    }
+
+  private def validateMaxItems(count: Int, itemName: String)(inner: => Route): Route =
+    if (count > MaxItems) {
+      BadRequest(s"No more than $MaxItems $itemName can be requested")
+    } else {
+      inner
+    }
 
   override implicit val ergoAddressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
@@ -178,7 +195,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getTxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
-    getTxById(history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
+    history
+      .typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index)))
+      .flatMap(txIndex => getTxById(txIndex.m)(history))
 
   private def getTxByIndexF(index: Long): Future[Option[IndexedErgoTransaction]] =
     getHistory.map { history =>
@@ -200,9 +219,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def validateAndGetTxsByAddress(address: ErgoAddress,
                                          offset: Int,
                                          limit: Int): Route = {
-    if (limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems transactions can be requested")
-    } else {
+    validatePaging(offset, limit, "transactions") {
       ApiResponse(getTxsByAddress(address, offset, limit))
     }
   }
@@ -218,17 +235,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
       val base: Long = getIndex(GlobalTxIndexKey, history).getLong - offset
-      val txIds: Array[ModifierId] = new Array[ModifierId](limit)
-      cfor(0)(_ < limit, _ + 1) { i =>
-        txIds(i) = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(base - limit + i))).get.m
-      }
-      txIds.reverse
+      val from = math.max(0L, base - limit)
+      val toExclusive = math.max(0L, base)
+      (from until toExclusive)
+        .flatMap(i => history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(i))).map(_.m))
+        .reverse
     }
 
   private def getTxRangeR: Route = (pathPrefix("transaction" / "range") & paging) { (offset, limit) =>
-    if(limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems transactions can be requested")
-    }else {
+    validatePaging(offset, limit, "transactions") {
       ApiResponse(getTxRange(offset, limit))
     }
   }
@@ -246,7 +261,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
-    getBoxById(history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
+    history
+      .typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index)))
+      .flatMap(boxIndex => getBoxById(boxIndex.m)(history))
 
   private def getBoxByIndexF(index: Long): Future[Option[IndexedErgoBox]] =
     getHistory.map { history =>
@@ -268,9 +285,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def validateAndGetBoxesByAddress(address: ErgoAddress,
                                            offset: Int,
                                            limit: Int) = {
-    if (limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems boxes can be requested")
-    } else {
+    validatePaging(offset, limit, "boxes") {
       ApiResponse(getBoxesByAddress(address, offset, limit))
     }
   }
@@ -307,12 +322,12 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
                                                   dir: Direction,
                                                   unconfirmed: Boolean, 
                                                   excludeMempoolSpent: Boolean): Route = {
-    if (limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems boxes can be requested")
-    } else if (dir == SortDirection.INVALID) {
-      BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
-    } else {
-      ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+    validatePaging(offset, limit, "boxes") {
+      if (dir == SortDirection.INVALID) {
+        BadRequest("Invalid parameter for sort direction, valid values are \"ASC\" and \"DESC\"")
+      } else {
+        ApiResponse(getBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+      }
     }
   }
 
@@ -341,9 +356,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByTemplateHashR: Route =
     (get & pathPrefix("box" / "byTemplateHash") & modifierId & paging) {
       (template, offset, limit) =>
-        if(limit > MaxItems) {
-          BadRequest(s"No more than $MaxItems boxes can be requested")
-        } else {
+        validatePaging(offset, limit, "boxes") {
           ApiResponse(getBoxesByTemplateHash(template, offset, limit))
         }
     }
@@ -359,11 +372,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxesByTemplateHashUnspentR: Route =
     (get & pathPrefix("box" / "unspent" / "byTemplateHash") & modifierId & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
       (template, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
-        if(limit > MaxItems) {
-          BadRequest(s"No more than $MaxItems boxes can be requested")
-        } else {
-          val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
-          ApiResponse(getBoxesByTemplateHashUnspent(template, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+        validatePaging(offset, limit, "boxes") {
+          if (dir == SortDirection.INVALID) {
+            BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
+          } else {
+            val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
+            ApiResponse(getBoxesByTemplateHashUnspent(template, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+          }
         }
     }
 
@@ -371,17 +386,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
       val base: Long = getIndex(GlobalBoxIndexKey, history).getLong - offset
-      val boxIds: Array[ModifierId] = new Array[ModifierId](limit)
-      cfor(0)(_ < limit, _ + 1) { i =>
-        boxIds(i) = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(base - limit + i))).get.m
-      }
-      boxIds.reverse
+      val from = math.max(0L, base - limit)
+      val toExclusive = math.max(0L, base)
+      (from until toExclusive)
+        .flatMap(i => history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(i))).map(_.m))
+        .reverse
     }
 
   private def getBoxRangeR: Route = (pathPrefix("box" / "range") & paging) { (offset, limit) =>
-    if(limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems boxes can be requested")
-    }else {
+    validatePaging(offset, limit, "boxes") {
       ApiResponse(getBoxRange(offset, limit))
     }
   }
@@ -395,9 +408,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getBoxesByErgoTreeR: Route = (post & pathPrefix("box" / "byErgoTree") & ergoTree & paging) { (tree, offset, limit) =>
-    if(limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems boxes can be requested")
-    }else {
+    validatePaging(offset, limit, "boxes") {
       ApiResponse(getBoxesByErgoTree(tree, offset, limit))
     }
   }
@@ -411,13 +422,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) { (tree, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
-    if(limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems boxes can be requested")
-    }else if (dir == SortDirection.INVALID) {
-      BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
-    }else {
-      val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
-      ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+    validatePaging(offset, limit, "boxes") {
+      if (dir == SortDirection.INVALID) {
+        BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
+      } else {
+        val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
+        ApiResponse(getBoxesByErgoTreeUnspent(tree, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+      }
     }
   }
 
@@ -438,7 +449,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getTokenInfoByIdsR: Route = (post & pathPrefix("tokens") & entity(as[Seq[ModifierId]])) { ids =>
-    ApiResponse(getTokenInfoByIds(ids))
+    validateMaxItems(ids.length, "tokens") {
+      ApiResponse(getTokenInfoByIds(ids))
+    }
   }
 
   private def getBoxesByTokenId(id: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
@@ -450,7 +463,9 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getBoxesByTokenIdR: Route = (get & pathPrefix("box" / "byTokenId") & modifierId & paging) { (id, offset, limit) =>
-    ApiResponse(getBoxesByTokenId(id, offset, limit))
+    validatePaging(offset, limit, "boxes") {
+      ApiResponse(getBoxesByTokenId(id, offset, limit))
+    }
   }
 
   private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
@@ -463,12 +478,12 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) { (id, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
     val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
-    if (limit > MaxItems) {
-      BadRequest(s"No more than $MaxItems boxes can be requested")
-    } else if (dir == SortDirection.INVALID) {
-      BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
-    } else {
-      ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+    validatePaging(offset, limit, "boxes") {
+      if (dir == SortDirection.INVALID) {
+        BadRequest("Invalid parameter for sort direction, valid values are 'ASC' and 'DESC'")
+      } else {
+        ApiResponse(getBoxesByTokenIdUnspent(id, offset, limit, dir, unconfirmed, excludeMempoolSpent))
+      }
     }
   }
 

@@ -146,7 +146,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
           "PeerSynchronizer",
           networkControllerRef,
           peerManagerRef,
-          scorexSettings.network
+          scorexSettings.network,
+          ergoSettings.networkType
         )
         map ++= Map(
           PeersSpec.messageCode    -> psr,

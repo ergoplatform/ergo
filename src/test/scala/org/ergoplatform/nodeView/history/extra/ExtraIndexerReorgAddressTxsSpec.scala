@@ -513,4 +513,49 @@ class ExtraIndexerReorgAddressTxsSpec extends ErgoCorePropertyTest with NodeView
     }
   }
 
+  /**
+    * The row of the watched address as earlier versions can leave it: the numbers of its two
+    * transactions and, between them, a higher number which is not its own (the second transaction
+    * was indexed after the rollback which left that number). Then a block with a transaction of
+    * the address is abandoned, the fork point being at or above the second number and below the
+    * stale one. The rollback has to remove the stale number and the abandoned one, no other.
+    *
+    * @param alsoPaysAddress - whether the abandoned transaction, which spends a box of the
+    *                          address, has an output for it too
+    */
+  private def rollbackOnRowOutOfOrder(alsoPaysAddress: Boolean): Unit = withNode() { node =>
+    val Seq(box, _) = node.fund(2)
+    node.indexDifferences() shouldBe empty
+    val fork = node.chain.last
+    val funding = node.expectedWatchedTxs
+    funding.size shouldBe 2
+    // the next number to be assigned: above the fork point, which is the last number of the chain
+    val stale = node.txCount
+    val row = node.watchedRow
+    row.txs.clear()
+    row.txs ++= Seq(funding.head, stale, funding.last)
+    node.history.historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](row)).get
+    node.storedWatchedTxs shouldBe Seq(funding.head, stale, funding.last)
+
+    // the abandoned block ends with the transaction of the address
+    val tx = if (alsoPaysAddress) move(box, watchedTree) else spend(box)
+    val abandoned = node.branch(fork)(state => node.ordinaryTxs(state, atLeast = 2) :+ tx)
+    val abandonedNumber = node.txCount + abandoned.head.blockTransactions.txs.size - 1
+    node.deliver(abandoned)
+    node.awaitIndexed()
+    node.storedWatchedTxs shouldBe Seq(funding.head, stale, funding.last, abandonedNumber)
+
+    node.deliver(node.branch(fork)(node.ordinary, node.ordinary))
+    node.indexDifferences() shouldBe empty
+    node.storedWatchedTxs shouldBe funding
+  }
+
+  property("a rollback on a row which is out of order keeps the numbers below the fork point when the address has only an input in the abandoned block") {
+    rollbackOnRowOutOfOrder(alsoPaysAddress = false)
+  }
+
+  property("a rollback on a row which is out of order keeps the numbers below the fork point when the abandoned transaction also pays the address") {
+    rollbackOnRowOutOfOrder(alsoPaysAddress = true)
+  }
+
 }

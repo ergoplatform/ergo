@@ -6,8 +6,13 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox}
 import org.ergoplatform.settings.Algos
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox, StorageRentBox}
+import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
+import scorex.db.ByteArrayWrapper
+import scorex.util.{ModifierId, bytesToId, idToBytes}
+import sigmastate.helpers.TestingHelpers.testBox
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, idToBytes}
 
@@ -47,6 +52,76 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     headers.forall(h => !db.get(h.id).exists(_.nonEmpty)) shouldBe true
     modifiers.forall(m => !db.get(m.id).exists(_.nonEmpty)) shouldBe true
     indexes.forall(i => !db.getIndex(i._1).exists(_.nonEmpty)) shouldBe true
+  }
+
+  /** Insert a distinct box and its storage-rent eligibility entry, return the box row. */
+  private def insertRentBox(globalIndex: Long): IndexedErgoBox = {
+    val creationHeight = 1000 + globalIndex.toInt
+    val box = testBox(1000000000L, Constants.TrueTree, creationHeight)
+    val iEb = new IndexedErgoBox(creationHeight, None, None, None, box, globalIndex)
+    db.insertExtra(Array.empty, Array[ExtraIndex](iEb, StorageRentBox(iEb)))
+    iEb
+  }
+
+  private def rentBoxIndexesInIndex(limit: Int): Seq[Long] =
+    db.storageRentBoxesAtOrBefore(Int.MaxValue, limit).map(_.globalIndex).toSeq
+
+  property("storage rent entries are removable by box id") {
+    val iEbs = (0L until 3).map(insertRentBox)
+    val boxIds = iEbs.map(_.id)
+    rentBoxIndexesInIndex(10) shouldBe Seq(0L, 1L, 2L)
+
+    // removing a subset removes exactly those entries, in key order for the rest
+    db.removeStorageRentBoxes(boxIds.take(2))
+    rentBoxIndexesInIndex(10) shouldBe Seq(2L)
+
+    // repeated removal is a no-op; unknown box ids are ignored
+    db.removeStorageRentBoxes(boxIds.take(2) :+ bytesToId(Array.fill(32)(42.toByte)))
+    rentBoxIndexesInIndex(10) shouldBe Seq(2L)
+
+    // an entry whose IndexedErgoBox is gone can not be located, so it is left in place
+    db.removeExtra(Array(boxIds(2)))
+    db.removeStorageRentBoxes(Seq(boxIds(2)))
+    rentBoxIndexesInIndex(10) shouldBe Seq(2L)
+  }
+
+  property("rent scan stops at the creation-height cutoff and skips foreign keys") {
+    val globalIndexes = Seq(100L, 200L, 300L)
+    val heights = Seq(10, 20, 30)
+    val rentRowIds = heights.zip(globalIndexes).map { case (h, gi) =>
+      val box = testBox(1000000000L, Constants.TrueTree, h)
+      val iEb = new IndexedErgoBox(h, None, None, None, box, gi)
+      val srb = StorageRentBox(iEb)
+      db.insertExtra(Array.empty, Array[ExtraIndex](iEb, srb))
+      srb.id
+    }
+    // a foreign 32-byte key starting with the marker byte, sorting between the
+    // height-20 and height-30 rent rows inside the marker namespace
+    val foreignKey = Array.fill(32)(0.toByte)
+    foreignKey(0) = StorageRentBox.KeyMarker
+    foreignKey(4) = 25.toByte // between height 20 (0x14) and 30 (0x1e) at the height's last byte
+    db.insertExtra(Array(foreignKey -> Array[Byte](1)), Array.empty)
+    // keys past the rent namespace: a rent-shaped key with the next marker byte and one
+    // far away - they must never leak into results (the scan stops at the marker change)
+    val laterMarkerKey = StorageRentBox.key(15, 150L)
+    laterMarkerKey(0) = (StorageRentBox.KeyMarker + 1).toByte
+    val farKey = Array.fill(32)(0xff.toByte)
+    db.insertExtra(Array(laterMarkerKey -> Array[Byte](1), farKey -> Array[Byte](1)), Array.empty)
+
+    try {
+      // the cutoff stops the scan at the first key in the namespace whose height
+      // bytes pass it - nothing eligible can sort after such a key
+      db.storageRentBoxesAtOrBefore(20, 10).map(_.globalIndex).toSeq shouldBe Seq(100L, 200L)
+      // the foreign key is skipped over (not returned, and not truncating the scan)
+      db.storageRentBoxesAtOrBefore(30, 10).map(_.globalIndex).toSeq shouldBe Seq(100L, 200L, 300L)
+      // out-of-namespace keys never appear even with an unlimited cutoff; the trailing
+      // row (globalIndex 2, height 1002) is the one the sibling property leaves in place
+      db.storageRentBoxesAtOrBefore(Int.MaxValue, 10).map(_.globalIndex).toSeq shouldBe
+        Seq(100L, 200L, 300L, 2L)
+    } finally {
+      // the spec's db is shared and persisted: leave no rows behind for other runs
+      db.removeExtra((rentRowIds ++ Seq(foreignKey, laterMarkerKey, farKey).map(bytesToId)).toArray)
+    }
   }
 
   property("recursive extra index deletion propagates a file failure") {

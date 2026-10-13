@@ -16,7 +16,7 @@ class ExtraIndexerRestoreJoinSpec extends ErgoCorePropertyTest with NodeViewTest
 
   import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 
-  property("repairs applied UTXO validity before the extra indexer catches up after restart") {
+  property("extra indexer indexes a block with missing validity mark during catch-up after restart") {
     val baseSettings = NodeViewTestConfig(
       StateType.Utxo,
       verifyTransactions = true,
@@ -46,17 +46,22 @@ class ExtraIndexerRestoreJoinSpec extends ErgoCorePropertyTest with NodeViewTest
 
         stopNodeViewHolder()
         startNodeViewHolder()
-        getHistory.isSemanticallyValid(block.header.id) shouldBe ModifierSemanticValidity.Valid
+        // no repair during startup: the validity row is still missing
+        getHistory.isSemanticallyValid(block.header.id) shouldBe ModifierSemanticValidity.Unknown
 
         val indexer = actorSystem.actorOf(Props(new ExtraIndexer(
           settings.cacheSettings,
           settings.chainSettings.addressEncoder,
-          Some(nodeViewHolderRef)
+          Some(nodeViewHolderRef),
+          true
         )))
         try {
           org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
             IndexerState.fromHistory(getHistory).indexedHeight shouldBe block.header.height
           }
+          // the indexer does not gate on semantic validity: the block was indexed
+          // with its validity mark still missing
+          getHistory.isSemanticallyValid(block.header.id) shouldBe ModifierSemanticValidity.Unknown
         } finally {
           actorSystem.stop(indexer)
         }

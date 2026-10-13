@@ -39,7 +39,7 @@ class ExtraIndexerRestartSpec extends ErgoCorePropertyTest with TestFileUtils {
       val settings = baseSettings.copy(
         directory = dir.getAbsolutePath,
         networkType = NetworkType.TestNet,
-        nodeSettings = baseSettings.nodeSettings.copy(extraIndex = false, headerChainDiff = 5000))
+        nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, headerChainDiff = 5000))
       val history = ErgoHistory.readOrGenerate(settings)(null)
       val chainState = ChainGenerator.generate(5, dir, history, None)
       val viewHolderProbe = TestProbe()

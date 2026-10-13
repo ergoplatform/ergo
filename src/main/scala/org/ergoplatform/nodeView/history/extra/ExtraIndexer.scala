@@ -478,8 +478,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       inputTokens.clear()
 
       //process transaction inputs
-      if (height > 1) { //only after 1st block (skip genesis box)
-        cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
+      // Genesis boxes and earlier outputs in block one are indexed inputs too.
+      cfor(0)(_ < tx.inputs.size, _ + 1) { i =>
           val boxId = bytesToId(tx.inputs(i).boxId)
           val spendingProof = tx.inputs(i).spendingProof
           if (findAndSpendBox(boxId, tx.id, height, spendingProof)) { // spend box and add tx
@@ -494,7 +494,6 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           } else {
             log.warn(s"Not found input box: $boxId")
           }
-        }
       }
 
       //process transaction outputs
@@ -1004,7 +1003,9 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 7
+  // Schema 7 used zero for both an ordinary box and unresolved genesis inputs.
+  // It must rebuild; positive references also change numeric API cursors.
+  val NewestVersion: Int = 8
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")

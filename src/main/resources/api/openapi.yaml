@@ -6556,6 +6556,11 @@ paths:
   /blockchain/box/byIndex/{boxIndex}:
     get:
       summary: Retrieve a box by global index number
+      description: >-
+        Box references are positive. Zero is reserved and returns 404. Genesis boxes
+        occupy the first references without creating an indexed transaction. Schema 8
+        rebuilds earlier indexes, so consumers must discard old numeric cursors and
+        resume using box IDs or restart pagination.
       operationId: getBoxByIndex
       tags:
         - blockchain
@@ -6994,6 +6999,11 @@ paths:
   /blockchain/box/range:
     get:
       summary: Get a range of box ids
+      description: >-
+        Returns newest box IDs first, including genesis boxes, up to the available
+        number of entries. An exhausted range returns an empty array. Offsets and
+        limits must be non-negative. Numeric cursors from earlier index schemas
+        must be discarded after the schema 8 rebuild.
       operationId: getBoxRange
       tags:
         - blockchain

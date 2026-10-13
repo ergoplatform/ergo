@@ -57,7 +57,7 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
 
   private val indexedSettings: ErgoSettings = {
     val base = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
-    base.copy(nodeSettings = base.nodeSettings.copy(extraIndex = true))
+    base.copy(nodeSettings = base.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
   }
 
   /** Turns the transactions of a valid child of `parent` into transactions the state rejects. */
@@ -152,14 +152,13 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
 
     val txs: Seq[(ErgoTransaction, ErgoFullBlock)] = chain.flatMap(block => block.blockTransactions.txs.map(_ -> block))
     val txIds: Set[ModifierId] = txs.map(_._1.id).toSet
-    val created: Seq[ErgoBox] = txs.flatMap(_._1.outputs)
+    val created: Seq[ErgoBox] = state.genesisBoxes ++ txs.flatMap(_._1.outputs)
     val createdIds: Set[ModifierId] = created.map(box => bytesToId(box.id)).toSet
     val spentOnChain: Set[ModifierId] = txs.flatMap(tx => inputIds(tx._1)).toSet
-    // the indexer does not process the inputs of the block at height 1
-    val spender: Map[ModifierId, ModifierId] = txs.collect { case (tx, block) if block.header.height > 1 =>
+    val spender: Map[ModifierId, ModifierId] = txs.map { case (tx, _) =>
       inputIds(tx).map(_ -> tx.id)
     }.flatten.toMap
-    val spendingHeight: Map[ModifierId, Int] = txs.collect { case (tx, block) if block.header.height > 1 =>
+    val spendingHeight: Map[ModifierId, Int] = txs.map { case (tx, block) =>
       inputIds(tx).map(_ -> block.header.height)
     }.flatten.toMap
 
@@ -169,7 +168,7 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         s"the applied chain is at height ${chain.last.header.height}, block ${chain.last.id}")
     check(checkpoint.rollbackTo == 0, s"rollback to ${checkpoint.rollbackTo} is pending")
     check(checkpoint.globalTxIndex == txs.size, s"${checkpoint.globalTxIndex} transactions indexed, the chain has ${txs.size}")
-    check(checkpoint.globalBoxIndex == created.size, s"${checkpoint.globalBoxIndex} boxes indexed, the chain created ${created.size}")
+    check(checkpoint.globalBoxIndex == created.size + 1L, s"next box reference ${checkpoint.globalBoxIndex}, expected ${created.size + 1L}")
 
     txs.zipWithIndex.foreach { case ((tx, block), number) =>
       history.typedExtraIndexById[IndexedErgoTransaction](tx.id) match {
@@ -178,7 +177,7 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
             s"transaction ${tx.id} is #$number in block ${block.id} at height ${block.header.height}, " +
               s"its row says #${row.globalIndex} in block ${row.blockId} at height ${row.height}")
           val rowInputs = Try(row.retrieveBody(history).inputs.map(_.id))
-          check(block.header.height == 1 || rowInputs.toOption.contains(inputIds(tx)),
+          check(rowInputs.toOption.contains(inputIds(tx)),
             s"transaction ${tx.id} spends ${inputIds(tx)}, its row resolves to $rowInputs")
         case None =>
           diffs += s"transaction ${tx.id} of block ${block.id} has no row"
@@ -187,7 +186,8 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         s"transaction number $number does not resolve to ${tx.id}")
     }
 
-    created.zipWithIndex.foreach { case (box, number) =>
+    created.zipWithIndex.foreach { case (box, index) =>
+      val number = index + 1L
       val id = bytesToId(box.id)
       // `chain` is what the state holds
       check(state.boxById(box.id).isDefined != spentOnChain.contains(id),
@@ -223,8 +223,8 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
 
     // box numbers as template and token rows list them: negative if the index has the box as spent
-    val listed: Seq[(ErgoBox, Long)] = created.zipWithIndex.map { case (box, number) =>
-      box -> (if (unspentInIndex(box)) number.toLong else -number.toLong)
+    val listed: Seq[(ErgoBox, Long)] = created.zipWithIndex.map { case (box, index) =>
+      box -> (if (unspentInIndex(box)) index + 1L else -(index + 1L))
     }
     listed.groupBy(entry => hashTreeTemplate(entry._1.ergoTree)).foreach { case (template, entries) =>
       val expected = entries.map(_._2)
@@ -252,7 +252,7 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
 
     val rentRows = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).map(_.globalIndex).sorted.toSeq
-    val unspentNumbers = created.zipWithIndex.collect { case (box, number) if unspentInIndex(box) => number.toLong }
+    val unspentNumbers = created.zipWithIndex.collect { case (box, index) if unspentInIndex(box) => index + 1L }
     check(rentRows == unspentNumbers,
       s"storage-rent rows without an unspent box: ${rentRows.diff(unspentNumbers)}, unspent boxes without a row: ${unspentNumbers.diff(rentRows)}")
 

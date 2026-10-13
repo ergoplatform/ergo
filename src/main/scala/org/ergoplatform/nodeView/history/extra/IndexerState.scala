@@ -10,7 +10,7 @@ import scorex.util.{ModifierId, bytesToId}
  * An immutable state for extra indexer
  * @param indexedHeight - Indexed block height
  * @param globalTxIndex - Indexed transaction count
- * @param globalBoxIndex - Indexed box count
+ * @param globalBoxIndex - Next positive box reference (zero is reserved)
  * @param rollbackTo - blockheight to rollback to, 0 if no rollback is in progress
  * @param caughtUp - flag to indicate if the indexer is caught up with the chain and is listening for updates
  * @param indexedHeaderId - id of the last block represented by the extra index

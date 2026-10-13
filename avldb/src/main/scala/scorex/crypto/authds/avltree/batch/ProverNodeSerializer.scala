@@ -8,6 +8,7 @@ import scorex.crypto.authds.avltree.batch.serialization.ProxyInternalNode
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
 import scorex.util.serialization.{Reader, Writer}
+import scala.collection.mutable
 
 /**
   * ErgoSerializer based prover nodes serializer (alternative to one provided in scrypto which is doing much more
@@ -39,6 +40,54 @@ class ProverNodeSerializer(store: LDBVersionedStore) extends ErgoSerializer[Prov
         w.putBytes(Ints.toByteArray(n.value.length))
         w.putBytes(n.value)
         w.putBytes(n.nextLeafKey)
+    }
+  }
+
+  /**
+    * Optimized toBytes implementation using ArrayBuilder directly
+    * to avoid unnecessary allocations
+    */
+  override def toBytes(node: ProverNodes[DigestType]): Array[Byte] = {
+    node match {
+      case n: ProxyInternalNode[DigestType] =>
+        val keySize = n.key.length
+        val labelSize = n.leftLabel.length
+        val totalSize = 1 + 1 + keySize + labelSize + labelSize
+        val result = new mutable.ArrayBuilder.ofByte
+        result.sizeHint(totalSize)
+        result += InternalNodePrefix
+        result += n.balance
+        result ++= n.key
+        result ++= n.leftLabel
+        result ++= n.rightLabel
+        result.result()
+        
+      case n: InternalProverNode[DigestType] =>
+        val keySize = n.key.length
+        val labelSize = n.left.label.length
+        val totalSize = 1 + 1 + keySize + labelSize + labelSize
+        val result = new mutable.ArrayBuilder.ofByte
+        result.sizeHint(totalSize)
+        result += InternalNodePrefix
+        result += n.balance
+        result ++= n.key
+        result ++= n.left.label
+        result ++= n.right.label
+        result.result()
+        
+      case n: ProverLeaf[DigestType] =>
+        val keySize = n.key.length
+        val valueLength = n.value.length
+        val nextLeafKeySize = n.nextLeafKey.length
+        val totalSize = 1 + keySize + 4 + valueLength + nextLeafKeySize
+        val result = new mutable.ArrayBuilder.ofByte
+        result.sizeHint(totalSize)
+        result += LeafPrefix
+        result ++= n.key
+        result ++= Ints.toByteArray(valueLength)
+        result ++= n.value
+        result ++= n.nextLeafKey
+        result.result()
     }
   }
 

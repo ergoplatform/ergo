@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexer, IndexedErgoBox, NumericBoxIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, UtxoState, VotingData}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, ErgoStateContext, UtxoState, VotingData}
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
@@ -68,7 +68,7 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
 
     val fixtureSettings = baseSettings.copy(directory = createTempDir.getAbsolutePath,
       nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
-    val firstGlobalIndex = 1L
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
     val baseState = UtxoState.fromBoxHolder(BoxHolder(rentBoxes :+ freshBox), None,
       createTempDir, fixtureSettings, parameters)
     val block = invalidErgoFullBlockGen.sample.get
@@ -215,7 +215,7 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
       override def emissionBoxOpt: Option[ErgoBox] = None
     }
     val storage = HistoryStorage(fixtureSettings)
-    val firstGlobalIndex = 1L
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
     val rows = rentBoxes.zipWithIndex.flatMap { case (box, index) =>
       val globalIndex = firstGlobalIndex + index
       val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, globalIndex)
@@ -350,7 +350,7 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
       override def emissionBoxOpt: Option[ErgoBox] = None
     }
     val storage = HistoryStorage(fixtureSettings)
-    val firstGlobalIndex = 1L
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
     val rows = rentBoxes.zipWithIndex.flatMap { case (box, index) =>
       val globalIndex = firstGlobalIndex + index
       val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, globalIndex)

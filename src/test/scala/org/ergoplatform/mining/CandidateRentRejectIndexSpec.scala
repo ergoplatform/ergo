@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexer, IndexedErgoBox, NumericBoxIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, UtxoState, VotingData}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, ErgoStateContext, UtxoState, VotingData}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -44,6 +44,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       val fixtureSettings = baseSettings.copy(
         directory = createTempDir.getAbsolutePath,
         nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
+      val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
       val baseState = UtxoState.fromBoxHolder(BoxHolder(eligibleBoxes :+ independentBox), None,
         createTempDir, fixtureSettings, parameters)
       val block = invalidErgoFullBlockGen.sample.get
@@ -58,13 +59,14 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       }
       val storage = HistoryStorage(fixtureSettings)
       eligibleBoxes.zipWithIndex.foreach { case (box, index) =>
-        val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, index.toLong)
+        val globalIndex = firstGlobalIndex + index
+        val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, globalIndex)
         storage.insertExtra(Array.empty[(Array[Byte], Array[Byte])],
-          Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
+          Array[ExtraIndex](indexed, NumericBoxIndex(globalIndex, indexed.id), StorageRentBox(indexed)))
       }
       storage.insertExtra(Array(
         ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
-        ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(eligibleBoxes.size.toLong).array
+        ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(firstGlobalIndex + eligibleBoxes.size).array
       ), Array.empty[ExtraIndex])
       val history = Proxy.newProxyInstance(
         classOf[ErgoHistoryReader].getClassLoader,
@@ -134,7 +136,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
         fourth.candidateBlock.transactions.map(_.id) should contain(laterClaim.id)
         // No candidate was applied: all 101 persistent rows and UTXOs remain available.
         storage.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
-          .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
+          .map(_.globalIndex) shouldBe (firstGlobalIndex to firstGlobalIndex + StorageRentClaimBuilder.MaxClaims)
         eligibleBoxes.foreach(box => state.boxById(box.id) shouldBe Some(box))
       } finally {
         TestKit.shutdownActorSystem(system)
@@ -155,6 +157,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
     val fixtureSettings = baseSettings.copy(
       directory = createTempDir.getAbsolutePath,
       nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
 
     val baseState = UtxoState.fromBoxHolder(BoxHolder(Seq(spentByOwner, stillUnspent, freshBox)), None,
       createTempDir, fixtureSettings, parameters)
@@ -171,14 +174,15 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
 
     val storage = HistoryStorage(fixtureSettings)
     Seq(spentByOwner, stillUnspent).zipWithIndex.foreach { case (box, index) =>
-      val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, index.toLong)
+      val globalIndex = firstGlobalIndex + index
+      val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, globalIndex)
       storage.insertExtra(Array.empty[(Array[Byte], Array[Byte])],
-        Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
+        Array[ExtraIndex](indexed, NumericBoxIndex(globalIndex, indexed.id), StorageRentBox(indexed)))
     }
 
     storage.insertExtra(Array(
       ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
-      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(2L).array
+      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(firstGlobalIndex + 2L).array
     ), Array.empty[ExtraIndex])
 
     val history = Proxy.newProxyInstance(
@@ -210,7 +214,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
     try {
       val threshold = height - Constants.StoragePeriod
       val before = history.storageRentBoxesAtOrBefore(threshold, StorageRentClaimBuilder.MaxClaims)
-      before.map(_.globalIndex).toSet shouldBe Set(0L, 1L)
+      before.map(_.globalIndex).toSet shouldBe Set(firstGlobalIndex, firstGlobalIndex + 1L)
       val batch = StorageRentClaimBuilder.buildClaim(Iterator(spentByOwner, stillUnspent),
         height, parameters, defaultMinerPk, None, Set.empty[ModifierId]).get
       batch.inputs.map(in => bytesToId(in.boxId)).toSet shouldBe
@@ -232,7 +236,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       // available for the next candidate even when the combined claim was rejected.
       state.boxById(ADKey @@ idToBytes(bytesToId(stillUnspent.id))) shouldBe Some(stillUnspent)
       history.storageRentBoxesAtOrBefore(threshold, StorageRentClaimBuilder.MaxClaims)
-        .map(_.globalIndex).toSet shouldBe Set(0L, 1L)
+        .map(_.globalIndex).toSet shouldBe Set(firstGlobalIndex, firstGlobalIndex + 1L)
 
       // Neither candidate has been applied. With the conflict gone, the ordinary next
       // generation must rediscover and include the claim without repairing the index.
@@ -248,7 +252,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       state.boxById(spentByOwner.id) shouldBe Some(spentByOwner)
       state.boxById(stillUnspent.id) shouldBe Some(stillUnspent)
       history.storageRentBoxesAtOrBefore(threshold, StorageRentClaimBuilder.MaxClaims)
-        .map(_.globalIndex).toSet shouldBe Set(0L, 1L)
+        .map(_.globalIndex).toSet shouldBe Set(firstGlobalIndex, firstGlobalIndex + 1L)
     } finally {
       storage.close()
       state.closeStorage()
@@ -266,6 +270,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
     val fixtureSettings = baseSettings.copy(
       directory = createTempDir.getAbsolutePath,
       nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
     val baseState = UtxoState.fromBoxHolder(BoxHolder(Seq(laterBox, freshBox, restoredBox)), None,
       createTempDir, fixtureSettings, parameters)
     val block = invalidErgoFullBlockGen.sample.get
@@ -282,14 +287,14 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
     val unresolvedRows = (0 until unresolvedCount).flatMap { index =>
       // The index is structurally complete, but these boxes are absent from the UTXO.
       val box = testBox(10000000000L + index, Constants.TrueTree, threshold, Seq.empty, Map.empty)
-      val row = new IndexedErgoBox(threshold, None, None, None, box, index.toLong)
+      val row = new IndexedErgoBox(threshold, None, None, None, box, firstGlobalIndex + index)
       Seq[ExtraIndex](row, NumericBoxIndex(row.globalIndex, row.id), StorageRentBox(row))
     }
-    val indexed = new IndexedErgoBox(threshold, None, None, None, laterBox, unresolvedCount.toLong)
+    val indexed = new IndexedErgoBox(threshold, None, None, None, laterBox, firstGlobalIndex + unresolvedCount)
     storage.insertExtra(Array(
       ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
       ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8)
-        .putLong(unresolvedCount.toLong + 1).array
+        .putLong(firstGlobalIndex + unresolvedCount + 1L).array
     ), (unresolvedRows ++ Seq[ExtraIndex](indexed,
       NumericBoxIndex(indexed.globalIndex, indexed.id), StorageRentBox(indexed))).toArray)
     val scanRowCounts = scala.collection.mutable.ArrayBuffer.empty[Int]
@@ -322,7 +327,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
 
     try {
       val before = storage.storageRentBoxesAtOrBefore(threshold, unresolvedCount + 1).map(_.globalIndex).toSeq
-      before shouldBe (0L to unresolvedCount.toLong)
+      before shouldBe (firstGlobalIndex to firstGlobalIndex + unresolvedCount)
       val independentSpend = ErgoTransaction(
         IndexedSeq(Input(freshBox.id, emptyProverResult)), IndexedSeq.empty,
         IndexedSeq(new ErgoBoxCandidate(freshBox.value, Constants.TrueTree, height)))
@@ -336,12 +341,12 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       }
 
       candidateInputs() shouldBe Set(bytesToId(freshBox.id))
-      scan.after.map(_.globalIndex) shouldBe Some(scanLimit.toLong - 1)
+      scan.after.map(_.globalIndex) shouldBe Some(firstGlobalIndex + scanLimit - 1L)
       candidateInputs() should contain(bytesToId(laterBox.id))
       scanRowCounts.toSeq shouldBe Seq(scanLimit, unresolvedCount + 1 - scanLimit)
       scan.after shouldBe None
       candidateInputs() shouldBe Set(bytesToId(freshBox.id))
-      scan.after.map(_.globalIndex) shouldBe Some(scanLimit.toLong - 1)
+      scan.after.map(_.globalIndex) shouldBe Some(firstGlobalIndex + scanLimit - 1L)
       storage.storageRentBoxesAtOrBefore(threshold, unresolvedCount + 1).map(_.globalIndex).toSeq shouldBe before
       state.boxById(laterBox.id) shouldBe Some(laterBox)
 
@@ -350,14 +355,14 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       // not an execution of ExtraIndexer rollback or a state rollback interleaving.
       storage.removeExtra(Array(StorageRentBox(indexed).id))
       val restored = new IndexedErgoBox(restoredBox.creationHeight, None, None, None,
-        restoredBox, unresolvedCount.toLong + 1)
+        restoredBox, firstGlobalIndex + unresolvedCount + 1L)
       storage.insertExtra(Array(ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8)
         .putLong(restored.globalIndex + 1).array), Array[ExtraIndex](restored,
         NumericBoxIndex(restored.globalIndex, restored.id), StorageRentBox(restored)))
       candidateInputs() shouldBe Set(bytesToId(freshBox.id))
       scan.after shouldBe None
       candidateInputs() should contain(bytesToId(restoredBox.id))
-      scan.after.map(_.globalIndex) shouldBe Some(scanLimit.toLong - 2)
+      scan.after.map(_.globalIndex) shouldBe Some(firstGlobalIndex + scanLimit - 2L)
     } finally {
       storage.close()
       state.closeStorage()
@@ -373,6 +378,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
     val fixtureSettings = baseSettings.copy(
       directory = createTempDir.getAbsolutePath,
       nodeSettings = baseSettings.nodeSettings.copy(extraIndex = true, storageRentCollection = true))
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
 
     val baseState = UtxoState.fromBoxHolder(BoxHolder(eligibleBoxes), None,
       createTempDir, fixtureSettings, parameters)
@@ -389,13 +395,14 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
 
     val storage = HistoryStorage(fixtureSettings)
     eligibleBoxes.zipWithIndex.foreach { case (box, index) =>
-      val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, index.toLong)
+      val globalIndex = firstGlobalIndex + index
+      val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, globalIndex)
       storage.insertExtra(Array.empty[(Array[Byte], Array[Byte])],
-        Array[ExtraIndex](indexed, NumericBoxIndex(index.toLong, indexed.id), StorageRentBox(indexed)))
+        Array[ExtraIndex](indexed, NumericBoxIndex(globalIndex, indexed.id), StorageRentBox(indexed)))
     }
     storage.insertExtra(Array(
       ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(height - 1).array,
-      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(eligibleBoxes.size.toLong).array
+      ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(firstGlobalIndex + eligibleBoxes.size).array
     ), Array.empty[ExtraIndex])
 
     val history = Proxy.newProxyInstance(
@@ -427,7 +434,7 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
     try {
       val threshold = height - Constants.StoragePeriod
       val indexedBefore = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
-      indexedBefore.map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
+      indexedBefore.map(_.globalIndex) shouldBe (firstGlobalIndex to firstGlobalIndex + StorageRentClaimBuilder.MaxClaims)
 
       val conflictingSpend = ErgoTransaction(
         IndexedSeq(Input(eligibleBoxes.head.id, emptyProverResult)), IndexedSeq.empty,
@@ -448,20 +455,20 @@ class CandidateRentRejectIndexSpec extends ErgoCorePropertyTest with TestFileUti
       candidateInputs() should not contain laterBoxId
       // Advancing only to the last examined row must leave row 101 for this attempt,
       // even though it was already fetched in the first 400-row scan window.
-      scan.after.map(_.globalIndex) shouldBe Some(StorageRentClaimBuilder.MaxClaims.toLong - 1)
+      scan.after.map(_.globalIndex) shouldBe Some(firstGlobalIndex + StorageRentClaimBuilder.MaxClaims - 1L)
       candidateInputs() should contain(laterBoxId)
       history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
-        .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
+        .map(_.globalIndex) shouldBe (firstGlobalIndex to firstGlobalIndex + StorageRentClaimBuilder.MaxClaims)
 
       // The accepted but unmined claim does not pin the cursor: the next
       // regeneration revisits the first batch, then rotates back to the later row.
       scan.after shouldBe None
       candidateInputs() should not contain laterBoxId
-      scan.after.map(_.globalIndex) shouldBe Some(StorageRentClaimBuilder.MaxClaims.toLong - 1)
+      scan.after.map(_.globalIndex) shouldBe Some(firstGlobalIndex + StorageRentClaimBuilder.MaxClaims - 1L)
       candidateInputs() should contain(laterBoxId)
       scan.after shouldBe None
       history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
-        .map(_.globalIndex) shouldBe (0L to StorageRentClaimBuilder.MaxClaims.toLong)
+        .map(_.globalIndex) shouldBe (firstGlobalIndex to firstGlobalIndex + StorageRentClaimBuilder.MaxClaims)
     } finally {
       storage.close()
       state.closeStorage()

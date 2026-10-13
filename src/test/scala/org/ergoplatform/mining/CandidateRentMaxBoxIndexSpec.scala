@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexer, IndexedErgoBox, NumericBoxIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoStateContext, UtxoState, VotingData}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, ErgoStateContext, UtxoState, VotingData}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.utils.TestFileUtils
@@ -77,13 +77,14 @@ class CandidateRentMaxBoxIndexSpec extends ErgoCorePropertyTest with TestFileUti
       override def emissionBoxOpt: Option[ErgoBox] = None
     }
     val storage = HistoryStorage(fixtureSettings)
-    val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, 0L)
+    val firstGlobalIndex = ErgoState.genesisBoxes(fixtureSettings.chainSettings).size.toLong + 1L
+    val indexed = new IndexedErgoBox(box.creationHeight, None, None, None, box, firstGlobalIndex)
     storage.insertExtra(Array(
       ExtraIndexer.IndexedHeightKey ->
         java.nio.ByteBuffer.allocate(4).putInt(parentHeader.height).array,
-      ExtraIndexer.GlobalBoxIndexKey -> java.nio.ByteBuffer.allocate(8).putLong(1L).array
+      ExtraIndexer.GlobalBoxIndexKey -> java.nio.ByteBuffer.allocate(8).putLong(firstGlobalIndex + 1L).array
     ),
-      Array[ExtraIndex](indexed, NumericBoxIndex(0L, indexed.id), StorageRentBox(indexed)))
+      Array[ExtraIndex](indexed, NumericBoxIndex(firstGlobalIndex, indexed.id), StorageRentBox(indexed)))
     val history = historyProxy(storage, parentBlock)
 
     try {

@@ -1288,9 +1288,30 @@ object ExtraIndexer {
                                            state: ErgoStateReader,
                                            verifyTransactions: Boolean): Boolean = history.synchronized {
     digestIndexHasProvenance(history) && checkpointOnSelectedFullChain(history) &&
-      digestIndexSnapshot(state, verifyTransactions)
-        .flatMap(digestIndexAuthority(history, _)).flatMap(_.frontier).exists { frontier =>
-        frontier.height >= getIndex(IndexedHeightKey, history).getInt
+      digestIndexSnapshot(state, verifyTransactions).exists { snapshot =>
+        digestIndexAuthority(history, snapshot).exists { authority =>
+          val indexedHeight = getIndex(IndexedHeightKey, history).getInt
+          authority.frontier match {
+            case Some(frontier) => frontier.height >= indexedHeight
+            // A committed genesis checkpoint has no full block to certify. Missing counters
+            // are not a checkpoint: getIndex treats missing keys as numeric zero.
+            case None =>
+              val storage = history.historyStorage
+              def zeroCounter(key: Array[Byte], length: Int): Boolean =
+                storage.modifierBytesById(bytesToId(key)).exists { bytes =>
+                  bytes.length == length && bytes.forall(_ == 0)
+                }
+              val genesisCheckpoint = zeroCounter(IndexedHeightKey, 4) &&
+                zeroCounter(GlobalTxIndexKey, 8) && zeroCounter(RollbackToKey, 4) &&
+                storage.modifierBytesById(bytesToId(GlobalBoxIndexKey)).exists { bytes =>
+                  bytes.length == 8 && ByteBuffer.wrap(bytes).getLong > 0
+                } && storage.modifierBytesById(bytesToId(IndexedHeaderIdKey)).isEmpty
+              genesisCheckpoint && indexedHeight == 0 && snapshot.stateHeaderIdOpt.isEmpty &&
+              snapshot.stateVersion == ErgoState.genesisStateVersion &&
+              snapshot.stateRoot.sameElements(snapshot.genesisRoot) && snapshot.bodyFrontierIdOpt.isEmpty &&
+              Try(state.isGenesis).getOrElse(false)
+          }
+        }
       }
   }
 

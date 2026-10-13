@@ -8,10 +8,11 @@ import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.http.api.BlockchainApiRoute
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{DigestIndexProvenanceBytes, IndexModeProvenanceKey,
   IndexedHeaderIdKey, IndexedHeightKey, RollbackToKey}
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
-import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateReader, StateType}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, ErgoStateReader, StateType}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -66,6 +67,40 @@ class BlockchainExtraIndexGateSpec
   }
   private val txPath = "/blockchain/transaction/byId/" + ("00" * 32)
   private val boxPath = "/blockchain/box/byId/" + ("00" * 32)
+
+  it should "withhold Digest genesis reads until a checkpoint is persisted" in {
+    val genesisSettings = indexedSettings.copy(directory = createTempDir.getAbsolutePath)
+    genesisSettings.nodeSettings.verifyTransactions shouldBe true
+    val genesisHistory = ErgoHistory.readOrGenerate(genesisSettings)(null)
+    val genesisState = ErgoState.generateGenesisDigestState(createTempDir, genesisSettings)
+    val readers = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetReaders => sender() ! Readers(genesisHistory, genesisState, memPool, wallet)
+        case GetDataFromHistory(f) => sender() ! f(genesisHistory)
+      }
+    }))
+    try {
+      genesisHistory.bestHeaderOpt shouldBe None
+      genesisState.version shouldBe ErgoState.genesisStateVersion
+      genesisState.stateContext.lastHeaderOpt shouldBe None
+      genesisState.fullBlockBodyFrontier shouldBe None
+      ExtraIndexer.digestIndexHasProvenance(genesisHistory) shouldBe true
+      ExtraIndexer.checkpointOnSelectedFullChain(genesisHistory) shouldBe true
+      ExtraIndexer.checkpointOnCertifiedDigestFullChain(genesisHistory, genesisState,
+        verifyTransactions = true) shouldBe false
+
+      val genesisRoute = akka.http.scaladsl.server.Route.seal(
+        BlockchainApiRoute(readers, genesisSettings, None).route)
+      Get(boxPath) ~> genesisRoute ~> check {
+        status shouldBe StatusCodes.ServiceUnavailable
+        header("Retry-After").map(_.value()) shouldBe Some("1")
+      }
+    } finally {
+      system.stop(readers)
+      genesisState.close()
+      genesisHistory.closeStorage()
+    }
+  }
 
   it should "keep disabled indexing distinct from temporary checkpoint recovery" in {
     val disabledRoute = BlockchainApiRoute(digestReadersRef,

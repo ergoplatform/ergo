@@ -5,13 +5,16 @@ import java.nio.ByteBuffer
 
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexer, IndexedErgoBox, NumericBoxIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, ErgoStateContext, UtxoState, VotingData}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, ErgoStateContext, StateType, UtxoState, VotingData}
 import org.ergoplatform.settings.{Constants, Parameters}
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.HistoryTestHelpers
+import org.ergoplatform.utils.generators.ChainGenerator
 import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 import org.ergoplatform.wallet.utils.TestFileUtils
 import scorex.util.{ModifierId, bytesToId}
@@ -75,8 +78,10 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
     var activeHeight = firstHeight
     var activeParameters = highParameters
     var forkOffset = 0L
-    var priorParentSelected = true
+    val priorParentSelected = true
+    var selectedHistory: Option[ErgoHistory] = None
     var selectedChainChecks = 0
+    val selectedChainIds = scala.collection.mutable.ArrayBuffer.empty[ModifierId]
     def activeHeader = block.header.copy(height = activeHeight - 1,
       timestamp = block.header.timestamp + forkOffset)
     val state = new UtxoState(baseState.persistentProver, baseState.version,
@@ -97,6 +102,7 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
       ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(firstGlobalIndex + rentBoxes.size).array
     ), rows.toArray)
     val scanSizes = scala.collection.mutable.ArrayBuffer.empty[Int]
+    val scanStarts = scala.collection.mutable.ArrayBuffer.empty[Option[Array[Byte]]]
     val history = Proxy.newProxyInstance(classOf[ErgoHistoryReader].getClassLoader,
       Array[Class[_]](classOf[ErgoHistoryReader]), new InvocationHandler {
         override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
@@ -106,6 +112,7 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
             case "historyStorage" => storage
             case "typedExtraIndexById" => storage.getExtraIndex(args(0).asInstanceOf[ModifierId])
             case "storageRentScanPage" =>
+              scanStarts += args(2).asInstanceOf[Option[Array[Byte]]]
               val page = storage.storageRentScanPage(args(0).asInstanceOf[Int],
                 args(1).asInstanceOf[Long], args(2).asInstanceOf[Option[Array[Byte]]],
                 args(3).asInstanceOf[Int])
@@ -113,7 +120,11 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
               page
             case "isInSelectedFullChain" =>
               selectedChainChecks += 1
-              java.lang.Boolean.valueOf(priorParentSelected)
+              val selectedId = args(0).asInstanceOf[ModifierId]
+              selectedChainIds += selectedId
+              java.lang.Boolean.valueOf(selectedHistory
+                .map(_.isInSelectedFullChain(selectedId))
+                .getOrElse(priorParentSelected))
             case "removeStorageRentBoxes" => fail("candidate must retain skipped rent rows")
             case "typedModifierById" => None
             case "requiredDifficultyAfter" => activeHeader.requiredDifficulty
@@ -157,16 +168,44 @@ class CandidateRentSkippedPageSpec extends ErgoCorePropertyTest with TestFileUti
       }
       scan.after should not be None
       // A competing selected parent can reuse global box numbers after rollback.
-      // Its first candidate must restart at the old row, not inherit this cursor.
+      // Use a real full-chain switch for the membership decision. Mining age and
+      // rent rows stay synthetic so the fixture does not generate StoragePeriod blocks.
+      var realHistory = HistoryTestHelpers.generateHistory(verifyTransactions = true,
+        StateType.Digest, PoPoWBootstrap = false, HistoryTestHelpers.BlocksToKeep)
+      selectedHistory = Some(realHistory)
+      realHistory.writeMinimalFullBlockHeight(1)
+      realHistory.setHeadersChainSynced()
+      val originalChain = ChainGenerator.genChain(2, realHistory)
+      realHistory = ChainGenerator.applyChain(realHistory, originalChain)
+      selectedHistory = Some(realHistory)
+      val originalParentId = realHistory.bestFullBlockOpt.get.id
+      realHistory.isInSelectedFullChain(originalParentId) shouldBe true
+      val competingChain = ChainGenerator.genChain(3, originalChain.head).tail
+      realHistory = ChainGenerator.applyChain(realHistory, competingChain)
+      selectedHistory = Some(realHistory)
+      realHistory.bestFullBlockOpt.get.id shouldBe competingChain.last.id
+      realHistory.isInSelectedFullChain(originalParentId) shouldBe false
+      realHistory.isInSelectedFullChain(competingChain.last.id) shouldBe true
+
+      // The first candidate left a nonempty cursor. Bind its remembered parent
+      // to the actual former selected tip before asking for the fork's candidate.
+      scan.progress = scan.progress.copy(parentId = Some(originalParentId))
+      val retainedKey = scan.progress.nextKey
+      retainedKey should not be None
       val oldParentHeight = scan.progress.parentHeight
       activeHeight = oldParentHeight + 2
       forkOffset = 1L
-      priorParentSelected = false
       val checksBeforeReorg = selectedChainChecks
       activeHeight - 1 should be > oldParentHeight
       candidateInputs() should contain(oldId)
       selectedChainChecks should be > checksBeforeReorg
+      selectedChainIds.last shouldBe originalParentId
+      scanStarts.last shouldBe None
+      scan.progress.parentId shouldBe Some(activeHeader.id)
+      scan.progress.cutoff shouldBe activeHeight - Constants.StoragePeriod
+      scan.progress.maxGlobalIndex should be >= firstGlobalIndex
     } finally {
+      selectedHistory.foreach(_.closeStorage())
       storage.close()
       state.closeStorage()
     }

@@ -19,6 +19,19 @@ servers:
     description: Known public node
 
 components:
+  responses:
+    ExtraIndexRecovering:
+      description: Indexed data is unavailable while the extra-index checkpoint is off the selected full chain or a rollback remains pending; check indexedHeight and node logs.
+      headers:
+        Retry-After:
+          description: Suggested delay in seconds before retrying.
+          schema:
+            type: integer
+            example: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
@@ -6407,6 +6420,8 @@ paths:
           schema:
             $ref: '#/components/schemas/ModifierId'
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: The requested indexed block.
           content:
@@ -6445,6 +6460,8 @@ paths:
                 - "d16c21a48194480b57754980072d6507425f1647e6216a2a0a2569a9b0a701d1"
                 - "e569557a2f153a1e2898a3b2b415a9bf32b13b19b22a083f23a07747e93f7c4f"
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: An array of the requested indexed blocks. The response will contain only the blocks that were found.
           content:
@@ -6480,6 +6497,8 @@ paths:
           schema:
             type: string
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: transaction with wanted id
           content:
@@ -6513,6 +6532,8 @@ paths:
           schema:
             type: number
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: transaction with wanted index
           content:
@@ -6564,6 +6585,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: transactions associated with wanted address
           content:
@@ -6616,6 +6639,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: transactions ids in wanted range
           content:
@@ -6646,6 +6671,8 @@ paths:
           schema:
             type: string
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: box with wanted id
           content:
@@ -6679,6 +6706,8 @@ paths:
           schema:
             type: number
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: box with wanted index
           content:
@@ -6728,6 +6757,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: boxes associated with wanted token
           content:
@@ -6807,6 +6838,8 @@ paths:
             type: boolean
             default: false
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: unspent boxes associated with wanted token
           content:
@@ -6861,6 +6894,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: boxes associated with wanted address
           content:
@@ -6942,6 +6977,8 @@ paths:
             type: boolean
             default: false
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: unspent boxes associated with wanted address
           content:
@@ -6994,6 +7031,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: boxes with wanted template hash
           content:
@@ -7067,6 +7106,8 @@ paths:
             type: boolean
             default: false
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: unspent boxes with wanted template hash
           content:
@@ -7113,6 +7154,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: box ids in wanted range
           content:
@@ -7161,6 +7204,8 @@ paths:
             format: int32
             default: 5
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: boxes with wanted ergotree
           content:
@@ -7236,6 +7281,8 @@ paths:
             type: boolean
             default: false
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: unspent boxes with wanted ergotree
           content:
@@ -7278,6 +7325,8 @@ paths:
           schema:
             type: string
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: token with wanted id
           content:
@@ -7312,6 +7361,8 @@ paths:
                 type: string
                 description: Token ID
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: Array of tokens with the provided IDs
           content:
@@ -7341,6 +7392,8 @@ paths:
               type: string
               example: '"3WwbzW6u8hKWBcL1W7kNVMr25s2UHfSBnYtwSHvrRQt7DdPuoXrt"'
       responses:
+        '503':
+          $ref: '#/components/responses/ExtraIndexRecovering'
         '200':
           description: balance information
           content:

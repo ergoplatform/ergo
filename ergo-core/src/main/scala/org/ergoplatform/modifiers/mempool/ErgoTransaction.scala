@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.sdk.utils.ArithUtils.{addExact, multiplyExact}
 import org.ergoplatform.sdk.wallet.protocol.context.TransactionContext
 import org.ergoplatform.settings.ValidationRules._
-import org.ergoplatform.settings.{Algos, ErgoValidationSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoValidationSettings}
 import org.ergoplatform.utils.{BoxUtils, ScorexEncoding}
 import org.ergoplatform.wallet.boxes.ErgoBoxAssetExtractor
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
@@ -382,6 +382,10 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
 
     lazy val inputSumTry = Try(boxesToSpend.map(_.value).reduce(Math.addExact(_, _)))
 
+    // Computed only since DataInputsUniquenessHeight activation, thanks to short-circuiting
+    // in the txDataInputsUnique check below
+    lazy val distinctDataInputsSize = dataInputs.distinct.size
+
     // Cost of transaction initialization: we should read and parse all inputs and data inputs,
     // and also iterate through all outputs to check rules
     val initialCost: Long = addExact(
@@ -437,6 +441,15 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
           modifierTypeId
         )
       )
+      // Check that there is no more than one pair of data inputs with the same box id.
+      // The rule is applied since ErgoTransaction.DataInputsUniquenessHeight only
+      .validate(
+        txDataInputsUnique,
+        stateContext.currentHeight < ErgoTransaction.DataInputsUniquenessHeight ||
+          distinctDataInputsSize == dataInputs.size ||
+          distinctDataInputsSize + 1 == dataInputs.size,
+        InvalidModifier(s"$id: more than one pair of data inputs with the same box", id, modifierTypeId)
+      )
       // Check that outputs are not dust, and not created in future
       .validateSeq(outputs) { case (validationState, out) =>
         verifyOutput(validationState, out, stateContext, maxCreationHeightInInputs)
@@ -445,6 +458,11 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       .validate(txInputsSum, inputSumTry.isSuccess, InvalidModifier(s"$id as invalid Inputs Sum", id, modifierTypeId))
       // Check that transaction is not creating money out of thin air.
       .validate(txErgPreservation, inputSumTry == outputsSumTry, InvalidModifier(s"$id: $inputSumTry == $outputsSumTry", id, modifierTypeId))
+      // Check that storage-rent var-127 values are unique across all inputs, so that two
+      // identical expired boxes can not be claimed against one shared output (which would
+      // let the collector keep everything above the larger box's recreation floor).
+      .validate(txRentDistinctOutputs, rentOutputIndicesDistinct(stateContext),
+        InvalidModifier(s"$id: repeated storage rent var-127 value", id, modifierTypeId))
       .validateTry(outAssetsTry, e => ModifierValidator.fatal("Incorrect assets", id, modifierTypeId, e)) { case (validation, (outAssets, outAssetsNum)) =>
         verifyAssets(validation, outAssets, outAssetsNum, boxesToSpend, stateContext)
       }
@@ -455,6 +473,23 @@ case class ErgoTransaction(override val inputs: IndexedSeq[Input],
       }
       .validate(txReemission, !stateContext.chainSettings.reemission.checkReemissionRules ||
         verifyReemissionSpending(boxesToSpend, outputCandidates, stateContext).isSuccess, InvalidModifier(id, id, modifierTypeId))
+  }
+
+  /**
+    * Check that the context extension var-127 values (indices of recreated outputs in
+    * storage-rent claims) of this transaction's inputs are pairwise distinct
+    * (rule `txRentDistinctOutputs`). Applies only from the activation height on; below it
+    * the check always passes, so historical transactions keep validating.
+    */
+  private def rentOutputIndicesDistinct(stateContext: ErgoStateContext): Boolean = {
+    if (stateContext.currentHeight < StorageRentDistinctOutputsActivationHeight) {
+      true
+    } else {
+      val indices = inputs.flatMap { input =>
+        input.spendingProof.extension.values.get(Constants.StorageIndexVarId).map(_.value)
+      }
+      indices.distinct.size == indices.size
+    }
   }
 
   /**
@@ -500,6 +535,12 @@ object ErgoTransaction extends ApiCodecs with ScorexLogging with ScorexEncoding 
   val WeakIdLength = 6
 
   val modifierTypeId: NetworkObjectTypeId.Value = TransactionTypeId.value
+
+  /**
+    * Height since which transactions with duplicated data inputs are considered invalid
+    * (validation rule txDataInputsUnique, #110).
+    */
+  val DataInputsUniquenessHeight: Int = 1885000
 
   def apply(inputs: IndexedSeq[Input], outputCandidates: IndexedSeq[ErgoBoxCandidate]): ErgoTransaction =
     ErgoTransaction(inputs, IndexedSeq.empty, outputCandidates, None)

@@ -69,6 +69,36 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
   }
 
   /**
+    * Iterate keys in ascending order starting from `first` (inclusive), collecting up to
+    * `limit` key-value pairs whose keys satisfy `keyFilter`. Iteration stops early when
+    * `continueScan` no longer holds for the current key.
+    */
+  def scanFrom(first: K, limit: Int, keyFilter: K => Boolean, continueScan: K => Boolean): Array[(K, V)] = {
+    val i = db.iterator()
+    val res = scala.collection.mutable.ArrayBuffer.empty[(K, V)]
+    try {
+      i.seek(first)
+      var n = 0
+      var proceed = true
+      while (proceed && n < limit && i.hasNext) {
+        val entry = i.next()
+        val key = entry.getKey
+        if (continueScan(key)) {
+          if (keyFilter(key)) {
+            res += ((key, entry.getValue))
+            n += 1
+          }
+        } else {
+          proceed = false
+        }
+      }
+    } finally {
+      i.close()
+    }
+    res.toArray
+  }
+
+  /**
     * Get last key within some range (inclusive) by used comparator.
     * Could be useful for applications with sequential ids.
     * The method iterates over all the keys so could be slow if there are many keys in the range.

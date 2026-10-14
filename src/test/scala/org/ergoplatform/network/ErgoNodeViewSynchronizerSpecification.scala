@@ -33,6 +33,7 @@ import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch.{ProverLeaf, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
 import scorex.crypto.hash.{Blake2b256, Digest32}
 import scorex.db.LDBFactory
@@ -226,7 +227,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     * Fixture for UTXO set snapshot bootstrap tests: synchronizer and history are built with
     * `utxoBootstrap` enabled (or disabled, for control tests), history contains headers only.
     */
-  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean) extends AkkaFixture {
+  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean,
+                                        captureViewHolder: Boolean = false) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
@@ -240,7 +242,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
 
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val viewHolderProbe = TestProbe("SnapshotViewHolderProbe")
+    val nodeViewHolderMockRef =
+      if (captureViewHolder) viewHolderProbe.ref else system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -272,8 +276,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
   }
 
-  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
-    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap)
+  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean,
+                                       captureViewHolder: Boolean = false)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
+    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap, captureViewHolder)
     try {
       testCode(fixture)
     }
@@ -1308,9 +1313,118 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  /**
-    * During UTXO set snapshot bootstrap block section invs must be ignored until the snapshot is applied.
-    */
+  /** Feed real snapshot chunks through the synchronizer with and without a header reorganization. */
+  private def runCertifiedSnapshotScenario(reorg: Boolean): Unit = {
+    withUtxoBootstrapFixture(utxoBootstrap = true, captureViewHolder = true) { ctx =>
+      import ctx._
+      viewHolderProbe.expectMsgType[GetNodeViewChanges](5.seconds)
+
+      val producerSettings = synchronizerSettings.copy(directory = createTempDir.getAbsolutePath)
+      val producerState = UtxoState.fromBoxHolder(
+        boxesHolderGenOfSize(128).sample.get, None, createTempDir, producerSettings, parameters)
+      val snapshotStore = LDBFactory.createKvDb(createTempDir.getAbsolutePath)
+      val receivingHistory = generateHistory(verifyTransactions = true,
+        StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1, utxoBootstrap = true)
+      val stopProbe = TestProbe("CertifiedSnapshotSynchronizerStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      try {
+        val snapshotHeight = 1
+        val manifestDepth = 2.toByte
+        val (rootHash, rootHeight) = splitDigest(producerState.rootDigest)
+        val manifestId = producerState.persistentProver.storage
+          .asInstanceOf[VersionedLDBAVLStorage]
+          .dumpSnapshot(snapshotStore, manifestDepth, rootHash).get
+        val manifest = new ManifestSerializer(manifestDepth)
+          .parseBytes(snapshotStore.get(manifestId).get)
+        manifest.subtreesIds.size should be > 1
+
+        val sourceHeader = powScheme.prove(
+          None, Header.InitialVersion, settings.chainSettings.initialNBits,
+          producerState.rootDigest, EmptyDigest32, EmptyDigest32,
+          System.currentTimeMillis(), EmptyDigest32, Array.fill(3)(0: Byte),
+          defaultMinerSecretNumber).get
+        receivingHistory.append(sourceHeader).get
+        receivingHistory.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(sourceHeader.id)
+        manifest.verify(Digest32 @@ rootHash, rootHeight) shouldBe true
+        val plan = receivingHistory.registerManifestToDownload(manifest, snapshotHeight, Seq(peer))
+
+        synchronizerMockRef ! ChangedHistory(receivingHistory)
+        synchronizerMockRef ! ChangedState(producerState)
+        val chunkIds = receivingHistory.getChunkIdsToDownload(manifest.subtreesIds.size)
+        chunkIds.map(Algos.encode) shouldBe manifest.subtreesIds.map(Algos.encode)
+        chunkIds.foreach { chunkId =>
+          deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value,
+            scorex.util.ModifierId @@ Algos.encode(chunkId), peer)(_ => Cancellable.alreadyCancelled)
+        }
+
+        chunkIds.dropRight(1).foreach { chunkId =>
+          synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+            Left(UtxoSnapshotChunkSpec.toBytes(snapshotStore.get(chunkId).get)), Some(peer))
+        }
+        eventually {
+          receivingHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.count(identity) shouldBe chunkIds.size - 1
+        }
+
+        if (reorg) {
+          val competingHeader = nextHeader(None, receivingHistory.difficultyCalculator,
+            diffBitsOpt = None, useRealTs = true)
+          receivingHistory.append(competingHeader).get
+          val competingChild = nextHeader(Some(competingHeader), receivingHistory.difficultyCalculator,
+            diffBitsOpt = None, useRealTs = true)
+          receivingHistory.append(competingChild).get
+          receivingHistory.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(competingHeader.id)
+          sourceHeader.id should not be competingHeader.id
+          synchronizerMockRef ! ChangedHistory(receivingHistory)
+          eventually { receivingHistory.utxoSetSnapshotDownloadPlan() shouldBe None }
+        }
+
+        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(snapshotStore.get(chunkIds.last).get)), Some(peer))
+        if (reorg) {
+          // Observe a later message on the same actor before asserting no import was sent.
+          val barrierId = modifierIdGen.sample.get
+          synchronizerMockRef ! Message(InvSpec,
+            Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(barrierId)))), Some(peer))
+          requestForModifierSent(ncProbe, Header.modifierTypeId, barrierId)
+          viewHolderProbe.expectNoMessage(500.millis)
+          receivingHistory.isUtxoSnapshotApplied shouldBe false
+        } else {
+          val importRequest = viewHolderProbe.fishForMessage(5.seconds) {
+            case _: InitStateFromSnapshot => true
+            case _ => false
+          }.asInstanceOf[InitStateFromSnapshot]
+          importRequest.blockHeight shouldBe snapshotHeight
+          importRequest.blockId shouldBe sourceHeader.id
+          importRequest.sessionId shouldBe plan.sessionId
+        }
+      } finally {
+        try {
+          system.stop(synchronizerMockRef)
+          stopProbe.expectTerminated(synchronizerMockRef)
+        } finally {
+          try {
+            receivingHistory.closeStorage()
+          } finally {
+            try {
+              snapshotStore.close()
+            } finally {
+              producerState.closeStorage()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: certified snapshot actor control without a reorg") {
+    runCertifiedSnapshotScenario(reorg = false)
+  }
+
+  property("NodeViewSynchronizer: certified snapshot actor cancels after a reorg before final chunk") {
+    runCertifiedSnapshotScenario(reorg = true)
+  }
+
+  /** During UTXO set snapshot bootstrap block section invs must be ignored until the snapshot is applied. */
   property("NodeViewSynchronizer: InvSpec - block section invs are ignored during utxo bootstrap") {
     withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
       import ctx._

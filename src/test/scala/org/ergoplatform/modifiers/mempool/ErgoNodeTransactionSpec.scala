@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import org.ergoplatform.nodeView.ErgoContext
@@ -17,6 +17,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
 import sigma.util.BenchmarkUtil
+import scorex.crypto.authds.ADKey
 import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigma.{Colls, VersionContext}
@@ -34,6 +35,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.{ErgoNodeTransactionGenerators => NodeTransactionGenerators}
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
@@ -151,6 +153,64 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     forAll(validErgoTransactionGen) { case (from, tx) =>
       tx.statelessValidity().isSuccess shouldBe true
       tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe true
+    }
+  }
+
+  property("more than one pair of data inputs with same box id prohibited since activation height") {
+    val activationHeight = ErgoTransaction.DataInputsUniquenessHeight
+
+    val dataBoxesGen = Gen.nonEmptyListOf(NodeTransactionGenerators.ergoBoxGenNoProp)
+      .map(_.toIndexedSeq)
+    forAll(validErgoTransactionGen, dataBoxesGen) { case ((from, tx), dataBoxes) =>
+      // fresh DataInput instances with the same content on every reference,
+      // to check content-based (not reference-based) comparison
+      def ref(b: ErgoBox): DataInput = DataInput(ADKey @@ b.id.clone())
+
+      val uniqueInputs = dataBoxes.map(ref)
+      val beforeActivationCtx = stateContext(activationHeight - 1, 1, settings)
+      val afterActivationCtx = stateContext(activationHeight, 1, settings)
+
+      // transaction with unique data inputs is valid both before and after the activation height
+      val txUnique = ErgoTransaction(tx.inputs, uniqueInputs, tx.outputCandidates)
+      txUnique.statelessValidity().isSuccess shouldBe true
+      txUnique.statefulValidity(from, dataBoxes, beforeActivationCtx).isSuccess shouldBe true
+      txUnique.statefulValidity(from, dataBoxes, afterActivationCtx).isSuccess shouldBe true
+
+      // one pair of data inputs with the same box id is allowed both before and after activation
+      val txOnePair = ErgoTransaction(tx.inputs, ref(dataBoxes.head) +: uniqueInputs, tx.outputCandidates)
+      val onePairBoxes = dataBoxes.head +: dataBoxes
+      txOnePair.statelessValidity().isSuccess shouldBe true
+      txOnePair.statefulValidity(from, onePairBoxes, beforeActivationCtx).isSuccess shouldBe true
+      txOnePair.statefulValidity(from, onePairBoxes, afterActivationCtx).isSuccess shouldBe true
+
+      // three data inputs with the same box id are still valid before the activation height ...
+      val thriceInputs = ref(dataBoxes.head) +: ref(dataBoxes.head) +: uniqueInputs
+      val thriceBoxes = dataBoxes.head +: dataBoxes.head +: dataBoxes
+      val txThrice = ErgoTransaction(tx.inputs, thriceInputs, tx.outputCandidates)
+      txThrice.statelessValidity().isSuccess shouldBe true
+      txThrice.statefulValidity(from, thriceBoxes, beforeActivationCtx).isSuccess shouldBe true
+
+      // ... but rejected by stateful validation since the activation height
+      val expectedMsg = ValidationRules.errorMessage(
+        ValidationRules.txDataInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
+      val postActivationThrice = txThrice.statefulValidity(from, thriceBoxes, afterActivationCtx)
+      postActivationThrice.isSuccess shouldBe false
+      postActivationThrice.failed.get.getMessage should include(expectedMsg.take(30))
+
+      // two pairs of data inputs with the same box ids are also rejected since activation
+      whenever(dataBoxes.size >= 2) {
+        val twoPairsInputs = ref(dataBoxes(0)) +: ref(dataBoxes(1)) +: uniqueInputs
+        val twoPairsBoxes = dataBoxes(0) +: dataBoxes(1) +: dataBoxes
+        val txTwoPairs = ErgoTransaction(tx.inputs, twoPairsInputs, tx.outputCandidates)
+        txTwoPairs.statefulValidity(from, twoPairsBoxes, beforeActivationCtx).isSuccess shouldBe true
+        val postActivationTwoPairs = txTwoPairs.statefulValidity(from, twoPairsBoxes, afterActivationCtx)
+        postActivationTwoPairs.isSuccess shouldBe false
+        postActivationTwoPairs.failed.get.getMessage should include(expectedMsg.take(30))
+      }
+
+      // duplicated ordinary inputs are still rejected by stateless validation
+      val txWithDuplicatedInputs = tx.copy(inputs = tx.inputs ++ tx.inputs)
+      txWithDuplicatedInputs.statelessValidity().isSuccess shouldBe false
     }
   }
 

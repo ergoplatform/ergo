@@ -424,7 +424,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       ncProbe.fishForMessage(3.seconds) {
         case _: PenalizePeer => true
         case _ => false
-      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.PermanentPenalty)
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
       ncProbe.expectNoMessage(300.millis)
 
       val otherPeer = ConnectedPeer(

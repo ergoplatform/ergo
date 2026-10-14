@@ -1294,7 +1294,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         if (sameIdVersionMismatch) {
           deliveryTracker.setUnknown(pmod.id, pmod.modifierTypeId)
-          penalizeMaliciousPeer(remote)
+          penalizeMisbehavingPeer(remote)
         } else {
           deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
           penalizeMisbehavingPeer(remote)

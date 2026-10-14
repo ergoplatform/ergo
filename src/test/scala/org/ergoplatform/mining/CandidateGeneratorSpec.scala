@@ -4,12 +4,14 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
+import com.google.common.io.Files.createTempDir
 import org.bouncycastle.util.BigIntegers
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification}
@@ -17,14 +19,14 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{Eliminat
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.{StateType, UtxoState, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{BoxHolder, StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.settings.NetworkType.DevNet60
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
+import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState, validFullBlock, validTransactionsFromBoxHolder}
-import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genHeaderChain}
+import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain, genHeaderChain}
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
 import org.ergoplatform.validation.MalformedModifierError
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, OrderingSolutionFound}
@@ -32,8 +34,12 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.authds.LeafData
+import scorex.util.bytesToId
 import scorex.util.encode.Base16
+import sigma.Colls
 import sigma.data.ProveDlog
+import sigma.data.TrivialProp.TrueProp
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
@@ -1329,6 +1335,104 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     system.terminate()
+  }
+
+  it should "bind the previous input-block digest in an ordinary candidate" in {
+    assertPreviousInputBlockDigestBinding(retryProofGeneration = false)
+  }
+
+  it should "bind the previous input-block digest after a proof retry" in {
+    assertPreviousInputBlockDigestBinding(retryProofGeneration = true)
+  }
+
+  private def assertPreviousInputBlockDigestBinding(retryProofGeneration: Boolean): Unit = {
+    val box = new ErgoBox(
+      value = 1000000000L,
+      ergoTree = ErgoTree.fromProposition(TrueProp),
+      creationHeight = 0,
+      additionalTokens = Colls.emptyColl,
+      additionalRegisters = Map.empty,
+      transactionId = bytesToId(Algos.hash("candidate-digest-binding")),
+      index = 0
+    )
+    val state = UtxoState.fromBoxHolder(BoxHolder(Seq(box)), None, createTempDir, settings, parameters)
+    val history = HistoryTestHelpers.generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep = -1,
+      epochLength = 10000,
+      useLastEpochs = 3,
+      initialDiffOpt = None,
+      None
+    )
+    val chain = genChain(2, history, stateOpt = Some(state))
+    applyChain(history, chain)
+
+    val outputCandidate = new ErgoBoxCandidate(
+      box.value,
+      box.ergoTree,
+      state.stateContext.currentHeight,
+      box.additionalTokens,
+      box.additionalRegisters
+    )
+    val tx = new ErgoTransaction(
+      IndexedSeq(new Input(box.id, emptyProverResult)),
+      IndexedSeq.empty,
+      IndexedSeq(outputCandidate)
+    )
+    val nextChain = genChain(2, history, stateOpt = Some(state)).tail
+    val inputBlock = InputBlockAnnouncement(1, nextChain.head.header, InputBlockFields.empty, None)
+    history.applyInputBlock(inputBlock) shouldBe None
+    history.applyInputBlockTransactions(inputBlock.id, Seq(tx), state) shouldBe
+      (Seq(inputBlock.id) -> Seq.empty)
+    val previousTransactions = history.getBestOrderingCollectedInputBlocksTransactions()
+    previousTransactions should contain(tx)
+
+    var proofsFailed = false
+    val candidateState: UtxoStateReader = if (retryProofGeneration) {
+      new UtxoState(state.persistentProver, state.version, state.store, settings) {
+        override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] =
+          if (!proofsFailed) {
+            proofsFailed = true
+            Failure(new Exception("Simulating one failed candidate proof"))
+          } else {
+            super.proofsForTransactions(txs)
+          }
+      }
+    } else {
+      state
+    }
+
+    val (candidate, _) = CandidateGenerator.createCandidate(
+      defaultMinerPk,
+      history,
+      settings.votingTargets.desiredUpdate,
+      candidateState,
+      Seq.empty,
+      None,
+      Seq.empty,
+      settings
+    ).get
+
+    proofsFailed shouldBe retryProofGeneration
+    val candidateBlock = candidate.candidateBlock
+    val expectedPreviousDigest = Algos.merkleTreeRoot(
+      previousTransactions.map(previousTx => LeafData @@ previousTx.serializedId)
+    )
+    val extensionFields = candidateBlock.extension.fields
+
+    def extensionValue(key: Array[Byte]): Seq[Byte] =
+      extensionFields.find(_._1.sameElements(key)).map(_._2.toSeq).get
+
+    candidateBlock.inputBlockFields.prevTransactionsDigest.toSeq shouldBe expectedPreviousDigest.toSeq
+    candidateBlock.inputBlockFields.prevTransactionsDigest.toSeq should not be (
+      candidateBlock.inputBlockFields.transactionsDigest.toSeq
+    )
+    extensionValue(Extension.InputBlockTransactionsDigestKey) shouldBe
+      candidateBlock.inputBlockFields.transactionsDigest.toSeq
+    extensionValue(Extension.PreviousInputBlockTransactionsDigestKey) shouldBe
+      expectedPreviousDigest.toSeq
   }
 
   private class FixedReadersHolder(readers: Readers) extends Actor {

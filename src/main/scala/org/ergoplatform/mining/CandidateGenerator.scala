@@ -835,7 +835,9 @@ object CandidateGenerator extends ScorexLogging {
       // digest (Merkle tree root) first class transactions since ordering block till last input-block
       val previousInputBlocksTransactionsDigest = Algos.merkleTreeRoot(previousOrderingBlockTransactionIds.map(id => LeafData @@ idToBytes(id)))
 
-      val inputBlockExtCandidate = InputBlockFields.toExtensionFields(parentInputBlockIdOpt, inputBlockTransactionsDigestValue, inputBlockTransactionsDigestValue)
+      val inputBlockExtCandidate = InputBlockFields.toExtensionFields(
+        parentInputBlockIdOpt, inputBlockTransactionsDigestValue, previousInputBlocksTransactionsDigest
+      )
 
       val extensionCandidate = preExtensionCandidate ++ inputBlockExtCandidate
 
@@ -921,7 +923,9 @@ object CandidateGenerator extends ScorexLogging {
               val retryInputBlockTransactions = retryPreInputBlockTransactions.filterNot(tx => previousOrderingBlockTransactionIds.contains(tx.id))
               val retryInputBlockTxsDigest = Algos.merkleTreeRoot(retryInputBlockTransactions.map(tx => LeafData @@ tx.serializedId))
               val retryExtensionCandidate = preExtensionCandidate ++
-                InputBlockFields.toExtensionFields(parentInputBlockIdOpt, retryInputBlockTxsDigest, retryInputBlockTxsDigest)
+                InputBlockFields.toExtensionFields(
+                  parentInputBlockIdOpt, retryInputBlockTxsDigest, previousInputBlocksTransactionsDigest
+                )
               retryExtensionCandidate.proofForInputBlockData match {
                 case Some(retryInputBlockFieldsProof) =>
                   val retryInputBlockFields = new InputBlockFields(parentInputBlockIdOpt, retryInputBlockTxsDigest, previousInputBlocksTransactionsDigest, retryInputBlockFieldsProof)

@@ -39,6 +39,7 @@ import org.ergoplatform.network.message.inputblocks._
 import org.ergoplatform.nodeView.LocallyGeneratedOrderingBlock
 import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.ergoplatform.subblocks.InputBlockAnnouncement
+import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
 import spire.syntax.all.cfor
@@ -1555,21 +1556,54 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
   }
 
-  /**
-   * Request transaction IDs for an input block from a peer.
-   *
-   * This method sends a request to the specified peer to download the transaction IDs
-   * associated with the given input block. This is used when an input block is received
-   * without transaction IDs, allowing the node to request them separately.
-   *
-   * @param inputBlockInfo The input block information to request transaction IDs for
-   * @param remote The peer to request the transaction IDs from
-   */
-  def requestInputBlockTransactionIds(inputBlockInfo: InputBlockAnnouncement, remote: ConnectedPeer): Unit = {
-    // currently we request input block transactions only once // todo: recheck this
-    val data = InvData(InputBlockTransactionIdsTypeId.value, Seq(inputBlockInfo.header.id))
-    val msg = Message(RequestModifierSpec, Right(data), None)
-    networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+  private def inputBlockTransactionsAreComplete(hr: ErgoHistoryReader, id: ModifierId): Boolean =
+    ErgoNodeViewSynchronizer.inputBlockTransactionsComplete(
+      hr.getInputBlock(id), hr.getInputBlockTransactionIds(id), hr.getInputBlockTransactions(id))
+
+  // Keep only a bounded set of peers that actually announced each input block.
+  private val inputBlockAnnouncers = mutable.LinkedHashMap.empty[ModifierId, Vector[ConnectedPeer]]
+
+  private def recordInputBlockAnnouncer(id: ModifierId, remote: ConnectedPeer): Unit = {
+    if (disconnectedHandlers.contains(remote.handlerRef)) return
+    val previous = inputBlockAnnouncers.remove(id).getOrElse(Vector.empty)
+    inputBlockAnnouncers.put(id,
+      (previous.filterNot(sameActiveConnection(_, remote)) :+ remote)
+        .takeRight(ErgoNodeViewSynchronizer.MaxInputBlockAnnouncersPerId))
+    if (inputBlockAnnouncers.size > ErgoNodeViewSynchronizer.MaxTrackedInputBlockAnnouncerIds) {
+      inputBlockAnnouncers.remove(inputBlockAnnouncers.head._1)
+    }
+  }
+
+  private def liveInputBlockIdsPeer(id: ModifierId): Option[ConnectedPeer] = {
+    val connected = syncTracker.knownPeers()
+    inputBlockAnnouncers.get(id).flatMap(_.reverse.find { candidate =>
+      !disconnectedHandlers.contains(candidate.handlerRef) &&
+        connected.exists(sameActiveConnection(_, candidate)) &&
+        SubBlocksFilter.condition(candidate) &&
+        candidate.mode.exists(_.stateType == StateType.Utxo)
+    })
+  }
+
+  /** Request transaction IDs for an input block from a live peer. */
+  def requestInputBlockTransactionIds(inputBlockInfo: InputBlockAnnouncement,
+                                       remote: ConnectedPeer,
+                                       checksDone: Int = 0): Unit =
+    requestInputBlockTransactionIdsById(inputBlockInfo.id, remote, checksDone)
+
+  // A retry may fire before the view holder has persisted the announcement.
+  private def requestInputBlockTransactionIdsById(subBlockId: ModifierId,
+                                                  remote: ConnectedPeer,
+                                                  checksDone: Int): Unit = {
+    if (disconnectedHandlers.contains(remote.handlerRef)) return
+    val typeId = InputBlockTransactionIdsTypeId.value
+    val retryChecks = deliveryTracker.getRequestedInfo(typeId, subBlockId) match {
+      case Some(info) if disconnectedHandlers.contains(info.peer.handlerRef) =>
+        deliveryTracker.setUnknown(subBlockId, typeId)
+        info.checks
+      case Some(_) => return
+      case None => checksDone
+    }
+    requestBlockSection(typeId, Seq(subBlockId), remote, retryChecks)
   }
 
 
@@ -1621,9 +1655,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     val subBlockHeader = inputBlockInfo.header
     val subBlockId = inputBlockInfo.id
 
-    // Skip already known input blocks
+    // A stored announcement can still lack its transactions after cache eviction.
     if (hr.getInputBlock(subBlockId).isDefined) {
-      log.debug(s"Input block $subBlockId already known, ignoring")
+      recordInputBlockAnnouncer(subBlockId, remote)
+      if (!inputBlockTransactionsAreComplete(hr, subBlockId) &&
+          !localInputBlockChunks.contains(subBlockId)) {
+        requestInputBlockTransactionIds(inputBlockInfo, remote)
+      }
       return
     }
 
@@ -1662,6 +1700,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .map(ps => inputBlockInfo.valid(powScheme, ps, expectedNBits))
         .getOrElse(true)
       if (valid) { // check PoW / Merkle proofs before processing
+        recordInputBlockAnnouncer(subBlockId, remote)
         setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
 
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block
@@ -1814,11 +1853,31 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * @param mp The mempool reader interface
    * @param remote The peer that sent the transaction IDs
    */
-   def processInputBlockTransactionIds(txIds: InputBlockTransactionIdsData, mp: ErgoMemPoolReader, remote: ConnectedPeer): Unit = {
+   def processInputBlockTransactionIds(txIds: InputBlockTransactionIdsData,
+                                        hr: ErgoHistoryReader,
+                                        mp: ErgoMemPoolReader,
+                                        remote: ConnectedPeer): Unit = {
      val subBlockId = txIds.inputBlockId
      val wIds = txIds.transactionIds
 
-     setReceivedIfRequested(subBlockId, InputBlockTransactionIdsTypeId.value, remote)
+     val requested = deliveryTracker.getRequestedInfo(InputBlockTransactionIdsTypeId.value, subBlockId)
+     // IDs are accepted only from the live owner of an explicit request, including the
+     // interval before the view holder stores the announcement.
+     val admitted = requested.exists { info =>
+       !disconnectedHandlers.contains(remote.handlerRef) && sameActiveConnection(info.peer, remote)
+     }
+     if (!admitted) {
+       return
+     }
+     // IDs have no persistent modifier of their own. Release request state after admission.
+     requested.foreach { _ =>
+       deliveryTracker.setUnknown(subBlockId, InputBlockTransactionIdsTypeId.value)
+     }
+     // An earlier announcement may already have started body retrieval from another peer.
+     if (localInputBlockChunks.contains(subBlockId) ||
+         inputBlockTransactionsAreComplete(hr, subBlockId)) {
+       return
+     }
 
      // todo: make it debug before release
      log.info(s"Processing input-block tx ids for ${subBlockId}")
@@ -2120,6 +2179,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case CheckDelivery(peer, modifierTypeId, modifierId) =>
       if (deliveryTracker.getRequestedInfo(modifierTypeId, modifierId)
         .exists(info => sameActiveConnection(info.peer, peer))) {
+        val disconnectedInputIdOwner = modifierTypeId == InputBlockTransactionIdsTypeId.value &&
+          disconnectedHandlers.contains(peer.handlerRef)
         // If transaction not delivered on time, we just forget about it.
         // It could be removed from other peer's mempool, so no reason to penalize the peer.
         if (modifierTypeId == ErgoTransaction.modifierTypeId) {
@@ -2134,6 +2195,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // which is currently defined by comparing request time with time the
           // node got last modifier (in future we may consider more precise method)
           val checksDone = deliveryTracker.getRequestedInfo(modifierTypeId, modifierId) match {
+            case Some(ri) if disconnectedInputIdOwner =>
+              ri.checks
             case Some(ri) if ri.requestTime < lastModifierGotTime =>
               ri.checks
             case Some(ri) =>
@@ -2153,6 +2216,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 case Some(newPeer) => requestUtxoSetChunk(Digest32 @@ Algos.decode(modifierId).get, newPeer)
                 case None => log.warn(s"No peer found to download UTXO set chunk $modifierId")
               }
+            } else if (disconnectedInputIdOwner) {
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              if (!inputBlockTransactionsAreComplete(hr, modifierId) &&
+                  !localInputBlockChunks.contains(modifierId)) {
+                liveInputBlockIdsPeer(modifierId).foreach { nextPeer =>
+                  requestInputBlockTransactionIdsById(modifierId, nextPeer, checksDone)
+                }
+              }
             } else if (modifierTypeId == InputBlockTypeId.value ||
                         modifierTypeId == InputBlockTransactionIdsTypeId.value ||
                         modifierTypeId == OrderingBlockAnnouncementTypeId.value) {
@@ -2160,10 +2231,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               if (modifierTypeId == InputBlockTypeId.value && checksDone < 2) {
                 log.info(s"re-requesting input block $modifierId")
                 requestInputBlock(modifierId, peer)
+              } else if (modifierTypeId == InputBlockTransactionIdsTypeId.value) {
+                if (!inputBlockTransactionsAreComplete(hr, modifierId) &&
+                    !localInputBlockChunks.contains(modifierId)) {
+                  log.info(s"re-requesting input tx ids $modifierId")
+                  requestInputBlockTransactionIdsById(modifierId, peer, checksDone)
+                }
               } else {
                 log.info(s"re-requesting input txs $modifierId")
                 hr.getInputBlock(modifierId).foreach { ibi =>
-                  requestInputBlockTransactionIds(ibi, peer)
+                  requestInputBlockTransactionIds(ibi, peer, checksDone)
                 }
               }
             } else {
@@ -2624,7 +2701,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     case (_: InputBlockMessageSpec.type, subBlockInfo: InputBlockAnnouncement, remote) =>
       processInputBlock(subBlockInfo, hr, mp, remote, usrOpt)
     case (_: InputBlockTransactionIdsMessageSpec.type, transactionIds: InputBlockTransactionIdsData, remote) =>
-      processInputBlockTransactionIds(transactionIds, mp, remote)
+      processInputBlockTransactionIds(transactionIds, hr, mp, remote)
     case (_: InputBlockTransactionsRequestMessageSpec.type, req: InputBlockTransactionsRequest, remote) =>
       processInputBlockTransactionsRequest(req, hr, remote)
     case (_: InputBlockTransactionsMessageSpec.type, transactions: InputBlockTransactionsData, remote) =>
@@ -2685,6 +2762,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+
+  private val MaxInputBlockAnnouncersPerId = 4
+  private val MaxTrackedInputBlockAnnouncerIds = 1024
+
+  private[network] def inputBlockTransactionsComplete(announcement: Option[InputBlockAnnouncement],
+                                                      storedIds: Option[Seq[ModifierId]],
+                                                      cachedTransactions: Option[Seq[ErgoTransaction]]): Boolean =
+    announcement.exists { ib =>
+      storedIds.exists { ids =>
+        cachedTransactions.exists { transactions =>
+          transactions.map(_.id) == ids &&
+            (ib.inputBlockFields.inputBlockFieldsProof.indices.isEmpty ||
+              Algos.merkleTreeRoot(transactions.map(tx => LeafData @@ tx.serializedId))
+                .sameElements(ib.inputBlockFields.transactionsDigest))
+        }
+      }
+    }
 
   /**
     * Max number of declined transaction ids kept to not ask peers for the same transactions again. The table is

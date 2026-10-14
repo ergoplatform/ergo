@@ -6,7 +6,9 @@ import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import com.google.common.io.Files.createTempDir
 import org.bouncycastle.util.BigIntegers
+import org.ergoplatform.AutolykosSolution
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.network.message.inputblocks.InputBlockTransactionsData
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -35,6 +37,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
 import org.scalatest.matchers.should.Matchers
 import scorex.crypto.authds.LeafData
+import scorex.crypto.hash.Digest32
 import scorex.util.bytesToId
 import scorex.util.encode.Base16
 import sigma.Colls
@@ -1433,6 +1436,48 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       candidateBlock.inputBlockFields.transactionsDigest.toSeq
     extensionValue(Extension.PreviousInputBlockTransactionsDigestKey) shouldBe
       expectedPreviousDigest.toSeq
+
+    // Use the real candidate and announcement assembly, then make PoW deterministic.
+    // At difficulty one the input-block target covers every possible V2 hit.
+    val solution = new AutolykosSolution(
+      AutolykosSolution.pkForV2,
+      AutolykosSolution.wForV2,
+      Array.fill(8)(0.toByte),
+      AutolykosSolution.dForV2
+    )
+    val producedAnnouncement = CandidateGenerator.completeInputBlock(candidateBlock, solution)._1
+    val easyNBits = DifficultySerializer.encodeCompactBits(1)
+    val params = state.stateContext.currentParameters
+    val powScheme = settings.chainSettings.powScheme
+    (powScheme.getB(easyNBits) * params.subBlocksPerBlock) should be >= (BigInt(1) << 256)
+    val announcement = producedAnnouncement.copy(
+      header = producedAnnouncement.header.copy(version = 2, nBits = easyNBits)
+    )
+    announcement.header.extensionRoot.toSeq shouldBe candidateBlock.extension.digest.toSeq
+    announcement.merkleProof.valid(announcement.header.extensionRoot) shouldBe true
+    announcement.valid(powScheme, params, Some(easyNBits)) shouldBe true
+
+    val fields = announcement.inputBlockFields
+    fields.prevInputBlockId.isDefined shouldBe true
+    def flipped(digest: Digest32): Digest32 = {
+      val bytes = digest.clone()
+      bytes(0) = (bytes(0) ^ 0x01).toByte
+      Digest32 @@ bytes
+    }
+    def withFields(prevId: Option[Array[Byte]], current: Digest32,
+                   previous: Digest32): InputBlockAnnouncement =
+      announcement.copy(inputBlockFields = new InputBlockFields(
+        prevId, current, previous, fields.inputBlockFieldsProof
+      ))
+
+    withFields(fields.prevInputBlockId, flipped(fields.transactionsDigest),
+      fields.prevTransactionsDigest).valid(powScheme, params, Some(easyNBits)) shouldBe false
+    withFields(fields.prevInputBlockId, fields.transactionsDigest,
+      flipped(fields.prevTransactionsDigest)).valid(powScheme, params, Some(easyNBits)) shouldBe false
+    val alteredPrevId = fields.prevInputBlockId.get.clone()
+    alteredPrevId(0) = (alteredPrevId(0) ^ 0x01).toByte
+    withFields(Some(alteredPrevId), fields.transactionsDigest,
+      fields.prevTransactionsDigest).valid(powScheme, params, Some(easyNBits)) shouldBe false
   }
 
   private class FixedReadersHolder(readers: Readers) extends Actor {

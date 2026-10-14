@@ -503,35 +503,35 @@ trait InputBlocksProcessor extends ScorexLogging {
       def applicationStep(ib: InputBlockAnnouncement,
                           txs: Seq[ErgoTransaction],
                           acc: (InputBlocksChain, Seq[ModifierId])): (InputBlocksChain, Seq[ModifierId]) = {
-        acc._1.applyTransactions(ib, txs, state) match {
-          case Success(updChain) =>
-            val res = (updChain -> (acc._2 ++ Seq(ib.id)))
-            // Check if the next block in the chain has available transactions to process
-            updChain.firstToComplete().filter(inputBlockTransactions.contains) match {
-              case Some(nextId) =>
-                // Continue processing the next block in the chain
-                val nextIb = inputBlockRecords(nextId)
-                val txIds = inputBlockTransactions(nextId)
-                val txs = mutable.ArrayBuffer[ErgoTransaction]()
-                cfor(0)(_ < txIds.length, _ + 1) { j =>
-                  val tid = txIds(j)
-                  val tx = transactionsCache.getIfPresent(tid)
-                  if (tx != null) {
-                    txs += tx
-                  } else {
-                    log.warn(s"Transaction $tid not found in cache during chain continuation (expired or evicted)")
-                  }
-                }
-                log.debug(s"Continuing input block chain with $nextId")
-                applicationStep(nextIb, txs, res)
-              case _ =>
-                // No more blocks to process in this chain
-                log.debug(s"No more input blocks to process in chain after ${ib.id}")
-                res
-            }
-          case Failure(e) =>
-            log.warn(s"Application of input-block transactions failed for ${ib.id} : ", e)
-            acc
+        // Validation also reads every processed ancestor through collectedTransactions.
+        // An evicted ancestor body cannot be silently treated as an empty block.
+        val missingAncestor = acc._1.chain.take(acc._1.processedIndex + 1)
+          .exists(id => completeCachedTransactions(id).isEmpty)
+        if (missingAncestor) {
+          log.warn(s"Cannot continue input block ${ib.id}: a processed ancestor body is incomplete")
+          acc
+        } else {
+          acc._1.applyTransactions(ib, txs, state) match {
+            case Success(updChain) =>
+              val res = (updChain -> (acc._2 ++ Seq(ib.id)))
+              // Check if the next block in the chain has available transactions to process
+              updChain.firstToComplete().flatMap { nextId =>
+                completeCachedTransactions(nextId).map(nextId -> _)
+              } match {
+                case Some((nextId, nextTransactions)) =>
+                  // Continue processing the next block in the chain
+                  val nextIb = inputBlockRecords(nextId)
+                  log.debug(s"Continuing input block chain with $nextId")
+                  applicationStep(nextIb, nextTransactions, res)
+                case _ =>
+                  // No more blocks to process in this chain
+                  log.debug(s"No more input blocks to process in chain after ${ib.id}")
+                  res
+              }
+            case Failure(e) =>
+              log.warn(s"Application of input-block transactions failed for ${ib.id} : ", e)
+              acc
+          }
         }
       }
 
@@ -551,19 +551,18 @@ trait InputBlocksProcessor extends ScorexLogging {
        *
        * A fork switch is needed when:
        * 1. The longest chain is different from the best chain
-       * 2. The depth of the current block in the longest chain is greater than the best chain depth
-       * 3. All blocks from the current processing point to the target depth have available transactions
+       * 2. The current block belongs to the longest chain
+       * 3. Its contiguous prefix with available transactions is deeper than the best chain depth
        */
       def switchNeeded(id: ModifierId): Boolean = {
-        val lf = forks(longestIndex)  // Get the longest fork
-        val d  = lf.depthOf(id)      // Get the depth of the current block in the longest fork
-        val needed = d > bestDepth && {  // Switch if longest fork is deeper than best fork
-          // Verify that all blocks from current processing point to target depth have transactions
-          (lf.processedIndex + 1 to d).forall { i =>
-            val id = lf.chain(i)
-            inputBlockTransactions.contains(id)  // Check if transactions are available
-          }
-        }
+        val lf = forks(longestIndex)
+        // A parent body may arrive after its children. Reconsider the entire
+        // available prefix rather than stopping at the newly delivered block.
+        val d = lf.processedIndex + lf.chain
+          .drop(lf.processedIndex + 1)
+          .takeWhile(id => completeCachedTransactions(id).isDefined)
+          .length
+        val needed = lf.depthOf(id) >= 0 && d > bestDepth
         if (needed) {
           log.info(s"Fork switch needed: longest fork depth $d > best fork depth ${bestDepth}")
         }
@@ -578,42 +577,29 @@ trait InputBlocksProcessor extends ScorexLogging {
 
         // Calculate which blocks need to be rolled back
         val rollbackInputBlocks = {
-          var commonIdx = -1  // Index of the common ancestor
-          (0 until currentFork.chain.length).foreach { idx =>
-            // Find the highest index that exists in both chains and is processed in the new chain
-            if (idx < newFork.chain.length &&
-                currentFork.chain(idx) == newFork.chain(idx) &&
-                idx <= newFork.processedIndex) {
-              commonIdx = idx
-            }
-          }
-          if(commonIdx == -1 || commonIdx == currentFork.processedIndex){
-            Seq.empty  // Nothing to roll back if common ancestor is at the same level or higher
-          } else {
-            // Extract the blocks that need to be rolled back (from common ancestor + 1 to processed tip)
-            val rolledBack = currentFork.chain.slice(commonIdx + 1, currentFork.processedIndex + 1)
+          val commonPrefixLength = currentFork.chain
+            .zip(newFork.chain)
+            .take(newFork.processedIndex + 1)
+            .takeWhile { case (currentId, newId) => currentId == newId }
+            .length
+          val rolledBack =
+            currentFork.chain.slice(commonPrefixLength, currentFork.processedIndex + 1)
+          if (rolledBack.nonEmpty) {
             log.info(s"Fork switch: rolling back ${rolledBack.length} input blocks from fork ${bestIndex}")
-            rolledBack
           }
+          rolledBack
         }
 
         // Process the next block in the new best chain
         val ibId = newFork.chain(newFork.processedIndex + 1)  // Next unprocessed block in new chain
         val ib   = inputBlockRecords(ibId)
-        val txIds = inputBlockTransactions(ibId)
-        val txs = mutable.ArrayBuffer[ErgoTransaction]()
-        cfor(0)(_ < txIds.length, _ + 1) { j =>
-          val tid = txIds(j)
-          val tx = transactionsCache.getIfPresent(tid)
-          if (tx != null) {
-            txs += tx
-          } else {
-            log.warn(s"Transaction $tid not found in cache during fork switch (expired or evicted)")
-          }
-        }
-        val r = applicationStep(ib, txs, (newFork -> Seq.empty))  // Process the block
+        val r = completeCachedTransactions(ibId)
+          .map(txs => applicationStep(ib, txs, (newFork -> Seq.empty[ModifierId])))
+          .getOrElse(newFork -> Seq.empty[ModifierId])
 
-        if (r._2.nonEmpty) {
+        // Cached bodies only predict progress. A later descendant may fail state
+        // validation, leaving the candidate no deeper than the selected fork.
+        if (r._2.nonEmpty && r._1.processedIndex > currentFork.processedIndex) {
           // Update the tree with the processed chain
           var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
           val updForks = updTree.forks
@@ -635,7 +621,7 @@ trait InputBlocksProcessor extends ScorexLogging {
           log.info(s"Fork switch completed: ${r._2.length} blocks rolled back, new best fork has ${r._1.processedIndex + 1} processed blocks")
           r._2 -> rollbackInputBlocks  // Return forward progress and rollback blocks
         } else {
-          log.warn("Progress is empty in processInputBlockTransactions during fork switch")
+          log.debug("Fork switch did not extend the selected processed depth")
           Seq.empty -> Seq.empty
         }
       } else if (forks(bestIndex).firstToComplete().contains(ib.id)) { // no forking - linear processing
@@ -713,6 +699,18 @@ trait InputBlocksProcessor extends ScorexLogging {
     .maximumSize(1000000)
     .expireAfterWrite(120, TimeUnit.MINUTES) // 2 hours
     .build[ModifierId, ErgoTransaction]()
+
+  private def completeCachedTransactions(sbId: ModifierId): Option[Seq[ErgoTransaction]] =
+    inputBlockTransactions.get(sbId).flatMap { ids =>
+      val complete = InputBlocksProcessor.completeTransactions(
+        ids,
+        id => Option(transactionsCache.getIfPresent(id))
+      )
+      if (complete.isEmpty) {
+        log.warn(s"Cannot complete input block $sbId: a recorded transaction body is missing from the cache")
+      }
+      complete
+    }
 
   /**
     * Transactions commited in an ordering block
@@ -1266,4 +1264,22 @@ trait InputBlocksProcessor extends ScorexLogging {
     orderingBlockTransactions.get(orderingBlockId)
   }
 
+}
+
+object InputBlocksProcessor {
+  private[history] def completeTransactions(
+    ids: Seq[ModifierId],
+    lookup: ModifierId => Option[ErgoTransaction]
+  ): Option[Seq[ErgoTransaction]] = {
+    val found = Vector.newBuilder[ErgoTransaction]
+    var index = 0
+    while (index < ids.length) {
+      lookup(ids(index)) match {
+        case Some(tx) => found += tx
+        case None => return None
+      }
+      index += 1
+    }
+    Some(found.result())
+  }
 }

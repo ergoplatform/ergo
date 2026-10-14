@@ -995,9 +995,11 @@ object CandidateGenerator extends ScorexLogging {
     currentHeight: Int,
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
-    stateContext: ErgoStateContext
+    stateContext: ErgoStateContext,
+    requiredFeeBoxIds: Set[ModifierId] = Set.empty
   ): Seq[ErgoTransaction] = {
-    collectRewards(None, currentHeight, txs, minerPk, stateContext, Colls.emptyColl)
+    collectRewards(None, currentHeight, txs, minerPk, stateContext, Colls.emptyColl,
+      requiredFeeBoxIds)
   }
 
   /**
@@ -1010,7 +1012,8 @@ object CandidateGenerator extends ScorexLogging {
     txs: Seq[ErgoTransaction],
     minerPk: ProveDlog,
     stateContext: ErgoStateContext,
-    assets: Coll[(TokenId, Long)] = Colls.emptyColl
+    assets: Coll[(TokenId, Long)] = Colls.emptyColl,
+    requiredFeeBoxIds: Set[ModifierId] = Set.empty
   ): Seq[ErgoTransaction] = {
     val chainSettings = stateContext.chainSettings
     val propositionBytes = chainSettings.monetary.feePropositionBytes
@@ -1098,7 +1101,14 @@ object CandidateGenerator extends ScorexLogging {
     val feeBoxes: Seq[ErgoBox] = ErgoState
       .newBoxes(txs)
       .filter(b => java.util.Arrays.equals(b.propositionBytes, propositionBytes) && !inputs.exists(i => java.util.Arrays.equals(i.boxId, b.id)))
-    val feeTxs = feeBoxes.grouped(MaxFeeBoxesPerTransaction).map { chunk =>
+    // New ordering fees are required for their source transaction; accepted-prefix fees
+    // are optional. Never put both in one collector: an uncollectible prefix batch must
+    // not prevent an otherwise valid ordering transaction from being selected.
+    val (requiredFeeBoxes, optionalFeeBoxes) = feeBoxes.partition(b =>
+      requiredFeeBoxIds.contains(bytesToId(b.id)))
+    val feeChunks = requiredFeeBoxes.grouped(MaxFeeBoxesPerTransaction).toSeq ++
+      optionalFeeBoxes.grouped(MaxFeeBoxesPerTransaction).toSeq
+    val feeTxs = feeChunks.map { chunk =>
       val feeAmount = chunk.map(_.value).sum
       val feeAssets = chunk.toArray.toColl.flatMap(_.additionalTokens).take(MaxAssetsPerBox)
       val feeInputs = chunk.map(b => new Input(b.id, ProverResult.empty))
@@ -1212,8 +1222,9 @@ object CandidateGenerator extends ScorexLogging {
     def feesFor(ordering: Seq[CostedTransaction]): Try[Option[Seq[CostedTransaction]]] = {
       val sources = inputBlockTransactions ++ ordering.map(_._1)
       val boxes = sources.flatMap(_.outputs).map(b => bytesToId(b.id) -> b).toMap
-      val feeTxs = collectFees(currentHeight, sources, minerPk, upcomingContext)
       val newOutputIds = ordering.flatMap(_._1.outputs).map(b => bytesToId(b.id)).toSet
+      val feeTxs = collectFees(currentHeight, sources, minerPk, upcomingContext,
+        requiredFeeBoxIds = newOutputIds)
       val (requiredTxs, optionalTxs) = feeTxs.partition { tx =>
         tx.inputs.exists(i => newOutputIds.contains(bytesToId(i.boxId)))
       }

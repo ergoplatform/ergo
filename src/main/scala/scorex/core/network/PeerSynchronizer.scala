@@ -14,7 +14,7 @@ import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 import shapeless.syntax.typeable._
 
-import java.net.InetSocketAddress
+import java.net.{InetAddress, InetSocketAddress}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -79,10 +79,14 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
     */
   private def addNewPeers(peers: Seq[PeerSpec], remote: ConnectedPeer): Unit = {
     val sourceIp = Option(remote.connectionId.remoteAddress.getAddress)
+    def isLan(ip: InetAddress): Boolean =
+      ip.isSiteLocalAddress || NetworkUtils.isUniqueLocalIp(ip)
+    val sourceIsLan = sourceIp.exists(isLan)
     def allowed(address: InetSocketAddress): Boolean =
       Option(address.getAddress).exists { ip =>
         !ip.isAnyLocalAddress && !ip.isMulticastAddress &&
-          (!NetworkUtils.isLocalIp(ip) || (settings.allowLocal && sourceIp.contains(ip)))
+          (!NetworkUtils.isLocalIp(ip) || (settings.allowLocal &&
+            (sourceIp.contains(ip) || (sourceIsLan && isLan(ip)))))
       }
 
     peers.foreach { peerSpec =>

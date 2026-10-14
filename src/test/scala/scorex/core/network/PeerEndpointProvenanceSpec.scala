@@ -18,6 +18,7 @@ import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.{defaultPeerSpec, settings}
 import scorex.core.app.ScorexContext
+import scorex.core.utils.NetworkUtils
 import scorex.db.LDBFactory
 import scorex.testkit.utils.AkkaFixture
 
@@ -162,6 +163,24 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       beginDial(address)
       completedDial(address, advertised)
     }
+  }
+
+  private def relayPeers(f: Fixture,
+                         sourceAddress: InetSocketAddress,
+                         peers: Seq[PeerSpec]): Set[InetSocketAddress] = {
+    val source = f.incoming(sourceAddress, defaultPeerSpec.copy(declaredAddress = Some(sourceAddress)))
+    if (f.config.scorexSettings.network.allowLocal || !NetworkUtils.isLocalIp(sourceAddress.getAddress)) {
+      f.awaitPeers(_.keySet should contain(sourceAddress))
+    }
+    val before = f.allPeers.keySet
+    val network = TestProbe()(f.system)
+    val synchronizer = f.system.actorOf(
+      PeerSynchronizerRef.props(network.ref, f.peerManager, f.config.scorexSettings.network)(f.ec)
+    )
+    val peersSpec = new PeersSpec(f.config.scorexSettings.network.maxPeerSpecObjects)
+
+    synchronizer ! Message(peersSpec, Left(peersSpec.toBytes(peers)), Some(source.remote))
+    before
   }
 
   property("an inbound address is only a dial candidate until an outbound handshake") {
@@ -477,6 +496,167 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       }
       f.controller ! ConnectTo(f.allPeers(candidate))
       f.tcpManager.expectMsgType[Tcp.Connect].remoteAddress shouldBe candidate
+    } finally {
+      Await.result(f.system.terminate(), Duration.Inf)
+      deleteRecursive(f.directory)
+    }
+  }
+
+  property("an opted-in private relay contributes a different private host only as an unverified dial candidate") {
+    val cases = Seq(
+      (
+        new InetSocketAddress("192.168.44.80", 55080),
+        new InetSocketAddress("192.168.44.81", 9081),
+        new InetSocketAddress("192.168.44.10", 55010),
+        false
+      ),
+      (
+        new InetSocketAddress("192.168.44.80", 55080),
+        new InetSocketAddress("192.168.44.81", 9081),
+        new InetSocketAddress("192.168.44.10", 55010),
+        true
+      ),
+      (
+        new InetSocketAddress("fd12:3456::80", 55080),
+        new InetSocketAddress("fd12:3456::81", 9081),
+        new InetSocketAddress("fd12:3456::10", 55010),
+        false
+      )
+    )
+
+    cases.foreach { case (sourceAddress, candidate, directLocal, useLocalFeature) =>
+      val f = new Fixture(allowLocal = true)
+      try {
+        relayPeers(
+          f,
+          sourceAddress,
+          // The local-address feature is IPv4-only; IPv6 uses the declared endpoint.
+          Seq(if (useLocalFeature) {
+            defaultPeerSpec.copy(
+              declaredAddress = None,
+              features = Seq(LocalAddressPeerFeature(candidate))
+            )
+          } else {
+            defaultPeerSpec.copy(declaredAddress = Some(candidate), features = Seq.empty)
+          })
+        )
+        f.awaitPeers { peers =>
+          val stored = peers(candidate)
+          stored.lastHandshake shouldBe 0L
+          stored.connectionType shouldBe None
+          stored.peerSpec.declaredAddress shouldBe Some(candidate)
+          stored.peerSpec.localAddressOpt shouldBe None
+        }
+
+        f.beginDial(candidate)
+        f.completedDialAtLocal(
+          candidate,
+          directLocal,
+          defaultPeerSpec.copy(declaredAddress = Some(candidate), features = Seq.empty)
+        )
+        f.awaitPeers { peers =>
+          val verified = peers(candidate)
+          verified.lastHandshake should be > 0L
+          verified.connectionType shouldBe Some(Outgoing)
+          verified.peerSpec.declaredAddress shouldBe Some(candidate)
+        }
+      } finally {
+        Await.result(f.system.terminate(), Duration.Inf)
+        deleteRecursive(f.directory)
+      }
+    }
+  }
+
+  property("a public relay cannot contribute a private target") {
+    val f = new Fixture(allowLocal = true)
+    try {
+      val sourceAddress = new InetSocketAddress("203.0.113.80", 55080)
+      val rejected = new InetSocketAddress("192.168.44.82", 9082)
+      val marker = new InetSocketAddress("198.51.100.82", 9082)
+      val before = relayPeers(
+        f,
+        sourceAddress,
+        Seq(
+          defaultPeerSpec.copy(
+            declaredAddress = Some(rejected),
+            features = Seq(LocalAddressPeerFeature(rejected))
+          ),
+          defaultPeerSpec.copy(declaredAddress = Some(marker), features = Seq.empty)
+        )
+      )
+
+      f.awaitPeers { peers =>
+        peers.keySet should contain(marker)
+        peers.keySet shouldBe (before + marker)
+        peers.keySet should not contain rejected
+      }
+    } finally {
+      Await.result(f.system.terminate(), Duration.Inf)
+      deleteRecursive(f.directory)
+    }
+  }
+
+  property("a private relay cannot contribute a private target when local dialing is disabled") {
+    val f = new Fixture(allowLocal = false)
+    try {
+      val sourceAddress = new InetSocketAddress("192.168.44.83", 55083)
+      val rejected = new InetSocketAddress("192.168.44.84", 9084)
+      val marker = new InetSocketAddress("198.51.100.84", 9084)
+      val before = relayPeers(
+        f,
+        sourceAddress,
+        Seq(
+          defaultPeerSpec.copy(
+            declaredAddress = Some(rejected),
+            features = Seq(LocalAddressPeerFeature(rejected))
+          ),
+          defaultPeerSpec.copy(declaredAddress = Some(marker), features = Seq.empty)
+        )
+      )
+
+      f.awaitPeers { peers =>
+        peers.keySet should contain(marker)
+        peers.keySet shouldBe (before + marker)
+        peers.keySet should not contain rejected
+      }
+    } finally {
+      Await.result(f.system.terminate(), Duration.Inf)
+      deleteRecursive(f.directory)
+    }
+  }
+
+  property("a LAN relay cannot redirect discovery to loopback or link-local targets") {
+    val f = new Fixture(allowLocal = true)
+    try {
+      val sourceAddress = new InetSocketAddress("192.168.44.85", 55085)
+      val rejected = Seq(
+        new InetSocketAddress("127.0.0.2", 9085),
+        new InetSocketAddress("169.254.20.2", 9085),
+        new InetSocketAddress("::1", 9085),
+        new InetSocketAddress("fe80::2", 9085)
+      )
+      val marker = new InetSocketAddress("198.51.100.85", 9085)
+      val rejectedSpecs = rejected.map { address =>
+        if (address.getAddress.getAddress.length == 4) {
+          defaultPeerSpec.copy(
+            declaredAddress = None,
+            features = Seq(LocalAddressPeerFeature(address))
+          )
+        } else {
+          defaultPeerSpec.copy(declaredAddress = Some(address), features = Seq.empty)
+        }
+      }
+      val before = relayPeers(
+        f,
+        sourceAddress,
+        rejectedSpecs :+ defaultPeerSpec.copy(declaredAddress = Some(marker), features = Seq.empty)
+      )
+
+      f.awaitPeers { peers =>
+        peers.keySet should contain(marker)
+        peers.keySet shouldBe (before + marker)
+        rejected.foreach(address => peers.keySet should not contain address)
+      }
     } finally {
       Await.result(f.system.terminate(), Duration.Inf)
       deleteRecursive(f.directory)

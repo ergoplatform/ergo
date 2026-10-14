@@ -1434,35 +1434,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
    * Key: input block id
    * Value: InputBlockDiffData containing creation time, weak transaction IDs, and cached transactions
    *
-   * Entries are automatically cleaned up after LocalInputBlockChunksTTL (10 minutes) to prevent memory exhaustion.
+   * Entry and retained-weight budgets apply globally and per remote address, in addition to expiry.
    */
-  private val localInputBlockChunks = mutable.Map[ModifierId, ErgoNodeViewSynchronizer.InputBlockDiffData]()
+  private val localInputBlockChunks = new InputBlockPendingCache(
+    InputBlockPendingCache.MaxEntries, InputBlockPendingCache.MaxPeerEntries,
+    InputBlockPendingCache.MaxWeight, InputBlockPendingCache.MaxPeerWeight,
+    ErgoNodeViewSynchronizer.LocalInputBlockChunksTTL.toMillis,
+    onExpired = (id, data, announcedWeakIds) => deferInputBlock(id, data, announcedWeakIds))
+
+  private def inputBlockPeerKey(remote: ConnectedPeer): String =
+    Option(remote.connectionId.remoteAddress.getAddress)
+      .fold(remote.connectionId.remoteAddress.getHostString)(_.getHostAddress)
 
   /**
-   * Cleanup old entries from localInputBlockChunks cache.
-   *
-   * This method removes entries that have been in the cache longer than LocalInputBlockChunksTTL.
-   * It should be called periodically to prevent memory exhaustion from stale entries.
-   *
-   * Algorithm:
-   * 1. Calculate the cutoff time (current time - TTL)
-   * 2. Filter out entries older than the cutoff time
-   * 3. Log the number of cleaned entries for monitoring
+   * Release expired entries even when no further reads or admissions occur.
    */
-  private def cleanupLocalInputBlockChunks(): Unit = {
-    val now = System.currentTimeMillis()
-    val cutoffTime = now - ErgoNodeViewSynchronizer.LocalInputBlockChunksTTL.toMillis
-
-    val oldEntries = localInputBlockChunks.filter { case (_, data) =>
-      data.created < cutoffTime
-    }
-
-    if (oldEntries.nonEmpty) {
-      oldEntries.keys.foreach { id =>
-        localInputBlockChunks.remove(id)
+  private def cleanupLocalInputBlockChunks(hr: ErgoHistoryReader): Unit = {
+    localInputBlockChunks.prune()
+    deferredInputBlocks.keys.filter(inputBlockTransactionsAreComplete(hr, _)).toVector
+      .foreach { id =>
+        deferredInputBlocks.remove(id)
+        deliveryTracker.setUnknown(id, InputBlockTransactionIdsTypeId.value)
       }
-      log.debug(s"Cleaned up ${oldEntries.size} expired local input block chunk entries")
-    }
+    retryDeferredInputBlocks()
   }
 
   private def weakIdsDiff(mp: ErgoMemPoolReader,
@@ -1493,20 +1487,36 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def resolveInputBlockTransactions(subBlockId: ModifierId,
                                             wIds: Seq[WeakId],
                                             mp: ErgoMemPoolReader,
-                                            remote: ConnectedPeer)
+                                            remote: ConnectedPeer,
+                                            announcedWeakIds: Boolean)
                                            (onReady: Seq[ErgoTransaction] => Unit,
-                                            onMissing: Seq[WeakId] => Unit): Unit = {
+                                             onMissing: Seq[WeakId] => Unit,
+                                             onDeferred: () => Unit): Unit = {
     val (diff, mempoolTxs) = weakIdsDiff(mp, wIds)
     if (diff.isEmpty) {
+      deferredInputBlocks.remove(subBlockId)
+      localInputBlockChunks.remove(subBlockId)
       onReady(mempoolTxs)
+      retryDeferredInputBlocks()
     } else {
       val ibdd = InputBlockDiffData(System.currentTimeMillis(), wIds, mempoolTxs)
-      localInputBlockChunks.put(subBlockId, ibdd)
-
-      val req = InputBlockTransactionsRequest(subBlockId, diff)
-      val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
-      networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
-      onMissing(diff)
+      // Readmission after an ID retry must retain the original announcement's binding
+      // through further disconnects and expiry, not just the first supplier handoff.
+      val pinnedWeakIds = announcedWeakIds ||
+        deferredInputBlocks.get(subBlockId).exists(_.announcedWeakIds.isDefined)
+      if (localInputBlockChunks.put(subBlockId, ibdd, inputBlockPeerKey(remote),
+          remote.handlerRef.toString, pinnedWeakIds)) {
+        deferredInputBlocks.remove(subBlockId)
+        val req = InputBlockTransactionsRequest(subBlockId, diff)
+        val msg = Message(InputBlockTransactionsRequestMessageSpec, Right(req), None)
+        networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
+        onMissing(diff)
+        retryDeferredInputBlocks()
+      } else {
+        log.debug(s"Deferring input block $subBlockId while pending synchronization budget is full")
+        deferInputBlock(subBlockId, ibdd, pinnedWeakIds)
+        onDeferred()
+      }
     }
   }
 
@@ -1562,6 +1572,44 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // Keep only a bounded set of peers that actually announced each input block.
   private val inputBlockAnnouncers = mutable.LinkedHashMap.empty[ModifierId, Vector[ConnectedPeer]]
+  private case class DeferredInputBlock(weight: Long,
+                                        announcedWeakIds: Option[(Int, Digest32)],
+                                        checksDone: Int)
+  private val deferredInputBlocks = mutable.LinkedHashMap.empty[ModifierId, DeferredInputBlock]
+
+  private def weakIdsHash(ids: Seq[WeakId]): Digest32 =
+    Algos.hash(ids.iterator.flatMap(_.iterator).toArray)
+
+  private def deferredWeakIdsMatch(id: ModifierId, ids: Seq[WeakId]): Boolean =
+    deferredInputBlocks.get(id).forall { deferred =>
+      deferred.announcedWeakIds.forall { case (count, hash) =>
+        count == ids.size && hash.sameElements(weakIdsHash(ids))
+      }
+    }
+
+  private def deferInputBlock(id: ModifierId, data: InputBlockDiffData,
+                              announcedWeakIds: Boolean): Unit = {
+    val pinned = if (announcedWeakIds) {
+      Some((data.weakTxsIds.size, weakIdsHash(data.weakTxsIds)))
+    } else None
+    val previous = deferredInputBlocks.remove(id)
+    val retained = previous match {
+      case Some(existing) => existing.copy(weight = InputBlockPendingCache.weightOf(data),
+        announcedWeakIds = existing.announcedWeakIds.orElse(pinned))
+      case None => DeferredInputBlock(InputBlockPendingCache.weightOf(data),
+        pinned, checksDone = 0)
+    }
+    deferredInputBlocks.put(id, retained)
+    if (deferredInputBlocks.size > ErgoNodeViewSynchronizer.MaxTrackedInputBlockAnnouncerIds) {
+      deferredInputBlocks.remove(deferredInputBlocks.head._1)
+    }
+  }
+
+  private def updateDeferredChecks(id: ModifierId, checksDone: Int): Unit = {
+    deferredInputBlocks.remove(id).foreach { deferred =>
+      deferredInputBlocks.put(id, deferred.copy(checksDone = math.max(deferred.checksDone, checksDone)))
+    }
+  }
 
   private def recordInputBlockAnnouncer(id: ModifierId, remote: ConnectedPeer): Unit = {
     if (disconnectedHandlers.contains(remote.handlerRef)) return
@@ -1574,14 +1622,38 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
-  private def liveInputBlockIdsPeer(id: ModifierId): Option[ConnectedPeer] = {
+  private def liveInputBlockIdsPeer(id: ModifierId,
+                                     canUse: ConnectedPeer => Boolean = _ => true): Option[ConnectedPeer] = {
     val connected = syncTracker.knownPeers()
     inputBlockAnnouncers.get(id).flatMap(_.reverse.find { candidate =>
       !disconnectedHandlers.contains(candidate.handlerRef) &&
         connected.exists(sameActiveConnection(_, candidate)) &&
         SubBlocksFilter.condition(candidate) &&
-        candidate.mode.exists(_.stateType == StateType.Utxo)
+        candidate.mode.exists(_.stateType == StateType.Utxo) && canUse(candidate)
     })
+  }
+
+  /** Keep a small, fair window of deferred ID requests without evicting pending body work. */
+  private def retryDeferredInputBlocks(): Unit = {
+    val typeId = InputBlockTransactionIdsTypeId.value
+    var outstanding = deferredInputBlocks.keys.count { id =>
+      deliveryTracker.getRequestedInfo(typeId, id)
+        .exists(info => !disconnectedHandlers.contains(info.peer.handlerRef))
+    }
+    deferredInputBlocks.toVector.foreach { case (id, deferred) =>
+      if (outstanding < ErgoNodeViewSynchronizer.MaxConcurrentDeferredIdRequests &&
+          deferred.checksDone < networkSettings.maxDeliveryChecks &&
+          deliveryTracker.getRequestedInfo(typeId, id)
+            .forall(info => disconnectedHandlers.contains(info.peer.handlerRef))) {
+        liveInputBlockIdsPeer(id, peer =>
+          localInputBlockChunks.canAdmit(inputBlockPeerKey(peer), deferred.weight)).foreach { peer =>
+          if (requestInputBlockTransactionIdsById(id, peer, deferred.checksDone)) {
+            outstanding += 1
+            updateDeferredChecks(id, deferred.checksDone)
+          }
+        }
+      }
+    }
   }
 
   /** Request transaction IDs for an input block from a live peer. */
@@ -1591,19 +1663,22 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     requestInputBlockTransactionIdsById(inputBlockInfo.id, remote, checksDone)
 
   // A retry may fire before the view holder has persisted the announcement.
-  private def requestInputBlockTransactionIdsById(subBlockId: ModifierId,
-                                                  remote: ConnectedPeer,
-                                                  checksDone: Int): Unit = {
-    if (disconnectedHandlers.contains(remote.handlerRef)) return
+  private def requestInputBlockTransactionIdsById(id: ModifierId,
+                                                   remote: ConnectedPeer,
+                                                   checksDone: Int): Boolean = {
+    if (disconnectedHandlers.contains(remote.handlerRef)) return false
     val typeId = InputBlockTransactionIdsTypeId.value
-    val retryChecks = deliveryTracker.getRequestedInfo(typeId, subBlockId) match {
+    val retryChecks = deliveryTracker.getRequestedInfo(typeId, id) match {
       case Some(info) if disconnectedHandlers.contains(info.peer.handlerRef) =>
-        deliveryTracker.setUnknown(subBlockId, typeId)
-        info.checks
-      case Some(_) => return
+        deliveryTracker.setUnknown(id, typeId)
+        math.max(info.checks, checksDone)
+      case Some(_) => return false
       case None => checksDone
     }
-    requestBlockSection(typeId, Seq(subBlockId), remote, retryChecks)
+    val boundedChecks = math.max(retryChecks, deferredInputBlocks.get(id).fold(0)(_.checksDone))
+    if (boundedChecks >= networkSettings.maxDeliveryChecks) return false
+    requestBlockSection(typeId, Seq(id), remote, boundedChecks)
+    true
   }
 
 
@@ -1659,8 +1734,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (hr.getInputBlock(subBlockId).isDefined) {
       recordInputBlockAnnouncer(subBlockId, remote)
       if (!inputBlockTransactionsAreComplete(hr, subBlockId) &&
-          !localInputBlockChunks.contains(subBlockId)) {
-        requestInputBlockTransactionIds(inputBlockInfo, remote)
+          localInputBlockChunks.get(subBlockId).isEmpty) {
+        if (deferredInputBlocks.contains(subBlockId)) retryDeferredInputBlocks()
+        else requestInputBlockTransactionIds(inputBlockInfo, remote)
       }
       return
     }
@@ -1700,8 +1776,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         .map(ps => inputBlockInfo.valid(powScheme, ps, expectedNBits))
         .getOrElse(true)
       if (valid) { // check PoW / Merkle proofs before processing
-        recordInputBlockAnnouncer(subBlockId, remote)
         setReceivedIfRequested(subBlockId, InputBlockTypeId.value, remote)
+        recordInputBlockAnnouncer(subBlockId, remote)
+        // Access first so expiry transfers the original pin before comparing a duplicate.
+        val pending = localInputBlockChunks.get(subBlockId)
+        // A deferred announcement has already pinned its ordered weak IDs. A second
+        // same-ID announcement cannot replace them while the holder write is pending.
+        if (inputBlockInfo.weakTxIds.exists(ids => !deferredWeakIdsMatch(subBlockId, ids))) {
+          return
+        }
+        // The view holder may not have persisted the first announcement yet. Do not let a
+        // second peer replace its pending weak IDs or complete it with an empty ID list.
+        if (pending.isDefined) {
+          return
+        }
 
         val prevSbIdOpt = inputBlockInfo.prevInputBlockId // link to previous sub-block
         val weakTxIdsOpt = inputBlockInfo.weakTxIds
@@ -1710,7 +1798,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
         weakTxIdsOpt match {
           case Some(wIds) =>
-            resolveInputBlockTransactions(subBlockId, wIds, mp, remote)(
+            val wasDeferred = deferredInputBlocks.contains(subBlockId)
+            resolveInputBlockTransactions(subBlockId, wIds, mp, remote, announcedWeakIds = true)(
               onReady = { mempoolTxs =>
                 // todo: make it debug before release
                 log.info(s"Diff is empty $subBlockId , processing immediately")
@@ -1726,6 +1815,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
                 // write sub-block to db
                 viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+              },
+              onDeferred = () => {
+                if (!wasDeferred) viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
               }
             )
 
@@ -1733,13 +1825,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             // input block coming with no transaction ids announced
 
             // write sub-block to db
-            viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+            if (!deferredInputBlocks.contains(subBlockId)) {
+              viewHolderRef ! ProcessInputBlock(inputBlockInfo, remote)
+            }
 
             // todo: make it debug before release
             log.info(s"No transactions announced for ${subBlockId}, asking for transacion ids from $remote")
 
             // ask for transaction ids
-            requestInputBlockTransactionIds(inputBlockInfo, remote)
+            if (deferredInputBlocks.contains(subBlockId)) retryDeferredInputBlocks()
+            else requestInputBlockTransactionIds(inputBlockInfo, remote)
         }
       } else {
         log.warn(s"Sub-block ${subBlockHeader.id} is invalid")
@@ -1874,22 +1969,33 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
        deliveryTracker.setUnknown(subBlockId, InputBlockTransactionIdsTypeId.value)
      }
      // An earlier announcement may already have started body retrieval from another peer.
-     if (localInputBlockChunks.contains(subBlockId) ||
-         inputBlockTransactionsAreComplete(hr, subBlockId)) {
+     if (inputBlockTransactionsAreComplete(hr, subBlockId)) {
+       deferredInputBlocks.remove(subBlockId)
+       localInputBlockChunks.remove(subBlockId)
+       retryDeferredInputBlocks()
+       return
+     }
+     if (localInputBlockChunks.get(subBlockId).isDefined) {
+       return
+     }
+     if (!deferredWeakIdsMatch(subBlockId, wIds)) {
+       updateDeferredChecks(subBlockId, requested.fold(0)(_.checks) + 1)
+       retryDeferredInputBlocks()
        return
      }
 
      // todo: make it debug before release
      log.info(s"Processing input-block tx ids for ${subBlockId}")
 
-      resolveInputBlockTransactions(subBlockId, wIds, mp, remote)(
+      resolveInputBlockTransactions(subBlockId, wIds, mp, remote, announcedWeakIds = false)(
         onReady = { mempoolTxs =>
           // all the txs found or wIds empty, process immediately
           // write sub-block and transactions to db
           val transactionsData = InputBlockTransactionsData(subBlockId, mempoolTxs)
           viewHolderRef ! ProcessInputBlockTransactions(transactionsData)
         },
-        onMissing = _ => () // nothing extra to do; cache and network request handled by resolveInputBlockTransactions
+         onMissing = _ => (), // cache and network request handled by resolveInputBlockTransactions
+         onDeferred = () => ()
       )
    }
 
@@ -1982,8 +2088,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
 
       if (allFound) {
+        localInputBlockChunks.remove(subBlockId)
         val res = InputBlockTransactionsData(subBlockId, resTxs)
         viewHolderRef ! ProcessInputBlockTransactions(res)
+        retryDeferredInputBlocks()
       } else {
         log.warn(s"Not all transactions found for input block $subBlockId, skipping processing")
         // todo: investigate whether penalization is appropriate here.
@@ -2204,10 +2312,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               ri.checks + 1
             case None => 0
           }
+          val deferredInputId = modifierTypeId == InputBlockTransactionIdsTypeId.value &&
+            deferredInputBlocks.contains(modifierId)
+          // The connectivity heuristic may waive a peer penalty, but an unanswered
+          // deferred request still consumes one attempt from its own finite budget.
+          val boundedChecksDone = if (deferredInputId) {
+            math.max(checksDone, deliveryTracker.getRequestedInfo(modifierTypeId, modifierId)
+              .fold(0)(_.checks + 1))
+          } else checksDone
+          if (deferredInputId) updateDeferredChecks(modifierId, boundedChecksDone)
 
           val maxDeliveryChecks = networkSettings.maxDeliveryChecks
-          if (checksDone < maxDeliveryChecks) {
-            if (modifierTypeId == UtxoSnapshotChunkTypeId.value) {
+          if (boundedChecksDone < maxDeliveryChecks) {
+            if (deferredInputId) {
+              deliveryTracker.setUnknown(modifierId, modifierTypeId)
+              if (inputBlockTransactionsAreComplete(hr, modifierId)) {
+                deferredInputBlocks.remove(modifierId)
+              } else if (localInputBlockChunks.get(modifierId).isEmpty) {
+                retryDeferredInputBlocks()
+              }
+            } else if (modifierTypeId == UtxoSnapshotChunkTypeId.value) {
               // randomly choosing a peer to download UTXO set snapshot chunk
               val newPeerOpt = hr.randomPeerToDownloadChunks()
               log.info(s"Rescheduling request for UTXO set chunk $modifierId , new peer $newPeerOpt")
@@ -2219,7 +2343,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             } else if (disconnectedInputIdOwner) {
               deliveryTracker.setUnknown(modifierId, modifierTypeId)
               if (!inputBlockTransactionsAreComplete(hr, modifierId) &&
-                  !localInputBlockChunks.contains(modifierId)) {
+                  localInputBlockChunks.get(modifierId).isEmpty) {
                 liveInputBlockIdsPeer(modifierId).foreach { nextPeer =>
                   requestInputBlockTransactionIdsById(modifierId, nextPeer, checksDone)
                 }
@@ -2233,7 +2357,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 requestInputBlock(modifierId, peer)
               } else if (modifierTypeId == InputBlockTransactionIdsTypeId.value) {
                 if (!inputBlockTransactionsAreComplete(hr, modifierId) &&
-                    !localInputBlockChunks.contains(modifierId)) {
+                    localInputBlockChunks.get(modifierId).isEmpty) {
                   log.info(s"re-requesting input tx ids $modifierId")
                   requestInputBlockTransactionIdsById(modifierId, peer, checksDone)
                 }
@@ -2321,6 +2445,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
       oversizedTransactionSuppliers -= connectedPeer.handlerRef
       exhaustedOversizedSuppliers -= connectedPeer.handlerRef
+      localInputBlockChunks.removeConnection(connectedPeer.handlerRef.toString).foreach {
+        case (id, data, announcedWeakIds) => deferInputBlock(id, data, announcedWeakIds)
+      }
+      retryDeferredInputBlocks()
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -2721,7 +2849,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       peerManagerEvents orElse
       checkDelivery(hr) orElse {
       case CleanupLocalInputBlockChunks =>
-        cleanupLocalInputBlockChunks()
+        cleanupLocalInputBlockChunks(hr)
       case a: Any => log.error("Strange input: " + a)
     }
   }
@@ -2765,6 +2893,7 @@ object ErgoNodeViewSynchronizer {
 
   private val MaxInputBlockAnnouncersPerId = 4
   private val MaxTrackedInputBlockAnnouncerIds = 1024
+  private val MaxConcurrentDeferredIdRequests = 2
 
   private[network] def inputBlockTransactionsComplete(announcement: Option[InputBlockAnnouncement],
                                                       storedIds: Option[Seq[ModifierId]],

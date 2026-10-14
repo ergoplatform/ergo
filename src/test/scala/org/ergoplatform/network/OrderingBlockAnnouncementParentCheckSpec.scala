@@ -236,6 +236,38 @@ class OrderingBlockAnnouncementParentCheckSpec extends AnyPropSpec with Matchers
     }
   }
 
+  property("requested ordering announcement from a replacement handler survives an old handler's reply") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val oba = announcement(f, unknownParent, f.hist.fullBlockHeight + 1,
+        DifficultySerializer.encodeCompactBits(1))
+      val replacementHandler = TestProbe("ReplacementOrderingHandler")(f.system)
+      val replacementPeer = f.peer.copy(handlerRef = replacementHandler.ref)
+      replacementPeer shouldBe f.peer // ConnectedPeer.equals checks only the remote address.
+      replacementPeer.handlerRef should not be f.peer.handlerRef
+
+      val inv = InvData(OrderingBlockAnnouncementTypeId.value, Seq(oba.header.id))
+      f.synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(replacementPeer))
+      val requests = f.ncProbe.receiveWhile(max = 1.second, idle = 300.millis) { case m => m }.collect {
+        case SendToNetwork(msg, _) if msg.spec.messageCode == RequestModifierSpec.messageCode =>
+          msg.data.get.asInstanceOf[InvData]
+      }
+      requests should contain(inv)
+      val attempt = f.deliveryTracker.getRequestedInfo(OrderingBlockAnnouncementTypeId.value, oba.header.id).get
+      attempt.peer.handlerRef shouldBe replacementHandler.ref
+
+      f.synchronizer ! Message(OrderingBlockAnnouncementMessageSpec,
+        Left(OrderingBlockAnnouncementMessageSpec.toBytes(oba)), Some(f.peer))
+      outcome(f, oba) shouldBe Outcome(stored = false, relayed = false, handedOff = false, penalized = false,
+        headerRequests = Seq.empty)
+
+      f.deliveryTracker.status(oba.header.id, OrderingBlockAnnouncementTypeId.value, Seq.empty) shouldBe ModifiersStatus.Requested
+      f.deliveryTracker.getRequestedInfo(OrderingBlockAnnouncementTypeId.value, oba.header.id)
+        .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+      attempt.cancellable.isCancelled shouldBe false
+    }
+  }
+
   property("ordering block announcement with unknown parent header is dropped without requesting the header") {
     withFixture { f =>
       val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))

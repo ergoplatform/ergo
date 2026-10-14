@@ -18,16 +18,17 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.{LocallyGeneratedInputBlock, LocallyGeneratedOrderingBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexer, NumericBoxIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoStateReader}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
-import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import org.ergoplatform.validation.SoftFieldsAccessError
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{AutolykosSolution, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, InputSolutionFound, OrderingSolutionFound, SolutionFound}
-import scorex.crypto.authds.{ADDigest, LeafData, SerializedAdProof}
+import scorex.crypto.authds.{ADDigest, ADKey, LeafData, SerializedAdProof}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
@@ -40,6 +41,7 @@ import sigma.interpreter.ProverResult
 import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer => MutableArray}
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
@@ -295,7 +297,7 @@ class CandidateGenerator(
       log.info(s"Processed solution $solution with the result $result")
       sender() ! result
 
-    case _: AutolykosSolution =>
+    case _: AutolykosSolution | _: SolutionFound =>
       sender() ! StatusReply.error(
         s"Block already solved : ${state.solvedBlock.map(_.id)}"
       )
@@ -305,6 +307,11 @@ class CandidateGenerator(
 }
 
 object CandidateGenerator extends ScorexLogging {
+
+  /**
+    * Memoized extra-index sync flag for the storage-rent in [[createCandidate]]
+    */
+  private var extraIndexSynced: Boolean = false
 
   /**
     * Holder for both candidate block and data for external miners derived from it
@@ -435,7 +442,6 @@ object CandidateGenerator extends ScorexLogging {
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
-
   /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
@@ -712,7 +718,70 @@ object CandidateGenerator extends ScorexLogging {
         version
       )
 
-      // todo: could be removed after 5.0, but we still slowly decreasing it for starters
+      val emissionTxs = emissionTxOpt.toSeq
+
+      // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
+      // bypassing the mempool (goes into the block right after the prioritized transactions)
+      val rentClaimTxs: Seq[ErgoTransaction] = {
+        // Collect rent only when the extra index is (almost) in sync with the chain: against
+        // a lagging index a temporarily unresolvable box would be mistaken for permanently
+        // unclaimable and evicted below. One block of lag is tolerated, as the indexer may
+        // simply not have processed the chain tip yet. The check is memoized: once synced,
+        // the indexer tracks the chain continuously and the database is not read again.
+        if (!extraIndexSynced) {
+          val indexedHeight = ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, history).getInt
+          val fullHeight = history.fullBlockHeight
+          extraIndexSynced = indexedHeight == fullHeight || indexedHeight + 1 == fullHeight
+          if (!extraIndexSynced) {
+            log.debug(s"Skipping storage-rent collection: extra index at $indexedHeight, chain at $fullHeight")
+          }
+        }
+        if (ergoSettings.nodeSettings.storageRentCollection && extraIndexSynced) {
+          val upcomingHeight = upcomingContext.currentHeight
+          val threshold = upcomingHeight - Constants.StoragePeriod
+          if (threshold > 0) {
+            // rent entries carry no payload, so resolve the box through the box-number
+            // index; entries whose box row is gone resolve to nothing and are skipped.
+            // The scan window is wider than the claim cap: the builder stops at
+            // MaxClaims CLAIMED boxes, so junk rows do not starve later claimable ones -
+            // and permanently unclaimable boxes are evicted from the index below, so the
+            // window advances across candidates.
+            val scanned = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
+              .toSeq
+              .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
+              .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
+            val params = upcomingContext.currentParameters
+            val reemissionTokenIdOpt =
+              Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
+            val permanentlySkipped = mutable.ArrayBuffer.empty[ModifierId]
+            val claimTxs = StorageRentClaimBuilder.buildClaim(
+              scanned,
+              upcomingHeight,
+              params,
+              minerPk,
+              reemissionTokenIdOpt,
+              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet,
+              b => permanentlySkipped += bytesToId(b.id)
+            ).toSeq
+            if (permanentlySkipped.nonEmpty) {
+              log.warn(s"Removing ${permanentlySkipped.length} storage-rent eligibility entries " +
+                s"for permanently unclaimable boxes: $permanentlySkipped")
+              history.removeStorageRentBoxes(permanentlySkipped.toSeq)
+            }
+            claimTxs
+          } else {
+            Seq.empty
+          }
+        } else {
+          Seq.empty
+        }
+      }
+
+      if (rentClaimTxs.nonEmpty) {
+        log.debug(s"Storage-rent claim transactions injected into the candidate: ${rentClaimTxs.map(_.id)}")
+      }
+
+      // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
       val safeGap = if (state.stateContext.currentParameters.maxBlockCost < 1000000) {
@@ -723,11 +792,9 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      // new transactions coming from API (prioritizedTransactions), mempool, and also emission transaction
-      // to spread to next input and ordering blocks
-      // within collectTxs(), transactions from previous input blocks will be accounted in addition to the new txs
-      val newTransactionCandidates = emissionTxOpt.toSeq ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
-
+      // Claims follow API-prioritized transactions and precede ordinary mempool entries.
+      val newTransactionCandidates =
+        emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
       val collected = Try(collectTxs(
         minerPk,
         state.stateContext.currentParameters.maxBlockCost - safeGap,

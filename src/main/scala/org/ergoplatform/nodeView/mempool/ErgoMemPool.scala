@@ -279,7 +279,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
-  def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_],
+  def process(unconfirmedTx: UnconfirmedTransaction,
+              state: ErgoState[_],
               inputBlockTransactions: Seq[ErgoTransaction] = Seq.empty): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
 

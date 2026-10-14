@@ -21,6 +21,70 @@ class AutolykosInputBlockPowSpec extends ErgoCorePropertyTest {
   private val powScheme = new AutolykosPowScheme(32, 26)
   private val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
+  private def assertClassification(hit: BigInt, b: BigInt, multiplier: Int): Unit = {
+    val orderingAccepted = powScheme.isOrderingHit(hit, b)
+    val inputAccepted = powScheme.isInputHit(hit, b, multiplier)
+    val verdict = powScheme.classifyHit(hit, b, multiplier)
+
+    withClue(s"hit=$hit, target=$b, multiplier=$multiplier: ") {
+      (verdict == AutolykosPowScheme.OrderingHit) shouldBe orderingAccepted
+      (verdict != AutolykosPowScheme.NoHit) shouldBe inputAccepted
+      (verdict == AutolykosPowScheme.InputHit) shouldBe
+        (inputAccepted && !orderingAccepted)
+    }
+  }
+
+  for {
+    multiplier <- Seq(1, 2, 30, 64)
+    boundary <- Seq("ordering", "input")
+    offset <- Seq(-1, 0, 1)
+  } {
+    property(s"prover classification should agree with shared predicates at the $boundary " +
+      s"target with offset $offset and multiplier $multiplier") {
+      val b = BigInt(100)
+      val target = if (boundary == "ordering") b else b * multiplier
+      assertClassification(target + offset, b, multiplier)
+    }
+  }
+
+  property("isOrderingHit should accept b - 1 and reject b and b + 1") {
+    val b = BigInt(100)
+    powScheme.isOrderingHit(b - 1, b) shouldBe true
+    powScheme.isOrderingHit(b, b) shouldBe false
+    powScheme.isOrderingHit(b + 1, b) shouldBe false
+  }
+
+  Seq(1, 2, 30, 64).foreach { multiplier =>
+    property(s"isInputHit should accept b * subBlocksPerBlock - 1 " +
+      s"and reject b * subBlocksPerBlock and b * subBlocksPerBlock + 1 " +
+      s"with multiplier $multiplier") {
+      val b = BigInt(100)
+      val inputTarget = b * multiplier
+      powScheme.isInputHit(inputTarget - 1, b, multiplier) shouldBe true
+      powScheme.isInputHit(inputTarget, b, multiplier) shouldBe false
+      powScheme.isInputHit(inputTarget + 1, b, multiplier) shouldBe false
+    }
+  }
+
+  // nBits 33810432 = 0x0203E800 -> difficulty 1000; floor(q / 1000) * 64 = literal below.
+  private val referenceInputTarget =
+    BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335616")
+  private val referenceHits = Seq(
+    BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335615"),
+    referenceInputTarget,
+    BigInt("7410693711188236507108543040556026102581604113860793880486730441057162335617")
+  )
+
+  referenceHits.zipWithIndex.foreach { case (hit, index) =>
+    property(s"prover classification should match reference input target vector $index") {
+      val nBits = 33810432L
+      val multiplier = 64
+      val b = powScheme.getB(nBits)
+      b * multiplier shouldBe referenceInputTarget
+      assertClassification(hit, b, multiplier)
+    }
+  }
+
   /**
    * Tests that checkInputBlockPoW accepts valid input block solutions.
    * Input block hits are in range [orderingTarget, inputTarget) where inputTarget = orderingTarget * subsPerBlock.

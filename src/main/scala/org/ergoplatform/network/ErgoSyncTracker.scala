@@ -103,6 +103,20 @@ final case class ErgoSyncTracker(networkSettings: NetworkSettings) extends Score
   }
 
   /**
+    * Set the recorded height of a peer already in the table, keeping its status; a peer not in the table is ignored.
+    * A height the peer reports in its SyncInfo replaces the record; a header the peer announces shows only that it has
+    * at least that height, so with `raiseOnly` the record is never lowered. Unlike `updateStatus`, the senior count is
+    * not recomputed, as it cannot change while the status is kept.
+    */
+  def updateHeight(peer: ConnectedPeer, height: Height, raiseOnly: Boolean): Unit = {
+    statuses.get(peer).foreach { status =>
+      if (!raiseOnly || height > status.height) {
+        statuses.update(peer, status.copy(height = height))
+      }
+    }
+  }
+
+  /**
     * Get synchronization status for given connected peer
     */
   def getStatus(peer: ConnectedPeer): Option[PeerChainStatus] = {

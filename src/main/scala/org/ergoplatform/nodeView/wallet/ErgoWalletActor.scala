@@ -4,10 +4,11 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
-import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.state.{ErgoStateReader, UtxoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
@@ -15,13 +16,14 @@ import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.BoxSelector
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
-import org.ergoplatform.nodeView.wallet.persistence.InputBlockDiff
+import org.ergoplatform.nodeView.wallet.persistence.{InputBlockDiff, OffChainRegistry}
 import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.utils.ScorexEncoding
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -87,6 +89,87 @@ class ErgoWalletActor(settings: ErgoSettings,
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
+  }
+
+  private def applyOffChainTransactions(registry: OffChainRegistry,
+                                        txs: Seq[ErgoTransaction],
+                                        state: ErgoWalletState): OffChainRegistry = {
+    val dustLimit = settings.walletSettings.dustLimit
+    txs.foldLeft(registry) { (current, tx) =>
+      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
+      val inputs = WalletScanLogic.extractInputBoxes(tx)
+      current.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
+    }
+  }
+
+  private def applyInputBlockTransactions(registry: OffChainRegistry,
+                                          inputBlockId: ModifierId,
+                                          txs: Seq[ErgoTransaction],
+                                          state: ErgoWalletState): OffChainRegistry = {
+    val finalRegistry = applyOffChainTransactions(registry, txs, state)
+    val beforeOffChainIds = registry.offChainBoxes.map(_.boxId).toSet
+    val afterOffChainIds = finalRegistry.offChainBoxes.map(_.boxId).toSet
+    val afterOnChainIds = finalRegistry.onChainBalances.map(_.id).toSet
+    val diff = InputBlockDiff(
+      finalRegistry.offChainBoxes.filterNot(b => beforeOffChainIds.contains(b.boxId)),
+      registry.offChainBoxes.filterNot(b => afterOffChainIds.contains(b.boxId)),
+      registry.onChainBalances.filterNot(b => afterOnChainIds.contains(b.id))
+    )
+    finalRegistry.copy(inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff))
+  }
+
+  private def dependencyOrder(txs: Seq[ErgoTransaction]): Either[String, Seq[ErgoTransaction]] = {
+    val unique = mutable.LinkedHashMap.empty[ModifierId, ErgoTransaction]
+    txs.foreach(tx => unique.getOrElseUpdate(tx.id, tx))
+
+    val providerByOutput = mutable.HashMap.empty[IdUtils.EncodedBoxId, ModifierId]
+    unique.valuesIterator.foreach { tx =>
+      tx.outputs.foreach(box => providerByOutput.update(IdUtils.encodedBoxId(box.id), tx.id))
+    }
+
+    val consumers = mutable.LinkedHashMap.empty[ModifierId, mutable.LinkedHashSet[ModifierId]]
+    val incoming = mutable.LinkedHashMap.empty[ModifierId, Int]
+    unique.keysIterator.foreach(id => incoming.update(id, 0))
+    unique.valuesIterator.foreach { consumer =>
+      val providers = mutable.LinkedHashSet.empty[ModifierId]
+      consumer.inputs.foreach { input =>
+        providerByOutput.get(IdUtils.encodedBoxId(input.boxId)).foreach { id =>
+          providers.add(id)
+        }
+      }
+      consumer.dataInputs.foreach { input =>
+        providerByOutput.get(IdUtils.encodedBoxId(input.boxId)).foreach { id =>
+          providers.add(id)
+        }
+      }
+      providers.remove(consumer.id)
+      providers.foreach { providerId =>
+        if (consumers.getOrElseUpdate(providerId, mutable.LinkedHashSet.empty).add(consumer.id)) {
+          incoming.update(consumer.id, incoming(consumer.id) + 1)
+        }
+      }
+    }
+
+    val ready = mutable.Queue.empty[ModifierId]
+    unique.keysIterator.filter(id => incoming(id) == 0).foreach(id => ready.enqueue(id))
+    val ordered = mutable.ArrayBuffer.empty[ErgoTransaction]
+    while (ready.nonEmpty) {
+      val id = ready.dequeue()
+      ordered += unique(id)
+      consumers.get(id).foreach { children =>
+        children.foreach { childId =>
+          val count = incoming(childId) - 1
+          incoming.update(childId, count)
+          if (count == 0) ready.enqueue(childId)
+        }
+      }
+    }
+
+    if (ordered.size == unique.size) {
+      Right(ordered.toVector)
+    } else {
+      Left("Final mempool contains a cyclic transaction dependency")
+    }
   }
 
   private def loadedWallet(state: ErgoWalletState): Receive = {
@@ -243,27 +326,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       } else {
         historyReader.getInputBlockTransactions(inputBlockId) match {
           case Some(txs) =>
-            val dustLimit = settings.walletSettings.dustLimit
-
-            // Process all transactions atomically, then compare the registry endpoints for rollback.
-            val finalRegistry = txs.foldLeft(state.offChainRegistry) { (registry, tx) =>
-              val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
-              val inputs = WalletScanLogic.extractInputBoxes(tx)
-              registry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
-            }
-
-            val beforeRegistry = state.offChainRegistry
-            val beforeOffChainIds = beforeRegistry.offChainBoxes.map(_.boxId).toSet
-            val afterOffChainIds = finalRegistry.offChainBoxes.map(_.boxId).toSet
-            val afterOnChainIds = finalRegistry.onChainBalances.map(_.id).toSet
-            val diff = InputBlockDiff(
-              finalRegistry.offChainBoxes.filterNot(b => beforeOffChainIds.contains(b.boxId)),
-              beforeRegistry.offChainBoxes.filterNot(b => afterOffChainIds.contains(b.boxId)),
-              beforeRegistry.onChainBalances.filterNot(b => afterOnChainIds.contains(b.id))
-            )
-            val registryWithDiff = finalRegistry.copy(
-              inputBlockDiffs = finalRegistry.inputBlockDiffs + (inputBlockId -> diff)
-            )
+            val registryWithDiff =
+              applyInputBlockTransactions(state.offChainRegistry, inputBlockId, txs, state)
 
             val newInputBlockIds = state.inputBlockIds :+ inputBlockId
             val baseState = state.copy(
@@ -301,6 +365,65 @@ class ErgoWalletActor(settings: ErgoSettings,
       )
       val newState = ergoWalletService.updateUtxoState(baseState, historyReader)
       context.become(loadedWallet(newState))
+
+    case ReconcileInputBlockChain(selectedInputBlockIds, finalMempool) =>
+      val selectedBodies = selectedInputBlockIds.map { id =>
+        (
+          id,
+          historyReader.getInputBlockTransactionIds(id),
+          historyReader.getInputBlockTransactions(id)
+        )
+      }
+      val incompleteIds = selectedBodies.collect {
+        case (id, None, _) => id
+        case (id, _, None) => id
+        case (id, Some(expectedIds), Some(txs)) if txs.map(_.id) != expectedIds => id
+      }
+      if (incompleteIds.nonEmpty) {
+        val error =
+          s"Cannot reconcile input-block chain: incomplete transaction bodies for ${incompleteIds.mkString(", ")}"
+        log.error(error)
+        context.become(loadedWallet(state.copy(error = Some(error))))
+      } else {
+        val seen = mutable.HashSet.empty[ModifierId]
+        val selectedTransactions = selectedBodies.collect {
+          case (id, Some(_), Some(txs)) => id -> txs.filter(tx => seen.add(tx.id))
+        }
+        val pooledTransactions = finalMempool.getAll.iterator
+          .map(_.transaction)
+          .filter(tx => seen.add(tx.id))
+          .toVector
+
+        dependencyOrder(pooledTransactions) match {
+          case Left(error) =>
+            log.error(error)
+            context.become(loadedWallet(state.copy(error = Some(error))))
+          case Right(orderedPoolTransactions) =>
+            val selectedRegistry = selectedTransactions.foldLeft(OffChainRegistry.init(state.registry)) {
+              case (registry, (id, txs)) =>
+                applyInputBlockTransactions(registry, id, txs, state)
+            }
+            val reconciledRegistry =
+              applyOffChainTransactions(selectedRegistry, orderedPoolTransactions, state)
+            val baseState = state.copy(
+              offChainRegistry = reconciledRegistry,
+              mempoolReaderOpt = Some(finalMempool),
+              inputBlockIds = selectedInputBlockIds
+            )
+            val selectedTxs = selectedTransactions.flatMap(_._2)
+            val newState = baseState.stateReaderOpt match {
+              case Some(utxo: UtxoStateReader) =>
+                baseState.copy(
+                  utxoStateReaderOpt = Some(
+                    utxo.withMempoolAndInputBlocks(finalMempool, selectedTxs)
+                  )
+                )
+              case _ =>
+                baseState
+            }
+            context.become(loadedWallet(newState))
+        }
+      }
 
 
     // rescan=true means we serve a user request for rescan from arbitrary height

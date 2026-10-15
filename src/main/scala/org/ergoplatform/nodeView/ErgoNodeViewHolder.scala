@@ -414,6 +414,14 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
       }
 
+      // A selected-chain change can interleave selected-block and ordinary mempool effects.
+      // Reconcile once from authoritative selected ids and the final pool after membership changes.
+      if (newBestInputBlocks.nonEmpty || rollbackInputBlocks.nonEmpty) {
+        val selectedInputBlockIds = history().bestInputBlocksChain().reverse
+        val newVault = vault().reconcileInputBlockChain(selectedInputBlockIds, memoryPool().getReader)
+        updateNodeView(updatedVault = Some(newVault))
+      }
+
       // send rollback signal
       newBestInputBlocks.foreach { id =>
         log.debug(s"New input-block with transactions found: $id")

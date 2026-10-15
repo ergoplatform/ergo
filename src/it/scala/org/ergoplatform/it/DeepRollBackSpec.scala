@@ -185,6 +185,9 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       // 2. Let nodeB mine `chainLength` blocks in isolation
       Async.await(minerBIsolated.waitForHeight(chainLength, 100.millis))
 
+      Async.await(minerAIsolated.connectedPeers) shouldBe empty
+      Async.await(minerBIsolated.connectedPeers) shouldBe empty
+
       log.info("Mining phase done")
 
       val minerABestHeight = Async.await(minerAIsolated.fullHeight)
@@ -200,6 +203,9 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       (minerABestHeight > minerBBestHeight) shouldBe true
 
       // 3. Restart nodeA and nodeB (having shorter chain) with disabled mining
+      // B's configured seed is A. Remove A's remembered peers so both nodes do not
+      // dial each other at once and abort both duplicate connections on handshake.
+      docker.removeFromMountedVolume(localVolumeA, remoteVolumeA, "peers")
       val minerA: Node = docker.startDevNetNode(minerAConfigNonGen,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
 

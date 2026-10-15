@@ -7,6 +7,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.http.api.NipopowApiRoute
 import org.ergoplatform.utils.Stubs
+import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -86,7 +87,8 @@ class NipopowApiRoutesSpec extends AnyFlatSpec
 
     Get(s"/nipopow/proof/1/2/${tip.id}") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
-      responseAs[String] should include("suffix length 1")
+      responseAs[Json].hcursor.downField("detail").as[String].right.get should
+        include("suffix length 1")
     }
   }
 
@@ -111,6 +113,49 @@ class NipopowApiRoutesSpec extends AnyFlatSpec
         .as[String].right.get shouldBe suffixHead.id
       val tail = cursor.downField("suffixTail").as[List[Json]].right.get
       tail.map(_.hcursor.downField("id").as[String].right.get) shouldBe List(tip.id)
+    }
+  }
+
+  it should "reject a disconnected selected suffix while retaining a one-header fork proof" in {
+    val tip = history.bestHeaderOpt.get
+    val selectedHead = history.bestHeaderAtHeight(tip.height - 1).get
+    val forkParent = chain.find(_.header.height == tip.height - 2).get
+    val sibling = genChain(1, forkParent).tail.head
+    sibling.header.height shouldBe selectedHead.height
+    sibling.header.id should not be selectedHead.id
+    applyChain(history, Seq(sibling))
+
+    history.popowHeader(sibling.id).get.header.id shouldBe sibling.id
+    history.bestHeaderAtHeight(sibling.header.height).get.id shouldBe selectedHead.id
+    history.bestHeaderOpt.get.id shouldBe tip.id
+    history.bestHeadersAfter(sibling.header, 1).map(_.id) shouldBe Seq(tip.id)
+    tip.parentId should not be sibling.id
+
+    val disconnected = history.popowProof(1, 2, Some(sibling.id))
+    disconnected.isFailure shouldBe true
+    disconnected.failed.get.getMessage should include("disconnected suffix")
+    val disconnectedBytes = history.popowProofBytes(1, 2, Some(sibling.id))
+    disconnectedBytes.isFailure shouldBe true
+    disconnectedBytes.failed.get.getMessage should include("disconnected suffix")
+    Get(s"/nipopow/proof/1/2/${sibling.id}") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.downField("detail").as[String].right.get should
+        include("disconnected suffix")
+    }
+
+    val oneHeaderProof = history.popowProof(1, 1, Some(sibling.id)).get
+    oneHeaderProof.hasValidParams shouldBe true
+    oneHeaderProof.hasValidConnections shouldBe true
+    oneHeaderProof.suffixHead.id shouldBe sibling.id
+    oneHeaderProof.suffixTail shouldBe empty
+    val oneHeaderBytes = history.popowProofBytes(1, 1, Some(sibling.id)).get
+    val parsed = history.nipopowSerializer.parseBytes(oneHeaderBytes)
+    parsed.suffixHeaders.map(_.id) shouldBe Seq(sibling.id)
+    parsed.hasValidConnections shouldBe true
+    Get(s"/nipopow/proof/1/1/${sibling.id}") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("suffixHead").downField("header")
+        .downField("id").as[String].right.get shouldBe sibling.id
     }
   }
 

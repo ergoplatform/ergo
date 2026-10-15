@@ -55,12 +55,62 @@ class NipopowApiRoutesSpec extends AnyFlatSpec
 
   it should "return proof for min superchain & suffix length & header id" in {
     val existingHeaderId = history.bestHeaderOpt.get.id
+    val proof = history.popowProof(1, 1, Some(existingHeaderId)).get
+    proof.hasValidParams shouldBe true
+    proof.suffixHead.id shouldBe existingHeaderId
+    proof.suffixTail shouldBe empty
+    val proofBytes = history.popowProofBytes(1, 1, Some(existingHeaderId)).get
+    val parsed = history.nipopowSerializer.parseBytes(proofBytes)
+    parsed.hasValidParams shouldBe true
+    parsed.suffixHeaders.map(_.id) shouldBe proof.suffixHeaders.map(_.id)
+    history.nipopowSerializer.toBytes(parsed).toSeq shouldBe proofBytes.toSeq
+
     Get(s"/nipopow/proof/1/1/$existingHeaderId") ~> route ~> check {
       status shouldBe StatusCodes.OK
       val json = responseAs[Json]
       log.info(s"Received nipopow proof response : $json")
       val c = json.hcursor
       c.downField("prefix").as[List[Json]].right.get shouldNot be(empty)
+    }
+  }
+
+  it should "reject a proof for the current tip when k requires a successor" in {
+    val tip = history.bestHeaderOpt.get
+    val proof = history.popowProof(1, 2, Some(tip.id))
+    proof.isFailure shouldBe true
+    proof.failed.get.getMessage should include("suffix length 1")
+
+    val proofBytes = history.popowProofBytes(1, 2, Some(tip.id))
+    proofBytes.isFailure shouldBe true
+    proofBytes.failed.get.getMessage should include("suffix length 1")
+
+    Get(s"/nipopow/proof/1/2/${tip.id}") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[String] should include("suffix length 1")
+    }
+  }
+
+  it should "return a proof when exactly the requested suffix is available" in {
+    val tip = history.bestHeaderOpt.get
+    val suffixHead = history.bestHeaderAtHeight(tip.height - 1).get
+    val proof = history.popowProof(1, 2, Some(suffixHead.id)).get
+    proof.hasValidParams shouldBe true
+    proof.suffixHead.id shouldBe suffixHead.id
+    proof.suffixTail.map(_.id) shouldBe Seq(tip.id)
+    val proofBytes = history.popowProofBytes(1, 2, Some(suffixHead.id)).get
+    val parsed = history.nipopowSerializer.parseBytes(proofBytes)
+    parsed.hasValidParams shouldBe true
+    parsed.suffixHeaders.map(_.id) shouldBe proof.suffixHeaders.map(_.id)
+    history.nipopowSerializer.toBytes(parsed).toSeq shouldBe proofBytes.toSeq
+
+    Get(s"/nipopow/proof/1/2/${suffixHead.id}") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val cursor = responseAs[Json].hcursor
+      cursor.downField("k").as[Int].right.get shouldBe 2
+      cursor.downField("suffixHead").downField("header").downField("id")
+        .as[String].right.get shouldBe suffixHead.id
+      val tail = cursor.downField("suffixTail").as[List[Json]].right.get
+      tail.map(_.hcursor.downField("id").as[String].right.get) shouldBe List(tip.id)
     }
   }
 

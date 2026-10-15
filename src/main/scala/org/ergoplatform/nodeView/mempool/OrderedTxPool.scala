@@ -50,6 +50,10 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       case None if orderedTransactions.size == transactionsRegistry.size =>
         orderedTransactions
       case _ =>
+        log.warn(
+          s"Mempool indices diverged (ordered=${orderedTransactions.size}, " +
+            s"registry=${transactionsRegistry.size}); full scan to remove $id"
+        )
         orderedTransactions.filter { case (wtx, utx) => wtx.id != id && utx.id != id }
     }
   }
@@ -62,6 +66,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     transactionsRegistry.get(id)
       .flatMap(wtx => orderedTransactions.get(wtx).filter(_.id == id).map(wtx -> _))
       .orElse {
+        log.warn(s"Mempool fast lookup failed for $id, scanning ordered transactions")
         orderedTransactions.iterator.collectFirst {
           case (wtx, utx) if wtx.id == id && utx.id == id => wtx -> utx
         }

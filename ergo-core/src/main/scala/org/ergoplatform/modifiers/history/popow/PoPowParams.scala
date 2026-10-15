@@ -12,6 +12,9 @@ import scala.util.Try
   *                     to calculate difficulty to be added to the proof). One-shot use means using the proof to just
   *                     to prove that a best chain contains some header (e.g. to work with a transaction corresponding
   *                     to the block header)
+  * @param minChainLength - minimal length of a proof's header chain acceptable for the params, always m + k.
+  *                     Kept as groundwork for the proof-length checks of the NiPoPoW parsing rework (#2461),
+  *                     not read by validation yet
   *
   */
 final class PoPowParams private (val m: Int, val k: Int, val continuous: Boolean, val minChainLength: Int)

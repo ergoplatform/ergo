@@ -173,6 +173,8 @@ object TransactionBuilder {
     val outputSumTry = Try(outputCandidates.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
     require(outputSumTry.isSuccess, s"Sum of transaction output values should not exceed ${Long.MaxValue}")
     require(inputs.distinct.size == inputs.size, s"There should be no duplicate inputs")
+    require(dataInputs.distinct.size >= dataInputs.size - 1,
+      s"There should be no more than one pair of data inputs with the same box id")
   }
 
   /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change

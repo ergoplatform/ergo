@@ -17,8 +17,8 @@ object NipopowProverWithDbAlgs {
   /**
    * Computes NiPoPow proof for the chain stored in `histReader`'s database,
    * or a prefix of the chain which contains a specific header (if `headerIdOpt` is specified).
-   * In the latter case, header will be the first header of the suffix of max length `k`
-   * (`suffixHead` field of the result).
+   * In the latter case, header will be the first header of the suffix of length `k`
+   * (`suffixHead` field of the result). Fails if fewer than `k - 1` successors are available.
    */
   def prove(histReader: ErgoHistoryReader,
             headerIdOpt: Option[ModifierId] = None, chainSettings: ChainSettings)(params: PoPowParams): Try[NipopowProof] = {
@@ -81,6 +81,8 @@ object NipopowProverWithDbAlgs {
           val suffix = histReader.lastHeaders(k).headers
           histReader.popowHeader(suffix.head.id).get -> suffix.tail // .get to be caught in outer (prove's) Try
       }
+      require(suffixTail.lengthCompare(k - 1) == 0,
+        s"Cannot construct NiPoPoW proof with suffix length ${suffixTail.size + 1}: expected $k")
 
       val storedHeights = mutable.Set[Height]() // cache to filter out duplicate headers
       val prefixBuilder = mutable.ArrayBuilder.make[PoPowHeader]()

@@ -20,6 +20,40 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
   private val emptyVersion: VersionTag = bytesToVersion(Array.fill(32)(0: Byte))
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
+  property("recover a valid checkpoint and reopen it") {
+    val (us, bh) = createUtxoState(settings)
+    try {
+      val block = validFullBlock(parentOpt = None, us, bh)
+      val checkpoint = block.header
+      val checkpointContext = us.stateContext.appendFullBlock(block).get
+      val dir = createTempDir
+
+      def checkCheckpoint(state: DigestState): Unit = {
+        state.version shouldEqual checkpoint.id
+        state.rootDigest shouldEqual checkpoint.stateRoot
+        state.stateContext.lastHeaderOpt.map(_.id) shouldEqual Some(checkpoint.id)
+        state.stateContext.bytes shouldEqual checkpointContext.bytes
+      }
+
+      val recovered = DigestState.recover(
+        idToVersion(checkpoint.id), checkpoint.stateRoot, checkpointContext, dir, settings).get
+      try {
+        checkCheckpoint(recovered)
+      } finally {
+        recovered.close()
+      }
+
+      val reopened = DigestState.create(None, None, dir, settings)
+      try {
+        checkCheckpoint(reopened)
+      } finally {
+        reopened.close()
+      }
+    } finally {
+      us.closeStorage()
+    }
+  }
+
   property("reopen") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh, parameters)
@@ -34,6 +68,8 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
       val state = DigestState.create(None, None, dir2, settings)
       state.version shouldEqual fb.header.id
       state.rootDigest shouldEqual fb.header.stateRoot
+      state.close()
+      us.closeStorage()
     }
   }
 
@@ -69,6 +105,8 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
 
       val ds = createDigestState(us.version, us.rootDigest)
       ds.applyModifier(block, None)(_ => ()) shouldBe 'success
+      ds.close()
+      us.closeStorage()
     }
   }
 
@@ -104,6 +142,9 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
       ds3.stateContext.lastHeaders.size shouldEqual 0
 
       ds3.applyModifier(block, None)(_ => ()).get.rootDigest shouldBe ds2.rootDigest
+
+      ds.close()
+      us.closeStorage()
     }
   }
 
@@ -134,6 +175,9 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
 
       val txs3 = IndexedSeq(txWithDataInputs, headTx, nextTx)
       ds.validateTransactions(txs3, digest2, proof2, emptyStateContext) shouldBe 'failure
+
+      ds.close()
+      us.closeStorage()
     }
   }
 

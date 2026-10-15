@@ -1,11 +1,15 @@
 package org.ergoplatform.http.routes
 
+import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.{Route, ValidationRejection}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import org.ergoplatform.http.api.NipopowApiRoute
+import org.ergoplatform.modifiers.history.popow.NipopowProof
+import org.ergoplatform.nodeView.ErgoReadersHolder.GetDataFromHistory
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -156,6 +160,62 @@ class NipopowApiRoutesSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("suffixHead").downField("header")
         .downField("id").as[String].right.get shouldBe sibling.id
+    }
+  }
+
+  it should "keep retarget headers on the requested retained fork" in {
+    val forkSettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      chainSettings = settings.chainSettings.copy(
+        epochLength = 20, useLastEpochs = 2, eip37EpochLength = None),
+      nodeSettings = settings.nodeSettings.copy(extraIndex = false, blocksToKeep = -1)
+    )
+    val forkHistory = ErgoHistory.readOrGenerate(forkSettings)(null)
+    val readers = system.actorOf(Props(new Actor {
+      def receive: Receive = {
+        case GetDataFromHistory(f) => sender() ! f(forkHistory)
+      }
+    }))
+    try {
+      val selected = genChain(22)
+      applyChain(forkHistory, selected)
+      val fork = genChain(20, selected.head).tail
+      applyChain(forkHistory, fork)
+      val requested = fork.last.header
+      val forkRetarget = fork.find(_.header.height == 20).get.header
+      val selectedRetarget = selected.find(_.header.height == 20).get.header
+
+      requested.height shouldBe 21
+      forkHistory.bestHeaderOpt.get.id shouldBe selected.last.id
+      forkHistory.popowHeader(requested.id).get.id shouldBe requested.id
+      forkHistory.bestHeaderAtHeight(20).get.id shouldBe selectedRetarget.id
+      forkRetarget.id should not be selectedRetarget.id
+      val selectedProof = forkHistory.popowProof(1, 1, Some(selected.last.id)).get
+      selectedProof.hasValidConnections shouldBe true
+      selectedProof.prefix.find(_.height == 20).get.id shouldBe selectedRetarget.id
+
+      val proof = forkHistory.popowProof(1, 1, Some(requested.id)).get
+      proof.continuous shouldBe true
+      val bytes = forkHistory.popowProofBytes(1, 1, Some(requested.id)).get
+      val parsed = forkHistory.nipopowSerializer.parseBytes(bytes)
+
+      val forkRoute = NipopowApiRoute(nodeViewRef, readers, forkSettings).route
+      var httpProof: Option[NipopowProof] = None
+      Get(s"/nipopow/proof/1/1/${requested.id}") ~> forkRoute ~> check {
+        status shouldBe StatusCodes.OK
+        httpProof = Some(responseAs[Json].as(NipopowProof.nipopowProofDecoder(proof.popowAlgos)).right.get)
+      }
+      val returnedProofs = Seq(proof, parsed, httpProof.get)
+      withClue(s"Producer, binary roundtrip and HTTP connection checks: ${returnedProofs.map(_.hasValidConnections)}. ") {
+        returnedProofs.foreach { returned =>
+          returned.prefix.find(_.height == 20).get.id shouldBe forkRetarget.id
+          returned.hasValidConnections shouldBe true
+          returned.hasValidDifficultyHeaders shouldBe true
+        }
+      }
+    } finally {
+      system.stop(readers)
+      forkHistory.closeStorage()
     }
   }
 

@@ -23,7 +23,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.PeerInfo
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.util.bytesToId
+import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -873,6 +873,88 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       eventually {
         deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty) shouldBe scorex.core.network.ModifiersStatus.Invalid
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: locally satisfied request permits one reply from its connection") {
+    withFixture2 { ctx =>
+      import ctx._
+      import org.ergoplatform.network.peer.PenaltyType
+      import scorex.core.network.NetworkController.ReceivableMessages.PenalizePeer
+
+      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      synchronizerMockRef ! ChangedHistory(hhistory)
+      synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val typeId = Header.modifierTypeId
+      def sendSection(remote: ConnectedPeer, id: ModifierId): Unit = {
+        val data = ModifiersData(typeId, Map(id -> Array[Byte](1)))
+        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(remote))
+      }
+
+      val id: ModifierId = bytesToId(Array.fill[Byte](32)(1.toByte))
+      deliveryTracker.setRequested(typeId, id, peer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! SyntacticallySuccessfulModifier(typeId, id)
+      eventually { deliveryTracker.status(id, typeId, Seq.empty) shouldBe Unknown }
+
+      // Equal remote addresses are not enough: the request belonged to the old handler.
+      val otherConnection = peer.copy(handlerRef = TestProbe().ref)
+      sendSection(otherConnection, id)
+      ncProbe.expectMsg(PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.SpamPenalty))
+
+      // The allowance is consumed, so a duplicate is still spam.
+      sendSection(peer, id)
+      sendSection(peer, id)
+      ncProbe.expectMsg(PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.SpamPenalty))
+      ncProbe.expectNoMessage(200.millis)
+
+      val unsolicited: ModifierId = bytesToId(Array.fill[Byte](32)(2.toByte))
+      sendSection(peer, unsolicited)
+      ncProbe.expectMsg(PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.SpamPenalty))
+
+      // A section already received from the network has no canceled local request to excuse.
+      val received: ModifierId = bytesToId(Array.fill[Byte](32)(3.toByte))
+      deliveryTracker.setRequested(typeId, received, peer)(_ => Cancellable.alreadyCancelled)
+      deliveryTracker.setReceived(received, typeId, peer)
+      synchronizerMockRef ! SyntacticallySuccessfulModifier(typeId, received)
+      eventually { deliveryTracker.status(received, typeId, Seq.empty) shouldBe Unknown }
+      sendSection(peer, received)
+      ncProbe.expectMsg(PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.SpamPenalty))
+    }
+  }
+
+  property("NodeViewSynchronizer: late reply allowance expires and evicts oldest entries") {
+    withFixture2 { ctx =>
+      import ctx._
+      var now = 0L
+      val replies = new LateBlockSectionReplies(1, 10L, () => now)
+      val typeId = Header.modifierTypeId
+      val first: ModifierId = bytesToId(Array.fill[Byte](32)(4.toByte))
+      val second: ModifierId = bytesToId(Array.fill[Byte](32)(5.toByte))
+
+      replies.record(typeId, first, peer)
+      replies.record(typeId, second, peer)
+      replies.consume(typeId, first, peer) shouldBe false
+      replies.consume(typeId, second, peer) shouldBe true
+      replies.consume(typeId, second, peer) shouldBe false
+
+      replies.record(typeId, first, peer)
+      replies.discard(typeId, first)
+      replies.consume(typeId, first, peer) shouldBe false
+
+      replies.record(typeId, first, peer)
+      now = 10L
+      replies.consume(typeId, first, peer) shouldBe false
+
+      now = 0L
+      val ordered = new LateBlockSectionReplies(2, 10L, () => now)
+      ordered.record(typeId, first, peer)
+      now = 5L
+      ordered.record(typeId, second, peer)
+      now = 10L
+      ordered.record(typeId, first, peer)
+      ordered.consume(typeId, second, peer) shouldBe true
+      ordered.consume(typeId, first, peer) shouldBe true
     }
   }
 

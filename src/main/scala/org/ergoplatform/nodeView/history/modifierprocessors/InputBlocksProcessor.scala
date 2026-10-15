@@ -535,6 +535,28 @@ trait InputBlocksProcessor extends ScorexLogging {
         }
       }
 
+      // A cached replay can complete several shared blocks in one application step.
+      // Advance each sibling in that order, preserving earlier updates to the tree.
+      def registerSharedCompletions(tree: InputBlocksTree,
+                                    completed: Seq[ModifierId]): InputBlocksTree = {
+        completed.foldLeft(tree) { (updatedTree, id) =>
+          val updatedForks = updatedTree.forks.map { fork =>
+            if (fork.firstToComplete().contains(id)) {
+              // todo: pass real cost of input block instead of costDelta = 0
+              fork.registerCompletion(id, costDelta = 0) match {
+                case Success(updatedFork) => updatedFork
+                case Failure(e) =>
+                  log.warn(s"registerCompletion failed for input block $id : ", e)
+                  fork
+              }
+            } else {
+              fork
+            }
+          }
+          new InputBlocksTree(updatedForks)
+        }
+      }
+
       // Determine the best fork index (prefer processed blocks over longest chain)
       val bestIndex = if (this.bestIndex == -1) {
         this.longestIndex
@@ -615,22 +637,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
         if (r._2.nonEmpty) {
           // Update the tree with the processed chain
-          var updTree  = new InputBlocksTree(forks.updated(longestIndex, r._1))
-          val updForks = updTree.forks
-
-          // Register completion for any other forks that were waiting for this block
-          (0 until updForks.length).foreach { idx =>
-            val f = updForks(idx)
-            if (f.firstToComplete().contains(ib.id)) {
-              // todo: pass real cost of input block instead of costDelta = 0
-              f.registerCompletion(ib.id, costDelta = 0) match {
-                case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
-                case Failure(e) =>
-                  log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
-              }
-            }
-          }
+          val updTree = registerSharedCompletions(
+            new InputBlocksTree(forks.updated(longestIndex, r._1)), r._2
+          )
           inputBlockTrees.put(ib.header.parentId, updTree) // Update global tree storage
           log.info(s"Fork switch completed: ${r._2.length} blocks rolled back, new best fork has ${r._1.processedIndex + 1} processed blocks")
           r._2 -> rollbackInputBlocks  // Return forward progress and rollback blocks
@@ -645,22 +654,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
         if (r._2.nonEmpty) {
           // Update the tree with the processed chain
-          var updTree  = new InputBlocksTree(forks.updated(bestIndex, r._1))
-          val updForks = updTree.forks
-
-          // Register completion for any other forks that were waiting for this block
-          (0 until updForks.length).foreach { idx =>
-            val f = updForks(idx)
-            if (f.firstToComplete().contains(ib.id)) {
-              // todo: pass real cost of input block instead of costDelta = 0
-              f.registerCompletion(ib.id, costDelta = 0) match {
-                case Success(ibc) =>
-                  updTree = new InputBlocksTree(forks.updated(idx, ibc))
-                case Failure(e) =>
-                  log.warn(s"registerCompletion failed for input block ${ib.id} : ", e)
-              }
-            }
-          }
+          val updTree = registerSharedCompletions(
+            new InputBlocksTree(forks.updated(bestIndex, r._1)), r._2
+          )
           inputBlockTrees.put(ib.header.parentId, updTree) // Update global tree storage
           log.debug(s"Input block ${ib.id} processed successfully, ${r._2.length} blocks added to chain")
           r._2 -> Seq.empty  // Return forward progress, no rollback since no fork switch
@@ -722,8 +718,9 @@ trait InputBlocksProcessor extends ScorexLogging {
 
   /**
     * Temporary cache of children which do not have parents downloaded yet
+    * Iteration preserves arrival order; recovery relies on it when attaching equal-length sibling forks.
     */
-  private[modifierprocessors] val disconnectedWaitlist = mutable.Set[InputBlockAnnouncement]()
+  private[modifierprocessors] val disconnectedWaitlist = mutable.LinkedHashSet[InputBlockAnnouncement]()
 
   private def bestOrderingBlock(): Option[Header] = historyReader.bestFullBlockOpt.map(_.header)
 

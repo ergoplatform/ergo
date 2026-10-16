@@ -1,37 +1,51 @@
 package org.ergoplatform.network
 
+import java.net.InetSocketAddress
+
 import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
-import akka.testkit.TestProbe
+import akka.testkit.{TestActorRef, TestProbe}
+import org.ergoplatform.Input
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.{ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
+import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
+import org.ergoplatform.utils.BoxUtils
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
+import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
-import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.crypto.authds.ADKey
 import scorex.util.bytesToId
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.testkit.utils.AkkaFixture
+import sigma.Colls
+import sigma.interpreter.{ContextExtension, ProverResult}
+import sigmastate.helpers.TestingHelpers._
 
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 
 class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   with Matchers
@@ -203,6 +217,29 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       pchProbe.ref,
       Some(peerInfo)
     )
+
+    // The view holder's own history. Tests seed and read history through it: a second ErgoHistory opened on the
+    // same directory shares the database but not the caches, so one instance can keep serving a stale index value
+    // (such as the best header id) after the other has written.
+    val viewHistory: ErgoHistory = {
+      val viewProbe = TestProbe("ViewProbe")
+      nodeViewHolderMockRef.tell(
+        GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)), viewProbe.ref)
+      // If the wait fails, the fixture is never built and withFixture2 cannot terminate its actor system, so it is
+      // terminated here: that stops the view holder, which closes its database.
+      val (h, pool) = try {
+        viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+      } catch {
+        case NonFatal(e) =>
+          Await.result(system.terminate(), Duration.Inf)
+          throw e
+      }
+      // Until it holds a history and a mempool the synchronizer defers every message by 1 s, in rounds. Handing them
+      // over before the test's first message makes it handle the test's messages at once.
+      synchronizerMockRef ! ChangedHistory(h)
+      synchronizerMockRef ! ChangedMempool(pool)
+      h
+    }
   }
 
   /**
@@ -347,13 +384,174 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: wrong-version transaction section does not poison its canonical id") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("HeaderFirstSynchronizerStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("HeaderFirstHolderProbe")
+      val synchronizer = system.actorOf(Props(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker)))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(history, blocks.head)
+      val withHeader = withParent.append(blocks.last.header).get._1
+      synchronizer ! ChangedHistory(withHeader)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val canonical = blocks.last.blockTransactions
+      val wrongVersion = canonical.copy(blockVersion = Header.Interpreter50Version, sizeOpt = None)
+      val wrongBytes = wrongVersion.bytes
+      val parsedWrongVersion = BlockTransactionsSerializer.parseBytes(wrongBytes)
+      canonical.id shouldBe blocks.last.header.transactionsId
+      parsedWrongVersion.id shouldBe canonical.id
+      parsedWrongVersion.blockVersion should not be blocks.last.header.version
+
+      val differentId = BlockTransactionsSerializer.parseBytes(wrongBytes)
+      val proof = differentId.txs.head.inputs.head.spendingProof.proof
+      proof(0) = (proof(0) ^ 1).toByte
+      val differentIdBytes = differentId.bytes
+      val parsedDifferentId = BlockTransactionsSerializer.parseBytes(differentIdBytes)
+      differentId.id should not be canonical.id
+      differentId.id should not be blocks.last.header.transactionsId
+      parsedDifferentId.id shouldBe differentId.id
+      parsedDifferentId.blockVersion shouldBe parsedWrongVersion.blockVersion
+      deliveryTracker.setRequested(differentId.modifierTypeId, differentId.id, peer)(_ => Cancellable.alreadyCancelled)
+      val differentIdData = ModifiersData(differentId.modifierTypeId, Map(differentId.id -> differentIdBytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(differentIdData)), Some(peer))
+      eventually {
+        deliveryTracker.status(differentId.id, differentId.modifierTypeId, Seq.empty) shouldBe
+          scorex.core.network.ModifiersStatus.Invalid
+      }
+      ncProbe.fishForMessage(3.seconds) {
+        case _: PenalizePeer => true
+        case _ => false
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+
+      deliveryTracker.setRequested(canonical.modifierTypeId, canonical.id, peer)(_ => Cancellable.alreadyCancelled)
+      val wrongData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> wrongBytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(wrongData)), Some(peer))
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      holderProbe.expectNoMessage(300.millis)
+      ncProbe.fishForMessage(3.seconds) {
+        case _: PenalizePeer => true
+        case _ => false
+      } shouldBe PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+      ncProbe.expectNoMessage(300.millis)
+
+      val otherPeer = ConnectedPeer(
+        connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("192.0.2.2", 9030)),
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+      )
+      otherPeer.connectionId.remoteAddress.getAddress should not be peer.connectionId.remoteAddress.getAddress
+      val announced = InvData(canonical.modifierTypeId, Seq(canonical.id))
+      synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(announced)), Some(otherPeer))
+      requestForModifierSent(ncProbe, canonical.modifierTypeId, canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      val canonicalData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> canonical.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(canonicalData)), Some(otherPeer))
+      val forwarded = holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote]
+      forwarded.modifiers.map(_.id) should contain (canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
+      }
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
+  property("NodeViewSynchronizer: transaction section received before header remains downloadable") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val stopProbe = TestProbe("OriginalSynchronizerStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      system.stop(synchronizerMockRef)
+      stopProbe.expectTerminated(synchronizerMockRef)
+
+      val holderProbe = TestProbe("SectionHolderProbe")
+      val synchronizer = system.actorOf(Props(new SynchronizerMock(
+        ncProbe.ref,
+        holderProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker)))
+      holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges]
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
+      val withParent = applyBlock(history, blocks.head)
+      synchronizer ! ChangedHistory(withParent)
+      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
+
+      val canonical = blocks.last.blockTransactions
+      val wrongVersion = canonical.copy(blockVersion = Header.Interpreter50Version, sizeOpt = None)
+      val wrongBytes = wrongVersion.bytes
+      val parsedWrongVersion = BlockTransactionsSerializer.parseBytes(wrongBytes)
+      canonical.id shouldBe blocks.last.header.transactionsId
+      parsedWrongVersion.id shouldBe canonical.id
+      parsedWrongVersion.blockVersion should not be blocks.last.header.version
+
+      deliveryTracker.setRequested(canonical.modifierTypeId, canonical.id, peer)(_ => Cancellable.alreadyCancelled)
+      val wrongData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> wrongBytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(wrongData)), Some(peer))
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      holderProbe.expectNoMessage(300.millis)
+      ncProbe.expectNoMessage(300.millis)
+
+      val withHeader = withParent.append(blocks.last.header).get._1
+      synchronizer ! ChangedHistory(withHeader)
+      val otherPeer = ConnectedPeer(
+        connectionIdGen.sample.get,
+        pchProbe.ref,
+        Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+          StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))),
+          System.currentTimeMillis()))
+      )
+      syncTracker.updateStatus(otherPeer, org.ergoplatform.consensus.Older, Some(blocks.last.header.height))
+      synchronizer ! ErgoNodeViewHolder.DownloadRequest(Map(canonical.modifierTypeId -> Seq(canonical.id)))
+      requestForModifierSent(ncProbe, canonical.modifierTypeId, canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      val canonicalData = ModifiersData(canonical.modifierTypeId, Map(canonical.id -> canonical.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(canonicalData)), Some(otherPeer))
+      val forwarded = holderProbe.expectMsgType[ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote]
+      forwarded.modifiers.map(_.id) should contain (canonical.id)
+      eventually {
+        deliveryTracker.status(canonical.id, canonical.modifierTypeId, Seq.empty) shouldBe Received
+      }
+      ncProbe.expectNoMessage(300.millis)
+    }
+  }
+
   property("NodeViewSynchronizer: apply continuation header from syncV2 and download its block") {
     withFixture2 { ctx =>
       import ctx._
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // we generate and apply existing base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -388,7 +586,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         }
       }
       eventually {
-        // test whether applied header was actually persisted to history
+        // test whether applied header was actually persisted to history: a fresh instance has no caches and reads the
+        // database
         val hist = ErgoHistory.readOrGenerate(settings)(null)
         hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
@@ -428,7 +627,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
       val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
       val parentOpt = newHistory.lastHeaders(2).headOption
@@ -451,7 +650,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // Generate base chain and set up synchronizer with it
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -503,54 +702,41 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: longer fork is applied and shorter is not") {
     withFixture2 { ctx =>
       import ctx._
+      val hist = viewHistory
 
-      def sendHeader(block: ErgoFullBlock): Unit = {
-        deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+      // Delivers a chain's headers as one reply. The delivery tracker is not thread-safe and the synchronizer
+      // updates it while it handles replies and their application events, so the test marks the headers as
+      // requested only once the synchronizer is done with the previous chain, and before sending anything.
+      def sendHeaders(chain: Seq[ErgoFullBlock]): Unit = {
+        chain.foreach { b =>
+          deliveryTracker.setRequested(Header.modifierTypeId, b.header.id, peer)(_ => Cancellable.alreadyCancelled)
+        }
+        val modData = ModifiersData(Header.modifierTypeId, chain.map(b => b.header.id -> b.header.bytes).toMap)
         synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
-      def sendBlockSection(block: BlockSection): Unit = {
-        deliveryTracker.setRequested(block.modifierTypeId, block.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
-        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
-      }
-
-      def sendBlock(block: ErgoFullBlock): Unit = {
-        sendBlockSection(block.blockTransactions)
-        sendBlockSection(block.extension)
-        block.adProofs.foreach(sendBlockSection(_))
+      def appliedAndSettled(chain: Seq[ErgoFullBlock]): Unit = eventually(timeout(10.seconds)) {
+        hist.bestHeaderOpt.map(_.id) shouldBe Some(chain.last.id)
+        // the synchronizer has handled every application event: no header is still tracked as received
+        chain.foreach(b => deliveryTracker.status(b.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown)
       }
 
       deliveryTracker.reset()
 
-      val hist = ErgoHistory.readOrGenerate(settings)(null)
-      // generate smaller fork that is going to be reverted after applying a bigger fork
+      // a shorter chain, received first, becomes the best one
       val smallFork = genChain(4, hist)
+      sendHeaders(smallFork)
+      appliedAndSettled(smallFork)
 
-      smallFork.foreach(sendHeader)
-      // history should eventually contain all smaller fork headers
-      eventually {
-        smallFork.forall(block => hist.contains(block.id))
-      }
-      smallFork.foreach(sendBlock)
-      // history should eventually contain smaller fork block parts
-      eventually {
-        smallFork.forall(block => hist.contains(block.extension.id) && hist.contains(block.blockTransactions.id))
-      }
-      // generate bigger fork that is going to win over smaller fork that is to be reverted
+      // a longer competing chain, received later, replaces it as the best one. Headers of the shorter chain stay
+      // in history; only the best chain changes. (Switching full blocks needs blocks valid for the view holder's
+      // state, which these generated blocks are not; the view holder's switch to a better chain is tested in
+      // ErgoNodeViewHolderSpec, "switching for a better chain".)
       val bigFork = genChain(20, hist, extension = emptyExtension)
-
-      bigFork.foreach(sendHeader)
-      // history should revert all smaller fork headers
-      eventually {
-        smallFork.forall(block => !hist.contains(block.id))
-      }
-      bigFork.foreach(sendBlock)
-      // history should revert all smaller fork block parts
-      eventually {
-        smallFork.forall(block => !hist.contains(block.extension.id) && !hist.contains(block.blockTransactions.id))
-      }
+      // both chains start from genesis: the longer one competes with the shorter one, it does not extend it
+      bigFork.head.header.parentId shouldBe smallFork.head.header.parentId
+      sendHeaders(bigFork)
+      appliedAndSettled(bigFork)
     }
   }
 
@@ -575,6 +761,27 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
             msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode && headers.length == 4
           case _ => false
         }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: full V2 sync info is sent to a peer after receiving a header from it") {
+    withFixture { ctx =>
+      import ctx._
+
+      deliveryTracker.reset()
+      val header = chain.take(1001).last
+      deliveryTracker.setRequested(Header.modifierTypeId, header.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(Header.modifierTypeId, Map(header.id -> header.bytes))
+      synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+
+      // the sync info consists of the headers at offsets 0, 16, 128 and 512 from our tip, not only of the tip
+      ncProbe.fishForMessage(3 seconds) {
+        case stn: SendToNetwork =>
+          val msg = stn.message
+          msg.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode &&
+            msg.data.get.asInstanceOf[ErgoSyncInfoV2].lastHeaders.length == ErgoHistoryReader.FullV2SyncOffsets.length
+        case _ => false
       }
     }
   }
@@ -631,7 +838,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -671,7 +878,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -693,12 +900,18 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
       val parentHeader = baseChain.last
       val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // The older peer also gets the synchronizer's periodic sync message, on its own schedule (the first one 2 s after
+      // start); only that is ignored. The probe filters messages as they arrive, so this is set before the peer is.
+      ncProbe.ignoreMsg {
+        case stn: SendToNetwork => stn.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode
+      }
 
       // Set up sync tracker with an older peer
       syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
@@ -714,6 +927,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Should NOT request the parent header since it's already in history
       ncProbe.expectNoMessage(1.second)
+      ncProbe.ignoreNoMsg()
 
       // The modifier should still be set to Unknown
       eventually {
@@ -726,7 +940,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -759,7 +973,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -786,7 +1000,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -822,7 +1036,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -849,7 +1063,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -881,7 +1095,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build a base chain and apply it to history
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -947,7 +1161,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build a base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -1051,7 +1265,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build base chain and state
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
 
@@ -1084,7 +1298,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build base chain and state
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
 
@@ -1308,6 +1522,360 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         Some(peer))
 
       requestForModifierSent(ncProbe, Extension.modifierTypeId, unknownSectionId)
+    }
+  }
+
+  /*
+   * Anti-spam handling of transactions declined by the mempool.
+   *
+   * A single peer sending plenty of declined (and thus cheap to produce and to check) transactions must not be able to
+   * shut down transaction intake of the whole node. See `MaxDeclined`, `MinDeclinedTxCost`, `addDeclined` and
+   * `canAcceptTxInv` in `ErgoNodeViewSynchronizer`.
+   */
+
+  private val BlocksInDeclinedChain = 10
+
+  /**
+    * Per-peer mempool processing budget between two applied blocks, `MempoolPeerCostPerBlock` in the synchronizer.
+    * A peer's transaction intake is stopped when the budget is reached, see `canAcceptTxInv`.
+    */
+  private val PeerBudgetBetweenBlocks = 10000000
+
+  /**
+    * Number of the cheapest declines a peer has to send to exhaust its budget. Since every decline is
+    * charged with at least `MinDeclinedTxCost`, the real validation cost of such transactions (as low as
+    * 1,000 units, e.g. a min fee check) does not matter here.
+    */
+  private val DeclinesToThrottlePeer = PeerBudgetBetweenBlocks * 3 / 2 / MinDeclinedTxCost + 2
+
+  /**
+    * A transaction with a random id, no signing involved. The synchronizer reads only the id and the source of a
+    * transaction when it processes the corresponding `DeclinedTransaction` event, so the transaction may be dummy.
+    */
+  private def dummyDeclinedTx(): ErgoTransaction = {
+    val proof = ProverResult(Array(0x7c.toByte), ContextExtension.empty)
+    val inputs = IndexedSeq(Input(ADKey @@ scorex.utils.Random.randomBytes(32), proof))
+    val minimalAmount = BoxUtils.minimalErgoAmountSimulated(TrueTree, Colls.emptyColl, Map(), parameters)
+    val outputs = IndexedSeq(testBox(minimalAmount, TrueTree, creationHeight = startHeight))
+    ErgoTransaction(inputs, outputs)
+  }
+
+  /**
+    * Fixture for the declined transactions properties. Unlike `SynchronizerFixture`, the history here has all the
+    * blocks applied, so that `hr.fullBlockHeight == hr.headersHeight` and `canAcceptTxInv` may pass.
+    */
+  private class DeclinedTransactionsFixture extends AkkaFixture {
+    implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+    val ncProbe = TestProbe("NetworkControllerProbe")
+    val vhProbe = TestProbe("ViewHolderProbe")
+    val pchProbe = TestProbe("PeerHandlerProbe")
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+
+    private val emptyHistory = generateHistory(verifyTransactions = true, StateType.Utxo,
+      PoPoWBootstrap = false, blocksToKeep = -1)
+    // named `declinedHistory` and not `history` to avoid a clash with the class level `history` of this spec
+    val declinedHistory: ErgoHistory = applyChain(emptyHistory, genChain(BlocksInDeclinedChain, emptyHistory))
+    declinedHistory.fullBlockHeight shouldBe declinedHistory.headersHeight
+
+    // `TestActorRef` gives access to the underlying actor, needed to check the size of the declined transactions
+    // table, which is not observable from the outside otherwise
+    val synchronizerTestRef: TestActorRef[ErgoNodeViewSynchronizer] = TestActorRef(Props(
+      new SynchronizerMock(
+        ncProbe.ref,
+        vhProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        deliveryTracker
+      )(ec)
+    ))
+
+    val synchronizerRef: ActorRef = synchronizerTestRef
+
+    synchronizerRef ! ChangedHistory(declinedHistory)
+    synchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings))
+
+    def newPeer: ConnectedPeer = ConnectedPeer(
+      connectionIdGen.sample.get,
+      pchProbe.ref,
+      Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+    )
+
+    /**
+      * Simulate `txs` declined by the mempool after they were received from `peer`, each of them being checked with
+      * `cost` cost units (1000 is the cheapest possible check, e.g. a min fee check)
+      */
+    def declineTxs(peer: ConnectedPeer, txs: Seq[ErgoTransaction], cost: Int): Unit = {
+      txs.foreach { tx =>
+        synchronizerRef ! DeclinedTransaction(UnconfirmedTransaction(tx, Some(peer)).withCost(cost))
+      }
+    }
+
+    /** Simulate `count` distinct transactions declined by the mempool after they were received from `peer` */
+    def declineTxs(peer: ConnectedPeer, count: Int, cost: Int): Unit =
+      declineTxs(peer, Seq.fill(count)(dummyDeclinedTx()), cost)
+
+    /** `peer` announces `tx` via `Inv`, the node is expected to answer with `RequestModifier` */
+    def invTxAndExpectRequest(peer: ConnectedPeer, tx: ErgoTransaction): Unit = {
+      val invData = InvData(ErgoTransaction.modifierTypeId, Seq(tx.id))
+      synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+      ncProbe.fishForMessage(5.seconds) { case m =>
+        m match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val requested = stn.message.data.get.asInstanceOf[InvData]
+            requested.typeId == ErgoTransaction.modifierTypeId && requested.ids.contains(tx.id)
+          case _ => false
+        }
+      }
+    }
+
+    /** `peer` announces `tx` via `Inv`, no `RequestModifier` for it is expected to be sent */
+    def invTxAndExpectNoRequest(peer: ConnectedPeer, tx: ErgoTransaction): Unit = {
+      val invData = InvData(ErgoTransaction.modifierTypeId, Seq(tx.id))
+      synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
+      // any other message (sync, inv broadcast, etc.) may be sent to the network controller, so only
+      // `RequestModifier` messages are collected here
+      val deadline = System.currentTimeMillis() + 2.seconds.toMillis
+      while (System.currentTimeMillis() < deadline) {
+        ncProbe.receiveOne(100.millis) match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            val requested = stn.message.data.get.asInstanceOf[InvData]
+            requested.ids should not contain tx.id
+          case _ => // not a request, ignore
+        }
+      }
+    }
+  }
+
+  private def withDeclinedTransactionsFixture(testCode: DeclinedTransactionsFixture => Any): Unit = {
+    val fixture = new DeclinedTransactionsFixture
+    try {
+      testCode(fixture)
+    }
+    finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  /**
+    * Regression test for the transaction intake denial of service: before the fix, the node stopped asking peers for
+    * transactions as soon as the table of declined transaction ids reached its max size, which any single peer was
+    * able to do with cheap (declinable) transactions. Now the table is only a bounded de-duplication cache.
+    */
+  property("NodeViewSynchronizer: declined transactions table at max size does not stop intake") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      // the cheapest declines, as the mempool rejects them before executing any script
+      declineTxs(attacker, count = MaxDeclined, cost = 1000)
+
+      // the node must still ask the other peers for transactions
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * The table of declined transactions is bounded, so that a peer sending plenty of declined transactions can not
+    * bloat node's memory. Entries are dropped one by one, so that the de-duplication is not lost entirely when
+    * the table overflows (as opposed to dropping the whole table at once).
+    */
+  property("NodeViewSynchronizer: declined transactions table is bounded") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      // twice as much as the table may hold, so that eviction definitely happens
+      declineTxs(attacker, count = 2 * MaxDeclined, cost = 1000)
+
+      // barrier: the response to this inv proves that all the declines above are already processed
+      // (messages from a single sender are processed in order)
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+
+      // the table is pinned at the limit rather than being emptied
+      synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe MaxDeclined
+    }
+  }
+
+  /**
+    * Cheapest declines are charged to the peer which sent them (with `MinDeclinedTxCost` floor), so a peer sending
+    * them in bulk stops being served, while other peers are not affected at all.
+    */
+  property("NodeViewSynchronizer: cheap declines throttle the sending peer only") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+      val honest = newPeer
+
+      declineTxs(attacker, count = DeclinesToThrottlePeer, cost = 1000)
+
+      // the attacker exhausted its own budget, its transaction invs are not served anymore
+      invTxAndExpectNoRequest(attacker, dummyDeclinedTx())
+
+      // other peers are not affected, and the global budget is not inflated with the floor price,
+      // as the real cost of the declines above is `DeclinesToThrottlePeer` cost units only
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * The per-peer cost is accumulated, so it must not overflow: an overflowed cost turns negative, and a negative
+    * cost passes every limit check, which silently disables the throttling of the peer.
+    *
+    * Note the declines below are counted in the global counter with their measured cost (1000 each), so the global
+    * budget is not exhausted here - this property is about the per-peer counter only.
+    */
+  property("NodeViewSynchronizer: per-peer cost does not overflow when a peer sends many declines") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val attacker = newPeer
+
+      // enough declines to overflow an `Int` accumulator, were the cost fields `Int` rather than `Long`
+      val declinesToOverflowInt = Int.MaxValue / MinDeclinedTxCost + 2
+      declineTxs(attacker, count = declinesToOverflowInt, cost = 1000)
+
+      // the peer is throttled, so the accumulated cost did not wrap around to a negative value
+      invTxAndExpectNoRequest(attacker, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * The peer budget, as well as the table of declined transactions, is reset when a new block is applied, so the
+    * throttling of a peer lasts no longer than one block.
+    */
+  property("NodeViewSynchronizer: throttled peer is served again when new block is applied") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+
+      declineTxs(peer, count = DeclinesToThrottlePeer, cost = 1000)
+      invTxAndExpectNoRequest(peer, dummyDeclinedTx())
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+
+      // the peer budget is reset on block application, so the peer is served again
+      invTxAndExpectRequest(peer, dummyDeclinedTx())
+    }
+  }
+
+  /**
+    * A declined transaction is worth re-evaluating once a new block is applied, as the reason of the decline may be
+    * gone by now (e.g. the transaction double-spending it lost to is mined, or mempool capacity is freed).
+    */
+  property("NodeViewSynchronizer: declined transactions table is reset when new block is applied") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+      val tx = dummyDeclinedTx()
+
+      declineTxs(peer, tx +: Seq.fill(9)(dummyDeclinedTx()), cost = 1000)
+      // the transaction is declined, so it is not asked for
+      invTxAndExpectNoRequest(peer, tx)
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+
+      // after a block is applied the transaction is asked for again
+      invTxAndExpectRequest(peer, tx)
+    }
+  }
+
+  /**
+    * Reservations now bound outstanding transaction responses below the processing cache limit.
+    * Budgeted inventory tails and peer fairness are covered in MempoolInflightBudgetSpec; here
+    * the admitted cached response must still resume when a block is applied.
+    */
+  property("NodeViewSynchronizer: admitted cached transaction resumes on block applied") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+
+      val txs = Seq.fill(2)(dummyDeclinedTx())
+      txs.map(_.id).distinct.size shouldBe 2
+      txs.foreach(tx => invTxAndExpectRequest(peer, tx))
+
+      val modData = ModifiersData(ErgoTransaction.modifierTypeId, txs.map(tx => tx.id -> tx.bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+
+      // One response is sent for processing while the other remains cached.
+      var firstForwardedId = Option.empty[scorex.util.ModifierId]
+      vhProbe.fishForMessage(5.seconds) {
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote
+          if txs.exists(_.id == t.unconfirmedTx.id) =>
+          firstForwardedId = Some(t.unconfirmedTx.id)
+          true
+        case _ => false
+      }
+
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 1
+
+      // The block boundary resumes the cached transaction.
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      vhProbe.fishForMessage(5.seconds) {
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote =>
+          txs.exists(_.id == t.unconfirmedTx.id) && !firstForwardedId.contains(t.unconfirmedTx.id)
+        case _ => false
+      }
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 0
+    }
+  }
+
+  /**
+    * The declined transactions table is a de-duplication cache: re-adding an id which is already in the full
+    * table must not evict another entry (which would forget a declined transaction for no reason).
+    */
+  property("NodeViewSynchronizer: duplicate declined transaction does not evict from the declined table") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+      val honest = newPeer
+
+      val txs = Seq.fill(MaxDeclined)(dummyDeclinedTx())
+      declineTxs(peer, txs, cost = 1000)
+      // decline one of the transactions once again - the table must not shrink
+      declineTxs(peer, Seq(txs.head), cost = 1000)
+
+      // barrier: the response to this inv proves that all the declines above are already processed
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+
+      synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe MaxDeclined
+    }
+  }
+
+  /**
+    * Declines of transactions invalidated by the mempool (e.g. rent or re-emission prefilter rejections) are
+    * already blocked from re-request by the `isInvalidated` check in `processInv`, so they are not stored
+    * in the declined transactions table.
+    */
+  property("NodeViewSynchronizer: decline of an invalidated transaction is not stored in the declined table") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val peer = newPeer
+      val honest = newPeer
+      val tx = dummyDeclinedTx()
+
+      // simulate the mempool invalidating the transaction while declining it
+      synchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings).invalidate(UnconfirmedTransaction(tx, None)))
+
+      declineTxs(peer, Seq(tx), cost = 1000)
+
+      // barrier: the response to this inv proves that the decline above is already processed
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+
+      // the invalidated decline did not occupy a slot in the declined table
+      synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe 0
     }
   }
 

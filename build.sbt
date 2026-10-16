@@ -22,6 +22,7 @@ lazy val commonSettings = Seq(
     "Typesafe maven releases" at "https://dl.bintray.com/typesafe/maven-releases/",
     "Sonatype Snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"),
   homepage := Some(url("http://ergoplatform.org/")),
+  description := "Ergo Platform node and libraries",
   licenses := Seq("CC0" -> url("https://creativecommons.org/publicdomain/zero/1.0/legalcode")),
   publishTo := {
     val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
@@ -359,7 +360,7 @@ usePgpKeyHex("D78982639AD538EF361DEC6BF264D529385A0333")
 credentials ++= (for {
   username <- Option(System.getenv().get("SONATYPE_USERNAME"))
   password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
-} yield Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)).toSeq
+} yield Credentials("Sonatype Nexus Repository Manager", "central.sonatype.com", username, password)).toSeq
 
 def javacReleaseOption = {
   if (System.getProperty("java.version").startsWith("1.")) 

@@ -210,6 +210,28 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     announcedIds(us, chain.reverse, rebroadcastCount = chain.size) shouldBe chain.map(_.id)
   }
 
+  it should "rebroadcast a pooled transaction together with the in-pool transaction that creates its data input" in {
+    val (us, bxs) = stateAfterOneBlock()
+    val creator = spending(bxs.take(1))
+    val reader = spending(bxs.slice(1, 2), dataInputs = creator.outputs.take(1))
+    reader.inputs.filter(in => us.boxById(in.boxId).isEmpty) shouldBe empty
+
+    // only the reader is selected; its inputs are in the state, its data input is created by the pooled creator
+    announcedIds(us, Seq(reader, creator), rebroadcastCount = 1) shouldBe Seq(creator.id, reader.id)
+  }
+
+  it should "not rebroadcast a transaction whose data input's in-pool creator is not announced" in {
+    val (us, bxs) = stateAfterOneBlock()
+    // missing -> creator, where creator's inputs are in neither the state nor the pool; reader reads creator's output
+    val Seq(_, creator) = chainFrom(bxs.slice(2, 3), 2)
+    val reader = spending(bxs.slice(3, 4), dataInputs = creator.outputs.take(1))
+    // a control chain whose root's inputs are in the state: parent -> child
+    val Seq(parent, child) = chainFrom(bxs.take(2), 2)
+
+    // the reader and the child are selected
+    announcedIds(us, Seq(reader, child, creator, parent), rebroadcastCount = 2) shouldBe Seq(parent.id, child.id)
+  }
+
   it should "add in-pool ancestors root first and keep a selection without in-pool parents as it is" in {
     val (_, bxs) = stateAfterOneBlock()
     val Seq(g, p, c) = chainFrom(bxs.take(1), 3).map(UnconfirmedTransaction(_, None))

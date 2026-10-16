@@ -290,7 +290,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val (txId, processingCacheRecord) = txProcessingCache.head
       txProcessingCache -= txId
       if (cacheRecordProcessable(txId, processingCacheRecord, mp)) {
-        parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source)
+        parseAndProcessTransaction(txId, processingCacheRecord.txBytes, remote = processingCacheRecord.source, mp = mp)
         forwarded = true
       } else {
         log.info(s"Dropping cached transaction ${encoder.encodeId(txId)} from ${processingCacheRecord.source} " +
@@ -890,7 +890,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
     }
     toProcess.foreach { case (txId, txBytes) =>
-      parseAndProcessTransaction(txId, txBytes, remote)
+      parseAndProcessTransaction(txId, txBytes, remote, mp)
     }
   }
 
@@ -959,7 +959,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Parse transaction coming from remote, filtering out immediately too big one, and send parsed transaction
     * to mempool for processing
     */
-  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer): Unit = {
+  def parseAndProcessTransaction(id: ModifierId, bytes: Array[Byte], remote: ConnectedPeer, mp: ErgoMemPool): Unit = {
     if (bytes.length > settings.nodeSettings.maxTransactionSize) {
       deliveryTracker.setInvalid(id, ErgoTransaction.modifierTypeId)
       txReservations -= id
@@ -967,7 +967,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       penalizeMisbehavingPeer(remote)
       log.warn(s"Transaction size ${bytes.length} from ${remote.toString} " +
                 s"exceeds limit ${settings.nodeSettings.maxTransactionSize}")
-      processFirstTxProcessingCacheRecord(mempoolReader)
+      processFirstTxProcessingCacheRecord(mp)
     } else {
       // actual tree version is properly set in ErgoTreeSerializer inside
       val parseResult = VersionContext.withVersions(activatedScriptVersion, activatedScriptVersion)(ErgoTransactionSerializer.parseBytesTry(bytes))
@@ -983,7 +983,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           penalizeMisbehavingPeer(remote)
           log.warn(s"Failed to parse transaction with declared id ${encoder.encodeId(id)} " +
                     s"from ${remote.toString}, reason: ${parseResult.map(_.id)}")
-          processFirstTxProcessingCacheRecord(mempoolReader)
+          processFirstTxProcessingCacheRecord(mp)
       }
     }
   }

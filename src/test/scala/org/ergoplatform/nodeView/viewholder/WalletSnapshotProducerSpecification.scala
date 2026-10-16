@@ -5,15 +5,16 @@ import akka.testkit.TestProbe
 import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import java.io.File
 import java.nio.file.Files
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input, Pay2SAddress}
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.mining.DefaultFakePowScheme
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.InitStateFromSnapshot
 import org.ergoplatform.nodeView.ErgoNodeViewRef
-import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, StateType}
+import org.ergoplatform.nodeView.state.{BoxHolder, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
+import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestContext, NodeViewTestOps}
@@ -39,6 +40,7 @@ class WalletSnapshotProducerSpecification extends ErgoCorePropertyTest with Node
          |ergo.node.mining = false
          |ergo.node.extraIndex = false
          |ergo.chain.voting.votingLength = 20
+         |ergo.wallet.keepSpentBoxes = true
          |ergo.wallet.testMnemonic = "ozone drill grab fiber curtain grace pudding thank cruise elder eight picnic"
          |ergo.wallet.testKeysQty = 5
          |""".stripMargin)
@@ -91,7 +93,47 @@ class WalletSnapshotProducerSpecification extends ErgoCorePropertyTest with Node
     }, 30.seconds, 100.millis)
   }
 
-  property("UTXO snapshot bootstrap restores owned wallet payment across restarts") {
+  private def awaitSpentPayment(session: Session,
+                                payment: ErgoBox,
+                                spendingTx: ErgoTransaction,
+                                height: Int): Unit = {
+    val wallet = getCurrentView(session).vault
+    session.testProbe.awaitAssert({
+      val status = Await.result(wallet.getWalletStatus, 10.seconds)
+      status.initialized shouldBe true
+      status.error shouldBe None
+      status.height shouldBe height
+
+      val allBoxes = Await.result(
+        wallet.walletBoxes(unspentOnly = false, considerUnconfirmed = false), 10.seconds)
+      val spent = allBoxes.filter(box =>
+        java.util.Arrays.equals(box.trackedBox.box.id, payment.id))
+      spent.size shouldBe 1
+      spent.head.trackedBox.box shouldBe payment
+      spent.head.trackedBox.scans should contain(PaymentsScanId)
+      spent.head.trackedBox.spendingHeightOpt shouldBe Some(height)
+      spent.head.trackedBox.spendingTxIdOpt shouldBe Some(spendingTx.id)
+
+      val unspent = Await.result(
+        wallet.walletBoxes(unspentOnly = true, considerUnconfirmed = false), 10.seconds)
+      unspent.exists(box =>
+        java.util.Arrays.equals(box.trackedBox.box.id, payment.id)) shouldBe false
+
+      val balance = Await.result(wallet.confirmedBalances, 10.seconds)
+      balance.height shouldBe height
+      balance.walletBalance shouldBe 0L
+      balance.walletAssetBalances shouldBe empty
+
+      val recorded = Await.result(wallet.transactionById(spendingTx.id), 10.seconds).get
+      recorded.wtx.id shouldBe spendingTx.id
+      recorded.wtx.inclusionHeight shouldBe height
+      recorded.wtx.scanIds should contain(PaymentsScanId)
+      val transactionIds = Await.result(wallet.transactions, 10.seconds).map(_.wtx.id)
+      transactionIds should contain(spendingTx.id)
+    }, 30.seconds, 100.millis)
+  }
+
+  property("spend snapshot-restored wallet payment across cold restart") {
       val root = Files.createTempDirectory("wallet-snapshot-producer-").toFile
       val nodeSettings = parsedSettings(new File(root, "node"), StateType.Utxo)
       val sourceSettings = parsedSettings(new File(root, "source"), StateType.Utxo)
@@ -180,7 +222,48 @@ class WalletSnapshotProducerSpecification extends ErgoCorePropertyTest with Node
         session = Some(afterSuccessorRestart)
         getCurrentState(afterSuccessorRestart).version shouldBe idToVersion(successor.id)
         awaitOwnedPayment(afterSuccessorRestart, payment, 20)
+
+        val spendingWallet = getCurrentView(afterSuccessorRestart).vault
+        val spendingRequest = PaymentRequest(
+          Pay2SAddress(Constants.TrueTree)(nodeSettings.addressEncoder),
+          payment.value,
+          payment.additionalTokens.toArray,
+          Map.empty)
+        val spendingTx = Await.result(
+          spendingWallet.generateTransaction(Seq(spendingRequest)), 10.seconds).get
+        spendingTx.inputs.size shouldBe 1
+        java.util.Arrays.equals(spendingTx.inputs.head.boxId, payment.id) shouldBe true
+        spendingTx.inputs.head.spendingProof.proof should not be empty
+        spendingTx.outputs.map(_.value).sum shouldBe payment.value
+        val spentAssets = spendingTx.outputs.flatMap(_.additionalTokens.toArray)
+        spentAssets should contain theSameElementsAs
+          payment.additionalTokens.toArray
+
+        val spendingBlock = validFullBlock(
+          Some(successor),
+          getCurrentState(afterSuccessorRestart).asInstanceOf[UtxoState],
+          Seq(spendingTx),
+          Some(startTime + 21000L))
+        spendingBlock.header.height shouldBe 21
+        applyHeader(spendingBlock.header)(afterSuccessorRestart).get
+        applyPayload(spendingBlock)(afterSuccessorRestart).get
+        afterSuccessorRestart.testProbe.awaitAssert({
+          getCurrentState(afterSuccessorRestart).version shouldBe
+            idToVersion(spendingBlock.id)
+          getHistory(afterSuccessorRestart).bestFullBlockOpt.map(_.id) shouldBe
+            Some(spendingBlock.id)
+        }, 20.seconds, 100.millis)
+        awaitSpentPayment(afterSuccessorRestart, payment, spendingTx, 21)
         afterSuccessorRestart.stop()
+        session = None
+
+        val afterSpendRestart = new Session(nodeSettings)
+        session = Some(afterSpendRestart)
+        getCurrentState(afterSpendRestart).version shouldBe idToVersion(spendingBlock.id)
+        getHistory(afterSpendRestart).bestFullBlockOpt.map(_.id) shouldBe
+          Some(spendingBlock.id)
+        awaitSpentPayment(afterSpendRestart, payment, spendingTx, 21)
+        afterSpendRestart.stop()
         session = None
       } finally {
         try session.foreach(_.stop())

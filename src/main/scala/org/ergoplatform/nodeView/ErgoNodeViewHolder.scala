@@ -428,11 +428,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               memPool: ErgoMemPool): ErgoMemPool = {
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    val rolledBackTxs = blocksRemoved
+    val rolledBackTxs = rolledBackTransactions(blocksRemoved, appliedTxs).map(tx => UnconfirmedTransaction(tx, None))
+    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
+  }
+
+  /**
+    * Transactions of the rolled-back blocks that the applied blocks do not include: `updateMemPool` returns these
+    * to the pool.
+    */
+  private def rolledBackTransactions(blocksRemoved: Seq[BlockSection],
+                                     appliedTxs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+    blocksRemoved
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
-      .map(tx => UnconfirmedTransaction(tx, None))
-    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
   }
 
   /**
@@ -519,11 +527,28 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  // a chain switch returns the rolled-back transactions to the pool however far behind the headers it is
-                  val newMemPool = if (almostSynced || progressInfo.chainSwitchingNeeded) {
+                  // A chain switch returns the rolled-back transactions to the pool however far behind the headers
+                  // it is, if the node holds the UTXO set (at full sync the rebroadcast checks their inputs against
+                  // the UTXO set before announcing them). A digest-mode node never rechecks or rebroadcasts its pool,
+                  // so there a switch taken 20 or more blocks behind still drops them.
+                  val returnRolledBack = almostSynced ||
+                    (progressInfo.chainSwitchingNeeded && settings.nodeSettings.stateType.holdsUtxoSet)
+                  val newMemPool = if (returnRolledBack) {
                     updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
                   } else {
                     memoryPool()
+                  }
+
+                  if (progressInfo.chainSwitchingNeeded) {
+                    val returned = if (returnRolledBack) {
+                      rolledBackTransactions(progressInfo.toRemove, blocksApplied.flatMap(extractTransactions)).size
+                    } else {
+                      0
+                    }
+                    val notReturnedNote = if (returnRolledBack) "" else " (digest mode, 20 or more blocks behind)"
+                    log.info(s"Chain switch: gap between headers and full blocks ${headersHeight - fullBlockHeight}, " +
+                      s"blocks removed ${progressInfo.toRemove.size}, " +
+                      s"rolled-back transactions returned to the mempool $returned$notReturnedNote")
                   }
 
                   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

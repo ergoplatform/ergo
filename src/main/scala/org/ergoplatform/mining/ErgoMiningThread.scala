@@ -63,9 +63,9 @@ class ErgoMiningThread(
     log.info(s"Stopping miner thread: ${self.path.name}")
 
   override def receive: Receive = {
-    case StatusReply.Success(Candidate(candidateBlock, _, _, parameters)) =>
+    case StatusReply.Success(Candidate(candidateBlock, externalVersion, _, parameters)) =>
       log.info(s"Initiating block mining")
-      context.become(mining(nonce = 0, candidateBlock, parameters, solvedBlocksCount = 0))
+      context.become(mining(nonce = 0, candidateBlock, externalVersion.msg.clone(), parameters, solvedBlocksCount = 0))
       enqueueMineCmdIfIdle()
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
@@ -74,14 +74,16 @@ class ErgoMiningThread(
   def mining(
     nonce: Long,
     candidateBlock: CandidateBlock,
+    workMsg: Array[Byte],
     parameters: Parameters,
     solvedBlocksCount: Int
   ): Receive = {
-    case StatusReply.Success(Candidate(cb, _, _, newParameters)) =>
-      // if we get new candidate instead of a cached one, mine it
-      if (cb.timestamp != candidateBlock.timestamp) {
+    case StatusReply.Success(Candidate(cb, externalVersion, _, newParameters)) =>
+      // if we get new candidate instead of a cached one, mine it: new work is a new PoW message, as a regenerated
+      // candidate can keep the timestamp (a parent dated ahead of the local clock)
+      if (!java.util.Arrays.equals(externalVersion.msg, workMsg)) {
         awaitingCandidate = false
-        context.become(mining(nonce = 0, cb, newParameters, solvedBlocksCount))
+        context.become(mining(nonce = 0, cb, externalVersion.msg.clone(), newParameters, solvedBlocksCount))
         enqueueMineCmdIfIdle()
       } else if (awaitingCandidate) {
         // the generator kept this candidate after the rejection: search on after the rejected nonce
@@ -100,7 +102,7 @@ class ErgoMiningThread(
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
       solutionsAwaitingReply = math.max(0, solutionsAwaitingReply - 1)
-      context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount + 1))
+      context.become(mining(nonce, candidateBlock, workMsg, parameters, solvedBlocksCount + 1))
     case MineCmd if awaitingCandidate =>
       mineCmdPending = false
     case MineCmd =>
@@ -109,15 +111,15 @@ class ErgoMiningThread(
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
           log.info(s"Found solution for ordering block, sending it for validation")
-          solutionSent(newBlock.header.powSolution, candidateBlock, parameters, solvedBlocksCount)
+          solutionSent(newBlock.header.powSolution, candidateBlock, workMsg, parameters, solvedBlocksCount)
           candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
         case InputBlockFound(newBlock) =>
           log.info(s"Found solution for input block, sending it for validation")
-          solutionSent(newBlock.header.powSolution, candidateBlock, parameters, solvedBlocksCount)
+          solutionSent(newBlock.header.powSolution, candidateBlock, workMsg, parameters, solvedBlocksCount)
           candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
-          context.become(mining(lastNonceToCheck, candidateBlock, parameters, solvedBlocksCount))
+          context.become(mining(lastNonceToCheck, candidateBlock, workMsg, parameters, solvedBlocksCount))
           enqueueMineCmdIfIdle()
         case _ =>
           //todo : rework ProveBlockResult hierarchy to avoid this branch
@@ -129,10 +131,11 @@ class ErgoMiningThread(
   // the search resumes after the found nonce if the solution is rejected
   private def solutionSent(solution: AutolykosSolution,
                            candidateBlock: CandidateBlock,
+                           workMsg: Array[Byte],
                            parameters: Parameters,
                            solvedBlocksCount: Int): Unit = {
     solutionsAwaitingReply += 1
-    context.become(mining(Longs.fromByteArray(solution.n) + 1, candidateBlock, parameters, solvedBlocksCount))
+    context.become(mining(Longs.fromByteArray(solution.n) + 1, candidateBlock, workMsg, parameters, solvedBlocksCount))
   }
 
 }

@@ -105,6 +105,10 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
       externalVersion = c.externalVersion.copy(msg = Blake2b256(c.externalVersion.msg ++ Ints.toByteArray(k)))
     )
 
+  /** `c` regenerated at the same timestamp (as with a parent dated ahead of the local clock): new PoW work. */
+  private def sameTimestamp(c: Candidate): Candidate =
+    c.copy(externalVersion = c.externalVersion.copy(msg = Blake2b256(c.externalVersion.msg)))
+
   private case class AfterRejection(polls: Int, newCandidates: Int, rejected: Int, refused: Int, accepted: Boolean)
 
   /** Answers the thread as the weak-blocks tip's generator does once it has rejected a solution and cleared its
@@ -290,6 +294,45 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
       (polls, newCandidates, solutions, rejected, accepted) shouldBe ((1, 1, 1, 0, true))
       system.stop(thread)
     } finally {
+      system.terminate()
+    }
+  }
+
+  // As the first case, with the generator's new candidate at the old one's timestamp: different PoW work, so the
+  // thread mines it from nonce 0 instead of reading it as the candidate kept and resuming after the rejected nonce.
+  it should "after a rejected solution, mine a new candidate with the old one's timestamp from nonce 0" in
+    new TestKit(ActorSystem()) {
+    try {
+      val candidate = realCandidate("same-timestamp")
+      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
+
+      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
+      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      generator.expectMsgType[GenerateCandidate](5.seconds)
+      generator.reply(StatusReply.Success(sameTimestamp(candidate)))
+
+      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
+    } finally {
+      system.terminate()
+    }
+  }
+
+  it should "while mining, switch to a new candidate with the current one's timestamp" in
+    new TestKit(ActorSystem()) {
+    val release = new CountDownLatch(1)
+    try {
+      val candidate = realCandidate("same-timestamp-mining")
+      val calls = TestProbe()
+      // no hit: the first step finds nothing, and the next starts at its end unless new work restarts it at nonce 0
+      val pow = new FixedHitsPowScheme(Seq.empty, Some(calls.ref), holdFirstCall = Some(release))
+      val (thread, generator) = startThread(candidate, pow)
+
+      calls.expectMsg(10.seconds, (0L, 1000L))
+      thread.tell(StatusReply.Success(sameTimestamp(candidate)), generator.ref)
+      release.countDown()
+      calls.expectMsg(10.seconds, (0L, 1000L))
+    } finally {
+      release.countDown()
       system.terminate()
     }
   }

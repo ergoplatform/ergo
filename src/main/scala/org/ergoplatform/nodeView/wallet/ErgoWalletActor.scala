@@ -335,9 +335,11 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def utxoSnapshotCatchUpHeight(
     state: ErgoWalletState,
-    completedHeight: Height): Try[Option[Height]] =
-    Try(utxoSnapshotFullHeight(state)).flatMap(
-      requiredAppliedWalletCatchUpHeight(state, completedHeight, _))
+    completedHeight: Height,
+    deferredHeight: Height = EmptyHistoryHeight): Try[Option[Height]] =
+    Try(utxoSnapshotFullHeight(state)).flatMap(fullHeight =>
+      requiredAppliedWalletCatchUpHeight(
+        state, completedHeight, Math.max(fullHeight, deferredHeight)))
 
   private def walletCatchUpPruningReason(subject: String, cause: Throwable): String =
     s"$subject is outside the full-block pruning horizon: ${cause.getMessage}. " +
@@ -1526,31 +1528,23 @@ class ErgoWalletActor(settings: ErgoSettings,
                   status.snapshotHeight, status.snapshotBlockId)),
                 persistFence = true)
             case Success(Some(_)) =>
-              deferredSnapshotBlock.filter(_._1 > state.getWalletHeight) match {
-                case Some((deferredHeight, _)) =>
-                  requiredAppliedWalletCatchUpHeight(
-                    state, state.getWalletHeight, deferredHeight) match {
-                    case Failure(t: WalletCatchUpBlockUnavailable)
-                      if isWalletCatchUpBlockDefinitelyPruned(t) =>
-                      enterUtxoSnapshotQuarantine(
-                        state,
-                        walletCatchUpPruningReason(
-                          s"Deferred post-snapshot block at height $deferredHeight", t),
-                        fence = None,
-                        persistFence = false)
-                    case Failure(t: WalletCatchUpBlockUnavailable) =>
-                      blockRecoverableUtxoSnapshotCatchUp(
-                        state, run, "deferred-block readiness check", t)
-                    case Failure(t) =>
-                      blockRecoverableUtxoSnapshotCatchUp(
-                        state, run, "deferred-block readiness check", t)
-                    case Success(Some(catchUpHeight)) =>
-                      self ! ContinueUtxoSnapshotCatchUp(run, catchUpHeight, cleanupAttempt)
-                    case Success(None) =>
-                      persistCompletedUtxoSnapshotFinalization(
-                        state, run, status, cleanupAttempt)
-                  }
-                case None =>
+              val deferredHeight = deferredSnapshotBlock.map(_._1)
+                .getOrElse(EmptyHistoryHeight)
+              utxoSnapshotCatchUpHeight(state, state.getWalletHeight, deferredHeight) match {
+                case Failure(t: WalletCatchUpBlockUnavailable)
+                  if isWalletCatchUpBlockDefinitelyPruned(t) =>
+                  enterUtxoSnapshotQuarantine(
+                    state,
+                    walletCatchUpPruningReason(
+                      s"Completed UTXO snapshot at height ${status.snapshotHeight}", t),
+                    fence = None,
+                    persistFence = false)
+                case Failure(t) =>
+                  blockRecoverableUtxoSnapshotCatchUp(
+                    state, run, "finalization readiness check", t)
+                case Success(Some(catchUpHeight)) =>
+                  self ! ContinueUtxoSnapshotCatchUp(run, catchUpHeight, cleanupAttempt)
+                case Success(None) =>
                   persistCompletedUtxoSnapshotFinalization(
                     state, run, status, cleanupAttempt)
               }

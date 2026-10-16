@@ -438,7 +438,11 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
                                   minFullBlockAvailable: Int = Int.MaxValue,
                                   utxoSnapshotApplied: Boolean = false,
                                   appliedHeader: Option[Header] = None,
-                                  appliedFullBlock: Option[ErgoFullBlock] = None):
+                                  appliedFullBlock: Option[ErgoFullBlock] = None,
+                                  appliedHeaders: Seq[Header] = Seq.empty,
+                                  appliedFullBlocks: Seq[ErgoFullBlock] = Seq.empty,
+                                  appliedFullBlockRead: Header => Unit = _ => (),
+                                  appliedFullBlockResult: Header => Option[ErgoFullBlock] = _ => None):
     ErgoHistoryReader = {
     Proxy.newProxyInstance(
       classOf[ErgoHistoryReader].getClassLoader,
@@ -454,12 +458,14 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
           case "typedModifierById" =>
             val id = args(0).asInstanceOf[ModifierId]
             val requested = args(1).asInstanceOf[scala.reflect.ClassTag[_]]
-            appliedHeader.filter(header =>
+            (appliedHeader.toSeq ++ appliedHeaders).find(header =>
               header.id == id && requested.runtimeClass == classOf[Header])
           case "getFullBlock" =>
             val header = args(0).asInstanceOf[Header]
-            appliedFullBlock.filter(block =>
-              block.header.id == header.id && block.header.height == header.height)
+            appliedFullBlockRead(header)
+            appliedFullBlockResult(header).orElse(
+              (appliedFullBlock.toSeq ++ appliedFullBlocks).find(block =>
+                block.header.id == header.id && block.header.height == header.height))
           case "minFullBlockAvailable" => Int.box(minFullBlockAvailable)
           case "isUtxoSnapshotApplied" => Boolean.box(utxoSnapshotApplied)
           case "removeUtxoSnapshotScanSource" => Success(())
@@ -524,6 +530,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
             case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
           }
       }).asInstanceOf[ErgoStateReader]
+
+  private def appliedStateContext(baseSettings: org.ergoplatform.settings.ErgoSettings,
+                                  tip: Header): ErgoStateContext =
+    new ErgoStateContext(
+      Seq(tip), None, startDigest, parameters, validationSettingsNoIl,
+      VotingData.empty)(baseSettings.chainSettings)
+
+  private def appliedStateReader(baseSettings: org.ergoplatform.settings.ErgoSettings,
+                                 tip: Header): ErgoStateReader =
+    genericStateReader(appliedStateContext(baseSettings, tip), Some(tip.id))
 
   private final class SnapshotRecoveryPreflightCase(
     val label: String,
@@ -1614,14 +1630,25 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     val source = UtxoSnapshotSourceIdentity(
       snapshotHeight, snapshotId, status.manifestDepth, status.totalSubtrees)
     val readinessChecks = new AtomicInteger(0)
+    val firstApplied = defaultHeaderGen.sample.get.copy(
+      height = snapshotHeight + 1, parentId = snapshotId)
+    val secondApplied = defaultHeaderGen.sample.get.copy(
+      height = snapshotHeight + 2, parentId = firstApplied.id)
+    val tip = defaultHeaderGen.sample.get.copy(
+      height = tipHeight, parentId = secondApplied.id)
     withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
 
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(),
+      strictHistoryReader(appliedHeaders = Seq(firstApplied, secondApplied, tip)),
       sourceIdentity = Some(_ => Success(source)),
+      bestHeaderId = Some {
+        case `tipHeight` => Success(Some(tip.id))
+        case _ => Success(None)
+      },
       snapshotFullHeight = Some(_ => tipHeight),
+      startupStateReader = Some(appliedStateReader(bootstrapSettings, tip)),
       catchUpReady = Some(height => {
         height shouldBe snapshotHeight + 1
         readinessChecks.incrementAndGet()
@@ -3500,6 +3527,65 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     }
   }
 
+  property("retry snapshot cleanup only after catching up to newly applied state") {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-cleanup-applied-state-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(72: Byte))
+    val appliedHeader = defaultHeaderGen.sample.get.copy(height = 1, parentId = snapshotId)
+    val appliedFullBlockReads = new AtomicInteger(0)
+    val statusRemovals = new AtomicInteger(0)
+    val sourceRemovals = new AtomicInteger(0)
+
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(
+        appliedHeader = Some(appliedHeader),
+        appliedFullBlockRead = _ => appliedFullBlockReads.incrementAndGet(),
+        minFullBlockAvailable = 1),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(appliedHeader.id))
+        case _ => Success(None)
+      },
+      statusRemoval = Some(state => {
+        val attempt = statusRemovals.incrementAndGet()
+        if (attempt == 1) Failure(new IllegalStateException("injected status removal failure"))
+        else state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      sourceRemoval = Some(_ => {
+        sourceRemovals.incrementAndGet()
+        Success(())
+      })) { (actor, scanner, client) =>
+      val run = startProbeRun(actor, scanner, client, snapshotHeight = 0, snapshotId)
+      client.send(actor, GetOrInitUtxoSnapshotScanStatus(
+        run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+      client.awaitAssert(statusRemovals.get() shouldBe 1, 3.seconds, 50.millis)
+
+      // The state can advance without ScanOnChain while headers lead full blocks.
+      client.send(actor, ChangedState(appliedStateReader(bootstrapSettings, appliedHeader)))
+      client.awaitAssert(appliedFullBlockReads.get() should be >= 1, 3.seconds, 50.millis)
+      client.send(actor, GetWalletStatus)
+      client.expectMsgType[WalletStatus].error.get.toLowerCase should include(
+        "finalization readiness check")
+      statusRemovals.get() shouldBe 1
+      sourceRemovals.get() shouldBe 0
+      client.send(actor, ReadBalances(ChainStatus.OnChain))
+      client.expectMsgType[Status.Failure]
+    }
+
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      storage.readUtxoSnapshotScanStatusTry().get.map(_.completed) shouldBe Some(true)
+      storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+    }
+  }
+
   property("recover completed finalization after automatic cleanup retry exhaustion") {
     val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
@@ -3633,7 +3719,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(),
+      strictHistoryReader(appliedHeader = Some(deferredBlock.header)),
       snapshotFullHeight = Some(_ => 0),
       bestHeaderId = Some {
         case 1 => Success(Some(deferredBlock.id))
@@ -3668,6 +3754,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       client.send(actor, GetOrInitUtxoSnapshotScanStatus(
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
       client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ChangedState(appliedStateReader(bootstrapSettings, deferredBlock.header)))
 
       client.send(actor, ApplyUtxoSnapshotScanBatch(
         run, subtreeIndex = 0, nextSubtreeIndex = 1,
@@ -3688,15 +3775,17 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     }
   }
 
-  property("reject a retained snapshot catch-up block that is not canonical") {
+  property("reject a retained snapshot catch-up block that is not on the applied path") {
     val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
     val directory = Files.createTempDirectory("wallet-snapshot-retained-noncanonical-").toFile
     val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(121: Byte))
-    val canonicalSiblingId = ModifierId @@ Algos.encode(Array.fill(32)(122: Byte))
     val retainedBase = invalidErgoFullBlockGen.sample.get
     val retainedBlock = retainedBase.copy(
       header = retainedBase.header.copy(height = 1, parentId = snapshotId))
+    val appliedSibling = retainedBlock.header.copy(
+      timestamp = retainedBlock.header.timestamp + 1L)
+    appliedSibling.id should not be retainedBlock.id
     val actorRef = new AtomicReference[ActorRef]()
     val retainedSent = new AtomicBoolean(false)
     val statusRemovals = new AtomicInteger(0)
@@ -3705,10 +3794,12 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(),
+      strictHistoryReader(
+        appliedHeader = Some(appliedSibling),
+        appliedFullBlockResult = _ => Some(retainedBlock)),
       snapshotFullHeight = Some(_ => 0),
       bestHeaderId = Some {
-        case 1 => Success(Some(canonicalSiblingId))
+        case 1 => Success(Some(appliedSibling.id))
         case _ => Success(None)
       },
       snapshotChunkScan = Some(() => {
@@ -3729,6 +3820,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       client.send(actor, GetOrInitUtxoSnapshotScanStatus(
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
       client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ChangedState(appliedStateReader(bootstrapSettings, appliedSibling)))
 
       client.send(actor, ApplyUtxoSnapshotScanBatch(
         run, subtreeIndex = 0, nextSubtreeIndex = 1,
@@ -3736,7 +3828,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
       client.awaitAssert({
         client.send(actor, GetWalletStatus)
-        client.expectMsgType[WalletStatus].error.get.toLowerCase should include("not canonical")
+        client.expectMsgType[WalletStatus].error.get.toLowerCase should include(
+          "not the applied state ancestor")
       }, 5.seconds, 100.millis)
       statusRemovals.get() shouldBe 0
       sourceRemovals.get() shouldBe 0
@@ -3779,24 +3872,22 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       ordinarySettings,
       directory,
       strictHistoryReader(
-        bestFullBlockRead = {
-          case 1 =>
+        appliedFullBlockRead = header => {
+          if (header.height == 1) {
             firstCatchUpRead.countDown()
             if (!releaseFirstCatchUpRead.await(5, TimeUnit.SECONDS)) {
               throw new IllegalStateException("Timed out waiting to release the first catch-up read")
             }
-          case _ => ()
+          }
         },
-        bestFullBlockResult = {
-          case 1 => Some(blockOne)
-          case 2 => Some(blockTwo)
-          case _ => None
-        }),
+        appliedHeaders = Seq(blockOne.header, blockTwo.header),
+        appliedFullBlocks = Seq(blockOne, blockTwo)),
       offChainReconciliation = Some((state, _, fallback) => {
         recordReconciliation(state.getWalletHeight)
         fallback()
       })) { (actor, scanner, client) =>
       scanner.expectNoMessage(300.millis)
+      client.send(actor, ChangedState(appliedStateReader(ordinarySettings, blockTwo.header)))
       client.send(actor, ScanOnChain(blockTwo))
       firstCatchUpRead.await(5, TimeUnit.SECONDS) shouldBe true
       client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
@@ -3856,10 +3947,12 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(bestFullBlockResult = {
-        case 1 if blockAvailable.get() => Some(catchUpBlock)
-        case _ => None
-      }, minFullBlockAvailable = 1),
+      strictHistoryReader(
+        appliedHeader = Some(catchUpBlock.header),
+        appliedFullBlockResult = header =>
+          if (header.id == catchUpBlock.id && blockAvailable.get()) Some(catchUpBlock)
+          else None,
+        minFullBlockAvailable = 1),
       sourceIdentity = Some(_ => Success(source)),
       bestHeaderId = Some {
         case 0 => Success(Some(snapshotId))
@@ -3868,6 +3961,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       },
       snapshotFullHeight = Some(_ => 1),
       catchUpReady = Some(_ => true),
+      utxoStateUpdate = Some((state, _) => state),
       statusRemoval = Some(state => {
         statusRemovals.incrementAndGet()
         state.storage.removeUtxoSnapshotScanStatus()
@@ -3926,19 +4020,16 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       ordinarySettings,
       directory,
       strictHistoryReader(
-        bestFullBlockRead = {
-          case 1 =>
+        appliedFullBlockRead = header => {
+          if (header.height == 1) {
             firstCatchUpRead.countDown()
             if (!releaseFirstCatchUpRead.await(5, TimeUnit.SECONDS)) {
               throw new IllegalStateException("Timed out waiting to release the first catch-up read")
             }
-          case _ => ()
+          }
         },
-        bestFullBlockResult = {
-          case 1 => Some(blockOne)
-          case 2 => Some(blockTwo)
-          case _ => None
-        }),
+        appliedHeaders = Seq(blockOne.header, blockTwo.header),
+        appliedFullBlocks = Seq(blockOne, blockTwo)),
       offChainReconciliation = Some((state, _, fallback) => {
         if (state.getWalletHeight == 2) {
           throw new IllegalStateException("injected post-catch-up reconciliation failure")
@@ -3946,6 +4037,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         fallback()
       })) { (actor, scanner, client) =>
       scanner.expectNoMessage(300.millis)
+      client.send(actor, ChangedState(appliedStateReader(ordinarySettings, blockTwo.header)))
       client.send(actor, ScanOnChain(blockTwo))
       firstCatchUpRead.await(5, TimeUnit.SECONDS) shouldBe true
       client.send(actor, ChangedMempool(new FakeMempool(Seq.empty)))
@@ -3988,17 +4080,18 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(bestFullBlockResult = {
-        case 1 => Some(catchUpBlock)
-        case _ => None
-      }),
+      strictHistoryReader(
+        appliedHeader = Some(catchUpBlock.header),
+        appliedFullBlock = Some(catchUpBlock)),
       sourceIdentity = Some(_ => Success(source)),
       bestHeaderId = Some {
         case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(catchUpBlock.id))
         case _ => Success(None)
       },
       snapshotFullHeight = Some(_ => 1),
       catchUpReady = Some(_ => true),
+      startupStateReader = Some(appliedStateReader(bootstrapSettings, catchUpBlock.header)),
       offChainReconciliation = Some((state, _, fallback) => {
         if (state.getWalletHeight == 1) {
           throw new IllegalStateException("injected post-catch-up reconciliation failure")
@@ -4037,18 +4130,15 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     val wrongParentBase = invalidErgoFullBlockGen.sample.get
     val wrongParentBlock = wrongParentBase.copy(
       header = wrongParentBase.header.copy(height = 7, parentId = foreignParent))
+    val expectedHeightHeader = wrongHeightBlock.header.copy(height = 7)
 
     Seq(
-      ("height", wrongHeightBlock, "requested height"),
-      ("parent", wrongParentBlock, "parent")
-    ).foreach { case (label, returnedBlock, expectedError) =>
+      ("height", wrongHeightBlock, expectedHeightHeader, "requested height"),
+      ("parent", wrongParentBlock, wrongParentBlock.header, "parent")
+    ).foreach { case (label, returnedBlock, appliedHeader, expectedError) =>
       withClue(s"$label mutant: ") {
         val directory = Files.createTempDirectory(s"wallet-catchup-$label-mutant-").toFile
-        val stateReader = snapshotRecoveryStateReader(
-          ordinarySettings,
-          returnedBlock.id,
-          versionId = Some(returnedBlock.id),
-          stateHeight = 7)
+        val stateReader = appliedStateReader(ordinarySettings, appliedHeader)
         seedWalletRegistryVersions(
           ordinarySettings, directory, Seq(canonicalAncestor -> 6))
         withSeededWalletStorage(ordinarySettings, directory)(
@@ -4057,17 +4147,15 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         withProbeWalletActor(
           ordinarySettings,
           directory,
-          strictHistoryReader(bestFullBlockResult = {
-            case 7 => Some(returnedBlock)
-            case _ => None
-          }),
-          currentStateTip = Some(_ => Success(7 -> Some(returnedBlock.id))),
+          strictHistoryReader(
+            appliedHeader = Some(appliedHeader),
+            appliedFullBlockResult = _ => Some(returnedBlock)),
           bestHeaderId = Some {
             case 6 => Success(Some(canonicalAncestor))
-            case 7 => Success(Some(returnedBlock.id))
+            case 7 => Success(Some(appliedHeader.id))
             case _ => Success(None)
-          }) { (actor, scanner, client) =>
-          client.send(actor, ChangedState(stateReader))
+          },
+          startupStateReader = Some(stateReader)) { (actor, scanner, client) =>
           scanner.expectNoMessage(300.millis)
           client.awaitAssert({
             client.send(actor, GetWalletStatus)
@@ -4113,17 +4201,18 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(bestFullBlockResult = {
-        case 1 => Some(foreignBlock)
-        case _ => None
-      }),
+      strictHistoryReader(
+        appliedHeader = Some(foreignBlock.header),
+        appliedFullBlock = Some(foreignBlock)),
       sourceIdentity = Some(_ => Success(source)),
       bestHeaderId = Some {
         case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(foreignBlock.id))
         case _ => Success(None)
       },
       snapshotFullHeight = Some(_ => 1),
       catchUpReady = Some(_ => true),
+      startupStateReader = Some(appliedStateReader(bootstrapSettings, foreignBlock.header)),
       statusRemoval = Some(state => {
         statusRemovals.incrementAndGet()
         state.storage.removeUtxoSnapshotScanStatus()
@@ -4270,7 +4359,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
       } else {
         storage.readUtxoSnapshotScanStatusTry().get.map(_.completed) shouldBe Some(true)
-        storage.readUtxoSnapshotWalletOriginTry().get shouldBe None
+        // The final batch commits the origin before mandatory catch-up begins.
+        storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
       }
     }
   }
@@ -4301,31 +4391,25 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     val catchUpScans = new AtomicInteger(0)
     val statusRemovals = new AtomicInteger(0)
     val sourceRemovals = new AtomicInteger(0)
-    val stateContext = ErgoStateContext.empty(bootstrapSettings.chainSettings, parameters)
-    val stateReader = Proxy.newProxyInstance(
-      classOf[ErgoStateReader].getClassLoader,
-      Array(classOf[ErgoStateReader]),
-      new InvocationHandler {
-        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
-          method.getName match {
-            case "stateContext" => stateContext
-            case "toString" => "snapshot-catchup-state-reader"
-            case "hashCode" => Int.box(System.identityHashCode(proxy))
-            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
-            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
-          }
-      }).asInstanceOf[ErgoStateReader]
+    val appliedHeader = defaultHeaderGen.sample.get.copy(
+      height = 1, parentId = snapshotId)
+    val stateReader = appliedStateReader(bootstrapSettings, appliedHeader)
     withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
 
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(),
+      strictHistoryReader(appliedHeader = Some(appliedHeader)),
       sourceIdentity = Some(_ => Success(source)),
       registryTip = Some(_ => Success(status.snapshotHeight -> Some(snapshotId))),
-      bestHeaderId = Some(_ => Success(Some(snapshotId))),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(appliedHeader.id))
+        case _ => Success(None)
+      },
       snapshotFullHeight = Some(_ => status.snapshotHeight + 1),
       catchUpReady = Some(_ => catchUpAvailable.get()),
+      startupStateReader = Some(stateReader),
       catchUpScan = Some((state, _) => {
         catchUpScans.incrementAndGet()
         if (catchUpAvailable.get()) Success(state)
@@ -5042,30 +5126,17 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     val bestHeaderTip = new AtomicReference[ModifierId](staleTipId)
     val rollbackCompleted = new AtomicBoolean(false)
     val rollbackAttempts = new AtomicInteger(0)
-    val forkStateContext = snapshotRecoveryStateReader(
-      ordinarySettings,
-      forkBlock.id,
-      versionId = Some(forkBlock.id),
-      stateHeight = 1).stateContext
-    val forkState = Proxy.newProxyInstance(
-      classOf[ErgoStateReader].getClassLoader,
-      Array(classOf[ErgoStateReader]),
-      new InvocationHandler {
-        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
-          method.getName match {
-            case "stateContext" => forkStateContext
-            case "toString" => "ordinary-rollback-state-reader"
-            case "hashCode" => Int.box(System.identityHashCode(proxy))
-            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
-            case other => throw new UnsupportedOperationException(
-              s"Unexpected state read: $other")
-          }
-      }).asInstanceOf[ErgoStateReader]
+    val forkStateContext = appliedStateContext(ordinarySettings, forkBlock.header)
+    forkStateContext.lastHeaderOpt.map(_.id) shouldBe Some(forkBlock.id)
+    val forkState = genericStateReader(forkStateContext, Some(forkBlock.id))
 
     withProbeWalletActor(
       ordinarySettings,
       directory,
-      strictHistoryReader(minFullBlockAvailable = 0),
+      strictHistoryReader(
+        minFullBlockAvailable = 0,
+        appliedHeader = Some(forkBlock.header),
+        appliedFullBlock = Some(forkBlock)),
       registryTip = Some(_ => Success(
         if (rollbackCompleted.get()) 0 -> Some(PreGenesisHeader.id)
         else 1 -> Some(staleTipId))),
@@ -5359,26 +5430,14 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         case `staleTarget` => Some(7)
         case _ => None
       },
-      bestFullBlockRead = catchUpHeight.set,
+      appliedHeader = Some(currentBestBlock.header),
+      appliedFullBlock = Some(currentBestBlock),
       bestFullBlockResult = {
         case 7 => Some(currentBestBlock)
         case _ => None
-      })
-    val catchUpStateContext = snapshotRecoveryStateReader(
-      ordinarySettings, currentBest, versionId = Some(currentBest), stateHeight = 7).stateContext
-    val catchUpStateReader = Proxy.newProxyInstance(
-      classOf[ErgoStateReader].getClassLoader,
-      Array(classOf[ErgoStateReader]),
-      new InvocationHandler {
-        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
-          method.getName match {
-            case "stateContext" => catchUpStateContext
-            case "toString" => "rollback-catchup-state-reader"
-            case "hashCode" => Int.box(System.identityHashCode(proxy))
-            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
-            case other => throw new UnsupportedOperationException(s"Unexpected state read: $other")
-          }
-      }).asInstanceOf[ErgoStateReader]
+      },
+      appliedFullBlockRead = header => catchUpHeight.set(header.height))
+    val catchUpStateReader = appliedStateReader(ordinarySettings, currentBestBlock.header)
     withProbeWalletActor(
       ordinarySettings,
       directory,
@@ -5474,24 +5533,13 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         case `canonicalTip` => Some(7)
         case _ => None
       },
+      appliedHeader = Some(canonicalTipBlock.header),
+      appliedFullBlock = Some(canonicalTipBlock),
       bestFullBlockResult = {
         case 7 => Some(canonicalTipBlock)
         case _ => None
       })
-    val canonicalStateReader = Proxy.newProxyInstance(
-      classOf[ErgoStateReader].getClassLoader,
-      Array(classOf[ErgoStateReader]),
-      new InvocationHandler {
-        override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
-          method.getName match {
-            case "stateContext" => canonicalStateContext
-            case "toString" => "no-intent-canonical-state-reader"
-            case "hashCode" => Int.box(System.identityHashCode(proxy))
-            case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
-            case other => throw new UnsupportedOperationException(
-              s"Unexpected state read: $other")
-          }
-      }).asInstanceOf[ErgoStateReader]
+    val canonicalStateReader = genericStateReader(canonicalStateContext, Some(canonicalTip))
 
     withProbeWalletActor(
       ordinarySettings,
@@ -5876,7 +5924,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       directory,
       Seq(canonicalAncestor -> 6))
     val fullStateReader = snapshotRecoveryStateReader(
-      ordinarySettings, currentBest, versionId = Some(currentBest), stateHeight = 7)
+      ordinarySettings, currentBest, versionId = Some(currentBest), stateHeight = 7,
+      stateContextOverride = Some(appliedStateContext(ordinarySettings, currentBestBlock.header)))
     withSeededWalletStorage(ordinarySettings, directory) { storage =>
       storage.updateStateContext(fullStateReader.stateContext).get
       storage.readWalletRollbackIntentTry().get shouldBe None
@@ -5886,11 +5935,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       ordinarySettings,
       directory,
       strictHistoryReader(
-        bestFullBlockRead = catchUpHeight.set,
-        bestFullBlockResult = {
-          case 7 => Some(currentBestBlock)
-          case _ => None
-        }),
+        appliedHeader = Some(currentBestBlock.header),
+        appliedFullBlock = Some(currentBestBlock),
+        appliedFullBlockRead = header => catchUpHeight.set(header.height)),
       currentStateTip = Some(_ => Success(7 -> Some(currentBest))),
       bestHeaderId = Some {
         case 6 => Success(Some(canonicalAncestor))
@@ -5953,11 +6000,14 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
     val directory = Files.createTempDirectory("wallet-catchup-pruning-race-").toFile
     val canonicalAncestor = ModifierId @@ Algos.encode(Array.fill(32)(117: Byte))
-    val currentBest = ModifierId @@ Algos.encode(Array.fill(32)(118: Byte))
+    val currentHeader = defaultHeaderGen.sample.get.copy(
+      height = 7, parentId = canonicalAncestor)
+    val currentBest = currentHeader.id
     val readinessChecks = new AtomicInteger(0)
     val consumingReads = new AtomicInteger(0)
     val stateReader = snapshotRecoveryStateReader(
-      prunedSettings, currentBest, versionId = Some(currentBest), stateHeight = 7)
+      prunedSettings, currentBest, versionId = Some(currentBest), stateHeight = 7,
+      stateContextOverride = Some(appliedStateContext(prunedSettings, currentHeader)))
 
     seedWalletRegistryVersions(prunedSettings, directory, Seq(canonicalAncestor -> 6))
     withSeededWalletStorage(prunedSettings, directory)(
@@ -5966,7 +6016,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       prunedSettings,
       directory,
-      strictHistoryReader(bestFullBlockRead = _ => consumingReads.incrementAndGet()),
+      strictHistoryReader(
+        appliedHeader = Some(currentHeader),
+        appliedFullBlockRead = _ => consumingReads.incrementAndGet()),
       catchUpReady = Some(height => {
         height shouldBe 7
         readinessChecks.incrementAndGet()
@@ -5977,7 +6029,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         case 6 => Success(Some(canonicalAncestor))
         case 7 => Success(Some(currentBest))
         case _ => Success(None)
-      }) { (actor, scanner, client) =>
+      },
+      startupStateReader = Some(stateReader),
+      utxoStateUpdate = Some((state, _) => state)) { (actor, scanner, client) =>
       client.send(actor, ChangedState(stateReader))
       scanner.expectNoMessage(300.millis)
       client.awaitAssert({
@@ -6095,6 +6149,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
     val directory = Files.createTempDirectory("wallet-snapshot-queued-catch-up-failure-").toFile
     val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(115: Byte))
+    val appliedHeader = defaultHeaderGen.sample.get.copy(
+      height = 1, parentId = snapshotId)
     val actorRef = new AtomicReference[ActorRef]()
     val clientRef = new AtomicReference[ActorRef]()
     val readinessChecks = new AtomicInteger(0)
@@ -6109,7 +6165,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withProbeWalletActor(
       bootstrapSettings,
       directory,
-      strictHistoryReader(),
+      strictHistoryReader(appliedHeader = Some(appliedHeader)),
       snapshotFullHeight = Some(_ => 1),
       catchUpReady = Some(height => {
         height shouldBe 1
@@ -6131,6 +6187,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       client.send(actor, GetOrInitUtxoSnapshotScanStatus(
         run, ManifestSerializer.MainnetManifestDepth.toInt, totalSubtrees = 1))
       client.expectMsgType[Try[UtxoSnapshotScanStatus]].get
+      client.send(actor, ChangedState(appliedStateReader(bootstrapSettings, appliedHeader)))
       client.send(actor, ApplyUtxoSnapshotScanBatch(
         run, subtreeIndex = 0, nextSubtreeIndex = 1,
         completed = true, boxes = IndexedSeq.empty))
@@ -6243,7 +6300,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         sourceAttempts.incrementAndGet()
         if (allowCleanup.get()) Success(())
         else Failure(new IllegalStateException("persistent source cleanup failure"))
-      })) { (actor, scanner, client) =>
+      }),
+      utxoStateUpdate = Some((state, _) => state)) { (actor, scanner, client) =>
       val initialStateReader = snapshotRecoveryStateReader(
         bootstrapSettings, snapshotId, versionId = Some(snapshotId))
       client.send(actor, ChangedState(initialStateReader))

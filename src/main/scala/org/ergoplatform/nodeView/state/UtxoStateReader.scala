@@ -11,6 +11,8 @@ import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.validation.MalformedModifierError
+import scorex.crypto.authds.avltree.batch.Constants.DigestType
+import scorex.crypto.authds.avltree.batch.serialization.BatchAVLProverSubtree
 import scorex.crypto.authds.avltree.batch.{Lookup, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
@@ -190,5 +192,13 @@ trait UtxoStateReader extends ErgoStateReader with UtxoSetSnapshotPersistence {
     * Useful when checking mempool transactions.
     */
   def withMempool(mp: ErgoMemPoolReader): UtxoState = withUnconfirmedTransactions(mp.getAll)
+
+  def countSnapshotSubtrees(depth: Int): Try[Int] =
+    persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage].countSubtrees(depth)
+
+  def iterateSnapshotSubtrees(fromIndex: Int, depth: Int, limit: Int)
+                             (handleSubtree: (Int, BatchAVLProverSubtree[DigestType]) => Try[Unit]): Try[Int] =
+    persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage]
+      .iterateSubtrees(fromIndex, depth, limit)(handleSubtree)
 
 }

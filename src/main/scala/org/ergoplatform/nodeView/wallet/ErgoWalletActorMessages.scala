@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.state.UtxoStateReader
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -50,6 +51,23 @@ object ErgoWalletActorMessages {
    * @param block - block to scan
    */
   final case class ScanOnChain(block: ErgoFullBlock)
+
+  private[wallet] final case class GetOrInitUtxoSnapshotScanStatus(snapshotHeight: Height,
+                                                                   snapshotBlockId: ModifierId,
+                                                                   manifestDepth: Int,
+                                                                   totalSubtrees: Int)
+
+  private[wallet] final case class ApplyUtxoSnapshotScanBatch(snapshotHeight: Height,
+                                                              snapshotBlockId: ModifierId,
+                                                              subtreeIndex: Int,
+                                                              nextSubtreeIndex: Int,
+                                                              completed: Boolean,
+                                                              boxes: IndexedSeq[ErgoBox])
+
+  private[wallet] final case class StartUtxoSnapshotScan(snapshotHeight: Height,
+                                                         snapshotBlockId: ModifierId,
+                                                         stateReader: UtxoStateReader,
+                                                         forceRestart: Boolean)
 
   /**
    * Rollback to previous version of the wallet, by throwing away effects of blocks after the version

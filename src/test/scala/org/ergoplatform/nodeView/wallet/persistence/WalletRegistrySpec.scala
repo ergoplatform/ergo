@@ -1,11 +1,13 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
 import com.google.common.primitives.{Ints, Shorts}
+import org.ergoplatform.core.{VersionTag, idToVersion}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.EmptyHistoryHeight
+import org.ergoplatform.nodeView.wallet.IdUtils.{EncodedTokenId, encodedTokenId}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.core.VersionTag
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -31,6 +33,17 @@ class WalletRegistrySpec
   private val walletBoxStatus = Set(PaymentsScanId)
 
   private val ws = settings.walletSettings
+
+  private def unspentWalletBox(box: TrackedBox): TrackedBox =
+    box.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus)
+
+  private def walletTokenBalances(boxes: Seq[TrackedBox]): Map[EncodedTokenId, Long] =
+    boxes
+      .flatMap(_.box.additionalTokens.toArray)
+      .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amount)) =>
+        val encodedId = encodedTokenId(id)
+        acc.updated(encodedId, acc.getOrElse(encodedId, 0L) + amount)
+      }
 
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>
@@ -110,10 +123,83 @@ class WalletRegistrySpec
       withVersionedStore(10) { store =>
         val registry = new WalletRegistry(store)(settings.walletSettings)
         val blockId = modifierIdGen.sample.get
-        val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = walletBoxStatus))
+        val unspentBoxes = boxes.map(unspentWalletBox)
         registry.updateOnBlock(ScanResults(unspentBoxes, ArraySeq.empty, ArraySeq.empty), blockId, 100).get
         registry.walletUnspentBoxes().toList should contain theSameElementsAs unspentBoxes
       }
+    }
+  }
+
+  it should "updateOnSnapshotChunk accumulates balances and tokens until final snapshot chunk" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box1 = unspentWalletBox(trackedBoxGen.sample.get)
+      val box2 = unspentWalletBox(trackedBoxGen.sample.get)
+
+      registry.fetchDigest().height shouldBe EmptyHistoryHeight
+      registry.updateOnSnapshotChunk(
+        ScanResults(Seq(box1), ArraySeq.empty, ArraySeq.empty),
+        snapshotBlockId,
+        snapshotHeight = 100,
+        subtreeIndex = 0,
+        finalChunk = false
+      ).get
+
+      registry.walletUnspentBoxes().toList should contain theSameElementsAs Seq(box1)
+      registry.fetchDigest().height shouldBe EmptyHistoryHeight
+      registry.fetchDigest().walletBalance shouldBe box1.box.value
+      registry.fetchDigest().walletAssetBalances.toMap shouldBe walletTokenBalances(Seq(box1))
+
+      registry.updateOnSnapshotChunk(
+        ScanResults(Seq(box2), ArraySeq.empty, ArraySeq.empty),
+        snapshotBlockId,
+        snapshotHeight = 100,
+        subtreeIndex = 1,
+        finalChunk = true
+      ).get
+
+      val allBoxes = Seq(box1, box2)
+      registry.walletUnspentBoxes().toList should contain theSameElementsAs allBoxes
+      registry.fetchDigest().height shouldBe 100
+      registry.fetchDigest().walletBalance shouldBe allBoxes.map(_.box.value).sum
+      registry.fetchDigest().walletAssetBalances.toMap shouldBe walletTokenBalances(allBoxes)
+    }
+  }
+
+  it should "updateOnSnapshotChunk writes a final snapshot version even if no wallet boxes are found" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+
+      registry.updateOnSnapshotChunk(
+        ScanResults(ArraySeq.empty, ArraySeq.empty, ArraySeq.empty),
+        snapshotBlockId,
+        snapshotHeight = 100,
+        subtreeIndex = 0,
+        finalChunk = true
+      ).get
+
+      registry.fetchDigest().height shouldBe 100
+      registry.rollback(idToVersion(snapshotBlockId)).isSuccess shouldBe true
+      registry.fetchDigest().height shouldBe 100
+    }
+  }
+
+  it should "updateOnSnapshotChunk rejects block scan data" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val snapshotBlockId = modifierIdGen.sample.get
+      val box = unspentWalletBox(trackedBoxGen.sample.get)
+      val spent = SpentInputData(modifierIdGen.sample.get, box)
+
+      registry.updateOnSnapshotChunk(
+        ScanResults(Seq(box), Seq(spent), ArraySeq.empty),
+        snapshotBlockId,
+        snapshotHeight = 100,
+        subtreeIndex = 0,
+        finalChunk = false
+      ).isFailure shouldBe true
     }
   }
 

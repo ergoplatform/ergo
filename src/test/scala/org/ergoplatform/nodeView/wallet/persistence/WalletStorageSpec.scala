@@ -5,6 +5,7 @@ import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
 import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer}
+import org.ergoplatform.utils.generators.CoreObjectGenerators._
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -82,6 +83,33 @@ class WalletStorageSpec
         val scan2 = storage.addScan(externalScanReq).get
         storage.lastUsedScanId shouldBe scan2.scanId
         storage.lastUsedScanId shouldBe (scan.scanId +1)
+      }
+    }
+  }
+
+  it should "store, update and remove UTXO snapshot scan status" in {
+    forAll(modifierIdGen) { snapshotBlockId =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        val status = UtxoSnapshotScanStatus(
+          snapshotHeight = 100,
+          snapshotBlockId = snapshotBlockId,
+          manifestDepth = 6,
+          nextSubtreeIndex = 3,
+          totalSubtrees = 64,
+          completed = false
+        )
+
+        storage.readUtxoSnapshotScanStatus() shouldBe None
+        storage.writeUtxoSnapshotScanStatus(status).get
+        storage.readUtxoSnapshotScanStatus() shouldBe Some(status)
+
+        val completedStatus = status.copy(nextSubtreeIndex = status.totalSubtrees, completed = true)
+        storage.writeUtxoSnapshotScanStatus(completedStatus).get
+        storage.readUtxoSnapshotScanStatus() shouldBe Some(completedStatus)
+
+        storage.removeUtxoSnapshotScanStatus().get
+        storage.readUtxoSnapshotScanStatus() shouldBe None
       }
     }
   }

@@ -1958,10 +1958,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val modData = ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes))
     synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
     val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
-    sent.exists {
-      case PenalizePeer(_, _) => true
-      case _ => false
-    } shouldBe false
+    sent.collect { case p: PenalizePeer => p } shouldBe empty
     eventually {
       deliveryTracker.status(mod.id, mod.modifierTypeId, Seq(hist)) shouldBe Held
     }
@@ -1979,42 +1976,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: a requested extension that is already in history is not judged invalid") {
     withFixture2 { ctx =>
       import ctx._
-
-      def reply(section: BlockSection): Unit = {
-        deliveryTracker.setRequested(section.modifierTypeId, section.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(section.modifierTypeId, Map(section.id -> section.bytes))
-        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
-      }
-
-      deliveryTracker.reset()
-      // the view holder's own history instance: a second ErgoHistory on the same directory would keep its own caches
-      val viewProbe = TestProbe("ViewProbe")
-      nodeViewHolderMockRef.tell(GetDataFromCurrentView[UtxoState, ErgoHistory](_.history), viewProbe.ref)
-      val hist = viewProbe.expectMsgType[ErgoHistory](10.seconds)
-      val block = genChain(1, hist).head
+      val (hist, block) = historyWithNewHeader(ctx)
       // the extension only: block transactions would complete the block, whose generated transactions this
-      // fixture's state rejects; both sections are checked by the same `alreadyApplied` rule
-      val sections = Seq(block.extension)
+      // fixture's state rejects
+      val extension = block.extension
 
-      reply(block.header)
-      // applied, and the synchronizer is done with it: the delivery tracker is not thread-safe, so the test updates
-      // it only while the synchronizer is not handling this chain's events
-      eventually(timeout(10.seconds)) {
-        hist.contains(block.header.id) shouldBe true
-        deliveryTracker.status(block.header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
-      }
-      sections.foreach(reply)
+      deliveryTracker.setRequested(extension.modifierTypeId, extension.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(extension.modifierTypeId, Map(extension.id -> extension.bytes))
+      synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       // applied, and the tracker has cleared the first delivery (the applied-modifier event was handled)
       eventually(timeout(10.seconds)) {
-        sections.foreach { s =>
-          hist.contains(s.id) shouldBe true
-          deliveryTracker.status(s.id, s.modifierTypeId, Seq.empty) shouldBe Unknown
-        }
+        hist.contains(extension.id) shouldBe true
+        deliveryTracker.status(extension.id, extension.modifierTypeId, Seq.empty) shouldBe Unknown
       }
       ncProbe.receiveWhile(1.second) { case m => m }
 
-      // each section is already in history (e.g. applied from another source) when a reply for it arrives
-      sections.foreach(replyForHeldModifier(deliveryTracker, synchronizerMockRef, ncProbe, peer, hist, _))
+      // the extension is already in history (e.g. applied from another source) when a reply for it arrives
+      replyForHeldModifier(deliveryTracker, synchronizerMockRef, ncProbe, peer, hist, extension)
     }
   }
 
@@ -2022,10 +2000,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   private def historyWithNewHeader(ctx: Synchronizer2Fixture): (ErgoHistory, ErgoFullBlock) = {
     import ctx._
     deliveryTracker.reset()
-    // the view holder's own history instance: a second ErgoHistory on the same directory would keep its own caches
-    val viewProbe = TestProbe("ViewProbe")
-    nodeViewHolderMockRef.tell(GetDataFromCurrentView[UtxoState, ErgoHistory](_.history), viewProbe.ref)
-    val hist = viewProbe.expectMsgType[ErgoHistory](10.seconds)
+    val hist = viewHistory
     val block = genChain(1, hist).head
     deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
     val headerData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
@@ -2057,7 +2032,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
       val (hist, block) = historyWithNewHeader(ctx)
-      @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
       val proofs = block.adProofs.get
 
       // a peer announces the block's ADProofs, and the node requests them
@@ -2072,10 +2046,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(proofsData)), Some(peer))
 
       val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
-      sent.exists {
-        case PenalizePeer(_, _) => true
-        case _ => false
-      } shouldBe false
+      sent.collect { case p: PenalizePeer => p } shouldBe empty
       eventually {
         // the request is closed and the id is not marked invalid
         deliveryTracker.status(proofs.id, ADProofs.modifierTypeId, Seq.empty) shouldBe Unknown

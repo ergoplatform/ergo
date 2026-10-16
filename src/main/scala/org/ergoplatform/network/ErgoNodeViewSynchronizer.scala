@@ -1533,8 +1533,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       * since the block was already announced.
       */
     case NewBlockMined(header, sections) =>
-      val served = (header +: sections).map(m => m.id -> (m.modifierTypeId -> m.bytes)).toMap
-      minedToServe = (minedToServe :+ (served.keySet -> served)).takeRight(MinedBlocksToServe)
       log.info(
         s"Immediately announcing newly mined block ${header.encodedId} " +
         s"at height ${header.height} to all peers"
@@ -1543,6 +1541,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       header.sectionIds.foreach { case (mtId, id) =>
         broadcastModifierInv(mtId, id)
       }
+      // serialized after the announcement, so it does not delay it; a request for the block is a later message to
+      // this actor, so it finds the copy in place
+      val served = (header +: sections).map(m => m.id -> (m.modifierTypeId -> m.bytes)).toMap
+      minedToServe = (minedToServe :+ (served.keySet -> served)).takeRight(MinedBlocksToServe)
 
     // Locally mined block applied - skip broadcast (already done via NewBlockMined)
     case LocalBlockApplied(header, _) =>

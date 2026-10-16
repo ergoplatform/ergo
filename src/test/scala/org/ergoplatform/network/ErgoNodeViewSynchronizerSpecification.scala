@@ -1365,6 +1365,75 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: a newly mined block's header is no longer served from memory once history holds it") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+      handOverView(ctx)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+      // history holds the header from this event on, also when the block does not become the best one (then no
+      // LocalBlockApplied follows); this fixture's history never receives it, so a header still served is the in-memory
+      // copy. Its sections are not held yet
+      synchronizerMockRef ! SyntacticallySuccessfulModifier(Header.modifierTypeId, newBlock.header.id)
+
+      // each request goes together with the second mined, still unapplied block, as in the tests above
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
+        Some(peer))
+      val servedHeaders = servedWith(pchProbe, marker.header.id)
+      servedHeaders should contain(marker.header.id)
+      servedHeaders should not contain newBlock.header.id
+
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(BlockTransactions.modifierTypeId,
+          Seq(newBlock.blockTransactions.id, marker.blockTransactions.id)))),
+        Some(peer))
+      val servedTransactions = servedWith(pchProbe, marker.blockTransactions.id)
+      servedTransactions should contain(newBlock.blockTransactions.id)
+    }
+  }
+
+  property("NodeViewSynchronizer: a newly mined block reported invalid after history held a part is no longer served") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+      handOverView(ctx)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+      // the transactions pass the syntactic check, so history holds them, and then fail on the state
+      synchronizerMockRef ! SyntacticallySuccessfulModifier(BlockTransactions.modifierTypeId, newBlock.blockTransactions.id)
+      synchronizerMockRef ! SemanticallyFailedModification(
+        BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
+
+      // the rest of the block goes too; requested together with the second mined, still unapplied block
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(Extension.modifierTypeId, Seq(newBlock.extension.id, marker.extension.id)))),
+        Some(peer))
+      val served = servedWith(pchProbe, marker.extension.id)
+      served should contain(marker.extension.id)
+      served should not contain newBlock.extension.id
+    }
+  }
+
   /**
     * Test that LocalBlockApplied does not duplicate broadcast when NewBlockMined already fired.
     */

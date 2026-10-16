@@ -149,17 +149,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private var lastCheckForModifiersToDownload: Long = 0L
 
-  // Header and sections of blocks this node mined and has not applied yet, by id (at most the last 4): a mined block is
-  // announced before the node view holder applies it, so a peer's request can arrive before history has it
+  // Header and sections of blocks this node mined and has not applied yet (at most the last 4), each with the ids of
+  // the whole block: a mined block is announced before the node view holder applies it, so a peer's request can arrive
+  // before history has it
   private val MinedBlocksToServe = 4
-  private var minedToServe: Vector[Map[ModifierId, (NetworkObjectTypeId.Value, Array[Byte])]] = Vector.empty
+  private var minedToServe: Vector[(Set[ModifierId], Map[ModifierId, (NetworkObjectTypeId.Value, Array[Byte])])] =
+    Vector.empty
 
   private def minedModifier(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
-    minedToServe.iterator.flatMap(_.get(id)).toSeq.headOption
+    minedToServe.iterator.flatMap(_._2.get(id)).toSeq.headOption
 
-  // a mined block is served from here until it is applied, or dropped if its header or a section turned out invalid
+  // a mined block is served from here until it is applied, or dropped if its header or a section turned out invalid,
+  // also one history already holds
   private def dropMinedContaining(id: ModifierId): Unit =
-    minedToServe = minedToServe.filterNot(_.contains(id))
+    minedToServe = minedToServe.filterNot(_._1.contains(id))
+
+  // history serves a header or section from the moment it holds it, also when the block does not become the best one
+  // (no LocalBlockApplied then); an id history never receives waits for the drops above or for 4 newer mined blocks
+  private def dropMinedHeld(id: ModifierId): Unit =
+    minedToServe = minedToServe.map { case (ids, served) => ids -> (served - id) }.filter(_._2.nonEmpty)
 
   /**
     * How many block sections stored in processing queue, imprecise number as updated only when
@@ -1526,7 +1534,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       */
     case NewBlockMined(header, sections) =>
       val served = (header +: sections).map(m => m.id -> (m.modifierTypeId -> m.bytes)).toMap
-      minedToServe = (minedToServe :+ served).takeRight(MinedBlocksToServe)
+      minedToServe = (minedToServe :+ (served.keySet -> served)).takeRight(MinedBlocksToServe)
       log.info(
         s"Immediately announcing newly mined block ${header.encodedId} " +
         s"at height ${header.height} to all peers"
@@ -1597,6 +1605,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       addDeclined(id)
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
+      dropMinedHeld(modId)
       deliveryTracker.setHeld(modId, modTypeId)
 
     case RecoverableFailedModification(modTypeId, modId, e) =>

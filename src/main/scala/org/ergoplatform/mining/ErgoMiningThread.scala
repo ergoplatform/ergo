@@ -2,11 +2,11 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
-import com.google.common.primitives.Longs
-import org.ergoplatform.{AutolykosSolution, InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
+import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, OrderingBlockFound, OrderingSolutionFound}
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -26,15 +26,9 @@ class ErgoMiningThread(
 
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val NonceStep = 1000
-  private val PollCandidate = GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None)
-  // solutions sent and not answered yet: an error reply while one is outstanding answers a solution, otherwise a poll
-  private var solutionsAwaitingReply = 0
-  // true while a MineCmd is queued: at most one is ever in the mailbox, so a new candidate or an error reply cannot
-  // start a second chain of MineCmd steps beside the running one (MineCmd is private, so no other sender can either)
+  // true while a MineCmd is queued: at most one is ever in the mailbox, so a new candidate cannot start a second
+  // chain of MineCmd steps beside the running one (MineCmd is private, so no other sender can either)
   private var mineCmdPending = false
-  // true from an error reply to a solution until a candidate reply: the generator may no longer hold this thread's
-  // candidate, and a hit on it would then be judged against the generator's next candidate and clear that one too
-  private var awaitingCandidate = false
 
   private def enqueueMineCmdIfIdle(): Unit = {
     if (!mineCmdPending) {
@@ -50,7 +44,7 @@ class ErgoMiningThread(
       1.second,
       ergoSettings.nodeSettings.internalMinerPollingInterval,
       candidateGenerator,
-      PollCandidate
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None)
     )(context.dispatcher, self)
   }
 
@@ -72,7 +66,7 @@ class ErgoMiningThread(
   }
 
   def mining(
-    nonce: Long,
+    nonce: Int,
     candidateBlock: CandidateBlock,
     workMsg: Array[Byte],
     parameters: Parameters,
@@ -82,40 +76,26 @@ class ErgoMiningThread(
       // if we get new candidate instead of a cached one, mine it: new work is a new PoW message, as a regenerated
       // candidate can keep the timestamp (a parent dated ahead of the local clock)
       if (!java.util.Arrays.equals(externalVersion.msg, workMsg)) {
-        awaitingCandidate = false
+        log.info(s"Switching block mining work to msg ${Base16.encode(externalVersion.msg)}")
         context.become(mining(nonce = 0, cb, externalVersion.msg.clone(), newParameters, solvedBlocksCount))
         enqueueMineCmdIfIdle()
-      } else if (awaitingCandidate) {
-        // the generator kept this candidate after the rejection: search on after the rejected nonce
-        awaitingCandidate = false
-        enqueueMineCmdIfIdle()
       }
-    case StatusReply.Error(ex) if solutionsAwaitingReply > 0 =>
-      solutionsAwaitingReply -= 1
-      log.error(s"Accepting solution did not succeed", ex)
-      // the generator may have dropped this candidate: poll now and hash nothing until the reply says whether it
-      // has a new one or kept this one (then the search resumes after the rejected nonce, recorded when it was found)
-      awaitingCandidate = true
-      candidateGenerator ! PollCandidate
     case StatusReply.Error(ex) =>
-      log.error(s"Preparing candidate did not succeed", ex)
+      // the generator rejects a solution only when its candidate does not fit it, is gone or is solved already, so
+      // no search resumes on this work: the thread mines again when a poll returns a candidate with a new PoW message
+      log.error(s"Accepting solution or preparing candidate did not succeed", ex)
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
-      solutionsAwaitingReply = math.max(0, solutionsAwaitingReply - 1)
       context.become(mining(nonce, candidateBlock, workMsg, parameters, solvedBlocksCount + 1))
-    case MineCmd if awaitingCandidate =>
-      mineCmdPending = false
     case MineCmd =>
       mineCmdPending = false
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
           log.info(s"Found solution for ordering block, sending it for validation")
-          solutionSent(newBlock.header.powSolution, candidateBlock, workMsg, parameters, solvedBlocksCount)
           candidateGenerator ! OrderingSolutionFound(newBlock.header.powSolution)
         case InputBlockFound(newBlock) =>
           log.info(s"Found solution for input block, sending it for validation")
-          solutionSent(newBlock.header.powSolution, candidateBlock, workMsg, parameters, solvedBlocksCount)
           candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
@@ -126,16 +106,6 @@ class ErgoMiningThread(
       }
     case GetSolvedBlocksCount =>
       sender() ! SolvedBlocksCount(solvedBlocksCount)
-  }
-
-  // the search resumes after the found nonce if the solution is rejected
-  private def solutionSent(solution: AutolykosSolution,
-                           candidateBlock: CandidateBlock,
-                           workMsg: Array[Byte],
-                           parameters: Parameters,
-                           solvedBlocksCount: Int): Unit = {
-    solutionsAwaitingReply += 1
-    context.become(mining(Longs.fromByteArray(solution.n) + 1, candidateBlock, workMsg, parameters, solvedBlocksCount))
   }
 
 }

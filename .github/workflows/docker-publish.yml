@@ -29,7 +29,7 @@ jobs:
         with:
           images: ergoplatform/ergo
           flavor: |
-            latest=false
+            latest=${{ github.event.release.prerelease && 'false' || 'auto' }}
 
       - name: Build and push Docker images
         uses: docker/build-push-action@v2.7.0

@@ -60,7 +60,7 @@ class ErgoMiningThreadChainSpec extends AnyFlatSpec with Matchers with ErgoTestH
       calls += 1
       observer ! ProveCall(calls)
       if (calls == 2) {
-        assert(release.await(10L, TimeUnit.SECONDS), "first prove call was not released")
+        assert(release.await(10L, TimeUnit.SECONDS), "the held prove call was not released")
         NothingFound
       } else {
         super.prove(parentOpt, version, nBits, stateRoot, adProofsRoot, transactionsRoot, timestamp, extensionHash,

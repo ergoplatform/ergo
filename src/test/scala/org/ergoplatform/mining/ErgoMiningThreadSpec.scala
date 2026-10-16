@@ -1,5 +1,6 @@
 package org.ergoplatform.mining
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
@@ -42,10 +43,14 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   /** Fake PoW with an input-block hit at the first of `hits` in [minNonce, maxNonce), reporting the hit as the
     * solution's nonce (or `reportedNonce(hit)` instead), so the miner's nonce search is observable, and the
     * candidate's timestamp as the solution's `d`, so a solution names the candidate it was found on. Every call's
-    * bounds go to `calls`, if given. */
+    * bounds go to `calls`, if given; the first call then waits for `holdFirstCall`, if given, so messages sent to the
+    * thread meanwhile are all queued before it reads any. */
   private class FixedHitsPowScheme(hits: Seq[Long],
                                    calls: Option[ActorRef] = None,
-                                   reportedNonce: Long => Long = identity) extends DefaultFakePowScheme(32, 26) {
+                                   reportedNonce: Long => Long = identity,
+                                   holdFirstCall: Option[CountDownLatch] = None) extends DefaultFakePowScheme(32, 26) {
+    private val firstCall = new AtomicBoolean(true)
+
     override def prove(parentOpt: Option[Header],
                        version: Header.Version,
                        nBits: Long,
@@ -60,6 +65,9 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
                        maxNonce: Long,
                        parameters: Parameters): ProveBlockResult = {
       calls.foreach(_ ! ((minNonce, maxNonce)))
+      if (firstCall.getAndSet(false)) {
+        holdFirstCall.foreach(latch => assert(latch.await(10L, TimeUnit.SECONDS), "the held prove call was not released"))
+      }
       hits.find(h => h >= minNonce && h < maxNonce) match {
         case None => NothingFound
         case Some(hit) =>
@@ -188,124 +196,146 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   // one, and a hit found on the old candidate is judged against the new one, rejected, and clears it as well.
   it should "after a rejected solution, hash nothing until the poll reply, then mine the generator's new candidate" in
     new TestKit(ActorSystem()) {
-    val candidate = realCandidate("drop")
-    val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
+    try {
+      val candidate = realCandidate("drop")
+      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
 
-    nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
-    thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
+      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
 
-    // the periodic poll is an hour away, so a poll here is the thread's own; one poll and one new candidate, whose
-    // first hit is accepted: no hit on the old candidate reaches the generator after the poll
-    answerAsTipGenerator(generator, candidate, firstShift = 1) shouldBe
-      AfterRejection(polls = 1, newCandidates = 1, rejected = 0, refused = 0, accepted = true)
-    system.terminate()
+      // the periodic poll is an hour away, so a poll here is the thread's own; one poll and one new candidate, whose
+      // first hit is accepted: no hit on the old candidate reaches the generator after the poll
+      answerAsTipGenerator(generator, candidate, firstShift = 1) shouldBe
+        AfterRejection(polls = 1, newCandidates = 1, rejected = 0, refused = 0, accepted = true)
+    } finally {
+      system.terminate()
+    }
   }
 
   // As above, with a new candidate arriving while the solution awaits its reply: the rejection was judged against
   // that newer candidate and cleared it, so the search the switch queued must not run on it either.
   it should "not run a search queued before the rejection on the candidate the generator has cleared" in
     new TestKit(ActorSystem()) {
-    val candidate = realCandidate("queued")
-    val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
+    val release = new CountDownLatch(1)
+    try {
+      val candidate = realCandidate("queued")
+      val calls = TestProbe()
+      val pow = new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref), holdFirstCall = Some(release))
+      val (thread, generator) = startThread(candidate, pow)
 
-    nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
-    // both are in the mailbox before the thread reads either
-    thread.tell(StatusReply.Success(shifted(candidate, 1)), generator.ref)
-    thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      // the thread is held in the step that finds nonce 5, so both replies are in the mailbox before it sends that
+      // solution and reads either
+      calls.expectMsg(10.seconds, (0L, 1000L))
+      thread.tell(StatusReply.Success(shifted(candidate, 1)), generator.ref)
+      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      release.countDown()
+      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
 
-    answerAsTipGenerator(generator, candidate, firstShift = 2) shouldBe
-      AfterRejection(polls = 1, newCandidates = 1, rejected = 0, refused = 0, accepted = true)
-    system.terminate()
+      answerAsTipGenerator(generator, candidate, firstShift = 2) shouldBe
+        AfterRejection(polls = 1, newCandidates = 1, rejected = 0, refused = 0, accepted = true)
+    } finally {
+      release.countDown()
+      system.terminate()
+    }
   }
 
   it should "against the real generator, poll once and get one new candidate per rejected solution" in
     new TestKit(ActorSystem()) {
-    val pow = new CandidateBoundPowScheme(Seq(5L, 900L))
-    val chainSettings: ErgoSettings = settings.copy(
-      directory = s"${settings.directory}-real-generator-${System.nanoTime()}",
-      chainSettings = settings.chainSettings.copy(powScheme = pow))
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(chainSettings)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
-    val realGenerator: ActorRef =
-      CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, chainSettings)
-    val events = TestProbe()
-    val relay = system.actorOf(Props(new Relay(realGenerator, events.ref)))
-    val thread = ErgoMiningThread(chainSettings, relay, defaultMinerSecret.w)
+    try {
+      val pow = new CandidateBoundPowScheme(Seq(5L, 900L))
+      val chainSettings: ErgoSettings = settings.copy(
+        directory = s"${settings.directory}-real-generator-${System.nanoTime()}",
+        chainSettings = settings.chainSettings.copy(powScheme = pow))
+      val viewHolderRef: ActorRef = ErgoNodeViewRef(chainSettings)
+      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+      val realGenerator: ActorRef =
+        CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, chainSettings)
+      val events = TestProbe()
+      val relay = system.actorOf(Props(new Relay(realGenerator, events.ref)))
+      val thread = ErgoMiningThread(chainSettings, relay, defaultMinerSecret.w)
 
-    // a new candidate is one whose PoW message was not seen before
-    var seen = Set.empty[Seq[Byte]]
-    // up to the rejection of the thread's first solution (the first poll waits for the genesis state)
-    var solutionsBefore = 0
-    events.fishForMessage(60.seconds, hint = "the rejection of the first solution") {
-      case ToGenerator(_: SolutionFound) => solutionsBefore += 1; false
-      case ToThread(StatusReply.Success(c: Candidate)) => seen += c.externalVersion.msg.toSeq; false
-      case ToThread(StatusReply.Error(_)) => true
-      case _ => false
-    }
-    solutionsBefore shouldBe 1
-
-    // from there to the first accepted solution
-    var polls, newCandidates, rejected, solutions, messages = 0
-    var accepted = false
-    while (!accepted && messages < 40) {
-      messages += 1
-      events.receiveOne(10.seconds) match {
-        case null => messages = 40
-        case ToGenerator(_: GenerateCandidate) => polls += 1
-        case ToGenerator(_: SolutionFound) => solutions += 1
-        case ToThread(StatusReply.Success(c: Candidate)) =>
-          if (!seen.contains(c.externalVersion.msg.toSeq)) {
-            seen += c.externalVersion.msg.toSeq
-            newCandidates += 1
-          }
-        case ToThread(StatusReply.Error(_)) => rejected += 1
-        case ToThread(StatusReply.Success(())) => accepted = true
-        case _ =>
+      // a new candidate is one whose PoW message was not seen before
+      var seen = Set.empty[Seq[Byte]]
+      // up to the rejection of the thread's first solution (the first poll waits for the genesis state)
+      var solutionsBefore = 0
+      events.fishForMessage(60.seconds, hint = "the rejection of the first solution") {
+        case ToGenerator(_: SolutionFound) => solutionsBefore += 1; false
+        case ToThread(StatusReply.Success(c: Candidate)) => seen += c.externalVersion.msg.toSeq; false
+        case ToThread(StatusReply.Error(_)) => true
+        case _ => false
       }
+      solutionsBefore shouldBe 1
+
+      // from there to the first accepted solution
+      var polls, newCandidates, rejected, solutions, messages = 0
+      var accepted = false
+      while (!accepted && messages < 40) {
+        messages += 1
+        events.receiveOne(10.seconds) match {
+          case null => messages = 40
+          case ToGenerator(_: GenerateCandidate) => polls += 1
+          case ToGenerator(_: SolutionFound) => solutions += 1
+          case ToThread(StatusReply.Success(c: Candidate)) =>
+            if (!seen.contains(c.externalVersion.msg.toSeq)) {
+              seen += c.externalVersion.msg.toSeq
+              newCandidates += 1
+            }
+          case ToThread(StatusReply.Error(_)) => rejected += 1
+          case ToThread(StatusReply.Success(())) => accepted = true
+          case _ =>
+        }
+      }
+      info(s"after one rejection: $polls polls, $newCandidates new candidates, $solutions solutions, " +
+        s"$rejected more errors, accepted: $accepted")
+      (polls, newCandidates, solutions, rejected, accepted) shouldBe ((1, 1, 1, 0, true))
+      system.stop(thread)
+    } finally {
+      system.terminate()
     }
-    info(s"after one rejection: $polls polls, $newCandidates new candidates, $solutions solutions, " +
-      s"$rejected more errors, accepted: $accepted")
-    (polls, newCandidates, solutions, rejected, accepted) shouldBe ((1, 1, 1, 0, true))
-    system.stop(thread)
-    system.terminate()
   }
 
   // Presumes a generator that keeps its candidate when it rejects a solution (#2638 option 2): the re-poll returns
   // the same candidate, and the thread searches on after the rejected nonce.
   it should "not resubmit a rejected solution's nonce while the generator keeps the candidate" in
     new TestKit(ActorSystem()) {
-    val candidate = realCandidate("keep")
-    val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
+    try {
+      val candidate = realCandidate("keep")
+      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
 
-    val first = generator.expectMsgType[InputSolutionFound](10.seconds)
-    nonceOf(first) shouldBe 5L
-    thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      val first = generator.expectMsgType[InputSolutionFound](10.seconds)
+      nonceOf(first) shouldBe 5L
+      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
 
-    val next = generator.fishForMessage(10.seconds) {
-      case _: GenerateCandidate => generator.reply(StatusReply.Success(candidate)); false
-      case _: SolutionFound => true
-    }.asInstanceOf[SolutionFound]
-    nonceOf(next) shouldBe 900L
-    system.terminate()
+      val next = generator.fishForMessage(10.seconds) {
+        case _: GenerateCandidate => generator.reply(StatusReply.Success(candidate)); false
+        case _: SolutionFound => true
+      }.asInstanceOf[SolutionFound]
+      nonceOf(next) shouldBe 900L
+    } finally {
+      system.terminate()
+    }
   }
 
   it should "resume after a rejected nonce past Int.MaxValue without truncating or wrapping" in
     new TestKit(ActorSystem()) {
-    val candidate = realCandidate("long")
-    val calls = TestProbe()
-    // the hit in the first batch is reported at nonce Int.MaxValue
-    val pow = new FixedHitsPowScheme(Seq(5L), Some(calls.ref), _ => Int.MaxValue.toLong)
-    val (thread, generator) = startThread(candidate, pow)
+    try {
+      val candidate = realCandidate("long")
+      val calls = TestProbe()
+      // the hit in the first batch is reported at nonce Int.MaxValue
+      val pow = new FixedHitsPowScheme(Seq(5L), Some(calls.ref), _ => Int.MaxValue.toLong)
+      val (thread, generator) = startThread(candidate, pow)
 
-    calls.expectMsg(10.seconds, (0L, 1000L))
-    nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe Int.MaxValue.toLong
-    thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
-    // the generator kept the candidate
-    generator.expectMsgType[GenerateCandidate](5.seconds)
-    generator.reply(StatusReply.Success(candidate))
+      calls.expectMsg(10.seconds, (0L, 1000L))
+      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe Int.MaxValue.toLong
+      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      // the generator kept the candidate
+      generator.expectMsgType[GenerateCandidate](5.seconds)
+      generator.reply(StatusReply.Success(candidate))
 
-    // the next batch starts right after the rejected nonce, as a Long
-    calls.expectMsg(10.seconds, (Int.MaxValue.toLong + 1, Int.MaxValue.toLong + 1001))
-    system.terminate()
+      // the next batch starts right after the rejected nonce, as a Long
+      calls.expectMsg(10.seconds, (Int.MaxValue.toLong + 1, Int.MaxValue.toLong + 1001))
+    } finally {
+      system.terminate()
+    }
   }
 }

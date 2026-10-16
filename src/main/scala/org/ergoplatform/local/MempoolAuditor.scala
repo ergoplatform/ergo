@@ -2,6 +2,7 @@ package org.ergoplatform.local
 
 import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor.{Actor, ActorInitializationException, ActorKilledException, ActorRef, ActorRefFactory, DeathPactException, OneForOneStrategy, Props}
+import org.ergoplatform.ErgoBox.BoxId
 import org.ergoplatform.local.CleanupWorker.RunCleanup
 import org.ergoplatform.local.MempoolAuditor.CleanupDone
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -101,29 +102,31 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
       val limit = MempoolAuditor.roundLimit(settings.nodeSettings.rebroadcastCount)
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
-          // toBroadcast is parents first: an input counts if it is in the state or is created by a transaction
-          // already announced in this round, so no transaction goes out without its in-pool parents, and stopping
-          // the round at `limit` announcements cannot separate a child from its parent
+          // toBroadcast is parents first: an input or data input counts if its box is in the state or is created by
+          // a transaction already announced in this round, so no transaction goes out without its in-pool parents,
+          // and stopping the round at `limit` announcements cannot separate a child from its parent
           val announcedOutputs = mutable.Set[ModifierId]()
+          def inPlace(boxId: BoxId): Boolean =
+            announcedOutputs.contains(bytesToId(boxId)) || utxoState.boxById(boxId).isDefined
           val skipped = mutable.ArrayBuffer[ModifierId]()
           var announced = 0
           val candidates = toBroadcast.iterator
           while (announced < limit && candidates.hasNext) {
             val unconfirmedTx = candidates.next()
-            if (unconfirmedTx.transaction.inputIds.forall(inputBoxId =>
-                  announcedOutputs.contains(bytesToId(inputBoxId)) || utxoState.boxById(inputBoxId).isDefined)) {
+            val tx = unconfirmedTx.transaction
+            if (tx.inputIds.forall(inPlace) && tx.dataInputs.forall(dataInput => inPlace(dataInput.boxId))) {
               log.info(s"Rebroadcasting $unconfirmedTx")
               broadcastTx(unconfirmedTx)
-              announcedOutputs ++= unconfirmedTx.transaction.outputs.map(out => bytesToId(out.id))
+              announcedOutputs ++= tx.outputs.map(out => bytesToId(out.id))
               announced += 1
             } else {
-              log.debug(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
+              log.debug(s"Not rebroadcasting $unconfirmedTx as not all the inputs and data inputs are in place")
               skipped += unconfirmedTx.id
             }
           }
           if (skipped.nonEmpty) {
-            log.info(s"Not rebroadcasting ${skipped.size} transactions as not all their inputs are in the state or " +
-              s"announced in this round, the first of them ${skipped.head}")
+            log.info(s"Not rebroadcasting ${skipped.size} transactions as not all their inputs and data inputs are in " +
+              s"the state or announced in this round, the first of them ${skipped.head}")
           }
           if (candidates.hasNext) {
             log.info(s"Rebroadcast round stopped after $limit announced transactions, " +
@@ -169,19 +172,22 @@ object MempoolAuditor {
   private[local] def roundLimit(rebroadcastCount: Int): Int = math.max(rebroadcastCount, MaxAnnouncedPerRound)
 
   /**
-    * Adds the in-pool ancestors of the selected transactions and orders the result parents first. The rebroadcast
+    * Adds the in-pool ancestors of the selected transactions and orders the result parents first. A transaction's
+    * in-pool parents are the pooled transactions that create its inputs and its data inputs. The rebroadcast
     * selection is a window of the pool, and a pooled transaction whose inputs are neither in the state nor in the
     * selection is not announced; its children, whose inputs the selection does hold, would then be announced
-    * without it. A peer declines a transaction whose inputs it does not have yet and does not request it again for
-    * a while, so those children stay out of the peer's pool (e.g. a chain of wallet payments returned to the pool
-    * by a rollback). Selections with no in-pool parent are returned unchanged.
+    * without it. A peer declines a transaction whose inputs it does not have yet and requests it again only when it
+    * is announced again after the next block, so such a chain (e.g. wallet payments returned to the pool by a
+    * rollback) reaches the peer a few transactions per round at best; a peer that lacks a data input's creator does
+    * not decline the transaction but rejects it. Selections with no in-pool parent are returned unchanged.
     */
   private[local] def withAncestorsParentsFirst(selected: Seq[UnconfirmedTransaction],
                                                pool: Seq[UnconfirmedTransaction]): Seq[UnconfirmedTransaction] = {
     val creatorOf: Map[ModifierId, UnconfirmedTransaction] =
       pool.flatMap(utx => utx.transaction.outputs.map(out => bytesToId(out.id) -> utx)).toMap
     def parentsOf(utx: UnconfirmedTransaction): Iterator[UnconfirmedTransaction] =
-      utx.transaction.inputIds.flatMap(boxId => creatorOf.get(bytesToId(boxId))).distinct.iterator
+      (utx.transaction.inputIds ++ utx.transaction.dataInputs.map(_.boxId))
+        .flatMap(boxId => creatorOf.get(bytesToId(boxId))).distinct.iterator
     val ordered = mutable.LinkedHashMap[ModifierId, UnconfirmedTransaction]()
     // iterative post-order walk: a transaction is emitted after its in-pool parents, down to MaxAncestorDepth
     selected.foreach { root =>

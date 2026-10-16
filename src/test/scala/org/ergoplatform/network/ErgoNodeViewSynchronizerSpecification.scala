@@ -2240,4 +2240,153 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+
+  /**
+    * While a re-request's tail waits in the processing cache, the peer (within its budget) announces and delivers
+    * another transaction through the ordinary inv path. A peer's transactions are charged when their mempool results
+    * come back, so the node counts the ones in processing against the peer's budget on every path: between two blocks
+    * no more of them are processed than the budget admits at the floor charge.
+    */
+  property("NodeViewSynchronizer: a re-request's cached tail and an inv delivery together stay within the peer's budget") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val budgetInDeclines = PeerBudgetBetweenBlocks / MinDeclinedTxCost
+
+      declineTxs(relay, count = DeclinesToThrottlePeer, cost = 1000)
+      val refused = Seq.fill(20)(dummyDeclinedTx())
+      val byId = refused.map(tx => tx.id -> tx).toMap
+      invTxIds(relay, refused.map(_.id))
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      val first = txRequestsSentTo(relay)
+      first.size shouldBe 1
+
+      // the relay spends its budget but for what the re-request carries
+      val spent = budgetInDeclines - first.head.size
+      declineTxs(relay, count = spent, cost = 1000)
+
+      // the re-request is delivered: its first transaction is processed, the rest is cached
+      val modData = ModifiersData(ErgoTransaction.modifierTypeId, first.head.map(id => id -> byId(id).bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(relay))
+
+      // the relay, within its budget, announces a new transaction, is asked for it and delivers it
+      val fresh = dummyDeclinedTx()
+      invTxAndExpectRequest(relay, fresh)
+      val freshData = ModifiersData(ErgoTransaction.modifierTypeId, Map(fresh.id -> fresh.bytes))
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(freshData)), Some(relay))
+
+      // the mempool: every transaction forwarded for processing is declined at the cheapest check
+      var processedFromRelay = spent
+      var forwarded = txsForwardedToMempool()
+      while (forwarded.nonEmpty) {
+        forwarded.foreach { utx =>
+          if (utx.source.contains(relay)) processedFromRelay += 1
+          synchronizerRef ! DeclinedTransaction(utx.withCost(1000))
+        }
+        forwarded = txsForwardedToMempool()
+      }
+
+      processedFromRelay should be <= budgetInDeclines
+    }
+  }
+
+  /**
+    * The ordinary inv path, no re-request involved: a peer one floor charge short of its budget, with one transaction
+    * in processing, delivers another requested transaction. The second is not processed while the first, which may
+    * use up the rest of the budget, is in processing; once the first is declined the peer is at its budget and the
+    * second is not processed in this block.
+    */
+  property("NodeViewSynchronizer: a delivery is not processed past the peer's budget while its transactions are in processing") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val budgetInDeclines = PeerBudgetBetweenBlocks / MinDeclinedTxCost
+
+      // transactions forwarded to the mempool so far (drains `vhProbe`)
+      def forwardedNow(): Seq[UnconfirmedTransaction] = {
+        val forwarded = scala.collection.mutable.ArrayBuffer[UnconfirmedTransaction]()
+        var msg = vhProbe.receiveOne(50.millis)
+        while (msg != null) {
+          msg match {
+            case tfr: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => forwarded += tfr.unconfirmedTx
+            case _ => // not a transaction, ignore
+          }
+          msg = vhProbe.receiveOne(50.millis)
+        }
+        forwarded
+      }
+      def deliver(tx: ErgoTransaction): Unit = {
+        val data = ModifiersData(ErgoTransaction.modifierTypeId, Map(tx.id -> tx.bytes))
+        synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(data)), Some(relay))
+      }
+
+      declineTxs(relay, count = budgetInDeclines - 1, cost = 1000)
+      val txA = dummyDeclinedTx()
+      val txB = dummyDeclinedTx()
+
+      invTxAndExpectRequest(relay, txA)
+      deliver(txA)
+      forwardedNow().map(_.id) shouldBe Seq(txA.id)
+
+      // the relay is within its budget, so its next announcement is requested, and it delivers
+      invTxAndExpectRequest(relay, txB)
+      deliver(txB)
+      val whileInProcessing = forwardedNow()
+
+      // the mempool: every transaction forwarded for processing is declined at the cheapest check
+      var processedFromRelay = budgetInDeclines - 1 + 1 + whileInProcessing.count(_.source.contains(relay))
+      synchronizerRef ! DeclinedTransaction(UnconfirmedTransaction(txA, Some(relay)).withCost(1000))
+      whileInProcessing.foreach(utx => synchronizerRef ! DeclinedTransaction(utx.withCost(1000)))
+      var forwarded = forwardedNow()
+      while (forwarded.nonEmpty) {
+        forwarded.foreach { utx =>
+          if (utx.source.contains(relay)) processedFromRelay += 1
+          synchronizerRef ! DeclinedTransaction(utx.withCost(1000))
+        }
+        forwarded = forwardedNow()
+      }
+
+      whileInProcessing.map(_.id) should not contain txB.id
+      processedFromRelay should be <= budgetInDeclines
+    }
+  }
+
+  /**
+    * A cached transaction of a peer within its budget, held back only because the peer's transaction in processing
+    * might use up the rest of the budget, waits in the cache and is processed once that result leaves room (here the
+    * transaction in processing is accepted at a low cost); it is not dropped.
+    */
+  property("NodeViewSynchronizer: a cached transaction held back for the peer's transactions in processing is processed later") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val other = newPeer
+      val budgetInDeclines = PeerBudgetBetweenBlocks / MinDeclinedTxCost
+
+      declineTxs(relay, count = budgetInDeclines - 1, cost = 1000)
+      val txs = Seq.fill(2)(dummyDeclinedTx())
+      txs.foreach(tx => invTxAndExpectRequest(relay, tx))
+      val modData = ModifiersData(ErgoTransaction.modifierTypeId, txs.map(tx => tx.id -> tx.bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(relay))
+
+      // the first transaction of the delivery is in processing, the second is cached
+      val first = txsForwardedToMempool()
+      first.size shouldBe 1
+      val second = txs.map(_.id).filterNot(_ == first.head.id).head
+
+      // another peer's mempool result resumes the cache: the second is held back, as the first may use up the budget
+      declineTxs(other, count = 1, cost = 1000)
+      txsForwardedToMempool() shouldBe empty
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 1
+
+      // the first is accepted at a low cost, the relay is still within its budget: the second is processed now
+      synchronizerRef ! SuccessfulTransaction(first.head.withCost(1000))
+      txsForwardedToMempool().map(_.id) shouldBe Seq(second)
+    }
+  }
+
 }

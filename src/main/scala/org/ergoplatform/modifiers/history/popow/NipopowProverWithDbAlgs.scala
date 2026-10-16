@@ -97,14 +97,42 @@ object NipopowProverWithDbAlgs {
       if (params.continuous) {
         // put headers needed to check difficulty of new blocks after suffix into prefix
         val epochLength = chainSettings.eip37EpochLength.getOrElse(chainSettings.epochLength)
-        diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength).foreach { height =>
-          // check that header in or after suffix is not included, otherwise, sorting by height would be broken
-          if (height < suffixHead.height) {
-            histReader.popowHeader(height).foreach { ph =>
-              prefixBuilder += ph
-              storedHeights += ph.height
+        val requiredHeights = diffAdjustment.heightsForNextRecalculation(suffixHead.height, epochLength)
+          .filter(height => height > 0 && height < suffixHead.height).toVector
+
+        // A requested suffix head can belong to a retained fork. Resolve difficulty headers
+        // on that head's ancestry, rather than replacing them with selected-chain headers
+        // at the same heights. Materialize the selected fast path under the history lock so
+        // a concurrent chain switch cannot change the height lookups midway through.
+        val selectedHeaders = histReader.synchronized {
+          if (histReader.bestHeaderIdAtHeight(suffixHead.height).contains(suffixHead.id)) {
+            Some(requiredHeights.map { height =>
+              histReader.popowHeader(height).getOrElse(
+                throw new IllegalArgumentException(s"Missing NiPoPoW difficulty header at height $height"))
+            })
+          } else {
+            None
+          }
+        }
+        val difficultyHeaders = selectedHeaders.getOrElse {
+          if (requiredHeights.isEmpty) {
+            Vector.empty[PoPowHeader]
+          } else {
+            val minHeight = requiredHeights.min
+            val ancestors = histReader.headerChainBack(
+              suffixHead.height - minHeight + 1, suffixHead.header, _ => false
+            ).headers.map(header => header.height -> header.id).toMap
+            requiredHeights.map { height =>
+              val id = ancestors.getOrElse(height,
+                throw new IllegalArgumentException(s"Missing NiPoPoW difficulty ancestor at height $height"))
+              histReader.popowHeader(id).getOrElse(
+                throw new IllegalArgumentException(s"Missing NiPoPoW difficulty header at height $height"))
             }
           }
+        }
+        difficultyHeaders.foreach { ph =>
+          prefixBuilder += ph
+          storedHeights += ph.height
         }
       }
 

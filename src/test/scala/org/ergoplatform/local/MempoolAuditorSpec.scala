@@ -2,12 +2,12 @@ package org.ergoplatform.local
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe}
-import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
+import org.ergoplatform.{ErgoAddressEncoder, ErgoBox}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{FailedTransaction, RecheckMempool, SuccessfulTransaction}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, RecheckedTransactions}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
-import org.ergoplatform.nodeView.state.ErgoState
+import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
@@ -23,6 +23,7 @@ import sigma.compiler.ir.CompiletimeIRContext
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.interpreter.Interpreter.emptyEnv
 import org.ergoplatform.settings.Constants.TrueTree
+import scorex.util.ModifierId
 
 import scala.concurrent.duration._
 
@@ -125,90 +126,93 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     }.isInstanceOf[SendToNetwork] shouldBe true
   }
 
-  it should "rebroadcast a pooled child together with its in-pool parent, parent first" in {
-
+  // the UTXO state after one block, and its boxes other than the emission box
+  private def stateAfterOneBlock(): (UtxoState, Seq[ErgoBox]) = {
     val (us0, bh0) = createUtxoState(settingsToTest)
     val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
     val b1 = validFullBlock(None, us0, txs0)
-
     val us = us0.applyModifier(b1, None)(_ => ()).get
-
     val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
-    val parent = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1.head
-    val child = validTransactionsFromBoxes(200000, parent.outputs, new RandomWrapper)._1.head
-    child.inputs.exists(in => parent.outputs.exists(_.id sameElements in.boxId)) shouldBe true
+    bxs.filter(b => us.boxById(b.id).isEmpty) shouldBe empty
+    us -> bxs
+  }
 
-    implicit val system = ActorSystem()
-    val probe = TestProbe()
+  // a transaction spending all of `inputs` and reading `dataInputs`, with no other data inputs
+  private def spending(inputs: Seq[ErgoBox], dataInputs: Seq[ErgoBox] = Seq.empty): ErgoTransaction =
+    validTransactionFromBoxes(inputs.toIndexedSeq, dataBoxes = dataInputs.toIndexedSeq)
 
-    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
+  // a chain of `length` transactions, each spending all the outputs of the one before, starting from `inputs`
+  private def chainFrom(inputs: Seq[ErgoBox], length: Int): Seq[ErgoTransaction] =
+    (1 until length).scanLeft(spending(inputs))((prev, _) => spending(prev.outputs))
 
-    // rebroadcastCount = 1 and FakeMempool.random takes from the front: only the child is sampled; its input is
-    // in neither the state nor the selection, so without its parent it is not announced at all
-    val pool = new FakeMempool(Seq(UnconfirmedTransaction(child, None), UnconfirmedTransaction(parent, None)))
-    auditor ! RecheckMempool(us, pool)
-
-    val announced = probe.receiveWhile(max = 5.seconds, idle = 2.seconds) {
-      case SendToNetwork(msg, _) => msg.input.toOption.toSeq.flatMap {
-        case inv: InvData => inv.ids
+  // runs one cleanup and rebroadcast round over `pool` and returns the announced ids in order (one `Inv` each)
+  private def announcedIds(us: UtxoState, pool: Seq[ErgoTransaction], rebroadcastCount: Int): Seq[ModifierId] = {
+    implicit val system: ActorSystem = ActorSystem()
+    try {
+      val probe = TestProbe()
+      val roundSettings =
+        settingsToTest.copy(nodeSettings = settingsToTest.nodeSettings.copy(rebroadcastCount = rebroadcastCount))
+      val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, roundSettings))
+      auditor ! RecheckMempool(us, new FakeMempool(pool.map(UnconfirmedTransaction(_, None))))
+      val announcements: PartialFunction[Any, Seq[ModifierId]] = {
+        case SendToNetwork(msg, _) => msg.input.toOption.toSeq.flatMap {
+          case inv: InvData => inv.ids
+          case _ => Seq.empty
+        }
         case _ => Seq.empty
       }
-      case _ => Seq.empty
-    }.flatten
+      // a round announces all its ids in one go, after the cleanup run, however long that takes: wait for the first
+      // announcement, then take the rest
+      val first = probe.fishForMessage(30.seconds) {
+        case _: SendToNetwork => true
+        case _ => false
+      }
+      announcements(first) ++ probe.receiveWhile(max = 10.seconds, idle = 1.second)(announcements).flatten
+    } finally {
+      system.terminate()
+    }
+  }
 
-    announced shouldBe Seq(parent.id, child.id)
+  it should "rebroadcast a pooled child together with its in-pool parent, parent first" in {
+    val (us, bxs) = stateAfterOneBlock()
+    val Seq(parent, child) = chainFrom(bxs.take(1), 2)
+
+    // FakeMempool.random takes from the front: only the child is selected; its input is in neither the state nor
+    // the selection, so without its parent it is not announced at all
+    announcedIds(us, Seq(child, parent), rebroadcastCount = 1) shouldBe Seq(parent.id, child.id)
   }
 
   it should "not rebroadcast the descendants of an in-pool ancestor that is not announced" in {
-
-    val (us0, bh0) = createUtxoState(settingsToTest)
-    val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
-    val b1 = validFullBlock(None, us0, txs0)
-
-    val us = us0.applyModifier(b1, None)(_ => ()).get
-
-    val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
+    val (us, bxs) = stateAfterOneBlock()
     // a chain whose root's inputs are in neither the state nor the pool: missing -> root -> mid -> leaf
-    val missing = validTransactionsFromBoxes(200000, bxs.drop(2), new RandomWrapper)._1.head
-    val root = validTransactionsFromBoxes(200000, missing.outputs, new RandomWrapper)._1.head
-    val mid = validTransactionsFromBoxes(200000, root.outputs, new RandomWrapper)._1.head
-    val leaf = validTransactionsFromBoxes(200000, mid.outputs, new RandomWrapper)._1.head
-    root.inputs.forall(in => us.boxById(in.boxId).isEmpty) shouldBe true
+    val Seq(_, root, mid, leaf) = chainFrom(bxs.slice(2, 3), 4)
+    root.inputs.filter(in => us.boxById(in.boxId).isDefined) shouldBe empty
     // a control chain whose root's inputs are in the state: parent -> child
-    val parent = validTransactionsFromBoxes(200000, bxs.take(2), new RandomWrapper)._1.head
-    val child = validTransactionsFromBoxes(200000, parent.outputs, new RandomWrapper)._1.head
-    parent.inputs.forall(in => us.boxById(in.boxId).isDefined) shouldBe true
+    val Seq(parent, child) = chainFrom(bxs.take(2), 2)
 
-    implicit val system = ActorSystem()
-    val probe = TestProbe()
+    // FakeMempool.random takes from the front: the leaf and the child are selected
+    announcedIds(us, Seq(leaf, child, mid, root, parent), rebroadcastCount = 2) shouldBe Seq(parent.id, child.id)
+  }
 
-    val twoPerRound = settingsToTest.copy(nodeSettings = settingsToTest.nodeSettings.copy(rebroadcastCount = 2))
-    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, twoPerRound))
+  it should "stop a rebroadcast round after MaxAnnouncedPerRound announcements, keeping the chain's front" in {
+    val (us, bxs) = stateAfterOneBlock()
+    val chain = chainFrom(bxs.take(1), MempoolAuditor.MaxAnnouncedPerRound + 5)
 
-    // FakeMempool.random takes from the front: the leaf and the child are sampled
-    val pool = new FakeMempool(Seq(leaf, child, mid, root, parent).map(UnconfirmedTransaction(_, None)))
-    auditor ! RecheckMempool(us, pool)
+    // only the leaf is selected; with its ancestors the round holds the whole chain, parents first
+    announcedIds(us, chain.reverse, rebroadcastCount = 1) shouldBe chain.take(MempoolAuditor.MaxAnnouncedPerRound).map(_.id)
+  }
 
-    val announced = probe.receiveWhile(max = 5.seconds, idle = 2.seconds) {
-      case SendToNetwork(msg, _) => msg.input.toOption.toSeq.flatMap {
-        case inv: InvData => inv.ids
-        case _ => Seq.empty
-      }
-      case _ => Seq.empty
-    }.flatten
+  it should "not stop a rebroadcast round below the configured rebroadcastCount" in {
+    val (us, bxs) = stateAfterOneBlock()
+    val chain = chainFrom(bxs.take(1), MempoolAuditor.MaxAnnouncedPerRound + 5)
 
-    announced shouldBe Seq(parent.id, child.id)
+    // the whole chain is selected
+    announcedIds(us, chain.reverse, rebroadcastCount = chain.size) shouldBe chain.map(_.id)
   }
 
   it should "add in-pool ancestors root first and keep a selection without in-pool parents as it is" in {
-    val (_, bh0) = createUtxoState(settingsToTest)
-    val bxs = bh0.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
-    val grand = validTransactionsFromBoxes(200000, bxs, new RandomWrapper)._1.head
-    val parent = validTransactionsFromBoxes(200000, grand.outputs, new RandomWrapper)._1.head
-    val child = validTransactionsFromBoxes(200000, parent.outputs, new RandomWrapper)._1.head
-    val g = UnconfirmedTransaction(grand, None)
-    val p = UnconfirmedTransaction(parent, None)
-    val c = UnconfirmedTransaction(child, None)
+    val (_, bxs) = stateAfterOneBlock()
+    val Seq(g, p, c) = chainFrom(bxs.take(1), 3).map(UnconfirmedTransaction(_, None))
     val pool = Seq(c, p, g)
 
     MempoolAuditor.withAncestorsParentsFirst(Seq(c), pool).map(_.id) shouldBe Seq(g.id, p.id, c.id)

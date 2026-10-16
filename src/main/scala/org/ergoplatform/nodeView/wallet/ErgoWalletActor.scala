@@ -6,7 +6,7 @@ import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState, CurrentWalletView, RequestCurrentWalletView, UtxoSnapshotAppliedToState}
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.history.header.PreGenesisHeader
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, Height}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -27,6 +27,7 @@ import scorex.crypto.authds.ADDigest
 import scorex.util.{ModifierId, ScorexLogging}
 
 import java.util.UUID
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -74,6 +75,16 @@ class ErgoWalletActor(settings: ErgoSettings,
   private var blockedUtxoSnapshotCatchUp: Option[(Height, ModifierId)] = None
   private var deferredSnapshotBlock: Option[(Height, ErgoFullBlock)] = None
   private var pendingWalletCatchUpTarget: Option[Height] = None
+
+  private final class AppliedWalletCatchUpPath(
+    val firstHeight: Height,
+    var tipHeight: Height,
+    var tipId: ModifierId,
+    val headerIds: ArrayBuffer[ModifierId]) {
+    def idAt(height: Height): ModifierId = headerIds(height - firstHeight)
+  }
+
+  private var appliedWalletCatchUpPath: Option[AppliedWalletCatchUpPath] = None
   private var utxoSnapshotFinalization: UtxoSnapshotFinalizationState =
     UtxoSnapshotFinalizationState.empty
   private var utxoSnapshotSourceCleanupErrors: Map[ModifierId, String] = Map.empty
@@ -219,6 +230,20 @@ class ErgoWalletActor(settings: ErgoSettings,
     }
   }
 
+  private def requiredAppliedWalletCatchUpHeight(
+    state: ErgoWalletState,
+    completedHeight: Height,
+    fullHeight: Height): Try[Option[Height]] =
+    requiredWalletCatchUpHeight(completedHeight, fullHeight).recoverWith {
+      case unavailable: WalletCatchUpBlockUnavailable =>
+        // The selected header can be an un-applied sibling without a body.
+        // A pruned node may still retain the full block on the applied path.
+        readMandatoryWalletCatchUpBlock(state, unavailable.height).flatMap {
+          case Some(_) => Success(Some(unavailable.height))
+          case None => Failure(unavailable)
+        }
+    }
+
   private final class WalletRollbackCatchUpPlan(
     val stateTipHeight: Height,
     val stateTipId: Option[ModifierId])
@@ -311,7 +336,8 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def utxoSnapshotCatchUpHeight(
     state: ErgoWalletState,
     completedHeight: Height): Try[Option[Height]] =
-    Try(utxoSnapshotFullHeight(state)).flatMap(requiredWalletCatchUpHeight(completedHeight, _))
+    Try(utxoSnapshotFullHeight(state)).flatMap(
+      requiredAppliedWalletCatchUpHeight(state, completedHeight, _))
 
   private def walletCatchUpPruningReason(subject: String, cause: Throwable): String =
     s"$subject is outside the full-block pruning horizon: ${cause.getMessage}. " +
@@ -333,14 +359,9 @@ class ErgoWalletActor(settings: ErgoSettings,
   protected[wallet] def scanUtxoSnapshotCatchUpHeight(
     state: ErgoWalletState,
     height: Height): Try[ErgoWalletState] =
-    readMandatoryWalletCatchUpBlock(height).flatMap {
-      case Some((block, retainedInActor)) =>
-        val canonicalValidation =
-          if (retainedInActor) validateRetainedWalletCatchUpBlock(height, block)
-          else Success(())
+    readMandatoryWalletCatchUpBlock(state, height).flatMap {
+      case Some(block) =>
         validateMandatoryWalletCatchUpBlock(state, height, block).flatMap { _ =>
-          canonicalValidation
-        }.flatMap { _ =>
           log.info(s"Wallet is scanning mandatory post-snapshot block ${block.id} at height ${block.height}")
           Try(ergoWalletService.scanBlockUpdate(state, block, settings.walletSettings.dustLimit)).flatten
         }
@@ -348,14 +369,100 @@ class ErgoWalletActor(settings: ErgoSettings,
         Failure(WalletCatchUpBlockUnavailable(height))
     }
 
+  private def traceAppliedWalletHeaders(
+    tipHeight: Height,
+    tipId: ModifierId,
+    firstHeight: Height): (Vector[ModifierId], ModifierId) = {
+    val backwards = Vector.newBuilder[ModifierId]
+    var height = tipHeight
+    var id = tipId
+    while (height >= firstHeight) {
+      val header = historyReader.typedModifierById[Header](id)
+        .getOrElse(throw WalletCatchUpBlockUnavailable(height))
+      if (header.id != id || header.height != height) {
+        throw new IllegalStateException(
+          s"Applied wallet catch-up ancestry expected header $id at height $height, " +
+            s"but history returned ${header.id} at height ${header.height}")
+      }
+      backwards += id
+      id = header.parentId
+      height -= 1
+    }
+    backwards.result().reverse -> id
+  }
+
+  private def readAppliedWalletCatchUpHeader(
+    state: ErgoWalletState,
+    height: Height): Try[Header] =
+    readCurrentStateTip(state).flatMap { case (tipHeight, tipIdOpt) =>
+      Try {
+        if (height < 1 || height > tipHeight) {
+          throw WalletRollbackEvidencePending(
+            s"Wallet catch-up height $height is outside applied state height $tipHeight")
+        }
+        val tipId = tipIdOpt.getOrElse(throw WalletRollbackEvidencePending(
+          s"Applied state header at height $tipHeight is unavailable"))
+        val readerId = state.stateReaderOpt
+          .map(reader => versionToId(reader.version))
+          .getOrElse(throw WalletRollbackEvidencePending(
+            s"Applied state reader at height $tipHeight is unavailable"))
+        if (readerId != tipId) {
+          throw WalletRollbackEvidencePending(
+            s"Wallet state context tip $tipId at height $tipHeight differs from " +
+              s"applied state version $readerId")
+        }
+
+        // Extend only the newly applied suffix, keeping a long catch-up linear.
+        val path = appliedWalletCatchUpPath match {
+          case Some(previous) if previous.tipHeight == tipHeight &&
+            previous.tipId == tipId && height >= previous.firstHeight =>
+            previous
+          case Some(previous) if tipHeight > previous.tipHeight &&
+            height >= previous.firstHeight =>
+            val (extension, parentId) = traceAppliedWalletHeaders(
+              tipHeight, tipId, Math.addExact(previous.tipHeight, 1))
+            if (parentId == previous.tipId) {
+              previous.headerIds ++= extension
+              previous.tipHeight = tipHeight
+              previous.tipId = tipId
+              previous
+            } else {
+              val (ids, _) = traceAppliedWalletHeaders(tipHeight, tipId, height)
+              new AppliedWalletCatchUpPath(height, tipHeight, tipId,
+                ArrayBuffer.empty[ModifierId] ++= ids)
+            }
+          case _ =>
+            val (ids, _) = traceAppliedWalletHeaders(tipHeight, tipId, height)
+            new AppliedWalletCatchUpPath(height, tipHeight, tipId,
+              ArrayBuffer.empty[ModifierId] ++= ids)
+        }
+        appliedWalletCatchUpPath = Some(path)
+        val expectedId = path.idAt(height)
+        val header = historyReader.typedModifierById[Header](expectedId)
+          .getOrElse(throw WalletCatchUpBlockUnavailable(height))
+        if (header.id != expectedId || header.height != height) {
+          throw new IllegalStateException(
+            s"Applied wallet catch-up header $expectedId at height $height changed in history")
+        }
+        header
+      }.recoverWith { case error =>
+        appliedWalletCatchUpPath = None
+        Failure(error)
+      }
+    }
+
   private def readMandatoryWalletCatchUpBlock(
-    height: Height): Try[Option[(ErgoFullBlock, Boolean)]] =
-    Try(historyReader.bestFullBlockAt(height)).map {
-      case Some(block) => Some(block -> false)
-      case None => deferredRollbackReconciliationBlocks.get(height).map(_ -> true)
-        .orElse(deferredSnapshotBlock.collect {
-          case (`height`, block) => block -> true
-        })
+    state: ErgoWalletState,
+    height: Height): Try[Option[ErgoFullBlock]] =
+    readAppliedWalletCatchUpHeader(state, height).flatMap { header =>
+      Try {
+        historyReader.getFullBlock(header)
+          .orElse(deferredRollbackReconciliationBlocks.get(height)
+            .filter(_.id == header.id))
+          .orElse(deferredSnapshotBlock.collect {
+            case (`height`, block) if block.id == header.id => block
+          })
+      }
     }
 
   private def validateRetainedWalletCatchUpBlock(
@@ -374,23 +481,29 @@ class ErgoWalletActor(settings: ErgoSettings,
     state: ErgoWalletState,
     requestedHeight: Height,
     block: ErgoFullBlock): Try[Unit] =
-    Try(Math.subtractExact(requestedHeight, 1)).flatMap { expectedWalletHeight =>
-      if (block.height != requestedHeight) {
-        fail(
-          s"History returned wallet catch-up block ${block.id} at height ${block.height}, " +
-            s"but the requested height was $requestedHeight")
-      } else {
-        readWalletRegistryTip(state).flatMap { case (walletHeight, walletVersion) =>
-          if (walletHeight != expectedWalletHeight) {
-            fail(
-              s"Wallet catch-up block ${block.id} at height $requestedHeight requires registry " +
-                s"height $expectedWalletHeight, but the wallet is at height $walletHeight")
-          } else if (walletVersion != Some(block.header.parentId)) {
-            fail(
-              s"Wallet catch-up block ${block.id} at height $requestedHeight has parent " +
-                s"${block.header.parentId}, but the wallet expected $walletVersion")
-          } else {
-            Success(())
+    readAppliedWalletCatchUpHeader(state, requestedHeight).flatMap { appliedHeader =>
+      Try(Math.subtractExact(requestedHeight, 1)).flatMap { expectedWalletHeight =>
+        if (block.height != requestedHeight) {
+          fail(
+            s"History returned wallet catch-up block ${block.id} at height ${block.height}, " +
+              s"but the requested height was $requestedHeight")
+        } else if (block.id != appliedHeader.id) {
+          fail(
+            s"Wallet catch-up block ${block.id} at height $requestedHeight is not the applied " +
+              s"state ancestor ${appliedHeader.id}")
+        } else {
+          readWalletRegistryTip(state).flatMap { case (walletHeight, walletVersion) =>
+            if (walletHeight != expectedWalletHeight) {
+              fail(
+                s"Wallet catch-up block ${block.id} at height $requestedHeight requires registry " +
+                  s"height $expectedWalletHeight, but the wallet is at height $walletHeight")
+            } else if (walletVersion != Some(block.header.parentId)) {
+              fail(
+                s"Wallet catch-up block ${block.id} at height $requestedHeight has parent " +
+                  s"${block.header.parentId}, but the wallet expected $walletVersion")
+            } else {
+              Success(())
+            }
           }
         }
       }
@@ -1415,7 +1528,8 @@ class ErgoWalletActor(settings: ErgoSettings,
             case Success(Some(_)) =>
               deferredSnapshotBlock.filter(_._1 > state.getWalletHeight) match {
                 case Some((deferredHeight, _)) =>
-                  requiredWalletCatchUpHeight(state.getWalletHeight, deferredHeight) match {
+                  requiredAppliedWalletCatchUpHeight(
+                    state, state.getWalletHeight, deferredHeight) match {
                     case Failure(t: WalletCatchUpBlockUnavailable)
                       if isWalletCatchUpBlockDefinitelyPruned(t) =>
                       enterUtxoSnapshotQuarantine(
@@ -1477,6 +1591,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         finalizingUtxoSnapshotStatus = None
         activeUtxoSnapshotRun = None
         blockedUtxoSnapshotCatchUp = None
+        appliedWalletCatchUpPath = None
         deferredSnapshotBlock = None
         deferredRollbackReconciliationBlocks = Map.empty
         val completedState = reconciledState.copy(error = None, rescanInProgress = false)
@@ -2175,7 +2290,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     if (!hasPendingUtxoSnapshotScan(state) &&
       state.secretIsSet(settings.walletSettings.testMnemonic) &&
       state.getWalletHeight < targetHeight) {
-      requiredWalletCatchUpHeight(state.getWalletHeight, targetHeight) match {
+      requiredAppliedWalletCatchUpHeight(state, state.getWalletHeight, targetHeight) match {
         case Failure(t) =>
           pendingWalletCatchUpTarget = None
           val reason = walletCatchUpFailureReason(
@@ -3185,17 +3300,14 @@ class ErgoWalletActor(settings: ErgoSettings,
         val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
         if (nextBlockHeight == blockHeight || rescan) {
           val blockRead =
-            if (rescan) Try(historyReader.bestFullBlockAt(blockHeight).map(_ -> false))
-            else readMandatoryWalletCatchUpBlock(blockHeight)
+            if (rescan) Try(historyReader.bestFullBlockAt(blockHeight))
+            else readMandatoryWalletCatchUpBlock(state, blockHeight)
           val scanResult = blockRead.flatMap {
-              case Some((block, retainedInActor)) =>
+              case Some(block) =>
                 val operation = if (rescan) "rescanning" else "scanning"
                 val validation =
                   if (rescan) Success(())
-                  else validateMandatoryWalletCatchUpBlock(state, blockHeight, block).flatMap { _ =>
-                    if (retainedInActor) validateRetainedWalletCatchUpBlock(blockHeight, block)
-                    else Success(())
-                  }
+                  else validateMandatoryWalletCatchUpBlock(state, blockHeight, block)
                 validation.flatMap { _ =>
                   log.info(s"Wallet is $operation a block ${block.id} in the past at height ${block.height}")
                   Try(ergoWalletService.scanBlockUpdate(
@@ -3276,6 +3388,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                         clearFreshMempool = false)
                     case Success(reconciledState) =>
                       pendingWalletCatchUpTarget = None
+                      appliedWalletCatchUpPath = None
                       deferredSnapshotBlock = deferredSnapshotBlock
                         .filter(_._1 > reconciledState.getWalletHeight)
                       deferredRollbackReconciliationBlocks =

@@ -10,7 +10,7 @@ import org.ergoplatform.ErgoBox.R1
 import org.ergoplatform.core.{VersionTag, idToVersion, versionToId}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.modifiers.history.header.PreGenesisHeader
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState, CurrentWalletView, RequestCurrentWalletView, UtxoSnapshotAppliedToState}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
@@ -436,7 +436,9 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
                                   bestFullBlockRead: Int => Unit = _ => (),
                                   bestFullBlockResult: Int => Option[ErgoFullBlock] = _ => None,
                                   minFullBlockAvailable: Int = Int.MaxValue,
-                                  utxoSnapshotApplied: Boolean = false):
+                                  utxoSnapshotApplied: Boolean = false,
+                                  appliedHeader: Option[Header] = None,
+                                  appliedFullBlock: Option[ErgoFullBlock] = None):
     ErgoHistoryReader = {
     Proxy.newProxyInstance(
       classOf[ErgoHistoryReader].getClassLoader,
@@ -449,6 +451,15 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
             val height = args(0).asInstanceOf[Int]
             bestFullBlockRead(height)
             bestFullBlockResult(height)
+          case "typedModifierById" =>
+            val id = args(0).asInstanceOf[ModifierId]
+            val requested = args(1).asInstanceOf[scala.reflect.ClassTag[_]]
+            appliedHeader.filter(header =>
+              header.id == id && requested.runtimeClass == classOf[Header])
+          case "getFullBlock" =>
+            val header = args(0).asInstanceOf[Header]
+            appliedFullBlock.filter(block =>
+              block.header.id == header.id && block.header.height == header.height)
           case "minFullBlockAvailable" => Int.box(minFullBlockAvailable)
           case "isUtxoSnapshotApplied" => Boolean.box(utxoSnapshotApplied)
           case "removeUtxoSnapshotScanSource" => Success(())
@@ -496,7 +507,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       }).asInstanceOf[UtxoStateReader]
   }
 
-  private def genericStateReader(stateContext: ErgoStateContext): ErgoStateReader =
+  private def genericStateReader(stateContext: ErgoStateContext,
+                                 versionId: Option[ModifierId] = None): ErgoStateReader =
     Proxy.newProxyInstance(
       classOf[ErgoStateReader].getClassLoader,
       Array(classOf[ErgoStateReader]),
@@ -504,6 +516,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         override def invoke(proxy: Any, method: Method, args: Array[AnyRef]): AnyRef =
           method.getName match {
             case "stateContext" => stateContext
+            case "version" => idToVersion(versionId.getOrElse(
+              throw new UnsupportedOperationException("State version not provided to wallet test reader")))
             case "toString" => "wallet-startup-state-reader"
             case "hashCode" => Int.box(System.identityHashCode(proxy))
             case "equals" => Boolean.box(proxy.asInstanceOf[AnyRef] eq args(0))
@@ -519,7 +533,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     val stateReader: UtxoStateReader,
     val bestHeaderState: Try[Option[(ModifierId, ADDigest)]],
     val sourceIdentity: Try[UtxoSnapshotSourceIdentity],
-    val expectedError: String)
+    val expectedError: String,
+    val expectedInitialized: Boolean)
 
   private final class SnapshotRecoveryStrictPreflightCase(
     val label: String,
@@ -2596,7 +2611,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
       eventBlockId: ModifierId = snapshotId,
       stateReader: UtxoStateReader = validReader,
       bestHeaderState: Try[Option[(ModifierId, ADDigest)]] = validHeader,
-      sourceIdentity: Try[UtxoSnapshotSourceIdentity] = Success(validSource)):
+      sourceIdentity: Try[UtxoSnapshotSourceIdentity] = Success(validSource),
+      expectedInitialized: Boolean = true):
       SnapshotRecoveryPreflightCase =
       new SnapshotRecoveryPreflightCase(
         label,
@@ -2606,7 +2622,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         stateReader,
         bestHeaderState,
         sourceIdentity,
-        expectedError)
+        expectedError,
+        expectedInitialized)
 
     val cases = Seq(
       preflightCase(
@@ -2618,7 +2635,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         "wallet scan variables unavailable",
         "initialized wallet scan variables",
         actorSettings = noScanSettings,
-        stateReader = snapshotRecoveryStateReader(noScanSettings, snapshotId)),
+        stateReader = snapshotRecoveryStateReader(noScanSettings, snapshotId),
+        expectedInitialized = false),
       preflightCase(
         "event height mismatch",
         "durable invalidation fence",
@@ -2726,7 +2744,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
         recoveryRestart = Some((_, _, _, _) => {
           restartCalls.incrementAndGet()
           Success(false)
-        })) { (actor, scanner, client) =>
+        }),
+        expectedInitialized = testCase.expectedInitialized) { (actor, scanner, client) =>
         client.send(actor, UtxoSnapshotAppliedToState(
           testCase.eventHeight,
           testCase.eventBlockId,
@@ -4129,6 +4148,139 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Mempoo
     withSeededWalletStorage(bootstrapSettings, directory) { storage =>
       storage.readUtxoSnapshotScanStatusTry().get shouldBe Some(status)
     }
+  }
+
+  private def exerciseSelectedSnapshotCatchUpSibling(appliedBlockAvailable: Boolean): Unit = {
+    val bootstrapSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+      blocksToKeep = -1,
+      utxoSettings = settings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+    val directory = Files.createTempDirectory("wallet-snapshot-selected-sibling-").toFile
+    val snapshotId = ModifierId @@ Algos.encode(Array.fill(32)(81: Byte))
+    val walletKey = defaultProver.hdPubKeys.head.key
+    val walletAddress = P2PKAddress(walletKey)(bootstrapSettings.addressEncoder)
+    val appliedPayment = ErgoTransaction(fakeInputs, IndexedSeq(
+      new ErgoBoxCandidate(MinBoxValue + 2L, walletAddress.script, creationHeight = 1)))
+    val siblingPayment = ErgoTransaction(fakeInputs, IndexedSeq(
+      new ErgoBoxCandidate(MinBoxValue + 1L, walletAddress.script, creationHeight = 1)))
+    val blockBase = invalidErgoFullBlockGen.sample.get
+    val appliedTransactions = blockBase.blockTransactions.copy(txs = Seq(appliedPayment))
+    val appliedHeader = defaultHeaderGen.sample.get.copy(
+      height = 1, parentId = snapshotId, transactionsRoot = appliedTransactions.digest)
+    val appliedBlock = blockBase.copy(
+      header = appliedHeader,
+      blockTransactions = appliedTransactions.copy(headerId = appliedHeader.id))
+    val siblingTransactions = blockBase.blockTransactions.copy(
+      txs = Seq(siblingPayment))
+    val siblingHeader = appliedHeader.copy(
+      timestamp = appliedHeader.timestamp + 1L,
+      transactionsRoot = siblingTransactions.digest)
+    val siblingBlock = blockBase.copy(
+      header = siblingHeader,
+      blockTransactions = siblingTransactions.copy(headerId = siblingHeader.id))
+    siblingBlock.id should not be appliedHeader.id
+    appliedPayment.outputs.head.id.sameElements(siblingPayment.outputs.head.id) shouldBe false
+    WalletScanLogic.extractWalletOutputs(
+      siblingPayment, Some(1), DefaultSnapshotWalletVars,
+      bootstrapSettings.walletSettings.dustLimit).map(_.box.id).exists(
+      _.sameElements(siblingPayment.outputs.head.id)) shouldBe true
+    WalletScanLogic.extractWalletOutputs(
+      appliedPayment, Some(1), DefaultSnapshotWalletVars,
+      bootstrapSettings.walletSettings.dustLimit).map(_.box.id).exists(
+      _.sameElements(appliedPayment.outputs.head.id)) shouldBe true
+
+    val appliedContext = new ErgoStateContext(
+      Seq(appliedHeader), None, startDigest, parameters,
+      validationSettingsNoIl, VotingData.empty)(bootstrapSettings.chainSettings)
+    val appliedStateReader = genericStateReader(appliedContext, Some(appliedHeader.id))
+    val selectedHeaderId = new AtomicReference[ModifierId](appliedHeader.id)
+    val status = snapshotStatus(
+      snapshotHeight = 0,
+      snapshotBlockId = snapshotId,
+      manifestDepth = ManifestSerializer.MainnetManifestDepth.toInt,
+      nextSubtreeIndex = 0,
+      totalSubtrees = 1,
+      completed = false)
+    val source = UtxoSnapshotSourceIdentity(
+      status.snapshotHeight, status.snapshotBlockId, status.manifestDepth, status.totalSubtrees)
+    val statusRemovals = new AtomicInteger(0)
+
+    withSeededWalletStorage(bootstrapSettings, directory)(_.writeUtxoSnapshotScanStatus(status).get)
+    withProbeWalletActor(
+      bootstrapSettings,
+      directory,
+      strictHistoryReader(bestFullBlockResult = {
+        case 1 => Some(siblingBlock)
+        case _ => None
+      }, appliedHeader = Some(appliedHeader),
+        appliedFullBlock = if (appliedBlockAvailable) Some(appliedBlock) else None),
+      sourceIdentity = Some(_ => Success(source)),
+      bestHeaderId = Some {
+        case 0 => Success(Some(snapshotId))
+        case 1 => Success(Some(selectedHeaderId.get()))
+        case _ => Success(None)
+      },
+      snapshotFullHeight = Some(_ => 1),
+      catchUpReady = Some(_ => true),
+      statusRemoval = Some(state => {
+        statusRemovals.incrementAndGet()
+        state.storage.removeUtxoSnapshotScanStatus()
+      }),
+      startupStateReader = Some(appliedStateReader)) { (actor, scanner, client) =>
+      val start = scanner.expectMsgType[StartUtxoSnapshotScan](5.seconds)
+      val run = start.run
+      run.hasSnapshot(0, snapshotId) shouldBe true
+      start.forceRestart shouldBe false
+      selectedHeaderId.set(siblingBlock.id)
+      appliedStateReader.stateContext.lastHeaderOpt.map(_.id) shouldBe Some(appliedHeader.id)
+      selectedHeaderId.get() shouldBe siblingBlock.id
+
+      client.send(actor, ApplyUtxoSnapshotScanBatch(
+        run, subtreeIndex = 0, nextSubtreeIndex = 1,
+        completed = true, boxes = IndexedSeq.empty))
+      client.expectMsgType[Try[UtxoSnapshotScanStatus]].get.completed shouldBe true
+      if (appliedBlockAvailable) {
+        client.awaitAssert({
+          client.send(actor, GetWalletStatus)
+          client.expectMsgType[WalletStatus].error shouldBe None
+          statusRemovals.get() shouldBe 1
+        }, 5.seconds, 100.millis)
+        client.send(actor, ReadBalances(ChainStatus.OnChain))
+        client.expectMsgType[WalletDigest].height shouldBe 1
+      } else {
+        client.awaitAssert({
+          client.send(actor, GetWalletStatus)
+          client.expectMsgType[WalletStatus].error should not be None
+        }, 5.seconds, 100.millis)
+        statusRemovals.get() shouldBe 0
+        client.send(actor, ReadBalances(ChainStatus.OnChain))
+        client.expectMsgType[Status.Failure]
+      }
+    }
+
+    val registry = WalletRegistry(bootstrapSettings.copy(directory = directory.getAbsolutePath)).get
+    try {
+      registry.lastVersionId shouldBe Some(if (appliedBlockAvailable) appliedHeader.id else snapshotId)
+      registry.fetchDigest().height shouldBe (if (appliedBlockAvailable) 1 else 0)
+      registry.getBox(appliedPayment.outputs.head.id).isDefined shouldBe appliedBlockAvailable
+      registry.getBox(siblingPayment.outputs.head.id) shouldBe None
+    } finally registry.close()
+    withSeededWalletStorage(bootstrapSettings, directory) { storage =>
+      if (appliedBlockAvailable) {
+        storage.readUtxoSnapshotScanStatusTry().get shouldBe None
+        storage.readUtxoSnapshotWalletOriginTry().get shouldBe Some(snapshotOrigin(0, snapshotId))
+      } else {
+        storage.readUtxoSnapshotScanStatusTry().get.map(_.completed) shouldBe Some(true)
+        storage.readUtxoSnapshotWalletOriginTry().get shouldBe None
+      }
+    }
+  }
+
+  property("reject a selected snapshot catch-up sibling that the state has not applied") {
+    exerciseSelectedSnapshotCatchUpSibling(appliedBlockAvailable = false)
+  }
+
+  property("scan the applied snapshot catch-up block even when history selects a sibling") {
+    exerciseSelectedSnapshotCatchUpSibling(appliedBlockAvailable = true)
   }
 
   property("quarantine completed finalization when its first catch-up block is unavailable") {

@@ -1274,7 +1274,6 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Move `pmod` to `Held` if it is already in history (a duplicate, dropped), to `Invalid` if it is permanently
     * invalid, to `Received` otherwise. Returns whether `pmod` should be passed on for application.
     */
-  @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
   def validateAndSetStatus(hr: ErgoHistory, remote: ConnectedPeer, pmod: BlockSection): Boolean = {
     def transactionHeaderMissing: Boolean = pmod match {
       case txs: BlockTransactions => hr.typedModifierById[Header](txs.headerId).isEmpty
@@ -1282,7 +1281,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     hr.applicableTry(pmod) match {
-      case Failure(e) if e.isInstanceOf[MalformedModifierError] && hr.contains(pmod.id) =>
+      case Failure(e: MalformedModifierError) if hr.contains(pmod.id) =>
         // already in history, e.g. applied from another source while this request was outstanding: a duplicate of a
         // valid modifier, not an invalid one, so it is dropped without penalizing the peer that answered the request.
         // Any fatal failure is matched, not only `alreadyApplied`, on purpose: the node needs nothing from a copy of a
@@ -1290,7 +1289,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Modifier ${pmod.encodedId} is already in history, dropping the copy from $remote: ${e.getMessage}")
         deliveryTracker.setHeld(pmod.id, pmod.modifierTypeId)
         false
-      case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
+      case Failure(e: MalformedModifierError) =>
         log.warn(s"Modifier ${pmod.encodedId} failed validation", e)
         // The transaction section ID does not commit to blockVersion. A peer can send
         // wrong-version bytes under the correct ID, so keep that ID downloadable.

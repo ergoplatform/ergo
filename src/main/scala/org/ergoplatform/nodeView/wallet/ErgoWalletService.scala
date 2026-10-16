@@ -50,6 +50,15 @@ object ErgoWalletService {
   final case class RegistryResetUnavailable(
     cause: Throwable
   ) extends RegistryResetOutcome
+
+  sealed abstract class ChangeAddressValidationException(message: String)
+    extends IllegalArgumentException(message)
+
+  final class WalletLockedForChangeAddress
+    extends ChangeAddressValidationException("Wallet is locked")
+
+  final class ChangeAddressNotOwned
+    extends ChangeAddressValidationException("Change address is not owned by the wallet")
 }
 
 /**
@@ -364,18 +373,6 @@ trait ErgoWalletService {
                    boxesToSpendOpt: Option[Seq[ErgoBox]],
                    dataBoxesOpt: Option[Seq[ErgoBox]]): TransactionHintsBag
 
-}
-
-object ErgoWalletService {
-
-  sealed abstract class ChangeAddressValidationException(message: String)
-    extends IllegalArgumentException(message)
-
-  final class WalletLockedForChangeAddress
-    extends ChangeAddressValidationException("Wallet is locked")
-
-  final class ChangeAddressNotOwned
-    extends ChangeAddressValidationException("Change address is not owned by the wallet")
 }
 
 class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends ErgoWalletService with ErgoWalletSupport with FileUtils {

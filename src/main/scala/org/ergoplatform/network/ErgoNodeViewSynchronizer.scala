@@ -1284,8 +1284,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     hr.applicableTry(pmod) match {
       case Failure(e) if e.isInstanceOf[MalformedModifierError] && hr.contains(pmod.id) =>
         // already in history, e.g. applied from another source while this request was outstanding: a duplicate of a
-        // valid modifier, not an invalid one, so it is dropped without penalizing the peer that answered the request
-        log.debug(s"Modifier ${pmod.encodedId} is already in history, dropping the copy from $remote")
+        // valid modifier, not an invalid one, so it is dropped without penalizing the peer that answered the request.
+        // Any fatal failure is matched, not only `alreadyApplied`, on purpose: the node needs nothing from a copy of a
+        // modifier it already holds, so the copy is dropped whichever rule rejects it.
+        log.info(s"Modifier ${pmod.encodedId} is already in history, dropping the copy from $remote: ${e.getMessage}")
         deliveryTracker.setHeld(pmod.id, pmod.modifierTypeId)
         false
       case Failure(e) if e.isInstanceOf[MalformedModifierError] =>

@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
-  // the periodic poll fires 1 s after start and then once an hour, so any later poll in a test is the thread's own
+  // the periodic poll fires 1 s after start and then once an hour, so in a test every later candidate is sent by hand
   private val settings: ErgoSettings = {
     val empty = ErgoSettingsReader.read()
     empty.copy(
@@ -41,13 +41,12 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   }
 
   /** Fake PoW with an input-block hit at the first of `hits` in [minNonce, maxNonce), reporting the hit as the
-    * solution's nonce (or `reportedNonce(hit)` instead), so the miner's nonce search is observable, and the
-    * candidate's timestamp as the solution's `d`, so a solution names the candidate it was found on. Every call's
-    * bounds go to `calls`, if given; the first call then waits for `holdFirstCall`, if given, so messages sent to the
-    * thread meanwhile are all queued before it reads any. */
+    * solution's nonce, so the miner's nonce search is observable, and the candidate's timestamp as the solution's
+    * `d`, so a solution names the candidate it was found on. Every call's bounds go to `calls`, if given; the first
+    * call then waits for `holdFirstCall`, if given, so messages sent to the thread meanwhile are all queued before it
+    * reads any. */
   private class FixedHitsPowScheme(hits: Seq[Long],
                                    calls: Option[ActorRef] = None,
-                                   reportedNonce: Long => Long = identity,
                                    holdFirstCall: Option[CountDownLatch] = None) extends DefaultFakePowScheme(32, 26) {
     private val firstCall = new AtomicBoolean(true)
 
@@ -75,8 +74,8 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
             votes, sk, minNonce, maxNonce, parameters) match {
             case OrderingBlockHeaderFound(h) =>
               val s = h.powSolution
-              val n = Longs.toByteArray(reportedNonce(hit))
-              InputBlockHeaderFound(h.copy(powSolution = new AutolykosSolution(s.pk, s.w, n, dFor(timestamp))))
+              InputBlockHeaderFound(h.copy(powSolution =
+                new AutolykosSolution(s.pk, s.w, Longs.toByteArray(hit), dFor(timestamp))))
             case other => other
           }
       }
@@ -108,49 +107,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   /** `c` regenerated at the same timestamp (as with a parent dated ahead of the local clock): new PoW work. */
   private def sameTimestamp(c: Candidate): Candidate =
     c.copy(externalVersion = c.externalVersion.copy(msg = Blake2b256(c.externalVersion.msg)))
-
-  private case class AfterRejection(polls: Int, newCandidates: Int, rejected: Int, refused: Int, accepted: Boolean)
-
-  /** Answers the thread as the weak-blocks tip's generator does once it has rejected a solution and cleared its
-    * candidate: a poll makes a new candidate if there is none (CandidateGenerator :185-217); a solution found on the
-    * cached candidate is accepted, one found on any other is rejected, and either clears the cache (:269-285); with
-    * no candidate a solution is refused (:291). New candidates are `shifted(base, firstShift)`, then the next shift.
-    * Stops at the first accepted solution, after `maxMessages`, or when the thread is silent for 5 s. */
-  private def answerAsTipGenerator(generator: TestProbe, base: Candidate, firstShift: Int,
-                                   maxMessages: Int = 20): AfterRejection = {
-    var cache: Option[Candidate] = None
-    var polls, newCandidates, rejected, refused, messages = 0
-    var accepted = false
-    while (!accepted && messages < maxMessages) {
-      messages += 1
-      generator.receiveOne(5.seconds) match {
-        case null => messages = maxMessages
-        case _: GenerateCandidate =>
-          polls += 1
-          if (cache.isEmpty) {
-            cache = Some(shifted(base, firstShift + newCandidates))
-            newCandidates += 1
-          }
-          generator.reply(StatusReply.Success(cache.get))
-        case s: SolutionFound =>
-          cache match {
-            case None =>
-              refused += 1
-              generator.reply(StatusReply.Error(new Exception("Block already solved : None")))
-            case Some(c) if s.as.d == BigInt(c.candidateBlock.timestamp) =>
-              accepted = true
-              cache = None
-              generator.reply(StatusReply.Success(()))
-            case Some(_) =>
-              rejected += 1
-              cache = None
-              generator.reply(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")))
-          }
-        case other => fail(s"unexpected message to the generator: $other")
-      }
-    }
-    AfterRejection(polls, newCandidates, rejected, refused, accepted)
-  }
 
   private case class ToGenerator(msg: Any)
   private case class ToThread(msg: Any)
@@ -196,29 +152,65 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
     (thread, generator)
   }
 
-  // Presumes the generator on the weak-blocks tip: a rejected solution clears its candidate, the next poll makes a new
-  // one, and a hit found on the old candidate is judged against the new one, rejected, and clears it as well.
-  it should "after a rejected solution, hash nothing until the poll reply, then mine the generator's new candidate" in
+  /** Returns once the thread has handled every message sent to it before this call and every step those queued: a
+    * step queued while the first barrier waits in the mailbox runs before the second barrier. */
+  private def settle(thread: ActorRef)(implicit system: ActorSystem): Unit = {
+    val barrier = TestProbe()
+    (1 to 2).foreach { _ =>
+      barrier.send(thread, ErgoMiningThread.GetSolvedBlocksCount)
+      barrier.expectMsgType[ErgoMiningThread.SolvedBlocksCount](10.seconds)
+    }
+  }
+
+  // The generator answers "Invalid input block! PoW valid: false" when its candidate is not the one the hit was found
+  // on (it clears it), so a hit found after the rejection on the same candidate cannot be accepted either.
+  it should "after a rejected solution, hash and send nothing until new work, then mine it from nonce 0" in
     new TestKit(ActorSystem()) {
     try {
       val candidate = realCandidate("drop")
-      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
+      val calls = TestProbe()
+      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref)))
 
+      calls.expectMsg(10.seconds, (0L, 1000L))
       nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
       thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
+      settle(thread)
+      calls.expectNoMessage(Duration.Zero)
+      generator.expectNoMessage(Duration.Zero)
 
-      // the periodic poll is an hour away, so a poll here is the thread's own; one poll and one new candidate, whose
-      // first hit is accepted: no hit on the old candidate reaches the generator after the poll
-      answerAsTipGenerator(generator, candidate, firstShift = 1) shouldBe
-        AfterRejection(polls = 1, newCandidates = 1, rejected = 0, refused = 0, accepted = true)
+      // new work, as the periodic poll returns it once the generator has a new candidate
+      val next = shifted(candidate, 1)
+      thread.tell(StatusReply.Success(next), generator.ref)
+      calls.expectMsg(10.seconds, (0L, 1000L))
+      generator.expectMsgType[InputSolutionFound](10.seconds).as.d shouldBe BigInt(next.candidateBlock.timestamp)
     } finally {
       system.terminate()
     }
   }
 
-  // As above, with a new candidate arriving while the solution awaits its reply: the rejection was judged against
-  // that newer candidate and cleared it, so the search the switch queued must not run on it either.
-  it should "not run a search queued before the rejection on the candidate the generator has cleared" in
+  // With two or more miners on one node, the generator keeps the candidate one of them solved and answers every other
+  // solution with "Block already solved" until the next block; a poll meanwhile returns that same candidate.
+  it should "after a rejected solution, mine nothing on a candidate the generator returns unchanged" in
+    new TestKit(ActorSystem()) {
+    try {
+      val candidate = realCandidate("unchanged")
+      val calls = TestProbe()
+      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref)))
+
+      calls.expectMsg(10.seconds, (0L, 1000L))
+      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
+      thread.tell(StatusReply.Error(new Exception("Block already solved : Some(...)")), generator.ref)
+      thread.tell(StatusReply.Success(candidate), generator.ref)
+      settle(thread)
+      calls.expectNoMessage(Duration.Zero)
+      generator.expectNoMessage(Duration.Zero)
+    } finally {
+      system.terminate()
+    }
+  }
+
+  // A new candidate that arrives while the solution awaits its reply is mined, from nonce 0, whatever the reply.
+  it should "mine a candidate that arrived before the rejection from nonce 0" in
     new TestKit(ActorSystem()) {
     val release = new CountDownLatch(1)
     try {
@@ -230,25 +222,28 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
       // the thread is held in the step that finds nonce 5, so both replies are in the mailbox before it sends that
       // solution and reads either
       calls.expectMsg(10.seconds, (0L, 1000L))
-      thread.tell(StatusReply.Success(shifted(candidate, 1)), generator.ref)
+      val next = shifted(candidate, 1)
+      thread.tell(StatusReply.Success(next), generator.ref)
       thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
       release.countDown()
-      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
+      generator.expectMsgType[InputSolutionFound](10.seconds).as.d shouldBe BigInt(candidate.candidateBlock.timestamp)
 
-      answerAsTipGenerator(generator, candidate, firstShift = 2) shouldBe
-        AfterRejection(polls = 1, newCandidates = 1, rejected = 0, refused = 0, accepted = true)
+      calls.expectMsg(10.seconds, (0L, 1000L))
+      generator.expectMsgType[InputSolutionFound](10.seconds).as.d shouldBe BigInt(next.candidateBlock.timestamp)
     } finally {
       release.countDown()
       system.terminate()
     }
   }
 
-  it should "against the real generator, poll once and get one new candidate per rejected solution" in
+  it should "against the real generator, mine the next polled candidate after a rejected solution, with no other error" in
     new TestKit(ActorSystem()) {
     try {
       val pow = new CandidateBoundPowScheme(Seq(5L, 900L))
+      // the default polling interval: the thread waits for the periodic poll after a rejection
       val chainSettings: ErgoSettings = settings.copy(
         directory = s"${settings.directory}-real-generator-${System.nanoTime()}",
+        nodeSettings = settings.nodeSettings.copy(internalMinerPollingInterval = 500.millis),
         chainSettings = settings.chainSettings.copy(powScheme = pow))
       val viewHolderRef: ActorRef = ErgoNodeViewRef(chainSettings)
       val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
@@ -270,8 +265,8 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
       }
       solutionsBefore shouldBe 1
 
-      // from there to the first accepted solution
-      var polls, newCandidates, rejected, solutions, messages = 0
+      // from there to the first accepted solution; the number of periodic polls depends on timing
+      var polls, newCandidates, errors, solutions, messages = 0
       var accepted = false
       while (!accepted && messages < 40) {
         messages += 1
@@ -284,14 +279,14 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
               seen += c.externalVersion.msg.toSeq
               newCandidates += 1
             }
-          case ToThread(StatusReply.Error(_)) => rejected += 1
+          case ToThread(StatusReply.Error(_)) => errors += 1
           case ToThread(StatusReply.Success(())) => accepted = true
           case _ =>
         }
       }
       info(s"after one rejection: $polls polls, $newCandidates new candidates, $solutions solutions, " +
-        s"$rejected more errors, accepted: $accepted")
-      (polls, newCandidates, solutions, rejected, accepted) shouldBe ((1, 1, 1, 0, true))
+        s"$errors more errors, accepted: $accepted")
+      (newCandidates, solutions, errors, accepted) shouldBe ((1, 1, 0, true))
       system.stop(thread)
     } finally {
       system.terminate()
@@ -299,18 +294,22 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   }
 
   // As the first case, with the generator's new candidate at the old one's timestamp: different PoW work, so the
-  // thread mines it from nonce 0 instead of reading it as the candidate kept and resuming after the rejected nonce.
+  // thread mines it from nonce 0.
   it should "after a rejected solution, mine a new candidate with the old one's timestamp from nonce 0" in
     new TestKit(ActorSystem()) {
     try {
       val candidate = realCandidate("same-timestamp")
-      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
+      val calls = TestProbe()
+      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref)))
 
+      calls.expectMsg(10.seconds, (0L, 1000L))
       nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
       thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
-      generator.expectMsgType[GenerateCandidate](5.seconds)
-      generator.reply(StatusReply.Success(sameTimestamp(candidate)))
+      settle(thread)
+      calls.expectNoMessage(Duration.Zero)
 
+      thread.tell(StatusReply.Success(sameTimestamp(candidate)), generator.ref)
+      calls.expectMsg(10.seconds, (0L, 1000L))
       nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe 5L
     } finally {
       system.terminate()
@@ -333,51 +332,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
       calls.expectMsg(10.seconds, (0L, 1000L))
     } finally {
       release.countDown()
-      system.terminate()
-    }
-  }
-
-  // Presumes a generator that keeps its candidate when it rejects a solution (#2638 option 2): the re-poll returns
-  // the same candidate, and the thread searches on after the rejected nonce.
-  it should "not resubmit a rejected solution's nonce while the generator keeps the candidate" in
-    new TestKit(ActorSystem()) {
-    try {
-      val candidate = realCandidate("keep")
-      val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L)))
-
-      val first = generator.expectMsgType[InputSolutionFound](10.seconds)
-      nonceOf(first) shouldBe 5L
-      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
-
-      val next = generator.fishForMessage(10.seconds) {
-        case _: GenerateCandidate => generator.reply(StatusReply.Success(candidate)); false
-        case _: SolutionFound => true
-      }.asInstanceOf[SolutionFound]
-      nonceOf(next) shouldBe 900L
-    } finally {
-      system.terminate()
-    }
-  }
-
-  it should "resume after a rejected nonce past Int.MaxValue without truncating or wrapping" in
-    new TestKit(ActorSystem()) {
-    try {
-      val candidate = realCandidate("long")
-      val calls = TestProbe()
-      // the hit in the first batch is reported at nonce Int.MaxValue
-      val pow = new FixedHitsPowScheme(Seq(5L), Some(calls.ref), _ => Int.MaxValue.toLong)
-      val (thread, generator) = startThread(candidate, pow)
-
-      calls.expectMsg(10.seconds, (0L, 1000L))
-      nonceOf(generator.expectMsgType[InputSolutionFound](10.seconds)) shouldBe Int.MaxValue.toLong
-      thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
-      // the generator kept the candidate
-      generator.expectMsgType[GenerateCandidate](5.seconds)
-      generator.reply(StatusReply.Success(candidate))
-
-      // the next batch starts right after the rejected nonce, as a Long
-      calls.expectMsg(10.seconds, (Int.MaxValue.toLong + 1, Int.MaxValue.toLong + 1001))
-    } finally {
       system.terminate()
     }
   }

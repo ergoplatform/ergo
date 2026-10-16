@@ -101,16 +101,12 @@ class ErgoMiningThreadChainSpec extends AnyFlatSpec with Matchers with ErgoTestH
       generator.fishForMessage(5.seconds) { case _: GenerateCandidate => true; case _ => false }
       generator.reply(StatusReply.Success(candidate))
 
-      // the first step finds a solution, which ends its chain; the error reply to it and the poll reply's switch
-      // between them start one chain
+      // the first step finds a solution, which ends its chain; the error reply to it starts none, and the next
+      // candidate's switch starts one
       events.expectMsg(5.seconds, ProveCall(1))
       generator.expectMsgType[SolutionFound](5.seconds)
       thread.tell(StatusReply.Error(new Exception("Invalid input block! PoW valid: false")), generator.ref)
-      generator.fishForMessage(5.seconds, hint = "a poll after the rejected solution") {
-        case _: GenerateCandidate => true
-        case _ => false
-      }
-      generator.reply(StatusReply.Success(withOffset(1)))
+      thread.tell(StatusReply.Success(withOffset(1)), generator.ref)
       events.expectMsg(5.seconds, ProveCall(2))
 
       // while that chain's first step runs: n new candidates

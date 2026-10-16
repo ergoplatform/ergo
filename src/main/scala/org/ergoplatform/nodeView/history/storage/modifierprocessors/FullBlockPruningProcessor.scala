@@ -71,8 +71,8 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
         h
       }
     }
-    if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     writeMinimalFullBlockHeight(minimalFullBlockHeight)
+    if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     minimalFullBlockHeight
   }
 

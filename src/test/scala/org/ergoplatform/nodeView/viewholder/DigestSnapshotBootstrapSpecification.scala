@@ -8,11 +8,13 @@ import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicBoolean
 import org.ergoplatform.core.{idToVersion, versionToBytes}
 import org.ergoplatform.mining.DefaultFakePowScheme
-import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedState, InitStateFromSnapshot}
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, ErgoNodeViewRef}
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockSectionProcessor
 import org.ergoplatform.nodeView.state.{DigestState, ErgoState, StateType, UtxoState}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.serialization.ManifestSerializer
@@ -21,7 +23,7 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestContext, NodeVi
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.validFullBlock
 import org.ergoplatform.wallet.utils.FileUtils
-import scorex.db.{LDBFactory, LDBVersionedStore, StoreRegistry}
+import scorex.db.{ByteArrayWrapper, LDBFactory, LDBVersionedStore, StoreRegistry}
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
 import scorex.crypto.hash.Digest32
 
@@ -73,7 +75,8 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
 
   private class Session(override val settings: ErgoSettings,
                         selfShutdown: Boolean = false,
-                        failAfterAvlWrite: Option[AtomicBoolean] = None) extends NodeViewTestContext {
+                        failAfterAvlWrite: Option[AtomicBoolean] = None,
+                        failMarkerWrite: Option[(AtomicBoolean, AtomicBoolean)] = None) extends NodeViewTestContext {
     override val actorSystem: ActorSystem = if (selfShutdown) {
       ActorSystem("snapshot-failure", ConfigFactory.parseString(
         """akka.coordinated-shutdown.terminate-actor-system = on
@@ -98,8 +101,47 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
       }
     }
 
+    private def markerFailingHistory(armed: AtomicBoolean, injected: AtomicBoolean): ErgoHistory = {
+      new ErgoHistory with FullBlockSectionProcessor {
+        override protected val settings: ErgoSettings = Session.this.settings
+        override val powScheme = Session.this.settings.chainSettings.powScheme
+        override val historyStorage: HistoryStorage = {
+          val markerKey = MinFullBlockHeightKey
+          val indexStore = LDBFactory.createKvDb(s"${settings.directory}/history/index")
+          val objectsStore = LDBFactory.createKvDb(s"${settings.directory}/history/objects")
+          val extraStore = LDBFactory.createKvDb(s"${settings.directory}/history/extra")
+          new HistoryStorage(indexStore, objectsStore, extraStore, settings.cacheSettings) {
+            override def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
+                                objectsToInsert: Array[BlockSection]): Try[Unit] = {
+              if (armed.get() && indexesToInsert.exists(_._1 == markerKey) && injected.compareAndSet(false, true)) {
+                Failure(new IOException("injected retained-height marker write failure"))
+              } else super.insert(indexesToInsert, objectsToInsert)
+            }
+          }
+        }
+      }
+    }
+
     override val nodeViewHolderRef: ActorRef = failAfterAvlWrite match {
-      case None => ErgoNodeViewRef(settings)(actorSystem)
+      case None => failMarkerWrite match {
+        case None => ErgoNodeViewRef(settings)(actorSystem)
+        case Some((armed, injected)) if settings.nodeSettings.stateType == StateType.Digest =>
+          actorSystem.actorOf(Props(new ErgoNodeViewHolder[DigestState](settings) {
+            override protected def genesisState = {
+              val (history, state, wallet, pool) = super.genesisState
+              history.closeStorage()
+              (markerFailingHistory(armed, injected), state, wallet, pool)
+            }
+          }))
+        case Some((armed, injected)) =>
+          actorSystem.actorOf(Props(new ErgoNodeViewHolder[UtxoState](settings) {
+            override protected def genesisState = {
+              val (history, state, wallet, pool) = super.genesisState
+              history.closeStorage()
+              (markerFailingHistory(armed, injected), state, wallet, pool)
+            }
+          }))
+      }
       case Some(injected) if settings.nodeSettings.stateType == StateType.Digest =>
         actorSystem.actorOf(Props(new ErgoNodeViewHolder[DigestState](settings) {
         override protected def genesisState = {
@@ -198,11 +240,14 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
     }
   }
 
-  Seq((StateType.Utxo, false, false, false), (StateType.Digest, false, false, false),
-    (StateType.Digest, true, false, false), (StateType.Digest, false, true, false),
-    (StateType.Digest, false, false, true), (StateType.Utxo, false, false, true)).foreach { case (mode, invalidAnchor, legacyFormat, postWriteFailure) =>
+  Seq((StateType.Utxo, false, false, false, false), (StateType.Digest, false, false, false, false),
+    (StateType.Digest, true, false, false, false), (StateType.Digest, false, true, false, false),
+    (StateType.Digest, false, false, true, false), (StateType.Utxo, false, false, true, false),
+    (StateType.Digest, false, false, false, true), (StateType.Utxo, false, false, false, true))
+    .foreach { case (mode, invalidAnchor, legacyFormat, postWriteFailure, markerWriteFailure) =>
     val testName = if (invalidAnchor) "failed Digest snapshot preparation shuts down without marking or publishing state"
     else if (postWriteFailure) s"failed AVL snapshot reconstruction shuts down after a real write without publishing state in ${mode.stateTypeName} mode"
+    else if (markerWriteFailure) s"failed retained-height marker write shuts down after reconstruction without publishing state in ${mode.stateTypeName} mode"
     else if (legacyFormat) "convert a legacy UTXO-format snapshot checkpoint on Digest reopen and retain rollback"
     else s"preserve real snapshot root and version after store reopen in ${mode.stateTypeName} mode"
     property(testName) {
@@ -239,8 +284,11 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
         info(s"${mode.stateTypeName} snapshot subtree count: ${manifest.subtreesIds.size}")
 
         val injectedWrite = new AtomicBoolean(false)
-        val first = new Session(importSettings, selfShutdown = invalidAnchor || postWriteFailure,
-          failAfterAvlWrite = if (postWriteFailure) Some(injectedWrite) else None)
+        val markerWriteArmed = new AtomicBoolean(false)
+        val injectedMarkerWrite = new AtomicBoolean(false)
+        val first = new Session(importSettings, selfShutdown = invalidAnchor || postWriteFailure || markerWriteFailure,
+          failAfterAvlWrite = if (postWriteFailure) Some(injectedWrite) else None,
+          failMarkerWrite = if (markerWriteFailure) Some((markerWriteArmed, injectedMarkerWrite)) else None)
         session = Some(first)
         blocks.foreach(block => applyHeader(block.header)(first).get)
         val history = getHistory(first)
@@ -250,25 +298,32 @@ class DigestSnapshotBootstrapSpecification extends ErgoCorePropertyTest with Nod
         manifest.subtreesIds.foreach { id =>
           history.registerDownloadedChunk(id, source.snapshotsDb.readSubtreeBytes(id).get)
         }
-        if (invalidAnchor || postWriteFailure) {
+        if (invalidAnchor || postWriteFailure || markerWriteFailure) {
           val observer = ActorSystem("snapshot-failure-observer")
           observerSystem = Some(observer)
           val stateEvents = TestProbe()(observer)
           first.actorSystem.eventStream.subscribe(stateEvents.ref, classOf[ChangedState]) shouldBe true
           val initialFloor = history.minimalFullBlockHeight
-          // Both failures occur after a real AVL write: either preparation rejects a different
-          // block ID, or the store reports an injected error after committing reconstruction.
+          // These failures occur after a real AVL write: preparation rejects a different block
+          // ID, the state store reports an error, or the retained-height write fails.
           val requestedAnchor = if (invalidAnchor) Header.GenesisParentId else snapshotHeader.id
+          markerWriteArmed.set(true)
           send(InitStateFromSnapshot(snapshotHeader.height, requestedAnchor))(first)
           Await.result(first.actorSystem.whenTerminated, 30.seconds)
           injectedWrite.get() shouldBe postWriteFailure
+          injectedMarkerWrite.get() shouldBe markerWriteFailure
           stateEvents.expectNoMessage(300.millis)
           closeOwnedStores(new File(nodeSettings.directory))
           session = None
           val reconstructedStore = new LDBVersionedStore(new File(nodeSettings.directory, "state"),
             initialKeepVersions = nodeSettings.nodeSettings.keepVersions)
           try {
-            reconstructedStore.lastVersionID.map(Algos.encode(_)) shouldBe Some(Algos.encode(snapshotHeader.stateRoot))
+            // Digest.fromSnapshot moves the store version from the AVL root to the block ID
+            // before completion writes the applied marker.
+            val expectedVersion = if (markerWriteFailure && mode == StateType.Digest)
+              Algos.encode(versionToBytes(idToVersion(snapshotHeader.id)))
+            else Algos.encode(snapshotHeader.stateRoot)
+            reconstructedStore.lastVersionID.map(Algos.encode(_)) shouldBe Some(expectedVersion)
           } finally reconstructedStore.close()
           val reopenedHistory = ErgoHistory.readOrGenerate(nodeSettings)(null)
           try {

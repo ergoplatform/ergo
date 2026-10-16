@@ -317,8 +317,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             }
             prepared match {
               case Success(newState) =>
-                history().onUtxoSnapshotApplied(height)
-                updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+                Try(history().onUtxoSnapshotApplied(height)) match {
+                  case Success(_) =>
+                    updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+                  case Failure(t) =>
+                    abortSnapshotStatePreparation(t)
+                }
               case Failure(t) =>
                 abortSnapshotStatePreparation(t)
             }

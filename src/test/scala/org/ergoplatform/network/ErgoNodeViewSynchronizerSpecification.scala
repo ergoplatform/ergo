@@ -907,6 +907,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val parentHeader = baseChain.last
       val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
 
+      // The older peer also gets the synchronizer's periodic sync message, on its own schedule (the first one 2 s after
+      // start); only that is ignored. The probe filters messages as they arrive, so this is set before the peer is.
+      ncProbe.ignoreMsg {
+        case stn: SendToNetwork => stn.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode
+      }
+
       // Set up sync tracker with an older peer
       syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
 
@@ -919,11 +925,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val error = new ParentHeaderNotFoundError(parentId, modifierId, Header.modifierTypeId)
       synchronizerMockRef ! RecoverableFailedModification(Header.modifierTypeId, modifierId, error)
 
-      // Should NOT request the parent header since it's already in history. The older peer also gets the
-      // synchronizer's periodic sync message, on its own schedule (the first one 2 s after start); only that is ignored.
-      ncProbe.ignoreMsg {
-        case stn: SendToNetwork => stn.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode
-      }
+      // Should NOT request the parent header since it's already in history
       ncProbe.expectNoMessage(1.second)
       ncProbe.ignoreNoMsg()
 

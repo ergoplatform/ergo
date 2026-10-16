@@ -1265,23 +1265,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  /**
-    * A peer that asks for a block the node has just announced must get it, also before the node view holder has
-    * applied the block: otherwise the request waits the whole delivery timeout.
-    */
-  // Hand the view holder's history and mempool to the synchronizer before a test's first message: until it holds both
-  // it defers every message by 1 s, in rounds, so a test that sleeps instead depends on start-up timing
-  private def handOverView(ctx: Synchronizer2Fixture): Unit = {
-    import ctx._
-    val viewProbe = TestProbe("ViewProbe")
-    nodeViewHolderMockRef.tell(
-      ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)),
-      viewProbe.ref)
-    val (h, pool) = viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
-    synchronizerMockRef ! ChangedHistory(h)
-    synchronizerMockRef ! ChangedMempool(pool)
-  }
-
   // the ids in the first ModifiersData sent to the peer that contains `marker`
   private def servedWith(pchProbe: TestProbe, marker: scorex.util.ModifierId): Seq[scorex.util.ModifierId] =
     pchProbe.fishForMessage(10.seconds) {
@@ -1290,6 +1273,10 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       case _ => false
     }.asInstanceOf[Message[_]].data.get.asInstanceOf[ModifiersData].modifiers.keys.toSeq
 
+  /**
+    * A peer that asks for a block the node has just announced must get it, also before the node view holder has
+    * applied the block: otherwise the request waits the whole delivery timeout.
+    */
   property("NodeViewSynchronizer: a newly mined block is served as soon as it is announced") {
     withFixture2 { ctx =>
       import ctx._
@@ -1300,7 +1287,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections) // as CandidateGenerator publishes it
       // collect everything sent in the window, then keep the announcements (other messages may interleave)
@@ -1335,7 +1321,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       val newBlock = statefulyValidFullBlock(wus)
       val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
-      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1366,7 +1351,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       val newBlock = statefulyValidFullBlock(wus)
       val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
-      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1396,7 +1380,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       val newBlock = statefulyValidFullBlock(wus)
       val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
-      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1434,7 +1417,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       val newBlock = statefulyValidFullBlock(wus)
       val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
-      handOverView(ctx)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }

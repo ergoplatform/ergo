@@ -98,23 +98,42 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     poolReaderOpt.foreach { pr =>
       val toBroadcast = MempoolAuditor.withAncestorsParentsFirst(
         pr.random(settings.nodeSettings.rebroadcastCount).toSeq, pr.getAllPrioritized)
+      val limit = MempoolAuditor.roundLimit(settings.nodeSettings.rebroadcastCount)
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
           // toBroadcast is parents first: an input counts if it is in the state or is created by a transaction
-          // already announced in this round, so no transaction goes out without its in-pool parents
+          // already announced in this round, so no transaction goes out without its in-pool parents, and stopping
+          // the round at `limit` announcements cannot separate a child from its parent
           val announcedOutputs = mutable.Set[ModifierId]()
-          toBroadcast.foreach { unconfirmedTx =>
+          val skipped = mutable.ArrayBuffer[ModifierId]()
+          var announced = 0
+          val candidates = toBroadcast.iterator
+          while (announced < limit && candidates.hasNext) {
+            val unconfirmedTx = candidates.next()
             if (unconfirmedTx.transaction.inputIds.forall(inputBoxId =>
                   announcedOutputs.contains(bytesToId(inputBoxId)) || utxoState.boxById(inputBoxId).isDefined)) {
               log.info(s"Rebroadcasting $unconfirmedTx")
               broadcastTx(unconfirmedTx)
               announcedOutputs ++= unconfirmedTx.transaction.outputs.map(out => bytesToId(out.id))
+              announced += 1
             } else {
-              log.info(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
+              log.debug(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
+              skipped += unconfirmedTx.id
             }
           }
+          if (skipped.nonEmpty) {
+            log.info(s"Not rebroadcasting ${skipped.size} transactions as not all their inputs are in the state or " +
+              s"announced in this round, the first of them ${skipped.head}")
+          }
+          if (candidates.hasNext) {
+            log.info(s"Rebroadcast round stopped after $limit announced transactions, " +
+              s"${candidates.size} of ${toBroadcast.size} candidates not considered in this round")
+          }
         case _ =>
-          toBroadcast.foreach { unconfirmedTx =>
+          if (toBroadcast.size > limit) {
+            log.info(s"Rebroadcast round limited to $limit of ${toBroadcast.size} candidates")
+          }
+          toBroadcast.take(limit).foreach { unconfirmedTx =>
             log.warn(s"Rebroadcasting $unconfirmedTx while state is not ready or not UTXO set")
             broadcastTx(unconfirmedTx)
           }
@@ -132,6 +151,22 @@ object MempoolAuditor {
     * on `updateFamily`).
     */
   private[local] val MaxAncestorDepth = 500
+
+  /**
+    * How many transactions one rebroadcast round announces at most, unless `rebroadcastCount` is set higher (see
+    * `roundLimit`). With the in-pool ancestors added, a round could otherwise announce the whole pool, each id in its
+    * own `Inv` to every peer. 100 lets a chain of up to 100 pooled transactions go out in one round, against 3
+    * selected by default. The round list is parents first and a transaction is announced only after its in-pool
+    * parents, so stopping early never announces a child without its parent; the rest of a longer chain goes out in
+    * a later round that selects one of its transactions, once its front is confirmed.
+    */
+  private[local] val MaxAnnouncedPerRound = 100
+
+  /**
+    * The most transactions a round announces: `MaxAnnouncedPerRound`, or `rebroadcastCount` if that is larger, so the
+    * limit never cuts a round below the configured selection size.
+    */
+  private[local] def roundLimit(rebroadcastCount: Int): Int = math.max(rebroadcastCount, MaxAnnouncedPerRound)
 
   /**
     * Adds the in-pool ancestors of the selected transactions and orders the result parents first. The rebroadcast

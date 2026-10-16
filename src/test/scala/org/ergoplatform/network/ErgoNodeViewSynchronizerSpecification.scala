@@ -45,6 +45,7 @@ import sigmastate.helpers.TestingHelpers._
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 
 class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   with Matchers
@@ -224,7 +225,15 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val viewProbe = TestProbe("ViewProbe")
       nodeViewHolderMockRef.tell(
         GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)), viewProbe.ref)
-      val (h, pool) = viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+      // If the wait fails, the fixture is never built and withFixture2 cannot terminate its actor system, so it is
+      // terminated here: that stops the view holder, which closes its database.
+      val (h, pool) = try {
+        viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+      } catch {
+        case NonFatal(e) =>
+          Await.result(system.terminate(), Duration.Inf)
+          throw e
+      }
       // Until it holds a history and a mempool the synchronizer defers every message by 1 s, in rounds. Handing them
       // over before the test's first message makes it handle the test's messages at once.
       synchronizerMockRef ! ChangedHistory(h)

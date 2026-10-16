@@ -728,7 +728,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // a longer competing chain, received later, replaces it as the best one. Headers of the shorter chain stay
       // in history; only the best chain changes. (Switching full blocks needs blocks valid for the view holder's
-      // state, which these generated blocks are not; that is covered by NodeViewHolderTests, "forking - switching".)
+      // state, which these generated blocks are not; the view holder's switch to a better chain is tested in
+      // ErgoNodeViewHolderSpec, "switching for a better chain".)
       val bigFork = genChain(20, hist, extension = emptyExtension)
       // both chains start from genesis: the longer one competes with the shorter one, it does not extend it
       bigFork.head.header.parentId shouldBe smallFork.head.header.parentId

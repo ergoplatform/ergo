@@ -1250,16 +1250,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
           }
         case expectedTypeId: NetworkObjectTypeId.Value =>
-          invData.ids.flatMap { id =>
-            minedModifier(id).orElse(hr.modifierTypeAndBytesById(id)).flatMap { case (mTypeId, bytes) =>
-              if (mTypeId == expectedTypeId) {
-                Some(id -> bytes)
-              } else {
-                log.debug(s"Improper type for asked modifier id: $id")
-                None
-              }
+          val found = invData.ids.flatMap { id =>
+            minedModifier(id).map(true -> _).orElse(hr.modifierTypeAndBytesById(id).map(false -> _)).flatMap {
+              case (fromMinedMemory, (mTypeId, bytes)) =>
+                if (mTypeId == expectedTypeId) {
+                  Some((id, bytes, fromMinedMemory))
+                } else {
+                  log.debug(s"Improper type for asked modifier id: $id")
+                  None
+                }
             }
           }
+          val fromMinedMemory = found.count(_._3)
+          if (fromMinedMemory > 0) {
+            log.info(s"Served $fromMinedMemory of ${invData.ids.length} requested ids of type $expectedTypeId " +
+                     s"from mined-block memory to $remote")
+          }
+          found.map { case (id, bytes, _) => id -> bytes }
       }
 
       log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +

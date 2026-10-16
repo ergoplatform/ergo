@@ -723,6 +723,7 @@ class WalletRegistrySpec
   it should "updateOnSnapshotChunk replay a logically identical multi-scan chunk after registry reopen" in {
     val isolatedSettings = settings.copy(directory = createTempDir.getAbsolutePath)
     val registryDir = WalletRegistry.registryFolder(isolatedSettings)
+    java.nio.file.Files.createDirectories(registryDir.toPath)
     val snapshotBlockId = modifierIdGen.sample.get
     val scanIds = Seq(
       PaymentsScanId,
@@ -791,6 +792,7 @@ class WalletRegistrySpec
   it should "updateOnSnapshotChunk reject a replay when only the scan set changes for the same box and marker scanSetDeltaMarker" in {
     val isolatedSettings = settings.copy(directory = createTempDir.getAbsolutePath)
     val registryDir = WalletRegistry.registryFolder(isolatedSettings)
+    java.nio.file.Files.createDirectories(registryDir.toPath)
     val snapshotBlockId = modifierIdGen.sample.get
     val acceptedScans = Set(
       PaymentsScanId,

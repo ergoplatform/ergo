@@ -143,7 +143,9 @@ trait ToDownloadProcessor
   private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
     if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       if (updateBestBlock) {
-        updateBestFullBlock(header, lowestApplicableHeight(header))
+        val lowestHeight = lowestApplicableHeight(header)
+        updateBestFullBlock(header, lowestHeight)
+        if (lowestHeight > GenesisHeight) warnIfBestFullBlockBelowGap(header)
       } else {
         setHeadersChainSynced()
       }
@@ -166,6 +168,21 @@ trait ToDownloadProcessor
       if (lowestConnected == GenesisHeight) GenesisHeight else lowestConnected + Constants.LastHeadersInContext - 1
     } else {
       GenesisHeight
+    }
+  }
+
+  /**
+    * A full block applied before its headers chain was connected (e.g. applied inside a NiPoPoW proof's headers gap by
+    * a node version which did not consider the gap) can not be continued, as there is no header after it, and full
+    * blocks downloading continues from the best full block. Such a database is not repaired, so tell the operator.
+    */
+  private def warnIfBestFullBlockBelowGap(header: Header): Unit = {
+    bestFullBlockOpt.foreach { fb =>
+      if (fb.height < header.height && headerIdsAtHeight(fb.height + 1).isEmpty) {
+        log.warn(s"Best full block ${fb.encodedId} at height ${fb.height} has no header at height ${fb.height + 1} " +
+          s"(headers chain has a gap after NiPoPoW bootstrap), so full blocks can not be applied after it. " +
+          s"Resync the node (remove its database) to bootstrap again")
+      }
     }
   }
 

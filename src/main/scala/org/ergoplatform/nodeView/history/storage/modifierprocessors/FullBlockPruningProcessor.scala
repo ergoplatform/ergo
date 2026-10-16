@@ -3,12 +3,13 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.ErgoSettings
+import scorex.util.ScorexLogging
 
 /**
   * A class that keeps and calculates minimal height for full blocks starting from which we need to download these full
   * blocks from the network and keep them in our history.
   */
-trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
+trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions with ScorexLogging {
 
   protected def settings: ErgoSettings
 
@@ -81,11 +82,16 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
       }
       if (epochStart >= lowestHeight) {
         epochStart
-      } else if (lowestHeight > VotingEpochLength && lowestHeight % VotingEpochLength != 0) {
-        // ... and not earlier than lowestHeight, so start from the next voting epoch then
-        extensionWithParametersHeight(lowestHeight) + VotingEpochLength
       } else {
-        lowestHeight
+        // ... and not earlier than lowestHeight, so start from the next voting epoch then, if lowestHeight is mid-epoch
+        val raised = if (lowestHeight > VotingEpochLength && lowestHeight % VotingEpochLength != 0) {
+          extensionWithParametersHeight(lowestHeight) + VotingEpochLength
+        } else {
+          lowestHeight
+        }
+        log.info(s"Minimal full block height raised from $epochStart to $raised: full blocks can not be applied " +
+          s"below height $lowestHeight, as headers chain has a gap below it (NiPoPoW bootstrap)")
+        raised
       }
     }
     if (!isHeadersChainSynced) isHeadersChainSyncedVar = true

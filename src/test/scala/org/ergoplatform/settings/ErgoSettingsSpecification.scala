@@ -1,12 +1,14 @@
 package org.ergoplatform.settings
 
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
 
 import java.net.{InetSocketAddress, URI}
+import java.nio.file.Paths
 import scala.concurrent.duration._
+import scala.sys.process.{Process, ProcessLogger}
 
 class ErgoSettingsSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants.settings
@@ -14,6 +16,44 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
+
+  private def runKeepVersionsProbe(utxoBootstrap: Boolean): (Int, String) = {
+    val javaExecutable = Paths
+      .get(
+        System.getProperty("java.home"),
+        "bin",
+        if (scala.util.Properties.isWin) "java.exe" else "java")
+      .toString
+    val output = new StringBuilder
+    val processLogger = ProcessLogger(
+      line => output.append(line).append(System.lineSeparator()),
+      line => output.append(line).append(System.lineSeparator()))
+    val exitCode = Process(Seq(
+      javaExecutable,
+      "-cp",
+      System.getProperty("java.class.path"),
+      "org.ergoplatform.settings.ErgoSettingsReaderKeepVersionsProbe",
+      utxoBootstrap.toString
+    )).!(processLogger)
+    exitCode -> output.toString()
+  }
+
+  property("UTXO snapshot bootstrap rejects keepVersions zero with a precise error") {
+    val (exitCode, output) = runKeepVersionsProbe(utxoBootstrap = true)
+
+    exitCode should not be 0
+    output should include(
+      "nodeSettings.keepVersions must be greater than 0 when UTXO snapshot bootstrap is enabled")
+  }
+
+  property("keepVersions zero remains valid without UTXO snapshot bootstrap") {
+    val (exitCode, output) = runKeepVersionsProbe(utxoBootstrap = false)
+
+    withClue(output) {
+      exitCode shouldBe 0
+    }
+    output should include("SETTINGS_ACCEPTED")
+  }
 
   property("should keep data user home  by default") {
     val settings = ErgoSettingsReader.read()
@@ -293,4 +333,18 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     scorexSettings.network.allowLocal shouldBe false
   }
 
+}
+
+object ErgoSettingsReaderKeepVersionsProbe {
+  def main(args: Array[String]): Unit = {
+    val config = ConfigFactory
+      .load()
+      .withValue("ergo.node.keepVersions", ConfigValueFactory.fromAnyRef(Int.box(0)))
+      .withValue(
+        "ergo.node.utxo.utxoBootstrap",
+        ConfigValueFactory.fromAnyRef(Boolean.box(args.head.toBoolean)))
+
+    ErgoSettingsReader.fromConfig(config)
+    println("SETTINGS_ACCEPTED")
+  }
 }

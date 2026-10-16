@@ -27,6 +27,11 @@ import scala.collection.immutable.SortedSet
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
+private[wallet] final class UtxoSnapshotChunkIntegrityException(
+  message: String,
+  cause: Throwable = null
+) extends IllegalStateException(message, cause)
+
 /**
   * Provides an access to version-sensitive wallet-specific indexes:
   *
@@ -61,6 +66,30 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     */
   def lastVersionId: Option[ModifierId] =
     store.lastVersionID.filter(_.length == ModifierIdSize).map(bytesToId)
+
+  /** Check whether an exact registry version is still retained for rollback recovery. */
+  def versionIdExists(versionId: ModifierId): Try[Boolean] =
+    Try(store.versionIdExists(idToBytes(versionId)))
+
+  /** Read the bounded set of retained rollback versions, newest first. */
+  def rollbackVersionIds: Try[Seq[ModifierId]] = Try {
+    store.rollbackVersions().toSeq.map { versionId =>
+      require(versionId.length == ModifierIdSize,
+        s"Retained wallet registry version has invalid length ${versionId.length}")
+      bytesToId(versionId)
+    }
+  }
+
+  /**
+    * A first UTXO snapshot scan may populate only a registry which has never
+    * carried wallet data. Height zero is insufficient: direct scan mutations
+    * can persist boxes and indexes under the pre-genesis version without
+    * advancing the aggregate digest.
+    */
+  def isPristineForUtxoSnapshot: Try[Boolean] = Try {
+    lastVersionId.contains(PreGenesisHeader.id) &&
+      store.getRange(FirstApplicationKey, AfterLastApplicationKey, limit = 1).isEmpty
+  }
 
   /**
     * Read wallet-related box with metadata
@@ -325,35 +354,110 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     } else if (scanResults.inputsSpent.nonEmpty || scanResults.relatedTransactions.nonEmpty) {
       Failure(new IllegalArgumentException("Snapshot chunk scan data must contain only outputs"))
     } else {
-      val markerKey = snapshotChunkMarkerKey(snapshotBlockId, subtreeIndex)
-      val markerValue = snapshotChunkMarkerValue(
-        scanResults,
-        snapshotHeight,
-        nextSubtreeIndex,
-        finalChunk
-      )
+      Try {
+        val markerKey = snapshotChunkMarkerKey(snapshotBlockId, subtreeIndex)
+        val markerValue = snapshotChunkMarkerValue(
+          scanResults,
+          snapshotHeight,
+          nextSubtreeIndex,
+          finalChunk
+        )
 
-      snapshotChunkUpdateLock.synchronized {
-        store.get(markerKey) match {
-          case Some(existing) if existing.sameElements(markerValue) =>
-            Success(())
-          case Some(_) =>
-            Failure(new IllegalStateException(
-              s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId was already applied with different contents"
-            ))
-          case None =>
-            val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
-            updateDigest(bag1) { digest =>
-              val nextHeight = if (finalChunk) snapshotHeight else digest.height
-              updateWalletDigest(digest, scanResults.outputs, Seq.empty, nextHeight)
-            }.flatMap { bag2 =>
-              val bag3 = bag2.copy(toInsert = bag2.toInsert :+ markerKey -> markerValue)
-              bag3.transact(store, snapshotChunkVersion(snapshotBlockId, subtreeIndex, finalChunk)).map { _ =>
-                cache ++= scanResults.outputs.map(b => b.boxId -> b)
+        snapshotChunkUpdateLock.synchronized {
+          store.get(markerKey) match {
+            case Some(existing) if existing.sameElements(markerValue) =>
+              validateSnapshotChunkApplication(
+                scanResults,
+                snapshotBlockId,
+                snapshotHeight,
+                subtreeIndex,
+                nextSubtreeIndex,
+                finalChunk,
+                existing)
+            case Some(_) =>
+              Failure(new UtxoSnapshotChunkIntegrityException(
+                s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId was already applied with different contents"
+              ))
+            case None =>
+              val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
+              updateDigest(bag1) { digest =>
+                val nextHeight = if (finalChunk) snapshotHeight else digest.height
+                updateWalletDigest(digest, scanResults.outputs, Seq.empty, nextHeight)
+              }.flatMap { bag2 =>
+                val bag3 = bag2.copy(toInsert = bag2.toInsert :+ markerKey -> markerValue)
+                bag3.transact(store, snapshotChunkVersion(snapshotBlockId, subtreeIndex, finalChunk)).map { _ =>
+                  cache ++= scanResults.outputs.map(b => b.boxId -> b)
+                  ()
+                }
               }
-            }
+          }
+        }
+      }.flatten
+    }
+  }
+
+  /**
+    * Validate a snapshot chunk marker and every wallet row/index it claims without mutating the registry.
+    */
+  private[wallet] def validateSnapshotChunk(scanResults: ScanResults,
+                                             snapshotBlockId: ModifierId,
+                                             snapshotHeight: Int,
+                                             subtreeIndex: Int,
+                                             nextSubtreeIndex: Int,
+                                             finalChunk: Boolean): Try[Unit] = {
+    if (subtreeIndex < 0 || nextSubtreeIndex <= subtreeIndex) {
+      Failure(new IllegalArgumentException(
+        s"Invalid UTXO snapshot part range [$subtreeIndex, $nextSubtreeIndex)"))
+    } else if (scanResults.inputsSpent.nonEmpty || scanResults.relatedTransactions.nonEmpty) {
+      Failure(new IllegalArgumentException("Snapshot chunk scan data must contain only outputs"))
+    } else {
+      snapshotChunkUpdateLock.synchronized {
+        Try(store.get(snapshotChunkMarkerKey(snapshotBlockId, subtreeIndex))).flatMap {
+          case Some(marker) =>
+            validateSnapshotChunkApplication(
+              scanResults,
+              snapshotBlockId,
+              snapshotHeight,
+              subtreeIndex,
+              nextSubtreeIndex,
+              finalChunk,
+              marker)
+          case None =>
+            Failure(new UtxoSnapshotChunkIntegrityException(
+              s"UTXO snapshot chunk marker at subtree $subtreeIndex for $snapshotBlockId is missing"))
         }
       }
+    }
+  }
+
+  /**
+    * Return the first unmarked snapshot part and reject any marker which appears after a gap.
+    * This is a structural check only; resume authenticates the last durable batch separately.
+    */
+  def contiguousSnapshotCursor(snapshotBlockId: ModifierId,
+                               totalParts: Int,
+                               batchSize: Int): Try[Int] = snapshotChunkUpdateLock.synchronized {
+    Try {
+      require(totalParts > 0, s"Invalid UTXO snapshot part count $totalParts")
+      require(batchSize > 0, s"Invalid UTXO snapshot scan batch size $batchSize")
+
+      var index = 0
+      var frontier = 0
+      var markerGap = false
+      while (index < totalParts) {
+        val markerPresent = store.get(snapshotChunkMarkerKey(snapshotBlockId, index)).nonEmpty
+        if (markerPresent && markerGap) {
+          throw new UtxoSnapshotChunkIntegrityException(
+            s"UTXO snapshot chunk marker at subtree $index for $snapshotBlockId appears after a gap")
+        }
+        if (markerPresent) {
+          frontier = Math.min(totalParts.toLong, index.toLong + batchSize.toLong).toInt
+        } else {
+          markerGap = true
+        }
+        index = Math.min(totalParts.toLong, index.toLong + batchSize.toLong).toInt
+      }
+      frontier
     }
   }
 
@@ -431,6 +535,46 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
       val orderedScans = SortedSet.empty[ScanId](scanOrdering) ++ box.scans
       TrackedBoxSerializer.toBytes(box.copy(scans = orderedScans))
     }
+
+  private def validateSnapshotChunkApplication(scanResults: ScanResults,
+                                               snapshotBlockId: ModifierId,
+                                               snapshotHeight: Int,
+                                               subtreeIndex: Int,
+                                               nextSubtreeIndex: Int,
+                                               finalChunk: Boolean,
+                                               marker: Array[Byte]): Try[Unit] = Try {
+    require(scanResults.inputsSpent.isEmpty && scanResults.relatedTransactions.isEmpty,
+      s"Invalid UTXO snapshot scan results at subtree $subtreeIndex for $snapshotBlockId")
+    val expectedMarker = snapshotChunkMarkerValue(
+      scanResults,
+      snapshotHeight,
+      nextSubtreeIndex,
+      finalChunk)
+    require(marker.sameElements(expectedMarker),
+      s"UTXO snapshot chunk marker at subtree $subtreeIndex for $snapshotBlockId " +
+        "does not match the immutable snapshot batch")
+
+    scanResults.outputs.foreach { expectedBox =>
+      val storedBytes = store.get(boxKey(expectedBox.box.id)).getOrElse {
+        throw new IllegalStateException(
+          s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId is missing tracked box ${expectedBox.boxId}")
+      }
+      val storedBox = TrackedBoxSerializer.parseBytesTry(storedBytes).get
+      require(
+        snapshotChunkMarkerTrackedBoxBytes(storedBox)
+          .sameElements(snapshotChunkMarkerTrackedBoxBytes(expectedBox)),
+        s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId has inconsistent tracked box ${expectedBox.boxId}")
+      boxIndexes(expectedBox).foreach { case (indexKey, expectedValue) =>
+        require(store.get(indexKey).exists(_.sameElements(expectedValue)),
+          s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId is missing an index for ${expectedBox.boxId}")
+      }
+    }
+  }.recoverWith {
+    case integrityFailure: UtxoSnapshotChunkIntegrityException => Failure(integrityFailure)
+    case t => Failure(new UtxoSnapshotChunkIntegrityException(
+      s"UTXO snapshot chunk $subtreeIndex for $snapshotBlockId failed integrity validation: ${t.getMessage}",
+      t))
+  }
 
   def rollback(version: VersionTag): Try[Unit] = {
     cache.clear()
@@ -579,14 +723,25 @@ object WalletRegistry {
 
   private[persistence] def initializeOpenedStore(store: LDBVersionedStore,
                                                   walletSettings: WalletSettings): Try[WalletRegistry] = {
-    val initialized = Try(store.versionIdExists(PreGenesisStateVersion)).flatMap {
-      case false =>
-        // Create pre-genesis state checkpoint
-        store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).flatMap { _ =>
-          Try(new WalletRegistry(store)(walletSettings))
+    val initialized = Try(store.lastVersionID).flatMap {
+      case Some(version) =>
+        Try {
+          require(version.length == ModifierIdSize,
+            s"Invalid wallet registry version length ${version.length}")
+          new WalletRegistry(store)(walletSettings)
         }
-      case true =>
-        Try(new WalletRegistry(store)(walletSettings))
+      case None =>
+        Try(store.getRange(FirstApplicationKey, AfterLastApplicationKey, limit = 1)).flatMap {
+          case entries if entries.nonEmpty =>
+            Failure(new IllegalStateException(
+              "Wallet registry has application data but no durable version"))
+          case _ =>
+            // Create the pre-genesis checkpoint only for a genuinely empty registry. An older
+            // checkpoint may legitimately have been pruned while a newer version remains current.
+            store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).flatMap { _ =>
+              Try(new WalletRegistry(store)(walletSettings))
+            }
+        }
     }
 
     initialized.recoverWith { case initializationFailure =>
@@ -614,6 +769,10 @@ object WalletRegistry {
 
   // Applied UTXO snapshot chunks, keyed by snapshot block id and starting subtree index.
   private val SnapshotChunkMarkerPrefix: Byte = 0x09
+
+  // All registry-owned application keys currently use prefixes 0x01 through 0x09.
+  private val FirstApplicationKey: Array[Byte] = Array(BoxKeyPrefix)
+  private val AfterLastApplicationKey: Array[Byte] = Array((SnapshotChunkMarkerPrefix + 1).toByte)
 
   // Stored as the first marker-value byte so future encodings cannot be mistaken for this format.
   private val SnapshotChunkMarkerFormatVersion: Byte = 0x02

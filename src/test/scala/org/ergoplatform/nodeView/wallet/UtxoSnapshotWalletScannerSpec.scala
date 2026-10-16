@@ -5,7 +5,7 @@ import akka.testkit.TestProbe
 import akka.util.ByteString
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{UtxoSnapshotScanSource, UtxoSnapshotScanSourceReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
-import org.ergoplatform.nodeView.wallet.persistence.UtxoSnapshotScanStatus
+import org.ergoplatform.nodeView.wallet.persistence.{UtxoSnapshotChunkIntegrityException, UtxoSnapshotScanStatus}
 import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -50,6 +50,24 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
     UtxoSnapshotWalletScanner.collectBoxes(subtree).isFailure shouldBe true
   }
 
+  property("UTXO snapshot collectBoxes skips only the AVL negative-infinity sentinel") {
+    val sentinel = new ProverLeaf[DigestType](
+      ADKey @@ Array.fill(32)(0: Byte),
+      ADValue @@ Array.emptyByteArray,
+      ADKey @@ Array.fill(32)(1: Byte)
+    )(hashFn)
+    val emptyUserLeaf = new ProverLeaf[DigestType](
+      ADKey @@ Array.fill(32)(1: Byte),
+      ADValue @@ Array.emptyByteArray,
+      ADKey @@ Array.fill(32)(2: Byte)
+    )(hashFn)
+
+    UtxoSnapshotWalletScanner
+      .collectBoxes(new BatchAVLProverSubtree[DigestType](sentinel)).get shouldBe empty
+    UtxoSnapshotWalletScanner
+      .collectBoxes(new BatchAVLProverSubtree[DigestType](emptyUserLeaf)).isFailure shouldBe true
+  }
+
   property("UTXO snapshot batches resume from the durable cursor and read immutable source parts") {
     val blockId = ModifierId @@ Algos.encode(Array.fill(32)(11: Byte))
     val box = org.ergoplatform.utils.ErgoNodeTestConstants.genesisEmissionBox
@@ -86,6 +104,127 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
     batch.boxes.size shouldBe 32
   }
 
+  property("UTXO snapshot restart derives only the last committed batch") {
+    val blockId = ModifierId @@ Algos.encode(Array.fill(32)(23: Byte))
+    val totalSubtrees = UtxoSnapshotWalletScanner.SnapshotScanBatchSize * 3 + 1
+
+    UtxoSnapshotWalletScanner.lastCommittedBatchStatus(
+      snapshotStatus(106, blockId, 14, 0, totalSubtrees, completed = false)).get shouldBe None
+
+    val firstCheckpoint = UtxoSnapshotWalletScanner.lastCommittedBatchStatus(
+      snapshotStatus(106, blockId, 14,
+        UtxoSnapshotWalletScanner.SnapshotScanBatchSize,
+        totalSubtrees,
+        completed = false)).get.get
+    firstCheckpoint.nextSubtreeIndex shouldBe 0
+
+    val secondCheckpoint = UtxoSnapshotWalletScanner.lastCommittedBatchStatus(
+      snapshotStatus(106, blockId, 14,
+        UtxoSnapshotWalletScanner.SnapshotScanBatchSize * 2,
+        totalSubtrees,
+        completed = false)).get.get
+    secondCheckpoint.nextSubtreeIndex shouldBe UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+
+    UtxoSnapshotWalletScanner.lastCommittedBatchStatus(
+      snapshotStatus(106, blockId, 14,
+        UtxoSnapshotWalletScanner.SnapshotScanBatchSize + 1,
+        totalSubtrees,
+        completed = false)).isFailure shouldBe true
+  }
+
+  property("UTXO snapshot batch bounds do not overflow Int cursors") {
+    UtxoSnapshotWalletScanner.nextBatchCursor(
+      Int.MaxValue,
+      Int.MaxValue - 1) shouldBe Int.MaxValue
+  }
+
+  property("UTXO snapshot scanner validates one prior batch before applying the next batch") {
+    implicit val system: ActorSystem = ActorSystem("utxo-snapshot-frontier-validation-spec")
+    try {
+      val wallet = TestProbe()
+      val blockId = ModifierId @@ Algos.encode(Array.fill(32)(24: Byte))
+      val box = org.ergoplatform.utils.ErgoNodeTestConstants.genesisEmissionBox
+      val part = subtree(ErgoBoxSerializer.toBytes(box), 4)
+      val source = scanSource(blockId, 107)
+      val totalSubtrees = UtxoSnapshotWalletScanner.SnapshotScanBatchSize + 1
+      val reader = new RecordingSourceReader(source, IndexedSeq.fill(totalSubtrees)(part))
+      val settings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.copy(
+        nodeSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.nodeSettings.copy(
+          utxoSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.nodeSettings.utxoSettings
+            .copy(utxoBootstrap = true)))
+      val scanner = system.actorOf(UtxoSnapshotWalletScanner.props(wallet.ref, settings, reader))
+      val run = UtxoSnapshotScanRun(
+        UtxoSnapshotRunToken(UUID.randomUUID()), source.snapshotHeight, blockId)
+      val status = snapshotStatus(
+        source.snapshotHeight,
+        blockId,
+        source.manifestDepth.toInt,
+        UtxoSnapshotWalletScanner.SnapshotScanBatchSize,
+        totalSubtrees,
+        completed = false)
+
+      scanner ! StartUtxoSnapshotScan(run, forceRestart = false)
+      wallet.expectMsgType[GetOrInitUtxoSnapshotScanStatus](5.seconds)
+      wallet.reply(Success(status))
+
+      val checkpoint = wallet.expectMsgType[ApplyUtxoSnapshotScanBatch](5.seconds)
+      checkpoint.subtreeIndex shouldBe 0
+      checkpoint.nextSubtreeIndex shouldBe UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+      checkpoint.completed shouldBe false
+      checkpoint.boxes.size shouldBe UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+      reader.readIndexes.toSeq shouldBe (0 until UtxoSnapshotWalletScanner.SnapshotScanBatchSize)
+      wallet.reply(Success(status))
+
+      val next = wallet.expectMsgType[ApplyUtxoSnapshotScanBatch](5.seconds)
+      next.subtreeIndex shouldBe UtxoSnapshotWalletScanner.SnapshotScanBatchSize
+      next.nextSubtreeIndex shouldBe totalSubtrees
+      next.completed shouldBe true
+      next.boxes shouldBe IndexedSeq(box)
+      reader.readIndexes.toSeq shouldBe (0 until totalSubtrees)
+      wallet.reply(Success(status.copy(nextSubtreeIndex = totalSubtrees, completed = true)))
+    } finally {
+      system.terminate()
+    }
+  }
+
+  property("UTXO snapshot scanner does not apply a new batch after frontier integrity fails") {
+    implicit val system: ActorSystem = ActorSystem("utxo-snapshot-frontier-integrity-failure-spec")
+    try {
+      val wallet = TestProbe()
+      val blockId = ModifierId @@ Algos.encode(Array.fill(32)(25: Byte))
+      val box = org.ergoplatform.utils.ErgoNodeTestConstants.genesisEmissionBox
+      val part = subtree(ErgoBoxSerializer.toBytes(box), 5)
+      val source = scanSource(blockId, 108)
+      val totalSubtrees = UtxoSnapshotWalletScanner.SnapshotScanBatchSize + 1
+      val reader = new RecordingSourceReader(source, IndexedSeq.fill(totalSubtrees)(part))
+      val settings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.copy(
+        nodeSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.nodeSettings.copy(
+          utxoSettings = org.ergoplatform.utils.ErgoNodeTestConstants.settings.nodeSettings.utxoSettings
+            .copy(utxoBootstrap = true)))
+      val scanner = system.actorOf(UtxoSnapshotWalletScanner.props(wallet.ref, settings, reader))
+      val run = UtxoSnapshotScanRun(
+        UtxoSnapshotRunToken(UUID.randomUUID()), source.snapshotHeight, blockId)
+      val status = snapshotStatus(
+        source.snapshotHeight,
+        blockId,
+        source.manifestDepth.toInt,
+        UtxoSnapshotWalletScanner.SnapshotScanBatchSize,
+        totalSubtrees,
+        completed = false)
+
+      scanner ! StartUtxoSnapshotScan(run, forceRestart = false)
+      wallet.expectMsgType[GetOrInitUtxoSnapshotScanStatus](5.seconds)
+      wallet.reply(Success(status))
+      wallet.expectMsgType[ApplyUtxoSnapshotScanBatch](5.seconds)
+      wallet.reply(Failure(new UtxoSnapshotChunkIntegrityException("injected marker mismatch")))
+
+      wallet.expectNoMessage(1500.millis)
+      reader.readIndexes.toSeq shouldBe (0 until UtxoSnapshotWalletScanner.SnapshotScanBatchSize)
+    } finally {
+      system.terminate()
+    }
+  }
+
   property("UTXO snapshot scanner exhausts its retry budget and will not hot-loop on duplicate starts") {
     implicit val system: ActorSystem = ActorSystem("utxo-snapshot-terminal-retry-spec")
     try {
@@ -94,6 +233,8 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
       val source = scanSource(blockId, 101)
       val reads = new AtomicInteger(0)
       val reader = new UtxoSnapshotScanSourceReader {
+        override def readUtxoSnapshotScanSource(): Try[UtxoSnapshotScanSource] =
+          Failure(new IllegalStateException("source unavailable"))
         override def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource] = {
           reads.incrementAndGet()
           Failure(new IllegalStateException("source unavailable"))
@@ -136,6 +277,8 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
       val source = scanSource(blockId, 105)
       val reads = new AtomicInteger(0)
       val reader = new UtxoSnapshotScanSourceReader {
+        override def readUtxoSnapshotScanSource(): Try[UtxoSnapshotScanSource] =
+          Failure(new IllegalStateException("source unavailable"))
         override def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource] = {
           if (reads.incrementAndGet() == 1) {
             firstReadStarted.countDown()
@@ -188,10 +331,26 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
     afterFailedCleanup.scheduleCatchUp shouldBe false
     afterFailedCleanup.tryCleanup shouldBe true
 
-    val afterSuccess = afterFailedCleanup.state.cleanupSucceeded(blockId)
+    val (cleanupClaimed, shouldStartCleanup) = afterFailedCleanup.state.claimSourceCleanup(blockId)
+    shouldStartCleanup shouldBe true
+    cleanupClaimed.isSourceCleanupStarted(blockId) shouldBe true
+
+    val (duplicateClaim, shouldStartDuplicateCleanup) = cleanupClaimed.claimSourceCleanup(blockId)
+    duplicateClaim shouldBe cleanupClaimed
+    shouldStartDuplicateCleanup shouldBe false
+
+    val cleanupCompleted = duplicateClaim.cleanupSucceeded(blockId)
+    cleanupCompleted.isSourceCleanupStarted(blockId) shouldBe false
+    cleanupCompleted.claimSourceCleanup(blockId)._2 shouldBe false
+
+    val afterSuccess = cleanupCompleted
       .plan(status, catchUpReady = true)
     afterSuccess.scheduleCatchUp shouldBe false
     afterSuccess.tryCleanup shouldBe false
+
+    val invalidated = cleanupClaimed.invalidate(blockId)
+    invalidated.isSourceCleanupStarted(blockId) shouldBe false
+    invalidated.claimSourceCleanup(blockId)._2 shouldBe true
 
     val afterCatchUpFailure = first.state.catchUpFailed(blockId)
       .plan(status, catchUpReady = true)
@@ -208,19 +367,19 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
     val pending = snapshotStatus(103, blockId, 14, 0, 2, completed = false)
 
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, blockId, walletHeight = 0, rescanInProgress = false, None) shouldBe true
+      103, blockId, registryPristine = true, rescanInProgress = false, None) shouldBe true
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, blockId, walletHeight = 1, rescanInProgress = false, None) shouldBe false
+      103, blockId, registryPristine = false, rescanInProgress = false, None) shouldBe false
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, blockId, walletHeight = 0, rescanInProgress = true, None) shouldBe false
+      103, blockId, registryPristine = true, rescanInProgress = true, None) shouldBe false
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, blockId, walletHeight = 10, rescanInProgress = true, Some(pending)) shouldBe false
+      103, blockId, registryPristine = false, rescanInProgress = true, Some(pending)) shouldBe false
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, blockId, walletHeight = 10, rescanInProgress = false, Some(pending)) shouldBe true
+      103, blockId, registryPristine = false, rescanInProgress = false, Some(pending)) shouldBe true
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, otherBlockId, walletHeight = 0, rescanInProgress = false, Some(pending)) shouldBe false
+      103, otherBlockId, registryPristine = false, rescanInProgress = false, Some(pending)) shouldBe false
     UtxoSnapshotScanStartPolicy.shouldStartApplied(
-      103, blockId, walletHeight = 0, rescanInProgress = false,
+      103, blockId, registryPristine = false, rescanInProgress = false,
       Some(pending.copy(nextSubtreeIndex = 2, completed = true))) shouldBe false
   }
 
@@ -237,6 +396,15 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
     }
 
     retained shouldBe Some(101 -> "tip-on-current-branch")
+  }
+
+  property("wallet catch-up classifies only heights below the retained horizon as pruned") {
+    ErgoWalletActor.isWalletCatchUpBlockDefinitelyPruned(
+      fullBlocksPruned = false, minFullBlockAvailable = 200, requestedHeight = 100) shouldBe false
+    ErgoWalletActor.isWalletCatchUpBlockDefinitelyPruned(
+      fullBlocksPruned = true, minFullBlockAvailable = 100, requestedHeight = 100) shouldBe false
+    ErgoWalletActor.isWalletCatchUpBlockDefinitelyPruned(
+      fullBlocksPruned = true, minFullBlockAvailable = 101, requestedHeight = 100) shouldBe true
   }
 
   private def subtree(value: Array[Byte], keyByte: Byte): BatchAVLProverSubtree[DigestType] = {
@@ -265,6 +433,7 @@ class UtxoSnapshotWalletScannerSpec extends ErgoCorePropertyTest {
     extends UtxoSnapshotScanSourceReader {
     val readIndexes: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer.empty
 
+    override def readUtxoSnapshotScanSource(): Try[UtxoSnapshotScanSource] = Success(source)
     override def readUtxoSnapshotScanSource(expectedBlockId: ModifierId): Try[UtxoSnapshotScanSource] =
       Success(source)
     override def readUtxoSnapshotScanPart(source: UtxoSnapshotScanSource,

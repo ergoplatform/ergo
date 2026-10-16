@@ -116,9 +116,11 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   def isInBestChain(h: Header): Boolean = bestHeaderIdAtHeight(h.height).contains(h.id)
 
   override protected def process(h: Header, nipopowMode: Boolean = false): Try[ProgressInfo[BlockSection]] = synchronized {
-    val dataToInsert: (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = toInsert(h, nipopowMode)
-
-    historyStorage.insert(dataToInsert._1, dataToInsert._2).flatMap { _ =>
+    val insertionDecision = headerInsertionDecision(h, nipopowMode)
+    rejectUnrecoverableUtxoSnapshotFork(h, insertionDecision._2).flatMap { _ =>
+      val dataToInsert = toInsert(h, nipopowMode, insertionDecision)
+      historyStorage.insert(dataToInsert._1, dataToInsert._2)
+    }.flatMap { _ =>
       bestHeaderIdOpt match {
         case Some(bestHeaderId) =>
           // If we verify transactions, we don't need to send this header to state.
@@ -131,25 +133,87 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     }
   }
 
+  private def headerInsertionDecision(h: Header, nipopowMode: Boolean): (Difficulty, Boolean) = {
+    val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + h.requiredDifficulty
+    // In nipopow mode the proof already establishes that the supplied header belongs to the best chain.
+    score -> (nipopowMode || score > bestHeadersChainScore)
+  }
+
+  /**
+    * A UTXO snapshot is the oldest state version this node can prove. Before the first full block,
+    * the snapshot anchor itself is still the live state and is a safe fork point. Afterwards the
+    * first retained full block is the oldest safe fork point. Reject older forks before changing
+    * BestHeaderKey or any height index so startup never persists a mixed node view.
+    */
+  private def rejectUnrecoverableUtxoSnapshotFork(h: Header, becomesBest: Boolean): Try[Unit] = {
+    if (!becomesBest || bestHeaderIdOpt.contains(h.parentId)) {
+      Success(())
+    } else {
+      ensureUtxoSnapshotBestHeaderTransition(
+        Some(h.parentId -> (h.height - 1)),
+        s"best header ${h.encodedId}")
+    }
+  }
+
+  /** Validate a proposed best-header transition before changing any durable history index. */
+  protected def ensureUtxoSnapshotBestHeaderTransition(
+      branchStart: Option[(ModifierId, Height)],
+      candidateDescription: String): Try[Unit] = {
+    val firstRecoverableFullBlock = minimalFullBlockHeight
+    val snapshotBootstrapActive =
+      nodeSettings.utxoSettings.utxoBootstrap && firstRecoverableFullBlock > GenesisHeight
+
+    if (!snapshotBootstrapActive || bestHeaderIdOpt.isEmpty) {
+      Success(())
+    } else {
+      val oldestSafeCommonAncestor =
+        if (bestFullBlockIdOpt.isEmpty) firstRecoverableFullBlock - 1
+        else firstRecoverableFullBlock
+
+      @tailrec
+      def commonAncestorHeight(id: ModifierId, height: Height): Option[Height] = {
+        if (height < GenesisHeight) {
+          None
+        } else if (bestHeaderIdAtHeight(height).contains(id)) {
+          Some(height)
+        } else {
+          typedModifierById[Header](id) match {
+            case Some(parent) if parent.height == height =>
+              commonAncestorHeight(parent.parentId, height - 1)
+            case _ =>
+              None
+          }
+        }
+      }
+
+      val ancestorHeight = branchStart.flatMap {
+        case (id, height) => commonAncestorHeight(id, height)
+      }
+      if (ancestorHeight.exists(_ >= oldestSafeCommonAncestor)) {
+        Success(())
+      } else {
+        val ancestorDescription = ancestorHeight.map(_.toString).getOrElse("unknown")
+        Failure(CriticalSystemException(
+          s"UTXO snapshot bootstrap cannot switch to $candidateDescription: " +
+            s"common ancestor height $ancestorDescription is below oldest safe fork point " +
+            s"$oldestSafeCommonAncestor. A fresh UTXO snapshot bootstrap or full resync is required."))
+      }
+    }
+  }
+
   /**
     * Data to add to and remove from the storage to process a header
     * @param h - header to be written into the storage
     * @param nipopowMode - flag showing whether header `h` is applied sequentially (so parent is already there), or
     *                     coming after a possible gap (during nipopow application). If true, a gap is possible.
     */
-  private def toInsert(h: Header, nipopowMode: Boolean): (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
+  private def toInsert(h: Header,
+                       nipopowMode: Boolean,
+                       insertionDecision: (Difficulty, Boolean)):
+  (Array[(ByteArrayWrapper, Array[Byte])], Array[BlockSection]) = {
     //todo: construct resulting Array without ++
 
-    val requiredDifficulty: Difficulty = h.requiredDifficulty
-    val score = scoreOf(h.parentId).getOrElse(BigInt(0)) + requiredDifficulty
-
-    // in nipopow comment, we consider that header we got is in best chain (which is guaranteed by the proof),
-    // so we do not check chain's score (and we do not have it)
-    val bestHeader = if (nipopowMode) {
-      true
-    } else {
-      score > bestHeadersChainScore
-    }
+    val (score, bestHeader) = insertionDecision
 
     val bestRow: Seq[(ByteArrayWrapper, Array[Byte])] =
       if (bestHeader) Seq(BestHeaderKey -> idToBytes(h.id)) else Seq.empty
@@ -215,11 +279,12 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     * Update header ids to ensure, that this block id and ids of all parent blocks are in the first position of
     * header ids at this height
     */
-  private def bestBlockHeaderIdsRow(h: Header, score: Difficulty): Seq[(ByteArrayWrapper, Array[Byte])] = {
+  protected def bestBlockHeaderIdsRow(h: Header, score: Difficulty): Seq[(ByteArrayWrapper, Array[Byte])] = {
     val prevHeight = headersHeight
     log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, Array[Byte]) =
-      heightIdsKey(h.height) -> (Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray
+      heightIdsKey(h.height) ->
+        (Seq(h.id) ++ headerIdsAtHeight(h.height).filterNot(_ == h.id)).flatMap(idToBytes).toArray
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
     val forkHeaders = parentHeaderOpt.toSeq
       .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)

@@ -82,8 +82,9 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
     }
     zeroWireFailure.getMessage shouldBe zeroDigestFailure.getMessage
 
+    UtxoSnapshotScanDefinition.WalletScanSemanticsVersion shouldBe 2.toByte
     Base16.encode(UtxoSnapshotScanDefinitionSerializer.toBytes(first)) shouldBe
-      ("01" + List.fill(32)("07").mkString)
+      ("02" + List.fill(32)("07").mkString)
     UtxoSnapshotScanDefinitionSerializer.parseBytes(
       UtxoSnapshotScanDefinitionSerializer.toBytes(first)) shouldBe first
   }
@@ -130,7 +131,7 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
       Seq(high, low),
       None).get
     val expectedAscendingPayload =
-      "010000000228ff2103" +
+      "02200000000228ff2103" +
         (0 until 32).map(i => f"$i%02x").mkString +
         "8c01fe2103" + List.fill(32)("55").mkString + "00"
 
@@ -147,7 +148,7 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
       "predicate" -> definition(scans = Seq(BaseScan.copy(trackingRule = OtherPredicate))),
       "tracked script" -> definition(tracked = Seq(Array[Byte](3))),
       "mining script" -> definition(mining = Seq(Array[Byte](3))),
-      "reward-delay branch" -> definition(rewardDelay = 0),
+      "reward delay" -> definition(rewardDelay = 719),
       "dust presence" -> definition(dustLimit = Some(1L))
     )
 
@@ -157,6 +158,7 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
       }
     }
 
+    definition(rewardDelay = 0).digest should not be base.digest
     definition(dustLimit = Some(1L)).digest should not be definition(dustLimit = Some(2L)).digest
   }
 
@@ -267,7 +269,7 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
       Seq.empty,
       None).get
 
-    Base16.encode(unsignedPayload.toArray) shouldBe "0102017f018000000000"
+    Base16.encode(unsignedPayload.toArray) shouldBe "022002017f018000000000"
 
     definition(
       tracked = Seq(Array[Byte](1), Array[Byte](2, 3)),
@@ -285,7 +287,7 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
       scanId = ScanId @@ 258.toShort,
       walletInteraction = ScanWalletInteraction.Forced)
     val expectedPayload =
-      "010201010202030102040501018404fd2103" +
+      "02200201010202030102040501018404fd2103" +
         (0 until 32).map(i => f"$i%02x").mkString +
         "01909cb0d080c1818202"
 
@@ -304,7 +306,7 @@ class UtxoSnapshotScanDefinitionSpec extends ErgoCorePropertyTest {
 
     Base16.encode(payload.toArray) shouldBe expectedPayload
     Base16.encode(calculated.digest.toArray) shouldBe
-      "2499e567e7d7cc797d71dbd7a71542d0c10fceaebff1f36264882a25c58e404d"
+      "447ef0f241c06b5d1d525bcd987f0bac4b171437ad9efeb6422686386f0e1a41"
   }
 
   property("predicate serialization failure is returned as Failure") {

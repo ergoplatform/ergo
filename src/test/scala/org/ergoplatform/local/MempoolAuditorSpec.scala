@@ -159,6 +159,47 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     announced shouldBe Seq(parent.id, child.id)
   }
 
+  it should "not rebroadcast the descendants of an in-pool ancestor that is not announced" in {
+
+    val (us0, bh0) = createUtxoState(settingsToTest)
+    val (txs0, bh1) = validTransactionsFromBoxHolder(bh0)
+    val b1 = validFullBlock(None, us0, txs0)
+
+    val us = us0.applyModifier(b1, None)(_ => ()).get
+
+    val bxs = bh1.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)
+    // a chain whose root's inputs are in neither the state nor the pool: missing -> root -> mid -> leaf
+    val missing = validTransactionsFromBoxes(200000, bxs.drop(2), new RandomWrapper)._1.head
+    val root = validTransactionsFromBoxes(200000, missing.outputs, new RandomWrapper)._1.head
+    val mid = validTransactionsFromBoxes(200000, root.outputs, new RandomWrapper)._1.head
+    val leaf = validTransactionsFromBoxes(200000, mid.outputs, new RandomWrapper)._1.head
+    root.inputs.forall(in => us.boxById(in.boxId).isEmpty) shouldBe true
+    // a control chain whose root's inputs are in the state: parent -> child
+    val parent = validTransactionsFromBoxes(200000, bxs.take(2), new RandomWrapper)._1.head
+    val child = validTransactionsFromBoxes(200000, parent.outputs, new RandomWrapper)._1.head
+    parent.inputs.forall(in => us.boxById(in.boxId).isDefined) shouldBe true
+
+    implicit val system = ActorSystem()
+    val probe = TestProbe()
+
+    val twoPerRound = settingsToTest.copy(nodeSettings = settingsToTest.nodeSettings.copy(rebroadcastCount = 2))
+    val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, twoPerRound))
+
+    // FakeMempool.random takes from the front: the leaf and the child are sampled
+    val pool = new FakeMempool(Seq(leaf, child, mid, root, parent).map(UnconfirmedTransaction(_, None)))
+    auditor ! RecheckMempool(us, pool)
+
+    val announced = probe.receiveWhile(max = 5.seconds, idle = 2.seconds) {
+      case SendToNetwork(msg, _) => msg.input.toOption.toSeq.flatMap {
+        case inv: InvData => inv.ids
+        case _ => Seq.empty
+      }
+      case _ => Seq.empty
+    }.flatten
+
+    announced shouldBe Seq(parent.id, child.id)
+  }
+
   it should "add in-pool ancestors root first and keep a selection without in-pool parents as it is" in {
     val (_, bh0) = createUtxoState(settingsToTest)
     val bxs = bh0.boxes.values.toList.filter(_.proposition != genesisEmissionBox.proposition)

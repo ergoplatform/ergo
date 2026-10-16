@@ -100,11 +100,15 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
         pr.random(settings.nodeSettings.rebroadcastCount).toSeq, pr.getAllPrioritized)
       stateReaderOpt match {
         case Some(utxoState: UtxoStateReader) =>
-          val stateToCheck = utxoState.withUnconfirmedTransactions(toBroadcast)
+          // toBroadcast is parents first: an input counts if it is in the state or is created by a transaction
+          // already announced in this round, so no transaction goes out without its in-pool parents
+          val announcedOutputs = mutable.Set[ModifierId]()
           toBroadcast.foreach { unconfirmedTx =>
-            if (unconfirmedTx.transaction.inputIds.forall(inputBoxId => stateToCheck.boxById(inputBoxId).isDefined)) {
+            if (unconfirmedTx.transaction.inputIds.forall(inputBoxId =>
+                  announcedOutputs.contains(bytesToId(inputBoxId)) || utxoState.boxById(inputBoxId).isDefined)) {
               log.info(s"Rebroadcasting $unconfirmedTx")
               broadcastTx(unconfirmedTx)
+              announcedOutputs ++= unconfirmedTx.transaction.outputs.map(out => bytesToId(out.id))
             } else {
               log.info(s"Not rebroadcasting $unconfirmedTx as not all the inputs are in place")
             }

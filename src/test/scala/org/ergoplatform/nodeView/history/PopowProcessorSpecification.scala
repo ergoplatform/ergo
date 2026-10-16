@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.mining.AutolykosPowScheme
-import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.popow.PoPowHeader
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
@@ -40,25 +40,27 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
                                      blocksToKeep: Int,
                                      nipopowBootstrap: Boolean = true,
                                      votingLength: Option[Int] = None): ErgoHistory =
-    ErgoHistory.readOrGenerate(prunedDigestSettings(genesisId, blocksToKeep, nipopowBootstrap, votingLength))(null)
+    ErgoHistory.readOrGenerate(bootstrapSettings(genesisId, blocksToKeep, nipopowBootstrap, votingLength))(null)
       .ensuring(_.bestFullBlockOpt.isEmpty)
 
-  private def prunedDigestSettings(genesisId: ModifierId,
-                                   blocksToKeep: Int,
-                                   nipopowBootstrap: Boolean = true,
-                                   votingLength: Option[Int] = None) = {
+  private def bootstrapSettings(genesisId: ModifierId,
+                                blocksToKeep: Int,
+                                nipopowBootstrap: Boolean = true,
+                                votingLength: Option[Int] = None,
+                                stateType: StateType = StateType.Digest,
+                                utxoBootstrap: Boolean = false) = {
     val voting = votingLength.fold(baseSettings.chainSettings.voting)(l => baseSettings.chainSettings.voting.copy(votingLength = l))
-    val prunedSettings = baseSettings.copy(
+    baseSettings.copy(
       directory = createTempDir.getAbsolutePath,
       chainSettings = baseSettings.chainSettings.copy(epochLength = 10000, useLastEpochs = 3, genesisId = Some(genesisId), voting = voting),
       nodeSettings = baseSettings.nodeSettings.copy(
-        stateType = StateType.Digest,
+        stateType = stateType,
         verifyTransactions = true,
         blocksToKeep = blocksToKeep,
+        utxoSettings = baseSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = utxoBootstrap),
         nipopowSettings = NipopowSettings(nipopowBootstrap = nipopowBootstrap, p2pNipopows = 1)
       )
     )
-    prunedSettings
   }
 
   val toPoPoWChain = (c: Seq[ErgoFullBlock]) => c.map(b => PoPowHeader.fromBlock(b).get)
@@ -181,9 +183,9 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     toDownload should contain(senderChain.last.header.transactionsId)
   }
 
-  property("after a restart, a full block floor stored inside a popow headers gap moves past the gap") {
+  property("after a restart, a full block floor stored inside a popow headers gap moves past the gap, if no full block was applied") {
     val (senderChain, proofBytes, genesisId) = senderChainAndProof()
-    val settings = prunedDigestSettings(genesisId, blocksToKeep = 60)
+    val settings = bootstrapSettings(genesisId, blocksToKeep = 60)
     val history = ErgoHistory.readOrGenerate(settings)(null)
     history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
     val lowest = continuousFrom(history) + Constants.LastHeadersInContext - 1
@@ -199,6 +201,46 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     withClue(s"tip=${restarted.headersHeight} lowest=$lowest floor=${restarted.minimalFullBlockHeight}: ") {
       restarted.isHeadersChainSynced shouldBe true
       restarted.minimalFullBlockHeight should be >= lowest
+    }
+  }
+
+  property("after a restart, a node which applied a full block inside a popow headers gap is not repaired") {
+    val (senderChain, proofBytes, genesisId) = senderChainAndProof()
+    val settings = bootstrapSettings(genesisId, blocksToKeep = 20)
+    val history = ErgoHistory.readOrGenerate(settings)(null)
+    history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
+    // a database written before this change, as in a devnet run: the floor stored at height 1, and the genesis block
+    // applied as the first full block, with no header at height 2
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    applyBlock(history, senderChain.head)
+    history.bestFullBlockOpt.map(_.height) shouldBe Some(GenesisHeight)
+    history.bestHeaderIdAtHeight(GenesisHeight + 1) shouldBe None
+    history.closeStorage()
+
+    val restarted = ErgoHistory.readOrGenerate(settings)(null)
+    applyHeaderChain(restarted, HeaderChain(senderChain.drop(restarted.headersHeight).map(_.header)))
+    val lowest = continuousFrom(restarted) + Constants.LastHeadersInContext - 1
+    val floor = restarted.minimalFullBlockHeight
+    // even with every block from the floor up delivered, none of them can follow the best full block
+    applyChain(restarted, senderChain.drop(floor - 1))
+    withClue(s"tip=${restarted.headersHeight} lowest=$lowest floor=$floor: ") {
+      restarted.isHeadersChainSynced shouldBe true
+      floor should be >= lowest
+      restarted.bestFullBlockOpt.map(_.height) shouldBe Some(GenesisHeight)
+    }
+  }
+
+  property("a popow proof applied by a UTXO set snapshot bootstrapping node marks headers chain synced only") {
+    val (_, proofBytes, genesisId) = senderChainAndProof()
+    val settings = bootstrapSettings(genesisId, blocksToKeep = -1, stateType = StateType.Utxo, utxoBootstrap = true)
+    val history = ErgoHistory.readOrGenerate(settings)(null)
+    history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
+    withClue(s"tip=${history.headersHeight} floor=${history.minimalFullBlockHeight}: ") {
+      history.isHeadersChainSynced shouldBe true
+      // no full block floor is written, so the snapshot is still to be applied, and it is asked for
+      history.minimalFullBlockHeight shouldBe GenesisHeight
+      history.isUtxoSnapshotApplied shouldBe false
+      history.nextModifiersToDownload(1000, (_, id) => !history.contains(id)) shouldBe Map(SnapshotsInfoTypeId.value -> Seq.empty)
     }
   }
 

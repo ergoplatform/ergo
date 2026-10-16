@@ -118,18 +118,20 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     val continuousFrom = (proofTip to GenesisHeight by -1).takeWhile(h => history.bestHeaderIdAtHeight(h).nonEmpty).last
     continuousFrom should be > GenesisHeight
 
-    def floorInGap: Boolean = history.isHeadersChainSynced && history.minimalFullBlockHeight < continuousFrom
-    floorInGap shouldBe false
+    // once headers chain is marked synced, the floor is not inside the gap
+    def checkFloorNotInGap(): Unit =
+      if (history.isHeadersChainSynced) history.minimalFullBlockHeight should be >= continuousFrom
+    checkFloorNotInGap()
 
     // headers after the proof are coming as usual
     applyHeaderChain(history, HeaderChain(senderChain.drop(proofTip).map(_.header)))
     history.headersHeight shouldBe senderChain.last.height
-    floorInGap shouldBe false
+    checkFloorNotInGap()
 
     // full blocks are to be downloaded from a height with enough headers before it to construct state context
     history.isHeadersChainSynced shouldBe true
     val firstContextHeight = history.minimalFullBlockHeight - Constants.LastHeadersInContext + 1
-    (firstContextHeight to history.headersHeight).forall(h => history.bestHeaderIdAtHeight(h).nonEmpty) shouldBe true
+    (firstContextHeight to history.headersHeight).filter(h => history.bestHeaderIdAtHeight(h).isEmpty) shouldBe empty
 
     // and full blocks downloading is going on up to the tip
     val toDownload = history.nextModifiersToDownload(1000, (_, id) => !history.contains(id)).values.flatten.toSeq
@@ -179,7 +181,7 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     applyHeaderChain(history, HeaderChain(senderChain.drop(history.headersHeight).map(_.header)))
     history.minimalFullBlockHeight shouldBe expected
     val toDownload = history.nextModifiersToDownload(1000, (_, id) => !history.contains(id)).values.flatten.toSet
-    senderChain.filter(_.header.height < expected).map(_.header.transactionsId).exists(toDownload.contains) shouldBe false
+    senderChain.filter(_.header.height < expected).map(_.header.transactionsId).filter(toDownload.contains) shouldBe empty
     toDownload should contain(senderChain.last.header.transactionsId)
   }
 

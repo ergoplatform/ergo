@@ -141,6 +141,34 @@ class DeliveryExpirationSpec extends AnyFlatSpec with Matchers with BeforeAndAft
     }
   }
 
+  it should "keep a header request active after more stale expirations than the retry limit" in {
+    val requests = new Requests
+    val controller = TestProbe()
+    val actor = TestActorRef(new ExpirationConsumer(controller.ref, requests)(system.dispatcher))
+    try {
+      val expirations = Vector.fill(settings.scorexSettings.network.maxDeliveryChecks + 1) {
+        requests.request(Header.modifierTypeId)
+      }
+      val current = requests.tracker.getRequestedInfo(Header.modifierTypeId, id)
+
+      expirations.init.foreach { case (expired, timer) =>
+        timer.isCancelled shouldBe true
+        actor ! expired
+      }
+
+      requests.tracker.getRequestedInfo(Header.modifierTypeId, id) shouldBe current
+      requests.tracker.status(id, Header.modifierTypeId, Seq.empty) shouldBe ModifiersStatus.Requested
+      requests.scheduled.size shouldBe expirations.size
+      controller.expectNoMessage(50.millis)
+
+      actor ! expirations.last._1
+
+      requests.tracker.getRequestedInfo(Header.modifierTypeId, id).get.checks shouldBe 1
+      requests.scheduled.size shouldBe expirations.size + 1
+      controller.receiveOne(1.second) should not be null
+    } finally system.stop(actor)
+  }
+
   it should "ignore queued expirations after reset without modifying successor requests" in {
     Seq(ErgoTransaction.modifierTypeId, Header.modifierTypeId, BlockTransactions.modifierTypeId).foreach { typeId =>
       val requests = new Requests

@@ -99,7 +99,8 @@ trait FullBlockProcessor extends HeadersProcessor {
 
       // insert updated chains statuses
       val additionalIndexes = toApply.map(b => chainStatusKey(b.id) -> FullBlockProcessor.BestChainMarker) ++
-        toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker)
+        toRemove.map(b => chainStatusKey(b.id) -> FullBlockProcessor.NonBestChainMarker) ++
+        bestHeaderRowsOnTie(newBestBlockHeader)
       updateStorage(newModRow, newBestBlockHeader.id, additionalIndexes).map { _ =>
         // remove block ids which have no chance to be applied
         val minForkRootHeight = toApply.last.height - nodeSettings.keepVersions
@@ -114,6 +115,27 @@ trait FullBlockProcessor extends HeadersProcessor {
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
       }
   }
+
+  /**
+    * Chains with equal score are equal for the node, and the best header is the one seen first. If the best header
+    * chain has no complete blocks (otherwise `isBetterChain` is false for a tie), a tying chain with complete blocks
+    * is better: the full chain must follow the data. So the best header moves to the new best full block, at the same
+    * height and in the same storage batch. This keeps the best header and the best full block on one fork, and
+    * the full chain never waits for a body that may not come.
+    *
+    * @param newBest - tip of the new best full chain
+    * @return rows to move the best header to `newBest`, or no rows if `newBest` does not tie the best header chain
+    */
+  private def bestHeaderRowsOnTie(newBest: Header): Seq[(ByteArrayWrapper, Array[Byte])] =
+    scoreOf(newBest.id) match {
+      case Some(score)
+        if !isInBestChain(newBest) && newBest.height == headersHeight && score == bestHeadersChainScore =>
+        log.info(s"Best header chain ties the new best full chain at height ${newBest.height}, " +
+          s"best header moves to ${newBest.encodedId}")
+        bestHeaderRows(newBest, score)
+      case _ =>
+        Seq.empty
+    }
 
   /**
     *

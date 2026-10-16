@@ -140,6 +140,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private val perPeerCost = mutable.Map[ConnectedPeer, IncomingTxInfo]()
 
   /**
+    * Ids of transactions a peer announced (or delivered) while it was over its per-block budget, so not requested
+    * (or not processed) then. They are requested from the same peer once its budget is reset on the next block, see
+    * `requestRefusedTxs`. Without this table such a transaction is lost to the node unless it is announced again,
+    * and a transaction is announced once on acceptance. Insertion-ordered, oldest first; bounded per peer and in
+    * total, see `MaxRefusedTxsPerPeer` and `MaxRefusedTxs`.
+    */
+  private val refusedTxs = mutable.LinkedHashMap[ConnectedPeer, mutable.LinkedHashSet[ModifierId]]()
+
+  // number of ids in `refusedTxs`, over all the peers
+  private var refusedTxsTotal: Int = 0
+
+  /**
     * Ids of a peer's transactions sent to the mempool whose result has not come back yet, so not charged to the peer
     * yet. They are counted against the peer's budget at the floor charge before another transaction of the peer is
     * sent to the mempool, see `peerAdmitsTx`. Not cleared on the budget reset, as their charges land after it.
@@ -247,6 +259,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.info(s"Dropping cached transaction ${encoder.encodeId(txId)} from ${processingCacheRecord.source} " +
           "without processing (its peer is over the per-block budget, or the transaction is known already)")
         deliveryTracker.setUnknown(txId, ErgoTransaction.modifierTypeId)
+        // dropped for the peer's budget only: ask the peer for it again after the budget reset
+        if (!peerWithinBudget(processingCacheRecord.source) &&
+          !mp.contains(txId) && !mp.isInvalidated(txId) && !declined.contains(txId)) {
+          rememberRefusedTx(processingCacheRecord.source, txId)
+        }
       }
     }
   }
@@ -1185,17 +1202,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                            peer: ConnectedPeer,
                            blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
 
-    val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
-
-    // We download transactions only if following conditions met:
-    def txAcceptanceFilter: Boolean = {
-      settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
-        hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
-        hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
+    // We download transactions only if following conditions met (besides the per-peer budget):
+    def nodeAcceptsTxInvs: Boolean = {
+      nodeReadyForTxs(hr) &&
       interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
-      peerCost < MempoolPeerCostPerBlock &&
       txProcessingCache.size <= MaxProcessingTransactionsCacheSize // txs processing cache is not overfull
     }
+
+    def txAcceptanceFilter: Boolean = nodeAcceptsTxInvs && peerWithinBudget(peer)
 
     val modifierTypeId = invData.typeId
 
@@ -1220,6 +1234,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             ((MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost).toInt
           notDeclined.take(txsToAsk)
         } else {
+          if (nodeAcceptsTxInvs) {
+            // refused for the peer's budget only: ask the peer for these transactions after the budget reset
+            invData.ids.filter(id => txWorthRequesting(id, mp, blockAppliedTxsCache))
+              .foreach(id => rememberRefusedTx(peer, id))
+          }
           Seq.empty
         }
       case _ =>
@@ -1478,6 +1497,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      refusedTxs.remove(connectedPeer).foreach(ids => refusedTxsTotal -= ids.size)
       txsInProcessing -= connectedPeer
   }
 
@@ -1501,6 +1521,97 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Number of transactions currently cached for later processing, exposed for tests
     */
   private[network] def txProcessingCacheSize: Int = txProcessingCache.size
+
+  /**
+    * Number of refused transaction ids currently kept for re-request (all peers), exposed for tests
+    */
+  private[network] def refusedTxsCount: Int = refusedTxsTotal
+
+  // the node holds the UTXO set and is synced, so it takes unconfirmed transactions from peers
+  private def nodeReadyForTxs(hr: ErgoHistory): Boolean = {
+    settings.nodeSettings.stateType.holdsUtxoSet && // node holds UTXO set
+      hr.headersHeight >= syncTracker.maxHeight().getOrElse(0) && // our best header is not worse than best around
+      hr.fullBlockHeight == hr.headersHeight // we have all the full blocks
+  }
+
+  private def peerWithinBudget(peer: ConnectedPeer): Boolean = {
+    perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost < MempoolPeerCostPerBlock
+  }
+
+  // a transaction not known to the node in any way: not requested or received already, not in the mempool,
+  // not invalidated, not applied in a recent block, not declined since the last block
+  private def txWorthRequesting(id: ModifierId,
+                                mp: ErgoMemPool,
+                                blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Boolean = {
+    deliveryTracker.status(id, ErgoTransaction.modifierTypeId, Seq(mp)) == ModifiersStatus.Unknown &&
+      !mp.isInvalidated(id) &&
+      !blockAppliedTxsCache.mightContain(id) &&
+      !declined.contains(id)
+  }
+
+  // keep the id of a transaction refused for the peer's budget, bounded per peer (the oldest id of the peer is
+  // dropped for a new one) and in total (a new id is not kept when the table is full, so a peer can not evict
+  // other peers' ids)
+  private def rememberRefusedTx(peer: ConnectedPeer, id: ModifierId): Unit = {
+    val ids = refusedTxs.getOrElse(peer, mutable.LinkedHashSet.empty[ModifierId])
+    if (!ids.contains(id)) {
+      if (ids.size >= MaxRefusedTxsPerPeer) {
+        ids -= ids.head
+        refusedTxsTotal -= 1
+      }
+      if (refusedTxsTotal < MaxRefusedTxs) {
+        ids += id
+        refusedTxsTotal += 1
+      }
+      if (ids.nonEmpty) {
+        refusedTxs.put(peer, ids)
+      } else {
+        refusedTxs -= peer
+      }
+    }
+  }
+
+  /**
+    * Request transactions refused earlier for a peer's budget (see `refusedTxs`) from that peer, once it is within
+    * its budget again. Called on block applied (after the budgets reset) and on every mempool result, it sends one
+    * request of up to `txsToAsk` ids (as many as for an inv) when the processing cache is empty and the global
+    * budget is not exhausted, so the re-requested transactions are processed and charged as any others, and do not
+    * add to the load the node takes between blocks. Peers are served in turns.
+    */
+  private def requestRefusedTxs(hr: ErgoHistory,
+                                mp: ErgoMemPool,
+                                blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
+    if (refusedTxs.nonEmpty && txProcessingCache.isEmpty &&
+      interblockCost.totalCost < MempoolCostPerBlock && nodeReadyForTxs(hr)) {
+      val txsToAsk = ((MempoolCostPerBlock - interblockCost.totalCost) / OptimisticMaxTransactionCost).toInt
+      val peersInTurn = refusedTxs.keys.filter(peerWithinBudget).toList.iterator
+      var requested = false
+      while (!requested && peersInTurn.hasNext) {
+        val peer = peersInTurn.next()
+        val ids = refusedTxs(peer)
+        val toAsk = mutable.ArrayBuffer[ModifierId]()
+        while (toAsk.size < txsToAsk && ids.nonEmpty) {
+          val id = ids.head
+          ids -= id
+          refusedTxsTotal -= 1
+          if (txWorthRequesting(id, mp, blockAppliedTxsCache)) {
+            toAsk += id
+          }
+        }
+        // the peer goes to the end of the turn
+        refusedTxs -= peer
+        if (ids.nonEmpty) {
+          refusedTxs.put(peer, ids)
+        }
+        if (toAsk.nonEmpty) {
+          log.info(s"Requesting ${toAsk.size} transactions refused earlier for the per-block budget from $peer, " +
+            s"${ids.size} more kept for it")
+          requestBlockSection(ErgoTransaction.modifierTypeId, toAsk, peer)
+          requested = true
+        }
+      }
+    }
+  }
 
   /**
     * Whether a transaction of the peer may be sent to the mempool now: the peer is within its budget even when each of
@@ -1615,6 +1726,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
+      requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
 
     // Peer-received block applied - broadcast to our peers
     case RemoteBlockApplied(header, _) =>
@@ -1628,11 +1740,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
+      requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
 
     case st@SuccessfulTransaction(utx) =>
       val tx = utx.transaction
       deliveryTracker.setHeld(tx.id, ErgoTransaction.modifierTypeId)
       processMempoolResult(st, mempoolReader)
+      requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
       broadcastModifierInv(tx)
 
     case dt@DeclinedTransaction(utx: UnconfirmedTransaction) =>
@@ -1643,10 +1757,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         addDeclined(utx.id)
       }
       processMempoolResult(dt, mempoolReader)
+      requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
 
     case ft@FailedTransaction(utx, error) =>
       val id = utx.id
       processMempoolResult(ft, mempoolReader)
+      requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
 
       utx.source.foreach { peer =>
         // no need to call deliveryTracker.setInvalid, as mempool will consider invalidated tx in contains()
@@ -1854,6 +1970,21 @@ object ErgoNodeViewSynchronizer {
     * node, see `txAcceptanceFilter` in the class above.
     */
   private[network] val MaxDeclined = 1000
+
+  /**
+    * Max number of ids of transactions refused for a peer's per-block budget which are kept for the peer, to be
+    * requested from it after the budget reset. Ten times the declines which exhaust the budget
+    * (`MempoolPeerCostPerBlock` / `MinDeclinedTxCost` = 50), so a relay parked in a busy block keeps its backlog for
+    * a few blocks; when the limit is reached, the oldest id of the peer is dropped for a new one.
+    */
+  private[network] val MaxRefusedTxsPerPeer = 500
+
+  /**
+    * Max number of refused transaction ids kept for all the peers together, so that the memory used (about 200 bytes
+    * per id, i.e. about 1 MB at the limit) does not depend on the number of peers. When the limit is reached, new ids
+    * are not kept (and are lost, as without the table), while ids of other peers are not evicted.
+    */
+  private[network] val MaxRefusedTxs = 5000
 
   /**
     * Minimal cost charged to a peer for a transaction declined by the mempool (1000 cost units ~ 1 ms of CPU).

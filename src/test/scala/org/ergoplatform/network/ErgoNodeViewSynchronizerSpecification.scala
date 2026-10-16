@@ -2443,6 +2443,51 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   /**
+    * The refused transaction ids are bounded per peer (a peer's oldest id is dropped for a new one) and in total
+    * (new ids are not kept when the table is full, other peers' ids are not evicted), and are forgotten when the
+    * peer disconnects, so a peer can not grow the node's memory with them.
+    */
+  property("NodeViewSynchronizer: refused transaction ids are bounded per peer and in total") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      def randomIds(n: Int): Seq[scorex.util.ModifierId] = Seq.fill(n)(bytesToId(scorex.utils.Random.randomBytes(32)))
+      def kept: Int = synchronizerTestRef.underlyingActor.refusedTxsCount
+
+      val peers = Seq.fill(MaxRefusedTxs / MaxRefusedTxsPerPeer + 1)(newPeer)
+      val honest = newPeer
+      peers.foreach(p => declineTxs(p, count = DeclinesToThrottlePeer, cost = 1000))
+
+      // one peer announces twice its limit: only the limit is kept
+      invTxIds(peers.head, randomIds(2 * MaxRefusedTxsPerPeer))
+      // barrier: the response to this inv proves that the invs above are already processed
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+      kept shouldBe MaxRefusedTxsPerPeer
+
+      // the other peers fill the table up and past its total limit
+      peers.tail.foreach(p => invTxIds(p, randomIds(MaxRefusedTxsPerPeer)))
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+      kept shouldBe MaxRefusedTxs
+
+      // a peer at its own limit replaces its oldest ids, the total stays at the limit
+      invTxIds(peers.head, randomIds(10))
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+      kept shouldBe MaxRefusedTxs
+
+      // the ids of a disconnected peer are forgotten
+      synchronizerRef ! DisconnectedPeer(peers.head)
+      invTxAndExpectRequest(honest, dummyDeclinedTx())
+      kept shouldBe MaxRefusedTxs - MaxRefusedTxsPerPeer
+
+      // after the budget reset one request is sent, and the ids it carries are not kept anymore
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      val requested = txIdsRequestedFromAny(peers.tail.toSet, 2.seconds)
+      requested should not be empty
+      kept shouldBe MaxRefusedTxs - MaxRefusedTxsPerPeer - requested.size
+    }
+  }
+
+  /**
     * A refused transaction which is known to the node by the time the budget is reset (in the mempool, invalidated,
     * or requested from another peer) is not requested again.
     */

@@ -20,7 +20,7 @@ import scorex.db.{ByteArrayWrapper, LDBVersionedStore}
 import scorex.util.{ByteArrayBuilder, ModifierId}
 import scorex.util.serialization.VLQByteBufferWriter
 
-import scala.util.Random
+import scala.util.{Failure, Random, Try}
 
 class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
@@ -275,6 +275,43 @@ class UtxoSetSnapshotProcessorSpecification extends ErgoCorePropertyTest {
     stateStore.getAll
       .map { case (key, value) => key.toIndexedSeq -> value.toIndexedSeq }
       .toSet shouldBe rowsBefore
+  }
+
+  property("fail closed when snapshot reconstruction and state rollback both fail") {
+    val (manifest, manifestBytes, chunks) = normalSnapshotFixture()
+    val snapshotHeight = epochLength - 1
+    val snapshotBlockId = randomBlockId()
+    val processor = freshProcessor(
+      HistoryStorage(s), snapshotHeight, snapshotBlockId,
+      VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)
+    )
+    processor.registerManifestToDownload(manifest, manifestBytes, snapshotHeight, Seq.empty)
+    processor.getChunkIdsToDownload(manifest.subtreesIds.size)
+      .zip(chunks).foreach { case (chunkId, bytes) =>
+        processor.registerDownloadedChunk(chunkId, bytes).get
+      }
+
+    val rollbackError = new IllegalStateException("forced rollback failure")
+    var storeClosed = false
+    val stateStore = new LDBVersionedStore(createTempDir, initialKeepVersions = 100) {
+      override def get(key: Array[Byte]): Option[Array[Byte]] =
+        if (lastVersionID.exists(_.length == 33)) None else super.get(key)
+
+      override def rollbackTo(versionID: VersionID): Try[Unit] = Failure(rollbackError)
+
+      override def close(): Unit = {
+        storeClosed = true
+        super.close()
+      }
+    }
+    stateStore.update(Array.fill(32)(51: Byte), Nil, Seq.empty).get
+
+    val error = processor.createPersistentProver(
+      stateStore, history, snapshotHeight, snapshotBlockId).failed.get
+
+    error shouldBe a [UtxoSetSnapshotProcessor.StateWriteFailure]
+    error.getCause.getSuppressed.toSeq should contain (rollbackError)
+    storeClosed shouldBe true
   }
 
   property("one-leaf manifest yields one readable embedded scan part") {

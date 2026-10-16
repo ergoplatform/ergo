@@ -433,12 +433,12 @@ trait UtxoSetSnapshotProcessor
       previousVersion: Array[Byte])(
       result: => Try[A]): Try[A] =
     Try(result).flatten.recoverWith { case restorationError =>
-      stateStore.rollbackTo(previousVersion) match {
+      Try(stateStore.rollbackTo(previousVersion)).flatten match {
         case Success(_) => Failure(restorationError)
         case Failure(rollbackError) =>
           restorationError.addSuppressed(rollbackError)
           Try(stateStore.close()).failed.foreach(restorationError.addSuppressed)
-          Failure(restorationError)
+          Failure(new UtxoSetSnapshotProcessor.StateWriteFailure(restorationError))
       }
     }
 
@@ -502,4 +502,8 @@ object UtxoSetSnapshotProcessor {
   /** Exact object-store key for a retained ordinal snapshot chunk. */
   def snapshotScanChunkKey(index: Int): Array[Byte] =
     DownloadedChunksPrefix ++ Ints.toByteArray(index)
+
+  /** Reconstruction failed after changing the state store, and rollback failed too. */
+  final class StateWriteFailure(cause: Throwable)
+    extends RuntimeException("Snapshot reconstruction may have changed the state store", cause)
 }

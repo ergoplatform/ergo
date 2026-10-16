@@ -14,6 +14,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
@@ -439,6 +440,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   /**
     * signal to pull Utxo set snapshot from database and recreate UTXO set from it
     */
+  private def abortSnapshotStatePreparation(error: Throwable): Unit = {
+    log.error("Failed to prepare the configured snapshot state; shutting down", error)
+    // Reconstruction has modified the store behind the old state. Do not serve it.
+    context.become(Actor.emptyBehavior)
+    ErgoApp.shutdownSystem()(context.system)
+  }
+
   def processStateSnapshot: Receive = {
     case InitStateFromSnapshot(height, blockId) =>
       if (!history().isUtxoSnapshotApplied) {
@@ -453,6 +461,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
                   context.system.eventStream.publish(UtxoSnapshotAppliedToState(height, blockId, newState))
                 }
+              case Failure(t: UtxoSetSnapshotProcessor.StateWriteFailure) =>
+                abortSnapshotStatePreparation(t)
               case Failure(t) =>
                 log.error("UTXO set snapshot application failed: ", t)
                 context.system.eventStream.publish(UtxoSnapshotStateRestorationFailed(

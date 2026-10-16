@@ -1928,6 +1928,26 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       requested
     }
+
+    /** `RequestModifier`s for transactions sent to `peer` so far, one id batch per request (drains `ncProbe`) */
+    def txRequestsSentTo(peer: ConnectedPeer): Seq[Seq[scorex.util.ModifierId]] = {
+      val requests = scala.collection.mutable.ArrayBuffer[Seq[scorex.util.ModifierId]]()
+      var msg = ncProbe.receiveOne(50.millis)
+      while (msg != null) {
+        msg match {
+          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+            stn.sendingStrategy match {
+              case SendToPeer(p) if p == peer =>
+                val data = stn.message.data.get.asInstanceOf[InvData]
+                if (data.typeId == ErgoTransaction.modifierTypeId) requests += data.ids
+              case _ => // a request to another peer, ignore
+            }
+          case _ => // not a request, ignore
+        }
+        msg = ncProbe.receiveOne(50.millis)
+      }
+      requests
+    }
   }
 
   private def withDeclinedTransactionsFixture(testCode: DeclinedTransactionsFixture => Any): Unit = {
@@ -2559,6 +2579,105 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val requested = txIdsRequestedFrom(relay, 2.seconds)
       requested should not be empty
       (requested.toSet -- txs.map(_.id).filterNot(_ == processed)) shouldBe empty
+    }
+  }
+
+  /**
+    * Transactions re-requested from a peer are charged to its per-block budget like any others, so between two blocks
+    * no more of them are processed than the budget admits at the floor charge, whatever the order of deliveries and
+    * mempool results; and the whole budget is used, so the kept ids are drained.
+    */
+  property("NodeViewSynchronizer: refused transactions re-requested between blocks stay within the peer's budget") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+
+      declineTxs(relay, count = DeclinesToThrottlePeer, cost = 1000)
+      val refused = Seq.fill(2 * PeerBudgetBetweenBlocks / MinDeclinedTxCost)(dummyDeclinedTx())
+      val byId = refused.map(tx => tx.id -> tx).toMap
+      invTxIds(relay, refused.map(_.id))
+      txRequestsSentTo(relay) shouldBe empty
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+
+      var processedFromRelay = 0
+      var moving = true
+      while (moving) {
+        // the network: the relay answers every request sent to it so far, before any mempool result comes back
+        val requests = txRequestsSentTo(relay)
+        requests.foreach { ids =>
+          val modData = ModifiersData(ErgoTransaction.modifierTypeId, ids.map(id => id -> byId(id).bytes).toMap)
+          synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(relay))
+        }
+        // the mempool: every transaction forwarded for processing is declined at the cheapest check
+        var forwarded = txsForwardedToMempool()
+        moving = requests.nonEmpty || forwarded.nonEmpty
+        while (forwarded.nonEmpty) {
+          forwarded.foreach { utx =>
+            if (utx.source.contains(relay)) processedFromRelay += 1
+            synchronizerRef ! DeclinedTransaction(utx.withCost(1000))
+          }
+          forwarded = txsForwardedToMempool()
+        }
+      }
+
+      processedFromRelay shouldBe PeerBudgetBetweenBlocks / MinDeclinedTxCost
+    }
+  }
+
+  /**
+    * A peer has at most one re-request of refused transactions in flight: mempool results (of any peer) arriving
+    * while it is undelivered do not send the peer another one, as the charges for the first are not known yet.
+    */
+  property("NodeViewSynchronizer: refused transactions are re-requested from a peer one request at a time") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val other = newPeer
+
+      declineTxs(relay, count = DeclinesToThrottlePeer, cost = 1000)
+      invTxIds(relay, Seq.fill(20)(dummyDeclinedTx()).map(_.id))
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      txRequestsSentTo(relay).size shouldBe 1
+
+      // the request is not delivered yet, other peers' transactions are processed meanwhile
+      declineTxs(other, count = 3, cost = 1000)
+      txRequestsSentTo(relay) shouldBe empty
+    }
+  }
+
+  /**
+    * A re-request of refused transactions asks for no more transactions than the peer's remaining budget admits at
+    * the floor charge, so that the ids it carries are not dropped (and kept again) for the budget after delivery.
+    */
+  property("NodeViewSynchronizer: a re-request of refused transactions is bounded by the peer's remaining budget") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val other = newPeer
+      val left = 3
+
+      declineTxs(relay, count = DeclinesToThrottlePeer, cost = 1000)
+      invTxIds(relay, Seq.fill(MaxRefusedTxsPerPeer)(dummyDeclinedTx()).map(_.id))
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      val first = txRequestsSentTo(relay).flatten
+      first should not be empty
+
+      // the relay spends its budget but for `left` floor charges, and its first re-request is never delivered
+      declineTxs(relay, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost - left, cost = 1000)
+      first.foreach(id => synchronizerRef ! CheckDelivery(relay, ErgoTransaction.modifierTypeId, id))
+      txRequestsSentTo(relay)
+
+      // the next mempool result sends the next re-request
+      declineTxs(other, count = 1, cost = 1000)
+      val next = txRequestsSentTo(relay)
+      next.size shouldBe 1
+      next.head.size shouldBe left
     }
   }
 

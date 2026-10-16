@@ -22,6 +22,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
+import org.ergoplatform.serialization.ManifestSerializer
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
@@ -701,8 +702,21 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         .get
       val nextBlock = validFullBlock(Some(snapshotBlock), sourceAtSnapshot)
 
+      sourceAtSnapshot
+        .dumpSnapshot(snapshotBlock.height, sourceAtSnapshot.rootDigest.dropRight(1))
+        .get
+      val manifestId = sourceAtSnapshot.snapshotsDb.readSnapshotsInfo
+        .availableManifests(snapshotBlock.height)
+      val manifestBytes = sourceAtSnapshot.snapshotsDb.readManifestBytes(manifestId).get
+      val manifest = ManifestSerializer.defaultSerializer.parseBytes(manifestBytes)
+      val chunks = manifest.subtreesIds.map(sourceAtSnapshot.snapshotsDb.readSubtreeBytes(_).get)
+
       applyHeader(snapshotBlock.header).get
-      getHistory.onUtxoSnapshotApplied(snapshotBlock.height)
+      getHistory.registerManifestToDownload(manifest, manifestBytes, snapshotBlock.height, Seq.empty)
+      getHistory.getChunkIdsToDownload(manifest.subtreesIds.size).zip(chunks).foreach {
+        case (chunkId, bytes) => getHistory.registerDownloadedChunk(chunkId, bytes).get
+      }
+      getHistory.onUtxoSnapshotApplied(snapshotBlock.height, snapshotBlock.id).get
       stopNodeViewHolder()
 
       val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")

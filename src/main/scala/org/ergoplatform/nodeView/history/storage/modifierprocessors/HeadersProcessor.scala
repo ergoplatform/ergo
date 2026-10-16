@@ -75,7 +75,13 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     historyStorage.insert(
       indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
       objectsToInsert = BlockSection.emptyArray)
+    ()
   }
+
+  protected def minimalFullBlockHeightKey: ByteArrayWrapper = MinFullBlockHeightKey
+
+  protected def snapshotHeaderStateAtHeight(height: Height): Option[(ModifierId, scorex.crypto.authds.ADDigest)] =
+    bestHeaderAtHeight(height).map(header => header.id -> header.stateRoot)
 
   override def readMinimalFullBlockHeight(): Height = {
     historyStorage.getIndex(MinFullBlockHeightKey).map(Ints.fromByteArray).getOrElse(GenesisHeight)

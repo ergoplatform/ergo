@@ -10,9 +10,11 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
+import scorex.util.serialization.VLQByteBufferReader
 import sigma.serialization.SigmaSerializer
 
 import java.io.File
+import java.nio.ByteBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -194,22 +196,205 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
       .getOrElse(PaymentsScanId)
   }
 
-  def readUtxoSnapshotScanStatus(): Option[UtxoSnapshotScanStatus] =
-    store.get(UtxoSnapshotScanStatusKey).flatMap { bytes =>
-      UtxoSnapshotScanStatusSerializer.parseBytesTry(bytes) match {
-        case Success(status) =>
+  /** Read scan progress without treating corrupt durable bytes as an absent status. */
+  def readUtxoSnapshotScanStatusTry(): Try[Option[UtxoSnapshotScanStatus]] =
+    Try(store.get(UtxoSnapshotScanStatusKey)).flatMap {
+      case Some(bytes) =>
+        Try {
+          val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+          val status = UtxoSnapshotScanStatusSerializer.parse(reader)
+          require(reader.remaining == 0, s"Unexpected trailing UTXO snapshot scan status bytes: ${reader.remaining}")
+          validateUtxoSnapshotScanStatus(status).get
+          require(java.util.Arrays.equals(bytes, UtxoSnapshotScanStatusSerializer.toBytes(status)),
+            "Non-canonical UTXO snapshot scan status encoding")
           Some(status)
-        case Failure(t) =>
-          log.error("Corrupted UTXO snapshot scan status", t)
-          None
-      }
+        }
+      case None => Success(None)
+    }
+
+  def readUtxoSnapshotScanStatus(): Option[UtxoSnapshotScanStatus] =
+    readUtxoSnapshotScanStatusTry() match {
+      case Success(status) => status
+      case Failure(t) =>
+        log.error("Corrupted UTXO snapshot scan status", t)
+        None
     }
 
   def writeUtxoSnapshotScanStatus(status: UtxoSnapshotScanStatus): Try[Unit] =
-    store.insert(UtxoSnapshotScanStatusKey, UtxoSnapshotScanStatusSerializer.toBytes(status))
+    validateUtxoSnapshotScanStatus(status)
+      .flatMap(_ => store.insert(UtxoSnapshotScanStatusKey, UtxoSnapshotScanStatusSerializer.toBytes(status)))
 
   def removeUtxoSnapshotScanStatus(): Try[Unit] =
     store.remove(Array(UtxoSnapshotScanStatusKey))
+
+  /** Read completed snapshot provenance without treating corrupt durable bytes as absent. */
+  def readUtxoSnapshotWalletOriginTry(): Try[Option[UtxoSnapshotWalletOrigin]] =
+    Try(store.get(UtxoSnapshotWalletOriginKey)).flatMap {
+      case Some(bytes) =>
+        Try {
+          val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+          val origin = UtxoSnapshotWalletOriginSerializer.parse(reader)
+          require(reader.remaining == 0,
+            s"Unexpected trailing UTXO snapshot wallet origin bytes: ${reader.remaining}")
+          validateUtxoSnapshotWalletOrigin(origin).get
+          require(java.util.Arrays.equals(bytes, UtxoSnapshotWalletOriginSerializer.toBytes(origin)),
+            "Non-canonical UTXO snapshot wallet origin encoding")
+          Some(origin)
+        }
+      case None => Success(None)
+    }
+
+  /**
+    * Commit completed progress and its immutable snapshot provenance in one LevelDB batch.
+    * An identical origin is replay-safe; corrupt or conflicting provenance is never overwritten.
+    */
+  def completeUtxoSnapshotScan(status: UtxoSnapshotScanStatus): Try[Unit] =
+    validateUtxoSnapshotScanStatus(status).flatMap { _ =>
+      Try(require(status.completed && status.nextSubtreeIndex == status.totalSubtrees,
+        "UTXO snapshot completion requires canonical completed progress"))
+    }.flatMap { _ =>
+      val origin = UtxoSnapshotWalletOrigin(
+        status.snapshotHeight, status.snapshotBlockId, status.scanDefinition)
+      readUtxoSnapshotWalletOriginTry().flatMap {
+        case None | Some(`origin`) =>
+          store.update(
+            Array(UtxoSnapshotScanStatusKey, UtxoSnapshotWalletOriginKey),
+            Array(
+              UtxoSnapshotScanStatusSerializer.toBytes(status),
+              UtxoSnapshotWalletOriginSerializer.toBytes(origin)),
+            Array.empty[Array[Byte]])
+        case Some(current) =>
+          Failure(new IllegalStateException(
+            s"Conflicting UTXO snapshot wallet origin: current=$current, requested=$origin"))
+      }
+    }
+
+  /** Read the durable invalidation fence without treating corrupt bytes as an absent marker. */
+  def readUtxoSnapshotScanInvalidationTry(): Try[Option[UtxoSnapshotScanInvalidation]] =
+    Try(store.get(UtxoSnapshotScanInvalidationKey)).flatMap {
+      case Some(bytes) =>
+        Try {
+          val reader = new VLQByteBufferReader(ByteBuffer.wrap(bytes))
+          val invalidation = UtxoSnapshotScanInvalidationSerializer.parse(reader)
+          require(reader.remaining == 0, s"Unexpected trailing UTXO snapshot invalidation bytes: ${reader.remaining}")
+          validateUtxoSnapshotScanInvalidation(invalidation).get
+          require(java.util.Arrays.equals(bytes, UtxoSnapshotScanInvalidationSerializer.toBytes(invalidation)),
+            "Non-canonical UTXO snapshot invalidation encoding")
+          Some(invalidation)
+        }
+      case None => Success(None)
+    }
+
+  /**
+    * Create the durable invalidation fence, or accept an identical existing fence idempotently.
+    * A different or unreadable existing fence fails closed and is never overwritten.
+    * This read-check-write sequence relies on the wallet actor serializing callers; it is not a database CAS.
+    */
+  def writeUtxoSnapshotScanInvalidation(invalidation: UtxoSnapshotScanInvalidation): Try[Unit] =
+    validateUtxoSnapshotScanInvalidation(invalidation).flatMap { _ =>
+      readUtxoSnapshotScanInvalidationTry().flatMap {
+        case None =>
+          store.insert(UtxoSnapshotScanInvalidationKey, UtxoSnapshotScanInvalidationSerializer.toBytes(invalidation))
+        case Some(current) if current == invalidation =>
+          Success(())
+        case Some(current) =>
+          Failure(new IllegalStateException(
+            s"Conflicting UTXO snapshot invalidation: current=$current, requested=$invalidation"))
+      }
+    }
+
+  /**
+    * Clear snapshot recovery only when the current durable fence matches the expected lifecycle exactly.
+    * Both the fence and progress are removed together, so recovery never observes a cleared fence with stale progress.
+    */
+  def clearUtxoSnapshotScanRecovery(expected: UtxoSnapshotScanInvalidation): Try[Boolean] =
+    validateUtxoSnapshotScanInvalidation(expected).flatMap { _ =>
+      readUtxoSnapshotScanInvalidationTry().flatMap {
+        case Some(current) if current == expected =>
+          store.update(
+            Array.empty[Array[Byte]],
+            Array.empty[Array[Byte]],
+            Array(UtxoSnapshotScanInvalidationKey, UtxoSnapshotScanStatusKey)
+          ).map(_ => true)
+        case _ => Success(false)
+      }
+    }
+
+  /**
+    * Replace recovery progress with a fresh scan obligation only when the durable fence matches exactly.
+    * The status put and fence deletion share one LevelDB batch: after a successful registry reset, a crash can
+    * therefore reveal either the old fence or the fresh incomplete status, but never an unfenced empty obligation.
+    * This read-check-write sequence relies on the wallet actor serializing callers; it is not a database CAS.
+    */
+  def restartUtxoSnapshotScanRecovery(
+    expected: UtxoSnapshotScanInvalidation,
+    freshStatus: UtxoSnapshotScanStatus): Try[Boolean] =
+    validateUtxoSnapshotScanRecoveryRestart(expected, freshStatus).flatMap { _ =>
+      validateUtxoSnapshotRecoveryOrigin(expected, freshStatus).flatMap { _ =>
+        readUtxoSnapshotScanInvalidationTry().flatMap {
+          case Some(current) if current == expected =>
+            store.update(
+              Array(UtxoSnapshotScanStatusKey),
+              Array(UtxoSnapshotScanStatusSerializer.toBytes(freshStatus)),
+              Array(UtxoSnapshotScanInvalidationKey)
+            ).map(_ => true)
+          case _ => Success(false)
+        }
+      }
+    }
+
+  private def validateUtxoSnapshotScanStatus(status: UtxoSnapshotScanStatus): Try[Unit] = Try {
+    require(status != null, "UTXO snapshot scan status must not be null")
+    require(status.scanDefinition != null, "UTXO snapshot scan definition must not be null")
+    require(status.snapshotHeight >= 0, s"Invalid UTXO snapshot height ${status.snapshotHeight}")
+    require(status.manifestDepth >= 0, s"Invalid UTXO snapshot manifest depth ${status.manifestDepth}")
+    require(status.totalSubtrees > 0, s"Invalid UTXO snapshot part count ${status.totalSubtrees}")
+    require(status.nextSubtreeIndex >= 0 && status.nextSubtreeIndex <= status.totalSubtrees,
+      s"Invalid UTXO snapshot cursor ${status.nextSubtreeIndex}/${status.totalSubtrees}")
+    require(status.completed == (status.nextSubtreeIndex == status.totalSubtrees),
+      s"Inconsistent UTXO snapshot completion at ${status.nextSubtreeIndex}/${status.totalSubtrees}")
+  }
+
+  private def validateUtxoSnapshotScanInvalidation(invalidation: UtxoSnapshotScanInvalidation): Try[Unit] = Try {
+    require(invalidation.snapshotHeight >= 0, s"Invalid UTXO snapshot invalidation height ${invalidation.snapshotHeight}")
+  }
+
+  private def validateUtxoSnapshotWalletOrigin(origin: UtxoSnapshotWalletOrigin): Try[Unit] = Try {
+    require(origin != null, "UTXO snapshot wallet origin must not be null")
+    require(origin.scanDefinition != null, "UTXO snapshot wallet origin definition must not be null")
+    require(origin.snapshotHeight >= 0, s"Invalid UTXO snapshot wallet origin height ${origin.snapshotHeight}")
+  }
+
+  private def validateUtxoSnapshotRecoveryOrigin(
+    expected: UtxoSnapshotScanInvalidation,
+    freshStatus: UtxoSnapshotScanStatus): Try[Unit] =
+    readUtxoSnapshotWalletOriginTry().flatMap {
+      case None => Success(())
+      case Some(origin)
+        if origin.snapshotHeight == expected.snapshotHeight &&
+          origin.snapshotBlockId == expected.snapshotBlockId &&
+          origin.scanDefinition == freshStatus.scanDefinition => Success(())
+      case Some(origin) =>
+        Failure(new IllegalStateException(
+          s"UTXO snapshot recovery $expected conflicts with completed wallet origin $origin"))
+    }
+
+  private def validateUtxoSnapshotScanRecoveryRestart(
+    expected: UtxoSnapshotScanInvalidation,
+    freshStatus: UtxoSnapshotScanStatus): Try[Unit] =
+    validateUtxoSnapshotScanInvalidation(expected)
+      .flatMap(_ => validateUtxoSnapshotScanStatus(freshStatus))
+      .flatMap { _ =>
+        Try {
+          require(freshStatus.snapshotHeight == expected.snapshotHeight,
+            s"Fresh UTXO snapshot recovery height ${freshStatus.snapshotHeight} does not match ${expected.snapshotHeight}")
+          require(freshStatus.snapshotBlockId == expected.snapshotBlockId,
+            "Fresh UTXO snapshot recovery block id does not match the invalidation fence")
+          require(freshStatus.nextSubtreeIndex == 0,
+            s"Fresh UTXO snapshot recovery cursor must be zero, got ${freshStatus.nextSubtreeIndex}")
+          require(!freshStatus.completed, "Fresh UTXO snapshot recovery status must be incomplete")
+        }
+      }
 
   /**
     * Close wallet storage database
@@ -261,6 +446,8 @@ object WalletStorage {
   val ChangeAddressKey: Array[Byte] = noPrefixKey("change_address")
   val lastUsedScanIdKey: Array[Byte] = noPrefixKey("last_scan_id")
   val UtxoSnapshotScanStatusKey: Array[Byte] = noPrefixKey("utxo_snapshot_scan_status")
+  val UtxoSnapshotScanInvalidationKey: Array[Byte] = noPrefixKey("utxo_snapshot_scan_invalidation")
+  val UtxoSnapshotWalletOriginKey: Array[Byte] = noPrefixKey("utxo_snapshot_wallet_origin")
 
 
   /**

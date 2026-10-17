@@ -260,10 +260,22 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
       case ReadScans =>
         sender() ! ReadScansResponse(apps.values.toSeq)
 
-      case GenerateTransaction(_, _, _, _) =>
-        val input = inputGen.sample.value
-        val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(ergoBoxCandidateGen.sample.value))
-        sender() ! Success(tx)
+      case GenerateTransaction(_, _, _, sign, contextExtensions) =>
+        val baseInput = inputGen.sample.value
+        val ext = contextExtensions.headOption.getOrElse(baseInput.spendingProof.extension)
+        val input = baseInput.copy(spendingProof = sigma.interpreter.ProverResult(baseInput.spendingProof.proof, ext))
+        val outCandidate = ergoBoxCandidateGen.sample.value
+        if (sign) {
+          val tx = ErgoTransaction(IndexedSeq(input), IndexedSeq(outCandidate))
+          sender() ! Success(tx)
+        } else {
+          val utx = new org.ergoplatform.modifiers.mempool.UnsignedErgoTransaction(
+            IndexedSeq(new org.ergoplatform.UnsignedInput(input.boxId, ext)),
+            IndexedSeq.empty,
+            IndexedSeq(outCandidate)
+          )
+          sender() ! Success(utx)
+        }
 
       case SignTransaction(tx, secrets, hints, boxesToSpendOpt, dataBoxesOpt) =>
         val sc = ErgoStateContext.empty(settings.chainSettings, parameters)

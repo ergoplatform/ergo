@@ -132,6 +132,19 @@ class RepairAfterCorruptionSpecification extends ErgoCorePropertyTest with Optio
     history.historyStorage.contains(completeForkBlock.extension.id) shouldBe true
     history.bestFullBlockOpt.value.id shouldBe chain(4).id
     history.bestHeaderOpt.value.id shouldBe competing.last.id
+
+    // Even when section repair is unsafe on this fork, a lost selected-header
+    // height row must be recovered so section download can traverse the fork.
+    val forkHeight = completeForkBlock.header.height
+    val heightIdsKey = ByteArrayWrapper(Algos.hash(Ints.toByteArray(forkHeight)))
+    history.historyStorage.remove(Array(heightIdsKey), Array.empty[ModifierId]).get
+    history.headerIdsAtHeight(forkHeight) shouldBe Seq.empty
+
+    ErgoHistory.repairIfNeeded(history) shouldBe true
+
+    history.headerIdsAtHeight(forkHeight) shouldBe Seq(completeForkBlock.header.id)
+    history.historyStorage.contains(completeForkBlock.blockTransactions.id) shouldBe true
+    history.historyStorage.contains(completeForkBlock.extension.id) shouldBe true
   }
 
   property("repair should restore lost height -> header ids index") {

@@ -74,11 +74,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   override def writeMinimalFullBlockHeight(height: Height): Unit = {
     historyStorage.insert(
       indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
-      objectsToInsert = BlockSection.emptyArray) match {
-      case Success(_) => ()
-      case Failure(error) =>
-        throw CriticalSystemException("Could not persist minimal full block height").initCause(error)
-    }
+      objectsToInsert = BlockSection.emptyArray)
   }
 
   override def readMinimalFullBlockHeight(): Height = {
@@ -122,7 +118,10 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
           // If we verify transactions, we don't need to send this header to state.
           // If we don't and this is the best header, we should send this header to state to update state root hash
           val toProcess = if (nodeSettings.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
-          Success(ProgressInfo(None, Seq.empty, toProcess, toDownload(h)))
+          // Headers of a NiPoPoW proof are checked for full blocks downloading once the whole proof is applied
+          // (see PopowProcessor.applyPopowProof), as the proof prefix is sparse
+          val toDownloadIds = if (nipopowMode) Seq.empty else toDownload(h)
+          Success(ProgressInfo(None, Seq.empty, toProcess, toDownloadIds))
         case None =>
           Failure(CriticalSystemException("History should always have best header on header application"))
       }

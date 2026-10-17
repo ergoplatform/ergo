@@ -14,7 +14,6 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
@@ -32,6 +31,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 /**
   * Composite local view of the node
@@ -307,27 +307,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history().createPersistentProver(store, history(), height, blockId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
-            val prepared: Try[ErgoState[_]] = settings.nodeSettings.stateType match {
-              case StateType.Digest =>
-                ErgoStateReader.reconstructStateContextBeforeEpoch(history(), height, settings).flatMap { stateContext =>
-                  DigestState.fromSnapshot(VersionTag @@@ blockId, pp.digest, stateContext, store, settings)
-                }
-              case StateType.Utxo =>
-                Try(new UtxoState(pp, version = VersionTag @@@ blockId, store, settings))
-            }
-            prepared match {
-              case Success(newState) =>
-                Try(history().onUtxoSnapshotApplied(height)) match {
-                  case Success(_) =>
-                    updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
-                  case Failure(t) =>
-                    abortSnapshotStatePreparation(t)
-                }
-              case Failure(t) =>
-                abortSnapshotStatePreparation(t)
-            }
-          case Failure(t: UtxoSetSnapshotProcessor.StateWriteFailure) =>
-            abortSnapshotStatePreparation(t)
+            history().onUtxoSnapshotApplied(height)
+            val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
+            updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
           case Failure(t) =>
             log.error("UTXO set snapshot application failed: ", t)
         }
@@ -481,7 +463,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(readStateForStartup(history), history) match {
+    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -512,8 +494,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       // if ADProofs block section generated locally, just dump it into the database
       if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
         val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
-        history().dumpToDb(pmod.serializedId, bytes)
-        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
+        history().dumpToDb(pmod.serializedId, bytes) match {
+          case Success(_) =>
+            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
+          case Failure(e) if NonFatal(e) =>
+            log.error(s"Could not persist locally generated ADProof ${pmod.encodedId}", e)
+            context.system.eventStream.publish(RecoverableFailedModification(pmod.modifierTypeId, pmod.id, e))
+          case Failure(e) =>
+            log.error(s"Fatal error while persisting locally generated ADProof ${pmod.encodedId}", e)
+            ErgoApp.shutdownSystem()(context.system)
+            throw e
+        }
       } else {
 
         log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
@@ -627,43 +618,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history.bestHeaderAtHeight(snapshotHeight)
       })
 
-  private def abortSnapshotStatePreparation(error: Throwable): Unit = {
-    log.error("Failed to prepare the configured snapshot state; shutting down", error)
-    // Reconstruction has modified the store behind the old state. Do not serve it.
-    context.become(Actor.emptyBehavior)
-    ErgoApp.shutdownSystem()(context.system)
-  }
-
-  private def readStateForStartup(history: ErgoHistory): State = {
-    if (settings.nodeSettings.stateType == StateType.Digest &&
-        settings.nodeSettings.utxoSettings.utxoBootstrap &&
-        history.isUtxoSnapshotApplied && history.bestFullBlockOpt.isEmpty) {
-      val height = history.minimalFullBlockHeight - 1
-      // Ordinary pruning may set a floor below the first epoch, where snapshot context cannot be reconstructed.
-      val restored = DigestState.readOrdinaryGenesis(stateDir(settings), settings).flatMap {
-        case Some(genesis) => Success(genesis)
-        case None => for {
-          header <- Try(history.bestHeaderAtHeight(height).getOrElse {
-            throw new IllegalStateException("Applied snapshot has no canonical header")
-          })
-          stateContext <- ErgoStateReader.reconstructStateContextBeforeEpoch(history, height, settings)
-          state <- DigestState.readSnapshot(stateDir(settings), settings, idToVersion(header.id),
-            header.stateRoot, stateContext)
-        } yield state
-      }
-      restored match {
-        case Success(state) => state.asInstanceOf[State]
-        case Failure(error) =>
-          // A failed snapshot load must not fall through to genesis recreation.
-          Try(history.closeStorage()).failed.foreach(error.addSuppressed)
-          ErgoApp.shutdownSystem()(context.system)
-          throw error
-      }
-    } else {
-      ErgoState.readOrGenerate(settings).asInstanceOf[State]
-    }
-  }
-
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
       case (ErgoState.genesisStateVersion, None, _) =>
@@ -674,11 +628,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Success(stateIn)
       case (_, None, _) if isPreparedUtxoSnapshotState(stateIn, history) =>
         log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
-        history.markSnapshotStatePrepared(history.minimalFullBlockHeight - 1)
-        Success(stateIn)
-      case (_, None, _: DigestState) if isPreparedDigestSnapshotState(stateIn, history) =>
-        log.info(s"Prepared Digest snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
-        history.markSnapshotStatePrepared(history.minimalFullBlockHeight - 1)
         Success(stateIn)
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
@@ -705,19 +654,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => self ! lm))
         }
     }
-  }
-
-  private def isPreparedDigestSnapshotState(state: State, history: ErgoHistory): Boolean = {
-    val snapshotHeight = history.minimalFullBlockHeight - 1
-    ErgoNodeViewHolder.isPreparedDigestSnapshotState(
-      settings.nodeSettings.stateType == StateType.Digest && state.isInstanceOf[DigestState],
-      settings.nodeSettings.utxoSettings.utxoBootstrap,
-      history.isUtxoSnapshotApplied,
-      state.version,
-      state.rootDigest,
-      history.bestHeaderAtHeight(snapshotHeight),
-      state.store.get(ErgoStateReader.ContextKey),
-      ErgoStateReader.reconstructStateContextBeforeEpoch(history, snapshotHeight, settings).toOption.map(_.bytes))
   }
 
   /**
@@ -825,21 +761,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
 
 object ErgoNodeViewHolder {
-
-  private[nodeView] def isPreparedDigestSnapshotState(
-      stateIsDigest: Boolean,
-      utxoBootstrap: => Boolean,
-      snapshotApplied: => Boolean,
-      stateVersion: VersionTag,
-      stateRoot: Array[Byte],
-      snapshotHeaderOpt: => Option[Header],
-      storedContext: => Option[Array[Byte]],
-      expectedContext: => Option[Array[Byte]]): Boolean =
-    stateIsDigest &&
-      utxoBootstrap &&
-      snapshotApplied &&
-      snapshotHeaderOpt.exists(matchesPreparedUtxoSnapshotHeader(stateVersion, stateRoot, _)) &&
-      storedContext.exists(stored => expectedContext.exists(_.sameElements(stored)))
 
   private[nodeView] def isPreparedUtxoSnapshotState(
       stateIsUtxo: Boolean,

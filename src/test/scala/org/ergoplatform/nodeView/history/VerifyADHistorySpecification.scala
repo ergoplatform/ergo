@@ -415,7 +415,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestFullBlockIdOpt shouldBe Some(first.id)
 
     val (recovered, progress) = history.reportModifierIsInvalid(first.header,
-      ProgressInfo[PM](None, Seq(first), Seq.empty, Seq.empty)).get
+      ProgressInfo[PM](Some(PreGenesisHeader.id), Seq(first), Seq.empty, Seq.empty)).get
     history = recovered
     progress.branchPoint shouldBe Some(PreGenesisHeader.id)
     progress.toRemove.map(_.id) shouldBe Seq(first.id)
@@ -442,7 +442,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestFullBlockIdOpt shouldBe Some(firstChain.last.id)
 
     val (recovered, progress) = history.reportModifierIsInvalid(first.header,
-      ProgressInfo[PM](None, firstChain, Seq.empty, Seq.empty)).get
+      ProgressInfo[PM](Some(PreGenesisHeader.id), firstChain, Seq.empty, Seq.empty)).get
     history = recovered
     progress.branchPoint shouldBe Some(PreGenesisHeader.id)
     progress.toRemove.map(_.id) shouldBe firstChain.map(_.id)
@@ -461,7 +461,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestFullBlockIdOpt shouldBe Some(chain.last.id)
 
     val (recovered, progress) = history.reportModifierIsInvalid(chain.last.header,
-      ProgressInfo[PM](None, Seq(chain.last), Seq.empty, Seq.empty)).get
+      ProgressInfo[PM](Some(chain(1).id), Seq(chain.last), Seq.empty, Seq.empty)).get
     history = recovered
     progress.toRemove.map(_.id) shouldBe Seq(chain.last.id)
     history.bestFullBlockIdOpt shouldBe None

@@ -936,4 +936,24 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
   }
 
+  it should "return strict IndexedSeq collections instead of lazy Stream from reader methods (issue #1551)" in {
+    val txs = (1 to 5).map(_ => invalidErgoTransactionGen.sample.get)
+      .map(tx => UnconfirmedTransaction(tx, None))
+    val pool = ErgoMemPool.empty(settings).put(txs)
+
+    pool.getAll shouldBe a[ IndexedSeq[_] ]
+    pool.getAll should not be a[ Stream[_] ]
+
+    pool.getAllPrioritized shouldBe a[ IndexedSeq[_] ]
+    pool.getAllPrioritized should not be a[ Stream[_] ]
+
+    pool.take(3) shouldBe a[ IndexedSeq[_] ]
+    pool.take(3) should not be a[ Stream[_] ]
+    pool.take(0) shouldBe empty
+
+    pool.weightedTransactionIds(3) shouldBe a[ IndexedSeq[_] ]
+    pool.weightedTransactionIds(3) should not be a[ Stream[_] ]
+    pool.weightedTransactionIds(0) shouldBe empty
+  }
+
 }

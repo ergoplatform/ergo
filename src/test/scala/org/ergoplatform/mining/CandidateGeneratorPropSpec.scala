@@ -431,4 +431,37 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     }
     avgMiningTime shouldBe 200.millis
   }
+
+  property("collectTxs does not duplicate fee transaction when a zero-fee transaction follows a fee-paying transaction") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper
+    val us       = createUtxoState(bh, parameters)
+    val minValue = BoxUtils.sufficientAmount(parameters)
+    val inputs   = bh.boxes.values.toIndexedSeq.filter(_.value >= minValue * 2).takeRight(4)
+    val feePayingTx = validTransactionFromBoxes(IndexedSeq(inputs.head), rnd, issueNew = false, feeProp)
+    val zeroFeeTx   = validTransactionFromBoxes(IndexedSeq(inputs(1)), rnd, issueNew = false)
+
+    val h = validFullBlock(None, us, bh, rnd).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val (collected, invalid) = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      parameters.maxBlockCost,
+      parameters.maxBlockSize,
+      us,
+      upcomingContext,
+      Vector(feePayingTx, zeroFeeTx)
+    )
+
+    invalid shouldBe empty
+    collected.size shouldBe 3
+    collected.map(_.id).distinct.size shouldBe 3
+  }
 }

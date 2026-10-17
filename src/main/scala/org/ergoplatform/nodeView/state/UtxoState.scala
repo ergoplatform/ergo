@@ -47,6 +47,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
     persistentProver.digest
   }
 
+  /** After a `Failure`, this receiver must not be reused because the prover may have been mutated before a digest mismatch was detected. */
   override def rollbackTo(version: VersionTag): Try[UtxoState] = persistentProver.synchronized {
     val p = persistentProver
     log.info(s"Rollback UtxoState to version ${Algos.encoder.encode(version)}")
@@ -54,6 +55,7 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
+          require(p.digest.sameElements(rootHash), "Unexpected root digest after rollback")
           new UtxoState(p, version, store, ergoSettings)
         }
         rollbackResult

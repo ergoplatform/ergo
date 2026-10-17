@@ -19,7 +19,7 @@ import scorex.utils.{Random => RandomBytes}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 class VersionedLDBAVLStorageSpecification
   extends AnyPropSpec
@@ -29,6 +29,89 @@ class VersionedLDBAVLStorageSpecification
 
   override protected val KL = 32
   override protected val VL = 8
+
+  property("rollback rejects an unavailable version without changing the prover root") {
+    val store = createVersionedStore()
+    try {
+      val prover = createPersistentProver(createVersionedStorage(store))
+      val originalDigest = prover.digest.clone()
+      val unavailable = ADDigest @@ (Blake2b256("unavailable rollback version") :+ 0.toByte)
+      store.rollbackVersions().exists(_.sameElements(unavailable)) shouldBe false
+
+      val result = prover.rollback(unavailable)
+
+      result.isFailure shouldBe true
+      result.failed.get shouldBe a[NoSuchElementException]
+      prover.digest shouldEqual originalDigest
+      store.lastVersionID.get shouldEqual originalDigest
+    } finally store.close()
+  }
+
+  for (throwsFailure <- Seq(false, true)) {
+    property(s"rollback preserves the original ${if (throwsFailure) "thrown" else "returned"} store failure") {
+      val failure = new IllegalStateException("local rollback failure")
+      val store = new LDBVersionedStore(getRandomTempDir, initialKeepVersions = 10) {
+        override def rollbackTo(versionID: VersionID): Try[Unit] =
+          if (throwsFailure) throw failure else Failure(failure)
+      }
+      try {
+        val storage = createVersionedStorage(store)
+        val prover = createPersistentProver(storage)
+        val originalDigest = prover.digest.clone()
+        val requested = ADDigest @@ (Blake2b256("another rollback version") :+ 0.toByte)
+
+        val result = storage.rollback(requested)
+
+        result.isFailure shouldBe true
+        result.failed.get should be theSameInstanceAs failure
+        prover.rollback(requested).failed.get should be theSameInstanceAs failure
+        prover.digest shouldEqual originalDigest
+        store.lastVersionID.get shouldEqual originalDigest
+      } finally store.close()
+    }
+  }
+
+  property("rollback to the current version skips the store rollback") {
+    var rollbacks = 0
+    val store = new LDBVersionedStore(getRandomTempDir, initialKeepVersions = 10) {
+      override def rollbackTo(versionID: VersionID): Try[Unit] = {
+        rollbacks += 1
+        Failure(new IllegalStateException("current version needs no rollback"))
+      }
+    }
+    try {
+      val prover = createPersistentProver(createVersionedStorage(store))
+      val current = ADDigest @@ store.lastVersionID.get
+      prover.rollback(current).get
+      rollbacks shouldBe 0
+      prover.digest shouldEqual current
+    } finally store.close()
+  }
+
+  property("rollback restores the requested root and contents after reopening") {
+    val dir = getRandomTempDir
+    val store = new LDBVersionedStore(dir, initialKeepVersions = 10)
+    val key = ADKey @@ Blake2b256("rollback reopen key").take(KL)
+    val originalDigest = try {
+      val prover = createPersistentProver(createVersionedStorage(store))
+      val original = prover.digest.clone()
+      prover.performOneOperation(Insert(key, ADValue @@ Longs.toByteArray(1L))).get
+      prover.generateProofAndUpdateStorage()
+      prover.digest.sameElements(original) shouldBe false
+      prover.rollback(ADDigest @@ original).get
+      prover.digest shouldEqual original
+      prover.unauthenticatedLookup(key) shouldBe None
+      original
+    } finally store.close()
+
+    val reopened = new LDBVersionedStore(dir, initialKeepVersions = 10)
+    try {
+      val prover = createPersistentProver(createVersionedStorage(reopened))
+      prover.digest shouldEqual originalDigest
+      prover.unauthenticatedLookup(key) shouldBe None
+      prover.checkTree(postProof = true)
+    } finally reopened.close()
+  }
 
   def kvGen: Gen[(ADKey, ADValue)] = for {
     key <- Gen.listOfN(KL, Arbitrary.arbitrary[Byte]).map(_.toArray) suchThat

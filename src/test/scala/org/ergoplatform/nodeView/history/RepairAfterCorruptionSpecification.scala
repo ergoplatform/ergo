@@ -4,6 +4,7 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.HeaderChain
+import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
@@ -161,6 +162,16 @@ class RepairAfterCorruptionSpecification extends ErgoCorePropertyTest with Optio
     ErgoHistory.repairIfNeeded(history) shouldBe true
 
     history.headerIdsAtHeight(lostHeight) shouldBe Seq(chain(lostHeight - 1).header.id)
+  }
+
+  property("database repair read should reject a header stored under another key") {
+    val (history, chain) = historyWithGap(fullBlocks = 5, headers = 8)
+    val selected = chain.last.header
+    val foreign = chain(6).header
+    selected.id should not be foreign.id
+    history.historyStorage.insert(selected.serializedId, HistoryModifierSerializer.toBytes(foreign)).get
+
+    history.historyStorage.modifierByIdFromDb(selected.id) shouldBe None
   }
 
   property("repair should truncate headers chain with corrupted header record") {

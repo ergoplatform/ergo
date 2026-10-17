@@ -38,9 +38,11 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
   val prefix = "/transactions"
+  val maxBatchItems = 16384
 
   val restApiSettings = RESTApiSettings(new InetSocketAddress("localhost", 8080), None, None, 10.seconds, None)
   val route: Route = TransactionsApiRoute(utxoReadersRef, nodeViewRef, settings).route
+  val sealedRoute: Route = Route.seal(route)
 
   val inputBox: ErgoBox = utxoState.takeBoxes(1).head
   val input = Input(inputBox.id, emptyProverResult)
@@ -158,6 +160,36 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
   }
 
+  it should "reject invalid unconfirmed pagination parameters" in {
+    Get(prefix + s"/unconfirmed?offset=-1") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/unconfirmed?limit=-1") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/unconfirmed?limit=${maxBatchItems + 1}") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "reject invalid unconfirmed box and token ids" in {
+    Get(prefix + s"/unconfirmed/inputs/byBoxId/not-hex") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/unconfirmed/inputs/byBoxId/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/unconfirmed/outputs/byBoxId/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/unconfirmed/outputs/byTokenId/not-hex") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/unconfirmed/outputs/byTokenId/00") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
   it should "return unconfirmed tx by output ergoTree from mempool" in {
     val searchedBox = txs.head.outputs.head.ergoTree.bytesHex
     Post(prefix + s"/unconfirmed/byErgoTree", searchedBox) ~> route ~> check {
@@ -198,6 +230,13 @@ class TransactionApiRouteSpec extends AnyFlatSpec
   it should "return unconfirmed tx by absent id from mempool" in {
     Get(prefix + s"/unconfirmed/byTransactionId/$absentModifierId") ~> route ~> check {
       status shouldBe StatusCodes.NotFound
+    }
+  }
+
+  it should "reject oversized unconfirmed transaction id batch requests" in {
+    val tooManyIds = List.fill(maxBatchItems + 1)(absentModifierId)
+    Post(prefix + s"/unconfirmed/byTransactionIds", tooManyIds.asJson) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 
@@ -384,6 +423,54 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     Get(prefix + s"/unconfirmed/byTransactionId/${tx.id}") ~> costedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("size").as[Int] shouldEqual Right(tx.size)
+    }
+  }
+
+  it should "reject invalid fee estimation parameters" in {
+    Get(prefix + s"/poolHistogram?bins=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/poolHistogram?maxtime=-1") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/getFee?waitTime=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/getFee?waitTime=-1") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/getFee?txSize=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/waitTime?txSize=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/waitTime?fee=-1") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "put all transactions in the overflow bin when maxtime is zero" in {
+    Get(prefix + "/poolHistogram?bins=2&maxtime=0") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val bins = responseAs[Json].asArray.get
+      bins.size shouldBe 3
+      bins.take(2).foreach(_.hcursor.get[Int]("nTxns") shouldBe Right(0))
+      bins.last.hcursor.get[Int]("nTxns") shouldBe Right(memPool.size)
+    }
+  }
+
+  it should "accept fee estimation waits beyond the histogram range" in {
+    val lastBinWait = 59
+    val expected = Get(prefix + s"/getFee?waitTime=$lastBinWait") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json]
+    }
+    Seq(2000, Int.MaxValue).foreach { waitTime =>
+      Get(prefix + s"/getFee?waitTime=$waitTime") ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[Json] shouldBe expected
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.pattern.{StatusReply, ask}
+import akka.pattern.{AskTimeoutException, StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
@@ -10,7 +10,9 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
+  ChangedHistory, ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification
+}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
@@ -36,6 +38,8 @@ import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 
+import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
@@ -1446,6 +1450,150 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     senderProbe.expectNoMessage(2.seconds)
     viewHolderProbe.expectNoMessage(500.millis)
 
+    system.terminate()
+  }
+
+  it should "stop an expired candidate ask and coalesce live retries until the history tip catches up" in new TestKit(
+    ActorSystem()
+  ) {
+    val testDir = s"${defaultSettings.directory}-expired-ask-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val liveSenderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, _) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val staleHistory = historyWithBestFullBlock(Seq(block1))
+    val alignedHistory = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+    val attempts = new AtomicInteger(0)
+    val trackedState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def withTransactions(txs: Seq[ErgoTransaction]): UtxoState = {
+        attempts.incrementAndGet()
+        super.withTransactions(txs)
+      }
+    }
+
+    val readers = Readers(staleHistory, trackedState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    // The startup request has no reply sender and must not create a retry loop.
+    awaitAssert(assert(attempts.get() >= 1), 3.seconds, 100.millis)
+    attempts.set(0)
+
+    val expiredAsk = candidateGenerator.askWithStatus(
+      GenerateCandidate(Seq.empty, reply = true, forced = false,
+        retryDeadline = Some(200.millis.fromNow))
+    )(Timeout(200.millis))
+    intercept[AskTimeoutException] {
+      Await.result(expiredAsk, 2.seconds)
+    }
+
+    awaitAssert(assert(attempts.get() >= 1), 2.seconds, 100.millis)
+    val attemptsAtExpiry = attempts.get()
+    viewHolderProbe.expectNoMessage(1200.millis)
+    attempts.get() shouldBe attemptsAtExpiry // the expired ask has no pending retry
+
+    val internalRequest = GenerateCandidate(Seq.empty, reply = true, forced = false)
+    (1 to 5).foreach(_ => candidateGenerator.tell(internalRequest, liveSenderProbe.ref))
+    awaitAssert(assert(attempts.get() > attemptsAtExpiry), 2.seconds, 100.millis)
+    candidateGenerator ! ChangedHistory(alignedHistory)
+    liveSenderProbe.expectMsgPF(3.seconds) {
+      case StatusReply.Success(_: Candidate) => ()
+    }
+    liveSenderProbe.expectNoMessage(1500.millis) // duplicate polls have one eventual reply
+    val attemptsAtRecovery = attempts.get()
+
+    candidateGenerator.tell(internalRequest, liveSenderProbe.ref)
+    liveSenderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(_: Candidate) => ()
+    }
+    attempts.get() shouldBe attemptsAtRecovery // the successful candidate is cached
+
+    system.terminate()
+  }
+
+  it should "recover a deadline-bearing candidate ask before its timeout despite a longer generation delay" in new TestKit(
+    ActorSystem()
+  ) {
+    val testDir = s"${defaultSettings.directory}-deadline-recovery-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, _) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val staleHistory = historyWithBestFullBlock(Seq(block1))
+    val alignedHistory = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+    val attempts = new AtomicInteger(0)
+    val trackedState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def withTransactions(txs: Seq[ErgoTransaction]): UtxoState = {
+        attempts.incrementAndGet()
+        super.withTransactions(txs)
+      }
+    }
+
+    val readers = Readers(staleHistory, trackedState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    awaitAssert(assert(attempts.get() >= 1), 3.seconds, 100.millis)
+    attempts.set(0)
+
+    // The initial generation delay is one second, longer than this ask's deadline.
+    val askTimeout = Timeout(900.millis)
+    val candidateF = candidateGenerator.askWithStatus(
+      GenerateCandidate(Seq.empty, reply = true, forced = false,
+        retryDeadline = Some(askTimeout.duration.fromNow))
+    )(askTimeout)
+    awaitAssert(assert(attempts.get() >= 1), 300.millis, 20.millis)
+    candidateGenerator ! ChangedHistory(alignedHistory)
+
+    Await.result(candidateF, 2.seconds) shouldBe a[Candidate]
+    attempts.get() should be >= 2
     system.terminate()
   }
 

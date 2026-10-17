@@ -72,7 +72,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
   // todo: unite p2sAddress and p2shAddress, https://github.com/ergoplatform/ergo/issues/2213
   private def p2sAddressR: Route = (path("p2sAddress") & post & entity(as[CompileRequest])) { compileRequest =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys).map(_.addresses), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
         val scriptVersion = Header.scriptFromBlockVersion(bv)
         val treeVersion = compileRequest.treeVersion
@@ -88,7 +88,7 @@ case class ScriptApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSettings)
 
 
   private def p2shAddressR: Route = (path("p2shAddress") & post & entity(as[CompileRequest])) { compileRequest =>
-    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
+    withWalletAndStateOp(r => (r.w.publicKeys(0, loadMaxKeys).map(_.addresses), r.s.stateContext.blockVersion)) { case (addrsF, bv) =>
       onSuccess(addrsF) { addrs =>
         val scriptVersion = Header.scriptFromBlockVersion(bv)
         val treeVersion = compileRequest.treeVersion

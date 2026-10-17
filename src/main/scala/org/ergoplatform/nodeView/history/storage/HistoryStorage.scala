@@ -108,14 +108,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     }
 
   def getExtraIndex(id: ModifierId): Option[ExtraIndex] = withExtraCacheReadLock {
-    Option(extraCache.getIfPresent(id)) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
+    Option(extraCache.getIfPresent(id)).filter(_.id == id) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
       ExtraIndexSerializer.parseBytesTry(bytes) match {
-        case Success(pm) =>
+        case Success(pm) if pm.id == id =>
           log.trace(s"Cache miss for existing index $id")
           if(!pm.isInstanceOf[Segment[_]]){
             extraCache.put(pm.id, pm) // cache non-segment objects
           }
           Some(pm)
+        case Success(pm) =>
+          log.warn(s"Index stored under ${encoder.encode(id)} has different id ${pm.encodedId}")
+          None
         case Failure(_) =>
           log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
           None

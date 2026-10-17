@@ -117,9 +117,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           (req2, tx2)
         }
       log.info(s"Generated transaction $tx2")
-      wallet.scanOffchain(tx2)
 
       eventually {
+        // re-publish each attempt so the wallet's on-demand view keeps tx2's inputs marked as spent
+        applyToMempool(Seq(tx2))
         tx2.inputs.size should be < tx.outputs.size
         // trying to create a new transaction
         val tx3 = await(wallet.generateTransaction(req2)).get
@@ -449,7 +450,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       val balance1 = settings.walletSettings.dustLimit.getOrElse(1000000L) + 1
       val box1 = IndexedSeq(new ErgoBoxCandidate(balance1, pubKey, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInputs, box1))
+      val tx1 = ErgoTransaction(fakeInputs, box1)
+      applyToMempool(Seq(tx1))
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second, 100.millis)
       eventually {
@@ -460,7 +462,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       val balance2 = settings.walletSettings.dustLimit.getOrElse(1000000L) + 1
       val box2 = IndexedSeq(new ErgoBoxCandidate(balance2, pubKey, startHeight, randomNewAsset.toColl))
-      wallet.scanOffchain(ErgoTransaction(fakeInputs, IndexedSeq(), box2))
+      val tx2 = ErgoTransaction(fakeInputs, IndexedSeq(), box2)
+      applyToMempool(Seq(tx1, tx2))
 
       eventually {
         val bs2 = getBalancesWithUnconfirmed
@@ -474,7 +477,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val tx = makeGenesisTx(address.pubkey, randomNewAsset)
-      wallet.scanOffchain(tx)
+      applyToMempool(Seq(tx))
       val boxesToSpend = boxesAvailable(tx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
       log.info(s"Balance to spent: $balanceToSpend")
@@ -490,7 +493,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           assetsAfterSpending should not be empty
           (spendingTx, balanceToReturn, assetsAfterSpending)
         }
-      wallet.scanOffchain(spendingTx)
+      applyToMempool(Seq(tx, spendingTx))
       eventually {
         val totalAfterSpending = getBalancesWithUnconfirmed
 
@@ -505,7 +508,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     withFixture { implicit w =>
       val address = getPublicKeys.head
       val tx = makeGenesisTx(address.pubkey, randomNewAsset)
-      wallet.scanOffchain(tx)
+      applyToMempool(Seq(tx))
       val boxesToSpend = boxesAvailable(tx, address.pubkey)
       val balanceToSpend = balanceAmount(boxesToSpend)
       implicit val patienceConfig: PatienceConfig = PatienceConfig((offchainScanTime(tx) * 3).millis, 100.millis)
@@ -520,8 +523,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           assets should not be empty
           (spendingTx, totalBalance, balanceToReturn, assets)
         }
-      wallet.scanOffchain(Seq(spendingTx, spendingTx))
-      wallet.scanOffchain(spendingTx)
+      // registering the spending transaction several times must be idempotent (the pool dedupes by tx id)
+      applyToMempool(Seq(tx, spendingTx, spendingTx))
 
       log.info(s"Total with unconfirmed balance: $totalBalance")
       log.info(s"Balance to spent: $balanceToSpend")
@@ -559,8 +562,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
           log.info(s"Total with unconfirmed balance before spending: $totalBalance")
           (spendingTx, assets)
         }
-      wallet.scanOffchain(spendingTx)
       eventually {
+        applyToMempool(Seq(spendingTx))
         val confirmedAfterSpending = getConfirmedBalances.walletBalance
         val totalAfterSpending = getBalancesWithUnconfirmed
 
@@ -569,7 +572,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
         confirmedAfterSpending shouldBe sumBalance
         totalAfterSpending.walletBalance shouldBe balanceToReturn
-        totalAfterSpending.walletAssetBalances shouldBe assets
+        totalAfterSpending.walletAssetBalances.toMap shouldBe assets.toMap
       }
     }
   }
@@ -700,7 +703,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     withFixture { implicit w =>
       val pubKey = getPublicKeys.head.pubkey
       val tx = makeGenesisTx(pubKey, randomNewAsset)
-      wallet.scanOffchain(tx)
+      applyToMempool(Seq(tx))
       implicit val patienceConfig: PatienceConfig = PatienceConfig(offchainScanTime(tx).millis, 100.millis)
       val (initialBalance, sumBalance, sumAssets) =
         eventually {
@@ -763,9 +766,11 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       val balanceToReturn = randomLong(balanceAmount(boxesToSpend))
       val spendingTx = makeSpendingTx(boxesToSpend, address, balanceToReturn)
-      wallet.scanOffchain(spendingTx)
 
       eventually {
+        // re-publish each attempt so the wallet's on-demand view reflects the unconfirmed spend
+        // regardless of any ChangedMempool the node emitted while the blocks above were applied
+        applyToMempool(Seq(spendingTx))
         val confirmedAfterSpending = getConfirmedBalances.walletBalance
         val totalAfterSpending = getBalancesWithUnconfirmed.walletBalance
 
@@ -778,6 +783,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
       wallet.rollback(initialState.version)
       eventually {
+        // clear the unconfirmed spend, mirroring the node re-validating the pool after a rollback
+        applyToMempool(Seq.empty)
         val balanceAfterRollback = getConfirmedBalances.walletBalance
         val totalAfterRollback = getBalancesWithUnconfirmed.walletBalance
 
@@ -785,7 +792,10 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
         balanceAfterRollback shouldBe initialBalance
-        totalAfterRollback shouldBe balanceToReturn
+        // The wallet now derives the unconfirmed view from the mempool on demand, so after a rollback
+        // it recomputes to the restored confirmed balance instead of lingering on the pre-rollback
+        // off-chain snapshot (which the former offChainRegistry never refreshed, see the #1180 TODO).
+        totalAfterRollback shouldBe initialBalance
       }
     }
   }
@@ -835,8 +845,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
 
         confirmedAfterRollback.walletBalance shouldBe initialBalance
         confirmedAfterRollback.walletAssetBalances shouldBe empty
-        totalAfterRollback.walletBalance shouldBe balanceToSpend
-        totalAfterRollback.walletAssetBalances shouldBe initialAssets
+        // unconfirmed view recomputes on demand to the restored confirmed state after rollback (#1180)
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }
@@ -865,23 +875,21 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         }
       wallet.scanPersistent(block)
 
-      val confirmedBeforeRollback =
-        eventually {
-          val historyHeight = getHistory.headersHeight
+      eventually {
+        val historyHeight = getHistory.headersHeight
 
-          val confirmedBeforeRollback = getConfirmedBalances
-          val totalBeforeRollback = getBalancesWithUnconfirmed
+        val confirmedBeforeRollback = getConfirmedBalances
+        val totalBeforeRollback = getBalancesWithUnconfirmed
 
-          log.info(s"Balance to spend: $sumBalance")
-          log.info(s"History height: $historyHeight")
-          log.info(s"Confirmed balance: $confirmedBeforeRollback")
-          log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
+        log.info(s"Balance to spend: $sumBalance")
+        log.info(s"History height: $historyHeight")
+        log.info(s"Confirmed balance: $confirmedBeforeRollback")
+        log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
 
-          confirmedBeforeRollback.walletBalance shouldBe 0L
-          confirmedBeforeRollback.walletAssetBalances shouldBe empty
-          totalBeforeRollback shouldBe confirmedBeforeRollback
-          confirmedBeforeRollback
-        }
+        confirmedBeforeRollback.walletBalance shouldBe 0L
+        confirmedBeforeRollback.walletAssetBalances shouldBe empty
+        totalBeforeRollback shouldBe confirmedBeforeRollback
+      }
 
       wallet.rollback(initialState.version)
       eventually {
@@ -891,8 +899,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
         confirmedAfterRollback shouldBe initialSnapshot
-        totalAfterRollback.walletBalance shouldBe confirmedBeforeRollback.walletBalance
-        totalAfterRollback.walletAssetBalances shouldBe confirmedBeforeRollback.walletAssetBalances
+        // unconfirmed view recomputes on demand to the restored confirmed state after rollback (#1180)
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }
@@ -929,21 +937,19 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         }
       wallet.scanPersistent(block)
 
-      val totalBeforeRollback =
-        eventually {
-          val historyHeight = getHistory.headersHeight
-          val confirmedBeforeRollback = getConfirmedBalances
-          val totalBeforeRollback = getBalancesWithUnconfirmed
-          log.info(s"History height: $historyHeight")
-          log.info(s"Confirmed balance: $confirmedBeforeRollback")
-          log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
-          confirmedBeforeRollback.walletBalance should be > 0L
-          confirmedBeforeRollback.walletBalance shouldBe balanceToReturn
-          confirmedBeforeRollback.walletAssetBalances should have size 2
-          totalBeforeRollback.walletBalance shouldBe balanceToReturn
-          totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
-          totalBeforeRollback
-        }
+      eventually {
+        val historyHeight = getHistory.headersHeight
+        val confirmedBeforeRollback = getConfirmedBalances
+        val totalBeforeRollback = getBalancesWithUnconfirmed
+        log.info(s"History height: $historyHeight")
+        log.info(s"Confirmed balance: $confirmedBeforeRollback")
+        log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
+        confirmedBeforeRollback.walletBalance should be > 0L
+        confirmedBeforeRollback.walletBalance shouldBe balanceToReturn
+        confirmedBeforeRollback.walletAssetBalances should have size 2
+        totalBeforeRollback.walletBalance shouldBe balanceToReturn
+        totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
+      }
       wallet.rollback(initialState.version)
 
       eventually {
@@ -953,8 +959,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
         confirmedAfterRollback shouldBe initialSnapshot
         confirmedAfterRollback.walletAssetBalances.toMap shouldBe asset1Map
-        totalAfterRollback.walletBalance shouldBe balanceToReturn
-        totalAfterRollback.walletAssetBalances shouldBe totalBeforeRollback.walletAssetBalances
+        // unconfirmed view recomputes on demand to the restored confirmed state after rollback (#1180)
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }
@@ -988,23 +994,21 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       wallet.scanPersistent(block)
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
-      val totalBeforeRollback =
-        eventually {
-          val historyHeight = getHistory.headersHeight
+      eventually {
+        val historyHeight = getHistory.headersHeight
 
-          val confirmedBeforeRollback = getConfirmedBalances
-          val totalBeforeRollback = getBalancesWithUnconfirmed
-          log.info(s"History height: $historyHeight")
-          log.info(s"Confirmed balance: $confirmedBeforeRollback")
-          log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
+        val confirmedBeforeRollback = getConfirmedBalances
+        val totalBeforeRollback = getBalancesWithUnconfirmed
+        log.info(s"History height: $historyHeight")
+        log.info(s"Confirmed balance: $confirmedBeforeRollback")
+        log.info(s"Total with unconfirmed balance: $totalBeforeRollback")
 
-          confirmedBeforeRollback.walletBalance shouldBe balanceToReturn
-          confirmedBeforeRollback.walletAssetBalances should have size 2
+        confirmedBeforeRollback.walletBalance shouldBe balanceToReturn
+        confirmedBeforeRollback.walletAssetBalances should have size 2
 
-          totalBeforeRollback.walletBalance shouldBe confirmedBeforeRollback.walletBalance
-          totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
-          totalBeforeRollback
-        }
+        totalBeforeRollback.walletBalance shouldBe confirmedBeforeRollback.walletBalance
+        totalBeforeRollback.walletAssetBalances.toMap shouldBe confirmedBeforeRollback.walletAssetBalances.toMap
+      }
       wallet.rollback(initialState.version)
 
       eventually {
@@ -1015,8 +1019,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
         log.info(s"Total with unconfirmed balance after rollback: $totalAfterRollback")
 
         confirmedAfterRollback.walletBalance shouldBe initialBalance
-        totalAfterRollback.walletBalance shouldBe balanceToReturn
-        totalAfterRollback.walletAssetBalances shouldBe totalBeforeRollback.walletAssetBalances
+        // unconfirmed view recomputes on demand to the restored confirmed state after rollback (#1180)
+        totalAfterRollback shouldBe confirmedAfterRollback
       }
     }
   }

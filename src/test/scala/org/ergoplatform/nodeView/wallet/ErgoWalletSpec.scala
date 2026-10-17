@@ -1163,4 +1163,57 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
     }
   }
 
+  property("wallet initialization should not rescan blockchain from height 0, unlike wallet restoration") {
+    val uninitializedSettings = settings.copy(
+      walletSettings = settings.walletSettings.copy(
+        testMnemonic = None,
+        secretStorage = settings.walletSettings.secretStorage.copy(
+          secretDir = java.nio.file.Files.createTempDirectory("wallet-spec-").toFile.getAbsolutePath
+        )
+      )
+    )
+    implicit val w: WalletFixture = new WalletFixture(uninitializedSettings, parameters, getCurrentView(_).vault)
+    try {
+      implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
+      val genesisBlock = makeGenesisBlock(defaultMinerPk)
+      applyBlock(genesisBlock) shouldBe 'success
+      wallet.scanPersistent(genesisBlock)
+
+      eventually {
+        getCurrentState.stateContext.currentHeight shouldBe 1
+        val statusBeforeInit = await(wallet.getWalletStatus)
+        statusBeforeInit.initialized shouldBe false
+        statusBeforeInit.height shouldBe 0
+      }
+
+      val pass = org.ergoplatform.sdk.SecretString.create("test-pass")
+      val initTry = await(wallet.initWallet(pass, None))
+      initTry.isSuccess shouldBe true
+
+      val newAddress = eventually {
+        val statusAfterInit = await(wallet.getWalletStatus)
+        statusAfterInit.initialized shouldBe true
+        statusAfterInit.unlocked shouldBe true
+        statusAfterInit.height shouldBe 1
+        val keys = getPublicKeys
+        keys should not be empty
+        keys.head
+      }
+
+      // Scan block 2 paying to the newly initialized wallet; it should scan block 2 directly without rescanning from 0
+      val genesisBoxes = boxesAvailable(genesisBlock, defaultMinerPk)
+      val amountToNewWallet = balanceAmount(genesisBoxes)
+      val txToNewWallet = makeTx(genesisBoxes, emptyProverResult, amountToNewWallet, newAddress.script)
+      val block2 = makeNextBlock(getUtxoState, Seq(txToNewWallet))
+      wallet.scanPersistent(block2)
+
+      eventually {
+        await(wallet.getWalletStatus).height shouldBe 2
+        getConfirmedBalances.walletBalance shouldBe amountToNewWallet
+      }
+    } finally {
+      w.stop()
+    }
+  }
+
 }

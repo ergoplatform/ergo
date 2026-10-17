@@ -370,4 +370,37 @@ class VersionedLDBAVLStorageSpecification
     }
   }
 
+  property("ProverNodeSerializer.toBytes matches writer serialization and round-trips") {
+    val prover = createPersistentProver()
+    forAll(kvGen, kvGen) { case ((k1, v1), (k2, v2)) =>
+      whenever(!k1.sameElements(k2)) {
+        prover.performOneOperation(Insert(k1, v1))
+        prover.performOneOperation(Insert(k2, v2))
+        prover.generateProofAndUpdateStorage()
+
+        val root = prover.avlProver.topNode
+        val serializer = VersionedLDBAVLStorage.noStoreSerializer
+
+        def checkNode(node: ProverNodes[Digest32]): Unit = {
+          val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+          serializer.serialize(node, writer)
+          val expectedBytes = writer.result().toBytes
+          val actualBytes = serializer.toBytes(node)
+          actualBytes.sameElements(expectedBytes) shouldBe true
+
+          val parsed = serializer.parseBytes(actualBytes)
+          serializer.toBytes(parsed).sameElements(expectedBytes) shouldBe true
+        }
+
+        checkNode(root)
+        root match {
+          case in: InternalProverNode[Digest32] =>
+            checkNode(in.left)
+            checkNode(in.right)
+          case _ =>
+        }
+      }
+    }
+  }
+
 }

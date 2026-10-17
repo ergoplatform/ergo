@@ -1,12 +1,12 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import com.google.common.primitives.{Ints, Shorts}
+import com.google.common.primitives.{Ints, Longs, Shorts}
 import org.ergoplatform.P2PKAddress
 import org.ergoplatform.nodeView.state.{ErgoStateContext, ErgoStateContextSerializer}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest, ScanSerializer}
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer, ExtendedPublicKey, ExtendedPublicKeySerializer}
 import org.ergoplatform.settings.{Constants, ErgoSettings, Parameters}
-import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
+import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId, isLegacyShortScanId}
 import scorex.crypto.hash.Blake2b256
 import scorex.db.{LDBFactory, LDBKVStore}
 import scorex.util.ScorexLogging
@@ -145,11 +145,11 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @return scan or error (e.g. if scan identifier space is exhausted)
     */
   def addScan(scanReq: ScanRequest): Try[Scan] = {
-    val id = ScanId @@ (lastUsedScanId + 1).toShort
+    val id = ScanId @@ (lastUsedScanId + 1)
     scanReq.toScan(id).flatMap { app =>
       store.insert(
         Array(scanPrefixKey(id), lastUsedScanIdKey),
-        Array(ScanSerializer.toBytes(app), Shorts.toByteArray(id))
+        Array(ScanSerializer.toBytes(app), Longs.toByteArray(id))
       ).map(_ => app)
     }
   }
@@ -158,7 +158,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * Remove an scan from the database
     * @param id scan identifier
     */
-  def removeScan(id: Short): Try[Unit] =
+  def removeScan(id: Long): Try[Unit] =
     store.remove(Array(scanPrefixKey(id)))
 
   /**
@@ -166,7 +166,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @param id scan identifier
     * @return scan stored in the database, or None
     */
-  def getScan(id: Short): Option[Scan] =
+  def getScan(id: Long): Option[Scan] =
     store.get(scanPrefixKey(id)).map(bytes => ScanSerializer.parseBytes(bytes))
 
   /**
@@ -182,14 +182,24 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * Last inserted scan identifier (as they are growing sequentially)
     * @return identifier of last inserted scan
     */
-  def lastUsedScanId: Short = {
+  def lastUsedScanId: Long = {
     // pre-3.3.7 method to get last used scan id, now useful to read pre-3.3.7 databases
-    def oldScanId: Option[Short] =
+    def oldScanId: Option[Long] =
       store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
-        .map(bs => Shorts.fromByteArray(bs.takeRight(2)))
+        .map { bs =>
+          if (bs.length >= 12) {
+            Longs.fromByteArray(bs.takeRight(8))
+          } else {
+            Shorts.fromByteArray(bs.takeRight(2)).toLong
+          }
+        }
 
     store.get(lastUsedScanIdKey)
-      .map(bs => Shorts.fromByteArray(bs))
+      .map {
+        case bs if bs.length == 2 => Shorts.fromByteArray(bs).toLong
+        case bs if bs.length == 4 => Ints.fromByteArray(bs).toLong
+        case bs                   => Longs.fromByteArray(bs)
+      }
       .orElse(oldScanId)
       .getOrElse(PaymentsScanId)
   }
@@ -223,11 +233,16 @@ object WalletStorage {
   val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
-  // scans key space to iterate over all of them
-  val SmallestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(0)
-  val BiggestPossibleScanId: Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue)
+  def scanPrefixKey(scanId: Long): Array[Byte] =
+    if (isLegacyShortScanId(scanId)) {
+      ScanPrefixArray ++ Shorts.toByteArray(scanId.toShort)
+    } else {
+      ScanPrefixArray ++ Shorts.toByteArray(Short.MinValue) ++ Longs.toByteArray(scanId)
+    }
 
-  def scanPrefixKey(scanId: Short): Array[Byte] = ScanPrefixArray ++ Shorts.toByteArray(scanId)
+  // scans key space to iterate over all of them
+  val SmallestPossibleScanId: Array[Byte] = scanPrefixKey(0L)
+  val BiggestPossibleScanId: Array[Byte] = scanPrefixKey(Long.MaxValue)
   def pubKeyPrefixKey(path: DerivationPath): Array[Byte] = PublicKeyPrefixArray ++ path.bytes
   def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = pubKeyPrefixKey(pk.path)
 

@@ -174,7 +174,8 @@ trait ErgoHistory
                 (validityRow.toSeq ++
                   newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)) ++
                   selectedHeaderRows).toArray,
-                BlockSection.emptyArray
+                BlockSection.emptyArray,
+                if (newBestHeaderOpt.isEmpty) Array(BestHeaderKey) else Array.empty[ByteArrayWrapper]
               ).map { _ =>
                 this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }

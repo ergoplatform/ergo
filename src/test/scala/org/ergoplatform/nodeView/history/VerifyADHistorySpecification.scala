@@ -381,6 +381,28 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.applicable(child) shouldBe false
   }
 
+  property("invalidating the only selected header clears its tip before an equal-score sibling") {
+    var history = genHistory()._1
+    val first = nextHeader(None, history.difficultyCalculator, useRealTs = false)
+    val second = nextHeader(None, history.difficultyCalculator,
+      tsOpt = Some(first.timestamp + 1), useRealTs = false)
+    first.id should not be second.id
+
+    history = history.append(first).get._1
+    history.bestHeaderIdOpt shouldBe Some(first.id)
+    history.bestFullBlockIdOpt shouldBe None
+
+    history = history.reportModifierIsInvalid(first,
+      ProgressInfo[PM](None, Seq.empty, Seq.empty, Seq.empty)).get._1
+    history.bestHeaderIdOpt shouldBe None
+    history.isEmpty shouldBe true
+    history.isSemanticallyValid(first.id) shouldBe Invalid
+
+    history = history.append(second).get._1
+    history.bestHeaderIdOpt shouldBe Some(second.id)
+    history.bestHeaderIdAtHeight(second.height) shouldBe Some(second.id)
+  }
+
   property("successive invalidations retain a third valid sibling at the same height") {
     var history = genHistory(2)._1
     val common = history.bestFullBlockOpt.value

@@ -22,7 +22,7 @@ import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class ErgoWalletActor(settings: ErgoSettings,
                       parameters: Parameters,
@@ -387,8 +387,10 @@ class ErgoWalletActor(settings: ErgoSettings,
       sender() ! txTry
 
     case ExtractHints(tx, real, simulated, boxesToSpendOpt, dataBoxesOpt) =>
-      val bag = ergoWalletService.extractHints(state, tx, real, simulated, boxesToSpendOpt, dataBoxesOpt)
-      sender() ! ExtractHintsResult(bag)
+      Try(ergoWalletService.extractHints(state, tx, real, simulated, boxesToSpendOpt, dataBoxesOpt)) match {
+        case Success(bag) => sender() ! ExtractHintsResult(bag)
+        case Failure(e) => sender() ! akka.actor.Status.Failure(e)
+      }
 
     case DeriveKey(encodedPath) =>
       ergoWalletService.deriveKeyFromPath(state, encodedPath, ergoAddressEncoder) match {

@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet.scanning
 
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.nodeView.wallet.scanning.ScanWalletInteraction.ScanWalletInteraction
+import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.serialization.ErgoSerializer
 import scorex.util.serialization.{Reader, Writer}
@@ -40,7 +41,7 @@ object ScanSerializer extends ErgoSerializer[Scan] {
   private val falseNeg: Byte = -2
 
   override def serialize(app: Scan, w: Writer): Unit = {
-    w.putShort(app.scanId)
+    Constants.putScanId(w, app.scanId)
     w.putShortString(app.scanName)
     w.put(ScanWalletInteraction.toByte(app.walletInteraction))
     if (app.removeOffchain) {
@@ -52,7 +53,7 @@ object ScanSerializer extends ErgoSerializer[Scan] {
   }
 
   override def parse(r: Reader): Scan = {
-    val scanId = ScanId @@ r.getShort()
+    val scanId = Constants.getScanId(r)
     val appName = r.getShortString()
 
     // hack to read scans serialized with previous versions (they will have positive first byte)

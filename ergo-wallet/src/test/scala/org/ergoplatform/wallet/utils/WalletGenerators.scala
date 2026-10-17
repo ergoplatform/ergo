@@ -150,8 +150,13 @@ object WalletGenerators {
     }
   }
 
+  val scanIdGen: Gen[ScanId] = Gen.oneOf(
+    Gen.posNum[Short].map(id => ScanId @@ id.toLong),
+    Gen.posNum[Long].map(id => ScanId @@ id)
+  )
+
   def appStatusesGen: Gen[Set[ScanId]] = Gen.oneOf(
-    Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ScanId @@ id }.toSet),
+    Gen.nonEmptyListOf(scanIdGen).map(_.toSet),
     Gen.const(Set(PaymentsScanId))
   )
 

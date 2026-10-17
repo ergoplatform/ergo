@@ -242,8 +242,8 @@ class BestFullBlockStartupRecoverySpec extends ErgoCorePropertyTest with NodeVie
     new NodeViewFixture(settings, parameters).apply { fixture =>
       import fixture._
 
-      ErgoHistory.historyDir(fixture.settings).listFiles().nonEmpty shouldBe true
       getHistory.bestFullBlockOpt shouldBe None
+      ErgoHistory.historyDir(fixture.settings).listFiles().nonEmpty shouldBe true
       getCurrentState.version shouldBe ErgoState.genesisStateVersion
       val genesisRoot = getCurrentState.rootDigest.toVector
 

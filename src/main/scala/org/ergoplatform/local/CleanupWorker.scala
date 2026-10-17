@@ -23,12 +23,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class CleanupWorker(nodeViewHolderRef: ActorRef,
                     nodeSettings: NodeConfigurationSettings) extends Actor with ScorexLogging {
 
-  // Limit for total cost of transactions to be re-checked. Hard-coded for now.
-  private val CostLimit = 7000000
-
-  // Transaction can be re-checked only after this delay
-  private val TimeLimit = nodeSettings.mempoolCleanupDuration.toMillis
-
   override def preStart(): Unit = {
     log.info("Cleanup worker started")
   }
@@ -62,14 +56,42 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     * @return - updated valid transactions and invalidated transaction ids
     */
   private def validatePool(validator: UtxoStateReader,
-                           mempool: ErgoMemPoolReader): Future[(Seq[UnconfirmedTransaction], Seq[ModifierId])] = Future {
+                           mempool: ErgoMemPoolReader): Future[(Seq[UnconfirmedTransaction], Seq[ModifierId])] = {
+    CleanupWorker.validatePool(validator, mempool, nodeSettings)
+  }
+
+}
+
+object CleanupWorker extends ScorexLogging {
+
+  // Limit for total cost of transactions to be re-checked. Hard-coded for now.
+  private val CostLimit = 7000000
+
+  /**
+    *
+    * A command to run (partial) memory pool cleanup
+    *
+    * @param validator - a state implementation which provides transaction validation
+    * @param mempool - mempool reader instance
+    */
+  case class RunCleanup(validator: UtxoStateReader, mempool: ErgoMemPoolReader)
+
+  /**
+    * Validates transactions from mempool for some specified amount of time.
+    *
+    * @return - updated valid transactions and invalidated transaction ids
+    */
+  private[local] def validatePool(validator: UtxoStateReader,
+                                  mempool: ErgoMemPoolReader,
+                                  nodeSettings: NodeConfigurationSettings): Future[(Seq[UnconfirmedTransaction], Seq[ModifierId])] = Future {
 
     val now = System.currentTimeMillis()
+    val timeLimit = nodeSettings.mempoolCleanupDuration.toMillis
 
     // Check transactions sorted by priority. Parent transaction comes before its children.
     val allPoolTxs = mempool.getAllPrioritized
     val txsToValidate = allPoolTxs.filter { utx =>
-      (now - utx.lastCheckedTime) > TimeLimit
+      (now - utx.lastCheckedTime) > timeLimit
     }.toList
 
 
@@ -86,15 +108,38 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
                       ): (mutable.ArrayBuilder[UnconfirmedTransaction], mutable.ArrayBuilder[ModifierId]) = {
       txs match {
         case head :: tail if costAcc < CostLimit =>
-          val validationContext = state.stateContext.simplifiedUpcoming()
-          state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
-            case Success(txCost) =>
+          if (head.isUsingBlockchainContext.contains(false) && head.validationResult.contains(true)) {
+            val inputsExist = head.transaction.inputIds.forall(id => state.boxById(id).isDefined) &&
+              head.transaction.dataInputs.forall(di => state.boxById(di.boxId).isDefined)
+            val txCost = head.lastCost.getOrElse(0)
+            if (inputsExist) {
               val updTx = head.withCost(txCost)
               validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
-            case Failure(e) =>
+            } else {
               val txId = head.id
-              log.info(s"Transaction $txId invalidated: ${e.getMessage}")
-              validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+              log.info(s"Transaction $txId invalidated: not all inputs exist in state")
+              validationLoop(tail, validated, invalidated += txId, txCost + costAcc)
+            }
+          } else {
+            val validationContext = state.stateContext.simplifiedUpcoming()
+            state.validateWithCost(head.transaction, validationContext, nodeSettings.maxTransactionCost, None) match {
+              case Success(txCost) =>
+                val usesBlockchainContext = head.isUsingBlockchainContext.getOrElse {
+                  head.transaction.inputIds.exists { id =>
+                    state.boxById(id).exists(_.ergoTree.isUsingBlockchainContext)
+                  }
+                }
+                val updTx = head.withValidationResult(
+                  usesBlockchainContext = usesBlockchainContext,
+                  isValid = true,
+                  costOpt = Some(txCost)
+                )
+                validationLoop(tail, validated += updTx, invalidated, txCost + costAcc)
+              case Failure(e) =>
+                val txId = head.id
+                log.info(s"Transaction $txId invalidated: ${e.getMessage}")
+                validationLoop(tail, validated, invalidated += txId, head.lastCost.getOrElse(0) + costAcc) //add old cost
+            }
           }
         case _ =>
           validated -> invalidated
@@ -104,18 +149,5 @@ class CleanupWorker(nodeViewHolderRef: ActorRef,
     val res = validationLoop(txsToValidate, mutable.ArrayBuilder.make(), mutable.ArrayBuilder.make(), 0L)
     wrapRefArray(res._1.result()) -> wrapRefArray(res._2.result())
   }
-
-}
-
-object CleanupWorker {
-
-  /**
-    *
-    * A command to run (partial) memory pool cleanup
-    *
-    * @param validator - a state implementation which provides transaction validation
-    * @param mempool - mempool reader instance
-    */
-  case class RunCleanup(validator: UtxoStateReader, mempool: ErgoMemPoolReader)
 
 }

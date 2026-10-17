@@ -117,7 +117,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
           }
           Some(pm)
         case Success(pm) =>
-          log.warn(s"Index stored under ${encoder.encode(id)} has different id ${pm.encodedId}")
+          log.warn(s"Index stored under ${encoder.encode(id)} has different id ${encoder.encode(pm.id)}")
           None
         case Failure(_) =>
           log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")

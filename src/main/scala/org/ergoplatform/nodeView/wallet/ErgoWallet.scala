@@ -1,7 +1,6 @@
 package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorRef, ActorSystem}
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.state.ErgoState
@@ -35,16 +34,6 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
 
   override val walletActor: ActorRef =
     ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
-
-  def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
-    walletActor ! ScanOffChain(tx)
-    this
-  }
-
-  def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
-    txs.foreach(tx => scanOffchain(tx))
-    this
-  }
 
   def scanPersistent(modifier: BlockSection): ErgoWallet = {
     modifier match {

@@ -4,8 +4,10 @@ import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform._
 import org.ergoplatform.mining.CandidateGenerator
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedMempool
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{ErgoState, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.nodeView.wallet.IdUtils._
@@ -45,6 +47,19 @@ trait WalletTestOps extends NodeViewBaseOps {
     await(w.wallet.balancesWithUnconfirmed)
 
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
+
+  /**
+    * Publishes a mempool snapshot holding the given transactions so the wallet, which derives its
+    * off-chain (unconfirmed) state from the mempool on demand, picks them up via the ChangedMempool
+    * event. The snapshot is a full replacement (not incremental), mirroring how the wallet sees the
+    * pool, so callers layering several unconfirmed transactions must pass the whole accumulated set.
+    */
+  def applyToMempool(txs: Seq[ErgoTransaction])(implicit w: WalletFixture): Unit = {
+    val pool = txs.foldLeft(ErgoMemPool.empty(settings)) { (p, tx) =>
+      p.put(UnconfirmedTransaction(tx, None))
+    }
+    w.actorSystem.eventStream.publish(ChangedMempool(pool.getReader))
+  }
 
   def balanceAmount(boxes: Seq[ErgoBox]): Long = boxes.map(_.value).sum
 

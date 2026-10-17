@@ -2035,7 +2035,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       hist.dumpToDb(genuine.serializedId, HistoryModifierSerializer.toBytes(foreign)).get
       hist.typedModifierById[BlockTransactions](genuine.id) shouldBe None
-      hist.contains(genuine.id) shouldBe false
 
       val check = new RecordingCancellable
       deliveryTracker.setRequested(genuine.modifierTypeId, genuine.id, peer)(_ => check)

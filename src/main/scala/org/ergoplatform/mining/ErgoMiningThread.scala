@@ -6,6 +6,7 @@ import org.ergoplatform.{InputBlockFound, InputSolutionFound, NothingFound, Orde
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -25,6 +26,16 @@ class ErgoMiningThread(
 
   private val powScheme = ergoSettings.chainSettings.powScheme
   private val NonceStep = 1000
+  // true while a MineCmd is queued: at most one is ever in the mailbox, so a new candidate cannot start a second
+  // chain of MineCmd steps beside the running one (MineCmd is private, so no other sender can either)
+  private var mineCmdPending = false
+
+  private def enqueueMineCmdIfIdle(): Unit = {
+    if (!mineCmdPending) {
+      mineCmdPending = true
+      self ! MineCmd
+    }
+  }
 
   override def preStart(): Unit = {
     log.info(s"Starting miner thread: ${self.path.name}")
@@ -46,10 +57,10 @@ class ErgoMiningThread(
     log.info(s"Stopping miner thread: ${self.path.name}")
 
   override def receive: Receive = {
-    case StatusReply.Success(Candidate(candidateBlock, _, _, parameters)) =>
+    case StatusReply.Success(Candidate(candidateBlock, externalVersion, _, parameters)) =>
       log.info(s"Initiating block mining")
-      context.become(mining(nonce = 0, candidateBlock, parameters, solvedBlocksCount = 0))
-      self ! MineCmd
+      context.become(mining(nonce = 0, candidateBlock, externalVersion.msg.clone(), parameters, solvedBlocksCount = 0))
+      enqueueMineCmdIfIdle()
     case StatusReply.Error(ex) =>
       log.error(s"Preparing candidate did not succeed", ex)
   }
@@ -57,23 +68,27 @@ class ErgoMiningThread(
   def mining(
     nonce: Int,
     candidateBlock: CandidateBlock,
+    workMsg: Array[Byte],
     parameters: Parameters,
     solvedBlocksCount: Int
   ): Receive = {
-    case StatusReply.Success(Candidate(cb, _, _, newParameters)) =>
-      // if we get new candidate instead of a cached one, mine it
-      if (cb.timestamp != candidateBlock.timestamp) {
-        context.become(mining(nonce = 0, cb, newParameters, solvedBlocksCount))
-        self ! MineCmd
+    case StatusReply.Success(Candidate(cb, externalVersion, _, newParameters)) =>
+      // if we get new candidate instead of a cached one, mine it: new work is a new PoW message, as a regenerated
+      // candidate can keep the timestamp (a parent dated ahead of the local clock)
+      if (!java.util.Arrays.equals(externalVersion.msg, workMsg)) {
+        log.info(s"Switching block mining work to msg ${Base16.encode(externalVersion.msg)}")
+        context.become(mining(nonce = 0, cb, externalVersion.msg.clone(), newParameters, solvedBlocksCount))
+        enqueueMineCmdIfIdle()
       }
     case StatusReply.Error(ex) =>
+      // the generator rejects a solution only when its candidate does not fit it, is gone or is solved already, so
+      // no search resumes on this work: the thread mines again when a poll returns a candidate with a new PoW message
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
-      context.become(mining(nonce + 1, candidateBlock, parameters, solvedBlocksCount))
-      self ! MineCmd
     case StatusReply.Success(()) =>
       log.info(s"Solution accepted")
-      context.become(mining(nonce, candidateBlock, parameters, solvedBlocksCount + 1))
+      context.become(mining(nonce, candidateBlock, workMsg, parameters, solvedBlocksCount + 1))
     case MineCmd =>
+      mineCmdPending = false
       val lastNonceToCheck = nonce + NonceStep
       powScheme.proveCandidate(candidateBlock, sk, nonce, lastNonceToCheck, parameters) match {
         case OrderingBlockFound(newBlock) =>
@@ -84,8 +99,8 @@ class ErgoMiningThread(
           candidateGenerator ! InputSolutionFound(newBlock.header.powSolution)
         case NothingFound =>
           log.info(s"Trying nonce $lastNonceToCheck")
-          context.become(mining(lastNonceToCheck, candidateBlock, parameters, solvedBlocksCount))
-          self ! MineCmd
+          context.become(mining(lastNonceToCheck, candidateBlock, workMsg, parameters, solvedBlocksCount))
+          enqueueMineCmdIfIdle()
         case _ =>
           //todo : rework ProveBlockResult hierarchy to avoid this branch
       }
@@ -97,7 +112,7 @@ class ErgoMiningThread(
 
 object ErgoMiningThread {
 
-  case object MineCmd
+  private case object MineCmd
   case object GetSolvedBlocksCount // metric just for testing purposes for now
   case class SolvedBlocksCount(count: Int)
 

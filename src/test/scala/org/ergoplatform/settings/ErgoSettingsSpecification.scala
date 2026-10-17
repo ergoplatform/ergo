@@ -1,12 +1,14 @@
 package org.ergoplatform.settings
 
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{ConfigFactory, ConfigValueFactory}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
 
 import java.net.{InetSocketAddress, URI}
+import java.nio.file.Paths
 import scala.concurrent.duration._
+import scala.sys.process.{Process, ProcessLogger}
 
 class ErgoSettingsSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants.settings
@@ -14,6 +16,70 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
 
   private val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
   private val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
+
+  private def runBootstrapProbe(stateType: String,
+                                utxoBootstrap: Boolean,
+                                verifyTransactions: Boolean,
+                                nipopowBootstrap: Boolean): (Int, String) = {
+    val javaExecutable = Paths
+      .get(
+        System.getProperty("java.home"),
+        "bin",
+        if (scala.util.Properties.isWin) "java.exe" else "java")
+      .toString
+    val output = new java.lang.StringBuffer
+    val processLogger = ProcessLogger(
+      line => { output.append(line).append(System.lineSeparator()); () },
+      line => { output.append(line).append(System.lineSeparator()); () })
+    val exitCode = Process(Seq(
+      javaExecutable,
+      "-cp",
+      System.getProperty("java.class.path"),
+      "org.ergoplatform.settings.ErgoSettingsReaderBootstrapProbe",
+      stateType,
+      utxoBootstrap.toString,
+      verifyTransactions.toString,
+      nipopowBootstrap.toString
+    )).!(processLogger)
+    exitCode -> output.toString
+  }
+
+  property("Digest state rejects UTXO snapshot bootstrap in both transaction verification modes") {
+    for {
+      verifyTransactions <- Seq(false, true)
+      nipopowBootstrap <- Seq(false, true)
+    } {
+      val (exitCode, output) = runBootstrapProbe(
+        "digest", true, verifyTransactions, nipopowBootstrap)
+
+      withClue(s"verifyTransactions=$verifyTransactions, nipopowBootstrap=$nipopowBootstrap: $output") {
+        exitCode shouldBe 1
+        output should include("UTXO snapshot bootstrap requires node.stateType = utxo")
+        output should not include "SETTINGS_ACCEPTED"
+      }
+    }
+  }
+
+  property("supported Digest and UTXO bootstrap settings remain valid with and without NiPoPoW") {
+    val supportedModes = Seq(
+      ("digest", false, false),
+      ("digest", false, true),
+      ("utxo", false, true),
+      ("utxo", true, true))
+    for {
+      (stateType, utxoBootstrap, verifyTransactions) <- supportedModes
+      nipopowBootstrap <- Seq(false, true)
+    } {
+      val (exitCode, output) = runBootstrapProbe(
+        stateType, utxoBootstrap, verifyTransactions, nipopowBootstrap)
+
+      withClue(s"stateType=$stateType, utxoBootstrap=$utxoBootstrap, " +
+        s"verifyTransactions=$verifyTransactions, nipopowBootstrap=$nipopowBootstrap: $output") {
+        exitCode shouldBe 0
+        output should include("SETTINGS_ACCEPTED")
+      }
+    }
+  }
 
   property("should keep data user home  by default") {
     val settings = ErgoSettingsReader.read()
@@ -293,4 +359,31 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     scorexSettings.network.allowLocal shouldBe false
   }
 
+}
+
+object ErgoSettingsReaderBootstrapProbe {
+  def main(args: Array[String]): Unit = {
+    val stateType = args(0)
+    val utxoBootstrap = args(1).toBoolean
+    val verifyTransactions = args(2).toBoolean
+    val nipopowBootstrap = args(3).toBoolean
+    val config = ConfigFactory
+      .load()
+      .withValue("ergo.node.stateType", ConfigValueFactory.fromAnyRef(stateType))
+      .withValue("ergo.node.mining", ConfigValueFactory.fromAnyRef(Boolean.box(false)))
+      .withValue("ergo.node.extraIndex", ConfigValueFactory.fromAnyRef(Boolean.box(false)))
+      .withValue("ergo.node.blocksToKeep",
+        ConfigValueFactory.fromAnyRef(Int.box(if (verifyTransactions) 1000 else 0)))
+      .withValue("ergo.node.verifyTransactions", ConfigValueFactory.fromAnyRef(Boolean.box(verifyTransactions)))
+      .withValue("ergo.node.utxo.utxoBootstrap", ConfigValueFactory.fromAnyRef(Boolean.box(utxoBootstrap)))
+      .withValue("ergo.node.nipopow.nipopowBootstrap", ConfigValueFactory.fromAnyRef(Boolean.box(nipopowBootstrap)))
+      .withValue("ergo.chain.genesisId", ConfigValueFactory.fromAnyRef("0" * 64))
+
+    val settings = ErgoSettingsReader.fromConfig(config)
+    require(settings.nodeSettings.stateType == (if (stateType == "digest") StateType.Digest else StateType.Utxo))
+    require(settings.nodeSettings.utxoSettings.utxoBootstrap == utxoBootstrap)
+    require(settings.nodeSettings.verifyTransactions == verifyTransactions)
+    require(settings.nodeSettings.nipopowSettings.nipopowBootstrap == nipopowBootstrap)
+    println("SETTINGS_ACCEPTED")
+  }
 }

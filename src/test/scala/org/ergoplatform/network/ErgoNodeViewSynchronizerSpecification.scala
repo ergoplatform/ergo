@@ -34,7 +34,7 @@ import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.crypto.authds.ADKey
-import scorex.util.bytesToId
+import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -1266,12 +1266,10 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   // the ids in the first ModifiersData sent to the peer that contains `marker`
-  private def servedWith(pchProbe: TestProbe, marker: scorex.util.ModifierId): Seq[scorex.util.ModifierId] =
-    pchProbe.fishForMessage(10.seconds) {
-      case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
-        msg.data.get.asInstanceOf[ModifiersData].modifiers.contains(marker)
-      case _ => false
-    }.asInstanceOf[Message[_]].data.get.asInstanceOf[ModifiersData].modifiers.keys.toSeq
+  private def servedWith(pchProbe: TestProbe, marker: ModifierId): Seq[ModifierId] =
+    pchProbe.fishForSpecificMessage(10.seconds) {
+      case Message(_, Right(served: ModifiersData), _) if served.modifiers.contains(marker) => served.modifiers.keys.toSeq
+    }
 
   /**
     * A peer that asks for a block the node has just announced must get it, also before the node view holder has
@@ -1295,18 +1293,19 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
           stn.message.data.get.asInstanceOf[InvData]
       }.flatMap(inv => inv.ids.map(inv.typeId -> _))
       announced should contain(Header.modifierTypeId -> newBlock.header.id)
-      newBlock.header.sectionIds.foreach(section => announced should contain(section))
+      announced should contain allElementsOf newBlock.header.sectionIds
 
       // the peer asks for everything it was told about, before the block is applied
-      announced.groupBy(_._1).foreach { case (typeId, ids) =>
-        synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, ids.map(_._2)))), Some(peer))
+      announced.groupBy { case (typeId, _) => typeId }.foreach { case (typeId, typed) =>
+        val ids = typed.map { case (_, id) => id }
+        synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, ids))), Some(peer))
       }
       // the synchronizer answers through the requesting peer's handler
       val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
         case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
           msg.data.get.asInstanceOf[ModifiersData]
       }.flatMap(md => md.modifiers.keys.map(md.typeId -> _))
-      announced.foreach(a => served should contain(a))
+      served should contain allElementsOf announced
     }
   }
 

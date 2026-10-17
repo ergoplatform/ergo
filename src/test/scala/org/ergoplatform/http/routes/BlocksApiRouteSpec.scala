@@ -143,4 +143,111 @@ class BlocksApiRouteSpec
     }
   }
 
+
+  it should "reject reset with negative height" in {
+    val resetRequestJson = Map("height" -> -1).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[Json]
+      val detail = response.hcursor.get[String]("detail").getOrElse("")
+      detail should include("Height must be non-negative")
+    }
+  }
+
+  it should "reject reset with height higher than current" in {
+    val currentHeight = history.headersHeight
+    val targetHeight = currentHeight + 100
+
+    val resetRequestJson = Map("height" -> targetHeight).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val response = responseAs[Json]
+      val detail = response.hcursor.get[String]("detail").getOrElse("")
+      detail should include("higher than current height")
+    }
+  }
+
+  it should "invalidate block transactions, reset to deeper block, and re-apply blocks as valid" in {
+    import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
+    import org.ergoplatform.nodeView.state.StateType
+    import org.ergoplatform.utils.generators.ChainGenerator.applyBlock
+
+    val localHistory = generateHistory(
+      verifyTransactions = true,
+      stateType = StateType.Utxo,
+      poPoWBootstrap = false,
+      blocksToKeep = -1
+    )
+    val fullChain = chain.take(5)
+    fullChain.foreach(b => applyBlock(localHistory, b))
+    localHistory.headersHeight shouldBe 5
+    localHistory.fullBlockHeight shouldBe 5
+
+    val corruptedBlock = fullChain(3) // height 4
+    val tipBlock = fullChain(4)       // height 5
+
+    // 1. Invalidate block transactions at height 4 via reportModifierIsInvalid
+    localHistory.reportModifierIsInvalid(
+      corruptedBlock.blockTransactions,
+      ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+    ).isSuccess shouldBe true
+
+    localHistory.isSemanticallyValid(corruptedBlock.id) shouldBe ModifierSemanticValidity.Invalid
+    localHistory.isSemanticallyValid(corruptedBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Invalid
+    localHistory.isSemanticallyValid(tipBlock.id) shouldBe ModifierSemanticValidity.Invalid
+
+    // 2. Reset to deeper block (height 2)
+    val targetHeight = 2
+    localHistory.resetToHeight(targetHeight).isSuccess shouldBe true
+    localHistory.headersHeight shouldBe targetHeight
+    localHistory.fullBlockHeight shouldBe targetHeight
+    localHistory.bestHeaderIdOpt shouldBe Some(fullChain(1).id)
+    localHistory.bestFullBlockIdOpt shouldBe Some(fullChain(1).id)
+
+    fullChain.drop(targetHeight).foreach { removedBlock =>
+      localHistory.contains(removedBlock.id) shouldBe false
+      localHistory.contains(removedBlock.blockTransactions.id) shouldBe false
+      localHistory.isSemanticallyValid(removedBlock.id) shouldBe ModifierSemanticValidity.Absent
+      localHistory.isSemanticallyValid(removedBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Absent
+    }
+
+    // 3. Re-apply blocks 3, 4, 5 and mark valid — they must be accepted and become Valid again
+    fullChain.drop(targetHeight).foreach { b =>
+      applyBlock(localHistory, b)
+      localHistory.reportModifierIsValid(b).isSuccess shouldBe true
+    }
+
+    localHistory.headersHeight shouldBe 5
+    localHistory.fullBlockHeight shouldBe 5
+    localHistory.bestFullBlockIdOpt shouldBe Some(tipBlock.id)
+    localHistory.isSemanticallyValid(corruptedBlock.id) shouldBe ModifierSemanticValidity.Valid
+    localHistory.isSemanticallyValid(corruptedBlock.blockTransactions.id) shouldBe ModifierSemanticValidity.Valid
+    localHistory.isSemanticallyValid(tipBlock.id) shouldBe ModifierSemanticValidity.Valid
+  }
+
+  it should "reset blockchain to specified height via POST /blocks/reset" in {
+    val currentHeight = history.headersHeight
+    currentHeight should be > 1
+    val targetHeight = currentHeight - 1
+    val removedIds = history.headerIdsAtHeight(currentHeight)
+    removedIds should not be empty
+
+    val resetRequestJson = Map("height" -> targetHeight).asJson
+    val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
+
+    Post(prefix + "/reset", resetRequestEntity) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val response = responseAs[Json]
+      val responseObj = response.asObject.get
+      responseObj("success").get.asBoolean.get shouldBe true
+      responseObj("resetHeight").get.asNumber.get.toInt.get shouldBe targetHeight
+      responseObj("message").get.asString.get should include("validity indices cleaned")
+      history.headersHeight shouldBe targetHeight
+      removedIds.foreach(id => history.contains(id) shouldBe false)
+    }
+  }
 }

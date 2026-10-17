@@ -2122,53 +2122,60 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       requestForModifierSent(ncProbe, Header.modifierTypeId, startupBarrierId)
       deliveryTracker.setUnknown(startupBarrierId, Header.modifierTypeId)
 
-      val selected = updHistory.bestHeaderAtHeight(ctx.chain.last.height).get
-      val manifest = syntheticSnapshotManifest()
-      selected.stateRoot.sameElements(VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)) shouldBe false
-      val subtree = new BatchAVLProverSubtree[Digest32](syntheticSnapshotLeaf())
-      val chunkBytes = SubtreeSerializer.toBytes(subtree)
-      val chunkId = scorex.util.ModifierId @@ Algos.encode(subtree.id)
-      val plan = updHistory.registerManifestToDownload(manifest, selected.height, Seq(peer, peerB))
-      deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(_ => Cancellable.alreadyCancelled)
+      val receivingState = UtxoState.fromBoxHolder(
+        boxesHolderGenOfSize(1).sample.get, None, createTempDir, synchronizerSettings, parameters)
+      synchronizerMockRef ! ChangedState(receivingState)
+      try {
+        val selected = updHistory.bestHeaderAtHeight(ctx.chain.last.height).get
+        val manifest = syntheticSnapshotManifest()
+        selected.stateRoot.sameElements(VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)) shouldBe false
+        val subtree = new BatchAVLProverSubtree[Digest32](syntheticSnapshotLeaf())
+        val chunkBytes = SubtreeSerializer.toBytes(subtree)
+        val chunkId = scorex.util.ModifierId @@ Algos.encode(subtree.id)
+        val plan = updHistory.registerManifestToDownload(manifest, selected.height, Seq(peer, peerB))
+        deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(_ => Cancellable.alreadyCancelled)
 
-      synchronizerMockRef ! ChangedHistory(updHistory)
-      val discard = viewHolderProbe.fishForMessage(5.seconds) {
-        case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
-        case _ => false
-      }.asInstanceOf[DiscardSnapshotDownload]
-      deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) shouldBe None
+        synchronizerMockRef ! ChangedHistory(updHistory)
+        val discard = viewHolderProbe.fishForMessage(5.seconds) {
+          case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
+          case _ => false
+        }.asInstanceOf[DiscardSnapshotDownload]
+        deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) shouldBe None
 
-      synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
-        Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
-      // A fresh peer's sync response fences the chunk on this actor without
-      // relying on a header-download peer being available during cancellation.
-      val barrierPeer = ConnectedPeer(connectionIdGen.sample.get,
-        TestProbe("SnapshotBarrierPeer").ref, peer.peerInfo)
-      synchronizerMockRef ! HandshakedPeer(barrierPeer)
-      synchronizerMockRef ! SendLocalSyncInfo
-      ncProbe.fishForMessage(5.seconds) {
-        case _: PenalizePeer => fail("A chunk received during holder-side discard was penalized")
-        case sent: SendToNetwork if sent.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode =>
-          sent.sendingStrategy match {
-            case SendToPeers(peers) => peers.contains(barrierPeer)
-            case _ => false
-          }
-        case _ => false
-      }
+        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
+        // A fresh peer's sync response fences the chunk on this actor without
+        // relying on a header-download peer being available during cancellation.
+        val barrierPeer = ConnectedPeer(connectionIdGen.sample.get,
+          TestProbe("SnapshotBarrierPeer").ref, peer.peerInfo)
+        synchronizerMockRef ! HandshakedPeer(barrierPeer)
+        synchronizerMockRef ! SendLocalSyncInfo
+        ncProbe.fishForMessage(5.seconds) {
+          case _: PenalizePeer => fail("A chunk received during holder-side discard was penalized")
+          case sent: SendToNetwork if sent.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode =>
+            sent.sendingStrategy match {
+              case SendToPeers(peers) => peers.contains(barrierPeer)
+              case _ => false
+            }
+          case _ => false
+        }
 
-      updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
-      system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
-      ncProbe.fishForMessage(5.seconds) {
-        case sent: SendToNetwork => sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
-        case _ => false
-      }
-      synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
-        Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
-      ncProbe.fishForMessage(5.seconds) {
-        case PenalizePeer(address, penalty) if address == peer.connectionId.remoteAddress =>
-          penalty shouldBe PenaltyType.SpamPenalty
-          true
-        case _ => false
+        updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
+        system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
+        ncProbe.fishForMessage(5.seconds) {
+          case sent: SendToNetwork => sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }
+        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
+        ncProbe.fishForMessage(5.seconds) {
+          case PenalizePeer(address, penalty) if address == peer.connectionId.remoteAddress =>
+            penalty shouldBe PenaltyType.SpamPenalty
+            true
+          case _ => false
+        }
+      } finally {
+        receivingState.closeStorage()
       }
     }
   }

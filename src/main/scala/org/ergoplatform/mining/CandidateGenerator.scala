@@ -264,11 +264,10 @@ class CandidateGenerator(
         } else {
           preSolution
         }
-
       def complete(candidate: Candidate): ErgoFullBlock =
         completeBlock(candidate.candidateBlock, solutionFor(candidate))
 
-      val result: StatusReply[Unit] = {
+      val result: StatusReply[SolutionAck.type] = {
         val newBlock = state.cachedCandidate
           .map(complete)
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
@@ -281,7 +280,7 @@ class CandidateGenerator(
           case Success(_) =>
             sendToNodeView(newBlock)
             context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
+            StatusReply.success(SolutionAck)
           case Failure(exception) =>
             log.warn(s"Removing candidates due to invalid block", exception)
             context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
@@ -329,6 +328,9 @@ object CandidateGenerator extends ScorexLogging {
     forced: Boolean,
     optPk: Option[ProveDlog] = None
   )
+
+  /** Acknowledgement that a mined solution was accepted by the candidate generator. */
+  case object SolutionAck
 
   /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(

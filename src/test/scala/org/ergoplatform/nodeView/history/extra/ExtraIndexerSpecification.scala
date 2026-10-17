@@ -4,8 +4,9 @@ import akka.actor.{Actor, ActorIdentity, ActorRef, ActorSystem, Identify, Props,
 import akka.testkit.TestProbe
 import org.ergoplatform.ErgoAddressEncoder
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.http.api.SortDirection
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
@@ -16,15 +17,19 @@ import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, 
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.createDigestState
 import scorex.util.{ModifierId, bytesToId}
 import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
+import java.util.concurrent.TimeUnit
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import scala.collection.mutable
@@ -62,7 +67,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   implicit val segmentThreshold: Int = 8
 
   val system: ActorSystem = ActorSystem.create("indexer-test")
-  val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+  val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
 
   var _history: ErgoHistory = _
   def history: ErgoHistoryReader = _history.getReader
@@ -86,8 +91,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
   def awaitCondition(condition: Condition): Unit = {
     lock.lock()
-    try condition.await()
-    finally lock.unlock()
+    try {
+      // bounded, so a fixture that never signals fails the test instead of hanging the suite
+      if (!condition.await(2.minutes.toMillis, TimeUnit.MILLISECONDS)) {
+        throw new AssertionError(s"Timed out waiting for the indexer fixture condition $condition")
+      }
+    } finally lock.unlock()
   }
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
@@ -197,8 +206,128 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       seg._1.boxCount == seg._2._1
     })
 
+  /**
+    * Verify the storage-rent eligibility index against the ground truth: every unspent
+    * IndexedErgoBox must have exactly one rent entry with matching fields, in ascending
+    * (creationHeight, globalIndex) order.
+    */
+  def checkRentIndex(): Unit = {
+    val state = IndexerState.fromHistory(_history)
+    val expected = (0L until state.globalBoxIndex).flatMap { boxNum =>
+      NumericBoxIndex.getBoxByNumber(history, boxNum).filter(!_.isSpent)
+    }
+    val rentEntries = history.storageRentBoxesAtOrBefore(Int.MaxValue, math.max(expected.length * 2, 100))
+    rentEntries.length shouldBe expected.length
+    val byGlobalIndex = expected.map(iEb => iEb.globalIndex -> iEb).toMap
+    rentEntries.foreach { srb =>
+      byGlobalIndex.get(srb.globalIndex) match {
+        case Some(iEb) =>
+          srb.creationHeight shouldBe iEb.box.creationHeight
+          // the resolution the claim path uses must land on the same box
+          NumericBoxIndex.getBoxByNumber(history, srb.globalIndex).map(_.id) shouldBe Some(iEb.id)
+        case None =>
+          fail(s"Unexpected storage-rent entry for global index ${srb.globalIndex}")
+      }
+    }
+    // ascending order by (creationHeight, globalIndex); note globalIndex alone is NOT
+    // monotonic here: test chains create boxes whose R3 creation height differs from the
+    // inclusion order, and the rent clock runs on R3
+    rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq shouldBe
+      rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq.sorted
+  }
+
+  /**
+    * Ground truth for the rent index derived WITHOUT any indexer state: replay the best
+    * chain's blocks and keep the boxes that were created and never spent, assigning the
+    * global box index in output order. The genesis box is not part of the chain's blocks,
+    * so the produced indices are offset relative to `NumericBoxIndex`, which counts from
+    * the genesis box.
+    *
+    * This is deliberately independent of `IndexerState` and `NumericBoxIndex`: those are
+    * maintained by the indexer under test, so a systematic miscount of the rent rows
+    * could cancel out in a comparison using them on both sides.
+    */
+  def unspentBoxesFromChain(height: Int): Map[ModifierId, (Int, Long)] = {
+    val created = mutable.HashMap.empty[ModifierId, (Int, Long)]
+    val spent = mutable.HashSet.empty[ModifierId]
+    var globalIndex = 0L
+    var h = 1
+    while (h <= height) {
+      history.bestHeaderIdAtHeight(h).foreach { headerId =>
+        history.typedModifierById[Header](headerId).foreach { header =>
+          history.getFullBlock(header).foreach { block =>
+            block.transactions.foreach { tx =>
+              tx.inputs.foreach(in => spent += bytesToId(in.boxId))
+              tx.outputs.foreach { out =>
+                created.put(bytesToId(out.id), (out.creationHeight, globalIndex))
+                globalIndex += 1
+              }
+            }
+          }
+        }
+      }
+      h += 1
+    }
+    created.filterNot { case (id, _) => spent.contains(id) }.toMap
+  }
+
+  /**
+    * The rent index must hold exactly the boxes the chain has created and never spent, and
+    * its rows must be ordered by (creationHeight, globalIndex) - the order the ascending
+    * range scan in `HistoryStorage.storageRentBoxesAtOrBefore` relies on.
+    *
+    * Box ids are compared against the chain-derived truth, so this catches rent rows that
+    * survive a rollback for boxes that no longer exist, and rows missing for boxes that do.
+    */
+  def checkRentIndexAgainstChain(height: Int): Unit = {
+    val expected = unspentBoxesFromChain(height)
+    val rentEntries =
+      history.storageRentBoxesAtOrBefore(Int.MaxValue, math.max(expected.size * 4, 1000))
+
+    withClue(s"rent index size at height $height: ") {
+      rentEntries.length shouldBe expected.size
+    }
+
+    // rent rows carry no payload, so resolve the box id through the box-number index,
+    // exactly like the claim path in CandidateGenerator does
+    val resolved = rentEntries.flatMap(e => NumericBoxIndex.getBoxByNumber(history, e.globalIndex))
+    withClue("every rent row must resolve to a box: ") {
+      resolved.length shouldBe rentEntries.length
+    }
+    val actualIds = resolved.map(_.id).toSet
+    withClue("rent index must cover exactly the boxes unspent on the best chain: ") {
+      actualIds shouldBe expected.keySet
+    }
+
+    // creation height is part of the key, so it must match the box exactly
+    rentEntries.foreach { e =>
+      NumericBoxIndex.getBoxByNumber(history, e.globalIndex).foreach { iEb =>
+        e.creationHeight shouldBe iEb.box.creationHeight
+        iEb.isSpent shouldBe false
+      }
+    }
+
+    // The global index cannot be compared against a chain replay: the indexer counts
+    // from the genesis box while a chain replay only sees block outputs. What matters
+    // for the range scan is that the numbering is strictly increasing in
+    // (creationHeight, globalIndex) order, so the rows form one ascending, unique run.
+    val keys = rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq
+    withClue("rent rows must be strictly ascending by (creationHeight, globalIndex): ") {
+      keys shouldBe keys.sorted
+      keys.distinct.length shouldBe keys.length
+    }
+
+  }
+
   // example G-30;R-20;G-35;R-30
-  def rollbackWithPattern(pattern: String): Unit = {
+  def rollbackWithPattern(pattern: String, checkChain: Boolean = false): Unit = {
+    // when checkChain is set, the rent rows are additionally verified against the
+    // chain-derived unspent set, which does not rely on indexer state
+    var rolledBackTo: Int = 0
+    def checkRent(): Unit = {
+      checkRentIndex()
+      if (checkChain) checkRentIndexAgainstChain(rolledBackTo)
+    }
 
     def rollback(n: Int): Unit = {
       println(s"Rollback to $n")
@@ -250,6 +379,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         else
           boxOpt shouldBe None
       }
+
+      rolledBackTo = n
+      checkRent()
     }
 
     def generate(n: Int): Unit = {
@@ -273,6 +405,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         utxos.exists(_.isSpent) shouldBe false
       }
 
+      rolledBackTo = n
+      checkRent()
     }
 
     pattern.split(";").map(_.split("-")).map(x => x(0) -> x(1).toInt).foreach {
@@ -747,20 +881,37 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val productionIndexer = system.actorOf(Props(new ExtraIndexer(
       dbSettings.cacheSettings,
       dbSettings.chainSettings.addressEncoder,
-      Some(viewHolderProbe.ref)
+      Some(viewHolderProbe.ref),
+      true
     )))
-    viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+    val request = viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+      .asInstanceOf[GetDataFromCurrentView[ErgoStateReader, Any]]
     val thresholdProbe = TestProbe()(system)
     thresholdProbe.send(productionIndexer, GetSegmentThreshold)
     thresholdProbe.expectMsg(512)
+    // the state of the snapshot is two blocks behind the best full block of history
+    val applied = history.bestHeaderAtHeight(history.fullBlockHeight - 2).get
+    val notApplied = (applied.height + 1 to history.fullBlockHeight).map(history.bestFullBlockAt(_).get)
     productionIndexer ! RemoteBlockApplied(
-      history.bestFullBlockOpt.get.header, history.bestFullBlockOpt.get.blockTransactions.txs.map(_.id))
+      applied, history.getFullBlock(applied).get.blockTransactions.txs.map(_.id))
     val probe = TestProbe()(system)
     probe.send(productionIndexer, Identify("started"))
     probe.expectMsg(ActorIdentity("started", Some(productionIndexer)))
-    viewHolderProbe.send(productionIndexer,
-      ExtraIndexer.ReceivableMessages.StartExtraIndexer(history))
+    val appliedState = createDigestState(idToVersion(applied.id), applied.stateRoot)
+    try viewHolderProbe.send(productionIndexer, request.f(CurrentView[ErgoStateReader](history, appliedState, null, null)))
+    finally appliedState.close()
 
+    // the indexer catches up with the state of the snapshot and stops there
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
+    }
+    Thread.sleep(1000) // nothing above it follows
+    IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
+    IndexerState.fromHistory(history).indexedHeight shouldBe applied.height
+
+    notApplied.foreach { block =>
+      productionIndexer ! RemoteBlockApplied(block.header, block.blockTransactions.txs.map(_.id))
+    }
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       val state = IndexerState.fromHistory(history)
       state.indexedHeight shouldBe history.fullBlockHeight
@@ -825,6 +976,97 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     checkTokens(indexedTokens) shouldBe 0
     indexer ! Reset()
   }
+
+  property("storage rent eligibility index") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("rent index entries are removable by box id") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+
+    val before = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
+    before.length should be > 2
+
+    // remove the first two entries by box id, as CandidateGenerator does for a rejected claim
+    val toRemove = before.take(2)
+      .flatMap(e => NumericBoxIndex.getBoxByNumber(history, e.globalIndex)).map(_.id)
+    toRemove.length shouldBe 2
+    history.removeStorageRentBoxes(toRemove)
+
+    val after = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
+    after.length shouldBe before.length - 2
+    after.map(_.globalIndex).toSet shouldBe before.drop(2).map(_.globalIndex).toSet
+
+    // removing again is a no-op: the boxes are still indexed, but the entries are gone
+    history.removeStorageRentBoxes(toRemove)
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+
+    // removing an entry of a box which is not indexed at all does not corrupt the index
+    history.removeStorageRentBoxes(Seq(bytesToId(Array.fill(32)(42.toByte))))
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+
+    indexer ! Reset()
+  }
+
+  property("rent index rows are not written when rent collection is off") {
+    val noRentIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(false)))
+    noRentIndexer ! CreateDB(HEIGHT)
+    noRentIndexer ! Index()
+    awaitCondition(done)
+    // the extra index is fully built, but no storage-rent rows are written
+    IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, 1000) shouldBe empty
+    noRentIndexer ! Reset()
+  }
+
+  property("rent index is trimmed to the unspent set after a rollback") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    checkRentIndexAgainstChain(HEIGHT)
+
+    // rolling back discards the blocks that created some boxes, so those rows must go;
+    // ForceRollback is needed: a plain Rollback is ignored while the indexed tip remains
+    // on the best chain, so `done` would never fire
+    val back = BRANCHPOINT
+    indexer ! ForceRollback(back)
+    awaitCondition(done)
+
+    checkRentIndexAgainstChain(back)
+    indexer ! Reset()
+  }
+
+  property("rent index stays correct across repeated rollbacks") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    checkRentIndexAgainstChain(HEIGHT)
+
+    // each rollback must re-derive the rent rows of the surviving range only; rolling
+    // forward again is separate (the chain generator cannot extend a rolled-back chain,
+    // so this covers successive rollbacks, as rollbackWithPattern does)
+    Seq(HEIGHT - 10, BRANCHPOINT, 8, 1).foreach { back =>
+      indexer ! ForceRollback(back)
+      awaitCondition(done)
+      checkRentIndexAgainstChain(back)
+    }
+    indexer ! Reset()
+  }
+
+  property("rent index survives rollback interleaved with generation") {
+    // same rollback/generate interleaving as rollbackWithPattern, but the rent rows are
+    // checked against chain-derived truth rather than indexer state
+    rollbackWithPattern("G-30;R-20;G-35;R-30", checkChain = true)
+  }
+
+
 
   property("alternating gens and rollbacks") {
     rollbackWithPattern("G-10;R-5;G-15;R-10;G-20;R-5")
@@ -915,13 +1157,15 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
 
       val restartedIndexer = system.actorOf(Props(new ExtraIndexer(
         initSettings.cacheSettings,
-        initSettings.chainSettings.addressEncoder
+        initSettings.chainSettings.addressEncoder,
+        None,
+        true
       )))
       val probe = TestProbe()(system)
       probe.watch(restartedIndexer)
       try {
         probe.send(restartedIndexer,
-          ExtraIndexer.ReceivableMessages.StartExtraIndexer(_history))
+          ExtraIndexer.ReceivableMessages.StartExtraIndexer(_history, Some(idToVersion(_history.bestFullBlockIdOpt.get))))
 
         org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
           val state = IndexerState.fromHistory(_history)
@@ -1218,7 +1462,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   }
 
   property("requests only extra indexer stop when final removal fails after partial rollback writes") {
-    val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+    val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
     val lifecycleProbe = TestProbe()(system)
     lifecycleProbe.watch(failingIndexer)
 
@@ -1338,10 +1582,10 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("waits for startup repair before indexing a selected header with missing validity") {
+  property("indexes selected headers with missing validity marks during catch-up") {
     indexer ! CreateDB(6)
     awaitCondition(created)
-    val missingValidityHeaders = Seq(fullChainHeaderAt(3))
+    val missingValidityHeaders = Seq(fullChainHeaderAt(3), fullChainHeaderAt(4))
     missingValidityHeaders.foreach { header =>
       FullBlockProcessor.isInBestFullChain(_history.historyStorage, header.id) shouldBe true
       _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Valid
@@ -1354,58 +1598,216 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
     }
 
-    val probe = TestProbe()(system)
-    indexer ! ObserveUnavailableHeader(3, probe.ref)
-    indexer ! Index()
-    probe.expectMsg(3.seconds, 3)
-    IndexerState.fromHistory(_history).indexedHeight shouldBe 2
-
-    val appliedTip = fullChainHeaderAt(6)
-    _history.repairAppliedFullChainValidity(fullChainHeaderAt(5).id).isFailure shouldBe true
-    _history.isSemanticallyValid(missingValidityHeaders.head.id) shouldBe ModifierSemanticValidity.Unknown
-
-    val persistedCheckpoint = IndexerState.fromHistory(_history).indexedHeaderId.get
-    _history.historyStorage.insertExtraTry(
-      Array(ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(fullChainHeaderAt(1).id)),
-      Array.empty).get
-    _history.repairAppliedFullChainValidity(appliedTip.id).isFailure shouldBe true
-    _history.isSemanticallyValid(missingValidityHeaders.head.id) shouldBe ModifierSemanticValidity.Unknown
-    _history.historyStorage.insertExtraTry(
-      Array(ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(persistedCheckpoint)),
-      Array.empty).get
-
-    val competingTip = appliedTip.copy(timestamp = appliedTip.timestamp + 1)
-    val competingTransactions = fullChainTransactionsAt(6).copy(headerId = competingTip.id)
-    competingTransactions.id shouldBe competingTip.transactionsId
-    val tipHeightKey = ByteArrayWrapper(
-      org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(appliedTip.height).array))
-    _history.historyStorage.insert(
-      Array(
-        tipHeightKey -> (ExtraIndexer.fastIdToBytes(competingTip.id) ++ ExtraIndexer.fastIdToBytes(appliedTip.id)),
-        FullBlockProcessor.chainStatusKey(competingTip.id) -> FullBlockProcessor.BestChainMarker
-      ),
-      Array[org.ergoplatform.modifiers.BlockSection](competingTip, competingTransactions)
-    ).get
-    FullBlockProcessor.isInBestFullChain(_history.historyStorage, competingTip.id) shouldBe true
-    _history.isSemanticallyValid(competingTip.id) shouldBe ModifierSemanticValidity.Unknown
-
-    _history.repairAppliedFullChainValidity(appliedTip.id).get
-    _history.isSemanticallyValid(competingTip.id) shouldBe ModifierSemanticValidity.Unknown
     indexer ! Index()
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       IndexerState.fromHistory(_history).indexedHeight shouldBe 6
     }
+    // the indexer does not gate on semantic validity: indexed without touching the marks
+    missingValidityHeaders.foreach { header =>
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
+    }
+    // the blocks are indexed like any other best-chain block
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    expectedTxs.zipWithIndex.foreach { case (tx, num) =>
+      NumericTxIndex.getTxByNumber(history, num).map(_.id) shouldBe Some(tx.id)
+    }
+    indexer ! Reset()
+  }
 
+  property("does not index an invalid block during catch-up") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val invalidHeader = fullChainHeaderAt(4)
+    _history.historyStorage.insert(
+      Array(_history.validityKey(invalidHeader.id) -> Array(0.toByte)),
+      BlockSection.emptyArray
+    ).get
+    _history.isSemanticallyValid(invalidHeader.id) shouldBe ModifierSemanticValidity.Invalid
+
+    val probe = TestProbe()(system)
+    indexer ! ObserveUnavailableHeader(4, probe.ref)
+    indexer ! Index()
+    probe.expectMsg(3.seconds, 4)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    }
+    Thread.sleep(500)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    _history.isSemanticallyValid(invalidHeader.id) shouldBe ModifierSemanticValidity.Invalid
+    indexer ! Reset()
+  }
+
+  property("does not index an unknown-validity block with a missing body during catch-up") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val bodilessHeader = fullChainHeaderAt(4)
     _history.historyStorage.remove(
-      Array(_history.validityKey(appliedTip.id)), Array.empty[ModifierId]).get
-    probe.send(indexer, ReopenCheckpoint())
-    probe.expectMsgType[IndexerState].indexedHeight shouldBe 0
+      Array(_history.validityKey(bodilessHeader.id)),
+      Array(bodilessHeader.transactionsId)
+    ).get
+    _history.isSemanticallyValid(bodilessHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    history.getFullBlock(bodilessHeader) shouldBe None
+
+    // the header is selected (no validity gating), but the missing body blocks indexing
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    }
+    Thread.sleep(500)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    _history.isSemanticallyValid(bodilessHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    indexer ! Reset()
+  }
+
+  property("does not index a block outside the best full chain during catch-up") {
+    indexer ! CreateDB(6)
+    awaitCondition(created)
+    val selectedBlock = history.getFullBlock(fullChainHeaderAt(4)).get
+    // section ids are derived from the header id, so a competing header needs its own sections
+    val competingHeader = selectedBlock.header.copy(timestamp = selectedBlock.header.timestamp + 1)
+    val competingSections: Seq[NonHeaderBlockSection] = Seq(
+      selectedBlock.adProofs.get.copy(headerId = competingHeader.id),
+      selectedBlock.blockTransactions.copy(headerId = competingHeader.id),
+      selectedBlock.extension.copy(headerId = competingHeader.id)
+    )
+    competingSections.map(_.id) shouldBe competingHeader.sectionIds.map(_._2).toSeq
+    val heightKey = ByteArrayWrapper(
+      org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(4).array))
+    // a complete block, neither selected nor marked valid or invalid
+    _history.historyStorage.insert(
+      Array(heightKey -> (ExtraIndexer.fastIdToBytes(competingHeader.id) ++
+        ExtraIndexer.fastIdToBytes(selectedBlock.header.id))),
+      (competingHeader +: competingSections).toArray[BlockSection]
+    ).get
+    _history.isSemanticallyValid(competingHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, competingHeader.id) shouldBe false
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, selectedBlock.header.id) shouldBe true
+    history.getFullBlock(competingHeader).isDefined shouldBe true
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+    // only the selected block is indexed, the orphan is left untouched
+    _history.isSemanticallyValid(competingHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    _history.isSemanticallyValid(selectedBlock.header.id) shouldBe ModifierSemanticValidity.Valid
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    indexer ! Reset()
+  }
+
+  property("rollback of an indexed then rejected block with unknown input leaves the index intact") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+
+    // valid PoW, spending a nonexistent box, never applied to the state - the best-full-chain
+    // marker is set at append, semantic validity stays Unknown
+    val forged = ChainGenerator.forgeUnvalidatedBlock(_history, Seq(scorex.utils.Random.randomBytes(32)))
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, forged.header.id) shouldBe true
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    // the state rejects the block: markers flip, the indexer reconciles on its next message
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    // the index is exactly as if the rejected block never existed
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("rollback of an indexed then rejected block double-spending a box leaves the index intact") {
+    indexer ! CreateDB(HEIGHT)
+    indexer ! Index()
+    awaitCondition(done)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+
+    // a box already spent on the valid chain
+    val spendingTx = fullChainTransactionsAt(2).txs.find(_.inputs.nonEmpty).get
+    val spentBoxId = spendingTx.inputs.head.boxId
+
+    val forged = ChainGenerator.forgeUnvalidatedBlock(_history, Seq(spentBoxId))
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    // while indexed, the original spend record must not be overwritten by the unvalidated block
+    history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
+      .spendingTxIdOpt shouldBe Some(spendingTx.id)
+
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    // the box stays spent by its original, valid spending transaction
+    val spentBox = history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
+    spentBox.spendingTxIdOpt shouldBe Some(spendingTx.id)
+    spentBox.spendingHeightOpt shouldBe Some(2)
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("box by number lookup tolerates a missing number row") {
+    indexer ! CreateDB(2)
+    awaitCondition(created)
+    NumericBoxIndex.getBoxByNumber(history, 1000000L) shouldBe None
     indexer ! Reset()
   }
 
   Seq("initial", "intermediate", "final").foreach { phase =>
     property(s"preserves recovery at the $phase rollback write failure") {
-      val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+      val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
       val probe = TestProbe()(system)
       probe.watch(failingIndexer)
       failingIndexer ! CreateDB(HEIGHT)

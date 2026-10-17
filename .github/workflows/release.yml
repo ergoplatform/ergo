@@ -38,14 +38,14 @@ jobs:
           GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
 
       - name: Publish ergo-wallet
-        run: sbt +ergoWallet/publishSigned sonatypeBundleRelease
+        run: sbt +ergoWallet/publishSigned sonaRelease
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
 
       - name: Publish ergo-core
-        run: sbt +ergoCore/publishSigned sonatypeBundleRelease
+        run: sbt +ergoCore/publishSigned sonaRelease
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}

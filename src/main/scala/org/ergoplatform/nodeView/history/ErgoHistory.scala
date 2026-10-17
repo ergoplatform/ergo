@@ -207,22 +207,21 @@ trait ErgoHistory
     * @param headerId - header id
     * @return
     */
-  def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = typedModifierById[Header](headerId)
-      val hRes = historyStorage.remove(
+  def forgetHeader(headerId: ModifierId): Try[Unit] = Try(typedModifierById[Header](headerId)).flatMap { hOpt =>
+    // Keep the header until its sections are removed so a retry can still discover their identifiers.
+    hOpt.toSeq.flatMap(requiredModifiersForHeader).foldLeft[Try[Unit]](Success(())) {
+      case (result, (_, mId)) => result.flatMap { _ =>
+        val removal = historyStorage.remove(Array(validityKey(mId)), Array(mId))
+        log.info(s"Result of removing modifier $mId: " + removal)
+        removal
+      }
+    }.flatMap { _ =>
+      val removal = historyStorage.remove(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
       )
-    log.info(s"Result of removing header $headerId: " + hRes)
-
-    hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        val mRes = historyStorage.remove(
-          indicesToRemove = Array(validityKey(mId)),
-          idsToRemove = Array(mId)
-        )
-        log.info(s"Result of removing modifier $mId: " + mRes)
-      }
+      log.info(s"Result of removing header $headerId: " + removal)
+      removal
     }
   }
 
@@ -282,8 +281,8 @@ object ErgoHistory extends ScorexLogging {
 
     if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
       log.warn("Found suspicious continuation, clearing it...")
-      afterHeaders.foreach(hId => history.forgetHeader(hId))
-      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
+      afterHeaders.foreach(hId => history.forgetHeader(hId).get)
+      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId]).get
       true
     } else {
       false
@@ -327,6 +326,9 @@ object ErgoHistory extends ScorexLogging {
       var damagedHeaderIdOpt: Option[ModifierId] = None
 
       var currentOpt: Option[Header] = history.bestHeaderIdOpt.flatMap(readHeader(history, _))
+      if (history.bestHeaderIdOpt.isDefined && currentOpt.isEmpty) {
+        throw new IllegalStateException("Selected best header is missing or corrupted; history repair cannot continue")
+      }
       var checked = 0
       while (currentOpt.exists(_.height > fullHeight) && checked < MaxHeadersToRepair) {
         val header = currentOpt.get
@@ -346,6 +348,29 @@ object ErgoHistory extends ScorexLogging {
           // parent of the last collected header is the best full block (or below), walk is done
           currentOpt = None
         }
+      }
+
+      // A selected header fork may diverge before the applied full block. Its sections
+      // are not evidence of an interrupted application of the selected full chain.
+      if (damagedHeaderIdOpt.isEmpty && headersAbove.nonEmpty &&
+        (headersAbove.last.height != fullHeight + 1 ||
+          headersAbove.last.parentId != bestFullBlockOpt.get.id)) {
+        // The selected headers are readable, but their ancestry is not anchored
+        // to the applied full chain. Restore only their download indexes; their
+        // complete sections may belong to a healthy, unapplied fork.
+        val storage = history.historyStorage
+        var restored = false
+        headersAbove.foreach { header =>
+          val idsAtHeight = history.headerIdsAtHeight(header.height)
+          if (!idsAtHeight.contains(header.id)) {
+            log.warn(s"Height index at height ${header.height} is missing header ${header.encodedId}, restoring it")
+            storage.insert(
+              Array(history.heightIdsKey(header.height) -> (Seq(header.id) ++ idsAtHeight).flatMap(idToBytes).toArray),
+              Array.empty[BlockSection]).get
+            restored = true
+          }
+        }
+        return restored
       }
 
       damagedHeaderIdOpt match {
@@ -373,14 +398,14 @@ object ErgoHistory extends ScorexLogging {
     val damagedHeightOpt = headersAbove.lastOption.map(_.height - 1)
 
     // remove headers above the damaged one, with their block sections and indexes
-    headersAbove.foreach(h => history.forgetHeader(h.id))
+    headersAbove.foreach(h => history.forgetHeader(h.id).get)
 
     // remove damaged header record if it exists (its bytes may be corrupted)
     storage.remove(
       indicesToRemove = Array(history.validityKey(damagedHeaderId),
         history.headerHeightKey(damagedHeaderId),
         history.headerScoreKey(damagedHeaderId)),
-      idsToRemove = Array(damagedHeaderId))
+      idsToRemove = Array(damagedHeaderId)).get
 
     // clean height -> header ids indexes at heights of removed headers
     val heightsToClean = headersAbove.map(_.height).toSet ++ damagedHeightOpt.toSet
@@ -400,7 +425,7 @@ object ErgoHistory extends ScorexLogging {
       case Some(newBestHeader) =>
         log.warn(s"Truncated headers chain at height ${damagedHeightOpt.get}, " +
           s"new best header: ${newBestHeader.encodedId} at height ${newBestHeader.height}")
-        storage.insert(Array(history.BestHeaderKey -> idToBytes(newBestHeader.id)), Array.empty[BlockSection])
+        storage.insert(Array(history.BestHeaderKey -> idToBytes(newBestHeader.id)), Array.empty[BlockSection]).get
         true
       case None =>
         log.error(s"Could not find a readable header below damaged header $damagedHeaderId, " +
@@ -418,11 +443,11 @@ object ErgoHistory extends ScorexLogging {
     val remaining = ids.filterNot(idsToRemove)
     if (remaining.length != ids.length) {
       if (remaining.isEmpty) {
-        history.historyStorage.remove(Array(history.heightIdsKey(height)), Array.empty[ModifierId])
+        history.historyStorage.remove(Array(history.heightIdsKey(height)), Array.empty[ModifierId]).get
       } else {
         history.historyStorage.insert(
           Array(history.heightIdsKey(height) -> remaining.flatMap(idToBytes).toArray),
-          Array.empty[BlockSection])
+          Array.empty[BlockSection]).get
       }
     }
   }
@@ -502,7 +527,7 @@ object ErgoHistory extends ScorexLogging {
       }
 
       if (sectionsToRemove.nonEmpty || validityKeysToRemove.nonEmpty) {
-        storage.remove(validityKeysToRemove.distinct.toArray, sectionsToRemove.distinct.toArray)
+        storage.remove(validityKeysToRemove.distinct.toArray, sectionsToRemove.distinct.toArray).get
       }
 
       // restore height -> header ids index if it is lost or does not contain the header
@@ -512,7 +537,7 @@ object ErgoHistory extends ScorexLogging {
         log.warn(s"Height index at height ${header.height} is missing header ${header.encodedId}, restoring it")
         storage.insert(
           Array(history.heightIdsKey(header.height) -> (Seq(header.id) ++ idsAtHeight).flatMap(idToBytes).toArray),
-          Array.empty[BlockSection])
+          Array.empty[BlockSection]).get
         repaired = true
       }
     }

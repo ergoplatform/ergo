@@ -4,6 +4,8 @@ import com.google.common.primitives.Ints
 import org.ergoplatform.modifiers.BlockSection
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.HeaderChain
+import org.ergoplatform.modifiers.history.HistoryModifierSerializer
+import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -98,12 +100,52 @@ class RepairAfterCorruptionSpecification extends ErgoCorePropertyTest with Optio
     history.historyStorage.insert(noIndexes, Array[BlockSection](nextBlock.blockTransactions)).get
     history.historyStorage.insert(noIndexes, Array[BlockSection](nextBlock.extension)).get
     history.bestFullBlockOpt.value.header.height shouldBe 5
+    nextBlock.header.parentId shouldBe history.bestFullBlockOpt.value.id
 
     ErgoHistory.repairIfNeeded(history) shouldBe true
 
     // sections removed, so the block is requested and processed anew
     history.historyStorage.contains(nextBlock.blockTransactions.id) shouldBe false
     history.historyStorage.contains(nextBlock.extension.id) shouldBe false
+  }
+
+  property("repair should retain complete sections on a selected fork outside the applied full chain") {
+    val (initialHistory, chain) = historyWithGap(fullBlocks = 5, headers = 8)
+    val competingExtension = ExtensionCandidate(
+      Seq(Array(0.toByte, 8.toByte) -> Array.fill[Byte](32)(1)))
+    val competing = blockStream(Some(chain(3)), extension = competingExtension).take(6).toVector
+    val history = applyHeaderChain(initialHistory, HeaderChain(competing.tail.map(_.header)))
+    val completeForkBlock = competing(2)
+    val noIndexes = Array.empty[(ByteArrayWrapper, Array[Byte])]
+    history.historyStorage.insert(noIndexes,
+      Array[BlockSection](completeForkBlock.blockTransactions, completeForkBlock.extension)).get
+
+    history.bestFullBlockOpt.value.id shouldBe chain(4).id
+    history.bestHeaderOpt.value.id shouldBe competing.last.id
+    completeForkBlock.header.parentId shouldBe competing(1).id
+    completeForkBlock.header.parentId should not be history.bestFullBlockOpt.value.id
+    history.historyStorage.contains(completeForkBlock.blockTransactions.id) shouldBe true
+    history.historyStorage.contains(completeForkBlock.extension.id) shouldBe true
+
+    ErgoHistory.repairIfNeeded(history) shouldBe false
+
+    history.historyStorage.contains(completeForkBlock.blockTransactions.id) shouldBe true
+    history.historyStorage.contains(completeForkBlock.extension.id) shouldBe true
+    history.bestFullBlockOpt.value.id shouldBe chain(4).id
+    history.bestHeaderOpt.value.id shouldBe competing.last.id
+
+    // Even when section repair is unsafe on this fork, a lost selected-header
+    // height row must be recovered so section download can traverse the fork.
+    val forkHeight = completeForkBlock.header.height
+    val heightIdsKey = ByteArrayWrapper(Algos.hash(Ints.toByteArray(forkHeight)))
+    history.historyStorage.remove(Array(heightIdsKey), Array.empty[ModifierId]).get
+    history.headerIdsAtHeight(forkHeight) shouldBe Seq.empty
+
+    ErgoHistory.repairIfNeeded(history) shouldBe true
+
+    history.headerIdsAtHeight(forkHeight) shouldBe Seq(completeForkBlock.header.id)
+    history.historyStorage.contains(completeForkBlock.blockTransactions.id) shouldBe true
+    history.historyStorage.contains(completeForkBlock.extension.id) shouldBe true
   }
 
   property("repair should restore lost height -> header ids index") {
@@ -120,6 +162,16 @@ class RepairAfterCorruptionSpecification extends ErgoCorePropertyTest with Optio
     ErgoHistory.repairIfNeeded(history) shouldBe true
 
     history.headerIdsAtHeight(lostHeight) shouldBe Seq(chain(lostHeight - 1).header.id)
+  }
+
+  property("database repair read should reject a header stored under another key") {
+    val (history, chain) = historyWithGap(fullBlocks = 5, headers = 8)
+    val selected = chain.last.header
+    val foreign = chain(6).header
+    selected.id should not be foreign.id
+    history.historyStorage.insert(selected.serializedId, HistoryModifierSerializer.toBytes(foreign)).get
+
+    history.historyStorage.modifierByIdFromDb(selected.id) shouldBe None
   }
 
   property("repair should truncate headers chain with corrupted header record") {

@@ -7,8 +7,10 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
-import scorex.db.ByteArrayWrapper
+import scorex.db.{ByteArrayWrapper, LDBKVStore}
 import scorex.util.{ModifierId, idToBytes}
+
+import scala.util.{Failure, Success, Try}
 
 class HistoryStorageSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -38,6 +40,22 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     headers.forall(h => !db.get(h.id).exists(_.nonEmpty)) shouldBe true
     modifiers.forall(m => !db.get(m.id).exists(_.nonEmpty)) shouldBe true
     indexes.forall(i => !db.getIndex(i._1).exists(_.nonEmpty)) shouldBe true
+  }
+
+  property("remove propagates an index store failure after the object store succeeds") {
+    val sentinel = new IllegalStateException("index removal sentinel")
+    val objectsStore = new LDBKVStore(null) {
+      override def update(toInsertKeys: Array[Array[Byte]], toInsertValues: Array[Array[Byte]],
+                          toRemove: Array[Array[Byte]]): Try[Unit] = Success(())
+    }
+    val indexStore = new LDBKVStore(null) {
+      override def update(toInsertKeys: Array[Array[Byte]], toInsertValues: Array[Array[Byte]],
+                          toRemove: Array[Array[Byte]]): Try[Unit] = Failure(sentinel)
+    }
+    val storage = new HistoryStorage(indexStore, objectsStore, null, settings.cacheSettings)
+    val key = ByteArrayWrapper(Array.fill[Byte](32)(1))
+
+    storage.remove(Array(key), Array.empty[ModifierId]) shouldBe Failure(sentinel)
   }
 
 }

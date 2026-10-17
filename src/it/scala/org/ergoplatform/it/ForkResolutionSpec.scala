@@ -112,13 +112,16 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       val isolatedNodes = Async.await {
         quiescedNodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
-        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
+        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, noConnectionsConfig))
       }
       Async.await(Future.traverse(isolatedNodes)(_.connectedPeers)).foreach(_ shouldBe empty)
       // Use the persisted heights after restart so the fork target is above every isolated tip.
       val forkHeight = Async.await(Future.traverse(isolatedNodes)(_.fullHeight)).max + forkLength
       Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
-      Async.await(Future.traverse(isolatedNodes)(_.connectedPeers)).foreach(_ shouldBe empty)
+      val isolatedPeers = Async.await(Future.traverse(isolatedNodes) { node =>
+        node.connectedPeers.map(peers => node.nodeName -> peers.map(_.name))
+      })
+      isolatedPeers.filter(_._2.nonEmpty) shouldBe empty
       val isolatedHeads = Async.await(Future.traverse(isolatedNodes)(_.headerIdsByHeight(forkHeight)))
         .map(_.headOption.value)
       log.info(s"Isolated fork heads at height $forkHeight: ${isolatedHeads.mkString(",")}")

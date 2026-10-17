@@ -195,13 +195,18 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
 
       case _: CheckSeed => sender() ! true
 
-      case GetWalletBoxes(unspentOnly, _) =>
+      case GetWalletBoxes(unspentOnly, _, minHeight, maxHeight) =>
         val boxes = if (unspentOnly) {
           Seq(walletBox10_10, walletBox20_30)
         } else {
           Seq(walletBox10_10, walletBox20_30, walletBoxSpent21_31)
         }
-        sender() ! boxes.sortBy(_.trackedBox.inclusionHeightOpt)
+        // emulate the inclusion-height range read done by the registry
+        val inRange = boxes.filter { bx =>
+          val h = bx.trackedBox.inclusionHeightOpt.getOrElse(0)
+          h >= minHeight && (maxHeight < 0 || h <= maxHeight)
+        }
+        sender() ! inRange.sortBy(_.trackedBox.inclusionHeightOpt)
 
       case GetScanTransactions(scanId, includeUnconfirmed) =>
         if (includeUnconfirmed) {

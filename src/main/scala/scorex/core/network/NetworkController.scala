@@ -476,7 +476,7 @@ class NetworkController(ergoSettings: ErgoSettings,
     * @return sequence of ConnectedPeer instances according SendingStrategy
     */
   private def filterConnections(sendingStrategy: SendingStrategy, version: Version): Seq[ConnectedPeer] = {
-    sendingStrategy.choose(connections.values.toSeq.filter(_.peerInfo.exists(_.peerSpec.protocolVersion >= version)))
+    NetworkController.selectEligibleConnections(sendingStrategy, version, connections.values.toSeq)
   }
 
   /**
@@ -590,6 +590,19 @@ object NetworkController {
   val OutgoingConnections = 8
 
   val ChildActorHandlingRetriesNr: Int = 10
+
+  /** Resolves each strategy choice to the same version-eligible live handler. */
+  private[network] def selectEligibleConnections(sendingStrategy: SendingStrategy,
+                                                  version: Version,
+                                                  connections: Seq[ConnectedPeer]): Seq[ConnectedPeer] = {
+    val eligible = connections.filter(_.peerInfo.exists(_.peerSpec.protocolVersion >= version))
+    val currentByAddress = eligible.map(peer => peer.connectionId.remoteAddress -> peer).toMap
+
+    sendingStrategy.choose(eligible).flatMap { target =>
+      currentByAddress.get(target.connectionId.remoteAddress)
+        .filter(_.handlerRef == target.handlerRef)
+    }
+  }
 
   object ReceivableMessages {
 

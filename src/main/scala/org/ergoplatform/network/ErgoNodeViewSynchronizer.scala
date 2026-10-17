@@ -963,6 +963,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
+    // The holder still owns the old plan until it acknowledges the discard.
+    if (cancellingSnapshotSession.nonEmpty) return
     // we request more chunks if currently less than `ChunksInParallelMin` chunks are being downloading
     // we request up to `ChunksInParallelMin`, so in extreme case may download almost 2 * `ChunksInParallelMin`
     // we download new chunks from random peers, `ChunksPerPeer` chunks from a random peer (but we may ask the same

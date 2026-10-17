@@ -58,6 +58,18 @@ object SyncV2Filter extends VersionBasedPeerFilteringRule {
 
 }
 
+/**
+  * If peer's version is >= 6.0.9, the peer is supporting sync V3
+  */
+object SyncV3Filter extends VersionBasedPeerFilteringRule {
+  private val syncV3Version = Version(6, 0, 9)
+
+  override def condition(version: Version): Boolean = {
+    version.compare(syncV3Version) >= 0
+  }
+
+}
+
 
 /**
   * Filter used to differentiate peers supporting UTXO state snapshots, so possibly
@@ -98,7 +110,7 @@ object NipopowSupportFilter extends PeerFilteringRule {
   */
 object BlockSectionsDownloadFilter extends PeerFilteringRule {
   override def condition(peer: ConnectedPeer): Boolean = {
-    peer.mode.exists(_.allBlocksAvailable)
+    peer.mode.exists(m => m.allBlocksAvailable || m.blocksToKeep > 0)
   }
 }
 

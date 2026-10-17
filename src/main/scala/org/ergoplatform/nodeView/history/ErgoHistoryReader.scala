@@ -160,8 +160,8 @@ trait ErgoHistoryReader
     info match {
       case syncV1: ErgoSyncInfoV1 =>
         compareV1(syncV1)
-      case syncV2: ErgoSyncInfoV2 =>
-        compareV2(syncV2)
+      case otherVersion: HeadersBasedSyncInfo =>
+        compareV2(otherVersion)
     }
   }
 
@@ -174,7 +174,7 @@ trait ErgoHistoryReader
     *         Older if the neighbour is ahead,
     *         Fork if the neighbour is on a fork
     */
-  def compareV2(info: ErgoSyncInfoV2): PeerChainStatus = {
+  def compareV2(info: HeadersBasedSyncInfo): PeerChainStatus = {
     bestHeaderOpt.map { myLastHeader =>
       if (info.lastHeaders.isEmpty) {
         Younger
@@ -286,7 +286,7 @@ trait ErgoHistoryReader
     * Calculating continuation from common header which will be sent to another node
     * if comparison status is YOUNGER of FORK, for sync message V2.
     */
-  def continuationIdsV2(syncV2: ErgoSyncInfoV2, size: Int): ModifierIds = {
+  def continuationIdsV2(syncV2: HeadersBasedSyncInfo, size: Int): ModifierIds = {
     if (syncV2.lastHeaders.isEmpty) {
       // if other node has no headers yet, send up to `size` headers from genesis
       val heightTo = Math.min(headersHeight, size + EmptyHistoryHeight)
@@ -311,7 +311,7 @@ trait ErgoHistoryReader
     * @param syncInfo  other's node sync info
     * @return maybe continuation header
     */
-  def continuationHeaderV2(syncInfo: ErgoSyncInfoV2): Option[Header] = {
+  def continuationHeaderV2(syncInfo: HeadersBasedSyncInfo): Option[Header] = {
     if (syncInfo.lastHeaders.isEmpty) {
       Option.empty
     } else {
@@ -336,7 +336,7 @@ trait ErgoHistoryReader
   def continuationIds(syncInfo: ErgoSyncInfo, size: Int): ModifierIds = {
     syncInfo match {
       case syncV1: ErgoSyncInfoV1 => continuationIdsV1(syncV1, size)
-      case syncV2: ErgoSyncInfoV2 => continuationIdsV2(syncV2, size)
+      case otherVersion: HeadersBasedSyncInfo => continuationIdsV2(otherVersion, size)
     }
   }
 
@@ -405,9 +405,9 @@ trait ErgoHistoryReader
     * @param full - if false, only last header to be sent, otherwise, multiple headers
     *               full info is needed when
     */
-  def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
+  private def headersForSyncInfo(full: Boolean): Array[Header] = {
     if (isEmpty) {
-      ErgoSyncInfoV2(Nil)
+      Array.empty
     } else {
       val h = headersHeight
 
@@ -417,9 +417,47 @@ trait ErgoHistoryReader
         ErgoHistoryReader.ReducedV2SyncOffsets
       }
 
-      val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+      offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+    }
+  }
 
-      ErgoSyncInfoV2(headers)
+  def syncInfoV2(full: Boolean): ErgoSyncInfoV2 = {
+    ErgoSyncInfoV2(headersForSyncInfo(full))
+  }
+
+  def syncInfoV3(full: Boolean): ErgoSyncInfoV3 = {
+    val headers = headersForSyncInfo(full)
+    val hRanges = if (headersHeight > 0) Seq(1 -> headersHeight) else Seq.empty
+    val fbRanges = if (fullBlockHeight >= minFullBlockAvailable && fullBlockHeight > 0) {
+      Seq(minFullBlockAvailable -> fullBlockHeight)
+    } else {
+      Seq.empty
+    }
+    ErgoSyncInfoV3(headers, hRanges, fbRanges)
+  }
+
+  /**
+    * Resolve the block height of a modifier (header or block section) if known to history
+    */
+  def modifierHeightById(modifierTypeId: NetworkObjectTypeId.Value, modifierId: ModifierId): Option[Height] = {
+    if (modifierTypeId == Header.modifierTypeId) {
+      heightOf(modifierId)
+    } else {
+      Option(modifierHeightsCache.get(modifierId)).orElse {
+        modifierById(modifierId).collect {
+          case s: NonHeaderBlockSection => heightOf(s.headerId)
+        }.flatten
+      }.orElse {
+        val top = headersHeight
+        val bottom = Math.max(1, top - 256)
+        (top to bottom by -1).view.flatMap { h =>
+          headerIdsAtHeight(h).flatMap(id => typedModifierById[Header](id)).collectFirst {
+            case hdr if hdr.sectionIds.exists(_._2 == modifierId) =>
+              modifierHeightsCache.put(modifierId, hdr.height)
+              hdr.height
+          }
+        }.headOption
+      }
     }
   }
 

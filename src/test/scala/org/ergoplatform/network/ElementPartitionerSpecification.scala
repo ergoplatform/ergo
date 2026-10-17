@@ -118,4 +118,49 @@ class ElementPartitionerSpecification
     elems.size shouldBe 1
     elems.head._2.size shouldBe 1
   }
+
+  property("distribute should only assign elements to buckets that can serve them") {
+    // Bucket 1 stores 1..10, Bucket 2 stores 11..20
+    val buckets = List("peer1", "peer2")
+    val elements = (1 to 20).toSeq
+    val canServe: (String, String, Int) => Boolean = {
+      case ("peer1", _, h) => h >= 1 && h <= 10
+      case ("peer2", _, h) => h >= 11 && h <= 20
+      case _ => false
+    }
+
+    val res = ElementPartitioner.distribute(buckets, 5, Map("Header" -> elements), canServe)
+    res(("peer1", "Header")) shouldBe (1 to 10).toSeq
+    res(("peer2", "Header")) shouldBe (11 to 20).toSeq
+  }
+
+  property("distribute should balance load when one peer has all blocks and another has only a suffix") {
+    // Archive peer has 1..20, pruned peer has 11..20
+    val buckets = List("archivePeer", "prunedPeer")
+    val elements = (1 to 20).toSeq
+    val canServe: (String, String, Int) => Boolean = {
+      case ("archivePeer", _, h) => h >= 1 && h <= 20
+      case ("prunedPeer", _, h) => h >= 11 && h <= 20
+      case _ => false
+    }
+
+    val res = ElementPartitioner.distribute(buckets, 5, Map("BlockTxs" -> elements), canServe)
+    res(("archivePeer", "BlockTxs")) shouldBe (1 to 10).toSeq
+    res(("prunedPeer", "BlockTxs")) shouldBe (11 to 20).toSeq
+  }
+
+  property("distribute should skip elements that no peer can serve") {
+    val buckets = List("peer1", "peer2")
+    val elements = (1 to 30).toSeq
+    val canServe: (String, String, Int) => Boolean = {
+      case ("peer1", _, h) => h >= 1 && h <= 10
+      case ("peer2", _, h) => h >= 11 && h <= 20
+      case _ => false
+    }
+
+    val res = ElementPartitioner.distribute(buckets, 5, Map("BlockTxs" -> elements), canServe)
+    res(("peer1", "BlockTxs")) shouldBe (1 to 10).toSeq
+    res(("peer2", "BlockTxs")) shouldBe (11 to 20).toSeq
+    res.values.flatten.toSeq should not contain 25
+  }
 }

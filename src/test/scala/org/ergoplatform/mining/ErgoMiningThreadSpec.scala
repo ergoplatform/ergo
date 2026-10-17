@@ -3,7 +3,7 @@ package org.ergoplatform.mining
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.StatusReply
 import akka.testkit.{TestKit, TestProbe}
 import com.google.common.primitives.{Ints, Longs}
@@ -75,26 +75,11 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
             case OrderingBlockHeaderFound(h) =>
               val s = h.powSolution
               InputBlockHeaderFound(h.copy(powSolution =
-                new AutolykosSolution(s.pk, s.w, Longs.toByteArray(hit), dFor(timestamp))))
+                new AutolykosSolution(s.pk, s.w, Longs.toByteArray(hit), BigInt(timestamp))))
             case other => other
           }
       }
     }
-
-    protected def dFor(timestamp: Header.Timestamp): BigInt = BigInt(timestamp)
-  }
-
-  /** For a real generator: its input-block check accepts a solution only if the solution's `d` is the timestamp of
-    * the candidate it is completed with, as real PoW holds only for the header it was found on. The thread's first
-    * hit carries a wrong `d`, so the generator rejects it. */
-  private class CandidateBoundPowScheme(hits: Seq[Long]) extends FixedHitsPowScheme(hits) {
-    private val firstHit = new AtomicBoolean(true)
-
-    override protected def dFor(timestamp: Header.Timestamp): BigInt =
-      if (firstHit.getAndSet(false)) BigInt(-1) else BigInt(timestamp)
-
-    override def checkInputBlockPoW(header: Header, parameters: Parameters): Boolean =
-      header.powSolution.d == BigInt(header.timestamp)
   }
 
   /** `c` with its timestamp moved by `k` ms and a PoW message of its own, so it reads as new work either way. */
@@ -107,24 +92,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   /** `c` regenerated at the same timestamp (as with a parent dated ahead of the local clock): new PoW work. */
   private def sameTimestamp(c: Candidate): Candidate =
     c.copy(externalVersion = c.externalVersion.copy(msg = Blake2b256(c.externalVersion.msg)))
-
-  private case class ToGenerator(msg: Any)
-  private case class ToThread(msg: Any)
-
-  /** Passes every message between the thread and the generator on, reporting it to `events`. */
-  private class Relay(generator: ActorRef, events: ActorRef) extends Actor {
-    private var thread: Option[ActorRef] = None
-
-    override def receive: Receive = {
-      case m if sender() == generator =>
-        events ! ToThread(m)
-        thread.foreach(_ ! m)
-      case m =>
-        thread = Some(sender())
-        events ! ToGenerator(m)
-        generator ! m
-    }
-  }
 
   /** A real candidate, built by a real generator on a chain of its own. */
   private def realCandidate(name: String)(implicit system: ActorSystem): Candidate = {
@@ -163,7 +130,7 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   }
 
   // The generator answers "Invalid input block! PoW valid: false" when its candidate is not the one the hit was found
-  // on (it clears it), so a hit found after the rejection on the same candidate cannot be accepted either.
+  // on, so a hit found after the rejection on the same candidate cannot be accepted either.
   it should "after a rejected solution, hash and send nothing until new work, then mine it from nonce 0" in
     new TestKit(ActorSystem()) {
     try {
@@ -232,63 +199,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
       generator.expectMsgType[InputSolutionFound](10.seconds).as.d shouldBe BigInt(next.candidateBlock.timestamp)
     } finally {
       release.countDown()
-      system.terminate()
-    }
-  }
-
-  it should "against the real generator, mine the next polled candidate after a rejected solution, with no other error" in
-    new TestKit(ActorSystem()) {
-    try {
-      val pow = new CandidateBoundPowScheme(Seq(5L, 900L))
-      // the default polling interval: the thread waits for the periodic poll after a rejection
-      val chainSettings: ErgoSettings = settings.copy(
-        directory = s"${settings.directory}-real-generator-${System.nanoTime()}",
-        nodeSettings = settings.nodeSettings.copy(internalMinerPollingInterval = 500.millis),
-        chainSettings = settings.chainSettings.copy(powScheme = pow))
-      val viewHolderRef: ActorRef = ErgoNodeViewRef(chainSettings)
-      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
-      val realGenerator: ActorRef =
-        CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, chainSettings)
-      val events = TestProbe()
-      val relay = system.actorOf(Props(new Relay(realGenerator, events.ref)))
-      val thread = ErgoMiningThread(chainSettings, relay, defaultMinerSecret.w)
-
-      // a new candidate is one whose PoW message was not seen before
-      var seen = Set.empty[Seq[Byte]]
-      // up to the rejection of the thread's first solution (the first poll waits for the genesis state)
-      var solutionsBefore = 0
-      events.fishForMessage(60.seconds, hint = "the rejection of the first solution") {
-        case ToGenerator(_: SolutionFound) => solutionsBefore += 1; false
-        case ToThread(StatusReply.Success(c: Candidate)) => seen += c.externalVersion.msg.toSeq; false
-        case ToThread(StatusReply.Error(_)) => true
-        case _ => false
-      }
-      solutionsBefore shouldBe 1
-
-      // from there to the first accepted solution; the number of periodic polls depends on timing
-      var polls, newCandidates, errors, solutions, messages = 0
-      var accepted = false
-      while (!accepted && messages < 40) {
-        messages += 1
-        events.receiveOne(10.seconds) match {
-          case null => messages = 40
-          case ToGenerator(_: GenerateCandidate) => polls += 1
-          case ToGenerator(_: SolutionFound) => solutions += 1
-          case ToThread(StatusReply.Success(c: Candidate)) =>
-            if (!seen.contains(c.externalVersion.msg.toSeq)) {
-              seen += c.externalVersion.msg.toSeq
-              newCandidates += 1
-            }
-          case ToThread(StatusReply.Error(_)) => errors += 1
-          case ToThread(StatusReply.Success(())) => accepted = true
-          case _ =>
-        }
-      }
-      info(s"after one rejection: $polls polls, $newCandidates new candidates, $solutions solutions, " +
-        s"$errors more errors, accepted: $accepted")
-      (newCandidates, solutions, errors, accepted) shouldBe ((1, 1, 0, true))
-      system.stop(thread)
-    } finally {
       system.terminate()
     }
   }

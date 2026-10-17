@@ -6,7 +6,7 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState}
-import org.ergoplatform.settings.{ErgoSettings, MonetarySettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Constants, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
 import org.ergoplatform.modifiers.history.header.Header
@@ -242,6 +242,25 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     reemissionTokenId.nonEmpty && outputCandidates.exists(_.tokens.contains(reemissionTokenId))
   }
 
+  /**
+    * Mempool policy check: is the transaction collecting storage rent, i.e. spending a box via
+    * an empty spending proof and the storage-rent-specific context extension variable #127
+    * (index of the recreated output)? Storage rent is to be collected by miners directly during
+    * candidate block generation, not relayed through the mempool, so nodes with
+    * `rejectStorageRentTxs` enabled decline such transactions on entry. A transaction using the
+    * variable for any input is rejected as a whole, so that rent claims can not be laundered
+    * through the mempool inside mixed transactions. Consensus rules are unchanged: the
+    * transactions remain valid in blocks.
+    *
+    * @param tx - transaction to check
+    */
+  private[mempool] def containsStorageRentClaim(tx: ErgoTransaction): Boolean = {
+    tx.inputs.exists { input =>
+      input.spendingProof.proof.isEmpty &&
+        input.spendingProof.extension.values.contains(Constants.StorageIndexVarId)
+    }
+  }
+
   def process(unconfirmedTx: UnconfirmedTransaction, state: ErgoState[_]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTx.transaction
 
@@ -279,6 +298,16 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                   // The pool is rebuilt directly, rather than via `this.invalidate`, because that
                   // helper runs `updateStatsOnRemoval`, which resets statistics for a transaction
                   // that was never in the pool - which is exactly the case here.
+                  return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
+                    new ProcessingOutcome.Declined(exc, validationStartTime))
+                }
+
+                if (nodeSettings.rejectStorageRentTxs && containsStorageRentClaim(tx)) {
+                  log.info(s"Mempool rejecting storage rent collection transaction: ${tx.id}")
+                  val exc = new Exception(
+                    "Mempool policy declines a storage rent collection transaction")
+                  // Rebuilt directly, rather than via `this.invalidate`, for the same reason
+                  // as the re-emission prefilter above.
                   return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
                     new ProcessingOutcome.Declined(exc, validationStartTime))
                 }

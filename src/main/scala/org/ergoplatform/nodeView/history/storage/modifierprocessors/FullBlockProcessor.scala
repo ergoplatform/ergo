@@ -112,7 +112,9 @@ trait FullBlockProcessor extends HeadersProcessor {
             val prunedFrom = readPrunedHeight()
             // Preserve the fallback before advancing the floor, including when cleanup must retry.
             if (historyStorage.getIndex(PrunedHeightKey).isEmpty) writePrunedHeight(prunedFrom)
-            val lastKept = updateBestFullBlock(fullBlock.header) // new minimal full block height
+            updateBestFullBlock(fullBlock.header)
+            // A failed floor write must not authorize deletion beyond the persisted boundary.
+            val lastKept = minimalFullBlockHeight
             // Do not prune block data the wallet has not scanned yet, so it can always catch up.
             // `None` means the wallet imposes no constraint (mining-only / not-yet-initialized).
             val pruneUntil = walletScannedHeight match {

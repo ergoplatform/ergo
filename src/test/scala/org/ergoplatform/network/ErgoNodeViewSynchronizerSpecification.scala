@@ -986,7 +986,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Ensure no peers are available for downloading headers
       // This should not crash even with empty peer candidates
-      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(Header.modifierTypeId, modifierId).get.requestId)
 
       // The modifier should still be in Requested state or transitioned appropriately
       eventually {
@@ -1019,11 +1020,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       syncTracker.updateStatus(equalPeer, org.ergoplatform.consensus.Equal, Some(header.height))
 
       // Set up delivery tracker with many checks done (> 5)
-      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
-      // Simulate many delivery checks by sending multiple CheckDelivery messages
-      (1 to 7).foreach { _ =>
-        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
-      }
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer, checksDone = 6)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(Header.modifierTypeId, modifierId).get.requestId)
 
       // Should eventually try the equal peer (we can verify by checking network messages)
       // The test passes if no crash occurs and status transitions appropriately
@@ -1048,14 +1047,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Use a non-header modifier type (e.g., BlockTransactions)
       val nonHeaderTypeId = org.ergoplatform.modifiers.history.BlockTransactions.modifierTypeId
 
-      // Set up delivery tracker with requested status
-      deliveryTracker.setRequested(nonHeaderTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
-
-      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      // Expire the active request at the retry limit.
       val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
-      (1 to maxDeliveryChecks + 2).foreach { _ =>
-        synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId)
-      }
+      deliveryTracker.setRequested(nonHeaderTypeId, modifierId, peer, maxDeliveryChecks - 1)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, nonHeaderTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(nonHeaderTypeId, modifierId).get.requestId)
 
       // After max attempts, non-header modifier should be set to Unknown (not Invalid)
       eventually {
@@ -1075,14 +1071,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val header = baseChain.last
       val modifierId = header.id
 
-      // Set up delivery tracker with requested status for header
-      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer)(_ => Cancellable.alreadyCancelled)
-
-      // Send many CheckDelivery messages to exceed maxDeliveryChecks
+      // Expire the active request at the retry limit.
       val maxDeliveryChecks = settings.scorexSettings.network.maxDeliveryChecks
-      (1 to maxDeliveryChecks + 2).foreach { _ =>
-        synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId)
-      }
+      deliveryTracker.setRequested(Header.modifierTypeId, modifierId, peer, maxDeliveryChecks - 1)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(peer, Header.modifierTypeId, modifierId,
+        deliveryTracker.getRequestedInfo(Header.modifierTypeId, modifierId).get.requestId)
 
       // After max attempts, header should be marked as Invalid
       eventually {
@@ -1538,14 +1531,14 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
    *
    * A single peer sending plenty of declined (and thus cheap to produce and to check) transactions must not be able to
    * shut down transaction intake of the whole node. See `MaxDeclined`, `MinDeclinedTxCost`, `addDeclined` and
-   * `txAcceptanceFilter` in `ErgoNodeViewSynchronizer`.
+   * `canAcceptTxInv` in `ErgoNodeViewSynchronizer`.
    */
 
   private val BlocksInDeclinedChain = 10
 
   /**
     * Per-peer mempool processing budget between two applied blocks, `MempoolPeerCostPerBlock` in the synchronizer.
-    * A peer's transaction intake is stopped when the budget is reached, see `txAcceptanceFilter`.
+    * A peer's transaction intake is stopped when the budget is reached, see `canAcceptTxInv`.
     */
   private val PeerBudgetBetweenBlocks = 10000000
 
@@ -1570,7 +1563,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
   /**
     * Fixture for the declined transactions properties. Unlike `SynchronizerFixture`, the history here has all the
-    * blocks applied, so that `hr.fullBlockHeight == hr.headersHeight` and `txAcceptanceFilter` may pass.
+    * blocks applied, so that `hr.fullBlockHeight == hr.headersHeight` and `canAcceptTxInv` may pass.
     */
   private class DeclinedTransactionsFixture extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
@@ -1798,93 +1791,43 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   /**
-    * Regression test for the shared processing cache stall: a peer which exhausted its per-block budget
-    * (via cheap declines charged with `MinDeclinedTxCost`) has its deliveries put into the shared
-    * `txProcessingCache`, which must neither grow unbounded nor stall transaction intake of other peers -
-    * over-budget peers' records are dropped from the cache when it is drained.
+    * Reservations now bound outstanding transaction responses below the processing cache limit.
+    * Budgeted inventory tails and peer fairness are covered in MempoolInflightBudgetSpec; here
+    * the admitted cached response must still resume when a block is applied.
     */
-  property("NodeViewSynchronizer: over-budget peer's cached transactions do not stall intake of other peers") {
-    withDeclinedTransactionsFixture { ctx =>
-      import ctx._
-
-      val attacker = newPeer
-      val honest = newPeer
-
-      // one decline short of the per-block budget (49 * MinDeclinedTxCost = 9.8M < 10M),
-      // so the attacker's invs are still served
-      declineTxs(attacker, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost - 1, cost = 1000)
-
-      // the attacker announces many transactions before delivering any; each inv is served
-      val txs = Seq.fill(60)(dummyDeclinedTx())
-      txs.foreach(tx => invTxAndExpectRequest(attacker, tx))
-
-      // the attacker delivers all of them at once: the first is sent for processing, up to
-      // `MaxProcessingTransactionsCacheSize` are cached, the rest are dropped
-      val modData = ModifiersData(ErgoTransaction.modifierTypeId, txs.map(tx => tx.id -> tx.bytes).toMap)
-      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(attacker))
-
-      // the first transaction of the delivery is being processed
-      vhProbe.fishForMessage(5.seconds) {
-        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
-        case _ => false
-      }
-
-      // barrier: the response to this inv proves that the delivery above is fully processed
-      invTxAndExpectRequest(honest, dummyDeclinedTx())
-      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe
-        synchronizerTestRef.underlyingActor.MaxProcessingTransactionsCacheSize
-
-      // the result for the transaction being processed comes in: the attacker is over its budget now
-      declineTxs(attacker, count = 1, cost = 1000)
-
-      // the cached records of the over-budget attacker are dropped, so other peers are still served
-      invTxAndExpectRequest(honest, dummyDeclinedTx())
-      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 0
-
-      // nothing from the attacker's cached delivery was sent for processing
-      vhProbe.receiveWhile(1.second) { case m => m }.collect {
-        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => t
-      } shouldBe empty
-    }
-  }
-
-  /**
-    * The transaction processing cache is bounded: a delivery bigger than the cache is partially dropped
-    * (dropped transactions can be requested again when re-announced), and cache processing is resumed
-    * when a new block is applied.
-    */
-  property("NodeViewSynchronizer: transaction processing cache is bounded and drained on block applied") {
+  property("NodeViewSynchronizer: admitted cached transaction resumes on block applied") {
     withDeclinedTransactionsFixture { ctx =>
       import ctx._
 
       val peer = newPeer
 
-      val txs = Seq.fill(60)(dummyDeclinedTx())
+      val txs = Seq.fill(2)(dummyDeclinedTx())
+      txs.map(_.id).distinct.size shouldBe 2
       txs.foreach(tx => invTxAndExpectRequest(peer, tx))
 
       val modData = ModifiersData(ErgoTransaction.modifierTypeId, txs.map(tx => tx.id -> tx.bytes).toMap)
       synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
 
-      // the first transaction is sent for processing
+      // One response is sent for processing while the other remains cached.
+      var firstForwardedId = Option.empty[scorex.util.ModifierId]
       vhProbe.fishForMessage(5.seconds) {
-        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote
+          if txs.exists(_.id == t.unconfirmedTx.id) =>
+          firstForwardedId = Some(t.unconfirmedTx.id)
+          true
         case _ => false
       }
 
-      // barrier: the response to this inv proves that the delivery above is fully processed
-      invTxAndExpectRequest(peer, dummyDeclinedTx())
-      // the rest of the delivery is cached up to the limit, the remainder is dropped
-      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe
-        synchronizerTestRef.underlyingActor.MaxProcessingTransactionsCacheSize
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 1
 
-      // on block applied the cache processing is resumed: one more record is sent for processing
+      // The block boundary resumes the cached transaction.
       synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
       vhProbe.fishForMessage(5.seconds) {
-        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote =>
+          txs.exists(_.id == t.unconfirmedTx.id) && !firstForwardedId.contains(t.unconfirmedTx.id)
         case _ => false
       }
-      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe
-        synchronizerTestRef.underlyingActor.MaxProcessingTransactionsCacheSize - 1
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 0
     }
   }
 

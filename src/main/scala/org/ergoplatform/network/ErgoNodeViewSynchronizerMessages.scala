@@ -12,6 +12,8 @@ import scorex.util.ModifierId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.history.popow.NipopowProof
 
+import java.util.UUID
+
 /**
   * Repository of messages processed ErgoNodeViewSynchronizer actor
   */
@@ -29,7 +31,8 @@ object ErgoNodeViewSynchronizerMessages {
      */
     case class CheckDelivery(source: ConnectedPeer,
                              modifierTypeId: NetworkObjectTypeId.Value,
-                             modifierId: ModifierId)
+                             modifierId: ModifierId,
+                             requestId: UUID)
 
     trait PeerManagerEvent
 

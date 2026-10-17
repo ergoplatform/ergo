@@ -6,7 +6,12 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.utils.TestFileUtils
-import scorex.util.bytesToId
+import scorex.db.{LDBFactory, StoreRegistry}
+import scorex.util.{ModifierId, bytesToId}
+
+import java.io.File
+import java.io.IOException
+import scala.util.{Failure, Try}
 
 /**
   * The rent index is written only while `storageRentCollection` is on. The marker-based
@@ -71,5 +76,78 @@ class RentIndexMarkerSpec extends ErgoCorePropertyTest with TestFileUtils {
     history.closeStorage()
     markerPresent(dir) shouldBe true
     readProbe(dir) shouldBe None
+  }
+
+  private def failedMarkerRemovalClosesBeforeRetry(throwsBeforeTry: Boolean): Unit = {
+    val dir = createTempDir.getAbsolutePath
+    var history = openHistory(dir, rentCollection = true)
+    history.closeStorage()
+    writeProbe(dir)
+    markerPresent(dir) shouldBe true
+
+    val failedRemoval = new IOException("injected rent-marker removal failure")
+    var closedByStartup = false
+    val storage = new HistoryStorage(
+      LDBFactory.createKvDb(s"$dir/history/index"),
+      LDBFactory.createKvDb(s"$dir/history/objects"),
+      LDBFactory.createKvDb(s"$dir/history/extra"),
+      settingsFor(dir, rentCollection = false).cacheSettings
+    ) {
+      override def removeExtraTry(ids: Array[ModifierId]): Try[Unit] = {
+        if (ids.toSeq == Seq(bytesToId(RentIndexEnabledKey))) {
+          if (throwsBeforeTry) throw failedRemoval else Failure(failedRemoval)
+        }
+        else super.removeExtraTry(ids)
+      }
+
+      override def close(): Unit = {
+        closedByStartup = true
+        super.close()
+      }
+    }
+
+    val registeredPaths = LDBFactory.factory.asInstanceOf[StoreRegistry].map.keySet
+    val storagePaths = Seq("index", "objects", "extra").map { name =>
+      new File(s"$dir/history/$name")
+    }
+    storagePaths.foreach { path =>
+      registeredPaths should contain(path)
+    }
+
+    val attempt = Try(ErgoHistory.readOrGenerateWithStorage(settingsFor(dir, rentCollection = false), storage)(null))
+    attempt.foreach(_.closeStorage())
+    try {
+      attempt.failed.get shouldBe failedRemoval
+      closedByStartup shouldBe true
+
+      // The registry must no longer hold any of the three LevelDB handles.
+      storagePaths.foreach { path =>
+        registeredPaths should not contain path
+      }
+
+      // The failed startup must release the LevelDB lock so a later restart can retry.
+      markerPresent(dir) shouldBe true
+      readProbe(dir) shouldBe defined
+
+      history = openHistory(dir, rentCollection = false)
+      history.closeStorage()
+      markerPresent(dir) shouldBe false
+      readProbe(dir) shouldBe defined
+
+      history = openHistory(dir, rentCollection = true)
+      history.closeStorage()
+      markerPresent(dir) shouldBe true
+      readProbe(dir) shouldBe None
+    } finally {
+      if (attempt.isFailure) Try(storage.close()).getOrElse(())
+    }
+  }
+
+  property("returned rent-marker removal failure aborts startup and permits a retry") {
+    failedMarkerRemovalClosesBeforeRetry(throwsBeforeTry = false)
+  }
+
+  property("thrown rent-marker removal failure aborts startup and permits a retry") {
+    failedMarkerRemovalClosesBeforeRetry(throwsBeforeTry = true)
   }
 }

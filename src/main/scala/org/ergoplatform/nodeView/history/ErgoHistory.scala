@@ -266,9 +266,14 @@ object ErgoHistory extends ScorexLogging {
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory =
+    readOrGenerateWithStorage(ergoSettings, HistoryStorage(ergoSettings))
+
   @nowarn("cat=unused")
-  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    var db = HistoryStorage(ergoSettings)
+  private[history] def readOrGenerateWithStorage(ergoSettings: ErgoSettings,
+                                                 initialStorage: HistoryStorage)
+                                                (implicit context: ActorContext): ErgoHistory = {
+    var db = initialStorage
 
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
@@ -445,7 +450,15 @@ object ErgoHistory extends ScorexLogging {
         }.get
         db = freshDb
       } else if (!ergoSettings.nodeSettings.storageRentCollection && rentEnabledStored) {
-        db.removeExtra(Array(bytesToId(RentIndexEnabledKey)))
+        Try(db.removeExtraTry(Array(bytesToId(RentIndexEnabledKey)))).flatten.recoverWith { case error =>
+          log.error(
+            "Rent-index marker removal failed; node startup is aborting. " +
+              "Correct the storage failure and restart, or set " +
+              "storageRentCollection = true and restart.",
+            error)
+          Try(db.close()).failed.foreach(error.addSuppressed)
+          Failure(error)
+        }.get
       }
     }
 

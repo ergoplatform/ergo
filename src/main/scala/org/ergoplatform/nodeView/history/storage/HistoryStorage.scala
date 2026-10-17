@@ -188,19 +188,27 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   def contains(id: ModifierId): Boolean = get(id).isDefined
 
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
-             objectsToInsert: Array[BlockSection]): Try[Unit] = {
+             objectsToInsert: Array[BlockSection],
+             indexesToRemove: Array[ByteArrayWrapper] = Array.empty): Try[Unit] = {
     objectsStore.insert(
       objectsToInsert.map(mod => mod.serializedId),
       objectsToInsert.map(mod => HistoryModifierSerializer.toBytes(mod))
     ).flatMap { _ =>
       cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i))}
-      if (indexesToInsert.nonEmpty) {
-        indexStore.insert(
-          indexesToInsert.map(_._1.data),
-          indexesToInsert.map(_._2)
-        ).map { _ =>
+      if (indexesToInsert.nonEmpty || indexesToRemove.nonEmpty) {
+        val insertedKeys = indexesToInsert.map(_._1.data)
+        val insertedValues = indexesToInsert.map(_._2)
+        val write = if (indexesToRemove.nonEmpty) {
+          indexStore.update(insertedKeys, insertedValues, indexesToRemove.map(_.data))
+        } else {
+          indexStore.insert(insertedKeys, insertedValues)
+        }
+        write.map { _ =>
           cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
             indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
+          }
+          cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
+            indexCache.invalidate(indexesToRemove(i))
           }
         }
       } else Success(())

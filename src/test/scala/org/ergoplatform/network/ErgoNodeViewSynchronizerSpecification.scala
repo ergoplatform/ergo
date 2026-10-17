@@ -2140,17 +2140,21 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
         Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
-      val pendingBarrierId = modifierIdGen.sample.get
-      synchronizerMockRef ! Message(InvSpec,
-        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(pendingBarrierId)))), Some(peer))
+      // A fresh peer's sync response fences the chunk on this actor without
+      // relying on a header-download peer being available during cancellation.
+      val barrierPeer = ConnectedPeer(connectionIdGen.sample.get,
+        TestProbe("SnapshotBarrierPeer").ref, peer.peerInfo)
+      synchronizerMockRef ! HandshakedPeer(barrierPeer)
+      synchronizerMockRef ! SendLocalSyncInfo
       ncProbe.fishForMessage(5.seconds) {
         case _: PenalizePeer => fail("A chunk received during holder-side discard was penalized")
-        case sent: SendToNetwork if sent.message.spec.messageCode == RequestModifierSpec.messageCode =>
-          val inv = sent.message.data.get.asInstanceOf[InvData]
-          inv.typeId == Header.modifierTypeId && inv.ids.contains(pendingBarrierId)
+        case sent: SendToNetwork if sent.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode =>
+          sent.sendingStrategy match {
+            case SendToPeers(peers) => peers.contains(barrierPeer)
+            case _ => false
+          }
         case _ => false
       }
-      deliveryTracker.setUnknown(pendingBarrierId, Header.modifierTypeId)
 
       updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
       system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))

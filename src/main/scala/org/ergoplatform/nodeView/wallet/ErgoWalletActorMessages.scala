@@ -5,9 +5,10 @@ import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
-import org.ergoplatform.sdk.wallet.secrets.DerivationPath
+import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, ExtendedPublicKey}
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ChainStatus
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
@@ -164,7 +165,7 @@ object ErgoWalletActorMessages {
    *
    * @param path
    */
-  final case class DeriveKey(path: String)
+  final case class DeriveKey(path: DerivationPath)
 
   /**
    * Get boxes related to P2PK payments
@@ -213,7 +214,7 @@ object ErgoWalletActorMessages {
    * @param minHeight - min inclusion height of unspent boxes
    * @param maxHeight - max inclusion height of unspent boxes
    */
-  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Int, maxHeight: Int)
+  final case class GetScanUnspentBoxes(scanId: ScanId, considerUnconfirmed: Boolean, minHeight: Height, maxHeight: Height)
 
   /**
    * Get spent boxes related to a scan
@@ -281,8 +282,8 @@ object ErgoWalletActorMessages {
    * @param includeUnconfirmed - whether to include transactions from mempool that match given scanId
    */
   case class GetFilteredScanTxs(scanIds: List[ScanId],
-                                minHeight: Int,
-                                maxHeight: Int,
+                                minHeight: Height,
+                                maxHeight: Height,
                                 minConfNum: Int,
                                 maxConfNum: Int,
                                 includeUnconfirmed: Boolean)
@@ -306,7 +307,7 @@ object ErgoWalletActorMessages {
   /**
    * Rescan wallet
    */
-  case class RescanWallet(fromHeight: Int)
+  case class RescanWallet(fromHeight: Height)
 
   /**
    * Get wallet status
@@ -411,5 +412,85 @@ object ErgoWalletActorMessages {
    * @param status
    */
   case class AddBoxResponse(status: Try[Unit])
+
+  /**
+   * Wallet's response to [[InitWallet]] containing the generated mnemonic phrase.
+   */
+  final case class InitWalletResponse(result: Try[SecretString])
+
+  /**
+   * Wallet's response to [[RestoreWallet]].
+   */
+  final case class RestoreWalletResponse(result: Try[Unit])
+
+  /**
+   * Wallet's response to [[UnlockWallet]].
+   */
+  final case class UnlockWalletResponse(result: Try[Unit])
+
+  /**
+   * Wallet's response to [[RescanWallet]].
+   */
+  final case class RescanWalletResponse(result: Try[Unit])
+
+  /**
+   * Wallet's response to [[CheckSeed]] — whether the supplied mnemonic matches stored secret.
+   */
+  final case class CheckSeedResponse(matched: Try[Boolean])
+
+  /**
+   * Wallet's response to [[DeriveKey]] containing the derived address.
+   */
+  final case class DeriveKeyResponse(address: Try[P2PKAddress])
+
+  /**
+   * Wallet's response to [[GetPrivateKeyFromPath]].
+   */
+  final case class PrivateKeyFromPathResponse(key: Try[DLogProverInput])
+
+  /**
+   * Wallet's response to [[ReadPublicKeys]].
+   */
+  final case class PublicKeysResponse(addresses: Seq[P2PKAddress])
+
+  /**
+   * Wallet's response to [[ReadExtendedPublicKeys]].
+   */
+  final case class ExtendedPublicKeysResponse(keys: Seq[ExtendedPublicKey])
+
+  /**
+   * Wallet's response to [[GetWalletBoxes]].
+   */
+  final case class WalletBoxesResponse(boxes: Seq[WalletBox])
+
+  /**
+   * Wallet's response to [[GetScanUnspentBoxes]] / [[GetScanSpentBoxes]].
+   */
+  final case class ScanBoxesResponse(boxes: Seq[WalletBox])
+
+  /**
+   * Wallet's response to [[GetTransactions]].
+   */
+  final case class WalletTransactionsResponse(txs: Seq[AugWalletTransaction])
+
+  /**
+   * Wallet's response to [[GetTransaction]].
+   */
+  final case class WalletTransactionResponse(tx: Option[AugWalletTransaction])
+
+  /**
+   * Wallet's response to [[ReadBalances]].
+   */
+  final case class BalancesResponse(digest: WalletDigest)
+
+  /**
+   * Wallet's response to a signed-transaction [[GenerateTransaction]] request.
+   */
+  final case class SignedTransactionResponse(tx: Try[ErgoTransaction])
+
+  /**
+   * Wallet's response to an unsigned-transaction [[GenerateTransaction]] request.
+   */
+  final case class UnsignedTransactionResponse(tx: Try[UnsignedErgoTransaction])
 
 }

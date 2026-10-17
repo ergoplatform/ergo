@@ -5,7 +5,7 @@ import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate, SolutionAck}
 import org.ergoplatform.mining.ErgoMiner.StartMining
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
@@ -165,7 +165,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     def loop(toSend: Int): Unit = {
       val toSpend: Seq[ErgoBox] = await(
         wallet.walletBoxes(unspentOnly = false, considerUnconfirmed = false)
-      ).map(_.trackedBox.box).toList
+      ).boxes.map(_.trackedBox.box).toList
       log.debug(s"Generate more transactions from ${toSpend.length} boxes. $toSend remains," +
         s"pool size: ${requestReaders.m.size}")
       val txs: Seq[ErgoTransaction] = toSpend.take(toSend) map { boxToSend =>
@@ -269,13 +269,13 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }

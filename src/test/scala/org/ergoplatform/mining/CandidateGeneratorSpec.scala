@@ -5,7 +5,7 @@ import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
-import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate, SolutionAck}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
@@ -117,7 +117,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     candidateGenerator.tell(block.header.powSolution, replyProbe.ref)
-    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(SolutionAck))
 
     // block sections were sent to the (fake) node view holder
     viewHolderProbe.expectMsg(LocallyGeneratedModifier(block.header))
@@ -148,7 +148,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           .get
     }
     candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
-    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(SolutionAck))
 
     system.terminate()
   }
@@ -181,7 +181,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
     candidateGenerator.tell(block.header.powSolution, replyProbe.ref)
-    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(SolutionAck))
 
     // block sections were sent to the (fake) node view holder
     viewHolderProbe.expectMsg(LocallyGeneratedModifier(block.header))
@@ -212,7 +212,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           .get
     }
     candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
-    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(SolutionAck))
 
     system.terminate()
   }
@@ -294,13 +294,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(block.header.powSolution, testProbe.ref)
     // we fish either for ack or SSM as the order is non-deterministic
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) =>
+      case StatusReply.Success(SolutionAck) =>
         testProbe.expectMsgPF(candidateGenDelay) {
           case FullBlockApplied(header) if header.id != block.header.parentId =>
         }
         true
       case FullBlockApplied(header) if header.id != block.header.parentId =>
-        testProbe.expectMsg(StatusReply.Success(()))
+        testProbe.expectMsg(StatusReply.Success(SolutionAck))
         true
     }
 
@@ -346,13 +346,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -436,13 +436,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -495,13 +495,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -542,13 +542,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -587,13 +587,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -647,13 +647,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -702,13 +702,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
         // we fish either for ack or SSM as the order is non-deterministic
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -935,7 +935,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     var ackSeen = false
     var appliedSeen = false
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) =>
+      case StatusReply.Success(SolutionAck) =>
         ackSeen = true
         ackSeen && appliedSeen
       case FullBlockApplied(header) if header.id == initBlock.header.id =>
@@ -1019,7 +1019,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     var ackSeen = false
     var appliedSeen = false
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) =>
+      case StatusReply.Success(SolutionAck) =>
         ackSeen = true
         ackSeen && appliedSeen
       case FullBlockApplied(header) if header.id == initBlock.header.id =>
@@ -1055,7 +1055,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     // CandidateGenerator should accept the solution against cachedPreviousCandidate.
     testProbe.expectMsgPF(blockValidationDelay) {
-      case StatusReply.Success(()) =>
+      case StatusReply.Success(SolutionAck) =>
     }
 
     system.terminate()
@@ -1101,7 +1101,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(initBlock.header.powSolution, testProbe.ref)
     // Wait for both StatusReply and FullBlockApplied messages
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
+      case StatusReply.Success(SolutionAck) => true
       case _: FullBlockApplied => true
       case _ => false
     }
@@ -1149,7 +1149,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     // Should successfully apply the block
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
+      case StatusReply.Success(SolutionAck) => true
       case _: FullBlockApplied => true
       case _ => false
     }
@@ -1236,13 +1236,13 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           .get
         candidateGenerator.tell(block.header.powSolution, testProbe.ref)
         testProbe.fishForMessage(blockValidationDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             testProbe.expectMsgPF(candidateGenDelay) {
               case FullBlockApplied(header) if header.id != block.header.parentId =>
             }
             true
           case FullBlockApplied(header) if header.id != block.header.parentId =>
-            testProbe.expectMsg(StatusReply.Success(()))
+            testProbe.expectMsg(StatusReply.Success(SolutionAck))
             true
         }
     }
@@ -1294,7 +1294,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     // Should successfully apply the block
     testProbe.fishForMessage(blockValidationDelay) {
-      case StatusReply.Success(()) => true
+      case StatusReply.Success(SolutionAck) => true
       case FullBlockApplied(header) if header.id != solvedBlock.header.parentId => true
       case _ => false
     }

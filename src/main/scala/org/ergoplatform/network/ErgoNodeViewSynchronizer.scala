@@ -23,7 +23,7 @@ import scorex.core.network._
 import scorex.core.network.{ConnectedPeer, ModifiersStatus, SendToPeer, SendToPeers}
 import org.ergoplatform.network.message.{InvData, Message, ModifiersData}
 import org.ergoplatform.utils.ScorexEncoding
-import org.ergoplatform.validation.{MalformedModifierError, ParentHeaderNotFoundError}
+import org.ergoplatform.validation.{MalformedModifierError, ParentHeaderNotFoundError, RecoverableModifierError}
 import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
@@ -800,7 +800,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
             val syncInfo = if (syncV2Supported(remote)) {
-              getV2SyncInfo(hr, full = false)
+              // full, not reduced (last header only) sync info, otherwise a node on a fork never tells where
+              // its chain branches off while the peer keeps delivering headers: every reduced sync info sent
+              // postpones the periodic sync, which carries the older headers
+              getV2SyncInfo(hr, full = true)
             } else {
               getV1SyncInfo(hr)
             }
@@ -1308,11 +1311,34 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   @SuppressWarnings(Array("org.wartremover.warts.IsInstanceOf"))
   def validateAndSetStatus(hr: ErgoHistory, remote: ConnectedPeer, pmod: BlockSection): Boolean = {
+    def transactionHeaderMissing: Boolean = pmod match {
+      case txs: BlockTransactions => hr.typedModifierById[Header](txs.headerId).isEmpty
+      case _ => false
+    }
+
     hr.applicableTry(pmod) match {
       case Failure(e) if e.isInstanceOf[MalformedModifierError] =>
-        log.warn(s"Modifier ${pmod.encodedId} is permanently invalid", e)
-        deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
-        penalizeMisbehavingPeer(remote)
+        log.warn(s"Modifier ${pmod.encodedId} failed validation", e)
+        // The transaction section ID does not commit to blockVersion. A peer can send
+        // wrong-version bytes under the correct ID, so keep that ID downloadable.
+        val sameIdVersionMismatch = pmod match {
+          case txs: BlockTransactions =>
+            hr.typedModifierById[Header](txs.headerId).exists { header =>
+              header.transactionsId == txs.id && header.version != txs.blockVersion
+            }
+          case _ => false
+        }
+        if (sameIdVersionMismatch) {
+          deliveryTracker.setUnknown(pmod.id, pmod.modifierTypeId)
+          penalizeMisbehavingPeer(remote)
+        } else {
+          deliveryTracker.setInvalid(pmod.id, pmod.modifierTypeId)
+          penalizeMisbehavingPeer(remote)
+        }
+        false
+      case Failure(_: RecoverableModifierError) if transactionHeaderMissing =>
+        // Wait for the header before caching an ID whose version cannot yet be checked.
+        deliveryTracker.setUnknown(pmod.id, pmod.modifierTypeId)
         false
       case _ =>
         deliveryTracker.setReceived(pmod.id, pmod.modifierTypeId, remote)

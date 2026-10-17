@@ -16,9 +16,11 @@ import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
 import org.ergoplatform.core.idToVersion
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.ModifierId
 import sigma.ast.ErgoTree
 import sigma.data.ProveDlog
+import sigma.interpreter.ProverResult
 import sigma.{Coll, Colls}
 import sigmastate.eval.Extensions._
 
@@ -47,11 +49,19 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   val minimalSuffix = 2
   val txCostLimit: Height = initSettings.nodeSettings.maxTransactionCost
   val txSizeLimit: Height = initSettings.nodeSettings.maxTransactionSize
-  val startTime: Long = System.currentTimeMillis() - ((5000 - 1) * blockInterval.toMillis)
+  // Fresh chains must stay within the node's freshness window (blockInterval * headerChainDiff)
+  // for their sections to be accepted, so the base timestamp is recomputed for every generated
+  // chain - a value fixed at class-loading goes stale while a long test suite is running.
+  private var startTime: Long = freshStartTime()
+
+  private def freshStartTime(): Long = System.currentTimeMillis() - ((5000 - 1) * blockInterval.toMillis)
 
   var endTime: Long = 0
 
   def generate(length: Int, dir: File, history: ErgoHistory, stateOpt: Option[UtxoState]): UtxoState = {
+    // Refresh the base timestamp only for a fresh chain: an extension continues from the
+    // timestamps of the chain being extended.
+    if (stateOpt.isEmpty) startTime = freshStartTime()
     val state = stateOpt.getOrElse {
         val stateDir = new File(s"${dir.getAbsolutePath}/state")
         stateDir.mkdirs()
@@ -94,8 +104,16 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       val candidate = genCandidate(defaultProver.hdPubKeys.head.key, last, time, txs, state)(history)
       val block = proveCandidate(candidate.get)
 
-      assert(history.append(block.header).isSuccess)
-      block.blockSections.foreach(s => if (!history.contains(s)) assert(history.append(s).isSuccess))
+      val headerAppend = history.append(block.header)
+      assert(headerAppend.isSuccess,
+        s"append of header ${block.header.encodedId} at height ${block.header.height} failed: ${headerAppend.failed.map(_.toString)}")
+      block.blockSections.foreach { s =>
+        if (!history.contains(s)) {
+          val res = history.append(s)
+          assert(res.isSuccess,
+            s"append of section ${s.encodedId} of block ${block.encodedId} at height ${block.header.height} failed: ${res.failed.map(_.toString)}")
+        }
+      }
 
       val outToPassNext = if (last.isEmpty) {
         block.transactions.flatMap(_.outputs).find(_.ergoTree == minerProp)
@@ -208,6 +226,40 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
       CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)
     }
   }.flatten
+
+  /**
+    * Builds a block with valid PoW on top of the current best full block, whose transactions
+    * spend the given box ids (which may be nonexistent or already spent on the valid chain),
+    * and appends it to history without applying it to the state. The block's state root is
+    * copied from its parent and its AD proofs are arbitrary bytes. This mimics the window
+    * between a block being written to history (best-full-chain marker set) and the state
+    * rejecting it.
+    */
+  def forgeUnvalidatedBlock(history: ErgoHistory, inputBoxIds: Seq[Array[Byte]]): ErgoFullBlock = {
+    val parent = history.bestFullBlockOpt.get.header
+    val height = parent.height + 1
+    val txs = inputBoxIds.map { boxId =>
+      ErgoTransaction(
+        IndexedSeq(Input(ADKey @@ boxId, ProverResult.empty)),
+        IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(MinTxAmount, selfAddressScript, height)))
+    }
+    val nBits = DifficultySerializer.encodeCompactBits(history.requiredDifficultyAfter(parent))
+    val interlinks = history.typedModifierById[Extension](parent.extensionId)
+      .flatMap(ext => NipopowAlgos.unpackInterlinks(ext.fields).toOption)
+      .map(nipopowAlgos.updateInterlinks(parent, _))
+      .getOrElse(Seq.empty)
+    val candidate = CandidateBlock(Some(parent), parent.version, nBits, parent.stateRoot,
+      SerializedAdProof @@ scorex.utils.Random.randomBytes(64), txs,
+      parent.timestamp + blockInterval.toMillis,
+      nipopowAlgos.interlinksToExtension(interlinks), Array(0: Byte, 0: Byte, 0: Byte))
+    val block = proveCandidate(candidate)
+    history.append(block.header).get
+    block.blockSections.foreach { s =>
+      if (!history.contains(s)) history.append(s).get
+    }
+    block
+  }
 
   @tailrec
   private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {

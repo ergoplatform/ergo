@@ -21,7 +21,9 @@ import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Try}
 
-class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexerBase with FileUtils {
+class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
+                            override protected val rentIndexEnabled: Boolean = true)
+  extends ExtraIndexerBase with FileUtils {
 
   override def receive: Receive = {
     case test.CreateDB(blockCount: Int) => createDB(blockCount)
@@ -134,8 +136,12 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     super.stopIndexer()
   }
 
-  override protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
-    val headerOpt = super.fullChainHeaderAtHeight(height)
+  /**
+    * Applies the header-lookup test seams (unavailable-header observation and one-shot
+    * non-extending header) to the best-chain header lookup.
+    */
+  private def withHeaderSeams(height: Int, headerLookup: => Option[Header]): Option[Header] = {
+    val headerOpt = headerLookup
     unavailableHeaderObserver.foreach { case (observedHeight, probe) =>
       if (height == observedHeight && headerOpt.isEmpty) {
         probe ! height
@@ -149,6 +155,14 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
       headerOpt
     }
   }
+
+  override protected def fullChainHeaderAtHeight(height: Int): Option[Header] =
+    withHeaderSeams(height, super.fullChainHeaderAtHeight(height))
+
+  // The fixture drives the indexer over a history without a state: every block on the
+  // history's best full chain counts as applied.
+  override protected def appliedTipOpt: Option[Header] =
+    _history.bestFullBlockIdOpt.flatMap(historyStorage.modifierById).collect { case header: Header => header }
 
   override protected def blockTransactionsForHeader(header: Header): Option[BlockTransactions] = {
     if (deferredTransactionsHeightOpt.contains(header.height)) {
@@ -175,7 +189,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
         LDBFactory.createKvDb(s"${dir.getAbsolutePath}/history/extra"),
         dbSettings.cacheSettings
       ) {
-        override def insertExtraTry(entries: Array[(Array[Byte], Array[Byte])], objects: Array[ExtraIndex]): Try[Unit] = {
+        override def insertExtraTry(entries: Array[(Array[Byte], Array[Byte])], objects: Array[ExtraIndex],
+                                    removals: Array[ModifierId]): Try[Unit] = {
           val marker = entries.find(_._1.sameElements(ExtraIndexer.RollbackToKey)).map(e => ByteBuffer.wrap(e._2).getInt)
           val shouldFail = writeFailurePhase match {
             case "forward" => marker.contains(0)
@@ -191,9 +206,11 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
               writeFailureProbe.foreach(_ ! pendingIds)
             }
             Failure(new IllegalStateException(s"injected $writeFailurePhase write failure"))
-          } else super.insertExtraTry(entries, objects).map { _ =>
+          } else super.insertExtraTry(entries, objects, removals).map { _ =>
             if (writeFailurePhase.nonEmpty) {
               completedWriteKinds += marker.map(m => if (m > 0) "marked" else "unmarked").getOrElse("rows")
+              // rent-row removals ride the same batch since saveProgress was made atomic
+              if (removals.nonEmpty) completedWriteKinds += "remove"
             }
           }
         }
@@ -235,6 +252,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification) extends ExtraIndexe
     templates.clear()
     tokens.clear()
     segments.clear()
+    rentBoxes.clear()
+    rentBoxDeletes.clear()
     deferredHeaderHeightOpt = None
     deferredTransactionsHeightOpt = None
     unavailableHeaderObserver = None

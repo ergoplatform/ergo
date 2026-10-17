@@ -22,6 +22,8 @@ import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, S
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
+import scorex.db.LDBVersionedStore
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -68,7 +70,13 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * state (result of log's modifiers application to pre-historical(genesis) state,
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
-  private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+  private var nodeView: NodeView = Try(restoreState().getOrElse(genesisState)).recover { case ex =>
+    log.error("Failed to initialize node view, shutting down the node", ex)
+    Try(ErgoApp.shutdownSystem()(context.system)).failed.foreach { shutdownError =>
+      if (shutdownError ne ex) ex.addSuppressed(shutdownError)
+    }
+    throw ex
+  }.get
 
   /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
   private var chainProgress: Option[ChainProgress] = None
@@ -457,12 +465,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   @SuppressWarnings(Array("AsInstanceOf"))
   def restoreState(): Option[NodeView] = if (ErgoHistory.historyDir(settings).listFiles().isEmpty) {
+    val dir = ErgoState.stateDir(settings)
+    val contents = if (dir.exists()) {
+      Option(dir.listFiles()).getOrElse(throw new IllegalStateException("Cannot read persisted state directory"))
+    } else Array.empty[File]
+    if (contents.nonEmpty && !isPersistedGenesisStateWithoutHistory(dir)) {
+      throw new IllegalStateException("Persisted state cannot be matched to an empty history")
+    }
     None
   } else {
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
+    val storedState = Try(ErgoState.readOrGenerate(settings).asInstanceOf[State])
+    val consistentState = storedState.flatMap(state => Try(restoreConsistentState(state, history)).flatten)
+    consistentState match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -473,9 +490,41 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
         log.error("Failed to recover state, try to resync from genesis manually", ex)
-        ErgoApp.shutdownSystem()(context.system)
-        None
+        Try(history.closeStorage()).failed.foreach { closeError =>
+          if (closeError ne ex) ex.addSuppressed(closeError)
+        }
+        storedState.toOption.foreach { state =>
+          Try(state.closeStorage()).failed.foreach { closeError =>
+            if (closeError ne ex) ex.addSuppressed(closeError)
+          }
+        }
+        throw ex
     }
+  }
+
+  private def isPersistedGenesisStateWithoutHistory(dir: File): Boolean = {
+    if (!new File(dir, "ldb_main/CURRENT").isFile || !new File(dir, "ldb_undo/CURRENT").isFile) {
+      return false
+    }
+    val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
+    val genesisRoot = settings.chainSettings.genesisStateDigest
+    val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
+    val metadataMatches = try {
+      val rootMatches = store.get(genesisVersion).exists(_.sameElements(genesisRoot))
+      val contextMatches = store.get(ErgoStateReader.ContextKey).exists(hasCanonicalGenesisContext)
+      contextMatches && (settings.nodeSettings.stateType match {
+        case StateType.Utxo =>
+          rootMatches &&
+            store.get(UtxoState.bestVersionKey).exists(_.sameElements(genesisVersion)) &&
+            store.lastVersionID.exists(_.sameElements(genesisRoot)) &&
+            new VersionedLDBAVLStorage(store).restorePrunedProver().toOption
+              .exists(_.digest.sameElements(genesisRoot))
+        case StateType.Digest =>
+          rootMatches && store.lastVersionID.exists(_.sameElements(genesisVersion))
+      })
+    } finally store.close()
+
+    metadataMatches
   }
 
   //todo: update state in async way?
@@ -608,9 +657,34 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         history.bestHeaderAtHeight(snapshotHeight)
       })
 
+  private def isCanonicalGenesisState(state: State): Boolean = {
+    val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
+    val genesisRoot = settings.chainSettings.genesisStateDigest
+    def hasGenesisContext(store: LDBVersionedStore): Boolean =
+      store.get(ErgoStateReader.ContextKey).exists(hasCanonicalGenesisContext)
+    java.util.Arrays.equals(state.rootDigest, genesisRoot) && (state match {
+      case utxo: UtxoState =>
+        hasGenesisContext(utxo.store) &&
+          utxo.store.get(UtxoState.bestVersionKey).exists(_.sameElements(genesisVersion)) &&
+          utxo.store.get(genesisVersion).exists(_.sameElements(genesisRoot)) &&
+          utxo.store.lastVersionID.exists(_.sameElements(genesisRoot))
+      case digest: DigestState =>
+        hasGenesisContext(digest.store) &&
+          digest.store.get(genesisVersion).exists(_.sameElements(genesisRoot)) &&
+          digest.store.lastVersionID.exists(_.sameElements(genesisVersion))
+      case _ => false
+    })
+  }
+
+  private def hasCanonicalGenesisContext(bytes: Array[Byte]): Boolean = {
+    val expected = ErgoStateContext.empty(settings.chainSettings, settings.launchParameters).bytes
+    ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(bytes).toOption
+      .exists(_.bytes.sameElements(expected))
+  }
+
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {
     (stateIn.version, history.bestFullBlockOpt, stateIn) match {
-      case (ErgoState.genesisStateVersion, None, _) =>
+      case (ErgoState.genesisStateVersion, None, _) if isCanonicalGenesisState(stateIn) =>
         log.info("State and history are both empty on startup")
         Success(stateIn)
       case (stateId, Some(block), _) if stateId == block.id =>
@@ -619,6 +693,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (_, None, _) if isPreparedUtxoSnapshotState(stateIn, history) =>
         log.info(s"Prepared UTXO snapshot state ${encoder.encode(stateIn.version)} restored before the first full block")
         Success(stateIn)
+      case (ErgoState.genesisStateVersion, None, _) =>
+        Failure(new IllegalStateException("Persisted genesis version does not match canonical genesis state"))
+      case (_, None, _) if settings.nodeSettings.verifyTransactions =>
+        Failure(new IllegalStateException("Persisted non-genesis state has no best full-block pointer"))
       case (_, None, _) =>
         log.info("State and history are inconsistent. History is empty on startup, rollback state to genesis.")
         stateIn.closeStorage()

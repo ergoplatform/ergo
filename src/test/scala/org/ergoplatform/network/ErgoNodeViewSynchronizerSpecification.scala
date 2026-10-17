@@ -472,7 +472,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val history = ErgoHistory.readOrGenerate(settings)(null)
       val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
-      val withParent = applyBlock(history, blocks.head)
+      val withParent = org.ergoplatform.utils.generators.ChainGenerator.applyBlock(history, blocks.head)
       val withHeader = withParent.append(blocks.last.header).get._1
       synchronizer ! ChangedHistory(withHeader)
       synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
@@ -564,7 +564,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val history = ErgoHistory.readOrGenerate(settings)(null)
       val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
-      val withParent = applyBlock(history, blocks.head)
+      val withParent = org.ergoplatform.utils.generators.ChainGenerator.applyBlock(history, blocks.head)
       synchronizer ! ChangedHistory(withParent)
       synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
 
@@ -2181,38 +2181,44 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(startupBarrierId)))), Some(peer))
       requestForModifierSent(ncProbe, Header.modifierTypeId, startupBarrierId)
       deliveryTracker.setUnknown(startupBarrierId, Header.modifierTypeId)
-      synchronizerMockRef ! ChangedState(getCurrentState.getReader)
+      val receivingState = UtxoState.fromBoxHolder(
+        boxesHolderGenOfSize(1).sample.get, None, createTempDir, synchronizerSettings, parameters)
+      synchronizerMockRef ! ChangedState(receivingState)
 
-      val (manifest, chunks) = snapshotWithChunks(64, 1.toByte)
-      chunks.size shouldBe 2
-      val absentHeight = ctx.chain.last.height + 1
-      updHistory.bestHeaderAtHeight(absentHeight) shouldBe None
-      val initialFloor = updHistory.minimalFullBlockHeight
-      val plan = updHistory.registerManifestToDownload(manifest, absentHeight, Seq(peer, peerB))
-      val requested = updHistory.getChunkIdsToDownload(chunks.size)
-      requested.zip(chunks).foreach { case (id, (expectedId, _)) =>
-        id.sameElements(expectedId) shouldBe true
-        deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value,
-          scorex.util.ModifierId @@ Algos.encode(id), peer)(_ => Cancellable.alreadyCancelled)
-      }
+      try {
+        val (manifest, chunks) = snapshotWithChunks(64, 1.toByte)
+        chunks.size shouldBe 2
+        val absentHeight = ctx.chain.last.height + 1
+        updHistory.bestHeaderAtHeight(absentHeight) shouldBe None
+        val initialFloor = updHistory.minimalFullBlockHeight
+        val plan = updHistory.registerManifestToDownload(manifest, absentHeight, Seq(peer, peerB))
+        val requested = updHistory.getChunkIdsToDownload(chunks.size)
+        requested.zip(chunks).foreach { case (id, (expectedId, _)) =>
+          id.sameElements(expectedId) shouldBe true
+          deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value,
+            scorex.util.ModifierId @@ Algos.encode(id), peer)(_ => Cancellable.alreadyCancelled)
+        }
 
-      chunks.foreach { case (_, bytes) =>
-        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
-          Left(UtxoSnapshotChunkSpec.toBytes(bytes)), Some(peer))
+        chunks.foreach { case (_, bytes) =>
+          synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+            Left(UtxoSnapshotChunkSpec.toBytes(bytes)), Some(peer))
+        }
+        val discard = viewHolderProbe.fishForMessage(5.seconds) {
+          case _: InitStateFromSnapshot => fail("No header exists for this completed snapshot")
+          case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
+          case _ => false
+        }.asInstanceOf[DiscardSnapshotDownload]
+        updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
+        system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
+        ncProbe.fishForMessage(5.seconds) {
+          case sent: SendToNetwork => sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }
+        updHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+        updHistory.minimalFullBlockHeight shouldBe initialFloor
+      } finally {
+        receivingState.closeStorage()
       }
-      val discard = viewHolderProbe.fishForMessage(5.seconds) {
-        case _: InitStateFromSnapshot => fail("No header exists for this completed snapshot")
-        case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
-        case _ => false
-      }.asInstanceOf[DiscardSnapshotDownload]
-      updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
-      system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
-      ncProbe.fishForMessage(5.seconds) {
-        case sent: SendToNetwork => sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
-        case _ => false
-      }
-      updHistory.utxoSetSnapshotDownloadPlan() shouldBe None
-      updHistory.minimalFullBlockHeight shouldBe initialFloor
     }
   }
 

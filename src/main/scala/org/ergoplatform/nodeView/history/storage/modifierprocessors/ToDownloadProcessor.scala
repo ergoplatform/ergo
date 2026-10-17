@@ -90,7 +90,8 @@ trait ToDownloadProcessor
       case Some(fb) =>
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
-        // (but not below minimal full block height, as there could be no headers below it, e.g. after NiPoPoW bootstrap)
+        // (but not below minimal full block height: block sections below it fail `bsTooOld` validation and their sender
+        // is penalized, and there could be no headers below it, e.g. after NiPoPoW bootstrap)
         val minHeight = Math.max(minimalFullBlockHeight, fb.header.height - 100)
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case None if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) =>

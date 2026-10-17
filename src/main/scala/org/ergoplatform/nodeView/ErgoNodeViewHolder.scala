@@ -30,6 +30,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -519,12 +520,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  val newMemPool = if (almostSynced) {
-                    updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
-                  } else {
-                    memoryPool()
-                  }
-
                   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
                   val v = vault()
                   val newVault = if (progressInfo.chainSwitchingNeeded) {
@@ -540,18 +535,18 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     blocksApplied.foreach(newVault.scanPersistent)
                   }
 
-                  // if blockchain is synced,
-                  // send an order to clean mempool up from transactions possibly become invalid
-                  // we can check mempool transactions only in "utxo" mode
-                  newMinState match {
-                    case utxoStateReader: UtxoStateReader if headersHeight == fullBlockHeight =>
-                      val recheckCommand = RecheckMempool(utxoStateReader, newMemPool)
-                      context.system.eventStream.publish(recheckCommand)
-                    case _ =>
-                  }
-
                   log.info(s"Persistent modifier ${pmod.encodedId} applied successfully")
-                  updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(newMemPool))
+                  if (almostSynced) {
+                    updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), None)
+                    val basePool = memoryPool()
+                    val toRemove = progressInfo.toRemove
+                    val selfRef = self
+                    Future(updateMemPool(toRemove, blocksApplied, basePool))(context.dispatcher).foreach { updatedPool =>
+                      selfRef ! MempoolUpdated(basePool, updatedPool, toRemove, blocksApplied)
+                    }(context.dispatcher)
+                  } else {
+                    updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(memoryPool()))
+                  }
                   chainProgress =
                     Some(ChainProgress(pmod, headersHeight, fullBlockHeight, System.currentTimeMillis()))
 
@@ -696,6 +691,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
+    case MempoolUpdated(basePool, updatedPool, blocksRemoved, blocksApplied) =>
+      val finalPool = if (memoryPool() eq basePool) {
+        updatedPool
+      } else {
+        updateMemPool(blocksRemoved, blocksApplied, memoryPool())
+      }
+      updateNodeView(updatedMempool = Some(finalPool))
+      // if blockchain is synced,
+      // send an order to clean mempool up from transactions possibly become invalid
+      // we can check mempool transactions only in "utxo" mode
+      minimalState() match {
+        case utxoStateReader: UtxoStateReader if history().headersHeight == history().fullBlockHeight =>
+          val recheckCommand = RecheckMempool(utxoStateReader, finalPool)
+          context.system.eventStream.publish(recheckCommand)
+        case _ =>
+      }
     case RecheckedTransactions(unconfirmedTxs) =>
       val updatedPool = memoryPool().put(unconfirmedTxs)
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -801,6 +812,11 @@ object ErgoNodeViewHolder {
     case class RecheckedTransactions(unconfirmedTxs: Iterable[UnconfirmedTransaction])
 
     case class EliminateTransactions(ids: Seq[ModifierId])
+
+    case class MempoolUpdated(basePool: ErgoMemPool,
+                              updatedPool: ErgoMemPool,
+                              blocksRemoved: Seq[BlockSection],
+                              blocksApplied: Seq[BlockSection])
 
     case object IsChainHealthy
     sealed trait HealthCheckResult

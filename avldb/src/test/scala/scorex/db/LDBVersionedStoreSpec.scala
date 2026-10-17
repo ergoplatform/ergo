@@ -104,4 +104,19 @@ class LDBVersionedStoreSpec extends AnyPropSpec with Matchers {
     store.update(version3, Seq.empty, Seq(k1 -> v1)).get
     store.versionIdExists(version3) shouldBe true
    }
+
+  property("rollbackTo current version when keepVersions = 0 is a no-op") {
+    val dir0 = getRandomTempDir
+    val store0 = new LDBVersionedStore(dir0, 0)
+    val v1 = Longs.toByteArray(1001L)
+    val k1 = Longs.toByteArray(1L)
+    val val1 = Longs.toByteArray(10L)
+
+    store0.update(v1, Seq.empty, Seq(k1 -> val1)).get
+    store0.lastVersionID.get.sameElements(v1) shouldBe true
+    store0.rollbackTo(v1).isSuccess shouldBe true
+    store0.lastVersionID.get.sameElements(v1) shouldBe true
+    store0.get(k1).get.sameElements(val1) shouldBe true
+    store0.close()
+  }
 }

@@ -1,8 +1,9 @@
 package org.ergoplatform.network
 
-import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
+import akka.actor.{ActorIdentity, ActorRef, ActorSystem, Cancellable, Identify, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.Input
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -16,11 +17,13 @@ import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockSectionProcessor
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{SnapshotsDb, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{SnapshotsDb, SnapshotsInfo, StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoSettingsReader, UtxoSettings}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.utils.{NodeViewTestConfig, NodeViewTestContext, NodeViewTestOps}
+import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
@@ -30,7 +33,7 @@ import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer, SendToPeers}
 import scorex.crypto.authds.{ADKey, ADValue}
 import scorex.crypto.authds.avltree.batch.{ProverLeaf, VersionedLDBAVLStorage}
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
@@ -50,12 +53,14 @@ import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
 import java.util.concurrent.atomic.AtomicInteger
+import java.net.InetSocketAddress
 
 class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   with Matchers
   with ScalaCheckPropertyChecks
   with FileUtils
-  with Eventually {
+  with Eventually
+  with NodeViewTestOps {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
@@ -1566,6 +1571,189 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       holderHistory.utxoSetSnapshotDownloadPlan() shouldBe None
       holderHistory.minimalFullBlockHeight shouldBe initialFloor
       holderHistory.isUtxoSnapshotApplied shouldBe false
+    }
+  }
+
+  property("NodeViewSynchronizer: rejected snapshot A admits and applies a new manifest B") {
+    val snapshotHeight = 19
+    val defaults = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true,
+      popowBootstrap = false, utxoBootstrap = true).toSettings
+    val bootstrapSettings = defaults.copy(chainSettings = defaults.chainSettings.copy(
+      voting = defaults.chainSettings.voting.copy(votingLength = snapshotHeight + 1),
+      epochLength = snapshotHeight + 1))
+
+    new NodeViewFixture(bootstrapSettings, parameters).apply { fixture =>
+      implicit val ctx: NodeViewTestContext = fixture
+      implicit val system: ActorSystem = fixture.actorSystem
+      val (manifestA, chunksA) = snapshotWithChunks(9216, ManifestSerializer.MainnetManifestDepth)
+      val (manifestB, chunksB) = snapshotWithChunks(9217, ManifestSerializer.MainnetManifestDepth)
+      manifestA.id.toSeq should not be manifestB.id.toSeq
+      chunksA should not be empty
+      chunksB should not be empty
+
+      val rootA = VersionedLDBAVLStorage.digest(manifestA.id, manifestA.rootHeight)
+      val rootB = VersionedLDBAVLStorage.digest(manifestB.id, manifestB.rootHeight)
+      val holderGate = TestProbe("SnapshotHolderGate")
+      val network = TestProbe("SnapshotRecoveryNetwork")
+      val firstHandler = TestProbe("SnapshotRecoveryFirstHandler")
+      val secondHandler = TestProbe("SnapshotRecoverySecondHandler")
+      val barrier = TestProbe("SnapshotRecoveryBarrier")
+      val rejection = TestProbe("SnapshotRecoveryRejection")
+      system.eventStream.subscribe(rejection.ref, classOf[SnapshotApplicationRejected])
+
+      val snapshotOnlyMode = ModePeerFeature(StateType.Utxo,
+        verifyingTransactions = true, nipopowBootstrapped = None,
+        blocksToKeep = ModePeerFeature.UTXOSetBootstrapped)
+      val peerInfo = PeerInfo(defaultPeerSpec.copy(features = Seq(snapshotOnlyMode)),
+        System.currentTimeMillis())
+      val firstPeer = ConnectedPeer(connectionIdGen.sample.get, firstHandler.ref, Some(peerInfo))
+      val secondPeer = firstPeer.copy(
+        connectionId = firstPeer.connectionId.copy(
+          remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      val syncTracker = ErgoSyncTracker(fixture.settings.scorexSettings.network)
+      val deliveryTracker = DeliveryTracker.empty(fixture.settings)
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        network.ref, holderGate.ref, ErgoSyncInfoMessageSpec,
+        fixture.settings, syncTracker, deliveryTracker)(fixture.executionContext)))
+
+      def actorBarrier(label: String): Unit = {
+        barrier.send(synchronizer, Identify(label))
+        barrier.expectMsgType[ActorIdentity].correlationId shouldBe label
+      }
+
+      def offerAndAdmit(manifest: BatchAVLProverManifest[Digest32]): Long = {
+        val infoBytes = SnapshotsInfoSpec.toBytes(
+          new SnapshotsInfo(Map(snapshotHeight -> manifest.id)))
+        barrier.send(synchronizer, Message(SnapshotsInfoSpec, Left(infoBytes), Some(firstPeer)))
+        barrier.send(synchronizer, Message(SnapshotsInfoSpec, Left(infoBytes), Some(secondPeer)))
+        val request = network.fishForMessage(10.seconds) {
+          case sent: SendToNetwork =>
+            sent.message.spec.messageCode == GetManifestSpec.messageCode &&
+              sent.message.data.get.asInstanceOf[Array[Byte]].toSeq == manifest.id.toSeq
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        val manifestPeer = request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+        val bytes = ManifestSerializer.defaultSerializer.toBytes(manifest)
+        barrier.send(synchronizer, Message(ManifestSpec,
+          Left(ManifestSpec.toBytes(bytes)), Some(manifestPeer)))
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          getHistory.utxoSetSnapshotDownloadPlan().map(_.utxoSetRootHash.toSeq) shouldBe
+            Some(manifest.id.toSeq)
+        }
+        getHistory.utxoSetSnapshotDownloadPlan().get.sessionId
+      }
+
+      def deliverChunks(chunks: Seq[(Array[Byte], Array[Byte])]): Unit = {
+        val byId = chunks.map { case (id, bytes) => bytesToId(id) -> bytes }.toMap
+        var remaining = byId.keySet
+        while (remaining.nonEmpty) {
+          val request = network.fishForMessage(20.seconds) {
+            case sent: SendToNetwork =>
+              sent.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode &&
+                remaining.contains(bytesToId(sent.message.data.get.asInstanceOf[Array[Byte]]))
+            case _ => false
+          }.asInstanceOf[SendToNetwork]
+          val id = bytesToId(request.message.data.get.asInstanceOf[Array[Byte]])
+          val chunkPeer = request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+          barrier.send(synchronizer, Message(UtxoSnapshotChunkSpec,
+            Left(UtxoSnapshotChunkSpec.toBytes(byId(id))), Some(chunkPeer)))
+          remaining -= id
+        }
+      }
+
+      try {
+        holderGate.expectMsgType[GetNodeViewChanges](10.seconds)
+        val history = getHistory
+        val generated = genHeaderChain(snapshotHeight, history,
+          diffBitsOpt = None, useRealTs = false).headers
+        val template = generated.last
+        val parent = generated(snapshotHeight - 2)
+        val headerA = powScheme.prove(Some(parent), template.version, template.nBits,
+          rootA, template.ADProofsRoot, template.transactionsRoot, template.timestamp,
+          template.extensionRoot, template.votes, defaultMinerSecretNumber).get
+        applyHeaderChain(history, HeaderChain(generated.dropRight(1) :+ headerA))
+        history.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(headerA.id)
+        history.setHeadersChainSynced()
+        val initialFloor = history.minimalFullBlockHeight
+        val initialRoot = getCurrentState.rootDigest.toSeq
+
+        barrier.send(synchronizer, ChangedHistory(history))
+        barrier.send(synchronizer, ChangedMempool(ErgoMemPool.empty(fixture.settings)))
+        barrier.send(synchronizer, ChangedState(getCurrentState.getReader))
+        barrier.send(synchronizer, HandshakedPeer(firstPeer))
+        barrier.send(synchronizer, HandshakedPeer(secondPeer))
+        barrier.send(synchronizer, CheckModifiersToDownload)
+        network.fishForMessage(10.seconds) {
+          case sent: SendToNetwork if
+              sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+            sent.sendingStrategy match {
+              case targets: SendToPeers =>
+                targets.chosenPeers.map(_.handlerRef).toSet ==
+                  Set(firstPeer.handlerRef, secondPeer.handlerRef)
+              case _ => false
+            }
+          case _ => false
+        }
+
+        val sessionA = offerAndAdmit(manifestA)
+        deliverChunks(chunksA)
+        val importA = holderGate.fishForMessage(10.seconds) {
+          case _: InitStateFromSnapshot => true
+          case _ => false
+        }.asInstanceOf[InitStateFromSnapshot]
+        importA.blockId shouldBe headerA.id
+        importA.sessionId shouldBe sessionA
+        network.receiveWhile(100.millis) { case message => message }
+
+        val headerB = powScheme.prove(Some(parent), template.version, template.nBits,
+          rootB, template.ADProofsRoot, template.transactionsRoot,
+          Math.max(System.currentTimeMillis(), headerA.timestamp + 1),
+          template.extensionRoot, template.votes, defaultMinerSecretNumber).get
+        history.append(headerB).get
+        val childB = nextHeader(Some(headerB), history.difficultyCalculator,
+          tsOpt = Some(headerB.timestamp + 1), diffBitsOpt = None, useRealTs = false)
+        history.append(childB).get
+        history.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(headerB.id)
+
+        holderGate.send(fixture.nodeViewHolderRef, importA)
+        rejection.expectMsg(10.seconds, SnapshotApplicationRejected(sessionA))
+        network.fishForMessage(10.seconds) {
+          case sent: SendToNetwork =>
+            sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          history.utxoSetSnapshotDownloadPlan() shouldBe None
+        }
+        history.minimalFullBlockHeight shouldBe initialFloor
+        getCurrentState.rootDigest.toSeq shouldBe initialRoot
+
+        val sessionB = offerAndAdmit(manifestB)
+        sessionB should not be sessionA
+        barrier.send(synchronizer, SnapshotApplicationRejected(sessionA))
+        actorBarrier("stale-A-rejection-processed")
+        history.utxoSetSnapshotDownloadPlan().map(_.sessionId) shouldBe Some(sessionB)
+
+        deliverChunks(chunksB)
+        val importB = holderGate.fishForMessage(10.seconds) {
+          case _: InitStateFromSnapshot => true
+          case _ => false
+        }.asInstanceOf[InitStateFromSnapshot]
+        importB.blockId shouldBe headerB.id
+        importB.sessionId shouldBe sessionB
+        holderGate.send(fixture.nodeViewHolderRef, importB)
+        eventually(timeout(30.seconds), interval(200.millis)) {
+          getHistory.isUtxoSnapshotApplied shouldBe true
+          getCurrentState.rootDigest.toSeq shouldBe rootB.toSeq
+          getHistory.minimalFullBlockHeight shouldBe snapshotHeight + 1
+        }
+      } finally {
+        val stopped = TestProbe("SnapshotRecoverySynchronizerStopped")
+        stopped.watch(synchronizer)
+        system.stop(synchronizer)
+        stopped.expectTerminated(synchronizer, 10.seconds)
+      }
     }
   }
 

@@ -1,11 +1,12 @@
 package org.ergoplatform.http.routes
 
 import java.net.InetSocketAddress
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
+import io.circe.syntax._
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{P2PKAddress, Pay2SAddress, Pay2SHAddress}
 import org.ergoplatform.http.api.ErgoUtilsApiRoute
@@ -13,6 +14,7 @@ import org.ergoplatform.settings.RESTApiSettings
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.util.encode.Base16
+import sigma.ast.{ErgoTree, SigmaOr, SigmaPropConstant}
 import sigma.serialization.ErgoTreeSerializer
 
 import scala.concurrent.duration._
@@ -35,9 +37,16 @@ class UtilsApiRouteSpec extends AnyFlatSpec
 
   val treeSerializer: ErgoTreeSerializer = new ErgoTreeSerializer
 
+  private def jsonStringEntity(value: String) =
+    HttpEntity(ContentTypes.`application/json`, value.asJson.noSpaces)
+
   it should "derive address from ErgoTree (p2s)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2saddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2saddress.toString())
+    }
+    Post(s"$prefix/ergoTreeToAddress", jsonStringEntity(et)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2saddress.toString())
     }
@@ -49,6 +58,12 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       val json = responseAs[Json]
       log.info(s"Received node info: $json")
       val c = json.hcursor
+      c.downField("address").as[String] shouldEqual Right(p2saddress.toString())
+      c.downField("isValid").as[Boolean] shouldEqual Right(true)
+    }
+    Post(s"$prefix/address", jsonStringEntity(p2saddress.toString())) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
       c.downField("address").as[String] shouldEqual Right(p2saddress.toString())
       c.downField("isValid").as[Boolean] shouldEqual Right(true)
     }
@@ -65,6 +80,13 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("isValid").as[Boolean] shouldEqual Right(false)
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
     }
+    Post(s"$prefix/address", jsonStringEntity(invalidAddress)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("address").as[String] shouldEqual Right(invalidAddress)
+      c.downField("isValid").as[Boolean] shouldEqual Right(false)
+      c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
+    }
   }
 
   //p2sh
@@ -72,6 +94,10 @@ class UtilsApiRouteSpec extends AnyFlatSpec
   it should "derive address from ErgoTree (p2sh)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2shaddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2shaddress.toString())
+    }
+    Post(s"$prefix/ergoTreeToAddress", jsonStringEntity(et)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2shaddress.toString())
     }
@@ -86,6 +112,12 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("address").as[String] shouldEqual Right(p2shaddress.toString())
       c.downField("isValid").as[Boolean] shouldEqual Right(true)
     }
+    Post(s"$prefix/address", jsonStringEntity(p2shaddress.toString())) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("address").as[String] shouldEqual Right(p2shaddress.toString())
+      c.downField("isValid").as[Boolean] shouldEqual Right(true)
+    }
   }
 
   it should "validate incorrect address (p2sh)" in {
@@ -95,6 +127,13 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       val json = responseAs[Json]
       log.info(s"Received node info: $json")
       val c = json.hcursor
+      c.downField("address").as[String] shouldEqual Right(invalidAddress)
+      c.downField("isValid").as[Boolean] shouldEqual Right(false)
+      c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
+    }
+    Post(s"$prefix/address", jsonStringEntity(invalidAddress)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
       c.downField("address").as[String] shouldEqual Right(invalidAddress)
       c.downField("isValid").as[Boolean] shouldEqual Right(false)
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
@@ -119,11 +158,25 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       val c = json.hcursor
       c.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
     }
+
+    Post(s"$prefix/addressToRaw", jsonStringEntity(p2pkaddress.toString())) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("raw").as[String] shouldEqual Right(raw)
+    }
+
+    Post(s"$prefix/rawToAddress", jsonStringEntity(raw)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+    }
   }
 
   it should "derive address from ErgoTree (p2pk)" in {
     val et = Base16.encode(treeSerializer.serializeErgoTree(p2pkaddress.script))
     Get(s"$prefix/ergoTreeToAddress/$et") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+    }
+    Post(s"$prefix/ergoTreeToAddress", jsonStringEntity(et)) ~> route ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
     }
@@ -135,6 +188,12 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       val json = responseAs[Json]
       log.info(s"Received node info: $json")
       val c = json.hcursor
+      c.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
+      c.downField("isValid").as[Boolean] shouldEqual Right(true)
+    }
+    Post(s"$prefix/address", jsonStringEntity(p2pkaddress.toString())) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
       c.downField("address").as[String] shouldEqual Right(p2pkaddress.toString())
       c.downField("isValid").as[Boolean] shouldEqual Right(true)
     }
@@ -151,7 +210,41 @@ class UtilsApiRouteSpec extends AnyFlatSpec
       c.downField("isValid").as[Boolean] shouldEqual Right(false)
       c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
     }
+    Post(s"$prefix/address", jsonStringEntity(invalidAddress)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("address").as[String] shouldEqual Right(invalidAddress)
+      c.downField("isValid").as[Boolean] shouldEqual Right(false)
+      c.downField("error").as[String] shouldEqual Right("requirement failed: Trying to decode mainnet address in testnet")
+    }
+  }
+
+  it should "handle oversized (>2000 chars) ErgoTree and Pay2SAddress via POST endpoints" in {
+    val largeProp = SigmaOr(Seq.fill(60)(SigmaPropConstant(defaultMinerPk)))
+    val largeTree = ErgoTree.fromProposition(largeProp)
+    val largeTreeHex = Base16.encode(treeSerializer.serializeErgoTree(largeTree))
+    val largeP2S = Pay2SAddress(largeTree)(settings.addressEncoder)
+    val largeP2SStr = largeP2S.toString()
+
+    largeTreeHex.length should be > 2000
+    largeP2SStr.length should be > 2000
+
+    Post(s"$prefix/ergoTreeToAddress", jsonStringEntity(largeTreeHex)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(largeP2SStr)
+    }
+
+    Post(s"$prefix/address", jsonStringEntity(largeP2SStr)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val c = responseAs[Json].hcursor
+      c.downField("address").as[String] shouldEqual Right(largeP2SStr)
+      c.downField("isValid").as[Boolean] shouldEqual Right(true)
+    }
+
+    Post(s"$prefix/addressToRaw", jsonStringEntity(largeP2SStr)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json].hcursor.downField("raw").as[String] shouldEqual Right(largeTreeHex)
+    }
   }
 
 }
-

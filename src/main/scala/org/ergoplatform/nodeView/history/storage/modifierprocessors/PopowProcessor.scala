@@ -43,7 +43,14 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   private lazy val nipopowVerifier =
     new NipopowVerifier(chainSettings.genesisId.orElse(bestHeaderIdAtHeight(ErgoHistoryUtils.GenesisHeight)))
 
-  protected val NipopowSnapshotHeightKey: ByteArrayWrapper = ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
+  private[history] val LegacyNipopowSnapshotKey: ByteArrayWrapper =
+    ByteArrayWrapper(Array.fill(HashLength)(50: Byte))
+
+  private[history] val NipopowProofV2Key: ByteArrayWrapper =
+    ByteArrayWrapper(Array.fill(HashLength)(51: Byte))
+
+  // Periodic snapshot production and P2P reads use V2. The legacy row remains untouched.
+  protected val NipopowSnapshotHeightKey: ByteArrayWrapper = NipopowProofV2Key
 
   /**
     * Minimal superchain length ('m' in KMZ17 paper) value used in NiPoPoW proofs for bootstrapping

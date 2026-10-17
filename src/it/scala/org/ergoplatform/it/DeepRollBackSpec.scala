@@ -172,13 +172,13 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       docker.stopNode(minerAGen.containerId)
       docker.stopNode(minerBGen.containerId)
 
-      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, isolatedPeersConfig,
+      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, noConnectionsConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
 
       // 1. Let nodeA mine `chainLength + delta` blocks in isolation
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
 
-      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, isolatedPeersConfig,
+      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, noConnectionsConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
       Async.await(observeNodes("isolated miners started", minerAIsolated, minerBIsolated))
 

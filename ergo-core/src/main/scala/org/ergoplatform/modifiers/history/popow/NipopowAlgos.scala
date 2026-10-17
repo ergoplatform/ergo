@@ -67,7 +67,9 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     */
   def maxLevelOf(header: Header): Int =
     if (!header.isGenesis) {
-      val requiredTarget = org.ergoplatform.mining.q / DifficultySerializer.decodeCompactBits(header.nBits)
+      val decodedDifficulty = DifficultySerializer.decodeCompactBits(header.nBits)
+      require(decodedDifficulty > 0, "Decoded difficulty target must be positive")
+      val requiredTarget = org.ergoplatform.mining.q / decodedDifficulty
       val realTarget = powScheme.powHit(header).doubleValue
       val level = log2(requiredTarget.doubleValue) - log2(realTarget.doubleValue)
       level.toInt
@@ -98,7 +100,7 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     * end function
     */
   def bestArg(chain: Seq[Header])(m: Int): Int = {
-    require(m >= 1, s"$m < 1")
+    PoPowParams.requireValidM(m)
 
     @scala.annotation.tailrec
     def loop(level: Int, acc: Seq[(Int, Int)] = Seq.empty): Seq[(Int, Int)] =
@@ -134,6 +136,7 @@ class NipopowAlgos(val chainSettings: ChainSettings) {
     val k = params.k
     val m = params.m
 
+    PoPowParams.requireValid(m, k)
     require(chain.lengthCompare(k + m) >= 0, s"Can not prove chain of size < ${k + m}")
     require(chain.head.header.isGenesis, "Can not prove non-anchored chain")
 

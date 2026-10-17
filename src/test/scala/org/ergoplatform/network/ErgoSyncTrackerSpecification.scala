@@ -110,4 +110,32 @@ class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
     syncTracker.peersByStatus.get(Equal) shouldBe None
     syncTracker.peersByStatus.isEmpty shouldBe true
   }
+
+  property("storedHeaders and storedFullblocks ranges in ErgoPeerStatus") {
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val peer = createPeer("v3peer", 9010)
+
+    syncTracker.updateStatus(
+      peer,
+      Older,
+      Some(1000),
+      peerHeaders = Seq(1 -> 500, 600 -> 1000),
+      peerFullblocks = Seq(800 -> 1000)
+    )
+
+    val status = syncTracker.statuses(peer)
+    status.headersHeight shouldBe 1000
+    status.storedHeaders shouldBe Seq(1 -> 500, 600 -> 1000)
+    status.storedFullblocks shouldBe Seq(800 -> 1000)
+
+    status.hasHeaderAt(250) shouldBe true
+    status.hasHeaderAt(550) shouldBe false
+    status.hasHeaderAt(750) shouldBe true
+    status.hasHeaderAt(1001) shouldBe false
+
+    status.hasFullBlockAt(799) shouldBe false
+    status.hasFullBlockAt(800) shouldBe true
+    status.hasFullBlockAt(1000) shouldBe true
+    status.hasFullBlockAt(1001) shouldBe false
+  }
 }

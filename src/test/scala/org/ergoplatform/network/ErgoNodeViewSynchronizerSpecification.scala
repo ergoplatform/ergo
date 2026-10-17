@@ -1603,7 +1603,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val snapshotOnlyMode = ModePeerFeature(StateType.Utxo,
         verifyingTransactions = true, nipopowBootstrapped = None,
-        blocksToKeep = ModePeerFeature.UTXOSetBootstrapped)
+        blocksToKeep = ModePeerFeature.AllBlocksKept)
       val peerInfo = PeerInfo(defaultPeerSpec.copy(features = Seq(snapshotOnlyMode)),
         System.currentTimeMillis())
       val firstPeer = ConnectedPeer(connectionIdGen.sample.get, firstHandler.ref, Some(peerInfo))

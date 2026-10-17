@@ -338,9 +338,12 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
         .flatMap { mnemonic =>
           initStorage(mnemonic).flatMap { newSecretStorage =>
             // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
+            // set initial wallet height to current chain height to avoid rescanning from height 0, see https://github.com/ergoplatform/ergo/issues/1722
             recreateRegistry(state, settings).flatMap { stateV1 =>
-              recreateStorage(stateV1, settings).map { stateV2 =>
-                mnemonic -> stateV2.copy(secretStorageOpt = Some(newSecretStorage), walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings))
+              stateV1.registry.updateHeight(state.fullHeight).flatMap { _ =>
+                recreateStorage(stateV1, settings).map { stateV2 =>
+                  mnemonic -> stateV2.copy(secretStorageOpt = Some(newSecretStorage), walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings))
+                }
               }
             }
           }
@@ -427,11 +430,14 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
 
   override def recreateStorage(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] =
     Try {
+      val stateContext = state.stateContext
       val storageFolder = WalletStorage.storageFolder(settings)
       log.info(s"Removing the wallet storage folder $storageFolder")
       state.storage.close()
       deleteRecursive(storageFolder)
-      state.copy(storage = WalletStorage.readOrCreate(settings))
+      val storage = WalletStorage.readOrCreate(settings)
+      storage.updateStateContext(stateContext)
+      state.copy(storage = storage)
     }
 
   override def getWalletBoxes(state: ErgoWalletState, unspentOnly: Boolean, considerUnconfirmed: Boolean): Seq[WalletBox] = {

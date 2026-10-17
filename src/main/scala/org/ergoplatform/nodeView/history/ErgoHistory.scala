@@ -348,6 +348,14 @@ object ErgoHistory extends ScorexLogging {
         }
       }
 
+      // A selected header fork may diverge before the applied full block. Its sections
+      // are not evidence of an interrupted application of the selected full chain.
+      if (damagedHeaderIdOpt.isEmpty && headersAbove.nonEmpty &&
+        (headersAbove.last.height != fullHeight + 1 ||
+          headersAbove.last.parentId != bestFullBlockOpt.get.id)) {
+        return false
+      }
+
       damagedHeaderIdOpt match {
         case Some(damagedHeaderId) =>
           truncateHeadersChain(history, headersAbove, damagedHeaderId)

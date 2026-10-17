@@ -7,7 +7,19 @@ import scorex.util.bytesToId
 
 class HistogramStatsSpec extends AnyFlatSpec with Matchers {
 
-  "Fee histogram" should "place future-created transactions in the first bin" in {
+  "Fee histogram" should "put all transactions in the overflow bin for a zero range" in {
+    val now = 10000L
+    val futureTx = WeightedTxId(bytesToId(Array.fill(32)(7.toByte)), 1L, 7L, now + 1000L)
+    val oldTx = WeightedTxId(bytesToId(Array.fill(32)(8.toByte)), 1L, 11L, now - 1000L)
+
+    HistogramStats.getFeeHistogram(now, 2, 0L, Seq(futureTx, oldTx)).toSeq shouldBe Seq(
+      FeeHistogramBin(0, 0L),
+      FeeHistogramBin(0, 0L),
+      FeeHistogramBin(2, 18L)
+    )
+  }
+
+  it should "place future-created transactions in the first bin" in {
     val now = 10000L
     val futureTx = WeightedTxId(bytesToId(Array.fill(32)(1.toByte)), 1L, 7L, now + 1000L)
     val oldTx = WeightedTxId(bytesToId(Array.fill(32)(2.toByte)), 1L, 11L, now - 1000L)

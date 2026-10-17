@@ -430,10 +430,13 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     Get(prefix + s"/poolHistogram?bins=0") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
     }
-    Get(prefix + s"/poolHistogram?maxtime=0") ~> route ~> check {
+    Get(prefix + s"/poolHistogram?maxtime=-1") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
     }
     Get(prefix + s"/getFee?waitTime=0") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    Get(prefix + s"/getFee?waitTime=-1") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
     }
     Get(prefix + s"/getFee?txSize=0") ~> route ~> check {
@@ -444,6 +447,30 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     }
     Get(prefix + s"/waitTime?fee=-1") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
+    }
+  }
+
+  it should "put all transactions in the overflow bin when maxtime is zero" in {
+    Get(prefix + "/poolHistogram?bins=2&maxtime=0") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      val bins = responseAs[Json].asArray.get
+      bins.size shouldBe 3
+      bins.take(2).foreach(_.hcursor.get[Int]("nTxns") shouldBe Right(0))
+      bins.last.hcursor.get[Int]("nTxns") shouldBe Right(memPool.size)
+    }
+  }
+
+  it should "accept fee estimation waits beyond the histogram range" in {
+    val lastBinWait = 59
+    val expected = Get(prefix + s"/getFee?waitTime=$lastBinWait") ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Json]
+    }
+    Seq(2000, Int.MaxValue).foreach { waitTime =>
+      Get(prefix + s"/getFee?waitTime=$waitTime") ~> route ~> check {
+        status shouldBe StatusCodes.OK
+        responseAs[Json] shouldBe expected
+      }
     }
   }
 

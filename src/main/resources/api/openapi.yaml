@@ -3766,7 +3766,7 @@ paths:
         schema:
           type: integer
           format: int64
-          minimum: 1
+          minimum: 0
           default: 60000
     get:
       summary: Get histogram (waittime, (n_trans, sum(fee)) for transactions in mempool.

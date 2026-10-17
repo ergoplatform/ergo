@@ -29,11 +29,11 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
   private def getStateAndPool: Future[(ErgoStateReader, ErgoMemPoolReader)] =
     (readersHolder ? GetReaders).mapTo[Readers].map(rs => (rs.s, rs.m))
 
-  private val MaxBatchItems = 16384
+  private val MaxItems = 16384
 
   private def validateMaxItems(count: Int, itemName: String)(inner: => Route): Route =
-    if (count > MaxBatchItems) {
-      BadRequest(s"No more than $MaxBatchItems $itemName can be requested")
+    if (count > MaxItems) {
+      BadRequest(s"No more than $MaxItems $itemName can be requested")
     } else {
       inner
     }
@@ -55,10 +55,10 @@ case class UtxoApiRoute(readersHolder: ActorRef, override val settings: RESTApiS
     }
 
   private def boxIds(values: Seq[String]): Directive1[Seq[ErgoBox.BoxId]] = {
-    val parsed = values.map(value => value -> parseBoxId(value))
-    parsed.collectFirst { case (_, Left(error)) => error } match {
+    val parsed = values.map(parseBoxId)
+    parsed.collectFirst { case Left(error) => error } match {
       case Some(error) => reject(ValidationRejection(error))
-      case None        => provide(parsed.collect { case (_, Right(boxId)) => boxId })
+      case None        => provide(parsed.collect { case Right(boxId) => boxId })
     }
   }
 

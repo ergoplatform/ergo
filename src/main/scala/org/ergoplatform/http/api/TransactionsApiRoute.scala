@@ -252,13 +252,12 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
 
   val feeHistogramParameters: Directive[(Int, Long)] = parameters("bins".as[Int] ? 10, "maxtime".as[Long] ? (60*1000L))
   private val MaxFeeHistogramBins = 1000
-  private val MaxFeeEstimationWaitTime = 1440
 
   def getFeeHistogramR: Route = (path("poolHistogram") & get & feeHistogramParameters) { (bins, maxtime) =>
     if (bins <= 0 || bins > MaxFeeHistogramBins) {
       BadRequest(s"bins should be between 1 and $MaxFeeHistogramBins")
-    } else if (maxtime <= 0) {
-      BadRequest("maxtime should be positive")
+    } else if (maxtime < 0) {
+      BadRequest("maxtime should be non-negative")
     } else {
       ApiResponse(
         getMemPool.map { p =>
@@ -271,8 +270,8 @@ case class TransactionsApiRoute(readersHolder: ActorRef,
   val feeRequestParameters: Directive[(Int, Int)] = parameters("waitTime".as[Int] ? 1, "txSize".as[Int] ? 100)
 
   def getRecommendedFeeR: Route = (path("getFee") & get & feeRequestParameters) { (waitTime, txSize) =>
-    if (waitTime <= 0 || waitTime > MaxFeeEstimationWaitTime) {
-      BadRequest(s"waitTime should be between 1 and $MaxFeeEstimationWaitTime")
+    if (waitTime <= 0) {
+      BadRequest("waitTime should be positive")
     } else if (txSize <= 0) {
       BadRequest("txSize should be positive")
     } else {

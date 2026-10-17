@@ -377,10 +377,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     * @return recommended fee value for transaction to be proceeded in specified time
     */
   def getRecommendedFee(expectedWaitTimeMinutes: Int, txSize: Int): Long = {
+    val maxWaitMinutes = math.min(expectedWaitTimeMinutes, MemPoolStatistics.nHistogramBins - 1)
     @tailrec def loop(waitMinutes: Int): Option[Long] =
       Try(stats.histogram(waitMinutes)).toOption match {
         case Some(bin) if bin.nTxns != 0 => Some(bin.totalFee / bin.nTxns * txSize / 1024)
-        case _ if waitMinutes < expectedWaitTimeMinutes => loop(waitMinutes + 1)
+        case _ if waitMinutes < maxWaitMinutes => loop(waitMinutes + 1)
         case _ => None
       }
 

@@ -151,6 +151,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // number of ids in `refusedTxs`, over all the peers
   private var refusedTxsTotal: Int = 0
 
+  // number of refused ids not kept since the last block because `refusedTxs` held `MaxRefusedTxs` ids
+  private var refusedTxsNotKept: Int = 0
+
   /**
     * Ids of the last re-request of refused transactions sent to a peer (see `requestRefusedTxs`) whose processing
     * is not over yet, so not charged to the peer yet. A peer with ids here is not sent another re-request. An id is
@@ -1573,12 +1576,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       if (refusedTxsTotal < MaxRefusedTxs) {
         ids += id
         refusedTxsTotal += 1
+      } else {
+        refusedTxsNotKept += 1
       }
       if (ids.nonEmpty) {
         refusedTxs.put(peer, ids)
       } else {
         refusedTxs -= peer
       }
+    }
+  }
+
+  // once per block: refused ids not kept because the table was full are lost, as without the table
+  private def logRefusedTxsNotKept(): Unit = {
+    if (refusedTxsNotKept > 0) {
+      log.info(s"$refusedTxsNotKept transactions refused for the per-block budget since the last block were not kept " +
+        s"for re-request, the table being full: $refusedTxsTotal ids kept for ${refusedTxs.size} peers, " +
+        s"limit $MaxRefusedTxs")
+      refusedTxsNotKept = 0
     }
   }
 
@@ -1762,6 +1777,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
+      logRefusedTxsNotKept()
       requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
 
     // Peer-received block applied - broadcast to our peers
@@ -1776,6 +1792,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearInterblockCost()
       perPeerCost.clear()
       processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
+      logRefusedTxsNotKept()
       requestRefusedTxs(historyReader, mempoolReader, blockAppliedTxsCache)
 
     case st@SuccessfulTransaction(utx) =>
@@ -2018,7 +2035,9 @@ object ErgoNodeViewSynchronizer {
   /**
     * Max number of refused transaction ids kept for all the peers together, so that the memory used (about 200 bytes
     * per id, i.e. about 1 MB at the limit) does not depend on the number of peers. When the limit is reached, new ids
-    * are not kept (and are lost, as without the table), while ids of other peers are not evicted.
+    * are not kept (and are lost, as without the table), while ids of other peers are not evicted. A peer is not
+    * penalized for not delivering a requested transaction, so ten peers announcing ids nobody has can fill the table
+    * and leave other peers' refused ids unkept; how many were not kept is logged once per block.
     */
   private[network] val MaxRefusedTxs = 5000
 

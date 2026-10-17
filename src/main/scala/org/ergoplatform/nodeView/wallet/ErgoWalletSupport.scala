@@ -23,6 +23,7 @@ import scorex.util.ScorexLogging
 import sigma.Colls
 import sigma.ast.{ByteArrayConstant, ErgoTree}
 import sigma.data.ProveDlog
+import sigma.interpreter.ContextExtension
 import sigmastate.eval.Extensions._
 import sigma.Extensions.ArrayOps
 import sigmastate.utils.Extensions._
@@ -236,7 +237,8 @@ trait ErgoWalletSupport extends ScorexLogging {
                                            walletHeight: Int,
                                            selectionResult: BoxSelectionResult[TrackedBox],
                                            dataInputBoxes: IndexedSeq[ErgoBox],
-                                           changeAddressOpt: Option[ProveDlog]): Try[UnsignedErgoTransaction] = Try {
+                                           changeAddressOpt: Option[ProveDlog],
+                                           contextExtensions: Seq[ContextExtension] = Seq.empty): Try[UnsignedErgoTransaction] = Try {
     if (selectionResult.changeBoxes.nonEmpty) {
       require(changeAddressOpt.isDefined, "Does not have change address to send change to")
     }
@@ -258,8 +260,13 @@ trait ErgoWalletSupport extends ScorexLogging {
         new ErgoBoxCandidate(changeBox.value, ErgoTree.fromProposition(changeAddressOpt.get), walletHeight, assets.toColl)
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
+    require(
+      contextExtensions.length <= inputBoxes.length,
+      s"More context extensions (${contextExtensions.length}) than inputs (${inputBoxes.length})"
+    )
+    val paddedExtensions = contextExtensions ++ Seq.fill(inputBoxes.length - contextExtensions.length)(ContextExtension.empty)
     new UnsignedErgoTransaction(
-      inputBoxes.map(tx => new UnsignedInput(tx.box.id)),
+      inputBoxes.zip(paddedExtensions).map { case (tx, ext) => new UnsignedInput(tx.box.id, ext) },
       dataInputs,
       (payTo ++ changeBoxCandidates).toIndexedSeq
     )
@@ -280,7 +287,8 @@ trait ErgoWalletSupport extends ScorexLogging {
                                             boxSelector: BoxSelector,
                                             requests: Seq[TransactionGenerationRequest],
                                             inputsRaw: Seq[String],
-                                            dataInputsRaw: Seq[String]): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
+                                            dataInputsRaw: Seq[String],
+                                            contextExtensions: Seq[ContextExtension] = Seq.empty): Try[(UnsignedErgoTransaction, IndexedSeq[ErgoBox], IndexedSeq[ErgoBox])] = Try {
     require(requests.count(_.isInstanceOf[AssetIssueRequest]) <= 1, "Too many asset issuance requests")
 
     val userInputs = ErgoWalletServiceUtils.stringsToBoxes(inputsRaw)
@@ -340,7 +348,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt, contextExtensions) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

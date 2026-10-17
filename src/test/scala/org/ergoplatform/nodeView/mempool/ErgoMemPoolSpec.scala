@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.{DataInput, ErgoBoxCandidate, Input}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{ProcessingOutcome, SortingOption}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -934,6 +934,60 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     // After replacement, TX4 (lower fee) should be rejected as double-spending loser
     val (_, outcome4) = poolAfter.process(tx4, wus)
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+  }
+
+  it should "take into account dataInputs during updateFamily (unconditional CPFP)" in {
+    val (us, bh) = createUtxoState(settings)
+    val genesis = validFullBlock(None, us, bh)
+    val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+    val feeProp = settings.chainSettings.monetary.feeProposition
+    val trueTree = TrueTree
+    val byteSortSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(mempoolSorting = SortingOption.FeePerByte)
+    )
+
+    val trueBoxes = wus.takeBoxes(100).filter(_.ergoTree == trueTree).take(2)
+    trueBoxes.size shouldBe 2
+    val boxA = trueBoxes.head
+    val boxB = trueBoxes(1)
+
+    // Parent transaction spending boxA with low fee (100,000 nanoERG kept as fee, rest as output)
+    val txParentOut = new ErgoBoxCandidate(boxA.value - 100000L, trueTree, creationHeight = 0)
+    val txParentFeeOut = new ErgoBoxCandidate(100000L, feeProp, creationHeight = 0)
+    val txParent = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(new Input(boxA.id, emptyProverResult)),
+      IndexedSeq.empty,
+      IndexedSeq(txParentOut, txParentFeeOut)
+    ), None)
+
+    // Child transaction spending independent boxB, referencing txParent's output via dataInputs, with high fee
+    val txChildFeeOut = new ErgoBoxCandidate(boxB.value - 100000L, feeProp, creationHeight = 0)
+    val txChildOut = new ErgoBoxCandidate(100000L, trueTree, creationHeight = 0)
+    val txChild = UnconfirmedTransaction(ErgoTransaction(
+      IndexedSeq(new Input(boxB.id, emptyProverResult)),
+      IndexedSeq(DataInput(txParent.transaction.outputs.head.id)),
+      IndexedSeq(txChildOut, txChildFeeOut)
+    ), None)
+
+    val pool0 = ErgoMemPool.empty(byteSortSettings)
+    val (pool1, outcome1) = pool0.process(txParent, wus)
+    outcome1.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+
+    val initialParentWeight = pool1.pool.transactionsRegistry(txParent.id).weight
+
+    // Process txChild referencing txParent via dataInputs
+    val (pool2, outcome2) = pool1.process(txChild, wus)
+    outcome2.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+
+    val childWeight = pool2.pool.transactionsRegistry(txChild.id).weight
+    val boostedParentWeight = pool2.pool.transactionsRegistry(txParent.id).weight
+    boostedParentWeight shouldBe (initialParentWeight + childWeight)
+    pool2.getAllPrioritized.map(_.id) shouldBe Seq(txParent.id, txChild.id)
+
+    // Removing txChild should restore txParent's original weight
+    val poolAfterRemove = pool2.pool.remove(txChild)
+    poolAfterRemove.transactionsRegistry(txParent.id).weight shouldBe initialParentWeight
   }
 
 }

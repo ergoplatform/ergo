@@ -6,12 +6,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.StatusReply
 import akka.testkit.{TestKit, TestProbe}
-import com.google.common.primitives.{Ints, Longs}
+import com.google.common.primitives.Longs
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.mining.ErgoMiningThreadFixture.{realCandidate, settings, shifted}
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, Parameters}
+import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform.{AutolykosSolution, InputBlockHeaderFound, InputSolutionFound, NothingFound,
   OrderingBlockHeaderFound, ProveBlockResult, SolutionFound}
@@ -24,21 +23,6 @@ import scala.concurrent.duration._
 
 class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers {
   import org.ergoplatform.utils.ErgoCoreTestConstants._
-
-  // the periodic poll fires 1 s after start and then once an hour, so in a test every later candidate is sent by hand
-  private val settings: ErgoSettings = {
-    val empty = ErgoSettingsReader.read()
-    empty.copy(
-      nodeSettings = empty.nodeSettings.copy(
-        mining = true,
-        stateType = StateType.Utxo,
-        internalMinerPollingInterval = 1.hour,
-        offlineGeneration = true,
-        verifyTransactions = true
-      ),
-      chainSettings = empty.chainSettings.copy(blockInterval = 1.seconds)
-    )
-  }
 
   /** Fake PoW with an input-block hit at the first of `hits` in [minNonce, maxNonce), reporting the hit as the
     * solution's nonce, so the miner's nonce search is observable, and the candidate's timestamp as the solution's
@@ -82,29 +66,12 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
     }
   }
 
-  /** `c` with its timestamp moved by `k` ms and a PoW message of its own, so it reads as new work either way. */
-  private def shifted(c: Candidate, k: Int): Candidate =
-    c.copy(
-      candidateBlock = c.candidateBlock.copy(timestamp = c.candidateBlock.timestamp + k),
-      externalVersion = c.externalVersion.copy(msg = Blake2b256(c.externalVersion.msg ++ Ints.toByteArray(k)))
-    )
+  // one real candidate serves every case: a `Candidate` is plain data
+  private lazy val candidate: Candidate = realCandidate("thread-spec")
 
   /** `c` regenerated at the same timestamp (as with a parent dated ahead of the local clock): new PoW work. */
   private def sameTimestamp(c: Candidate): Candidate =
     c.copy(externalVersion = c.externalVersion.copy(msg = Blake2b256(c.externalVersion.msg)))
-
-  /** A real candidate, built by a real generator on a chain of its own. */
-  private def realCandidate(name: String)(implicit system: ActorSystem): Candidate = {
-    val chainSettings = settings.copy(directory = s"${settings.directory}-$name-${System.nanoTime()}")
-    val viewHolderRef: ActorRef = ErgoNodeViewRef(chainSettings)
-    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
-    val realGenerator: ActorRef =
-      CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, chainSettings)
-    val candidateProbe = TestProbe()
-    realGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None), candidateProbe.ref)
-    // the first request waits for the genesis state, which can take a while on a loaded machine
-    candidateProbe.expectMsgPF(60.seconds) { case StatusReply.Success(c: Candidate) => c }
-  }
 
   private def nonceOf(s: SolutionFound): Long = Longs.fromByteArray(s.as.n)
 
@@ -134,7 +101,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   it should "after a rejected solution, hash and send nothing until new work, then mine it from nonce 0" in
     new TestKit(ActorSystem()) {
     try {
-      val candidate = realCandidate("drop")
       val calls = TestProbe()
       val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref)))
 
@@ -160,7 +126,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   it should "after a rejected solution, mine nothing on a candidate the generator returns unchanged" in
     new TestKit(ActorSystem()) {
     try {
-      val candidate = realCandidate("unchanged")
       val calls = TestProbe()
       val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref)))
 
@@ -181,7 +146,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
     new TestKit(ActorSystem()) {
     val release = new CountDownLatch(1)
     try {
-      val candidate = realCandidate("queued")
       val calls = TestProbe()
       val pow = new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref), holdFirstCall = Some(release))
       val (thread, generator) = startThread(candidate, pow)
@@ -208,7 +172,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
   it should "after a rejected solution, mine a new candidate with the old one's timestamp from nonce 0" in
     new TestKit(ActorSystem()) {
     try {
-      val candidate = realCandidate("same-timestamp")
       val calls = TestProbe()
       val (thread, generator) = startThread(candidate, new FixedHitsPowScheme(Seq(5L, 900L), Some(calls.ref)))
 
@@ -230,7 +193,6 @@ class ErgoMiningThreadSpec extends AnyFlatSpec with Matchers with ErgoTestHelper
     new TestKit(ActorSystem()) {
     val release = new CountDownLatch(1)
     try {
-      val candidate = realCandidate("same-timestamp-mining")
       val calls = TestProbe()
       // no hit: the first step finds nothing, and the next starts at its end unless new work restarts it at nonce 0
       val pow = new FixedHitsPowScheme(Seq.empty, Some(calls.ref), holdFirstCall = Some(release))

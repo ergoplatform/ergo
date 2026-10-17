@@ -533,4 +533,51 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestFullBlockOpt.value shouldBe chain.last
   }
 
+  property("processBetterChain defers switching when fork has missing intermediate full blocks until gap is filled") {
+    var (history, baseChain) = genHistory(2)
+    val branchPoint = baseChain.last
+    val mainFork = genChain(2, branchPoint).tail
+    val betterFork = genChain(4, branchPoint).tail
+
+    // Apply mainFork completely (2 blocks after branchPoint)
+    history = applyChain(history, mainFork)
+    history.bestFullBlockOpt.value shouldBe mainFork.last
+
+    // Append all headers of betterFork so headers chain knows betterFork has higher score
+    history = applyHeaderChain(history, HeaderChain(betterFork.map(_.header)))
+    history.bestHeaderOpt.value shouldBe betterFork.last.header
+
+    // Append full block sections for betterFork(2) and betterFork(3), leaving betterFork(0) and betterFork(1) missing
+    Seq(betterFork(2), betterFork(3)).foreach { blk =>
+      blk.blockSections.foreach { sec =>
+        val (h, info) = history.append(sec).get
+        history = h
+        info.toApply shouldBe empty
+      }
+    }
+    history.bestFullBlockOpt.value shouldBe mainFork.last
+
+    // Append betterFork(0), still missing betterFork(1) -> should not switch best full block yet
+    betterFork.head.blockSections.foreach { sec =>
+      val (h, info) = history.append(sec).get
+      history = h
+      info.toApply shouldBe empty
+    }
+    history.bestFullBlockOpt.value shouldBe mainFork.last
+
+    // Now fill the gap by appending betterFork(1) -> full chain betterFork(0..3) is now complete and should be applied!
+    var finalInfo: ProgressInfo[PM] = ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)
+    betterFork(1).blockSections.foreach { sec =>
+      val (h, info) = history.append(sec).get
+      history = h
+      if (info.toApply.nonEmpty) {
+        finalInfo = info
+      }
+    }
+    finalInfo.branchPoint shouldBe Some(branchPoint.id)
+    finalInfo.toRemove should contain theSameElementsInOrderAs mainFork
+    finalInfo.toApply should contain theSameElementsInOrderAs betterFork
+    history.bestFullBlockOpt.value shouldBe betterFork.last
+  }
+
 }

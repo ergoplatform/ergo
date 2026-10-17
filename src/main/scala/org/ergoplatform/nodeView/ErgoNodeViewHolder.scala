@@ -31,6 +31,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 /**
   * Composite local view of the node
@@ -493,8 +494,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       // if ADProofs block section generated locally, just dump it into the database
       if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
         val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
-        history().dumpToDb(pmod.serializedId, bytes)
-        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
+        history().dumpToDb(pmod.serializedId, bytes) match {
+          case Success(_) =>
+            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
+          case Failure(e) if NonFatal(e) =>
+            log.error(s"Could not persist locally generated ADProof ${pmod.encodedId}", e)
+            context.system.eventStream.publish(RecoverableFailedModification(pmod.modifierTypeId, pmod.id, e))
+          case Failure(e) =>
+            log.error(s"Fatal error while persisting locally generated ADProof ${pmod.encodedId}", e)
+            ErgoApp.shutdownSystem()(context.system)
+            throw e
+        }
       } else {
 
         log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")

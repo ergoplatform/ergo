@@ -36,13 +36,13 @@ trait WalletTestOps extends NodeViewBaseOps {
   def wallet(implicit w: WalletFixture): ErgoWallet = w.wallet
 
   def getPublicKeys(implicit w: WalletFixture): Seq[P2PKAddress] =
-    await(w.wallet.publicKeys(0, Int.MaxValue))
+    await(w.wallet.publicKeys(0, Int.MaxValue)).addresses
 
   def getConfirmedBalances(implicit w: WalletFixture): WalletDigest =
-    await(w.wallet.confirmedBalances)
+    await(w.wallet.confirmedBalances).digest
 
   def getBalancesWithUnconfirmed(implicit w: WalletFixture): WalletDigest =
-    await(w.wallet.balancesWithUnconfirmed)
+    await(w.wallet.balancesWithUnconfirmed).digest
 
   def offchainScanTime(tx: ErgoTransaction): Long = tx.outputs.size * 100 + 300
 

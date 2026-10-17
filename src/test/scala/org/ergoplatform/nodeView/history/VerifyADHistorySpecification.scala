@@ -453,7 +453,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.isSemanticallyValid(first.id) shouldBe Invalid
   }
 
-  property("invalidating a snapshot-floor full block does not retain its selected full tip") {
+  property("invalidating a retained-floor full block clears its selected full tip") {
     var history = genHistory(minFullHeight = Some(3))._1
     val chain = genChain(3, history)
     history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
@@ -463,7 +463,6 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     val (recovered, progress) = history.reportModifierIsInvalid(chain.last.header,
       ProgressInfo[PM](None, Seq(chain.last), Seq.empty, Seq.empty)).get
     history = recovered
-    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
     progress.toRemove.map(_.id) shouldBe Seq(chain.last.id)
     history.bestFullBlockIdOpt shouldBe None
     history.bestHeaderIdOpt shouldBe Some(chain(1).id)

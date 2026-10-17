@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.HeaderChain
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
@@ -401,6 +401,72 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history = history.append(second).get._1
     history.bestHeaderIdOpt shouldBe Some(second.id)
     history.bestHeaderIdAtHeight(second.height) shouldBe Some(second.id)
+  }
+
+  property("invalidating the only full genesis clears both selected tips") {
+    var history = genHistory()._1
+    val first = genChain(1, history).head
+    val siblingTag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(1: Byte, 1: Byte)))
+    val second = genChain(1, history, extension = defaultExtension ++ siblingTag).head
+    first.id should not be second.id
+
+    history = applyChain(history, Seq(first))
+    history.bestHeaderIdOpt shouldBe Some(first.id)
+    history.bestFullBlockIdOpt shouldBe Some(first.id)
+
+    val (recovered, progress) = history.reportModifierIsInvalid(first.header,
+      ProgressInfo[PM](None, Seq(first), Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe Seq(first.id)
+    progress.toApply shouldBe Seq.empty
+    history.bestHeaderIdOpt shouldBe None
+    history.bestFullBlockIdOpt shouldBe None
+    history.isSemanticallyValid(first.id) shouldBe Invalid
+
+    history = applyChain(history, Seq(second))
+    history.bestHeaderIdOpt shouldBe Some(second.id)
+    history.bestFullBlockIdOpt shouldBe Some(second.id)
+  }
+
+  property("invalidating full genesis selects a previously received full sibling") {
+    var history = genHistory()._1
+    val firstChain = genChain(2, history)
+    val first = firstChain.head
+    val siblingTag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(2: Byte, 1: Byte)))
+    val second = genChain(1, history, extension = defaultExtension ++ siblingTag).head
+    first.id should not be second.id
+
+    history = applyChain(history, firstChain :+ second)
+    history.bestHeaderIdOpt shouldBe Some(firstChain.last.id)
+    history.bestFullBlockIdOpt shouldBe Some(firstChain.last.id)
+
+    val (recovered, progress) = history.reportModifierIsInvalid(first.header,
+      ProgressInfo[PM](None, firstChain, Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe firstChain.map(_.id)
+    progress.toApply.map(_.id) shouldBe Seq(second.id)
+    history.bestHeaderIdOpt shouldBe Some(second.id)
+    history.bestFullBlockIdOpt shouldBe Some(second.id)
+    history.bestHeaderIdAtHeight(second.header.height) shouldBe Some(second.id)
+    history.isSemanticallyValid(first.id) shouldBe Invalid
+  }
+
+  property("invalidating a snapshot-floor full block does not retain its selected full tip") {
+    var history = genHistory(minFullHeight = Some(3))._1
+    val chain = genChain(3, history)
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history = applyBlock(history, chain.last)
+    history.bestFullBlockIdOpt shouldBe Some(chain.last.id)
+
+    val (recovered, progress) = history.reportModifierIsInvalid(chain.last.header,
+      ProgressInfo[PM](None, Seq(chain.last), Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe Seq(chain.last.id)
+    history.bestFullBlockIdOpt shouldBe None
+    history.bestHeaderIdOpt shouldBe Some(chain(1).id)
   }
 
   property("successive invalidations retain a third valid sibling at the same height") {

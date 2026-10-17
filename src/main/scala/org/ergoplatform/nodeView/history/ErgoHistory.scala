@@ -185,8 +185,10 @@ trait ErgoHistory
                 .flatMap(getFullBlock)
                 .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 
-              val genesisInvalidated = invalidatedChain.lengthCompare(1) == 0
-              val branchPointHeader = if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
+              // A singleton can also be the first retained full block after snapshot bootstrap.
+              val noRetainedFullAncestor = invalidatedChain.lengthCompare(1) == 0 ||
+                (invalidatedChain.head.header.height == GenesisHeight && invalidatedIds.contains(invalidatedChain.head.id))
+              val branchPointHeader = if (noRetainedFullAncestor) PreGenesisHeader else invalidatedChain.head.header
 
               val validHeadersChain =
                 continuationHeaderChains(branchPointHeader,
@@ -200,11 +202,15 @@ trait ErgoHistory
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
+              val newBestFullOpt = validHeadersChain.lastOption.filterNot(_.id == PreGenesisHeader.id)
+              val changedLinks = newBestFullOpt.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow ++ selectedHeaderRows
-              historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
-                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
+              val linksToRemove =
+                (if (newBestFullOpt.isEmpty) Seq(BestFullBlockKey) else Seq.empty) ++
+                  (if (newBestHeaderOpt.isEmpty) Seq(BestHeaderKey) else Seq.empty)
+              historyStorage.insert(toInsert, BlockSection.emptyArray, linksToRemove.toArray).map { _ =>
+                val toRemove = if (noRetainedFullAncestor) invalidatedChain else invalidatedChain.tail
                 this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
               }
             }

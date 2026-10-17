@@ -18,6 +18,11 @@ import java.nio.file.{Files, Path}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.jdk.CollectionConverters.asScalaIteratorConverter
 
+/** One raw-work-bounded page of the storage-rent eligibility index. */
+final case class StorageRentScanPage(entries: Array[StorageRentBox],
+                                     nextKey: Option[Array[Byte]],
+                                     exhausted: Boolean)
+
 /**
   * Storage for Ergo history
   *
@@ -129,10 +134,11 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     }
 
   /**
-    * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
-    * transaction spending them failed validation during block assembly, so retrying the claim
-    * is futile. An entry whose [[IndexedErgoBox]] is not in the extra index can not be
-    * located and is left in place.
+    * Remove storage-rent eligibility entries of the given boxes only with independent
+    * evidence that they are no longer eligible. A candidate-local claim skip or rejection
+    * does not establish this: parameters or policy can change while the box stays unspent.
+    * An entry whose [[IndexedErgoBox]] is not in the extra index can not be located and is
+    * left in place.
     */
   def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit = {
     val keys = boxIds.flatMap { boxId =>
@@ -151,14 +157,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     * at or before `creationHeight`, in ascending (creationHeight, globalIndex) order.
     * Returns an empty array when the extra index is disabled or does not cover the height.
     */
-  def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
-    val start = StorageRentBox.key(0, 0L)
+  def storageRentBoxesAtOrBefore(creationHeight: Int,
+                                 limit: Int,
+                                 after: Option[StorageRentBox] = None): Array[StorageRentBox] = {
+    val start = after.map(_.serializedId).getOrElse(StorageRentBox.key(0, 0L))
     extraStore.scanFrom(
       start,
       limit,
       keyFilter = key =>
         key.length == StorageRentBox.KeyLength &&
           key(0) == StorageRentBox.KeyMarker &&
+          (after.isEmpty || !java.util.Arrays.equals(key, start)) &&
           java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight,
       // stop when the marker byte changes (the iterator left the rent namespace) or at
       // the first in-namespace key whose height bytes pass the cutoff. Any key with height
@@ -170,6 +179,36 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
         key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
           (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight)
     ).map { case (key, _) => StorageRentBox.fromKey(key) }
+  }
+
+  /**
+    * Scan one bounded page of a fixed rent sweep. Rows created after the sweep's global
+    * box-index watermark are excluded even when their R3 creation height is backdated.
+    */
+  def storageRentScanPage(creationHeight: Int,
+                          maxGlobalIndex: Long,
+                          firstKey: Option[Array[Byte]],
+                          limit: Int): StorageRentScanPage = {
+    val page = extraStore.scanPageFrom(
+      firstKey.getOrElse(StorageRentBox.key(0, 0L)),
+      limit,
+      keyFilter = key =>
+        key.length == StorageRentBox.KeyLength &&
+          key(0) == StorageRentBox.KeyMarker &&
+          java.nio.ByteBuffer.wrap(key, 5, 8).getLong <= maxGlobalIndex,
+      continueScan = key =>
+        key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
+          (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight),
+      skipTo = key =>
+        if (key.length == StorageRentBox.KeyLength &&
+            java.nio.ByteBuffer.wrap(key, 5, 8).getLong > maxGlobalIndex &&
+            java.nio.ByteBuffer.wrap(key, 1, 4).getInt < Int.MaxValue) {
+          val height = java.nio.ByteBuffer.wrap(key, 1, 4).getInt
+          Some(StorageRentBox.key(height + 1, 0L))
+        } else None
+    )
+    StorageRentScanPage(page.rows.map { case (key, _) => StorageRentBox.fromKey(key) },
+      page.nextKey, page.exhausted)
   }
 
   /**

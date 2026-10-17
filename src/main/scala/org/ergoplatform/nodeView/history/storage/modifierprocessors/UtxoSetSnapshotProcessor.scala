@@ -93,7 +93,6 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height,
                                  peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = synchronized {
-    require(_cachedDownloadPlan.isEmpty, "A UTXO snapshot download is already active")
     val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight, peersToDownload,
       UtxoSetSnapshotProcessor.nextSessionId())
     _manifest = Some(manifest)
@@ -226,8 +225,8 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
                              historyReader: ErgoHistoryReader,
                              height: Height,
                              blockId: ModifierId,
-                             sessionId: Long): Try[PersistentBatchAVLProver[Digest32, HF]] = synchronized {
-    val matchingManifest = _cachedDownloadPlan.flatMap { plan =>
+                             sessionId: Long): Try[PersistentBatchAVLProver[Digest32, HF]] = {
+    def matchingManifest: Option[BatchAVLProverManifest[Digest32]] = _cachedDownloadPlan.flatMap { plan =>
       _manifest.flatMap { manifest =>
         historyReader.bestHeaderAtHeight(height).filter { header =>
           val (root, treeHeight) = splitDigest(header.stateRoot)
@@ -243,21 +242,22 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
       case Some(manifest) =>
         log.info("Starting UTXO set snapshot transfer into state database")
         ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
-          case Success(esc) if esc.lastHeaders.headOption.exists(_.id == blockId) =>
+          case Success(esc) if esc.lastHeaders.headOption.exists(_.id == blockId) &&
+              matchingManifest.exists(_.id.sameElements(manifest.id)) =>
+            // The holder serializes header appends and discards with this import.
             val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
             VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
               ldbStorage =>
                 log.info("Finished UTXO set snapshot transfer into state database")
-                ldbStorage.restorePrunedProver().map {
-                  prunedAvlProver =>
-                    new PersistentBatchAVLProver[Digest32, HF] {
-                      override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-                      override val storage: VersionedLDBAVLStorage = ldbStorage
-                    }
+                ldbStorage.restorePrunedProver().map { prunedAvlProver =>
+                  new PersistentBatchAVLProver[Digest32, HF] {
+                    override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+                    override val storage: VersionedLDBAVLStorage = ldbStorage
+                  }
                 }
             }
           case Success(_) =>
-            Failure(new SnapshotCheckpointMismatch(s"Selected header changed while reconstructing snapshot context at height $height"))
+            Failure(new SnapshotCheckpointMismatch(s"Selected snapshot checkpoint changed before state reconstruction at height $height"))
           case Failure(e) =>
             log.warn("Can't reconstruct state context in createPersistentProver ", e)
             Failure(e)

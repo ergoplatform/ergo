@@ -168,7 +168,10 @@ object ErgoNodeViewSynchronizerMessages {
      */
     case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId, sessionId: Long)
 
-    /** A checkpoint mismatch was detected before snapshot state was imported. */
+    /** Ask the node view holder to discard a stale snapshot download on its actor thread. */
+    case class DiscardSnapshotDownload(sessionId: Long)
+
+    /** The holder discarded a stale snapshot download; the synchronizer may retry discovery. */
     case class SnapshotApplicationRejected(sessionId: Long) extends NodeViewHolderEvent
 
   /**

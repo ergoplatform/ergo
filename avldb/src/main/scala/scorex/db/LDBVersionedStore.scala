@@ -401,6 +401,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         } else {
           require(lastVersion.get.sameElements(versionID))
         }
+      } else if (keepVersions == 0 && lastVersion.exists(_.sameElements(versionID))) {
+        // When keepVersions=0, we don't maintain version history, but the version 
+        // is still tracked in lastVersion. Rollback to current version is a no-op.
+        // This handles the case when the node restarts during active sync with keepVersions=0.
       } else {
         throw new NoSuchElementException("versionID not found, can not rollback")
       }

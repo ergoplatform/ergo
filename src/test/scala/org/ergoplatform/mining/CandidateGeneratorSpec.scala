@@ -25,7 +25,8 @@ import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState,
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genHeaderChain}
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
 import org.ergoplatform.validation.MalformedModifierError
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input, Version}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
@@ -1578,4 +1579,30 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "include node version in block candidate extension" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(defaultSettings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        defaultSettings
+      )
+
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+
+    testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(candidate: Candidate) =>
+        val versionKey = Array(Extension.MinerVersionPrefix, 0: Byte)
+        val versionEntry = candidate.candidateBlock.extension.fields.find(_._1 sameElements versionKey)
+        versionEntry shouldBe defined
+        new String(versionEntry.get._2, "UTF-8") shouldEqual Version.VersionString
+    }
+
+    system.terminate()
+  }
 }

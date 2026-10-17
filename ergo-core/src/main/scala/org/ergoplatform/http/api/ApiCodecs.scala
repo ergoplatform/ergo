@@ -106,11 +106,11 @@ trait ApiCodecs extends JsonCodecs {
   })
 
   implicit val scanIdEncoder: Encoder[ScanId] = Encoder.instance({ scanId =>
-    scanId.toShort.asJson
+    scanId.toLong.asJson
   })
 
   implicit val scanIdDecoder: Decoder[ScanId] = Decoder.instance({ c: HCursor =>
-    ScanId @@ c.as[Short]
+    ScanId @@ c.as[Long]
   })
 
   implicit def trackedBoxEncoder(implicit opts: Detalization): Encoder[TrackedBox] = Encoder.instance({ box =>

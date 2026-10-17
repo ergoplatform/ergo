@@ -38,7 +38,7 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
 
   private val scanningPredicate = EqualsScanningPredicate(ErgoBox.ScriptRegId, ByteArrayConstant(TrueTree.bytes))
   private val appReq = ScanRequest("True detector", scanningPredicate, Some(ScanWalletInteraction.Off), None)
-  private val scanId: ScanId = ScanId @@ 50.toShort
+  private val scanId: ScanId = ScanId @@ 50L
 
   private val pubkeys = prover.hdPubKeys
   private val miningScripts = WalletCache.miningScripts(pubkeys, s)

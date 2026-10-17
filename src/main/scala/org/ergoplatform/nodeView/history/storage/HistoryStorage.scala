@@ -92,12 +92,15 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] =
-    lookupModifier(id) orElse objectsStore.get(idToBytes(id)).flatMap { bytes =>
+    lookupModifier(id).filter(_.id == id) orElse objectsStore.get(idToBytes(id)).flatMap { bytes =>
       HistoryModifierSerializer.parseBytesTry(bytes) match {
-        case Success(pm) =>
+        case Success(pm) if pm.id == id =>
           log.trace(s"Cache miss for existing modifier $id")
           cacheModifier(pm)
           Some(pm)
+        case Success(pm) =>
+          log.warn(s"Modifier stored under ${encoder.encode(id)} has different id ${pm.encodedId}")
+          None
         case Failure(e) =>
           log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
           None
@@ -105,14 +108,17 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     }
 
   def getExtraIndex(id: ModifierId): Option[ExtraIndex] = withExtraCacheReadLock {
-    Option(extraCache.getIfPresent(id)) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
+    Option(extraCache.getIfPresent(id)).filter(_.id == id) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
       ExtraIndexSerializer.parseBytesTry(bytes) match {
-        case Success(pm) =>
+        case Success(pm) if pm.id == id =>
           log.trace(s"Cache miss for existing index $id")
           if(!pm.isInstanceOf[Segment[_]]){
             extraCache.put(pm.id, pm) // cache non-segment objects
           }
           Some(pm)
+        case Success(pm) =>
+          log.warn(s"Index stored under ${encoder.encode(id)} has different id ${encoder.encode(pm.id)}")
+          None
         case Failure(_) =>
           log.warn(s"Failed to parse index ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})")
           None
@@ -185,7 +191,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     * @return if object with `id` is in the objects database
     */
   def contains(id: Array[Byte]): Boolean = get(id).isDefined
-  def contains(id: ModifierId): Boolean = get(id).isDefined
+  def contains(id: ModifierId): Boolean = modifierById(id).isDefined
 
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Array[BlockSection]): Try[Unit] = {

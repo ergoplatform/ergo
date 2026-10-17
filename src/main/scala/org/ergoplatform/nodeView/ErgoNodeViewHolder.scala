@@ -511,13 +511,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val store = new LDBVersionedStore(dir, initialKeepVersions = settings.nodeSettings.keepVersions)
     val metadataMatches = try {
       val rootMatches = store.get(genesisVersion).exists(_.sameElements(genesisRoot))
-      val contextReadable = store.get(ErgoStateReader.ContextKey).exists { bytes =>
-        ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(bytes).toOption.exists { context =>
-          java.util.Arrays.equals(context.genesisStateDigest, genesisRoot) &&
-            context.lastHeaders.isEmpty && context.lastExtensionOpt.isEmpty
-        }
-      }
-      contextReadable && (settings.nodeSettings.stateType match {
+      val contextMatches = store.get(ErgoStateReader.ContextKey).exists(hasCanonicalGenesisContext)
+      contextMatches && (settings.nodeSettings.stateType match {
         case StateType.Utxo =>
           rootMatches &&
             store.get(UtxoState.bestVersionKey).exists(_.sameElements(genesisVersion)) &&
@@ -666,12 +661,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val genesisVersion = versionToBytes(ErgoState.genesisStateVersion)
     val genesisRoot = settings.chainSettings.genesisStateDigest
     def hasGenesisContext(store: LDBVersionedStore): Boolean =
-      store.get(ErgoStateReader.ContextKey).exists { bytes =>
-        ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(bytes).toOption.exists { context =>
-          java.util.Arrays.equals(context.genesisStateDigest, genesisRoot) &&
-            context.lastHeaders.isEmpty && context.lastExtensionOpt.isEmpty
-        }
-      }
+      store.get(ErgoStateReader.ContextKey).exists(hasCanonicalGenesisContext)
     java.util.Arrays.equals(state.rootDigest, genesisRoot) && (state match {
       case utxo: UtxoState =>
         hasGenesisContext(utxo.store) &&
@@ -684,6 +674,12 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           digest.store.lastVersionID.exists(_.sameElements(genesisVersion))
       case _ => false
     })
+  }
+
+  private def hasCanonicalGenesisContext(bytes: Array[Byte]): Boolean = {
+    val expected = ErgoStateContext.empty(settings.chainSettings, settings.launchParameters).bytes
+    ErgoStateContextSerializer(settings.chainSettings).parseBytesTry(bytes).toOption
+      .exists(_.bytes.sameElements(expected))
   }
 
   private def restoreConsistentState(stateIn: State, history: ErgoHistory): Try[State] = {

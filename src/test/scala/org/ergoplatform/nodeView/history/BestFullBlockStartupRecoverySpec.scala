@@ -3,7 +3,9 @@ package org.ergoplatform.nodeView.history
 import akka.testkit.TestProbe
 import org.ergoplatform.core.{idToVersion, versionToBytes}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateReader, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, ErgoStateContextSerializer,
+  ErgoStateReader, StateType, UtxoState}
+import org.ergoplatform.settings.Parameters
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState, validFullBlock}
@@ -353,6 +355,62 @@ class BestFullBlockStartupRecoverySpec extends ErgoCorePropertyTest with NodeVie
         persistedState.version shouldBe savedVersion
         persistedState.rootDigest.toVector shouldBe savedRoot
       } finally persistedState.closeStorage()
+    }
+  }
+
+  property("holder retains UTXO state when empty history has altered genesis parameters") {
+    val settings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true,
+      popowBootstrap = false).toSettings
+
+    new NodeViewFixture(settings, parameters).apply { fixture =>
+      import fixture._
+
+      getCurrentState.version shouldBe ErgoState.genesisStateVersion
+      val savedRoot = getCurrentState.rootDigest.toVector
+      val oldHolder = nodeViewHolderRef
+      val oldHolderWatcher = TestProbe()
+      oldHolderWatcher.watch(oldHolder)
+      actorSystem.stop(oldHolder)
+      oldHolderWatcher.within(10.seconds) {
+        oldHolderWatcher.expectTerminated(oldHolder)
+      }
+      moveFixtureHistoryAside(fixture)
+
+      val stateDirectory = ErgoState.stateDir(fixture.settings)
+      val store = new LDBVersionedStore(stateDirectory,
+        initialKeepVersions = fixture.settings.nodeSettings.keepVersions)
+      val alteredBytes = try {
+        val context = ErgoStateContextSerializer(fixture.settings.chainSettings)
+          .parseBytesTry(store.get(ErgoStateReader.ContextKey).get).get
+        val original = context.currentParameters
+        val changed = Parameters(original.height, original.parametersTable.updated(
+          Parameters.MaxBlockCostIncrease, original.maxBlockCost + 1), original.proposedUpdate)
+        val altered = new ErgoStateContext(context.lastHeaders, context.lastExtensionOpt,
+          context.genesisStateDigest, changed, context.validationSettings,
+          context.votingData)(fixture.settings.chainSettings)
+        altered.genesisStateDigest.toVector shouldBe savedRoot
+        altered.lastHeaders shouldBe empty
+        altered.lastExtensionOpt shouldBe None
+        val bytes = altered.bytes
+        ErgoStateContextSerializer(fixture.settings.chainSettings).parseBytesTry(bytes).isSuccess shouldBe true
+        store.update(savedRoot.toArray, Seq.empty, Seq(ErgoStateReader.ContextKey -> bytes)).get
+        bytes.toVector
+      } finally store.close()
+      val marker = Files.write(stateDirectory.toPath.resolve("preserved-state"), Array[Byte](42))
+
+      startNodeViewHolder()
+      val watcher = TestProbe()
+      watcher.watch(nodeViewHolderRef)
+      watcher.within(10.seconds) {
+        watcher.expectTerminated(nodeViewHolderRef)
+      }
+      Files.readAllBytes(marker).toSeq shouldBe Seq[Byte](42)
+      val reopened = new LDBVersionedStore(stateDirectory,
+        initialKeepVersions = fixture.settings.nodeSettings.keepVersions)
+      try {
+        reopened.get(ErgoStateReader.ContextKey).map(_.toVector) shouldBe Some(alteredBytes)
+        reopened.get(UtxoState.bestVersionKey).isDefined shouldBe true
+      } finally reopened.close()
     }
   }
 }

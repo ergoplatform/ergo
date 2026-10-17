@@ -13,7 +13,8 @@ import scorex.util.ScorexLogging
 
 import scala.util.{Failure, Success, Try}
 
-class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters)
+class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, parameters: Parameters,
+                 nodeViewHolderRef: Option[ActorRef] = None)
                 (implicit val actorSystem: ActorSystem)
   extends ErgoWalletReader with ScorexLogging {
 
@@ -34,7 +35,8 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
   private val boxSelector = new ReplaceCompactCollectBoxSelector(maxInputs, optimalInputs, reemissionDataOpt)
 
   override val walletActor: ActorRef =
-    ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector, historyReader)
+    ErgoWalletActor(settings, parameters, new ErgoWalletServiceImpl(settings), boxSelector,
+      historyReader, nodeViewHolderRef)
 
   def scanOffchain(tx: ErgoTransaction): ErgoWallet = {
     walletActor ! ScanOffChain(tx)
@@ -86,8 +88,9 @@ object ErgoWallet {
 
   def readOrGenerate(historyReader: ErgoHistoryReader,
                      settings: ErgoSettings,
-                     parameters: Parameters)(implicit actorSystem: ActorSystem): ErgoWallet = {
-    new ErgoWallet(historyReader, settings, parameters)
+                     parameters: Parameters,
+                     nodeViewHolderRef: Option[ActorRef] = None)(implicit actorSystem: ActorSystem): ErgoWallet = {
+    new ErgoWallet(historyReader, settings, parameters, nodeViewHolderRef)
   }
 
 }

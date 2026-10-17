@@ -149,25 +149,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private var lastCheckForModifiersToDownload: Long = 0L
 
-  // Header and sections of blocks this node mined and has not applied yet (at most the last 4), each with the ids of
-  // the whole block: a mined block is announced before the node view holder applies it, so a peer's request can arrive
-  // before history has it
+  // Header and sections of blocks this node mined and has not applied yet (at most the last 4): a mined block is
+  // announced before the node view holder applies it, so a peer's request can arrive before history has it
   private val MinedBlocksToServe = 4
-  private var minedToServe: Vector[(Set[ModifierId], Map[ModifierId, (NetworkObjectTypeId.Value, Array[Byte])])] =
-    Vector.empty
+  private var minedToServe: Vector[MinedBlock] = Vector.empty
 
   private def minedModifier(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
-    minedToServe.iterator.flatMap(_._2.get(id)).toSeq.headOption
+    minedToServe.collectFirst { case block if block.toServe.contains(id) => block.toServe(id) }
 
   // a mined block is served from here until it is applied, or dropped if its header or a section turned out invalid,
   // also one history already holds
   private def dropMinedContaining(id: ModifierId): Unit =
-    minedToServe = minedToServe.filterNot(_._1.contains(id))
+    minedToServe = minedToServe.filterNot(_.blockIds.contains(id))
 
   // history serves a header or section from the moment it holds it, also when the block does not become the best one
   // (no LocalBlockApplied then); an id history never receives waits for the drops above or for 4 newer mined blocks
   private def dropMinedHeld(id: ModifierId): Unit =
-    minedToServe = minedToServe.map { case (ids, served) => ids -> (served - id) }.filter(_._2.nonEmpty)
+    minedToServe = minedToServe.map(block => block.copy(toServe = block.toServe - id)).filter(_.toServe.nonEmpty)
 
   /**
     * How many block sections stored in processing queue, imprecise number as updated only when
@@ -1261,9 +1259,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 }
             }
           }
-          val fromMinedMemory = found.count(_._3)
-          if (fromMinedMemory > 0) {
-            log.info(s"Served $fromMinedMemory of ${invData.ids.length} requested ids of type $expectedTypeId " +
+          val servedFromMemory = found.count { case (_, _, fromMinedMemory) => fromMinedMemory }
+          if (servedFromMemory > 0) {
+            log.info(s"Served $servedFromMemory of ${invData.ids.length} requested ids of type $expectedTypeId " +
                      s"from mined-block memory to $remote")
           }
           found.map { case (id, bytes, _) => id -> bytes }
@@ -1551,7 +1549,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       // serialized after the announcement, so it does not delay it; a request for the block is a later message to
       // this actor, so it finds the copy in place
       val served = (header +: sections).map(m => m.id -> (m.modifierTypeId -> m.bytes)).toMap
-      minedToServe = (minedToServe :+ (served.keySet -> served)).takeRight(MinedBlocksToServe)
+      minedToServe = (minedToServe :+ MinedBlock(served.keySet, served)).takeRight(MinedBlocksToServe)
 
     // Locally mined block applied - skip broadcast (already done via NewBlockMined)
     case LocalBlockApplied(header, _) =>
@@ -1852,6 +1850,15 @@ object ErgoNodeViewSynchronizer {
   object IncomingTxInfo {
     def empty(): IncomingTxInfo = IncomingTxInfo(0, 0, 0)
   }
+
+  /**
+    * A block this node mined, kept to serve its parts to peers until history holds them.
+    *
+    * @param blockIds - ids of the header and all sections, so the whole block is dropped when any part turns out invalid
+    * @param toServe  - the parts history does not hold yet, by id, with their type and bytes
+    */
+  private case class MinedBlock(blockIds: Set[ModifierId],
+                                toServe: Map[ModifierId, (NetworkObjectTypeId.Value, Array[Byte])])
 
   /**
     * Transaction bytes and source peer to be recorded in a cache and processed later

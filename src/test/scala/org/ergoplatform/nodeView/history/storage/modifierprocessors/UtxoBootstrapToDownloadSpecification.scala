@@ -6,7 +6,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.serialization.ManifestSerializer
-import org.ergoplatform.settings.{NipopowSettings, UtxoSettings}
+import org.ergoplatform.settings.NipopowSettings
 import org.ergoplatform.utils.{ErgoCorePropertyTest, HistoryTestHelpers}
 import scorex.util.ModifierId
 
@@ -41,7 +41,7 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
         stateType = StateType.Utxo,
         verifyTransactions = true,
         blocksToKeep = -1,
-        utxoSettings = UtxoSettings(utxoBootstrap = true, 0, 2),
+        utxoSettings = baseSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = true),
         nipopowSettings = NipopowSettings(nipopowBootstrap = true, p2pNipopows = 1)
       )
     )
@@ -155,7 +155,7 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     val proofBytes = senderHistory
       .popowProofBytes(senderHistory.P2PNipopowProofM, senderHistory.P2PNipopowProofK, Some(suffixHeadId)).get
 
-    var history = genNipopowUtxoBootstrapHistory(senderHistory.bestHeaderIdAtHeight(GenesisHeight).get)
+    val history = genNipopowUtxoBootstrapHistory(senderHistory.bestHeaderIdAtHeight(GenesisHeight).get)
     history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
     history.setHeadersChainSynced() // as done by ErgoNodeViewHolder after NiPoPoW proof application
     val proofTip = history.headersHeight
@@ -164,13 +164,13 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     val continuousFrom = (proofTip to GenesisHeight by -1).takeWhile(h => history.bestHeaderIdAtHeight(h).nonEmpty).last
     continuousFrom should be > GenesisHeight
 
-    history = applyHeaderChain(history, HeaderChain(senderChain.drop(proofTip).map(_.header)))
+    applyHeaderChain(history, HeaderChain(senderChain.drop(proofTip).map(_.header)))
 
     // apply UTXO set snapshot and some full blocks after it, so best full block is 100 blocks after a missing header
     val bestFullBlockHeight = continuousFrom - 1 + 100
     val snapshotHeight = bestFullBlockHeight - 12
     history.onUtxoSnapshotApplied(snapshotHeight)
-    history = applyChain(history, senderChain.slice(snapshotHeight, bestFullBlockHeight))
+    applyChain(history, senderChain.slice(snapshotHeight, bestFullBlockHeight))
     history.bestFullBlockOpt.map(_.height) shouldBe Some(bestFullBlockHeight)
     history.bestHeaderIdAtHeight(bestFullBlockHeight - 100) shouldBe None
     // near the tip
@@ -179,7 +179,7 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     // sections of the next block are to be downloaded
     val nextHeader = senderChain(bestFullBlockHeight).header
     val toDownload = history.nextModifiersToDownload(1, (_, id) => !history.contains(id)).values.flatten.toSeq
-    toDownload should contain theSameElementsAs history.requiredModifiersForHeader(nextHeader).map(_._2)
+    toDownload should contain theSameElementsAs history.requiredModifiersForHeader(nextHeader).map { case (_, id) => id }
   }
 
 }

@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history
 
-import org.ergoplatform.consensus.{Equal, Fork, Older, Younger}
+import org.ergoplatform.consensus.{Equal, Fork, Older, Unknown, Younger}
 import org.ergoplatform.mining.difficulty.DifficultySerializer
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
@@ -142,6 +142,32 @@ class NonVerifyADHistorySpecification extends ErgoCorePropertyTest {
     val si2 = history2.syncInfoV2(full = true)
     val continuation2 = history1.continuationIds(si2, BlocksInChain * 100)
     fork1.headers.foreach(h => continuation2.exists(_._2 == h.id) shouldBe true)
+  }
+
+  property("V2 common point ignores a retained header outside the selected chain") {
+    var history = genHistory()
+    val common = genHeaderChain(9, history, diffBitsOpt = None, useRealTs = false)
+    history = applyHeaderChain(history, common)
+    val selectedTail = genHeaderChain(35, Some(common.last), history.difficultyCalculator,
+      diffBitsOpt = None, useRealTs = false).tail
+    val sideTail = genHeaderChain(35, Some(common.last), history.difficultyCalculator,
+      extensionHash = Algos.hash(Array[Byte](1)), diffBitsOpt = None, useRealTs = false).tail
+    history = applyHeaderChain(history, selectedTail)
+    history = applyHeaderChain(history, sideTail.take(19))
+
+    history.bestHeaderOpt.get.id shouldBe selectedTail.last.id
+    history.contains(sideTail(18).id) shouldBe true
+    history.isInBestChain(sideTail(18).id) shouldBe false
+
+    val sideOnly = ErgoSyncInfoV2(Seq(sideTail.last, sideTail(18)))
+    history.compareV2(sideOnly) shouldBe Unknown
+    history.continuationIdsV2(sideOnly, 100) shouldBe empty
+
+    val withSelectedCommonPoint = ErgoSyncInfoV2(sideOnly.lastHeaders :+ common.head)
+    history.compareV2(withSelectedCommonPoint) shouldBe Fork
+    val continuation = history.continuationIdsV2(withSelectedCommonPoint, 100)
+    continuation.head._2 shouldBe common.headers(1).id
+    continuation.last._2 shouldBe selectedTail.last.id
   }
 
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {

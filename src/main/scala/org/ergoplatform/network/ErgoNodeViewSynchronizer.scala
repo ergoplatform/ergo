@@ -75,7 +75,19 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV1CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV1)] = Option.empty
 
-  private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
+  private var syncInfoV2CacheByTipAndMode:
+    Option[((Int, Option[ModifierId], Boolean), ErgoSyncInfoV2)] = Option.empty
+
+  // Only received, fully held contiguous pages can advance this per-peer locator.
+  // A selected-chain duplicate is reusable while the exact selected tip is unchanged.
+  private case class HeaderInventoryProgress(ids: Seq[ModifierId], tipId: ModifierId, cursor: Header)
+  private val headerInventoryProgress = mutable.Map[ConnectedPeer, HeaderInventoryProgress]()
+  private val lastHeaderInventoryCheck = mutable.Map[ConnectedPeer, Long]()
+  // One queued page per peer; insertion order gives a noisy peer no advantage over its neighbours.
+  // ConnectedPeer equality uses only the remote address. Keep the latest handler with its page.
+  private val pendingHeaderInventories = mutable.LinkedHashMap[ConnectedPeer, (ConnectedPeer, InvData)]()
+  private var headerInventoryCheckScheduled = false
+  private var lastHeaderInventoryValidationAt = 0L
 
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
@@ -94,6 +106,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   // resource exhaustion. To prevent it, we do not provide an answer for sync message, if previous one was sent
   // no more than `PerPeerSyncLockTime` milliseconds ago.
   private val PerPeerSyncLockTime = 100
+  private val HeaderInventoryValidationInterval = 250.millis
 
   // when we got last modifier, both unconfirmed transactions and block sections count
   private var lastModifierGotTime: Long = 0
@@ -343,12 +356,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   /** Get V2 sync info from cache or load it from history and add to cache */
   private def getV2SyncInfo(history: ErgoHistory, full: Boolean): ErgoSyncInfoV2 = {
-    val headersHeight = history.headersHeight
-    syncInfoV2CacheByHeadersHeight
-      .collect { case (height, syncInfo) if height == headersHeight => syncInfo }
+    val key = (history.headersHeight, history.bestHeaderIdOpt, full)
+    syncInfoV2CacheByTipAndMode
+      .collect { case (cachedKey, syncInfo) if cachedKey == key => syncInfo }
       .getOrElse {
         val v2SyncInfo = history.syncInfoV2(full)
-        syncInfoV2CacheByHeadersHeight = Some(headersHeight -> v2SyncInfo)
+        syncInfoV2CacheByTipAndMode = Some(key -> v2SyncInfo)
         v2SyncInfo
       }
   }
@@ -357,6 +370,81 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Whether neighbour peer `remote` supports sync protocol V2.
     */
   def syncV2Supported(remote: ConnectedPeer): Boolean = SyncV2Filter.condition(remote)
+
+  private def peerSyncInfoV2(history: ErgoHistory, peer: ConnectedPeer): ErgoSyncInfoV2 = {
+    // Read the actual selected tip, including after a same-height reorganization.
+    val summary = history.syncInfoV2(full = true)
+    headerInventoryProgress.get(peer) match {
+      case Some(progress) if summary.lastHeaders.nonEmpty &&
+        history.isInBestChain(progress.tipId) &&
+        history.typedModifierById[Header](progress.cursor.id).isDefined =>
+        ErgoNodeViewSynchronizer.withHeaderInventoryCursor(summary, progress.cursor)
+      case _ =>
+        headerInventoryProgress -= peer
+        summary
+    }
+  }
+
+  private def queueHeaderInventory(inv: InvData, peer: ConnectedPeer): Unit = {
+    val now = System.currentTimeMillis()
+    // V2 sends 399 IDs after a common point, or 400 IDs for an empty summary.
+    val fullPage = inv.ids.size == maxHeadersPerBucket - 1 || inv.ids.size == maxHeadersPerBucket
+    if (inv.typeId == Header.modifierTypeId && fullPage && syncV2Supported(peer) &&
+      syncTracker.getStatus(peer).isDefined &&
+      now - lastHeaderInventoryCheck.getOrElse(peer, 0L) > PerPeerSyncLockTime) {
+      lastHeaderInventoryCheck.put(peer, now)
+      pendingHeaderInventories.put(peer, (peer, inv))
+      scheduleHeaderInventoryValidation()
+    }
+  }
+
+  private def scheduleHeaderInventoryValidation(): Unit = {
+    if (pendingHeaderInventories.nonEmpty && !headerInventoryCheckScheduled) {
+      val elapsed = System.currentTimeMillis() - lastHeaderInventoryValidationAt
+      val delay = math.max(0L, HeaderInventoryValidationInterval.toMillis - elapsed)
+      headerInventoryCheckScheduled = true
+      context.system.scheduler.scheduleOnce(delay.millis, self, ValidateNextHeaderInventory)
+    }
+  }
+
+  private def validateNextHeaderInventory(history: ErgoHistory): Unit = {
+    headerInventoryCheckScheduled = false
+    pendingHeaderInventories.headOption.foreach { case (queuedPeer, (peer, inv)) =>
+      pendingHeaderInventories -= queuedPeer
+      lastHeaderInventoryValidationAt = System.currentTimeMillis()
+      if (syncV2Supported(peer) && syncTracker.getStatus(peer).isDefined) {
+        history.bestHeaderIdOpt.foreach { tipId =>
+          val cached = headerInventoryProgress.get(peer).filter(p =>
+            p.tipId == tipId && p.ids == inv.ids && history.isInBestChain(p.cursor)).map(_.cursor)
+          val cursor = cached.orElse {
+            // Delivery status Requested/Received is insufficient: resolve every object from history.
+            // typedModifierById also excludes persisted-invalid headers.
+            // Stop at the first absent or broken link in an untrusted page.
+            var previous: Option[Header] = None
+            val ids = inv.ids.iterator
+            var complete = true
+            while (complete && ids.hasNext) {
+              history.typedModifierById[Header](ids.next()) match {
+                case Some(header) if previous.forall(p =>
+                  header.height == p.height + 1 && header.parentId == p.id) =>
+                  previous = Some(header)
+                case _ => complete = false
+              }
+            }
+            if (complete) previous else None
+          }
+          cursor.foreach { next =>
+            // A different complete page can represent a peer reorganization.
+            // Replace its locator even when the new page ends below the old one.
+            headerInventoryProgress.put(peer, HeaderInventoryProgress(inv.ids, tipId, next))
+            // A lock-dropped response is retried by duplicate inventories or the existing periodic sync.
+            sendSyncToPeer(peer, peerSyncInfoV2(history, peer))
+          }
+        }
+      }
+    }
+    scheduleHeaderInventoryValidation()
+  }
 
   /**
     * Send synchronization statuses to neighbour peers
@@ -383,8 +471,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
       if (peersV2.nonEmpty) {
         //todo: send only last header to peers which are equal or younger
-        val v2SyncInfo = getV2SyncInfo(history, full = true)
-        networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(peersV2))
+        val (progressPeers, ordinaryPeers) = peersV2.partition(headerInventoryProgress.contains)
+        progressPeers.foreach(peer => sendSyncToPeer(peer, peerSyncInfoV2(history, peer)))
+        if (ordinaryPeers.nonEmpty) {
+          val v2SyncInfo = getV2SyncInfo(history, full = true)
+          networkControllerRef ! SendToNetwork(Message(syncInfoSpec, Right(v2SyncInfo), None), SendToPeers(ordinaryPeers))
+        }
       }
     }
   }
@@ -517,7 +609,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
 
     if (syncSendNeeded) {
-      val ownSyncInfo = getV2SyncInfo(hr, full = true)
+      val ownSyncInfo = peerSyncInfoV2(hr, remote)
       sendSyncToPeer(remote, ownSyncInfo)
     }
   }
@@ -772,10 +864,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // send sync message to the peer to get new headers quickly
           if (valid.head.isInstanceOf[Header]) {
             val syncInfo = if (syncV2Supported(remote)) {
-              // full, not reduced (last header only) sync info, otherwise a node on a fork never tells where
-              // its chain branches off while the peer keeps delivering headers: every reduced sync info sent
-              // postpones the periodic sync, which carries the older headers
-              getV2SyncInfo(hr, full = true)
+              peerSyncInfoV2(hr, remote)
             } else {
               getV1SyncInfo(hr)
             }
@@ -1205,6 +1294,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     if (newModifierIds.nonEmpty) {
       log.debug(s"Going to request ${newModifierIds.length} modifiers of type $modifierTypeId from $peer")
       requestBlockSection(modifierTypeId, newModifierIds, peer)
+    } else {
+      queueHeaderInventory(invData, peer)
     }
   }
 
@@ -1423,15 +1514,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
+      headerInventoryProgress -= remote
+      lastHeaderInventoryCheck -= remote
+      pendingHeaderInventories -= remote
       syncTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(connectedPeer) =>
+      headerInventoryProgress -= connectedPeer
+      lastHeaderInventoryCheck -= connectedPeer
+      pendingHeaderInventories -= connectedPeer
       syncTracker.clearStatus(connectedPeer)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
     case SendLocalSyncInfo =>
       sendSync(historyReader)
+  }
+
+  private def validatePendingHeaderInventory(historyReader: ErgoHistory): Receive = {
+    case ValidateNextHeaderInventory => validateNextHeaderInventory(historyReader)
   }
 
 
@@ -1720,6 +1821,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                   usr: Option[UtxoStateReader],
                   blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = {
     processDataFromPeer(msgHandlers(hr, mp, usr, blockAppliedTxsCache)) orElse
+      validatePendingHeaderInventory(hr) orElse
       onDownloadRequest(hr) orElse
       sendLocalSyncInfo(hr) orElse
       viewHolderEvents(hr, mp, usr, blockAppliedTxsCache) orElse
@@ -1765,6 +1867,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 }
 
 object ErgoNodeViewSynchronizer {
+  private case object ValidateNextHeaderInventory
+
+  private[network] def withHeaderInventoryCursor(summary: ErgoSyncInfoV2, cursor: Header): ErgoSyncInfoV2 = {
+    summary.lastHeaders.headOption.map { tip =>
+      // The first header reports our selected tip, even when a held peer-fork
+      // cursor is higher. The rest are locator alternatives for this peer.
+      val locators = (summary.lastHeaders.tail.filterNot(_.id == cursor.id) :+ cursor)
+        .filterNot(_.id == tip.id)
+        .sortBy(_.height)(Ordering[Int].reverse)
+      ErgoSyncInfoV2(tip +: locators)
+    }.getOrElse(summary)
+  }
 
   /**
     * Max number of declined transaction ids kept to not ask peers for the same transactions again. The table is

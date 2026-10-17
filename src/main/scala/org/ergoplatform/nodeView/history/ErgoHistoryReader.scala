@@ -140,12 +140,12 @@ trait ErgoHistoryReader
   def applicable(modifier: BlockSection): Boolean = applicableTry(modifier).isSuccess
 
   /**
-    * For given headers (sorted in reverse chronological order), find first one (most recent one) which is known
-    * to our history
+    * For given headers (sorted in reverse chronological order), find the first one (most recent one)
+    * on our selected chain
     */
   private def commonPoint(headers: Seq[Header]): Option[Header] = {
     headers.find { h =>
-      contains(h.id)
+      isInBestChain(h.id)
     }
   }
 
@@ -417,7 +417,9 @@ trait ErgoHistoryReader
         ErgoHistoryReader.ReducedV2SyncOffsets
       }
 
-      val headers = offsets.flatMap(offset => bestHeaderAtHeight(h - offset))
+      val heights = offsets.map(h - _)
+      val locatorHeights = if (full) (heights :+ GenesisHeight).distinct else heights
+      val headers = locatorHeights.flatMap(bestHeaderAtHeight)
 
       ErgoSyncInfoV2(headers)
     }

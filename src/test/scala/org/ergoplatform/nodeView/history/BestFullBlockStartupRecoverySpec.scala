@@ -59,15 +59,12 @@ class BestFullBlockStartupRecoverySpec extends ErgoCorePropertyTest with NodeVie
         try {
           val bestFullBlockKey = ByteArrayWrapper(Array.fill[Byte](32)(-1))
           storage.getIndex(bestFullBlockKey).map(bytesToId) shouldBe Some(block.id)
-          storage.modifierByIdFromDb(block.header.id).map(_.id) shouldBe Some(block.id)
-          storage.modifierByIdFromDb(block.header.transactionsId).map(_.id) shouldBe Some(block.header.transactionsId)
-          storage.modifierByIdFromDb(block.header.extensionId).map(_.id) shouldBe Some(block.header.extensionId)
+          val sectionIds = Seq(block.header.id, block.header.transactionsId, block.header.extensionId)
+          val sectionBytesBefore = sectionIds.map(id => storage.modifierTypeAndBytesById(id).map(_._2.toVector).get)
 
           storage.remove(Array(bestFullBlockKey), Array.empty[ModifierId]).get
           storage.getIndex(bestFullBlockKey) shouldBe None
-          storage.modifierByIdFromDb(block.header.id).map(_.id) shouldBe Some(block.id)
-          storage.modifierByIdFromDb(block.header.transactionsId).map(_.id) shouldBe Some(block.header.transactionsId)
-          storage.modifierByIdFromDb(block.header.extensionId).map(_.id) shouldBe Some(block.header.extensionId)
+          sectionIds.map(id => storage.modifierTypeAndBytesById(id).map(_._2.toVector).get) shouldBe sectionBytesBefore
         } finally storage.close()
 
         startNodeViewHolder()

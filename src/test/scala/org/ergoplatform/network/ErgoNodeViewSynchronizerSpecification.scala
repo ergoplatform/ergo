@@ -1966,7 +1966,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         case m if requested(m, Extension.modifierTypeId) => true
         case m => beforeSentinel += m; false
       }
-      beforeSentinel.exists(requested(_, ADProofs.modifierTypeId)) shouldBe false
+      beforeSentinel.filter(requested(_, ADProofs.modifierTypeId)) shouldBe empty
     }
   }
 }

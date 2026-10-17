@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 
 import java.io.File
 import java.nio.{ByteBuffer, ByteOrder}

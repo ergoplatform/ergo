@@ -1,6 +1,6 @@
 package scorex.db
 
-import com.google.common.primitives.{Ints, Shorts}
+import com.google.common.primitives.{Ints, Longs, Shorts}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
@@ -43,6 +43,14 @@ class ByteArrayUtilsSpec extends AnyPropSpec with ScalaCheckPropertyChecks with 
       val ba = Array.fill(2)(0: Byte)
       ByteArrayUtils.putShort(ba, 0, i)
       Shorts.fromByteArray(ba) shouldBe i // check with Guava
+    }
+  }
+
+  property("putLong") {
+    forAll(Gen.choose(Long.MinValue, Long.MaxValue)) { i =>
+      val ba = Array.fill(8)(0: Byte)
+      ByteArrayUtils.putLong(ba, 0, i)
+      Longs.fromByteArray(ba) shouldBe i // check with Guava
     }
   }
 

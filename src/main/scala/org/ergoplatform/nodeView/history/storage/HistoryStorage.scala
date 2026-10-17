@@ -99,9 +99,12 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
   def modifierByIdFromDb(id: ModifierId): Option[BlockSection] =
     objectsStore.get(idToBytes(id)).flatMap { bytes =>
       HistoryModifierSerializer.parseBytesTry(bytes) match {
-        case Success(pm) =>
+        case Success(pm) if pm.id == id =>
           cacheModifier(pm)
           Some(pm)
+        case Success(pm) =>
+          log.warn(s"Modifier stored under ${encoder.encode(id)} has different id ${pm.encodedId}")
+          None
         case Failure(e) =>
           log.warn(s"Failed to parse modifier ${encoder.encode(id)} from db (bytes are: ${Algos.encode(bytes)})", e)
           None

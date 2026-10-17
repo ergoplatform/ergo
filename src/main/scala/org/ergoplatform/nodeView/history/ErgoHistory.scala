@@ -353,7 +353,22 @@ object ErgoHistory extends ScorexLogging {
       if (damagedHeaderIdOpt.isEmpty && headersAbove.nonEmpty &&
         (headersAbove.last.height != fullHeight + 1 ||
           headersAbove.last.parentId != bestFullBlockOpt.get.id)) {
-        return false
+        // The selected headers are readable, but their ancestry is not anchored
+        // to the applied full chain. Restore only their download indexes; their
+        // complete sections may belong to a healthy, unapplied fork.
+        val storage = history.historyStorage
+        var restored = false
+        headersAbove.foreach { header =>
+          val idsAtHeight = history.headerIdsAtHeight(header.height)
+          if (!idsAtHeight.contains(header.id)) {
+            log.warn(s"Height index at height ${header.height} is missing header ${header.encodedId}, restoring it")
+            storage.insert(
+              Array(history.heightIdsKey(header.height) -> (Seq(header.id) ++ idsAtHeight).flatMap(idToBytes).toArray),
+              Array.empty[BlockSection]).get
+            restored = true
+          }
+        }
+        return restored
       }
 
       damagedHeaderIdOpt match {

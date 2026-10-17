@@ -622,4 +622,53 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("initWallet should set wallet height to current fullHeight while restoreWallet resets it to 0") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wpass = SecretString.create("y")
+        val genesisBlock = makeGenesisBlock(pks.head.pubkey, randomNewAsset)
+        val currentCtx = new org.ergoplatform.nodeView.state.ErgoStateContext(
+          Seq(genesisBlock.header.copy(height = 10)),
+          Some(genesisBlock.extension),
+          startDigest,
+          parameters,
+          validationSettingsNoIl,
+          org.ergoplatform.nodeView.state.VotingData.empty
+        )(settings.chainSettings)
+        currentCtx.currentHeight shouldBe 10
+
+        val isolatedSettings = settings.copy(
+          directory = createTempDir.getAbsolutePath,
+          nodeSettings = settings.nodeSettings.copy(blocksToKeep = -1),
+          walletSettings = settings.walletSettings.copy(
+            secretStorage = settings.walletSettings.secretStorage.copy(secretDir = createTempDir.getAbsolutePath)
+          )
+        )
+        val walletService = new ErgoWalletServiceImpl(isolatedSettings)
+        val ws0 = initialState(store, versionedStore)
+        ws0.storage.updateStateContext(currentCtx).get
+        ws0.fullHeight shouldBe 10
+        ws0.getWalletHeight shouldBe 0
+
+        val (mnemonic, initializedState) = walletService.initWallet(ws0, isolatedSettings, wpass, None).get
+        initializedState.fullHeight shouldBe 10
+        initializedState.getWalletHeight shouldBe 10
+
+        val restoredState = walletService.restoreWallet(
+          initializedState,
+          isolatedSettings,
+          mnemonic,
+          mnemonicPassOpt = None,
+          walletPass = wpass,
+          usePre1627KeyDerivation = false
+        ).get
+        restoredState.fullHeight shouldBe 10
+        restoredState.getWalletHeight shouldBe 0
+
+        restoredState.registry.close()
+        restoredState.storage.close()
+      }
+    }
+  }
+
 }

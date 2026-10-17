@@ -9,7 +9,7 @@ import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DigestFullBlockApplied, RemoteBlockApplied, Rollback}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentThreshold, Index}
 import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
@@ -20,10 +20,9 @@ import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockPro
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, ErgoStateReader, StateType}
 import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import org.ergoplatform.utils.generators.ValidBlocksGenerators.createDigestState
 import scorex.util.{ModifierId, bytesToId}
 import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
@@ -633,7 +632,33 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
             reloaded.typedExtraIndexById[IndexedErgoBox](lastBox.id).exists(_.globalIndex == lastBoxIndex)
         probe.ref ! state
         probe.ref ! terminalRowsPreserved
+        // Markerless legacy rows can have a valid terminal checkpoint while other rows are
+        // stale. Rebuild them before readers are available in either state mode.
+        val orphanKey = org.ergoplatform.settings.Algos.hash("legacy extra index orphan")
+        reloaded.historyStorage.insertExtraTry(Array(orphanKey -> Array(7.toByte)), Array.empty).get
+        reloaded.historyStorage.removeExtraTry(Array(bytesToId(ExtraIndexer.IndexModeProvenanceKey))).get
         reloaded.closeStorage()
+
+        val legacyUtxo = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! (IndexerState.fromHistory(legacyUtxo).indexedHeight == 0 &&
+          legacyUtxo.historyStorage.modifierBytesById(bytesToId(orphanKey)).isEmpty &&
+          legacyUtxo.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexModeProvenanceKey))
+            .exists(_.sameElements(ExtraIndexer.UtxoIndexProvenanceBytes)))
+        legacyUtxo.historyStorage.insertExtraTry(
+          checkpointMetadata ++ Array(orphanKey -> Array(7.toByte)), checkpointObjects).get
+        legacyUtxo.historyStorage.removeExtraTry(Array(bytesToId(ExtraIndexer.IndexModeProvenanceKey))).get
+        legacyUtxo.closeStorage()
+
+        val legacyDigest = ErgoHistory.readOrGenerate(dbSettings.copy(nodeSettings =
+          dbSettings.nodeSettings.copy(stateType = StateType.Digest)))(context)
+        probe.ref ! (IndexerState.fromHistory(legacyDigest).indexedHeight == 0 &&
+          legacyDigest.historyStorage.modifierBytesById(bytesToId(orphanKey)).isEmpty &&
+          legacyDigest.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexModeProvenanceKey))
+            .exists(_.sameElements(ExtraIndexer.DigestIndexProvenanceBytes)))
+        legacyDigest.closeStorage()
+
+        // Return this fixture to UTXO mode for the following independent corruption cases.
+        ErgoHistory.readOrGenerate(dbSettings)(context).closeStorage()
 
         val interrupted = HistoryStorage(dbSettings)
         interrupted.insertExtraTry(
@@ -776,6 +801,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     preserved.globalTxIndex should be > 0L
     preserved.globalBoxIndex should be > 0L
     probe.expectMsg(true)
+    probe.expectMsg(true)
+    probe.expectMsg(true)
     probe.expectMsg((0, 0L, 0L, None))
     probe.expectMsg((0, 0L, 0L, None))
     probe.expectMsg((0, 0L, 0L, None))
@@ -861,7 +888,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val dbSettings = initSettings.copy(
       directory = dbDir.getAbsolutePath,
       networkType = NetworkType.TestNet,
-      nodeSettings = initSettings.nodeSettings.copy(extraIndex = true, headerChainDiff = 5000)
+      nodeSettings = initSettings.nodeSettings.copy(
+        stateType = StateType.Digest, extraIndex = true, headerChainDiff = 5000)
     )
     val setupProbe = TestProbe()(system)
     system.actorOf(Props(new Actor {
@@ -897,11 +925,36 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val probe = TestProbe()(system)
     probe.send(productionIndexer, Identify("started"))
     probe.expectMsg(ActorIdentity("started", Some(productionIndexer)))
-    val appliedState = createDigestState(idToVersion(applied.id), applied.stateRoot)
+    val emptyContext = ErgoStateContext.empty(dbSettings.chainSettings, dbSettings.launchParameters)
+    val stateContext = new ErgoStateContext(Seq(applied), None, emptyContext.genesisStateDigest,
+      emptyContext.currentParameters, emptyContext.validationSettings, emptyContext.votingData)(dbSettings.chainSettings)
+    val appliedState = DigestState.recover(idToVersion(applied.id), applied.stateRoot,
+      stateContext, Files.createTempDirectory("digest-indexer-state").toFile, dbSettings).get
     try viewHolderProbe.send(productionIndexer, request.f(CurrentView[ErgoStateReader](history, appliedState, null, null)))
     finally appliedState.close()
 
-    // the indexer catches up with the state of the snapshot and stops there
+    def replyCertified(header: Header): Unit = {
+      val refresh = viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+        .asInstanceOf[GetDataFromCurrentView[ErgoStateReader, Any]]
+      val context = new ErgoStateContext(Seq(header), None, emptyContext.genesisStateDigest,
+        emptyContext.currentParameters, emptyContext.validationSettings, emptyContext.votingData)(dbSettings.chainSettings)
+      val recovered = DigestState.recover(idToVersion(header.id), header.stateRoot,
+        context, Files.createTempDirectory("digest-indexer-state").toFile, dbSettings).get
+      val certified = new DigestState(recovered.version, recovered.rootDigest, recovered.store, dbSettings) {
+        override val fullBlockBodyFrontier: Option[ModifierId] = Some(header.id)
+      }
+      try viewHolderProbe.send(productionIndexer,
+        refresh.f(CurrentView[ErgoStateReader](history, certified, null, null)))
+      finally certified.close()
+      viewHolderProbe.send(productionIndexer, GetSegmentThreshold)
+      viewHolderProbe.expectMsg(512)
+    }
+
+    // The synthetic Digest snapshot has a header version but no body certificate.
+    IndexerState.fromHistory(history).indexedHeight shouldBe 0
+    productionIndexer ! DigestFullBlockApplied(applied, Some(applied.id))
+    replyCertified(applied)
+    // The certified event admits bodies through the applied block and stops there.
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
     }
@@ -910,7 +963,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     IndexerState.fromHistory(history).indexedHeight shouldBe applied.height
 
     notApplied.foreach { block =>
-      productionIndexer ! RemoteBlockApplied(block.header, block.blockTransactions.txs.map(_.id))
+      productionIndexer ! DigestFullBlockApplied(block.header, Some(block.id))
+      replyCertified(block.header)
     }
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
       val state = IndexerState.fromHistory(history)

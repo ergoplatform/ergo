@@ -17,6 +17,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError, ServiceUnavailable}
 import org.ergoplatform.modifiers.history.header.Header
@@ -78,13 +79,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case _ => reject(ValidationRejection("Wrong address format"))
     }
 
+  private val digestMode: Boolean = ergoSettings.nodeSettings.stateType == StateType.Digest
+
   override val route: Route = handleExceptions(recoveryExceptionHandler) {
   if(ergoSettings.nodeSettings.extraIndex)
     pathPrefix("blockchain") {
       getIndexedHeightR ~
-      onSuccess(getRawHistory) { history =>
-        if (getIndex(RollbackToKey, history).getInt != 0 ||
-            !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+      onSuccess(getRawHistoryAndState) { case (history, stateOpt) =>
+        if (recoveryIncomplete(history, stateOpt)) {
           recoveryUnavailable
         } else {
           getTxByIdR ~
@@ -123,19 +125,34 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getRawHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
-  private def checkedHistory(history: ErgoHistoryReader): ErgoHistoryReader = {
-    if (getIndex(RollbackToKey, history).getInt != 0 ||
-        !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+  private def getRawHistoryAndState: Future[(ErgoHistoryReader, Option[ErgoStateReader])] =
+    if (digestMode) {
+      (readersHolder ? GetReaders).mapTo[Readers].map(r => (r.h, Some(r.s)))
+    } else {
+      getRawHistory.map(h => (h, None))
+    }
+
+  private def recoveryIncomplete(history: ErgoHistoryReader, stateOpt: Option[ErgoStateReader]): Boolean =
+    getIndex(RollbackToKey, history).getInt != 0 ||
+      (if (digestMode) {
+        !stateOpt.exists(state => ExtraIndexer.checkpointOnCertifiedDigestFullChain(
+          history, state, ergoSettings.nodeSettings.verifyTransactions))
+      } else {
+        !ExtraIndexer.checkpointOnSelectedFullChain(history)
+      })
+
+  private def checkedHistory(history: ErgoHistoryReader, stateOpt: Option[ErgoStateReader]): ErgoHistoryReader = {
+    if (recoveryIncomplete(history, stateOpt)) {
       throw ExtraIndexRecoveryIncomplete
     }
     history
   }
 
   private def getHistory: Future[ErgoHistoryReader] =
-    getRawHistory.map(checkedHistory)
+    getRawHistoryAndState.map { case (history, stateOpt) => checkedHistory(history, stateOpt) }
 
   private def getHistoryWithMempool: Future[(ErgoHistoryReader,ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map(r => (checkedHistory(r.h), r.m))
+    (readersHolder ? GetReaders).mapTo[Readers].map(r => (checkedHistory(r.h, Some(r.s)), r.m))
 
   private def getAddress(tree: ErgoTree)(history: ErgoHistoryReader): Option[IndexedErgoAddress] =
     history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(tree))

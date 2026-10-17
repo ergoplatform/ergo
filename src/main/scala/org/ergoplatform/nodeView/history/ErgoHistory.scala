@@ -10,11 +10,14 @@ import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
-  IndexedHeightKey, NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{DigestFrontierQuarantineKey, DigestIndexProvenanceBytes,
+  GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey, IndexedHeightKey, IndexModeProvenanceKey,
+  NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey,
+  UtxoIndexProvenanceBytes}
 import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
+import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
@@ -273,6 +276,12 @@ object ErgoHistory extends ScorexLogging {
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
       def storedBytes(key: Array[Byte]): Option[Array[Byte]] = db.modifierBytesById(bytesToId(key))
+      val digestMode = ergoSettings.nodeSettings.stateType == StateType.Digest
+      val modeProvenanceBytes = if (digestMode) DigestIndexProvenanceBytes else UtxoIndexProvenanceBytes
+      val modeProvenanceValid = storedBytes(IndexModeProvenanceKey)
+        .exists(_.sameElements(modeProvenanceBytes))
+      val quarantined = storedBytes(DigestFrontierQuarantineKey).isDefined
+      val modeProvenanceEntry = Array(IndexModeProvenanceKey -> modeProvenanceBytes)
       def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
         .filter(_.length == Integer.BYTES)
         .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
@@ -374,10 +383,12 @@ object ErgoHistory extends ScorexLogging {
       val nonEmptyCheckpoint = indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
         .forall(_.isDefined) && rollbackTo == 0 && terminalRowsMatchCheckpoint
       val checkpointIsValid = schemaVersionOpt.contains(NewestVersion) && numericValuesAreWellFormed &&
-        valuesAreNonNegative && (emptyCheckpoint || nonEmptyCheckpoint)
+        valuesAreNonNegative && (emptyCheckpoint || nonEmptyCheckpoint) && modeProvenanceValid && !quarantined
       if (!checkpointIsValid) {
         val failedChecks = Seq(
           !schemaVersionOpt.contains(NewestVersion) -> "schema version",
+          !modeProvenanceValid -> "state-mode index provenance",
+          quarantined -> "Digest frontier quarantine",
           !numericValuesAreWellFormed -> "counter encoding",
           !valuesAreNonNegative -> "negative counters",
           (rollbackTo != 0) -> "rollback marker",
@@ -410,7 +421,8 @@ object ErgoHistory extends ScorexLogging {
           } else {
             Array.empty
           }
-        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)) ++ rentMarkerEntry, Array.empty).recoverWith { case error =>
+        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)) ++ rentMarkerEntry ++ modeProvenanceEntry,
+          Array.empty).recoverWith { case error =>
           Try(freshDb.close()).failed.foreach(error.addSuppressed)
           Failure(error)
         }.get
@@ -439,7 +451,8 @@ object ErgoHistory extends ScorexLogging {
         }.get
         freshDb.insertExtraTry(Array(
           (SchemaVersionKey, NewestVersionBytes),
-          (RentIndexEnabledKey, RentIndexEnabledBytes)), Array.empty).recoverWith { case error =>
+          (RentIndexEnabledKey, RentIndexEnabledBytes)) ++ modeProvenanceEntry,
+          Array.empty).recoverWith { case error =>
           Try(freshDb.close()).failed.foreach(error.addSuppressed)
           Failure(error)
         }.get

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.viewholder
 
+import akka.testkit.TestProbe
 import java.io.File
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
@@ -766,11 +767,22 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       persistedForkState.version shouldBe idToVersion(noncanonicalBlock.id)
       persistedForkState.version should not be idToVersion(canonicalHeader.id)
       java.util.Arrays.equals(persistedForkState.rootDigest, canonicalHeader.stateRoot) shouldBe true
+      val savedVersion = persistedForkState.version
+      val savedRoot = persistedForkState.rootDigest.toVector
       persistedForkState.closeStorage()
 
       startNodeViewHolder()
+      val watcher = TestProbe()
+      watcher.watch(nodeViewHolderRef)
+      watcher.within(10.seconds) {
+        watcher.expectTerminated(nodeViewHolderRef)
+      }
 
-      getRootHash shouldBe Algos.encode(settings.chainSettings.genesisStateDigest)
+      val retainedState = UtxoState.create(stateDir, settings)
+      try {
+        retainedState.version shouldBe savedVersion
+        retainedState.rootDigest.toVector shouldBe savedRoot
+      } finally retainedState.closeStorage()
 
       sourceState.closeStorage()
     }

@@ -164,8 +164,15 @@ object ErgoNodeViewSynchronizerMessages {
      *
      * @param blockHeight - height of a block corresponding to the UTXO set snapshot
      * @param blockId     - id of a block corresponding to the UTXO set snapshot
+     * @param sessionId   - local snapshot download session to apply
      */
-    case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId)
+    case class InitStateFromSnapshot(blockHeight: Height, blockId: ModifierId, sessionId: Long)
+
+    /** Ask the node view holder to discard a stale snapshot download on its actor thread. */
+    case class DiscardSnapshotDownload(sessionId: Long)
+
+    /** The holder discarded a stale snapshot download; the synchronizer may retry discovery. */
+    case class SnapshotApplicationRejected(sessionId: Long) extends NodeViewHolderEvent
 
   /**
     * Command for a central node view holder component to process NiPoPoW proof,

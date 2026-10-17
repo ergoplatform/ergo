@@ -139,10 +139,10 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
   }
 
 
-  // a sender chain of 110 fresh blocks and a proof whose suffix starts at height 60
-  private def senderChainAndProof(): (Seq[ErgoFullBlock], Array[Byte], ModifierId) = {
+  // a sender chain of `length` fresh blocks and a proof whose suffix starts at height 60
+  private def senderChainAndProof(length: Int = 110): (Seq[ErgoFullBlock], Array[Byte], ModifierId) = {
     val senderHistory = genHistory(None, popowBootstrap = false)
-    val senderChain = genChain(110, senderHistory)
+    val senderChain = genChain(length, senderHistory)
     applyChain(senderHistory, senderChain)
     val suffixHeadId = senderHistory.bestHeaderIdAtHeight(60).get
     val proofBytes = senderHistory.popowProofBytes(senderHistory.P2PNipopowProofM, senderHistory.P2PNipopowProofK, Some(suffixHeadId)).get
@@ -183,6 +183,41 @@ class PopowProcessorSpecification extends ErgoCorePropertyTest with FileUtils {
     val toDownload = history.nextModifiersToDownload(1000, (_, id) => !history.contains(id)).values.flatten.toSet
     senderChain.filter(_.header.height < expected).map(_.header.transactionsId).filter(toDownload.contains) shouldBe empty
     toDownload should contain(senderChain.last.header.transactionsId)
+  }
+
+  property("near the tip, no block section below a full block floor raised to an epoch start after a popow proof is scheduled") {
+    val (senderChain, proofBytes, genesisId) = senderChainAndProof(length = 250)
+    val votingLength = 20
+    // blocksToKeep is large enough for the floor to stay where the proof put it while full blocks are applied
+    val history = genPrunedDigestHistory(genesisId, blocksToKeep = 200, votingLength = Some(votingLength))
+    history.applyPopowProof(history.nipopowSerializer.parseBytes(proofBytes))
+    applyHeaderChain(history, HeaderChain(senderChain.drop(history.headersHeight).map(_.header)))
+    val from = continuousFrom(history)
+    val floor = history.minimalFullBlockHeight
+
+    // full blocks from the floor up, so that 100 blocks below the best full block is below the floor, but not in the gap
+    val bestFullBlockHeight = floor + 90
+    applyChain(history, senderChain.slice(floor - 1, bestFullBlockHeight))
+    val scanStart = bestFullBlockHeight - 100
+    withClue(s"tip=${history.headersHeight} continuousFrom=$from floor=$floor bestFullBlock=$bestFullBlockHeight scanStart=$scanStart: ") {
+      floor should be > from + Constants.LastHeadersInContext - 1 // raised to the next epoch start
+      floor % votingLength shouldBe 0
+      history.minimalFullBlockHeight shouldBe floor
+      history.bestFullBlockOpt.map(_.height) shouldBe Some(bestFullBlockHeight)
+      (history.headersHeight - bestFullBlockHeight) should be < 128 // near the tip
+      // headers below the floor are contiguous from the scan start
+      scanStart should be >= from
+      scanStart should be < floor
+
+      val heightOf = senderChain.flatMap(b => history.requiredModifiersForHeader(b.header).map { case (_, id) => id -> b.height }).toMap
+      val toDownload = history.nextModifiersToDownload(1000, (_, id) => !history.contains(id)).values.flatten.toSeq
+      // every scheduled id is a section of a sender chain block, so none drops out of the height check below
+      toDownload.filterNot(heightOf.contains) shouldBe empty
+      // sections below the floor would fail `bsTooOld`, and their sender would be penalized
+      toDownload.map(heightOf).filter(_ < floor).sorted shouldBe empty
+      val nextHeader = senderChain(bestFullBlockHeight).header
+      toDownload should contain allElementsOf history.requiredModifiersForHeader(nextHeader).map { case (_, id) => id }
+    }
   }
 
   property("after a restart, a full block floor stored inside a popow headers gap moves past the gap, if no full block was applied") {

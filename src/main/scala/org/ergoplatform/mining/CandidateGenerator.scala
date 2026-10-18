@@ -177,12 +177,15 @@ class CandidateGenerator(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
       val stateWithAppliedTxs =
-        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet))
+        state.copy(
+          lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet),
+          cachedPreviousCandidate = state.cachedPreviousCandidate.filter(
+            _.candidateBlock.parentOpt.exists(_.id == header.id)),
+          // A forced candidate may already point at this block when its notification arrives.
+          solvedBlock = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
+        )
       if (needNewCandidate(state.cachedCandidate, header)) {
-        if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
-        else
-          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+        context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
         context.become(initialized(stateWithAppliedTxs))
@@ -202,7 +205,15 @@ class CandidateGenerator(
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       val effectiveMinerPk = optPk.getOrElse(minerPk)
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
+      if (
+        !forced &&
+        cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk) &&
+        !hasCandidateExpired(
+          state.cachedCandidate,
+          state.solvedBlock,
+          candidateGenInterval
+        )
+      ) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -255,25 +266,30 @@ class CandidateGenerator(
           preSolution
         }
       val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
+        val currentBlock = state.cachedCandidate
           .map(candidate => completeBlock(candidate.candidateBlock, solution))
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
+        val previousBlock = if (currentBlock.isEmpty) state.cachedPreviousCandidate.map { previous =>
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
-          }
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
-          case Success(_) =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
-          case Failure(exception) =>
-            log.warn(s"Removing candidates due to invalid block", exception)
-            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
-            )
+            completeBlock(previous.candidateBlock, solution)
+          } else None
+        currentBlock.orElse(previousBlock) match {
+          case Some(newBlock) =>
+            log.info(s"New block mined, header: ${newBlock.header}")
+            ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
+              case Success(_) =>
+                sendToNodeView(newBlock)
+                context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
+                StatusReply.success(())
+              case Failure(exception) =>
+                log.warn(s"Removing candidates due to invalid block", exception)
+                context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+                StatusReply.error(
+                  new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+                )
+            }
+          case None =>
+            StatusReply.error("Solution does not match the current candidate")
         }
       }
       log.info(s"Processed solution $solution with the result $result")

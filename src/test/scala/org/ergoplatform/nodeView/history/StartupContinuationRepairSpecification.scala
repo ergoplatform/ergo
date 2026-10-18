@@ -241,8 +241,10 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
       history.closeStorage()
       val disk = HistoryStorage(settings)
       try {
-        disk.insert(a8.header.serializedId, HistoryModifierSerializer.toBytes(b7.header)).get
-        disk.modifierById(a8.id).map(_.id) shouldBe Some(b7.id)
+        val foreignBytes = HistoryModifierSerializer.toBytes(b7.header)
+        disk.insert(a8.header.serializedId, foreignBytes).get
+        // Verify the injected row without requiring a typed reader to accept its mismatched ID.
+        disk.get(a8.id).map(_.toSeq) shouldBe Some(foreignBytes.toSeq)
       } finally disk.close()
       val reopened = ErgoHistory.readOrGenerate(settings)(null)
       try {

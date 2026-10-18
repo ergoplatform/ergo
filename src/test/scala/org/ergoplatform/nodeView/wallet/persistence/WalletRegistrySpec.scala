@@ -4,6 +4,10 @@ import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
+import org.ergoplatform.nodeView.wallet.IdUtils
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.core.VersionTag
 import org.scalacheck.Gen
@@ -11,6 +15,9 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.util.encode.Base16
+import scorex.crypto.authds.ADKey
+import sigma.Colls
+import sigmastate.eval.Extensions.ArrayByteOps
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.Success
@@ -21,6 +28,7 @@ class WalletRegistrySpec
     with DBSpec
     with ScalaCheckPropertyChecks {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
+  import org.ergoplatform.utils.ErgoCoreTestConstants.emptyProverResult
   import org.ergoplatform.utils.generators.ErgoNodeWalletGenerators._
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
@@ -224,7 +232,103 @@ class WalletRegistrySpec
     }
   }
 
-  it should "update scans correctly" in {
+  it should "preserve inclusion metadata when updating scans of an existing unspent box" in {
+    val appId1: ScanId = ScanId @@ 21.toShort
+    val appId2: ScanId = ScanId @@ 22.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      withVersionedStore(10) { store =>
+        val inclusionHeight = if (tb0.box.creationHeight == 5) 6 else 5
+        val existingBox = tb0.copy(
+          inclusionHeightOpt = Some(inclusionHeight),
+          spendingHeightOpt = None,
+          spendingTxIdOpt = None,
+          scans = Set(appId1))
+
+        WalletRegistry.putBox(emptyBag, existingBox).transact(store).get
+        val reg = new WalletRegistry(store)(ws)
+
+        reg.updateScans(Set(appId2), existingBox.box).get
+
+        val updatedBox = reg.getBox(existingBox.box.id).get
+        updatedBox.inclusionHeightOpt shouldBe existingBox.inclusionHeightOpt
+        updatedBox.spendingHeightOpt shouldBe existingBox.spendingHeightOpt
+        updatedBox.spendingTxIdOpt shouldBe existingBox.spendingTxIdOpt
+        updatedBox.scans shouldBe Set(appId2)
+        reg.unspentBoxes(appId1) shouldBe empty
+        reg.unspentBoxesByInclusionHeight(appId2, inclusionHeight, inclusionHeight) should have length 1
+      }
+    }
+  }
+
+  it should "preserve inclusion and spending metadata when updating scans of an existing spent box" in {
+    val appId1: ScanId = ScanId @@ 21.toShort
+    val appId2: ScanId = ScanId @@ 22.toShort
+
+    forAll(trackedBoxGen, modifierIdGen) { case (tb0, spendingTxId) =>
+      withVersionedStore(10) { store =>
+        val inclusionHeight = if (tb0.box.creationHeight == 5) 6 else 5
+        val existingBox = tb0.copy(
+          inclusionHeightOpt = Some(inclusionHeight),
+          spendingHeightOpt = Some(10),
+          spendingTxIdOpt = Some(spendingTxId),
+          scans = Set(appId1))
+
+        WalletRegistry.putBox(emptyBag, existingBox).transact(store).get
+        val reg = new WalletRegistry(store)(ws)
+
+        reg.updateScans(Set(appId2), existingBox.box).get
+
+        val updatedBox = reg.getBox(existingBox.box.id).get
+        updatedBox.inclusionHeightOpt shouldBe existingBox.inclusionHeightOpt
+        updatedBox.spendingHeightOpt shouldBe existingBox.spendingHeightOpt
+        updatedBox.spendingTxIdOpt shouldBe existingBox.spendingTxIdOpt
+        updatedBox.scans shouldBe Set(appId2)
+        reg.spentBoxes(appId1) shouldBe empty
+        reg.spentBoxes(appId2) should have length 1
+        reg.spentBoxesByInclusionHeight(appId2, inclusionHeight, inclusionHeight) should have length 1
+      }
+    }
+  }
+
+  for (spent <- Seq(false, true); adding <- Seq(false, true)) {
+    it should s"account for payment scan membership according to spending state (spent=$spent, adding=$adding)" in {
+      withVersionedStore(10) { store =>
+        val appId = ScanId @@ 21.toShort
+        val tokenId = Array.fill[Byte](32)(1).toTokenId
+        val tokens = Colls.fromItems(tokenId -> 7L)
+        val output = new ErgoBoxCandidate(1000L, TrueTree, 1, tokens)
+        val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
+        val transaction = new ErgoTransaction(inputs, IndexedSeq.empty, IndexedSeq(output))
+        val oldScans = if (adding) Set(appId) else Set(appId, PaymentsScanId)
+        val newScans = if (adding) Set(appId, PaymentsScanId) else Set(appId)
+        val tracked = TrackedBox(transaction.id, 0, Some(2),
+          if (spent) Some(transaction.id) else None,
+          if (spent) Some(3) else None, transaction.outputs.head, oldScans)
+        val encodedToken = IdUtils.encodedTokenId(tokenId)
+        val digest = WalletDigest(10, 5000L, Seq(encodedToken -> 20L))
+        WalletRegistry.putDigest(WalletRegistry.putBox(emptyBag, tracked), digest).transact(store).get
+        val registry = new WalletRegistry(store)(ws)
+
+        registry.updateScans(newScans, tracked.box).get
+
+        val change = if (spent) 0 else if (adding) 1 else -1
+        registry.fetchDigest().walletBalance shouldBe 5000L + change * 1000L
+        registry.fetchDigest().walletAssetBalances.toMap shouldBe Map(encodedToken -> (20L + change * 7L))
+        registry.fetchDigest().height shouldBe 10
+        val updated = registry.getBox(tracked.box.id).get
+        updated.scans shouldBe newScans
+        updated.inclusionHeightOpt shouldBe tracked.inclusionHeightOpt
+        updated.spendingHeightOpt shouldBe tracked.spendingHeightOpt
+        updated.spendingTxIdOpt shouldBe tracked.spendingTxIdOpt
+        registry.spentBoxes(appId).size shouldBe (if (spent) 1 else 0)
+        registry.unspentBoxes(appId).size shouldBe (if (spent) 0 else 1)
+        registry.walletUnspentBoxes().size shouldBe (if (!spent && adding) 1 else 0)
+      }
+    }
+  }
+
+  it should "update non-payment scan indexes correctly" in {
     val appId1: ScanId = ScanId @@ 21.toShort
     val appId2: ScanId = ScanId @@ 22.toShort
 
@@ -244,6 +348,49 @@ class WalletRegistrySpec
         // limit should by applied
         reg.unspentBoxes(appId1, limit = 1).length shouldBe 1
         reg.unspentBoxes(appId1, limit = 0).length shouldBe 0
+      }
+    }
+  }
+
+  it should "construct an initially tracked record when updating scans for a new box" in {
+    val appId: ScanId = ScanId @@ 21.toShort
+
+    forAll(trackedBoxGen) { tb =>
+      withVersionedStore(10) { store =>
+        val reg = new WalletRegistry(store)(ws)
+
+        reg.updateScans(Set(appId), tb.box).get
+
+        val insertedBox = reg.getBox(tb.box.id).get
+        insertedBox.creationTxId shouldBe tb.box.transactionId
+        insertedBox.creationOutIndex shouldBe tb.box.index
+        insertedBox.inclusionHeightOpt shouldBe Some(tb.box.creationHeight)
+        insertedBox.spendingHeightOpt shouldBe None
+        insertedBox.spendingTxIdOpt shouldBe None
+        insertedBox.scans shouldBe Set(appId)
+        reg.unspentBoxes(appId) should have length 1
+      }
+    }
+  }
+
+  it should "delete a tracked box when its final scan association is removed" in {
+    val appId: ScanId = ScanId @@ 21.toShort
+
+    forAll(trackedBoxGen) { tb0 =>
+      withVersionedStore(10) { store =>
+        val existingBox = tb0.copy(
+          inclusionHeightOpt = Some(5),
+          spendingHeightOpt = None,
+          spendingTxIdOpt = None,
+          scans = Set(appId))
+        WalletRegistry.putBox(emptyBag, existingBox).transact(store).get
+        val reg = new WalletRegistry(store)(ws)
+
+        reg.updateScans(Set.empty, existingBox.box).get
+
+        reg.getBox(existingBox.box.id) shouldBe None
+        reg.unspentBoxes(appId) shouldBe empty
+        reg.boxesByInclusionHeight(appId, 5, 5) shouldBe empty
       }
     }
   }

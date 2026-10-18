@@ -264,7 +264,11 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         defaultMinerPk,
         emptyStateContext
       )
-      txs.length shouldBe 2
+      val feeBoxesCount = blockTxs.flatMap(_.outputs).size
+      val expectedFeeTxCount =
+        (feeBoxesCount + CandidateGenerator.MaxFeeBoxesPerTransaction - 1) /
+          CandidateGenerator.MaxFeeBoxesPerTransaction
+      txs.length shouldBe (1 + expectedFeeTxCount)
 
       val emissionTx = txs.head
       emissionTx.outputs.length shouldBe 2
@@ -273,13 +277,47 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         defaultMinerPk
       )
 
-      val feeTx = txs.last
-      feeTx.outputs.length shouldBe 1
-      feeTx.outputs.head.value shouldBe blockTxs.flatMap(_.outputs).map(_.value).sum
-      feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(
-        defaultMinerPk
-      )
+      val feeTxs = txs.tail
+      feeTxs.foreach { feeTx =>
+        feeTx.inputs.length should be <= CandidateGenerator.MaxFeeBoxesPerTransaction
+        feeTx.outputs.length shouldBe 1
+        feeTx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(
+          defaultMinerPk
+        )
+      }
+      feeTxs.flatMap(_.outputs).map(_.value).sum shouldBe blockTxs.flatMap(_.outputs).map(_.value).sum
     }
+  }
+
+  property("split fee inputs into multiple transactions when too many of them") {
+    val bh       = boxesHolderGen.sample.get
+    val rnd      = new RandomWrapper
+    val us       = createUtxoState(bh, parameters)
+    val height   = us.stateContext.currentHeight
+    val minValue = BoxUtils.sufficientAmount(parameters)
+
+    // Replicate across synthetic block transactions so total fee outputs > 2 * MaxFeeBoxesPerTransaction
+    val singleFeeTxs = bh.boxes.values.toIndexedSeq
+      .filter(_.value >= minValue * 2)
+      .take(CandidateGenerator.MaxFeeBoxesPerTransaction * 2 + 15)
+      .map(b => validTransactionFromBoxes(IndexedSeq(b), rnd, issueNew = false, feeProp))
+
+    val totalFeeBoxes = singleFeeTxs.flatMap(_.outputs).count(b => java.util.Arrays.equals(b.propositionBytes, feeProp.bytes))
+    totalFeeBoxes should be > (CandidateGenerator.MaxFeeBoxesPerTransaction * 2)
+
+    val feeTxs = CandidateGenerator.collectFees(height, singleFeeTxs, defaultMinerPk, emptyStateContext)
+    val expectedChunks =
+      (totalFeeBoxes + CandidateGenerator.MaxFeeBoxesPerTransaction - 1) /
+        CandidateGenerator.MaxFeeBoxesPerTransaction
+    feeTxs.length shouldBe expectedChunks
+    feeTxs.foreach { tx =>
+      tx.inputs.length should be <= CandidateGenerator.MaxFeeBoxesPerTransaction
+      tx.outputs.length shouldBe 1
+      tx.outputs.head.propositionBytes shouldEqual expectedRewardOutputScriptBytes(defaultMinerPk)
+    }
+    val allSpentIds = feeTxs.flatMap(_.inputs.map(i => bytesToId(i.boxId)))
+    allSpentIds.distinct.size shouldBe totalFeeBoxes
+    feeTxs.map(_.outputs.head.value).sum shouldBe singleFeeTxs.flatMap(_.outputs).map(_.value).sum
   }
 
   property("stale emission tx is invalidated when its box was spent by concurrently applied block") {

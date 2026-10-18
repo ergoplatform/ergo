@@ -8,11 +8,13 @@ import org.ergoplatform.Input
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -26,13 +28,13 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
+import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker}
 import scorex.crypto.authds.ADKey
-import scorex.util.bytesToId
+import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -44,6 +46,7 @@ import sigmastate.helpers.TestingHelpers._
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 
 class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   with Matchers
@@ -215,6 +218,29 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       pchProbe.ref,
       Some(peerInfo)
     )
+
+    // The view holder's own history. Tests seed and read history through it: a second ErgoHistory opened on the
+    // same directory shares the database but not the caches, so one instance can keep serving a stale index value
+    // (such as the best header id) after the other has written.
+    val viewHistory: ErgoHistory = {
+      val viewProbe = TestProbe("ViewProbe")
+      nodeViewHolderMockRef.tell(
+        GetDataFromCurrentView[UtxoState, (ErgoHistory, ErgoMemPool)](v => (v.history, v.pool)), viewProbe.ref)
+      // If the wait fails, the fixture is never built and withFixture2 cannot terminate its actor system, so it is
+      // terminated here: that stops the view holder, which closes its database.
+      val (h, pool) = try {
+        viewProbe.expectMsgType[(ErgoHistory, ErgoMemPool)](10.seconds)
+      } catch {
+        case NonFatal(e) =>
+          Await.result(system.terminate(), Duration.Inf)
+          throw e
+      }
+      // Until it holds a history and a mempool the synchronizer defers every message by 1 s, in rounds. Handing them
+      // over before the test's first message makes it handle the test's messages at once.
+      synchronizerMockRef ! ChangedHistory(h)
+      synchronizerMockRef ! ChangedMempool(pool)
+      h
+    }
   }
 
   /**
@@ -526,7 +552,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // we generate and apply existing base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -561,7 +587,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         }
       }
       eventually {
-        // test whether applied header was actually persisted to history
+        // test whether applied header was actually persisted to history: a fresh instance has no caches and reads the
+        // database
         val hist = ErgoHistory.readOrGenerate(settings)(null)
         hist.bestHeaderIdOpt.get shouldBe appliedHeader.id
       }
@@ -601,7 +628,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // we generate fork of two headers, starting from the parent of the best header
       // so the depth of the rollback is 1, and the fork bypasses the best chain by 1 header
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val newHeaders = genHeaderChain(2, hhistory, diffBitsOpt = None, useRealTs = false).headers
       val newHistory = newHeaders.foldLeft(hhistory) { case (hist, header) => hist.append(header).get._1 }
       val parentOpt = newHistory.lastHeaders(2).headOption
@@ -624,7 +651,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.second, 100.millis)
 
       // Generate base chain and set up synchronizer with it
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -676,54 +703,41 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   property("NodeViewSynchronizer: longer fork is applied and shorter is not") {
     withFixture2 { ctx =>
       import ctx._
+      val hist = viewHistory
 
-      def sendHeader(block: ErgoFullBlock): Unit = {
-        deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+      // Delivers a chain's headers as one reply. The delivery tracker is not thread-safe and the synchronizer
+      // updates it while it handles replies and their application events, so the test marks the headers as
+      // requested only once the synchronizer is done with the previous chain, and before sending anything.
+      def sendHeaders(chain: Seq[ErgoFullBlock]): Unit = {
+        chain.foreach { b =>
+          deliveryTracker.setRequested(Header.modifierTypeId, b.header.id, peer)(_ => Cancellable.alreadyCancelled)
+        }
+        val modData = ModifiersData(Header.modifierTypeId, chain.map(b => b.header.id -> b.header.bytes).toMap)
         synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
       }
 
-      def sendBlockSection(block: BlockSection): Unit = {
-        deliveryTracker.setRequested(block.modifierTypeId, block.id, peer)(_ => Cancellable.alreadyCancelled)
-        val modData = ModifiersData(block.modifierTypeId, Map(block.id -> block.bytes))
-        synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
-      }
-
-      def sendBlock(block: ErgoFullBlock): Unit = {
-        sendBlockSection(block.blockTransactions)
-        sendBlockSection(block.extension)
-        block.adProofs.foreach(sendBlockSection(_))
+      def appliedAndSettled(chain: Seq[ErgoFullBlock]): Unit = eventually(timeout(10.seconds)) {
+        hist.bestHeaderOpt.map(_.id) shouldBe Some(chain.last.id)
+        // the synchronizer has handled every application event: no header is still tracked as received
+        chain.foreach(b => deliveryTracker.status(b.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown)
       }
 
       deliveryTracker.reset()
 
-      val hist = ErgoHistory.readOrGenerate(settings)(null)
-      // generate smaller fork that is going to be reverted after applying a bigger fork
+      // a shorter chain, received first, becomes the best one
       val smallFork = genChain(4, hist)
+      sendHeaders(smallFork)
+      appliedAndSettled(smallFork)
 
-      smallFork.foreach(sendHeader)
-      // history should eventually contain all smaller fork headers
-      eventually {
-        smallFork.forall(block => hist.contains(block.id))
-      }
-      smallFork.foreach(sendBlock)
-      // history should eventually contain smaller fork block parts
-      eventually {
-        smallFork.forall(block => hist.contains(block.extension.id) && hist.contains(block.blockTransactions.id))
-      }
-      // generate bigger fork that is going to win over smaller fork that is to be reverted
+      // a longer competing chain, received later, replaces it as the best one. Headers of the shorter chain stay
+      // in history; only the best chain changes. (Switching full blocks needs blocks valid for the view holder's
+      // state, which these generated blocks are not; the view holder's switch to a better chain is tested in
+      // ErgoNodeViewHolderSpec, "switching for a better chain".)
       val bigFork = genChain(20, hist, extension = emptyExtension)
-
-      bigFork.foreach(sendHeader)
-      // history should revert all smaller fork headers
-      eventually {
-        smallFork.forall(block => !hist.contains(block.id))
-      }
-      bigFork.foreach(sendBlock)
-      // history should revert all smaller fork block parts
-      eventually {
-        smallFork.forall(block => !hist.contains(block.extension.id) && !hist.contains(block.blockTransactions.id))
-      }
+      // both chains start from genesis: the longer one competes with the shorter one, it does not extend it
+      bigFork.head.header.parentId shouldBe smallFork.head.header.parentId
+      sendHeaders(bigFork)
+      appliedAndSettled(bigFork)
     }
   }
 
@@ -825,7 +839,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -865,7 +879,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -887,12 +901,18 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
       val parentHeader = baseChain.last
       val childHeader = genHeaderChain(_.size > 2, Some(parentHeader), hhistory.difficultyCalculator, None, false).last
+
+      // The older peer also gets the synchronizer's periodic sync message, on its own schedule (the first one 2 s after
+      // start); only that is ignored. The probe filters messages as they arrive, so this is set before the peer is.
+      ncProbe.ignoreMsg {
+        case stn: SendToNetwork => stn.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode
+      }
 
       // Set up sync tracker with an older peer
       syncTracker.updateStatus(peer, org.ergoplatform.consensus.Older, Some(childHeader.height))
@@ -908,6 +928,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // Should NOT request the parent header since it's already in history
       ncProbe.expectNoMessage(1.second)
+      ncProbe.ignoreNoMsg()
 
       // The modifier should still be set to Unknown
       eventually {
@@ -920,7 +941,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -953,7 +974,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -979,7 +1000,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -1017,7 +1038,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -1047,7 +1068,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withFixture2 { ctx =>
       import ctx._
 
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(hhistory.append)
 
@@ -1082,7 +1103,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build a base chain and apply it to history
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -1148,7 +1169,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build a base chain
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
       val bestHeaderOpt = hhistory.bestHeaderOpt
@@ -1220,7 +1241,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = statefulyValidFullBlock(wus)
 
       // Send NewBlockMined to synchronizer
-      synchronizerMockRef ! NewBlockMined(newBlock.header)
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
 
       // Expect 4 inv messages (1 header + 3 sections)
       val invMessages = (0 until 4).map { _ =>
@@ -1244,6 +1265,175 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  // the ids in the first ModifiersData sent to the peer that contains `marker`
+  private def servedWith(pchProbe: TestProbe, marker: ModifierId): Seq[ModifierId] =
+    pchProbe.fishForSpecificMessage(10.seconds) {
+      case Message(_, Right(served: ModifiersData), _) if served.modifiers.contains(marker) => served.modifiers.keys.toSeq
+    }
+
+  /**
+    * A peer that asks for a block the node has just announced must get it, also before the node view holder has
+    * applied the block: otherwise the request waits the whole delivery timeout.
+    */
+  property("NodeViewSynchronizer: a newly mined block is served as soon as it is announced") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections) // as CandidateGenerator publishes it
+      // collect everything sent in the window, then keep the announcements (other messages may interleave)
+      val announced = ncProbe.receiveWhile(2.seconds) { case m => m }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == InvSpec.messageCode =>
+          stn.message.data.get.asInstanceOf[InvData]
+      }.flatMap(inv => inv.ids.map(inv.typeId -> _))
+      announced should contain(Header.modifierTypeId -> newBlock.header.id)
+      announced should contain allElementsOf newBlock.header.sectionIds
+
+      // the peer asks for everything it was told about, before the block is applied
+      announced.groupBy { case (typeId, _) => typeId }.foreach { case (typeId, typed) =>
+        val ids = typed.map { case (_, id) => id }
+        synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, ids))), Some(peer))
+      }
+      // the synchronizer answers through the requesting peer's handler
+      val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
+        case Message(_, Right(md: ModifiersData), _) => md
+      }.flatMap(md => md.modifiers.keys.map(md.typeId -> _))
+      served should contain allElementsOf announced
+    }
+  }
+
+  property("NodeViewSynchronizer: a newly mined block is no longer served from memory once applied") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+      // in production history serves it after this event; this fixture's history never receives it, so a request that
+      // is still answered can only come from the in-memory copy
+      synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
+
+      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
+      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
+        Some(peer))
+      val served = servedWith(pchProbe, marker.header.id)
+      served should contain(marker.header.id)
+      served should not contain newBlock.header.id
+    }
+  }
+
+  property("NodeViewSynchronizer: a newly mined block reported invalid is no longer served") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+      synchronizerMockRef ! SemanticallyFailedModification(
+        BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
+
+      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
+      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
+        Some(peer))
+      val served = servedWith(pchProbe, marker.header.id)
+      served should contain(marker.header.id)
+      served should not contain newBlock.header.id
+    }
+  }
+
+  property("NodeViewSynchronizer: a newly mined block's header is no longer served from memory once history holds it") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+      // history holds the header from this event on, also when the block does not become the best one (then no
+      // LocalBlockApplied follows); this fixture's history never receives it, so a header still served is the in-memory
+      // copy. Its sections are not held yet
+      synchronizerMockRef ! SyntacticallySuccessfulModifier(Header.modifierTypeId, newBlock.header.id)
+
+      // each request goes together with the second mined, still unapplied block, as in the tests above
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
+        Some(peer))
+      val servedHeaders = servedWith(pchProbe, marker.header.id)
+      servedHeaders should contain(marker.header.id)
+      servedHeaders should not contain newBlock.header.id
+
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(BlockTransactions.modifierTypeId,
+          Seq(newBlock.blockTransactions.id, marker.blockTransactions.id)))),
+        Some(peer))
+      val servedTransactions = servedWith(pchProbe, marker.blockTransactions.id)
+      servedTransactions should contain(newBlock.blockTransactions.id)
+    }
+  }
+
+  property("NodeViewSynchronizer: a newly mined block reported invalid after history held a part is no longer served") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+      // the transactions pass the syntactic check, so history holds them, and then fail on the state
+      synchronizerMockRef ! SyntacticallySuccessfulModifier(BlockTransactions.modifierTypeId, newBlock.blockTransactions.id)
+      synchronizerMockRef ! SemanticallyFailedModification(
+        BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
+
+      // the rest of the block goes too; requested together with the second mined, still unapplied block
+      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(Extension.modifierTypeId, Seq(newBlock.extension.id, marker.extension.id)))),
+        Some(peer))
+      val served = servedWith(pchProbe, marker.extension.id)
+      served should contain(marker.extension.id)
+      served should not contain newBlock.extension.id
+    }
+  }
+
   /**
     * Test that LocalBlockApplied does not duplicate broadcast when NewBlockMined already fired.
     */
@@ -1252,7 +1442,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build base chain and state
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
 
@@ -1261,7 +1451,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = validFullBlock(bestBlockOpt, us, bh)
 
       // First: NewBlockMined triggers immediate broadcast
-      synchronizerMockRef ! NewBlockMined(newBlock.header)
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
 
       // Consume all inv messages from NewBlockMined
       ncProbe.receiveWhile(2.seconds) {
@@ -1285,7 +1475,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       import ctx._
 
       // Build base chain and state
-      val hhistory = ErgoHistory.readOrGenerate(settings)(null)
+      val hhistory = viewHistory
       val baseChain = genHeaderChain(_.size > 4, None, hhistory.difficultyCalculator, None, false)
       baseChain.headers.foreach(h => hhistory.append(h).get)
 
@@ -1294,7 +1484,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = validFullBlock(bestBlockOpt, us, bh)
 
       // NewBlockMined should broadcast
-      synchronizerMockRef ! NewBlockMined(newBlock.header)
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
 
       // Consume the inv messages
       val deadline1 = System.currentTimeMillis() + 2000
@@ -1371,7 +1561,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val newBlock = statefulyValidFullBlock(wus)
 
       // Send NewBlockMined to synchronizer
-      synchronizerMockRef ! NewBlockMined(newBlock.header)
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
 
       // Expect 4 inv messages (1 header + 3 sections)
       val invMessages = (0 until 4).map { _ =>
@@ -1913,6 +2103,124 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // the invalidated decline did not occupy a slot in the declined table
       synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe 0
+    }
+  }
+
+  // records whether the delivery check scheduled for a request was cancelled
+  private class RecordingCancellable extends Cancellable {
+    private val cancelled = new java.util.concurrent.atomic.AtomicBoolean(false)
+    override def cancel(): Boolean = cancelled.compareAndSet(false, true)
+    override def isCancelled: Boolean = cancelled.get()
+  }
+
+  // a reply for a modifier the node already holds, while its request is still outstanding (as when it was applied from
+  // another source before the peer answered): marked held and dropped, the request is closed, the peer is not penalized
+  private def replyForHeldModifier(deliveryTracker: DeliveryTracker,
+                                   synchronizer: ActorRef,
+                                   ncProbe: TestProbe,
+                                   peer: ConnectedPeer,
+                                   hist: ErgoHistory,
+                                   mod: BlockSection): Unit = {
+    hist.contains(mod.id) shouldBe true
+    val check = new RecordingCancellable
+    deliveryTracker.setRequested(mod.modifierTypeId, mod.id, peer)(_ => check)
+    val modData = ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes))
+    synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+    val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
+    sent.collect { case p: PenalizePeer => p } shouldBe empty
+    eventually {
+      deliveryTracker.status(mod.id, mod.modifierTypeId, Seq(hist)) shouldBe Held
+    }
+    check.isCancelled shouldBe true
+  }
+
+  property("NodeViewSynchronizer: a requested header that is already in history is not judged invalid") {
+    withFixture { ctx =>
+      ctx.deliveryTracker.reset()
+      // the fixture history holds the first 1000 headers of `chain` (localChain)
+      replyForHeldModifier(ctx.deliveryTracker, ctx.synchronizer, ctx.ncProbe, ctx.peer, history, localChain.last)
+    }
+  }
+
+  property("NodeViewSynchronizer: a requested extension that is already in history is not judged invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+      val (hist, block) = historyWithNewHeader(ctx)
+      // the extension only: block transactions would complete the block, whose generated transactions this
+      // fixture's state rejects
+      val extension = block.extension
+
+      deliveryTracker.setRequested(extension.modifierTypeId, extension.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(extension.modifierTypeId, Map(extension.id -> extension.bytes))
+      synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+      // applied, and the tracker has cleared the first delivery (the applied-modifier event was handled)
+      eventually(timeout(10.seconds)) {
+        hist.contains(extension.id) shouldBe true
+        deliveryTracker.status(extension.id, extension.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      ncProbe.receiveWhile(1.second) { case m => m }
+
+      // the extension is already in history (e.g. applied from another source) when a reply for it arrives
+      replyForHeldModifier(deliveryTracker, synchronizerMockRef, ncProbe, peer, hist, extension)
+    }
+  }
+
+  // the view holder's history, holding the header of a new block (applied from a requested reply)
+  private def historyWithNewHeader(ctx: Synchronizer2Fixture): (ErgoHistory, ErgoFullBlock) = {
+    import ctx._
+    deliveryTracker.reset()
+    val hist = viewHistory
+    val block = genChain(1, hist).head
+    deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
+    val headerData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+    synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(headerData)), Some(peer))
+    // applied, and the synchronizer is done with it: the delivery tracker is not thread-safe, so the test updates
+    // it only while the synchronizer is not handling this chain's events
+    eventually(timeout(10.seconds)) {
+      hist.contains(block.header.id) shouldBe true
+      deliveryTracker.status(block.header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+    }
+    ncProbe.receiveWhile(1.second) { case m => m }
+    hist -> block
+  }
+
+  property("NodeViewSynchronizer: requested block transactions that are already in history are not judged invalid") {
+    withFixture2 { ctx =>
+      val (hist, block) = historyWithNewHeader(ctx)
+      val txs: BlockTransactions = block.blockTransactions
+      // stored without the extension, so the block is not completed (this fixture's state rejects its transactions)
+      hist.append(txs).get
+      replyForHeldModifier(ctx.deliveryTracker, ctx.synchronizerMockRef, ctx.ncProbe, ctx.peer, hist, txs)
+    }
+  }
+
+  // A node that stores the UTXO set requests ADProofs a peer announces, and also generates them itself when it applies
+  // the block (UtxoState), storing them through ErgoNodeViewHolder.pmodModify, which publishes the applied-modifier
+  // event only after the write. A reply to the request handled between the two is a copy of a modifier in history.
+  property("NodeViewSynchronizer: requested ADProofs that are already in history, generated by the node itself, are not judged invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+      val (hist, block) = historyWithNewHeader(ctx)
+      val proofs = block.adProofs.get
+
+      // a peer announces the block's ADProofs, and the node requests them
+      val proofsInv = InvData(ADProofs.modifierTypeId, Seq(proofs.id))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(proofsInv)), Some(peer))
+      requestForModifierSent(ncProbe, ADProofs.modifierTypeId, proofs.id)
+
+      // the node's own proofs are stored, as pmodModify stores them on this network (history.append); the
+      // applied-modifier event it publishes next has not been handled when the peer's reply arrives
+      hist.append(proofs).get
+      val proofsData = ModifiersData(ADProofs.modifierTypeId, Map(proofs.id -> proofs.bytes))
+      synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(proofsData)), Some(peer))
+
+      val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
+      sent.collect { case p: PenalizePeer => p } shouldBe empty
+      eventually {
+        // the request is closed and the id is not marked invalid
+        deliveryTracker.status(proofs.id, ADProofs.modifierTypeId, Seq.empty) shouldBe Unknown
+        deliveryTracker.status(proofs.id, ADProofs.modifierTypeId, Seq(hist)) shouldBe Held
+      }
     }
   }
 

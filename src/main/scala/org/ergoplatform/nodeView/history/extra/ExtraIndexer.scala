@@ -615,6 +615,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
           val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
           address.findAndModBox(iEb.globalIndex, history)
+          // the address may have no output removed below: drop the rolled-back transaction numbers here, boxes stay
+          toRemove ++= address.rollback(txTarget, Long.MaxValue, _history)
 
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
           template.findAndModBox(iEb.globalIndex, history)

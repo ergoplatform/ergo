@@ -11,6 +11,7 @@ import scorex.crypto.hash.Digest32
   * Entity which stores information about state of UTXO set snapshots downloading
   *
   * @param createdTime - time when snapshot was created
+  * @param sessionId - local identity of this download attempt; it is not a network identifier
   * @param latestUpdateTime - latest time when anything was updated for the state of UTXO set snapshot
   * @param snapshotHeight - height of a block UTXO set snapshot is corresponding to (UTXO set if after the block applied)
   * @param utxoSetRootHash - root hash of AVL+ tree which is authenticating UTXO set snapshot
@@ -23,6 +24,7 @@ import scorex.crypto.hash.Digest32
   */
 case class UtxoSetSnapshotDownloadPlan(createdTime: Long,
                                        latestUpdateTime: Long,
+                                       sessionId: Long,
                                        snapshotHeight: Height,
                                        utxoSetRootHash: Digest32,
                                        utxoSetTreeHeight: Byte,
@@ -57,7 +59,8 @@ object UtxoSetSnapshotDownloadPlan {
     */
   def fromManifest(manifest: BatchAVLProverManifest[Digest32],
                    blockHeight: Height,
-                   peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
+                   peersToDownload: Seq[ConnectedPeer],
+                   sessionId: Long): UtxoSetSnapshotDownloadPlan = {
     val subtrees = manifest.subtreesIds
     val now = System.currentTimeMillis()
 
@@ -65,6 +68,7 @@ object UtxoSetSnapshotDownloadPlan {
     UtxoSetSnapshotDownloadPlan(
       createdTime = now,
       latestUpdateTime = now,
+      sessionId = sessionId,
       snapshotHeight = blockHeight,
       utxoSetRootHash = manifest.id,
       utxoSetTreeHeight = manifest.rootHeight.toByte,

@@ -14,6 +14,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{BlockAppliedTransactions, CurrentView, DownloadRequest}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.UtxoSetSnapshotProcessor.SnapshotCheckpointMismatch
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
@@ -300,16 +301,66 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   /**
     * signal to pull Utxo set snapshot from database and recreate UTXO set from it
     */
+  private case class RetrySnapshotDiscard(sessionId: Long)
+
+  private var pendingSnapshotDiscardRetry: Option[Long] = None
+
+  private def discardStaleSnapshotDownload(sessionId: Long, mayRetry: Boolean): Unit = {
+    if (!history().isUtxoSnapshotApplied) {
+      Try(history().discardSnapshotDownload(sessionId)) match {
+        case Success(Some(_)) =>
+          pendingSnapshotDiscardRetry = None
+          context.system.eventStream.publish(SnapshotApplicationRejected(sessionId))
+        case Success(None) =>
+          pendingSnapshotDiscardRetry = None
+          if (history().utxoSetSnapshotDownloadPlan().isEmpty) {
+            context.system.eventStream.publish(SnapshotApplicationRejected(sessionId))
+          } else {
+            log.debug(s"Ignoring discard for inactive snapshot session $sessionId")
+          }
+        case Failure(t) if mayRetry =>
+          log.warn(s"Could not discard snapshot session $sessionId; retrying once", t)
+          pendingSnapshotDiscardRetry = Some(sessionId)
+          context.system.scheduler.scheduleOnce(scorexSettings.network.deliveryTimeout,
+            self, RetrySnapshotDiscard(sessionId))(context.dispatcher, self)
+        case Failure(t) =>
+          pendingSnapshotDiscardRetry = None
+          // Keep the old plan and do not start another import after failed storage cleanup.
+          log.error(s"Could not discard snapshot session $sessionId after one retry", t)
+      }
+    } else {
+      pendingSnapshotDiscardRetry = None
+    }
+  }
+
   def processStateSnapshot: Receive = {
-    case InitStateFromSnapshot(height, blockId) =>
+    case DiscardSnapshotDownload(sessionId) =>
+      if (!pendingSnapshotDiscardRetry.contains(sessionId)) {
+        pendingSnapshotDiscardRetry = None
+        discardStaleSnapshotDownload(sessionId, mayRetry = true)
+      }
+
+    case RetrySnapshotDiscard(sessionId) if pendingSnapshotDiscardRetry.contains(sessionId) =>
+      pendingSnapshotDiscardRetry = None
+      discardStaleSnapshotDownload(sessionId, mayRetry = false)
+
+    case _: RetrySnapshotDiscard => () // Superseded by a newer download session.
+
+    case InitStateFromSnapshot(height, blockId, sessionId) =>
       if (!history().isUtxoSnapshotApplied) {
         val store = minimalState().store
-        history().createPersistentProver(store, history(), height, blockId) match {
+        history().createPersistentProver(store, history(), height, blockId, sessionId) match {
           case Success(pp) =>
             log.info(s"Restoring state from prover with digest ${pp.digest} reconstructed for height $height")
             history().onUtxoSnapshotApplied(height)
             val newState = new UtxoState(pp, version = VersionTag @@@ blockId, store, settings)
             updateNodeView(updatedState = Some(newState.asInstanceOf[State]))
+          case Failure(t: SnapshotCheckpointMismatch) =>
+            log.warn("UTXO set snapshot checkpoint changed before import: ", t)
+            if (!pendingSnapshotDiscardRetry.contains(sessionId)) {
+              pendingSnapshotDiscardRetry = None
+              discardStaleSnapshotDownload(sessionId, mayRetry = true)
+            }
           case Failure(t) =>
             log.error("UTXO set snapshot application failed: ", t)
         }

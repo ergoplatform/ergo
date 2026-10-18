@@ -28,6 +28,7 @@ import scorex.util.{ModifierId, ScorexLogging}
 import scorex.core.network.DeliveryTracker
 import org.ergoplatform.network.peer.PenaltyType
 import scorex.crypto.hash.Digest32
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage
 import org.ergoplatform.nodeView.state.UtxoState.{ManifestId, SubtreeId}
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.consensus.{Equal, Fork, Nonsense, Older, Unknown, Younger}
@@ -161,6 +162,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * ergo.node.utxo.p2pUtxoSnapshots setting)
     */
   private val availableManifests = mutable.Map[ModifierId, (Height, Seq[ConnectedPeer])]()
+  // The holder owns storage cleanup. While its reply is pending, stop using the old plan.
+  private var cancellingSnapshotSession: Option[Long] = None
+  private var applyingSnapshotSession: Option[Long] = None
 
   /**
    * Peers provided nipopow poofs
@@ -297,6 +301,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     context.system.eventStream.subscribe(self, classOf[DownloadRequest])
     context.system.eventStream.subscribe(self, classOf[BlockAppliedTransactions])
     context.system.eventStream.subscribe(self, classOf[BlockSectionsProcessingCacheUpdate])
+    context.system.eventStream.subscribe(self, classOf[SnapshotApplicationRejected])
 
     // subscribe for immediate block mining announcements (fast propagation)
     context.system.eventStream.subscribe(self, classOf[NewBlockMined])
@@ -636,6 +641,29 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     }
   }
 
+  /** Stop old requests before the holder discards their download plan. */
+  private def discardSnapshotAfterCheckpointChange(hr: ErgoHistory, sessionId: Long): Unit = {
+    if (cancellingSnapshotSession.isEmpty && !hr.isUtxoSnapshotApplied &&
+        hr.utxoSetSnapshotDownloadPlan().exists(_.sessionId == sessionId)) {
+      cancellingSnapshotSession = Some(sessionId)
+      deliveryTracker.fullInfo.requested
+        .find(_._1 == UtxoSnapshotChunkTypeId.value)
+        .foreach { case (_, requests) =>
+          requests.keys.foreach(id => deliveryTracker.setUnknown(id, UtxoSnapshotChunkTypeId.value))
+        }
+      viewHolderRef ! DiscardSnapshotDownload(sessionId)
+    }
+  }
+
+  private def snapshotPlanMatchesSelectedHeader(hr: ErgoHistory): Boolean = {
+    hr.utxoSetSnapshotDownloadPlan().forall { plan =>
+      hr.bestHeaderAtHeight(plan.snapshotHeight).exists { header =>
+        val plannedDigest = VersionedLDBAVLStorage.digest(plan.utxoSetRootHash, plan.utxoSetTreeHeight.toInt)
+        plannedDigest.sameElements(header.stateRoot)
+      }
+    }
+  }
+
   private def requestManifest(manifestId: ManifestId, peer: ConnectedPeer): Unit = {
     deliveryTracker.setRequested(ManifestTypeId.value, ModifierId @@ Algos.encode(manifestId), peer) { deliveryCheck =>
       context.system.scheduler.scheduleOnce(deliveryTimeout, self, deliveryCheck)
@@ -935,6 +963,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   }
 
   private def requestMoreChunksIfNeeded(hr: ErgoHistory): Unit = {
+    // The holder still owns the old plan until it acknowledges the discard.
+    if (cancellingSnapshotSession.nonEmpty) return
     // we request more chunks if currently less than `ChunksInParallelMin` chunks are being downloading
     // we request up to `ChunksInParallelMin`, so in extreme case may download almost 2 * `ChunksInParallelMin`
     // we download new chunks from random peers, `ChunksPerPeer` chunks from a random peer (but we may ask the same
@@ -1008,11 +1038,14 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                   .map(splitDigest)
                   .exists { case (expRoot, expHeight) => manifest.verify(Digest32 @@ expRoot, expHeight) }
 
-                if(manifestVerified) {
+                if (manifestVerified && cancellingSnapshotSession.isEmpty &&
+                    !hr.isUtxoSnapshotApplied && hr.utxoSetSnapshotDownloadPlan().isEmpty) {
                   log.info(s"Going to download chunks for manifest ${Algos.encode(manifest.id)} at height $height from $peersToDownload")
                   hr.registerManifestToDownload(manifest, height, peersToDownload)
                   availableManifests.clear()
                   requestMoreChunksIfNeeded(hr)
+                } else if (manifestVerified) {
+                  log.info(s"Ignoring manifest ${Algos.encode(manifest.id)} while a snapshot download is active or already applied")
                 } else {
                   log.error(s"Got invalid manifest from $remote")
                   penalizeMaliciousPeer(remote)
@@ -1032,6 +1065,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // process utxo set snapshot chunk got from another peer
   private def processUtxoSnapshotChunk(serializedChunk: Array[Byte], hr: ErgoHistory, remote: ConnectedPeer): Unit = {
+    if (cancellingSnapshotSession.nonEmpty) {
+      log.debug(s"Ignoring snapshot chunk from $remote while discarding a stale download")
+      return
+    }
     SubtreeSerializer.parseBytesTry(serializedChunk) match {
       case Success(subtree) =>
         val chunkId = ModifierId @@ Algos.encode(subtree.id)
@@ -1050,10 +1087,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                     val h = downloadPlan.snapshotHeight
                     hr.bestHeaderIdAtHeight(h) match {
                       case Some(blockId) =>
-                        viewHolderRef ! InitStateFromSnapshot(h, blockId)
+                        applyingSnapshotSession = Some(downloadPlan.sessionId)
+                        viewHolderRef ! InitStateFromSnapshot(h, blockId, downloadPlan.sessionId)
                       case None =>
-                        // shouldn't happen in principle
-                        log.error("No best header found when all chunks are downloaded. Please contact developers.")
+                        log.warn("No selected header found when snapshot chunks completed; requesting a fresh snapshot")
+                        discardSnapshotAfterCheckpointChange(hr, downloadPlan.sessionId)
                     }
                   } else {
                     log.warn("UTXO set snapshot already applied, double application attemt")
@@ -1479,6 +1517,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     if (settings.nodeSettings.utxoSettings.utxoBootstrap &&
           historyReader.fullBlockHeight == 0 &&
+          cancellingSnapshotSession.isEmpty &&
+          !historyReader.isUtxoSnapshotApplied &&
           availableManifests.nonEmpty &&
           historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {
       val res = availableManifests.filter { case (_, (_, peers)) => peers.length >= MinSnapshots }
@@ -1512,6 +1552,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         )(getPeersForDownloadingBlocks) { howManyPerType =>
           historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
         }
+      }
+
+    case SnapshotApplicationRejected(sessionId) =>
+      if (cancellingSnapshotSession.contains(sessionId) || applyingSnapshotSession.contains(sessionId)) {
+        if (cancellingSnapshotSession.contains(sessionId)) cancellingSnapshotSession = None
+        if (applyingSnapshotSession.contains(sessionId)) applyingSnapshotSession = None
+        if (!historyReader.isUtxoSnapshotApplied && historyReader.utxoSetSnapshotDownloadPlan().isEmpty) {
+          deliveryTracker.fullInfo.requested
+            .find(_._1 == UtxoSnapshotChunkTypeId.value)
+            .foreach { case (_, requests) =>
+              requests.keys.foreach(id => deliveryTracker.setUnknown(id, UtxoSnapshotChunkTypeId.value))
+            }
+          availableManifests.clear()
+          requestSnapshotsInfo()
+        } else {
+          log.debug(s"Ignoring snapshot rejection for session $sessionId while a download is active or applied")
+        }
+      } else {
+        log.debug(s"Ignoring stale snapshot rejection for session $sessionId")
       }
 
     /**
@@ -1620,12 +1679,18 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
+      if (!snapshotPlanMatchesSelectedHeader(newHistoryReader)) {
+        newHistoryReader.utxoSetSnapshotDownloadPlan().foreach { plan =>
+          discardSnapshotAfterCheckpointChange(newHistoryReader, plan.sessionId)
+        }
+      }
       context.become(initialized(newHistoryReader, mempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedMempool(newMempoolReader: ErgoMemPool) =>
       context.become(initialized(historyReader, newMempoolReader, utxoStateReaderOpt, blockAppliedTxsCache))
 
     case ChangedState(reader: ErgoStateReader) =>
+      if (historyReader.isUtxoSnapshotApplied) applyingSnapshotSession = None
       activatedScriptVersion = Header.scriptFromBlockVersion(reader.stateContext.blockVersion)
       reader match {
         case utxoStateReader: UtxoStateReader =>

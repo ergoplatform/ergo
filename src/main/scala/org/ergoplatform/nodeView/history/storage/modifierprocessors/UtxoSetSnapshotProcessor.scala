@@ -18,7 +18,9 @@ import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
 import scala.util.{Failure, Random, Success, Try}
+import java.util.concurrent.atomic.AtomicLong
 import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 
 /**
   * Parts of history processing and storage corresponding to UTXO set snapshot processing and storage
@@ -28,6 +30,7 @@ import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLPro
 trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with ScorexLogging {
 
   import org.ergoplatform.settings.ErgoAlgos.HF
+  import UtxoSetSnapshotProcessor.SnapshotCheckpointMismatch
 
   // node config to read history-related settings here and in descendants
   protected val settings: ErgoSettings
@@ -89,11 +92,25 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     */
   def registerManifestToDownload(manifest: BatchAVLProverManifest[Digest32],
                                  blockHeight: Height,
-                                 peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = {
-    val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight, peersToDownload)
+                                 peersToDownload: Seq[ConnectedPeer]): UtxoSetSnapshotDownloadPlan = synchronized {
+    val plan = UtxoSetSnapshotDownloadPlan.fromManifest(manifest, blockHeight, peersToDownload,
+      UtxoSetSnapshotProcessor.nextSessionId())
     _manifest = Some(manifest)
     updateUtxoSetSnashotDownloadPlan(plan)
     plan
+  }
+
+  /** Discard only the named, unapplied download. Never advance the full-block download floor. */
+  def discardSnapshotDownload(sessionId: Long): Option[UtxoSetSnapshotDownloadPlan] = synchronized {
+    _cachedDownloadPlan.filter(_.sessionId == sessionId).map { plan =>
+      val chunkIds = downloadedChunkIdsIterator(plan.totalChunks)
+        .map(chunkId => ModifierId @@ Algos.encode(chunkId))
+        .toArray
+      historyStorage.remove(Array.empty, chunkIds).get
+      _manifest = None
+      _cachedDownloadPlan = None
+      plan
+    }
   }
 
   /**
@@ -207,33 +224,56 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
   def createPersistentProver(stateStore: LDBVersionedStore,
                              historyReader: ErgoHistoryReader,
                              height: Height,
-                             blockId: ModifierId): Try[PersistentBatchAVLProver[Digest32, HF]] = {
-    _manifest match {
+                             blockId: ModifierId,
+                             sessionId: Long): Try[PersistentBatchAVLProver[Digest32, HF]] = {
+    def matchingManifest: Option[BatchAVLProverManifest[Digest32]] = _cachedDownloadPlan.flatMap { plan =>
+      _manifest.flatMap { manifest =>
+        historyReader.bestHeaderAtHeight(height).filter { header =>
+          val (root, treeHeight) = splitDigest(header.stateRoot)
+          plan.sessionId == sessionId && plan.snapshotHeight == height && plan.fullyDownloaded &&
+            plan.utxoSetRootHash.sameElements(manifest.id) &&
+            plan.utxoSetTreeHeight == manifest.rootHeight.toByte &&
+            header.id == blockId && manifest.verify(Digest32 @@ root, treeHeight) &&
+            VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight).sameElements(header.stateRoot)
+        }.map(_ => manifest)
+      }
+    }
+    matchingManifest match {
       case Some(manifest) =>
         log.info("Starting UTXO set snapshot transfer into state database")
         ErgoStateReader.reconstructStateContextBeforeEpoch(historyReader, height, settings) match {
-          case Success(esc) =>
+          case Success(esc) if esc.lastHeaders.headOption.exists(_.id == blockId) &&
+              matchingManifest.exists(_.id.sameElements(manifest.id)) =>
+            // The holder serializes header appends and discards with this import.
             val metadata = UtxoState.metadata(VersionTag @@@ blockId, VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight), None, esc)
             VersionedLDBAVLStorage.recreate(manifest, downloadedChunksIterator(), additionalData = metadata.toIterator, stateStore).flatMap {
               ldbStorage =>
                 log.info("Finished UTXO set snapshot transfer into state database")
-                ldbStorage.restorePrunedProver().map {
-                  prunedAvlProver =>
-                    new PersistentBatchAVLProver[Digest32, HF] {
-                      override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
-                      override val storage: VersionedLDBAVLStorage = ldbStorage
-                    }
+                ldbStorage.restorePrunedProver().map { prunedAvlProver =>
+                  new PersistentBatchAVLProver[Digest32, HF] {
+                    override var avlProver: BatchAVLProver[Digest32, ErgoAlgos.HF] = prunedAvlProver
+                    override val storage: VersionedLDBAVLStorage = ldbStorage
+                  }
                 }
             }
+          case Success(_) =>
+            Failure(new SnapshotCheckpointMismatch(s"Selected snapshot checkpoint changed before state reconstruction at height $height"))
           case Failure(e) =>
             log.warn("Can't reconstruct state context in createPersistentProver ", e)
             Failure(e)
         }
       case None =>
-        val msg = "No manifest available in createPersistentProver"
-        log.error(msg)
-        Failure(new Exception(msg))
+        Failure(new SnapshotCheckpointMismatch(s"Snapshot download does not match the selected checkpoint at height $height"))
     }
   }
 
+}
+
+object UtxoSetSnapshotProcessor {
+  private val sessionIds = new AtomicLong()
+
+  private def nextSessionId(): Long = sessionIds.incrementAndGet()
+
+  final class SnapshotCheckpointMismatch(message: String, cause: Throwable = null)
+    extends IllegalStateException(message, cause)
 }

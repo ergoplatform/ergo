@@ -1,10 +1,12 @@
 package org.ergoplatform.network
 
 import java.net.InetSocketAddress
+import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
+import akka.actor.{ActorIdentity, ActorRef, ActorSystem, Cancellable, Identify, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.Input
+import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -14,15 +16,19 @@ import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{GetDataFromCurrentView, GetNodeViewChanges}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockSectionProcessor
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{SnapshotsDb, SnapshotsInfo, StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.Constants.TrueTree
-import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
+import org.ergoplatform.settings.{Algos, ErgoSettings, ErgoSettingsReader, UtxoSettings}
 import org.ergoplatform.utils.BoxUtils
+import org.ergoplatform.utils.{NodeViewTestConfig, NodeViewTestContext, NodeViewTestOps}
+import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.validation.{ParentHeaderNotFoundError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
@@ -32,10 +38,15 @@ import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
-import scorex.crypto.authds.ADKey
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer, SendToPeers}
+import scorex.crypto.authds.{ADKey, ADValue}
+import scorex.crypto.authds.avltree.batch.{ProverLeaf, VersionedLDBAVLStorage}
+import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
+import scorex.crypto.authds.avltree.batch.serialization.{BatchAVLProverManifest, BatchAVLProverSubtree}
+import scorex.crypto.hash.{Blake2b256, Digest32}
+import scorex.db.LDBFactory
 import scorex.util.bytesToId
-import org.ergoplatform.serialization.ErgoSerializer
+import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, SubtreeSerializer}
 import org.scalatest.propspec.AnyPropSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.testkit.utils.AkkaFixture
@@ -52,7 +63,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   with Matchers
   with ScalaCheckPropertyChecks
   with FileUtils
-  with Eventually {
+  with Eventually
+  with NodeViewTestOps {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
@@ -84,7 +96,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
+  class NodeViewHolderMock(holderSettings: ErgoSettings = settings)
+    extends ErgoNodeViewHolder[UtxoState](holderSettings)
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,
@@ -247,7 +260,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     * Fixture for UTXO set snapshot bootstrap tests: synchronizer and history are built with
     * `utxoBootstrap` enabled (or disabled, for control tests), history contains headers only.
     */
-  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean) extends AkkaFixture {
+  class UtxoBootstrapSynchronizerFixture(utxoBootstrap: Boolean,
+                                        captureViewHolder: Boolean = false) extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
     val ncProbe = TestProbe("NetworkControllerProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
@@ -261,7 +275,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
 
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val viewHolderProbe = TestProbe("SnapshotViewHolderProbe")
+    val nodeViewHolderMockRef =
+      if (captureViewHolder) viewHolderProbe.ref else system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -293,8 +309,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
   }
 
-  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
-    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap)
+  private def withUtxoBootstrapFixture(utxoBootstrap: Boolean,
+                                       captureViewHolder: Boolean = false)(testCode: UtxoBootstrapSynchronizerFixture => Any): Unit = {
+    val fixture = new UtxoBootstrapSynchronizerFixture(utxoBootstrap, captureViewHolder)
     try {
       testCode(fixture)
     }
@@ -311,6 +328,56 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
           invData.typeId == typeId && invData.ids.contains(id)
         }
       case _ => false
+    }
+  }
+
+  private def awaitHolderStartup(ctx: UtxoBootstrapSynchronizerFixture): Unit = {
+    import ctx._
+
+    // The synchronizer's preStart sends GetNodeViewChanges to the holder.
+    // An actor barrier confirms preStart ran; the holder probe then fences
+    // the initial responses sent to the synchronizer before this reply.
+    val actorBarrierId = modifierIdGen.sample.get
+    synchronizerMockRef ! Message(InvSpec,
+      Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(actorBarrierId)))),
+      Some(peer))
+    requestForModifierSent(ncProbe, Header.modifierTypeId, actorBarrierId)
+
+    val holderProbe = TestProbe("HolderStartupProbe")
+    holderProbe.send(nodeViewHolderMockRef,
+      GetNodeViewChanges(history = true, state = false, vault = false, mempool = false))
+    holderProbe.expectMsgType[ChangedHistory](10.seconds)
+  }
+
+  private def syntheticSnapshotLeaf(): ProverLeaf[Digest32] = {
+    new ProverLeaf[Digest32](
+      ADKey @@ Array.fill(32)(1: Byte),
+      ADValue @@ Array.fill(8)(2: Byte),
+      ADKey @@ Array.fill(32)(3: Byte))(Blake2b256)
+  }
+
+  private def syntheticSnapshotManifest(): BatchAVLProverManifest[Digest32] =
+    new BatchAVLProverManifest[Digest32](syntheticSnapshotLeaf(), 1.toByte)
+
+  private def snapshotWithChunks(boxCount: Int, manifestDepth: Byte):
+      (BatchAVLProverManifest[Digest32], Seq[(Array[Byte], Array[Byte])]) = {
+    val boxes = boxesHolderGenOfSize(boxCount).sample.get
+    val state = createUtxoState(boxes, parameters)
+    val snapshotStore = LDBFactory.createKvDb(createTempDir.getAbsolutePath)
+    try {
+      val snapshots = new SnapshotsDb(snapshotStore)
+      val manifestId = snapshots.writeSnapshot(
+        state.persistentProver.storage.asInstanceOf[VersionedLDBAVLStorage],
+        1, state.rootDigest.dropRight(1), manifestDepth).get
+      val manifest = new ManifestSerializer(manifestDepth)
+        .parseBytes(snapshots.readManifestBytes(Digest32 @@ manifestId).get)
+      val chunks = manifest.subtreesIds.toSeq.map { id =>
+        id -> snapshots.readSubtreeBytes(id).get
+      }
+      (manifest, chunks)
+    } finally {
+      snapshotStore.close()
+      state.store.close()
     }
   }
 
@@ -406,7 +473,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val history = ErgoHistory.readOrGenerate(settings)(null)
       val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
-      val withParent = applyBlock(history, blocks.head)
+      val withParent = org.ergoplatform.utils.generators.ChainGenerator.applyBlock(history, blocks.head)
       val withHeader = withParent.append(blocks.last.header).get._1
       synchronizer ! ChangedHistory(withHeader)
       synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
@@ -498,7 +565,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       val history = ErgoHistory.readOrGenerate(settings)(null)
       val blocks = genChain(2, history, (Header.InitialVersion + 1).toByte)
-      val withParent = applyBlock(history, blocks.head)
+      val withParent = org.ergoplatform.utils.generators.ChainGenerator.applyBlock(history, blocks.head)
       synchronizer ! ChangedHistory(withParent)
       synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
 
@@ -1456,9 +1523,125 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  /**
-    * During UTXO set snapshot bootstrap block section invs must be ignored until the snapshot is applied.
-    */
+  /** Feed real snapshot chunks through the synchronizer with and without a header reorganization. */
+  private def runCertifiedSnapshotScenario(reorg: Boolean): Unit = {
+    withUtxoBootstrapFixture(utxoBootstrap = true, captureViewHolder = true) { ctx =>
+      import ctx._
+      viewHolderProbe.expectMsgType[GetNodeViewChanges](5.seconds)
+
+      val producerSettings = synchronizerSettings.copy(directory = createTempDir.getAbsolutePath)
+      val producerState = UtxoState.fromBoxHolder(
+        boxesHolderGenOfSize(128).sample.get, None, createTempDir, producerSettings, parameters)
+      val snapshotStore = LDBFactory.createKvDb(createTempDir.getAbsolutePath)
+      val receivingHistory = generateHistory(verifyTransactions = true,
+        StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1, utxoBootstrap = true)
+      val stopProbe = TestProbe("CertifiedSnapshotSynchronizerStopProbe")
+      stopProbe.watch(synchronizerMockRef)
+      try {
+        val snapshotHeight = 1
+        val manifestDepth = 2.toByte
+        val (rootHash, rootHeight) = splitDigest(producerState.rootDigest)
+        val manifestId = producerState.persistentProver.storage
+          .asInstanceOf[VersionedLDBAVLStorage]
+          .dumpSnapshot(snapshotStore, manifestDepth, rootHash).get
+        val manifest = new ManifestSerializer(manifestDepth)
+          .parseBytes(snapshotStore.get(manifestId).get)
+        manifest.subtreesIds.size should be > 1
+
+        val sourceHeader = powScheme.prove(
+          None, Header.InitialVersion, settings.chainSettings.initialNBits,
+          producerState.rootDigest, EmptyDigest32, EmptyDigest32,
+          System.currentTimeMillis(), EmptyDigest32, Array.fill(3)(0: Byte),
+          defaultMinerSecretNumber).get
+        receivingHistory.append(sourceHeader).get
+        receivingHistory.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(sourceHeader.id)
+        manifest.verify(Digest32 @@ rootHash, rootHeight) shouldBe true
+        val plan = receivingHistory.registerManifestToDownload(manifest, snapshotHeight, Seq(peer))
+
+        synchronizerMockRef ! ChangedHistory(receivingHistory)
+        synchronizerMockRef ! ChangedState(producerState)
+        val chunkIds = receivingHistory.getChunkIdsToDownload(manifest.subtreesIds.size)
+        chunkIds.map(Algos.encode) shouldBe manifest.subtreesIds.map(Algos.encode)
+        chunkIds.foreach { chunkId =>
+          deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value,
+            scorex.util.ModifierId @@ Algos.encode(chunkId), peer)(_ => Cancellable.alreadyCancelled)
+        }
+
+        chunkIds.dropRight(1).foreach { chunkId =>
+          synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+            Left(UtxoSnapshotChunkSpec.toBytes(snapshotStore.get(chunkId).get)), Some(peer))
+        }
+        eventually {
+          receivingHistory.utxoSetSnapshotDownloadPlan().get.downloadedChunkIds.count(identity) shouldBe chunkIds.size - 1
+        }
+
+        if (reorg) {
+          val competingHeader = nextHeader(None, receivingHistory.difficultyCalculator,
+            diffBitsOpt = None, useRealTs = true)
+          receivingHistory.append(competingHeader).get
+          val competingChild = nextHeader(Some(competingHeader), receivingHistory.difficultyCalculator,
+            diffBitsOpt = None, useRealTs = true)
+          receivingHistory.append(competingChild).get
+          receivingHistory.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(competingHeader.id)
+          sourceHeader.id should not be competingHeader.id
+          synchronizerMockRef ! ChangedHistory(receivingHistory)
+          val discard = viewHolderProbe.fishForMessage(5.seconds) {
+            case _: InitStateFromSnapshot => fail("Reorganized checkpoint was sent for import")
+            case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
+            case _ => false
+          }.asInstanceOf[DiscardSnapshotDownload]
+          receivingHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
+          system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
+          eventually { receivingHistory.utxoSetSnapshotDownloadPlan() shouldBe None }
+        }
+
+        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(snapshotStore.get(chunkIds.last).get)), Some(peer))
+        if (reorg) {
+          // Observe a later message on the same actor before asserting no import was sent.
+          val barrierId = modifierIdGen.sample.get
+          synchronizerMockRef ! Message(InvSpec,
+            Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(barrierId)))), Some(peer))
+          requestForModifierSent(ncProbe, Header.modifierTypeId, barrierId)
+          viewHolderProbe.expectNoMessage(500.millis)
+          receivingHistory.isUtxoSnapshotApplied shouldBe false
+        } else {
+          val importRequest = viewHolderProbe.fishForMessage(5.seconds) {
+            case _: InitStateFromSnapshot => true
+            case _ => false
+          }.asInstanceOf[InitStateFromSnapshot]
+          importRequest.blockHeight shouldBe snapshotHeight
+          importRequest.blockId shouldBe sourceHeader.id
+          importRequest.sessionId shouldBe plan.sessionId
+        }
+      } finally {
+        try {
+          system.stop(synchronizerMockRef)
+          stopProbe.expectTerminated(synchronizerMockRef)
+        } finally {
+          try {
+            receivingHistory.closeStorage()
+          } finally {
+            try {
+              snapshotStore.close()
+            } finally {
+              producerState.closeStorage()
+            }
+          }
+        }
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: certified snapshot actor control without a reorg") {
+    runCertifiedSnapshotScenario(reorg = false)
+  }
+
+  property("NodeViewSynchronizer: certified snapshot actor cancels after a reorg before final chunk") {
+    runCertifiedSnapshotScenario(reorg = true)
+  }
+
+  /** During UTXO set snapshot bootstrap block section invs must be ignored until the snapshot is applied. */
   property("NodeViewSynchronizer: InvSpec - block section invs are ignored during utxo bootstrap") {
     withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
       import ctx._
@@ -1519,6 +1702,538 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       requestForModifierSent(ncProbe, Extension.modifierTypeId, unknownSectionId)
     }
   }
+
+  property("NodeViewSynchronizer: SnapshotApplicationRejected retries only the named snapshot session") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      awaitHolderStartup(ctx)
+      val holderProbe = TestProbe("SnapshotSessionHolderHistory")
+      holderProbe.send(nodeViewHolderMockRef, GetDataFromCurrentView[UtxoState, ErgoHistory](_.history))
+      val holderHistory = holderProbe.expectMsgType[ErgoHistory](10.seconds)
+      synchronizerMockRef ! ChangedHistory(holderHistory)
+      val startupBarrierId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(startupBarrierId)))), Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, startupBarrierId)
+
+      val secondPeer = ConnectedPeer(connectionIdGen.sample.get,
+        TestProbe("SnapshotPeer2").ref, peer.peerInfo)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      syncTracker.updateStatus(secondPeer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+
+      val manifest = syntheticSnapshotManifest()
+      val initialFloor = holderHistory.minimalFullBlockHeight
+      val original = holderHistory.registerManifestToDownload(manifest, ctx.chain.last.height, Seq(peer, secondPeer))
+
+      synchronizerMockRef ! ChangedHistory(holderHistory)
+      ncProbe.fishForMessage(5.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }
+      holderHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+      holderHistory.minimalFullBlockHeight shouldBe initialFloor
+      holderHistory.isUtxoSnapshotApplied shouldBe false
+
+      val replacement = holderHistory.registerManifestToDownload(manifest, ctx.chain.last.height, Seq(peer, secondPeer))
+      replacement.sessionId should not be original.sessionId
+      synchronizerMockRef ! SnapshotApplicationRejected(original.sessionId)
+      val staleBarrierId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(staleBarrierId)))),
+        Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, staleBarrierId)
+      holderHistory.utxoSetSnapshotDownloadPlan().map(_.sessionId) shouldBe Some(replacement.sessionId)
+      holderHistory.minimalFullBlockHeight shouldBe initialFloor
+    }
+  }
+
+  property("NodeViewHolder: checkpoint rejection discards only its snapshot session") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      val peerB = ConnectedPeer(connectionIdGen.sample.get, TestProbe("SnapshotPeerB").ref, peer.peerInfo)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      syncTracker.updateStatus(peerB, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      awaitHolderStartup(ctx)
+
+      val holderProbe = TestProbe("SnapshotHolderViewProbe")
+      holderProbe.send(nodeViewHolderMockRef, GetDataFromCurrentView[UtxoState, ErgoHistory](_.history))
+      val holderHistory = holderProbe.expectMsgType[ErgoHistory](10.seconds)
+      holderHistory.isUtxoSnapshotApplied shouldBe false
+
+      synchronizerMockRef ! ChangedHistory(holderHistory)
+      val historyBarrierId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(historyBarrierId)))),
+        Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, historyBarrierId)
+
+      val initialFloor = holderHistory.minimalFullBlockHeight
+      val plan = holderHistory.registerManifestToDownload(syntheticSnapshotManifest(), 1, Seq(peer, peerB))
+      plan.fullyDownloaded shouldBe true
+      val missingBlockId = modifierIdGen.sample.get
+      holderHistory.bestHeaderAtHeight(1).map(_.id) should not be Some(missingBlockId)
+
+      val rejectionProbe = TestProbe("SnapshotRejectionProbe")
+      system.eventStream.subscribe(rejectionProbe.ref, classOf[SnapshotApplicationRejected])
+      nodeViewHolderMockRef ! InitStateFromSnapshot(1, missingBlockId, plan.sessionId)
+      rejectionProbe.expectMsg(10.seconds, SnapshotApplicationRejected(plan.sessionId))
+      holderHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+      holderHistory.minimalFullBlockHeight shouldBe initialFloor
+      holderHistory.isUtxoSnapshotApplied shouldBe false
+    }
+  }
+
+  property("NodeViewSynchronizer: rejected snapshot A admits and applies a new manifest B") {
+    val snapshotHeight = 19
+    val defaults = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true,
+      popowBootstrap = false, utxoBootstrap = true).toSettings
+    val bootstrapSettings = defaults.copy(chainSettings = defaults.chainSettings.copy(
+      voting = defaults.chainSettings.voting.copy(votingLength = snapshotHeight + 1),
+      epochLength = snapshotHeight + 1))
+
+    new NodeViewFixture(bootstrapSettings, parameters).apply { fixture =>
+      implicit val ctx: NodeViewTestContext = fixture
+      implicit val system: ActorSystem = fixture.actorSystem
+      val (manifestA, chunksA) = snapshotWithChunks(9216, ManifestSerializer.MainnetManifestDepth)
+      val (manifestB, chunksB) = snapshotWithChunks(9217, ManifestSerializer.MainnetManifestDepth)
+      manifestA.id.toSeq should not be manifestB.id.toSeq
+      chunksA should not be empty
+      chunksB should not be empty
+
+      val rootA = VersionedLDBAVLStorage.digest(manifestA.id, manifestA.rootHeight)
+      val rootB = VersionedLDBAVLStorage.digest(manifestB.id, manifestB.rootHeight)
+      val holderGate = TestProbe("SnapshotHolderGate")
+      val network = TestProbe("SnapshotRecoveryNetwork")
+      val firstHandler = TestProbe("SnapshotRecoveryFirstHandler")
+      val secondHandler = TestProbe("SnapshotRecoverySecondHandler")
+      val barrier = TestProbe("SnapshotRecoveryBarrier")
+      val rejection = TestProbe("SnapshotRecoveryRejection")
+      system.eventStream.subscribe(rejection.ref, classOf[SnapshotApplicationRejected])
+
+      val snapshotOnlyMode = ModePeerFeature(StateType.Utxo,
+        verifyingTransactions = true, nipopowBootstrapped = None,
+        blocksToKeep = ModePeerFeature.AllBlocksKept)
+      val peerInfo = PeerInfo(defaultPeerSpec.copy(features = Seq(snapshotOnlyMode)),
+        System.currentTimeMillis())
+      val firstPeer = ConnectedPeer(connectionIdGen.sample.get, firstHandler.ref, Some(peerInfo))
+      val secondPeer = firstPeer.copy(
+        connectionId = firstPeer.connectionId.copy(
+          remoteAddress = new InetSocketAddress("127.0.0.2", 28444)),
+        handlerRef = secondHandler.ref)
+      val syncTracker = ErgoSyncTracker(fixture.settings.scorexSettings.network)
+      val deliveryTracker = DeliveryTracker.empty(fixture.settings)
+      val synchronizer = system.actorOf(Props(new ErgoNodeViewSynchronizer(
+        network.ref, holderGate.ref, ErgoSyncInfoMessageSpec,
+        fixture.settings, syncTracker, deliveryTracker)(fixture.executionContext)))
+
+      def actorBarrier(label: String): Unit = {
+        barrier.send(synchronizer, Identify(label))
+        barrier.expectMsgType[ActorIdentity].correlationId shouldBe label
+      }
+
+      def offerAndAdmit(manifest: BatchAVLProverManifest[Digest32]): Long = {
+        val infoBytes = SnapshotsInfoSpec.toBytes(
+          new SnapshotsInfo(Map(snapshotHeight -> manifest.id)))
+        barrier.send(synchronizer, Message(SnapshotsInfoSpec, Left(infoBytes), Some(firstPeer)))
+        barrier.send(synchronizer, Message(SnapshotsInfoSpec, Left(infoBytes), Some(secondPeer)))
+        val request = network.fishForMessage(10.seconds) {
+          case sent: SendToNetwork =>
+            sent.message.spec.messageCode == GetManifestSpec.messageCode &&
+              sent.message.data.get.asInstanceOf[Array[Byte]].toSeq == manifest.id.toSeq
+          case _ => false
+        }.asInstanceOf[SendToNetwork]
+        val manifestPeer = request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+        val bytes = ManifestSerializer.defaultSerializer.toBytes(manifest)
+        barrier.send(synchronizer, Message(ManifestSpec,
+          Left(ManifestSpec.toBytes(bytes)), Some(manifestPeer)))
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          getHistory.utxoSetSnapshotDownloadPlan().map(_.utxoSetRootHash.toSeq) shouldBe
+            Some(manifest.id.toSeq)
+        }
+        getHistory.utxoSetSnapshotDownloadPlan().get.sessionId
+      }
+
+      def deliverChunks(chunks: Seq[(Array[Byte], Array[Byte])]): Unit = {
+        val byId = chunks.map { case (id, bytes) => bytesToId(id) -> bytes }.toMap
+        var remaining = byId.keySet
+        while (remaining.nonEmpty) {
+          val request = network.fishForMessage(20.seconds) {
+            case sent: SendToNetwork =>
+              sent.message.spec.messageCode == GetUtxoSnapshotChunkSpec.messageCode &&
+                remaining.contains(bytesToId(sent.message.data.get.asInstanceOf[Array[Byte]]))
+            case _ => false
+          }.asInstanceOf[SendToNetwork]
+          val id = bytesToId(request.message.data.get.asInstanceOf[Array[Byte]])
+          val chunkPeer = request.sendingStrategy.asInstanceOf[SendToPeer].chosenPeer
+          barrier.send(synchronizer, Message(UtxoSnapshotChunkSpec,
+            Left(UtxoSnapshotChunkSpec.toBytes(byId(id))), Some(chunkPeer)))
+          remaining -= id
+        }
+      }
+
+      try {
+        holderGate.expectMsgType[GetNodeViewChanges](10.seconds)
+        val history = getHistory
+        val generated = genHeaderChain(snapshotHeight, history,
+          diffBitsOpt = None, useRealTs = false).headers
+        val template = generated.last
+        val parent = generated(snapshotHeight - 2)
+        val headerA = powScheme.prove(Some(parent), template.version, template.nBits,
+          rootA, template.ADProofsRoot, template.transactionsRoot, template.timestamp,
+          template.extensionRoot, template.votes, defaultMinerSecretNumber).get
+        applyHeaderChain(history, HeaderChain(generated.dropRight(1) :+ headerA))
+        history.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(headerA.id)
+        history.setHeadersChainSynced()
+        val initialFloor = history.minimalFullBlockHeight
+        val initialRoot = getCurrentState.rootDigest.toSeq
+
+        barrier.send(synchronizer, ChangedHistory(history))
+        barrier.send(synchronizer, ChangedMempool(ErgoMemPool.empty(fixture.settings)))
+        barrier.send(synchronizer, ChangedState(getCurrentState.getReader))
+        barrier.send(synchronizer, HandshakedPeer(firstPeer))
+        barrier.send(synchronizer, HandshakedPeer(secondPeer))
+        barrier.send(synchronizer, CheckModifiersToDownload)
+        network.fishForMessage(10.seconds) {
+          case sent: SendToNetwork if
+              sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+            sent.sendingStrategy match {
+              case targets: SendToPeers =>
+                targets.chosenPeers.map(_.handlerRef).toSet ==
+                  Set(firstPeer.handlerRef, secondPeer.handlerRef)
+              case _ => false
+            }
+          case _ => false
+        }
+
+        val sessionA = offerAndAdmit(manifestA)
+        deliverChunks(chunksA)
+        val importA = holderGate.fishForMessage(10.seconds) {
+          case _: InitStateFromSnapshot => true
+          case _ => false
+        }.asInstanceOf[InitStateFromSnapshot]
+        importA.blockId shouldBe headerA.id
+        importA.sessionId shouldBe sessionA
+        network.receiveWhile(100.millis) { case message => message }
+
+        val headerB = powScheme.prove(Some(parent), template.version, template.nBits,
+          rootB, template.ADProofsRoot, template.transactionsRoot,
+          Math.max(System.currentTimeMillis(), headerA.timestamp + 1),
+          template.extensionRoot, template.votes, defaultMinerSecretNumber).get
+        history.append(headerB).get
+        val childB = nextHeader(Some(headerB), history.difficultyCalculator,
+          tsOpt = Some(headerB.timestamp + 1), diffBitsOpt = None, useRealTs = false)
+        history.append(childB).get
+        history.bestHeaderIdAtHeight(snapshotHeight) shouldBe Some(headerB.id)
+
+        holderGate.send(fixture.nodeViewHolderRef, importA)
+        rejection.expectMsg(10.seconds, SnapshotApplicationRejected(sessionA))
+        network.fishForMessage(10.seconds) {
+          case sent: SendToNetwork =>
+            sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          history.utxoSetSnapshotDownloadPlan() shouldBe None
+        }
+        history.minimalFullBlockHeight shouldBe initialFloor
+        getCurrentState.rootDigest.toSeq shouldBe initialRoot
+
+        val sessionB = offerAndAdmit(manifestB)
+        sessionB should not be sessionA
+        barrier.send(synchronizer, SnapshotApplicationRejected(sessionA))
+        actorBarrier("stale-A-rejection-processed")
+        history.utxoSetSnapshotDownloadPlan().map(_.sessionId) shouldBe Some(sessionB)
+
+        holderGate.send(fixture.nodeViewHolderRef, importA)
+        holderGate.send(fixture.nodeViewHolderRef, GetNodeViewChanges(history = true,
+          state = false, vault = false, mempool = false))
+        holderGate.fishForMessage(10.seconds) {
+          case _: ChangedHistory => true
+          case _ => false
+        }
+        rejection.expectNoMessage(300.millis)
+        history.utxoSetSnapshotDownloadPlan().map(_.sessionId) shouldBe Some(sessionB)
+
+        deliverChunks(chunksB)
+        val importB = holderGate.fishForMessage(10.seconds) {
+          case _: InitStateFromSnapshot => true
+          case _ => false
+        }.asInstanceOf[InitStateFromSnapshot]
+        importB.blockId shouldBe headerB.id
+        importB.sessionId shouldBe sessionB
+        holderGate.send(fixture.nodeViewHolderRef, importB)
+        eventually(timeout(30.seconds), interval(200.millis)) {
+          getHistory.isUtxoSnapshotApplied shouldBe true
+          getCurrentState.rootDigest.toSeq shouldBe rootB.toSeq
+          getHistory.minimalFullBlockHeight shouldBe snapshotHeight + 1
+        }
+      } finally {
+        val stopped = TestProbe("SnapshotRecoverySynchronizerStopped")
+        stopped.watch(synchronizer)
+        system.stop(synchronizer)
+        stopped.expectTerminated(synchronizer, 10.seconds)
+      }
+    }
+  }
+
+  property("NodeViewHolder: a transient snapshot discard failure retries once before acknowledgment") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      val historySettings = synchronizerSettings.copy(directory = createTempDir.getAbsolutePath)
+      val discardAttempts = new AtomicInteger(0)
+      val faultHistory: ErgoHistory = new ErgoHistory with FullBlockSectionProcessor {
+        override protected val settings: ErgoSettings = historySettings
+        override val historyStorage: HistoryStorage = HistoryStorage(historySettings)
+        override val powScheme = historySettings.chainSettings.powScheme
+
+        override def discardSnapshotDownload(sessionId: Long) = {
+          if (discardAttempts.incrementAndGet() == 1) {
+            throw new IllegalStateException("injected one-time snapshot discard failure")
+          }
+          super.discardSnapshotDownload(sessionId)
+        }
+      }
+
+      val retrySettings = settings.copy(scorexSettings = settings.scorexSettings.copy(
+        network = settings.scorexSettings.network.copy(deliveryTimeout = 2.seconds)))
+      val faultHolder = system.actorOf(Props(new NodeViewHolderMock(retrySettings) {
+        override protected def history(): ErgoHistory = faultHistory
+      }))
+      val rejectionProbe = TestProbe("SnapshotDiscardFailureEvents")
+      system.eventStream.subscribe(rejectionProbe.ref, classOf[SnapshotApplicationRejected])
+      try {
+        val initialFloor = faultHistory.minimalFullBlockHeight
+        val plan = faultHistory.registerManifestToDownload(syntheticSnapshotManifest(), 1, Seq(peer))
+        val barrier = TestProbe("SnapshotFaultHolderBarrier")
+        barrier.send(faultHolder, DiscardSnapshotDownload(plan.sessionId))
+        barrier.send(faultHolder, GetNodeViewChanges(history = true,
+          state = false, vault = false, mempool = false))
+        barrier.expectMsgType[ChangedHistory](10.seconds)
+        discardAttempts.get() shouldBe 1
+        faultHistory.utxoSetSnapshotDownloadPlan().map(_.sessionId) shouldBe Some(plan.sessionId)
+        rejectionProbe.expectNoMessage(300.millis)
+
+        rejectionProbe.expectMsg(5.seconds, SnapshotApplicationRejected(plan.sessionId))
+        discardAttempts.get() shouldBe 2
+        faultHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+        faultHistory.minimalFullBlockHeight shouldBe initialFloor
+        faultHistory.isUtxoSnapshotApplied shouldBe false
+      } finally {
+        system.stop(faultHolder)
+        faultHistory.closeStorage()
+      }
+    }
+  }
+
+  property("NodeViewHolder: a persistent snapshot discard failure stops after one retry") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      val historySettings = synchronizerSettings.copy(directory = createTempDir.getAbsolutePath)
+      val discardAttempts = new AtomicInteger(0)
+      val faultHistory: ErgoHistory = new ErgoHistory with FullBlockSectionProcessor {
+        override protected val settings: ErgoSettings = historySettings
+        override val historyStorage: HistoryStorage = HistoryStorage(historySettings)
+        override val powScheme = historySettings.chainSettings.powScheme
+
+        override def discardSnapshotDownload(sessionId: Long) = {
+          discardAttempts.incrementAndGet()
+          throw new IllegalStateException("injected persistent snapshot discard failure")
+        }
+      }
+
+      val retrySettings = settings.copy(scorexSettings = settings.scorexSettings.copy(
+        network = settings.scorexSettings.network.copy(deliveryTimeout = 200.millis)))
+      val faultHolder = system.actorOf(Props(new NodeViewHolderMock(retrySettings) {
+        override protected def history(): ErgoHistory = faultHistory
+      }))
+      val rejectionProbe = TestProbe("SnapshotPersistentDiscardFailureEvents")
+      system.eventStream.subscribe(rejectionProbe.ref, classOf[SnapshotApplicationRejected])
+      try {
+        val initialFloor = faultHistory.minimalFullBlockHeight
+        val plan = faultHistory.registerManifestToDownload(syntheticSnapshotManifest(), 1, Seq(peer))
+        faultHolder ! DiscardSnapshotDownload(plan.sessionId)
+        eventually(timeout(5.seconds), interval(50.millis)) {
+          discardAttempts.get() shouldBe 2
+        }
+        rejectionProbe.expectNoMessage(500.millis)
+        discardAttempts.get() shouldBe 2
+        faultHistory.utxoSetSnapshotDownloadPlan().map(_.sessionId) shouldBe Some(plan.sessionId)
+        faultHistory.minimalFullBlockHeight shouldBe initialFloor
+        faultHistory.isUtxoSnapshotApplied shouldBe false
+      } finally {
+        system.stop(faultHolder)
+        faultHistory.closeStorage()
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: ChangedHistory abandons a displaced snapshot checkpoint before application") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, captureViewHolder = true) { ctx =>
+      import ctx._
+
+      val startupBarrierId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(startupBarrierId)))),
+        Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, startupBarrierId)
+
+      val secondPeer = ConnectedPeer(connectionIdGen.sample.get,
+        TestProbe("SnapshotPeer2").ref, peer.peerInfo)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      syncTracker.updateStatus(secondPeer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+
+      val manifest = syntheticSnapshotManifest()
+      val selected = updHistory.bestHeaderAtHeight(ctx.chain.last.height).get
+      java.util.Arrays.equals(selected.stateRoot,
+        VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)) shouldBe false
+      val initialFloor = updHistory.minimalFullBlockHeight
+      val plan = updHistory.registerManifestToDownload(manifest, selected.height, Seq(peer, secondPeer))
+
+      synchronizerMockRef ! ChangedHistory(updHistory)
+      val discard = viewHolderProbe.fishForMessage(5.seconds) {
+        case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
+        case _ => false
+      }.asInstanceOf[DiscardSnapshotDownload]
+      updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
+      system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
+      ncProbe.fishForMessage(5.seconds) {
+        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }
+      updHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+      updHistory.minimalFullBlockHeight shouldBe initialFloor
+      updHistory.isUtxoSnapshotApplied shouldBe false
+    }
+  }
+
+  property("NodeViewSynchronizer: old snapshot chunks are ignored until holder confirms discard") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, captureViewHolder = true) { ctx =>
+      import ctx._
+
+      val peerB = ConnectedPeer(connectionIdGen.sample.get, TestProbe("SnapshotPeerB").ref, peer.peerInfo)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      syncTracker.updateStatus(peerB, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      val startupBarrierId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(startupBarrierId)))), Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, startupBarrierId)
+      deliveryTracker.setUnknown(startupBarrierId, Header.modifierTypeId)
+
+      val receivingState = UtxoState.fromBoxHolder(
+        boxesHolderGenOfSize(1).sample.get, None, createTempDir, synchronizerSettings, parameters)
+      synchronizerMockRef ! ChangedState(receivingState)
+      try {
+        val selected = updHistory.bestHeaderAtHeight(ctx.chain.last.height).get
+        val manifest = syntheticSnapshotManifest()
+        selected.stateRoot.sameElements(VersionedLDBAVLStorage.digest(manifest.id, manifest.rootHeight)) shouldBe false
+        val subtree = new BatchAVLProverSubtree[Digest32](syntheticSnapshotLeaf())
+        val chunkBytes = SubtreeSerializer.toBytes(subtree)
+        val chunkId = scorex.util.ModifierId @@ Algos.encode(subtree.id)
+        val plan = updHistory.registerManifestToDownload(manifest, selected.height, Seq(peer, peerB))
+        deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value, chunkId, peer)(_ => Cancellable.alreadyCancelled)
+
+        synchronizerMockRef ! ChangedHistory(updHistory)
+        val discard = viewHolderProbe.fishForMessage(5.seconds) {
+          case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
+          case _ => false
+        }.asInstanceOf[DiscardSnapshotDownload]
+        deliveryTracker.getRequestedInfo(UtxoSnapshotChunkTypeId.value, chunkId) shouldBe None
+
+        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
+        // A fresh peer's sync response fences the chunk on this actor without
+        // relying on a header-download peer being available during cancellation.
+        val barrierPeer = ConnectedPeer(connectionIdGen.sample.get,
+          TestProbe("SnapshotBarrierPeer").ref, peer.peerInfo)
+        synchronizerMockRef ! HandshakedPeer(barrierPeer)
+        synchronizerMockRef ! SendLocalSyncInfo
+        ncProbe.fishForMessage(5.seconds) {
+          case _: PenalizePeer => fail("A chunk received during holder-side discard was penalized")
+          case sent: SendToNetwork if sent.message.spec.messageCode == ErgoSyncInfoMessageSpec.messageCode =>
+            sent.sendingStrategy match {
+              case SendToPeers(peers) => peers.contains(barrierPeer)
+              case _ => false
+            }
+          case _ => false
+        }
+
+        updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
+        system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
+        ncProbe.fishForMessage(5.seconds) {
+          case sent: SendToNetwork => sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }
+        synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+          Left(UtxoSnapshotChunkSpec.toBytes(chunkBytes)), Some(peer))
+        ncProbe.fishForMessage(5.seconds) {
+          case PenalizePeer(address, penalty) if address == peer.connectionId.remoteAddress =>
+            penalty shouldBe PenaltyType.SpamPenalty
+            true
+          case _ => false
+        }
+      } finally {
+        receivingState.closeStorage()
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: missing selected header after the last chunk discards the session") {
+    withUtxoBootstrapFixture(utxoBootstrap = true, captureViewHolder = true) { ctx =>
+      import ctx._
+
+      val peerB = ConnectedPeer(connectionIdGen.sample.get, TestProbe("SnapshotPeerB").ref, peer.peerInfo)
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      syncTracker.updateStatus(peerB, org.ergoplatform.consensus.Unknown, Some(ctx.chain.last.height))
+      val startupBarrierId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(startupBarrierId)))), Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, startupBarrierId)
+      deliveryTracker.setUnknown(startupBarrierId, Header.modifierTypeId)
+      val receivingState = UtxoState.fromBoxHolder(
+        boxesHolderGenOfSize(1).sample.get, None, createTempDir, synchronizerSettings, parameters)
+      synchronizerMockRef ! ChangedState(receivingState)
+
+      try {
+        val (manifest, chunks) = snapshotWithChunks(64, 1.toByte)
+        chunks.size shouldBe 2
+        val absentHeight = ctx.chain.last.height + 1
+        updHistory.bestHeaderAtHeight(absentHeight) shouldBe None
+        val initialFloor = updHistory.minimalFullBlockHeight
+        val plan = updHistory.registerManifestToDownload(manifest, absentHeight, Seq(peer, peerB))
+        val requested = updHistory.getChunkIdsToDownload(chunks.size)
+        requested.zip(chunks).foreach { case (id, (expectedId, _)) =>
+          id.sameElements(expectedId) shouldBe true
+          deliveryTracker.setRequested(UtxoSnapshotChunkTypeId.value,
+            scorex.util.ModifierId @@ Algos.encode(id), peer)(_ => Cancellable.alreadyCancelled)
+        }
+
+        chunks.foreach { case (_, bytes) =>
+          synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+            Left(UtxoSnapshotChunkSpec.toBytes(bytes)), Some(peer))
+        }
+        val discard = viewHolderProbe.fishForMessage(5.seconds) {
+          case _: InitStateFromSnapshot => fail("No header exists for this completed snapshot")
+          case command: DiscardSnapshotDownload => command.sessionId == plan.sessionId
+          case _ => false
+        }.asInstanceOf[DiscardSnapshotDownload]
+        updHistory.discardSnapshotDownload(discard.sessionId).map(_.sessionId) shouldBe Some(plan.sessionId)
+        system.eventStream.publish(SnapshotApplicationRejected(discard.sessionId))
+        ncProbe.fishForMessage(5.seconds) {
+          case sent: SendToNetwork => sent.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+          case _ => false
+        }
+        updHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+        updHistory.minimalFullBlockHeight shouldBe initialFloor
+      } finally {
+        receivingState.closeStorage()
+      }
+    }
+  }
+
 
   property("NodeViewSynchronizer: InvSpec - block section invs processed when utxoBootstrap disabled") {
     withUtxoBootstrapFixture(utxoBootstrap = false) { ctx =>

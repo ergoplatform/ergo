@@ -143,6 +143,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * Ids of a peer's transactions sent to the mempool whose result has not come back yet, so not charged to the peer
     * yet. They are counted against the peer's budget at the floor charge before another transaction of the peer is
     * sent to the mempool, see `peerAdmitsTx`. Not cleared on the budget reset, as their charges land after it.
+    * `ErgoNodeViewHolder.txModify` has no catch: if it throws, no result comes back and the id stays counted until the
+    * peer disconnects.
     */
   private val txsInProcessing = mutable.Map[ConnectedPeer, mutable.Set[ModifierId]]()
 

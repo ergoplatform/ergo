@@ -148,6 +148,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     history
   }
 
+  private def indexCheckpoint(history: ErgoHistoryReader): (Int, Option[ModifierId]) =
+    (getIndex(ExtraIndexer.IndexedHeightKey, history).getInt,
+      history.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey)).map(bytes => bytesToId(bytes)))
+
   private def checkedIndexJson[A: Encoder](history: ErgoHistoryReader,
                                            stateOpt: Option[ErgoStateReader])(read: => A): Json =
     history.withExtraIndexReadLock {
@@ -171,11 +175,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def withHistoryAndMempoolJson[P, A: Encoder](prepare: ErgoMemPoolReader => P)
                                                       (read: (ErgoHistoryReader, P) => A): Future[Json] =
     (readersHolder ? GetReaders).mapTo[Readers].map { readers =>
-      readers.h.withExtraIndexReadLock {
+      val checkpoint = readers.h.withExtraIndexReadLock {
         checkedHistory(readers.h, Some(readers.s))
+        indexCheckpoint(readers.h)
       }
       val prepared = prepare(readers.m)
-      checkedIndexJson(readers.h, Some(readers.s))(read(readers.h, prepared))
+      checkedIndexJson(readers.h, Some(readers.s)) {
+        if (indexCheckpoint(readers.h) != checkpoint) throw ExtraIndexRecoveryIncomplete
+        read(readers.h, prepared)
+      }
     }
 
   private case class PreparedUnspentMempool(spentBoxIds: Set[ModifierId],

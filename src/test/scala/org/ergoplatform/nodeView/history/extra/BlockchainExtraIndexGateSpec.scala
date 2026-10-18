@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core.{VersionTag, idToVersion}
@@ -30,10 +30,13 @@ import java.nio.ByteBuffer
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import org.ergoplatform.ErgoBox.BoxId
+import org.ergoplatform.ErgoBoxCandidate
 import scorex.crypto.authds.ADDigest
 import scorex.util.{ModifierId, bytesToId}
 
 import scala.util.Try
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 
 class BlockchainExtraIndexGateSpec
   extends AnyFlatSpec
@@ -687,6 +690,132 @@ class BlockchainExtraIndexGateSpec
       if (!writer.isAlive) storage.insertExtraTry(
         Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
       ).get
+    }
+    writer.isAlive shouldBe false
+  }
+
+  it should "reject a mixed old mempool and new confirmed index after checkpoint replacement" in {
+    implicit val routeTimeout: RouteTestTimeout = RouteTestTimeout(15.seconds)
+    val storage = history.historyStorage
+    val newTransaction = chain.last.blockTransactions.txs.head
+    val newBox = newTransaction.outputs.head
+    val oldCandidate = new ErgoBoxCandidate(newBox.value + 1, newBox.ergoTree,
+      newBox.creationHeight, newBox.additionalTokens, newBox.additionalRegisters)
+    val oldTransaction = ErgoTransaction(newTransaction.inputs, IndexedSeq(oldCandidate))
+    val oldBox = oldTransaction.outputs.head
+    val oldId = bytesToId(oldBox.id)
+    val newId = bytesToId(newBox.id)
+    oldId should not be newId
+    val templateHash = IndexedContractTemplateSerializer.hashTreeTemplate(oldBox.ergoTree)
+    val indexedBox = new IndexedErgoBox(chain.last.header.height, None, None, None, newBox, 1L)
+    val numericBoxIndex = NumericBoxIndex(1L, indexedBox.id)
+    val templateIndex = IndexedContractTemplate(templateHash, ArrayBuffer(1L))
+    val oldPool = ErgoMemPool.empty(settings).put(UnconfirmedTransaction(oldTransaction, None))
+    val newPool = ErgoMemPool.empty(settings)
+    val enteredMempool = new CountDownLatch(1)
+    val finishedWrite = new CountDownLatch(1)
+    val blockOldRead = new java.util.concurrent.atomic.AtomicBoolean(false)
+    val failure = new AtomicReference[Throwable]()
+    val blockingOldPool = new ErgoMemPoolReader {
+      override def contains(id: ModifierId): Boolean = oldPool.contains(id)
+      override def modifierById(id: ModifierId): Option[ErgoTransaction] = oldPool.modifierById(id)
+      override def unconfirmedById(id: ModifierId): Option[UnconfirmedTransaction] = oldPool.unconfirmedById(id)
+      override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = oldPool.getAll(ids)
+      override def getAll: Seq[UnconfirmedTransaction] = oldPool.getAll
+      override def getAllPrioritized: Seq[UnconfirmedTransaction] = oldPool.getAllPrioritized
+      override def size: Int = oldPool.size
+      override def take(limit: Int): Iterable[UnconfirmedTransaction] = oldPool.take(limit)
+      override def random(limit: Int): Iterable[UnconfirmedTransaction] = oldPool.random(limit)
+      override def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = oldPool.weightedTransactionIds(limit)
+      override def getExpectedWaitTime(fee: Long, size: Int): Long = oldPool.getExpectedWaitTime(fee, size)
+      override def getRecommendedFee(minutes: Int, size: Int): Long = oldPool.getRecommendedFee(minutes, size)
+      override def spentInputs: Iterator[BoxId] = {
+        if (blockOldRead.get()) {
+          enteredMempool.countDown()
+          if (!finishedWrite.await(10, TimeUnit.SECONDS))
+            throw new IllegalStateException("Checkpoint replacement did not finish during mempool preparation")
+        }
+        oldPool.spentInputs
+      }
+    }
+    val currentPool = new AtomicReference[ErgoMemPoolReader](blockingOldPool)
+    val controlledReaders = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetDataFromHistory(f) => sender() ! f(utxoReaders.h)
+        case GetReaders => sender() ! utxoReaders.copy(m = currentPool.get())
+      }
+    }))
+    val utxoIndexSettings = indexedSettings.copy(nodeSettings = indexedSettings.nodeSettings.copy(
+      stateType = StateType.Utxo))
+    val controlledRoute = BlockchainApiRoute(controlledReaders, utxoIndexSettings, None).route
+    val path = "/blockchain/box/unspent/byTemplateHash/" + templateHash +
+      "?includeUnconfirmed=true&excludeMempoolSpent=true"
+    val oldHeader = chain(4).header
+    val newHeader = chain.last.header
+    def checkpoint(header: Header, rollback: Int): Array[(Array[Byte], Array[Byte])] = Array(
+      RollbackToKey -> ByteBuffer.allocate(4).putInt(rollback).array,
+      IndexedHeightKey -> ByteBuffer.allocate(4).putInt(header.height).array,
+      IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(header.id))
+    def oldCheckpoint(): Unit = {
+      storage.insertExtraTry(checkpoint(oldHeader, 0), Array.empty[ExtraIndex],
+        Array(templateHash, numericBoxIndex.id, indexedBox.id)).get
+      currentPool.set(blockingOldPool)
+    }
+    def newCheckpoint(): Unit = {
+      storage.insertExtraTry(Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(1).array),
+        Array.empty[ExtraIndex]).get
+      storage.insertExtraTry(checkpoint(newHeader, 0),
+        Array[ExtraIndex](templateIndex, numericBoxIndex, indexedBox)).get
+      currentPool.set(newPool)
+    }
+    val writer = new Thread(new Runnable {
+      override def run(): Unit = try {
+        if (!enteredMempool.await(10, TimeUnit.SECONDS))
+          throw new IllegalStateException("Unspent request did not enter old mempool preparation")
+        newCheckpoint()
+      } catch {
+        case error: Throwable => failure.compareAndSet(null, error); ()
+      } finally finishedWrite.countDown()
+    })
+    writer.setDaemon(true)
+    try {
+      oldCheckpoint()
+      Get(path) ~> controlledRoute ~> check {
+        status shouldBe StatusCodes.OK
+        val body = response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict].data.utf8String
+        body should include(oldId)
+        body should not include newId
+      }
+      newCheckpoint()
+      Get(path) ~> controlledRoute ~> check {
+        status shouldBe StatusCodes.OK
+        val body = response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict].data.utf8String
+        body should include(newId)
+        body should not include oldId
+      }
+      oldCheckpoint()
+      blockOldRead.set(true)
+      writer.start()
+      Get(path) ~> controlledRoute ~> check {
+        status shouldBe StatusCodes.ServiceUnavailable
+        header("Retry-After").map(_.value()) shouldBe Some("1")
+      }
+      enteredMempool.getCount shouldBe 0L
+      finishedWrite.getCount shouldBe 0L
+      failure.get() shouldBe null
+      Get(path) ~> controlledRoute ~> check {
+        status shouldBe StatusCodes.OK
+        val body = response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict].data.utf8String
+        body should include(newId)
+        body should not include oldId
+      }
+    } finally {
+      finishedWrite.countDown()
+      writer.join(10000)
+      storage.insertExtraTry(Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array),
+        Array.empty[ExtraIndex], Array(templateHash, numericBoxIndex.id, indexedBox.id)).get
+      storage.removeExtraTry(Array(bytesToId(IndexedHeightKey), bytesToId(IndexedHeaderIdKey))).get
+      system.stop(controlledReaders)
     }
     writer.isAlive shouldBe false
   }

@@ -1625,6 +1625,9 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * re-request while its previous one is in flight (see `refusedTxsInFlight`), so that the ids asked for can be
     * processed in this block rather than cached and dropped for the budget. The budget itself is kept where the
     * transactions are sent to the mempool, see `peerAdmitsTx`.
+    *
+    * An id requested from another peer meanwhile is kept for a later turn rather than asked again, as that request
+    * may not be delivered in time; other ids the node knows by then are dropped.
     */
   private def requestRefusedTxs(hr: ErgoHistory,
                                 mp: ErgoMemPool,
@@ -1641,14 +1644,20 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         val peerTxsToAsk =
           math.min(txsToAsk.toLong, (MempoolPeerCostPerBlock - peerCost(peer)) / MinDeclinedTxCost).toInt
         val toAsk = mutable.ArrayBuffer[ModifierId]()
+        val requestedElsewhere = mutable.ArrayBuffer[ModifierId]()
         while (toAsk.size < peerTxsToAsk && ids.nonEmpty) {
           val id = ids.head
           ids -= id
           refusedTxsTotal -= 1
           if (txWorthRequesting(id, mp, blockAppliedTxsCache)) {
             toAsk += id
+          } else if (deliveryTracker.status(id, ErgoTransaction.modifierTypeId, Seq(mp)) == ModifiersStatus.Requested) {
+            requestedElsewhere += id
           }
         }
+        // kept, at the end of the peer's ids, in case the other request is not delivered in time
+        ids ++= requestedElsewhere
+        refusedTxsTotal += requestedElsewhere.size
         // the peer goes to the end of the turn
         refusedTxs -= peer
         if (ids.nonEmpty) {

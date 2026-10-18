@@ -252,7 +252,7 @@ object UtxoState {
     */
   type SubtreeId = Digest32
 
-  private[nodeView] lazy val bestVersionKey = Algos.hash("best state version")
+  private lazy val bestVersionKey = Algos.hash("best state version")
   val EmissionBoxIdKey: Digest32 = Algos.hash("emission box id key")
 
 

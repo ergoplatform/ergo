@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFr
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{ErgoState, StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
@@ -155,9 +155,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // Each test must start with an empty history and state.
+    // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
-    deleteRecursive(ErgoState.stateDir(settings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(
@@ -198,9 +197,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
     val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
 
-    // Each test must start with an empty history and state.
+    // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
-    deleteRecursive(ErgoState.stateDir(settings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(
@@ -263,7 +261,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     )
 
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
-    deleteRecursive(ErgoState.stateDir(synchronizerSettings))
     val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
 
     val synchronizerMockRef = system.actorOf(Props(

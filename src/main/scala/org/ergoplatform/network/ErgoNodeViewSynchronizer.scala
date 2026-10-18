@@ -1214,6 +1214,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         if (utxoBootstrapInProgress) {
           log.debug(s"Ignoring ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer: UTXO snapshot bootstrap in progress")
           Seq.empty
+        } else if (modifierTypeId == ADProofs.modifierTypeId && settings.nodeSettings.stateType.holdsUtxoSet) {
+          // a node that stores the UTXO set regenerates these proofs for the last `adProofsSuffixLength` blocks when it
+          // applies them (UtxoState), so it does not download them (see requiredModifiersForHeader)
+          log.debug(s"Ignoring ${invData.ids.length} ADProofs invs from $peer: the UTXO set is stored")
+          Seq.empty
         } else {
           log.info(s"Processing ${invData.ids.length} non-tx invs (of type $modifierTypeId) from $peer")
           invData.ids.filter(mid => deliveryTracker.status(mid, modifierTypeId, Seq(hr)) == ModifiersStatus.Unknown)

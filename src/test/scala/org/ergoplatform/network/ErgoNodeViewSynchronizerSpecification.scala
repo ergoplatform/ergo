@@ -1302,8 +1302,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       // the synchronizer answers through the requesting peer's handler
       val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
-        case msg: Message[_] if msg.spec.messageCode == ModifiersSpec.messageCode =>
-          msg.data.get.asInstanceOf[ModifiersData]
+        case Message(_, Right(md: ModifiersData), _) => md
       }.flatMap(md => md.modifiers.keys.map(md.typeId -> _))
       served should contain allElementsOf announced
     }

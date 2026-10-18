@@ -293,4 +293,19 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     scorexSettings.network.allowLocal shouldBe false
   }
 
+  property("genesisId must be 64 lower-case hex characters") {
+    val mainnetGenesisId = "b0244dfc267baca974a4caee06120321562784303a8a688976ae56170e4d175b"
+    def readWithGenesisId(id: String): ErgoSettings = ErgoSettingsReader.fromConfig(
+      ConfigFactory.parseString(s"""ergo.chain.genesisId = "$id"""").withFallback(ConfigFactory.load()))
+
+    readWithGenesisId(mainnetGenesisId).chainSettings.genesisId shouldBe Some(mainnetGenesisId)
+
+    val malformedIds = Seq("", mainnetGenesisId.toUpperCase, mainnetGenesisId.dropRight(1), mainnetGenesisId + "0",
+      mainnetGenesisId.dropRight(1) + "g")
+    malformedIds.foreach { id =>
+      val error = the[Error] thrownBy readWithGenesisId(id)
+      error.getMessage should include(s"genesisId = '$id'")
+    }
+  }
+
 }

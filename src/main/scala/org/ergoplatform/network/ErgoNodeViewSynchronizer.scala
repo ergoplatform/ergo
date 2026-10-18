@@ -149,6 +149,24 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private var lastCheckForModifiersToDownload: Long = 0L
 
+  // Header and sections of blocks this node mined and has not applied yet (at most the last 4): a mined block is
+  // announced before the node view holder applies it, so a peer's request can arrive before history has it
+  private val MinedBlocksToServe = 4
+  private var minedToServe: Vector[MinedBlock] = Vector.empty
+
+  private def minedModifier(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] =
+    minedToServe.collectFirst { case block if block.toServe.contains(id) => block.toServe(id) }
+
+  // a mined block is served from here until it is applied, or dropped if its header or a section turned out invalid,
+  // also one history already holds
+  private def dropMinedContaining(id: ModifierId): Unit =
+    minedToServe = minedToServe.filterNot(_.blockIds.contains(id))
+
+  // history serves a header or section from the moment it holds it, also when the block does not become the best one
+  // (no LocalBlockApplied then); an id history never receives waits for the drops above or for 4 newer mined blocks
+  private def dropMinedHeld(id: ModifierId): Unit =
+    minedToServe = minedToServe.map(block => block.copy(toServe = block.toServe - id)).filter(_.toServe.nonEmpty)
+
   /**
     * How many block sections stored in processing queue, imprecise number as updated only when
     * this actor is getting data from view holder actor
@@ -1230,16 +1248,23 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
           }
         case expectedTypeId: NetworkObjectTypeId.Value =>
-          invData.ids.flatMap { id =>
-            hr.modifierTypeAndBytesById(id).flatMap { case (mTypeId, bytes) =>
-              if (mTypeId == expectedTypeId) {
-                Some(id -> bytes)
-              } else {
-                log.debug(s"Improper type for asked modifier id: $id")
-                None
-              }
+          val found = invData.ids.flatMap { id =>
+            minedModifier(id).map(true -> _).orElse(hr.modifierTypeAndBytesById(id).map(false -> _)).flatMap {
+              case (fromMinedMemory, (mTypeId, bytes)) =>
+                if (mTypeId == expectedTypeId) {
+                  Some((id, bytes, fromMinedMemory))
+                } else {
+                  log.debug(s"Improper type for asked modifier id: $id")
+                  None
+                }
             }
           }
+          val servedFromMemory = found.count { case (_, _, fromMinedMemory) => fromMinedMemory }
+          if (servedFromMemory > 0) {
+            log.info(s"Served $servedFromMemory of ${invData.ids.length} requested ids of type $expectedTypeId " +
+                     s"from mined-block memory to $remote")
+          }
+          found.map { case (id, bytes, _) => id -> bytes }
       }
 
       log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
@@ -1520,7 +1545,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       * propagation latency. LocalBlockApplied arrives later and skips broadcast
       * since the block was already announced.
       */
-    case NewBlockMined(header) =>
+    case NewBlockMined(header, sections) =>
       log.info(
         s"Immediately announcing newly mined block ${header.encodedId} " +
         s"at height ${header.height} to all peers"
@@ -1529,9 +1554,15 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       header.sectionIds.foreach { case (mtId, id) =>
         broadcastModifierInv(mtId, id)
       }
+      // serialized after the announcement, so it does not delay it; a request for the block is a later message to
+      // this actor, so it finds the copy in place
+      val served = (header +: sections).map(m => m.id -> (m.modifierTypeId -> m.bytes)).toMap
+      minedToServe = (minedToServe :+ MinedBlock(served.keySet, served)).takeRight(MinedBlocksToServe)
 
     // Locally mined block applied - skip broadcast (already done via NewBlockMined)
     case LocalBlockApplied(header, _) =>
+      // applied: history serves it from now on (#2414)
+      dropMinedContaining(header.id)
       log.debug(
         s"Local block applied at height ${header.height}, " +
         s"header id: ${header.encodedId}, skipping broadcast"
@@ -1589,6 +1620,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       addDeclined(id)
 
     case SyntacticallySuccessfulModifier(modTypeId, modId) =>
+      dropMinedHeld(modId)
       deliveryTracker.setHeld(modId, modTypeId)
 
     case RecoverableFailedModification(modTypeId, modId, e) =>
@@ -1613,10 +1645,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
     case SyntacticallyFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Invalidating syntactically failed modifier $modId", e)
+      dropMinedContaining(modId)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case SemanticallyFailedModification(modTypeId, modId, e) =>
       logger.debug(s"Invalidating semantically failed modifier $modId", e)
+      dropMinedContaining(modId)
       deliveryTracker.setInvalid(modId, modTypeId).foreach(penalizeMisbehavingPeer)
 
     case ChangedHistory(newHistoryReader: ErgoHistory) =>
@@ -1824,6 +1858,15 @@ object ErgoNodeViewSynchronizer {
   object IncomingTxInfo {
     def empty(): IncomingTxInfo = IncomingTxInfo(0, 0, 0)
   }
+
+  /**
+    * A block this node mined, kept to serve its parts to peers until history holds them.
+    *
+    * @param blockIds - ids of the header and all sections, so the whole block is dropped when any part turns out invalid
+    * @param toServe  - the parts history does not hold yet, by id, with their type and bytes
+    */
+  private case class MinedBlock(blockIds: Set[ModifierId],
+                                toServe: Map[ModifierId, (NetworkObjectTypeId.Value, Array[Byte])])
 
   /**
     * Transaction bytes and source peer to be recorded in a cache and processed later

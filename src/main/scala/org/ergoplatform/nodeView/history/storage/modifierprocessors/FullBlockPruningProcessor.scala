@@ -76,8 +76,13 @@ trait FullBlockPruningProcessor extends MinimalFullBlockHeightFunctions {
         h
       }
     }
-    if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     writeMinimalFullBlockHeight(minimalFullBlockHeight)
+    val persistedHeight = readMinimalFullBlockHeight()
+    if (persistedHeight != minimalFullBlockHeight) {
+      throw new IllegalStateException(
+        s"Minimal full block height $minimalFullBlockHeight was not persisted (found $persistedHeight)")
+    }
+    if (!isHeadersChainSynced) isHeadersChainSyncedVar = true
     minimalFullBlockHeight
   }
 

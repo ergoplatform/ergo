@@ -8,6 +8,7 @@ import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfiguration
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
+import scala.util.{Failure, Success, Try}
 
 /**
   * Trait that calculates next modifiers we should download to synchronize our full chain with headers chain
@@ -116,8 +117,13 @@ trait ToDownloadProcessor
       requiredModifiersForHeader(header)
     } else if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       // Headers chain is synced after this header. Start downloading full blocks
-      updateBestFullBlock(header)
-      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+      Try(updateBestFullBlock(header)) match {
+        case Success(_) =>
+          log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+        case Failure(error) =>
+          log.warn(s"Could not persist full-block download floor after header ${header.encodedId}; " +
+            "will retry on the next fresh header", error)
+      }
       Nil
     } else {
       Nil

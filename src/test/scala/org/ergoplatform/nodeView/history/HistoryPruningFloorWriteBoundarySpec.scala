@@ -18,7 +18,7 @@ class HistoryPruningFloorWriteBoundarySpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants.initSettings
   import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 
-  property("a failed floor write cannot advance cleanup past the persisted floor") {
+  property("a failed floor write keeps the recorded full block applicable and defers cleanup") {
     val root = Files.createTempDirectory("history-pruning-floor-write-failure")
     val testSettings = initSettings.copy(
       directory = root.toString,
@@ -78,8 +78,14 @@ class HistoryPruningFloorWriteBoundarySpec extends ErgoCorePropertyTest {
       history.append(generated(8).header).get
       history.append(generated(8).blockTransactions).get
       failNextFloorWrite = true
-      history.append(generated(8).extension).get
+      val appendResult = history.append(generated(8).extension)
+      appendResult.isSuccess shouldBe true
+      val (afterAppend, progressInfo) = appendResult.get
       failedFloorWrites shouldBe 1
+      afterAppend.bestFullBlockIdOpt shouldBe Some(generated(8).id)
+      progressInfo.toApply.exists(_.id == generated(8).id) shouldBe true
+      afterAppend.minimalFullBlockHeight shouldBe 4
+      afterAppend.readPrunedHeight() shouldBe 4
       generated
     } finally history.closeStorage()
 

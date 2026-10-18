@@ -8,7 +8,7 @@ import java.nio.file.attribute.{BasicFileAttributes, PosixFileAttributeView}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{ActorSystem, Props, Status}
 import akka.testkit.TestProbe
 
 import org.ergoplatform.{ErgoBox, P2PKAddress}
@@ -1119,9 +1119,83 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
         }
         initCalls.get() shouldBe 1
         otherCalls.get() shouldBe 0
+        probe.send(actor, AddScan(ScanRequest("uncertain scan",
+          EqualsScanningPredicate(ErgoBox.R0, LongConstant(1)),
+          Some(ScanWalletInteraction.Off), Some(true))))
+        probe.expectMsgType[AddScanResponse](5.seconds).response.isFailure shouldBe true
+        probe.send(actor, AddBox(ErgoNodeTestConstants.genesisBoxes.head, Set(PaymentsScanId)))
+        probe.expectMsgType[AddBoxResponse](5.seconds).status.isFailure shouldBe true
+        probe.send(actor, CheckSeed(SecretString.create("unused seed"), None))
+        probe.expectMsgType[Status.Failure](5.seconds).cause shouldBe error
+        probe.send(actor, ReadScans)
+        probe.expectMsgType[Status.Failure](5.seconds).cause shouldBe error
+        probe.send(actor, ScanInThePast(0, rescan = false))
+        probe.send(actor, GetWalletStatus)
+        probe.expectMsgType[WalletStatus](5.seconds).error shouldBe Some(error.getMessage)
       } finally {
         probe.send(actor, CloseWallet)
         probe.expectTerminated(actor, 5.seconds)
+        Await.result(system.terminate(), 10.seconds)
+      }
+    }
+  }
+
+  property("an uncertain published generation quarantines the actor until a cold reopen") {
+    withSettings { configured =>
+      import ErgoWalletActorMessages._
+      val settings = configured.copy(nodeSettings = configured.nodeSettings.copy(blocksToKeep = -1,
+        utxoSettings = configured.nodeSettings.utxoSettings.copy(utxoBootstrap = false)))
+      val fault = new IOException("descriptor move returned an uncertain result")
+      val service = new ErgoWalletServiceImpl(settings) {
+        override private[wallet] val walletInitialization: WalletInitialization = new WalletInitialization {
+          private var moveAttempted = false
+
+          override protected def moveDescriptor(staging: Path, target: Path): Unit = {
+            super.moveDescriptor(staging, target)
+            moveAttempted = true
+            throw fault
+          }
+
+          override protected def readDescriptor(path: Path): Array[Byte] =
+            if (moveAttempted) throw new IOException("descriptor readback unavailable")
+            else super.readDescriptor(path)
+        }
+      }
+      val system = ActorSystem("wallet-uncertain-published-generation")
+      val probe = TestProbe()(system)
+      val actor = system.actorOf(Props(new ErgoWalletActor(settings, parameters, service, null, null)))
+      probe.watch(actor)
+      try {
+        WalletInitialization.selected(settings) shouldBe None
+        probe.send(actor, InitWallet(password, None))
+        val uncertain = probe.expectMsgType[Failure[_]](10.seconds).exception
+        uncertain shouldBe a[WalletInitialization.OutcomeUnknown]
+        uncertain.getCause shouldBe fault
+        WalletInitialization.selected(settings).isDefined shouldBe true
+
+        probe.send(actor, AddScan(ScanRequest("must not enter old storage",
+          EqualsScanningPredicate(ErgoBox.R0, LongConstant(1)),
+          Some(ScanWalletInteraction.Off), Some(true))))
+        probe.expectMsgType[AddScanResponse](5.seconds).response.isFailure shouldBe true
+        probe.send(actor, ScanInThePast(0, rescan = false))
+        probe.send(actor, GetWalletStatus)
+        probe.expectMsgType[WalletStatus](5.seconds).error shouldBe Some(uncertain.getMessage)
+      } finally {
+        probe.send(actor, CloseWallet)
+        probe.expectTerminated(actor, 5.seconds)
+      }
+
+      val reopened = system.actorOf(Props(new ErgoWalletActor(
+        settings, parameters, new ErgoWalletServiceImpl(settings), null, null)))
+      probe.watch(reopened)
+      try {
+        probe.send(reopened, GetWalletStatus)
+        probe.expectMsgType[WalletStatus](10.seconds).initialized shouldBe true
+        probe.send(reopened, ReadScans)
+        probe.expectMsgType[ReadScansResponse](5.seconds).apps.isEmpty shouldBe true
+      } finally {
+        probe.send(reopened, CloseWallet)
+        probe.expectTerminated(reopened, 5.seconds)
         Await.result(system.terminate(), 10.seconds)
       }
     }

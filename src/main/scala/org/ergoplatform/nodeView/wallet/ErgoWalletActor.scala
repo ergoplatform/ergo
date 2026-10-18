@@ -8,7 +8,7 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.{CurrentView, ReceivableMessages}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.modifiers.ErgoFullBlock
-import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContextSerializer, ErgoStateReader}
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
@@ -45,8 +45,6 @@ class ErgoWalletActor(settings: ErgoSettings,
   import ErgoWalletActor._
 
   private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
-
-  private var initializationOutcomeUnknown: Option[Throwable] = None
 
   private case class ReplayRescan(height: Int)
 
@@ -417,26 +415,60 @@ class ErgoWalletActor(settings: ErgoSettings,
       stash()
   }
 
-  private def loadedWallet(state: ErgoWalletState): Receive = {
-    case _: AppliedTipReply | _: AppliedTipTimeout => // Ignore replies from an abandoned rescan.
+  private def quarantinedWallet(state: ErgoWalletState, error: Throwable): Receive = {
+    case GetWalletStatus =>
+      sender() ! WalletStatus(initialized = false, unlocked = false, changeAddress = None,
+        height = EmptyHistoryHeight, error = Some(error.getMessage))
 
-    case InitWallet(walletPass, mnemonicPassOpt) if initializationOutcomeUnknown.isDefined =>
+    case CloseWallet =>
+      Try(state.storage.close()).failed.foreach(closeError =>
+        log.warn("Could not close uncertain wallet storage", closeError))
+      Try(state.registry.close()).failed.foreach(closeError =>
+        log.warn("Could not close uncertain wallet registry", closeError))
+      context.stop(self)
+
+    case InitWallet(walletPass, mnemonicPassOpt) =>
       walletPass.erase()
       mnemonicPassOpt.foreach(_.erase())
-      sender() ! Failure(initializationOutcomeUnknown.get)
+      sender() ! Failure(error)
 
-    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, _) if initializationOutcomeUnknown.isDefined =>
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, _) =>
       mnemonic.erase()
       mnemonicPassOpt.foreach(_.erase())
       walletPass.erase()
-      sender() ! Failure(initializationOutcomeUnknown.get)
+      sender() ! Failure(error)
 
-    case UnlockWallet(walletPass) if initializationOutcomeUnknown.isDefined =>
+    case UnlockWallet(walletPass) =>
       walletPass.erase()
-      sender() ! Failure(initializationOutcomeUnknown.get)
+      sender() ! Failure(error)
 
-    case _: RescanWallet if initializationOutcomeUnknown.isDefined =>
-      sender() ! Failure(initializationOutcomeUnknown.get)
+    case CheckSeed(mnemonic, passOpt) =>
+      mnemonic.erase()
+      passOpt.foreach(_.erase())
+      sender() ! Status.Failure(error)
+
+    case _: AddScan => sender() ! AddScanResponse(Failure(error))
+    case _: RemoveScan => sender() ! RemoveScanResponse(Failure(error))
+    case _: AddBox => sender() ! AddBoxResponse(Failure(error))
+    case _: StopTracking => sender() ! StopTrackingResponse(Failure(error))
+    case _: GenerateCommitmentsFor => sender() ! GenerateCommitmentsResponse(Failure(error))
+    case _: CollectWalletBoxes => sender() ! ReqBoxesResponse(Failure(error))
+    case DeriveNextKey => sender() ! DeriveNextKeyResult(Failure(error))
+    case _: UpdateChangeAddress => sender() ! StatusReply.error(error)
+    case GetFirstSecret => sender() ! FirstSecretResponse(Failure(error))
+    case _: RescanWallet | _: DeriveKey | _: GenerateTransaction | _: SignTransaction =>
+      sender() ! Failure(error)
+
+    case _: AppliedTipReply | _: AppliedTipTimeout | _: ReadWallet |
+         _: ChangedState | _: ChangedMempool | _: ScanOffChain |
+         _: ScanOnChain | _: ScanInThePast | _: Rollback | LockWallet =>
+      () // The selected descriptor cannot be safely reconciled with this state.
+
+    case _ => sender() ! Status.Failure(error)
+  }
+
+  private def loadedWallet(state: ErgoWalletState): Receive = {
+    case _: AppliedTipReply | _: AppliedTipTimeout => // Ignore replies from an abandoned rescan.
 
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
@@ -732,8 +764,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val isUnlocked = state.walletVars.proverOpt.isDefined
       val changeAddress = state.getChangeAddress(ergoAddressEncoder)
       val height = state.getWalletHeight
-      val lastError = initializationOutcomeUnknown.map(_.getMessage).orElse(state.error)
-      val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, lastError)
+      val status = WalletStatus(isSecretSet, isUnlocked, changeAddress, height, state.error)
       sender() ! status
 
     case GenerateTransaction(requests, inputsRaw, dataInputsRaw, sign) =>
@@ -869,8 +900,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def rememberInitializationFailure(state: ErgoWalletState, error: Throwable): Unit = error match {
     case _: WalletInitialization.OutcomeUnknown =>
-      initializationOutcomeUnknown = Some(error)
-      context.become(loadedWallet(state.copy(error = Some(error.getMessage))))
+      context.become(quarantinedWallet(state, error))
     case _ =>
   }
 

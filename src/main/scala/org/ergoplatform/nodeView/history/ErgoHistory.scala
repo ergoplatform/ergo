@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 
 import java.io.File
 import java.nio.{ByteBuffer, ByteOrder}
@@ -241,7 +241,7 @@ trait ErgoHistory
     * @return
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = typedModifierById[Header](headerId)
+    val hOpt = historyStorage.modifierById(headerId).collect { case h: Header if h.id == headerId => h }
       val hRes = historyStorage.remove(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
@@ -249,7 +249,7 @@ trait ErgoHistory
     log.info(s"Result of removing header $headerId: " + hRes)
 
     hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
+      h.sectionIds.foreach { case (_, mId) =>
         val mRes = historyStorage.remove(
           indicesToRemove = Array(validityKey(mId)),
           idsToRemove = Array(mId)
@@ -274,16 +274,27 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  // check if there is possible database corruption when there is header after
-  // recognized blockchain tip marked as invalid
+  // A retained alternative fork may continue above the selected full-block tip.
+  // Keep a continuation only when it has a readable, matching header and is not invalid.
   protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
-      log.warn("Found suspicious continuation, clearing it...")
-      afterHeaders.map { hId =>
+    val removableContinuations = afterHeaders.nonEmpty && afterHeaders.forall { id =>
+      history.isSemanticallyValid(id) match {
+        case ModifierSemanticValidity.Invalid => true
+        case _ => !history.historyStorage.modifierById(id).exists {
+          case header: Header => header.id == id
+          case _ => false
+        }
+      }
+    }
+
+    if (bestHeaderHeight == bestFullBlockHeight && removableContinuations) {
+      log.warn("Found invalid or unreadable continuation, clearing it...")
+      // Iterator.toSeq is a lazy Stream on Scala 2.12; force every deletion before dropping the row.
+      afterHeaders.foreach { hId =>
         history.forgetHeader(hId)
       }
       history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])

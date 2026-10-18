@@ -5,6 +5,7 @@ import akka.testkit.TestProbe
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedOrderingBlock}
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoSyncInfoMessageSpec}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.{StateType, UtxoState}
@@ -24,8 +25,8 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 
 /**
-  * Tests for ordering block synchronization logic added in commit b35b5c9:
-  * - FullBlockApplied is published after LocallyGeneratedOrderingBlock
+  * Tests for ordering block synchronization logic from commit b35b5c9, and later fixes:
+  * - No FullBlockApplied if a locally generated ordering block is not applied
   * - Ordering blocks are only sent to nearly synced peers (within 2 blocks)
   *
   * Note: The tests verify the behavior as implemented in the commit.
@@ -115,7 +116,7 @@ class OrderingBlockSyncSpec extends AnyPropSpec
     val (synchronizer, nodeViewHolder, peer, pchProbe, ncProbe, eventListener, deliveryTracker, syncTracker) = nodeViewSynchronizer
   }
 
-  property("publish FullBlockApplied after LocallyGeneratedOrderingBlock") {
+  property("no FullBlockApplied if a locally generated ordering block is not applied") {
     withFixture { fixture =>
       import fixture._
 
@@ -137,19 +138,17 @@ class OrderingBlockSyncSpec extends AnyPropSpec
       val wrappedState = wrappedUtxoStateGen.sample.get
       val nextBlock = validFullBlock(fullChain.lastOption, wrappedState)
 
-      val expectedHeaderId = nextBlock.header.id
-      
       // Send locally generated ordering block to the node view holder (not the synchronizer)
-      // The node view holder processes it and publishes FullBlockApplied
+      // The node view holder does not have the parent of the block, so it cannot apply it
       nodeViewHolder ! LocallyGeneratedOrderingBlock(nextBlock, Seq.empty)
 
-      // Verify FullBlockApplied is published (any header)
-      // Note: This tests that the fix in ErgoNodeViewHolder.scala publishes FullBlockApplied
-      // after processing LocallyGeneratedOrderingBlock
-      val fullBlockAppliedMsg = eventListener.expectMsgClass(15.seconds, classOf[FullBlockApplied])
-      
-      // Verify the header ID matches
-      fullBlockAppliedMsg.header.id shouldBe expectedHeaderId
+      // The node view holder handles messages in order,
+      // so after this reply it has handled the block
+      val viewProbe = TestProbe()
+      viewProbe.send(nodeViewHolder, GetDataFromCurrentView[UtxoState, Unit](_ => ()))
+      viewProbe.expectMsg(15.seconds, ())
+
+      eventListener.expectNoMessage(100.millis)
     }
   }
 

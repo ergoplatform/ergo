@@ -1223,14 +1223,17 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       nodeViewHolderRef ! LocallyGeneratedOrderingBlock(nextBlock, Seq.empty)
 
       // Wait for FullBlockApplied
-      val fba = fullBlockProbe.fishForMessage(5.seconds) {
-        case _: FullBlockApplied => true
-        case _ => false
-      }.asInstanceOf[FullBlockApplied]
-      fba.header.id shouldBe nextBlock.header.id
+      fullBlockProbe.expectMsg(
+        5.seconds,
+        LocalBlockApplied(nextBlock.header, nextBlock.transactions.map(_.id))
+      )
 
       // Block should be the new best
       getBestHeaderOpt shouldBe Some(nextBlock.header)
+
+      // getBestHeaderOpt asks the node view holder, so it has handled the block by now:
+      // a second FullBlockApplied would already be in the queue
+      fullBlockProbe.expectNoMessage(100.millis)
     }
   }
 

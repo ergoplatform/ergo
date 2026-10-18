@@ -240,7 +240,22 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
                     limit: Int,
                     sortDir: Direction,
                     unconfirmed: Boolean,
-                    spentBoxesIdsInMempool: Set[ModifierId]): Seq[IndexedErgoBox] = {
+                    spentBoxesIdsInMempool: Set[ModifierId]): Seq[IndexedErgoBox] =
+    retrieveUtxosWithPreparedMempool(history,
+      prepareUnconfirmedBoxes(mempool), offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
+
+  /** Filter mempool outputs for this index without reading history or extra-index rows. */
+  def prepareUnconfirmedBoxes(mempool: ErgoMemPoolReader): Seq[ErgoBox] =
+    filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
+
+  /** Read confirmed rows and merge the supplied, already filtered mempool outputs. */
+  def retrieveUtxosWithPreparedMempool(history: ErgoHistoryReader,
+                                       mempoolBoxes: => Seq[ErgoBox],
+                                       offset: Int,
+                                       limit: Int,
+                                       sortDir: Direction,
+                                       unconfirmed: Boolean,
+                                       spentBoxesIdsInMempool: Set[ModifierId]): Seq[IndexedErgoBox] = {
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
     val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
       case DESC =>
@@ -264,7 +279,6 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
         data.slice(offset, offset + limit)
     }
     if (unconfirmed) {
-      val mempoolBoxes = filterMempool(mempool.getAll.flatMap(_.transaction.outputs))
       val unconfirmedBoxes = mempoolBoxes.map(new IndexedErgoBox(0, None, None, None, _, 0)).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
       sortDir match {
         case DESC => unconfirmedBoxes ++ confirmedBoxes

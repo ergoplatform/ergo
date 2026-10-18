@@ -1,25 +1,39 @@
 package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, Props}
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.http.api.BlockchainApiRoute
+import org.ergoplatform.mining.AutolykosPowScheme
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
-import org.ergoplatform.nodeView.history.ErgoHistory
+import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{DigestIndexProvenanceBytes, IndexModeProvenanceKey,
   IndexedHeaderIdKey, IndexedHeightKey, RollbackToKey}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentThreshold
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.mempool.{ErgoMemPool, ErgoMemPoolReader}
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, ErgoStateReader, StateType}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.nio.ByteBuffer
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import org.ergoplatform.ErgoBox.BoxId
 import scorex.crypto.authds.ADDigest
 import scorex.util.{ModifierId, bytesToId}
+
+import scala.util.Try
 
 class BlockchainExtraIndexGateSpec
   extends AnyFlatSpec
@@ -379,5 +393,362 @@ class BlockchainExtraIndexGateSpec
         header("Retry-After").map(_.value()) shouldBe Some("1")
       }
     } finally system.stop(switchingReaders)
+  }
+
+  private def checkBoxRowAtRead(startRollbackOnRowRead: Boolean,
+                                expectedStatus: StatusCode,
+                                expectedRetryAfter: Option[String],
+                                byIndex: Boolean = false): Unit = {
+    val box = chain.last.blockTransactions.txs.head.outputs.head
+    val indexedBox = new IndexedErgoBox(chain.last.header.height, None, None, None, box, 1L)
+    val numericBoxIndex = NumericBoxIndex(1L, indexedBox.id)
+    val originalStorage = history.historyStorage
+    ExtraIndexer.getIndex(IndexedHeightKey, history).getInt shouldBe 0
+    ExtraIndexer.getIndex(RollbackToKey, history).getInt shouldBe 0
+
+    val rowReads = new AtomicInteger(0)
+    val numericReads = new AtomicInteger(0)
+    val controlledHistory = new ErgoHistoryReader {
+      override protected[history] val historyStorage: HistoryStorage =
+        new HistoryStorage(null, null, null, null) {
+          override def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+            originalStorage.modifierBytesById(id)
+
+          override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
+            if (byIndex && id == numericBoxIndex.id) {
+              numericReads.incrementAndGet()
+              Some(numericBoxIndex)
+            } else if (id == indexedBox.id) {
+              rowReads.incrementAndGet()
+              if (startRollbackOnRowRead) {
+                originalStorage.insertExtraTry(
+                  Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(1).array), Array.empty
+                ).get
+              }
+              Some(indexedBox)
+            } else {
+              None
+            }
+          }
+        }
+      override protected val settings: ErgoSettings = indexedSettings
+      override protected def requireProofs: Boolean = false
+      override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] =
+        throw new UnsupportedOperationException("Read-only route fixture")
+      override protected def validate(m: NonHeaderBlockSection): Try[Unit] =
+        throw new UnsupportedOperationException("Read-only route fixture")
+      override val powScheme: AutolykosPowScheme = indexedSettings.chainSettings.powScheme
+    }
+    val controlledReaders = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetDataFromHistory(f) => sender() ! f(controlledHistory)
+      }
+    }))
+    val controlledRoute = BlockchainApiRoute(controlledReaders,
+      indexedSettings.copy(nodeSettings = indexedSettings.nodeSettings.copy(stateType = StateType.Utxo)), None).route
+
+    try {
+      val path = if (byIndex) "/blockchain/box/byIndex/1" else "/blockchain/box/byId/" + indexedBox.id
+      Get(path) ~> controlledRoute ~> check {
+        numericReads.get() shouldBe (if (byIndex) 1 else 0)
+        rowReads.get() shouldBe 1
+        ExtraIndexer.getIndex(RollbackToKey, history).getInt shouldBe (if (startRollbackOnRowRead) 1 else 0)
+        status shouldBe expectedStatus
+        header("Retry-After").map(_.value()) shouldBe expectedRetryAfter
+        if (!startRollbackOnRowRead) {
+          response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict]
+            .data.utf8String should include("\"globalIndex\"")
+        }
+      }
+    } finally {
+      originalStorage.insertExtraTry(
+        Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+      ).get
+      system.stop(controlledReaders)
+    }
+  }
+
+  it should "serve an indexed box row when rollback does not start after the history check" in {
+    checkBoxRowAtRead(false, StatusCodes.OK, None)
+  }
+
+  it should "withhold an indexed box row if rollback starts after the history check" in {
+    checkBoxRowAtRead(true, StatusCodes.ServiceUnavailable, Some("1"))
+  }
+
+  it should "serve an indexed box by index when rollback does not start after the history check" in {
+    checkBoxRowAtRead(false, StatusCodes.OK, None, byIndex = true)
+  }
+
+  it should "withhold an indexed box by index if rollback starts on its box row" in {
+    checkBoxRowAtRead(true, StatusCodes.ServiceUnavailable, Some("1"), byIndex = true)
+  }
+
+  private def checkTokenRowAtRead(startRollbackOnRowRead: Boolean,
+                                  expectedStatus: StatusCode,
+                                  expectedRetryAfter: Option[String]): Unit = {
+    val box = chain.last.blockTransactions.txs.head.outputs.head
+    val tokenId = bytesToId(chain.last.blockTransactions.txs.head.inputs.head.boxId)
+    val indexedToken = IndexedToken(tokenId, Some(bytesToId(box.id)), Some(1L),
+      Some("gate-token"), Some("row-read"), Some(0))
+    val originalStorage = history.historyStorage
+    ExtraIndexer.getIndex(IndexedHeightKey, history).getInt shouldBe 0
+    ExtraIndexer.getIndex(RollbackToKey, history).getInt shouldBe 0
+
+    val rowReads = new AtomicInteger(0)
+    val controlledHistory = new ErgoHistoryReader {
+      override protected[history] val historyStorage: HistoryStorage =
+        new HistoryStorage(null, null, null, null) {
+          override def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+            originalStorage.modifierBytesById(id)
+
+          override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
+            if (id == indexedToken.id) {
+              rowReads.incrementAndGet()
+              if (startRollbackOnRowRead) {
+                originalStorage.insertExtraTry(
+                  Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(1).array), Array.empty
+                ).get
+              }
+              Some(indexedToken)
+            } else {
+              None
+            }
+          }
+        }
+      override protected val settings: ErgoSettings = indexedSettings
+      override protected def requireProofs: Boolean = false
+      override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] =
+        throw new UnsupportedOperationException("Read-only route fixture")
+      override protected def validate(m: NonHeaderBlockSection): Try[Unit] =
+        throw new UnsupportedOperationException("Read-only route fixture")
+      override val powScheme: AutolykosPowScheme = indexedSettings.chainSettings.powScheme
+    }
+    val controlledReaders = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetDataFromHistory(f) => sender() ! f(controlledHistory)
+      }
+    }))
+    val controlledRoute = BlockchainApiRoute(controlledReaders,
+      indexedSettings.copy(nodeSettings = indexedSettings.nodeSettings.copy(stateType = StateType.Utxo)), None).route
+
+    try {
+      Get("/blockchain/token/byId/" + tokenId) ~> controlledRoute ~> check {
+        rowReads.get() shouldBe 1
+        ExtraIndexer.getIndex(RollbackToKey, history).getInt shouldBe (if (startRollbackOnRowRead) 1 else 0)
+        status shouldBe expectedStatus
+        header("Retry-After").map(_.value()) shouldBe expectedRetryAfter
+        if (!startRollbackOnRowRead) {
+          val body = response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict]
+            .data.utf8String
+          body should include(tokenId)
+          body should include("gate-token")
+        }
+      }
+    } finally {
+      originalStorage.insertExtraTry(
+        Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+      ).get
+      system.stop(controlledReaders)
+    }
+  }
+
+  it should "serve an indexed token row when rollback does not start after the history check" in {
+    checkTokenRowAtRead(false, StatusCodes.OK, None)
+  }
+
+  it should "withhold an indexed token row if rollback starts on its row" in {
+    checkTokenRowAtRead(true, StatusCodes.ServiceUnavailable, Some("1"))
+  }
+
+  it should "serve an empty unspent token page with a certified Digest reader" in {
+    Get("/blockchain/box/unspent/byTokenId/" + ("00" * 32)) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      header("Retry-After") shouldBe None
+      response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict]
+        .data.utf8String.replaceAll("\\s", "") shouldBe "[]"
+    }
+  }
+
+  it should "resolve the segment threshold before holding the extra-index read lock" in {
+    val storage = history.historyStorage
+    val enteredThreshold = new CountDownLatch(1)
+    val finishedWrite = new CountDownLatch(1)
+    val failure = new AtomicReference[Throwable]()
+    storage.insertExtraTry(
+      Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+    ).get
+    val thresholdActor = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetSegmentThreshold =>
+          enteredThreshold.countDown()
+          if (!finishedWrite.await(2, TimeUnit.SECONDS))
+            throw new IllegalStateException("Extra-index write waited for the segment threshold")
+          sender() ! 1
+      }
+    }))
+    val writer = new Thread(new Runnable {
+      override def run(): Unit = try {
+        if (!enteredThreshold.await(2, TimeUnit.SECONDS))
+          throw new IllegalStateException("Route did not request the segment threshold")
+        storage.insertExtraTry(
+          Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+        ).get
+      } catch {
+        case error: Throwable => failure.compareAndSet(null, error); ()
+      } finally finishedWrite.countDown()
+    })
+    writer.setDaemon(true)
+    writer.start()
+    try {
+      Get("/blockchain/box/byTokenId/" + ("00" * 32)) ~>
+        BlockchainApiRoute(certifiedReadersRef, indexedSettings, Some(thresholdActor)).route ~> check {
+          status shouldBe StatusCodes.OK
+          header("Retry-After") shouldBe None
+        }
+      enteredThreshold.getCount shouldBe 0L
+      finishedWrite.getCount shouldBe 0L
+      failure.get() shouldBe null
+    } finally {
+      writer.join(10000)
+      system.stop(thresholdActor)
+      if (!writer.isAlive) storage.insertExtraTry(
+        Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+      ).get
+    }
+    writer.isAlive shouldBe false
+  }
+
+  it should "let an extra-index write finish while an unspent request reads the mempool" in {
+    val storage = history.historyStorage
+    val transaction = chain.last.blockTransactions.txs.head
+    val box = transaction.outputs.head
+    val templateHash = IndexedContractTemplateSerializer.hashTreeTemplate(box.ergoTree)
+    val testPool = ErgoMemPool.empty(settings).put(UnconfirmedTransaction(transaction, None))
+    val enteredMempool = new CountDownLatch(1)
+    val finishedWrite = new CountDownLatch(1)
+    val failure = new AtomicReference[Throwable]()
+    storage.insertExtraTry(
+      Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+    ).get
+    val blockingMempool = new ErgoMemPoolReader {
+      override def contains(id: ModifierId): Boolean = testPool.contains(id)
+      override def modifierById(id: ModifierId): Option[ErgoTransaction] = testPool.modifierById(id)
+      override def unconfirmedById(id: ModifierId): Option[UnconfirmedTransaction] = testPool.unconfirmedById(id)
+      override def getAll(ids: Seq[ModifierId]): Seq[UnconfirmedTransaction] = testPool.getAll(ids)
+      override def getAll: Seq[UnconfirmedTransaction] = testPool.getAll
+      override def getAllPrioritized: Seq[UnconfirmedTransaction] = testPool.getAllPrioritized
+      override def size: Int = testPool.size
+      override def take(limit: Int): Iterable[UnconfirmedTransaction] = testPool.take(limit)
+      override def random(limit: Int): Iterable[UnconfirmedTransaction] = testPool.random(limit)
+      override def weightedTransactionIds(limit: Int): Seq[WeightedTxId] = testPool.weightedTransactionIds(limit)
+      override def getExpectedWaitTime(fee: Long, size: Int): Long = testPool.getExpectedWaitTime(fee, size)
+      override def getRecommendedFee(minutes: Int, size: Int): Long = testPool.getRecommendedFee(minutes, size)
+      override def spentInputs: Iterator[BoxId] = {
+        enteredMempool.countDown()
+        if (!finishedWrite.await(10, TimeUnit.SECONDS))
+          throw new IllegalStateException("Extra-index write waited for the mempool read")
+        testPool.spentInputs
+      }
+    }
+    val controlledReaders = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetReaders => sender() ! readersWithFrontier(Some(chain.last.id)).copy(m = blockingMempool)
+      }
+    }))
+    val controlledRoute = BlockchainApiRoute(controlledReaders, indexedSettings, None).route
+    val writer = new Thread(new Runnable {
+      override def run(): Unit = try {
+        if (!enteredMempool.await(10, TimeUnit.SECONDS))
+          throw new IllegalStateException("Unspent request did not read the mempool")
+        storage.insertExtraTry(
+          Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+        ).get
+      } catch {
+        case error: Throwable => failure.compareAndSet(null, error); ()
+      } finally finishedWrite.countDown()
+    })
+    writer.setDaemon(true)
+    writer.start()
+    try {
+      Get("/blockchain/box/unspent/byTemplateHash/" + templateHash +
+        "?includeUnconfirmed=true&excludeMempoolSpent=true") ~>
+        controlledRoute ~> check {
+          status shouldBe StatusCodes.OK
+          response.entity.asInstanceOf[akka.http.scaladsl.model.HttpEntity.Strict]
+            .data.utf8String should include(bytesToId(box.id))
+        }
+      enteredMempool.getCount shouldBe 0L
+      finishedWrite.getCount shouldBe 0L
+      failure.get() shouldBe null
+    } finally {
+      writer.join(10000)
+      system.stop(controlledReaders)
+      if (!writer.isAlive) storage.insertExtraTry(
+        Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+      ).get
+    }
+    writer.isAlive shouldBe false
+  }
+
+  it should "hold a same-storage rollback marker write until an extra-index read finishes" in {
+    val storage = history.historyStorage
+    val enteredRead = new CountDownLatch(1)
+    val releaseRead = new CountDownLatch(1)
+    val startedWrite = new CountDownLatch(1)
+    val finishedWrite = new CountDownLatch(1)
+    val failure = new AtomicReference[Throwable]()
+    storage.insertExtraTry(
+      Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+    ).get
+
+    val reader = new Thread(new Runnable {
+      override def run(): Unit = try {
+        storage.withExtraIndexReadLock {
+          enteredRead.countDown()
+          if (!releaseRead.await(10, TimeUnit.SECONDS))
+            throw new IllegalStateException("Timed out holding the extra-index read lock")
+        }
+      } catch {
+        case error: Throwable => failure.compareAndSet(null, error); ()
+      }
+    })
+    val writer = new Thread(new Runnable {
+      override def run(): Unit = try {
+        if (!enteredRead.await(10, TimeUnit.SECONDS))
+          throw new IllegalStateException("Timed out waiting for the extra-index read")
+        startedWrite.countDown()
+        storage.insertExtraTry(
+          Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(1).array), Array.empty
+        ).get
+      } catch {
+        case error: Throwable => failure.compareAndSet(null, error); ()
+      } finally finishedWrite.countDown()
+    })
+    reader.setDaemon(true)
+    writer.setDaemon(true)
+    reader.start()
+    try {
+      enteredRead.await(10, TimeUnit.SECONDS) shouldBe true
+      writer.start()
+      startedWrite.await(10, TimeUnit.SECONDS) shouldBe true
+      val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+      while (writer.isAlive && writer.getState != Thread.State.WAITING && System.nanoTime() < deadline)
+        Thread.sleep(1)
+      writer.getState shouldBe Thread.State.WAITING
+      finishedWrite.getCount shouldBe 1L
+      ExtraIndexer.getIndex(RollbackToKey, storage).getInt shouldBe 0
+    } finally {
+      releaseRead.countDown()
+      reader.join(10000)
+      if (writer.getState != Thread.State.NEW) writer.join(10000)
+      if (!reader.isAlive && !writer.isAlive) storage.insertExtraTry(
+        Array(RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array), Array.empty
+      ).get
+    }
+    reader.isAlive shouldBe false
+    writer.isAlive shouldBe false
+    failure.get() shouldBe null
+    finishedWrite.getCount shouldBe 0L
   }
 }

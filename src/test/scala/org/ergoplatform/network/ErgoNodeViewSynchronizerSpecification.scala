@@ -8,8 +8,8 @@ import org.ergoplatform.Input
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.{ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
@@ -28,7 +28,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
-import scorex.core.network.ModifiersStatus.{Received, Requested, Unknown}
+import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
@@ -2104,6 +2104,124 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       // the invalidated decline did not occupy a slot in the declined table
       synchronizerTestRef.underlyingActor.declinedTxsCount shouldBe 0
+    }
+  }
+
+  // records whether the delivery check scheduled for a request was cancelled
+  private class RecordingCancellable extends Cancellable {
+    private val cancelled = new java.util.concurrent.atomic.AtomicBoolean(false)
+    override def cancel(): Boolean = cancelled.compareAndSet(false, true)
+    override def isCancelled: Boolean = cancelled.get()
+  }
+
+  // a reply for a modifier the node already holds, while its request is still outstanding (as when it was applied from
+  // another source before the peer answered): marked held and dropped, the request is closed, the peer is not penalized
+  private def replyForHeldModifier(deliveryTracker: DeliveryTracker,
+                                   synchronizer: ActorRef,
+                                   ncProbe: TestProbe,
+                                   peer: ConnectedPeer,
+                                   hist: ErgoHistory,
+                                   mod: BlockSection): Unit = {
+    hist.contains(mod.id) shouldBe true
+    val check = new RecordingCancellable
+    deliveryTracker.setRequested(mod.modifierTypeId, mod.id, peer)(_ => check)
+    val modData = ModifiersData(mod.modifierTypeId, Map(mod.id -> mod.bytes))
+    synchronizer ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+    val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
+    sent.collect { case p: PenalizePeer => p } shouldBe empty
+    eventually {
+      deliveryTracker.status(mod.id, mod.modifierTypeId, Seq(hist)) shouldBe Held
+    }
+    check.isCancelled shouldBe true
+  }
+
+  property("NodeViewSynchronizer: a requested header that is already in history is not judged invalid") {
+    withFixture { ctx =>
+      ctx.deliveryTracker.reset()
+      // the fixture history holds the first 1000 headers of `chain` (localChain)
+      replyForHeldModifier(ctx.deliveryTracker, ctx.synchronizer, ctx.ncProbe, ctx.peer, history, localChain.last)
+    }
+  }
+
+  property("NodeViewSynchronizer: a requested extension that is already in history is not judged invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+      val (hist, block) = historyWithNewHeader(ctx)
+      // the extension only: block transactions would complete the block, whose generated transactions this
+      // fixture's state rejects
+      val extension = block.extension
+
+      deliveryTracker.setRequested(extension.modifierTypeId, extension.id, peer)(_ => Cancellable.alreadyCancelled)
+      val modData = ModifiersData(extension.modifierTypeId, Map(extension.id -> extension.bytes))
+      synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
+      // applied, and the tracker has cleared the first delivery (the applied-modifier event was handled)
+      eventually(timeout(10.seconds)) {
+        hist.contains(extension.id) shouldBe true
+        deliveryTracker.status(extension.id, extension.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      ncProbe.receiveWhile(1.second) { case m => m }
+
+      // the extension is already in history (e.g. applied from another source) when a reply for it arrives
+      replyForHeldModifier(deliveryTracker, synchronizerMockRef, ncProbe, peer, hist, extension)
+    }
+  }
+
+  // the view holder's history, holding the header of a new block (applied from a requested reply)
+  private def historyWithNewHeader(ctx: Synchronizer2Fixture): (ErgoHistory, ErgoFullBlock) = {
+    import ctx._
+    deliveryTracker.reset()
+    val hist = viewHistory
+    val block = genChain(1, hist).head
+    deliveryTracker.setRequested(Header.modifierTypeId, block.header.id, peer)(_ => Cancellable.alreadyCancelled)
+    val headerData = ModifiersData(Header.modifierTypeId, Map(block.header.id -> block.header.bytes))
+    synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(headerData)), Some(peer))
+    // applied, and the synchronizer is done with it: the delivery tracker is not thread-safe, so the test updates
+    // it only while the synchronizer is not handling this chain's events
+    eventually(timeout(10.seconds)) {
+      hist.contains(block.header.id) shouldBe true
+      deliveryTracker.status(block.header.id, Header.modifierTypeId, Seq.empty) shouldBe Unknown
+    }
+    ncProbe.receiveWhile(1.second) { case m => m }
+    hist -> block
+  }
+
+  property("NodeViewSynchronizer: requested block transactions that are already in history are not judged invalid") {
+    withFixture2 { ctx =>
+      val (hist, block) = historyWithNewHeader(ctx)
+      val txs: BlockTransactions = block.blockTransactions
+      // stored without the extension, so the block is not completed (this fixture's state rejects its transactions)
+      hist.append(txs).get
+      replyForHeldModifier(ctx.deliveryTracker, ctx.synchronizerMockRef, ctx.ncProbe, ctx.peer, hist, txs)
+    }
+  }
+
+  // A node that stores the UTXO set requests ADProofs a peer announces, and also generates them itself when it applies
+  // the block (UtxoState), storing them through ErgoNodeViewHolder.pmodModify, which publishes the applied-modifier
+  // event only after the write. A reply to the request handled between the two is a copy of a modifier in history.
+  property("NodeViewSynchronizer: requested ADProofs that are already in history, generated by the node itself, are not judged invalid") {
+    withFixture2 { ctx =>
+      import ctx._
+      val (hist, block) = historyWithNewHeader(ctx)
+      val proofs = block.adProofs.get
+
+      // a peer announces the block's ADProofs, and the node requests them
+      val proofsInv = InvData(ADProofs.modifierTypeId, Seq(proofs.id))
+      synchronizerMockRef ! Message(InvSpec, Left(InvSpec.toBytes(proofsInv)), Some(peer))
+      requestForModifierSent(ncProbe, ADProofs.modifierTypeId, proofs.id)
+
+      // the node's own proofs are stored, as pmodModify stores them on this network (history.append); the
+      // applied-modifier event it publishes next has not been handled when the peer's reply arrives
+      hist.append(proofs).get
+      val proofsData = ModifiersData(ADProofs.modifierTypeId, Map(proofs.id -> proofs.bytes))
+      synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(proofsData)), Some(peer))
+
+      val sent = ncProbe.receiveWhile(3.seconds) { case m => m }
+      sent.collect { case p: PenalizePeer => p } shouldBe empty
+      eventually {
+        // the request is closed and the id is not marked invalid
+        deliveryTracker.status(proofs.id, ADProofs.modifierTypeId, Seq.empty) shouldBe Unknown
+        deliveryTracker.status(proofs.id, ADProofs.modifierTypeId, Seq(hist)) shouldBe Held
+      }
     }
   }
 

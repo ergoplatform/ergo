@@ -43,6 +43,7 @@ import sigma.Colls
 import sigma.interpreter.{ContextExtension, ProverResult}
 import sigmastate.helpers.TestingHelpers._
 
+import java.net.InetSocketAddress
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.language.postfixOps
@@ -1572,14 +1573,18 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     * Fixture for the declined transactions properties. Unlike `SynchronizerFixture`, the history here has all the
     * blocks applied, so that `hr.fullBlockHeight == hr.headersHeight` and `txAcceptanceFilter` may pass.
     */
-  private class DeclinedTransactionsFixture extends AkkaFixture {
+  private class DeclinedTransactionsFixture(maxConnections: Int)
+    extends AkkaFixture {
     implicit val ec: ExecutionContextExecutor = system.dispatcher
 
+    val synchronizerSettings = settings.copy(scorexSettings = settings.scorexSettings.copy(
+      network = settings.scorexSettings.network.copy(maxConnections = maxConnections)
+    ))
     val ncProbe = TestProbe("NetworkControllerProbe")
     val vhProbe = TestProbe("ViewHolderProbe")
     val pchProbe = TestProbe("PeerHandlerProbe")
-    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
-    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(settings)
+    val syncTracker = ErgoSyncTracker(synchronizerSettings.scorexSettings.network)
+    val deliveryTracker: DeliveryTracker = DeliveryTracker.empty(synchronizerSettings)
 
     private val emptyHistory = generateHistory(verifyTransactions = true, StateType.Utxo,
       PoPoWBootstrap = false, blocksToKeep = -1)
@@ -1594,7 +1599,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         ncProbe.ref,
         vhProbe.ref,
         ErgoSyncInfoMessageSpec,
-        settings,
+        synchronizerSettings,
         syncTracker,
         deliveryTracker
       )(ec)
@@ -1603,11 +1608,17 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     val synchronizerRef: ActorRef = synchronizerTestRef
 
     synchronizerRef ! ChangedHistory(declinedHistory)
-    synchronizerRef ! ChangedMempool(ErgoMemPool.empty(settings))
+    synchronizerRef ! ChangedMempool(ErgoMemPool.empty(synchronizerSettings))
 
     def newPeer: ConnectedPeer = ConnectedPeer(
       connectionIdGen.sample.get,
       pchProbe.ref,
+      Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
+    )
+
+    def newPeerAtPort(remotePort: Int): ConnectedPeer = ConnectedPeer(
+      connectionIdGen.sample.get.copy(remoteAddress = new InetSocketAddress("127.0.0.1", remotePort)),
+      TestProbe().ref,
       Some(PeerInfo(defaultPeerSpec, System.currentTimeMillis()))
     )
 
@@ -1657,13 +1668,222 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  private def withDeclinedTransactionsFixture(testCode: DeclinedTransactionsFixture => Any): Unit = {
-    val fixture = new DeclinedTransactionsFixture
+  private def withDeclinedTransactionsFixture(testCode: DeclinedTransactionsFixture => Any): Unit =
+    withDeclinedTransactionsFixture(settings.scorexSettings.network.maxConnections)(testCode)
+
+  private def withDeclinedTransactionsFixture(maxConnections: Int)(testCode: DeclinedTransactionsFixture => Any): Unit = {
+    val fixture = new DeclinedTransactionsFixture(maxConnections)
     try {
       testCode(fixture)
     }
     finally {
       Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("NodeViewSynchronizer: fresh transaction scopes are bounded across peer turnover") {
+    val maxConnections = 3
+    withDeclinedTransactionsFixture(maxConnections) { ctx =>
+      import ctx._
+
+      // The global measured cost is only 3 * 50 * 1000, far below its 12M limit.
+      // Every new remote port is a distinct ConnectedPeer, even though the IP is unchanged.
+      (0 until maxConnections).foreach { index =>
+        val peer = newPeerAtPort(31000 + index)
+        synchronizerRef ! HandshakedPeer(peer)
+        invTxAndExpectRequest(peer, dummyDeclinedTx())
+        declineTxs(peer, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost, cost = 1000)
+        invTxAndExpectNoRequest(peer, dummyDeclinedTx())
+        synchronizerRef ! DisconnectedPeer(peer)
+      }
+
+      val nextPort = newPeerAtPort(31000 + maxConnections)
+      synchronizerRef ! HandshakedPeer(nextPort)
+      invTxAndExpectNoRequest(nextPort, dummyDeclinedTx())
+    }
+  }
+
+  property("NodeViewSynchronizer: shared request helper enforces the fresh transaction scope cap") {
+    withDeclinedTransactionsFixture(maxConnections = 1) { ctx =>
+      import ctx._
+
+      val admitted = newPeerAtPort(31050)
+      val otherPeer = newPeerAtPort(31051)
+      synchronizerRef ! HandshakedPeer(admitted)
+      synchronizerRef ! HandshakedPeer(otherPeer)
+      invTxAndExpectRequest(admitted, dummyDeclinedTx())
+
+      // Exercise the helper directly; current timed-out transaction requests are not retried.
+      val otherTx = dummyDeclinedTx()
+      synchronizerTestRef.underlyingActor.requestBlockSection(
+        ErgoTransaction.modifierTypeId, Seq(otherTx.id), otherPeer, checksDone = 1)
+      val otherRequests = ncProbe.receiveWhile(250.millis) { case message => message }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode &&
+          stn.message.data.get.asInstanceOf[InvData].ids.contains(otherTx.id) => stn
+      }
+      otherRequests shouldBe empty
+      deliveryTracker.status(otherTx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Unknown
+    }
+  }
+
+  property("NodeViewSynchronizer: admitted shared-IP peers keep separate budgets after the scope cap") {
+    withDeclinedTransactionsFixture(maxConnections = 2) { ctx =>
+      import ctx._
+
+      val first = newPeerAtPort(31100)
+      val second = newPeerAtPort(31101)
+      val idle = newPeerAtPort(31102)
+      synchronizerRef ! HandshakedPeer(idle)
+      synchronizerRef ! HandshakedPeer(first)
+      synchronizerRef ! HandshakedPeer(second)
+
+      // Repeated inventories from one endpoint reserve only one scope.
+      invTxAndExpectRequest(first, dummyDeclinedTx())
+      invTxAndExpectRequest(first, dummyDeclinedTx())
+      invTxAndExpectRequest(second, dummyDeclinedTx())
+      // An unadmitted handshake does not create an established transaction peer.
+      invTxAndExpectNoRequest(idle, dummyDeclinedTx())
+      // The cap does not evict already admitted, under-budget peers or pool costs by IP.
+      invTxAndExpectRequest(first, dummyDeclinedTx())
+      invTxAndExpectRequest(second, dummyDeclinedTx())
+      declineTxs(first, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost, cost = 1000)
+      invTxAndExpectNoRequest(first, dummyDeclinedTx())
+      invTxAndExpectRequest(second, dummyDeclinedTx())
+    }
+  }
+
+  property("NodeViewSynchronizer: a same-endpoint reconnect retains declined-transaction debt") {
+    withDeclinedTransactionsFixture(maxConnections = 2) { ctx =>
+      import ctx._
+
+      val firstConnection = newPeerAtPort(31200)
+      synchronizerRef ! HandshakedPeer(firstConnection)
+      invTxAndExpectRequest(firstConnection, dummyDeclinedTx())
+      declineTxs(firstConnection, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost, cost = 1000)
+      invTxAndExpectNoRequest(firstConnection, dummyDeclinedTx())
+      synchronizerRef ! DisconnectedPeer(firstConnection)
+
+      // A different handler and connection id with the same remote endpoint is still the same quota scope.
+      val reopened = newPeerAtPort(31200)
+      synchronizerRef ! HandshakedPeer(reopened)
+      invTxAndExpectNoRequest(reopened, dummyDeclinedTx())
+    }
+  }
+
+  property("NodeViewSynchronizer: full blocks renew fresh scopes but a mined announcement does not") {
+    withDeclinedTransactionsFixture(maxConnections = 1) { ctx =>
+      import ctx._
+
+      val first = newPeerAtPort(31300)
+      val second = newPeerAtPort(31301)
+      val third = newPeerAtPort(31302)
+      synchronizerRef ! HandshakedPeer(first)
+      synchronizerRef ! HandshakedPeer(second)
+      synchronizerRef ! HandshakedPeer(third)
+
+      invTxAndExpectRequest(first, dummyDeclinedTx())
+      declineTxs(first, count = PeerBudgetBetweenBlocks / MinDeclinedTxCost, cost = 1000)
+      invTxAndExpectNoRequest(first, dummyDeclinedTx())
+      invTxAndExpectNoRequest(second, dummyDeclinedTx())
+
+      // Transaction admission may be full while block downloads remain available.
+      val headerId = modifierIdGen.sample.get
+      val headerInv = InvData(Header.modifierTypeId, Seq(headerId))
+      synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(headerInv)), Some(second))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, headerId)
+
+      val header = declinedHistory.bestHeaderOpt.get
+      synchronizerRef ! NewBlockMined(header)
+      invTxAndExpectNoRequest(second, dummyDeclinedTx())
+
+      synchronizerRef ! LocalBlockApplied(header, Seq.empty)
+      // This established scope renews its own budget without consuming the next fresh slot.
+      invTxAndExpectRequest(first, dummyDeclinedTx())
+      invTxAndExpectRequest(second, dummyDeclinedTx())
+      invTxAndExpectNoRequest(third, dummyDeclinedTx())
+
+      synchronizerRef ! RemoteBlockApplied(header, Seq.empty)
+      invTxAndExpectRequest(third, dummyDeclinedTx())
+    }
+  }
+
+  property("NodeViewSynchronizer: same-endpoint replacement after a block spends a fresh slot") {
+    withDeclinedTransactionsFixture(maxConnections = 1) { ctx =>
+      import ctx._
+
+      val original = newPeerAtPort(31350)
+      synchronizerRef ! HandshakedPeer(original)
+      val originalTxs = Seq.fill(2)(dummyDeclinedTx())
+      originalTxs.foreach(tx => invTxAndExpectRequest(original, tx))
+      val originalData = ModifiersData(ErgoTransaction.modifierTypeId,
+        originalTxs.map(tx => tx.id -> tx.bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(originalData)), Some(original))
+      vhProbe.fishForMessage(5.seconds) {
+        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case _ => false
+      }
+      invTxAndExpectRequest(original, dummyDeclinedTx())
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 1
+
+      // Simulate a missed or late disconnect at the same endpoint. The replaced handler's
+      // cached transaction must not be resumed after the next applied block.
+      val replacement = newPeerAtPort(31350)
+      synchronizerRef ! HandshakedPeer(replacement)
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      invTxAndExpectRequest(replacement, dummyDeclinedTx())
+      vhProbe.receiveWhile(200.millis) { case m => m }.collect {
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => t
+      } shouldBe empty
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 0
+      synchronizerRef ! DisconnectedPeer(original)
+      invTxAndExpectRequest(replacement, dummyDeclinedTx())
+
+      // Remote-address equality alone must not grant this new handler free established renewal.
+      val other = newPeerAtPort(31351)
+      synchronizerRef ! HandshakedPeer(other)
+      invTxAndExpectNoRequest(other, dummyDeclinedTx())
+    }
+  }
+
+  property("NodeViewSynchronizer: late requested transaction bytes cannot bypass the fresh-scope cap") {
+    withDeclinedTransactionsFixture(maxConnections = 1) { ctx =>
+      import ctx._
+
+      val admitted = newPeerAtPort(31400)
+      val late = newPeerAtPort(31401)
+      synchronizerRef ! HandshakedPeer(admitted)
+      synchronizerRef ! HandshakedPeer(late)
+
+      val admittedTx = dummyDeclinedTx()
+      invTxAndExpectRequest(admitted, admittedTx)
+      val admittedData = ModifiersData(ErgoTransaction.modifierTypeId,
+        Map(admittedTx.id -> admittedTx.bytes))
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(admittedData)), Some(admitted))
+      vhProbe.fishForMessage(5.seconds) {
+        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
+        case _ => false
+      }
+
+      // Model responses to requests left outstanding across a quota-window transition.
+      // The second response would enter the processing cache while the first is in flight.
+      val lateTxs = Seq.fill(2)(dummyDeclinedTx())
+      lateTxs.foreach { tx =>
+        deliveryTracker.setRequested(ErgoTransaction.modifierTypeId, tx.id, late)(
+          _ => Cancellable.alreadyCancelled)
+      }
+      val lateData = ModifiersData(ErgoTransaction.modifierTypeId,
+        lateTxs.map(tx => tx.id -> tx.bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(lateData)), Some(late))
+
+      // A request from the established peer acts as an actor-mailbox barrier for the late bytes.
+      invTxAndExpectRequest(admitted, dummyDeclinedTx())
+      vhProbe.receiveWhile(200.millis) { case m => m }.collect {
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => t
+      } shouldBe empty
+      synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe 0
+      lateTxs.foreach { tx =>
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
     }
   }
 

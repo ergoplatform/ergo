@@ -4,6 +4,7 @@ import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer
+import org.ergoplatform.network.message.{InvSpec, Message}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -28,7 +29,10 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
     case class EstablishedConnection(connectionProbe: TestProbe, handlerRef: ActorRef)
 
-    def createController(maxConnections: Int): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
+    def createController(
+      maxConnections: Int,
+      inboundHandlers: Map[MessageCode, ActorRef] = Map.empty
+    ): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
       val peerManagerProbe = TestProbe("PeerManager")
       val tcpManagerProbe = TestProbe("TcpManager")
 
@@ -45,7 +49,7 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
         peerManagerProbe.ref,
         scorexContext,
         tcpManagerProbe.ref,
-        _ => Map.empty[MessageCode, ActorRef]
+        _ => inboundHandlers
       ))
 
       tcpManagerProbe.expectMsgType[Tcp.Bind]
@@ -510,6 +514,44 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       first.expectTerminated(handler)
       events.expectMsgType[DisconnectedPeer].peer.handlerRef shouldBe handler
       f.beginPendingConnection(controller, peerManager, new InetSocketAddress("203.0.113.31", 9031))
+    }
+  }
+
+  property("message ingress should reject stale and forged handlers after endpoint replacement") {
+    withFixture { f =>
+      implicit val system = f.system
+      val inbound = TestProbe("InboundMessages")
+      val (controller, peerManager, _) = f.createController(
+        maxConnections = 4,
+        inboundHandlers = Map(InvSpec.messageCode -> inbound.ref)
+      )
+      val disconnected = TestProbe("DisconnectedPeers")
+      f.system.eventStream.subscribe(disconnected.ref, classOf[DisconnectedPeer])
+      val address = new InetSocketAddress("203.0.113.40", 9040)
+      val localAddress = settings.scorexSettings.network.bindAddress
+      val first = f.establishIncomingConnectionWithHandler(controller, peerManager, address)
+      val firstPeer = ConnectedPeer(ConnectionId(address, localAddress, Incoming), first.handlerRef, None)
+      val firstMessage = Message(InvSpec, Left(Array.emptyByteArray), Some(firstPeer))
+
+      controller.tell(firstMessage, first.handlerRef)
+      inbound.expectMsg(firstMessage)
+
+      first.connectionProbe.watch(first.handlerRef)
+      first.connectionProbe.send(first.handlerRef, Tcp.Aborted)
+      first.connectionProbe.expectTerminated(first.handlerRef)
+      disconnected.expectMsgType[DisconnectedPeer].peer.handlerRef shouldBe first.handlerRef
+
+      val replacement = f.establishIncomingConnectionWithHandler(controller, peerManager, address)
+      val replacementPeer = ConnectedPeer(ConnectionId(address, localAddress, Incoming), replacement.handlerRef, None)
+      val replacementMessage = Message(InvSpec, Left(Array.emptyByteArray), Some(replacementPeer))
+      val forgedSender = TestProbe("ForgedSender")
+
+      controller.tell(firstMessage, first.handlerRef)
+      inbound.expectNoMessage(200.millis)
+      controller.tell(replacementMessage, forgedSender.ref)
+      inbound.expectNoMessage(200.millis)
+      controller.tell(replacementMessage, replacement.handlerRef)
+      inbound.expectMsg(replacementMessage)
     }
   }
 

@@ -139,6 +139,44 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private val perPeerCost = mutable.Map[ConnectedPeer, IncomingTxInfo]()
 
+  // A request spends an allowance before the mempool has reported any cost. Keep that admission
+  // separate from perPeerCost so changing the remote port cannot replenish the allowance by
+  // disconnecting and reconnecting repeatedly between applied blocks.
+  private val admittedTxEndpoints = mutable.Set[java.net.InetSocketAddress]()
+  private val activeAdmittedTxHandlers = mutable.Map[ActorRef, java.net.InetSocketAddress]()
+  private var freshTxScopesUsed = 0
+
+  private def isEstablishedTransactionHandler(peer: ConnectedPeer): Boolean =
+    activeAdmittedTxHandlers.get(peer.handlerRef).contains(peer.connectionId.remoteAddress)
+
+  private def transactionScopeAvailable(peer: ConnectedPeer): Boolean =
+    isEstablishedTransactionHandler(peer) ||
+      admittedTxEndpoints.contains(peer.connectionId.remoteAddress) ||
+      freshTxScopesUsed < networkSettings.maxConnections
+
+  private def admitTransactionScope(peer: ConnectedPeer): Boolean = {
+    val endpoint = peer.connectionId.remoteAddress
+    if (!isEstablishedTransactionHandler(peer) && !admittedTxEndpoints.contains(endpoint)) {
+      if (freshTxScopesUsed >= networkSettings.maxConnections) return false
+      admittedTxEndpoints += endpoint
+      freshTxScopesUsed += 1
+    }
+    // Handler identity matters here: ConnectedPeer equality compares only remote IP and port.
+    // An old disconnect must not retire a replacement handler for the same endpoint.
+    activeAdmittedTxHandlers.retain { (handler, address) =>
+      address != endpoint || handler == peer.handlerRef
+    }
+    activeAdmittedTxHandlers.put(peer.handlerRef, endpoint)
+    true
+  }
+
+  private def resetTransactionScopes(): Unit = {
+    admittedTxEndpoints.clear()
+    // Only the exact handlers still active can renew without spending a fresh slot.
+    // A replacement at the same endpoint is a new connection after this reset.
+    freshTxScopesUsed = 0
+  }
+
   /**
     * Cache which contains bytes of transactions we received but not parsed and processed yet
     */
@@ -191,7 +229,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                      record: TransactionProcessingCacheRecord,
                                      mp: ErgoMemPool): Boolean = {
     val peerCost = perPeerCost.getOrElse(record.source, IncomingTxInfo.empty()).totalCost
-    peerCost < MempoolPeerCostPerBlock &&
+    isEstablishedTransactionHandler(record.source) &&
+      peerCost < MempoolPeerCostPerBlock &&
       !mp.contains(txId) && !mp.isInvalidated(txId) && !declined.contains(txId)
   }
 
@@ -605,6 +644,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                           modifierIds: Seq[ModifierId],
                           peer: ConnectedPeer,
                           checksDone: Int = 0): Unit = {
+    // Enforce the bound at the request boundary, including callers that do not process an inventory.
+    if (modifierTypeId == ErgoTransaction.modifierTypeId &&
+      modifierIds.nonEmpty && !admitTransactionScope(peer)) {
+      log.debug(s"Skipping transaction request from $peer: fresh transaction scopes exhausted")
+      return
+    }
     log.debug(s"Requesting block sections of type $modifierTypeId : $modifierIds")
     if (checksDone > 0 && modifierIds.length > 1) {
       log.warn(s"Incorrect state, checksDone > 0 && modifierIds.length > 1 , for $modifierIds of type $modifierTypeId")
@@ -730,6 +775,17 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                      remote: ConnectedPeer): Unit = {
     // filter out transactions already in the mempool
     val notInThePool = requestedModifiers.filterKeys(id => !mp.contains(id))
+    if (notInThePool.nonEmpty && !admitTransactionScope(remote)) {
+      // A different peer may own the outstanding request. Do not clear its status when
+      // this sender has no transaction allowance.
+      notInThePool.keys.foreach { txId =>
+        if (deliveryTracker.getRequestedInfo(ErgoTransaction.modifierTypeId, txId)
+          .exists(_.peer.handlerRef == remote.handlerRef)) {
+          deliveryTracker.clearStatusForModifier(txId, ErgoTransaction.modifierTypeId, ModifiersStatus.Requested)
+        }
+      }
+      return
+    }
     val peerCost = perPeerCost.getOrElse(remote, IncomingTxInfo.empty()).totalCost
 
     val (toProcess, toPutIntoCache) =
@@ -1155,7 +1211,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         hr.fullBlockHeight == hr.headersHeight && // we have all the full blocks
       interblockCost.totalCost <= MempoolCostPerBlock * 3 / 2 && // we can download some extra to fill cache
       peerCost < MempoolPeerCostPerBlock &&
-      txProcessingCache.size <= MaxProcessingTransactionsCacheSize // txs processing cache is not overfull
+      txProcessingCache.size <= MaxProcessingTransactionsCacheSize && // txs processing cache is not overfull
+      transactionScopeAvailable(peer)
     }
 
     val modifierTypeId = invData.typeId
@@ -1423,10 +1480,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   protected def peerManagerEvents: Receive = {
     case HandshakedPeer(remote) =>
+      // The controller can replace an endpoint before its old handler terminates. The old
+      // termination then has no connection entry and does not publish DisconnectedPeer.
+      activeAdmittedTxHandlers.retain { (handler, address) =>
+        address != remote.connectionId.remoteAddress || handler == remote.handlerRef
+      }
       syncTracker.updateStatus(remote, status = Unknown, height = None)
 
     case DisconnectedPeer(connectedPeer) =>
       syncTracker.clearStatus(connectedPeer)
+      activeAdmittedTxHandlers.remove(connectedPeer.handlerRef)
   }
 
   protected def sendLocalSyncInfo(historyReader: ErgoHistory): Receive = {
@@ -1539,6 +1602,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearDeclined()
       clearInterblockCost()
       perPeerCost.clear()
+      resetTransactionScopes()
       processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
 
     // Peer-received block applied - broadcast to our peers
@@ -1552,6 +1616,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       clearDeclined()
       clearInterblockCost()
       perPeerCost.clear()
+      resetTransactionScopes()
       processFirstTxProcessingCacheRecord(mempoolReader) // resume cache processing
 
     case st@SuccessfulTransaction(utx) =>

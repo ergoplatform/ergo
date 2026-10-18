@@ -122,15 +122,15 @@ class NetworkController(ergoSettings: ErgoSettings,
   private def businessLogic: Receive = {
     // a message coming in from another peer
     case msg@Message(spec, _, Some(remote)) =>
-      messageHandlers.get(spec.messageCode) match {
-        case Some(handler) => handler ! msg // forward the message to the appropriate handler for processing
-        case None => log.error(s"No handlers found for message $remote: " + spec.messageCode)
-      }
-
-      // Update last seen message timestamps with the message timestamp
       val remoteAddress = remote.connectionId.remoteAddress
       connections.get(remoteAddress) match {
-        case Some(cp) =>
+        case Some(cp) if cp.handlerRef == remote.handlerRef && cp.handlerRef == sender() =>
+          messageHandlers.get(spec.messageCode) match {
+            case Some(handler) => handler ! msg // forward the message to the appropriate handler for processing
+            case None => log.error(s"No handlers found for message $remote: " + spec.messageCode)
+          }
+
+          // Update last seen message timestamps with the message timestamp
           val now = time()
           lastIncomingMessageTime = now
           // Update peer's last activity time every ${activityDelta} minutes inside PeerInfo
@@ -142,7 +142,7 @@ class NetworkController(ergoSettings: ErgoSettings,
             }
           }
 
-        case None => log.warn("Connection not found for a message got from: " + remoteAddress)
+        case _ => log.warn("Current connection not found for a message got from: " + remoteAddress)
       }
 
     case SendToNetwork(message, sendingStrategy) =>

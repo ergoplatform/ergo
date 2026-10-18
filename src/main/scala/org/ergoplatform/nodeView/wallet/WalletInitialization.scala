@@ -76,7 +76,7 @@ private[wallet] class WalletInitialization extends ScorexLogging {
     val path = lockFile.toRealPath()
     // Do not open a second channel in this JVM: closing it may release an existing file lock.
     if (selectionReservations.putIfAbsent(path, java.lang.Boolean.TRUE) != null)
-      throw new IOException("Wallet selection is already in progress")
+      throw new SelectionBusy()
     var channel: FileChannel = null
     var lock: FileLock = null
     var operationError: Throwable = null
@@ -84,9 +84,9 @@ private[wallet] class WalletInitialization extends ScorexLogging {
       channel = FileChannel.open(path, StandardOpenOption.WRITE)
       lock = try channel.tryLock(0L, 1L, false) catch {
         case error: OverlappingFileLockException =>
-          throw new IOException("Wallet selection is already in progress", error)
+          throw new SelectionBusy(error)
       }
-      if (lock == null) throw new IOException("Wallet selection is already in progress")
+      if (lock == null) throw new SelectionBusy()
       body
     } catch {
       case error: Throwable =>
@@ -361,6 +361,10 @@ private[wallet] object WalletInitialization {
 
   final class OutcomeUnknown(cause: Throwable) extends IOException(
     "Wallet initialization outcome is uncertain. Restart the node before retrying; wallet recovery material has been retained.", cause)
+
+  /** The selection lock was busy, so the publication body was never entered. */
+  final class SelectionBusy(cause: Throwable = null) extends IOException(
+    "Wallet selection is already in progress", cause)
 
   def descriptor(settings: ErgoSettings): Path = new File(s"${settings.directory}/wallet/active-generation").toPath
   def dataFolder(settings: ErgoSettings, id: String): File = new File(s"${settings.directory}/wallet/generations/$id")

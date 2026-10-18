@@ -2,6 +2,7 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.TestProbe
+import org.ergoplatform.ErgoBox
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedState
@@ -17,8 +18,10 @@ import org.ergoplatform.wallet.boxes.ChainStatus
 import org.scalatest.concurrent.Eventually
 
 import java.io.{File, IOException}
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -76,7 +79,9 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
       for (cut <- Seq("from-height", "missing-prefix", "missing-in-range", "zero-height", "above-tip",
         "unapplied-fork", "restart", "stale-restart", "timeout", "success", "mid-replay",
         "promotion", "lock", "rollback", "pending", "pending-during", "duplicate", "fork", "advance",
-        "timeout-mismatch", "prestart-mismatch", "descriptor-mismatch")) {
+        "advance-limit", "future-backlog",
+        "timeout-mismatch", "prestart-mismatch", "descriptor-mismatch", "busy-selection-lock")) {
+        val selectedTipHeight = getCurrentState.stateContext.currentHeight
         val root = new File(w.nodeViewDir, s"staged-$cut")
         val settings = w.settings.copy(directory = root.getAbsolutePath,
           nodeSettings = w.settings.nodeSettings.copy(blocksToKeep = -1),
@@ -90,6 +95,7 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
         val releaseScan = new CountDownLatch(1)
         val publishFinished = new CountDownLatch(1)
         @volatile var stagedReplay = false
+        @volatile var resumedFutureHeights = Vector.empty[Int]
         val service = new ErgoWalletServiceImpl(settings) {
           override private[wallet] val walletInitialization: WalletInitialization = new WalletInitialization {
             override protected def replaceDescriptor(staging: Path, target: Path): Unit = {
@@ -100,12 +106,17 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
 
           override def scanBlockUpdate(state: ErgoWalletState, block: ErgoFullBlock,
                                        dustLimit: Option[Long]): Try[ErgoWalletState] = {
+            if (stagedReplay && Set("advance-limit", "future-backlog").contains(cut) &&
+              block.height > selectedTipHeight)
+              resumedFutureHeights = resumedFutureHeights :+ block.height
             if (stagedReplay && (((cut == "lock" || cut == "duplicate" || cut == "pending-during" ||
-              cut == "advance") && block.height == first.height) ||
-              ((cut == "rollback" || cut == "fork" || cut == "descriptor-mismatch") &&
+              cut == "advance" || cut == "advance-limit" || cut == "future-backlog") &&
+                block.height == first.height) ||
+              ((cut == "rollback" || cut == "fork" || cut == "descriptor-mismatch" ||
+                cut == "busy-selection-lock") &&
                 block.height == second.height))) {
               scanEntered.countDown()
-              if (!releaseScan.await(5, TimeUnit.SECONDS)) throw fault
+              if (!releaseScan.await(30, TimeUnit.SECONDS)) throw fault
             }
             if (cut == "mid-replay" && block.height == second.height) Failure(fault)
             else super.scanBlockUpdate(state, block, dustLimit)
@@ -127,11 +138,18 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
             if (cut == "restart") {
               prepared.storage.updateStateContext(getCurrentState.stateContext).get
             }
-            if (Set("rollback", "pending", "fork", "advance").contains(cut)) {
+            if (Set("rollback", "pending", "fork", "advance", "advance-limit",
+              "future-backlog").contains(cut)) {
               val unlocked = service.unlockWallet(prepared, initialPassword,
                 settings.walletSettings.usePreEip3Derivation).get
               val afterFirst = service.scanBlockUpdate(unlocked, first, settings.walletSettings.dustLimit).get
-              service.scanBlockUpdate(afterFirst, second, settings.walletSettings.dustLimit).get
+              val afterSecond = service.scanBlockUpdate(afterFirst, second, settings.walletSettings.dustLimit).get
+              if (Set("advance", "advance-limit", "future-backlog").contains(cut)) {
+                ((second.height + 1) to selectedTipHeight).foldLeft(afterSecond) { (current, height) =>
+                  service.scanBlockUpdate(current, getHistory.bestFullBlockAt(height).get,
+                    settings.walletSettings.dustLimit).get
+                }
+              }
             }
             prepared.generation.get
           } finally {
@@ -158,9 +176,14 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
         } else None
         val holderRef = if (cut == "timeout" || cut == "timeout-mismatch")
           TestProbe()(w.actorSystem).ref else w.nodeViewHolderRef
-        val actorProps = if (Set("missing-prefix", "missing-in-range", "unapplied-fork").contains(cut)) {
+        val actorProps = if (Set("missing-prefix", "missing-in-range", "unapplied-fork",
+          "advance-limit", "future-backlog").contains(cut)) {
           Props(new ErgoWalletActor(settings, parameters, service, selector, getHistory,
             Some(holderRef)) {
+            override protected[wallet] def maxRescanTipExtensions: Int =
+              if (cut == "advance-limit") 0 else super.maxRescanTipExtensions
+            override protected[wallet] def maxRescanFutureBlocks: Int =
+              if (cut == "future-backlog") 2 else super.maxRescanFutureBlocks
             private var initialTipChecked = false
             override protected[wallet] def selectedBlockAt(height: Int): Option[ErgoFullBlock] =
               if (cut == "missing-prefix" && height == first.height) None
@@ -183,6 +206,8 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
         val probe = TestProbe()(actorSystem)
         probe.watch(actor)
         var originalDescriptor: Option[Array[Byte]] = None
+        var abandonedCandidate: Option[Path] = None
+        var futureCredit: Option[ErgoBox] = None
         try {
           probe.send(actor, UnlockWallet(SecretString.create("staged-rescan-password")))
           probe.expectMsg(scala.util.Success(()))
@@ -241,14 +266,34 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
             if (cut == "fork") probe.send(actor, ScanOnChain(alternativeSecond))
             releaseScan.countDown()
           }
-          if (cut == "advance") {
+          if (Set("advance", "advance-limit", "future-backlog").contains(cut)) {
             scanEntered.await(5, TimeUnit.SECONDS) shouldBe true
-            val thirdPayment = PaymentRequest(sourceAddress, confirmedBox.value / 3, Array.empty, Map.empty)
-            val thirdTx = await(wallet.generateTransaction(Seq(thirdPayment))).get
-            val third = makeNextBlock(getUtxoState, Seq(thirdTx))
-            applyBlock(third) shouldBe 'success
-            probe.send(actor, ScanOnChain(third))
-            releaseScan.countDown()
+            try {
+              val thirdPayment = PaymentRequest(restoredAddress, confirmedBox.value / 12, Array.empty, Map.empty)
+              val thirdTx = await(wallet.generateTransaction(Seq(thirdPayment))).get
+              val third = makeNextBlock(getUtxoState, Seq(thirdTx))
+              applyBlock(third) shouldBe 'success
+              eventually(timeout(10.seconds), interval(100.millis)) {
+                getCurrentState.stateContext.currentHeight shouldBe third.height
+              }
+              futureCredit = thirdTx.outputs.find(_.ergoTree == restoredAddress.script)
+              probe.send(actor, ScanOnChain(third))
+              if (cut == "future-backlog") {
+                eventually(timeout(15.seconds), interval(100.millis)) {
+                  await(wallet.getWalletStatus).height shouldBe third.height
+                }
+                val fourthPayment = PaymentRequest(restoredAddress, confirmedBox.value / 24, Array.empty, Map.empty)
+                val fourthTx = await(wallet.generateTransaction(Seq(fourthPayment))).get
+                val fourth = makeNextBlock(getUtxoState, Seq(fourthTx))
+                applyBlock(fourth) shouldBe 'success
+                eventually(timeout(10.seconds), interval(100.millis)) {
+                  getCurrentState.stateContext.currentHeight shouldBe fourth.height
+                }
+                probe.send(actor, ScanOnChain(fourth))
+              }
+            } finally {
+              releaseScan.countDown()
+            }
           }
           if (cut == "pending-during") {
             scanEntered.await(5, TimeUnit.SECONDS) shouldBe true
@@ -268,10 +313,45 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
             Files.write(descriptor, Array[Byte](1, 2, 3))
             releaseScan.countDown()
           }
+          if (cut == "busy-selection-lock") {
+            scanEntered.await(5, TimeUnit.SECONDS) shouldBe true
+            val generationFolder = selected.registryFolder(settings).toPath.getParent
+            val candidates = Option(generationFolder.toFile.listFiles()).toSeq.flatten
+              .filter(_.getName.startsWith("registry-"))
+            candidates.size shouldBe 1
+            abandonedCandidate = Some(candidates.head.toPath)
+            val descriptor = WalletInitialization.descriptor(settings)
+            originalDescriptor = Some(Files.readAllBytes(descriptor))
+            val channel = FileChannel.open(descriptor.getParent.resolve("selection-lock")
+              .resolve(".ergo-secret-staging-wallet-selection.lock"), StandardOpenOption.WRITE)
+            try {
+              val lock = channel.lock()
+              try {
+                releaseScan.countDown()
+                publishFinished.await(10, TimeUnit.SECONDS) shouldBe true
+                eventually(timeout(10.seconds), interval(100.millis)) {
+                  probe.send(actor, GetWalletStatus)
+                  probe.expectMsgType[WalletStatus].error.value should include("already in progress")
+                  Files.exists(abandonedCandidate.get) shouldBe false
+                }
+                Files.readAllBytes(descriptor).toSeq shouldBe originalDescriptor.get.toSeq
+                WalletInitialization.selected(settings) shouldBe Some(selected)
+              } finally {
+                releaseScan.countDown()
+                lock.release()
+              }
+            } finally {
+              releaseScan.countDown()
+              channel.close()
+            }
+          }
 
           if (Set("from-height", "missing-prefix", "zero-height", "above-tip", "restart",
-            "stale-restart", "success", "lock", "pending", "pending-during", "duplicate").contains(cut)) {
-            publishFinished.await(10, TimeUnit.SECONDS) shouldBe true
+            "stale-restart", "success", "lock", "pending", "pending-during", "duplicate",
+            "advance").contains(cut)) {
+            withClue(s"$cut must publish the selected generation: ") {
+              publishFinished.await(10, TimeUnit.SECONDS) shouldBe true
+            }
             WalletInitialization.selected(settings).get.registryId.isDefined shouldBe true
             if (cut == "lock") {
               probe.send(actor, GetWalletStatus)
@@ -296,12 +376,19 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
               probe.send(actor, GetWalletStatus)
               probe.expectMsgType[WalletStatus].error.value should include(
                 if (Set("rollback", "fork", "advance").contains(cut)) "selected chain changed"
+                else if (cut == "advance-limit") "applied tip advanced too many times"
+                else if (cut == "future-backlog") "future-block backlog limit reached"
                 else if (cut == "missing-in-range") "Required rescan block"
                 else if (cut == "unapplied-fork") "applied state"
                 else if (cut == "timeout") "snapshot timed out"
+                else if (cut == "busy-selection-lock") "already in progress"
                 else fault.getMessage)
             }
             WalletInitialization.selected(settings) shouldBe Some(selected)
+            if (cut == "advance-limit")
+              resumedFutureHeights shouldBe Vector(selectedTipHeight + 1)
+            if (cut == "future-backlog")
+              resumedFutureHeights shouldBe Vector(selectedTipHeight + 1, selectedTipHeight + 2)
           }
         } finally {
           if (descriptorMismatch) {
@@ -314,12 +401,16 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
           }
         }
 
+        abandonedCandidate.foreach(path => Files.exists(path) shouldBe false)
+
         val reopened = ErgoWalletState.initial(settings, parameters).get
         try {
           if (Set("from-height", "missing-prefix", "zero-height", "above-tip", "restart",
-            "stale-restart", "success", "lock", "pending", "pending-during", "duplicate").contains(cut)) {
+            "stale-restart", "success", "lock", "pending", "pending-during", "duplicate",
+            "advance").contains(cut)) {
             reopened.generation.get.registryId.isDefined shouldBe true
-            reopened.registry.fetchDigest().height shouldBe second.height
+            reopened.registry.fetchDigest().height shouldBe
+              (if (cut == "advance") selectedTipHeight + 1 else second.height)
             reopened.registry.allWalletTxs().exists(_.tx.id == spendingTx.id) shouldBe true
             reopened.registry.getBox(genesisBoxes.head.id) shouldBe None
             if (Set("from-height", "missing-prefix", "above-tip").contains(cut)) {
@@ -337,18 +428,27 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
               case "rollback" => first.height
               case "fork" => alternativeSecond.height
               case "advance" => second.height + 1
+              case "advance-limit" => selectedTipHeight + 1
+              case "future-backlog" => selectedTipHeight + 2
               case _ => 0
             })
             if (cut == "fork") {
               reopened.registry.allWalletTxs().exists(_.tx.id == spendingTx.id) shouldBe false
             }
-            if (!Set("rollback", "fork", "advance").contains(cut)) {
+            if (!Set("rollback", "fork", "advance", "advance-limit", "future-backlog").contains(cut)) {
               reopened.registry.getBox(genesisBoxes.head.id).isDefined shouldBe true
             }
             selectedDescriptor.foreach { prior =>
               Files.readAllBytes(WalletInitialization.descriptor(settings))
                 .sameElements(prior) shouldBe true
             }
+            if (cut == "busy-selection-lock") {
+              Files.readAllBytes(WalletInitialization.descriptor(settings)).toSeq shouldBe
+                originalDescriptor.get.toSeq
+            }
+          }
+          if (Set("advance", "advance-limit", "future-backlog").contains(cut)) {
+            reopened.registry.getBox(futureCredit.get.id).isDefined shouldBe true
           }
         } finally {
           reopened.registry.close()

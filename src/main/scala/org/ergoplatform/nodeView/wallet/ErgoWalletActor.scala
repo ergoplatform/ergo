@@ -53,6 +53,10 @@ class ErgoWalletActor(settings: ErgoSettings,
   private case object Replaying extends RescanPhase
   private case object AwaitingFinalTip extends RescanPhase
   private var nextSnapshotId = 0L
+  protected[wallet] def maxRescanTipExtensions: Int = 8
+  protected[wallet] def maxRescanFutureBlocks: Int = 32
+  private var rescanTipExtensions = 0
+  private var rescanFutureBlocks = 0
 
   private def requestAppliedTip(): Long = {
     nextSnapshotId += 1
@@ -118,21 +122,52 @@ class ErgoWalletActor(settings: ErgoSettings,
     case AppliedTipReply(id, result) if id == snapshotId && phase == AwaitingFinalTip =>
       result.flatMap { tip =>
         Try {
-          require(tip.height == targetHeight && tip.blockId == lastBlockId &&
-            (targetHeight < GenesisHeight || lastBlockId.exists(id => selectedBlockAt(targetHeight).exists(_.id == id))) &&
-            candidate.getWalletHeight == targetHeight,
+          require((targetHeight < GenesisHeight ||
+            lastBlockId.exists(id => selectedBlockAt(targetHeight).exists(_.id == id))) &&
+            candidate.getWalletHeight == targetHeight && tip.height >= targetHeight &&
+            (tip.height < GenesisHeight ||
+              tip.blockId.exists(id => selectedBlockAt(tip.height).exists(_.id == id))),
             "Rescan replay does not match the applied state tip")
+          if (tip.height == targetHeight) {
+            require(tip.blockId == lastBlockId, "Rescan replay does not match the applied state tip")
+            None
+          } else {
+            require(rescanTipExtensions < maxRescanTipExtensions,
+              "Rescan applied tip advanced too many times")
+            val stateContext = ErgoStateContextSerializer(settings.chainSettings)
+              .parseBytesTry(tip.contextBytes.toArray).get
+            require(stateContext.currentHeight == tip.height &&
+              stateContext.lastHeaderOpt.map(_.id) == tip.blockId,
+              "Rescan snapshot context does not match the applied state tip")
+            active.storage.updateStateContext(stateContext).get
+            if (candidate.storage ne active.storage) candidate.storage.updateStateContext(stateContext).get
+            val currentParameters = stateContext.currentParameters
+            val nextActive = active.copy(parameters = currentParameters,
+              walletVars = active.walletVars.withParameters(currentParameters).getOrElse(active.walletVars))
+            val nextCandidate = candidate.copy(parameters = currentParameters,
+              walletVars = candidate.walletVars.withParameters(currentParameters).getOrElse(candidate.walletVars))
+            Some((tip.height, nextActive, nextCandidate))
+          }
         }
       } match {
         case Failure(error) => failStagedRescan(active, candidate, error)
-        case Success(_) =>
+        case Success(Some((appliedHeight, nextActive, nextCandidate))) =>
+          rescanTipExtensions += 1
+          context.become(stagedRescan(nextActive, nextCandidate, fromHeight, appliedHeight,
+            lastBlockId, stagedSpentIds))
+          self ! ReplayRescan(targetHeight + 1)
+        case Success(None) =>
           Try(rebaseOffChain(active, candidate, stagedSpentIds)) match {
             case Failure(error) => failStagedRescan(active, candidate, error)
             case Success(rebased) =>
               Try(ergoWalletService.publishRegistryRescan(active, rebased, settings)).flatten match {
-                case Success(selected) => context.become(loadedWallet(selected))
+                case Success(selected) =>
+                  context.become(loadedWallet(selected))
+                  unstashAll()
                 case Failure(error: WalletInitialization.OutcomeUnknown) =>
                   failStopRescan(active, Some(candidate), error)
+                case Failure(error: WalletInitialization.SelectionBusy) =>
+                  failStagedRescan(active, candidate, error)
                 case Failure(error) => failStagedRescan(active, candidate, error, cleanupCandidate = false)
               }
           }
@@ -259,12 +294,25 @@ class ErgoWalletActor(settings: ErgoSettings,
           context.become(stagedRescan(updated, candidate, fromHeight, targetHeight, lastBlockId,
             stagedSpentIds ++ inputs, phase, snapshotId))
       }
-    case change @ ScanOnChain(block) if block.height <= targetHeight =>
+    case ScanOnChain(block) if block.height <= targetHeight =>
       if (!Try(selectedBlockAt(block.height).exists(_.id == block.id)).getOrElse(false)) {
-        abortStagedRescanForChainChange(active, candidate, change)
+        stash()
+        abortStagedRescanForChainChange(active, candidate)
       }
-    case change: ScanOnChain => abortStagedRescanForChainChange(active, candidate, change)
-    case change: Rollback => abortStagedRescanForChainChange(active, candidate, change)
+    case ScanOnChain(block) =>
+      // Replay this applied block to the selected wallet if the candidate cannot catch up.
+      stash()
+      if (!Try(selectedBlockAt(block.height).exists(_.id == block.id)).getOrElse(false)) {
+        abortStagedRescanForChainChange(active, candidate)
+      } else {
+        rescanFutureBlocks += 1
+        if (rescanFutureBlocks >= maxRescanFutureBlocks)
+          failStagedRescan(active, candidate,
+            new IllegalStateException("Rescan future-block backlog limit reached"))
+      }
+    case _: Rollback =>
+      stash()
+      abortStagedRescanForChainChange(active, candidate)
     case ScanInThePast(_, false) => // The candidate is already replaying the selected history.
     case ScanInThePast(_, true) => // A previous rescan signal cannot advance this candidate.
 
@@ -295,6 +343,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         "; Candidate cleanup or handle closure was incomplete; see node logs" else "")
     resumeIfSelected(active, error) {
       context.become(loadedWallet(active.copy(error = Some(statusError), rescanInProgress = false)))
+      unstashAll()
     }
   }
 
@@ -316,7 +365,7 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private def failStopRescan(active: ErgoWalletState, candidate: Option[ErgoWalletState],
                              error: WalletInitialization.OutcomeUnknown): Unit = {
-    log.error("Wallet rescan selection is uncertain; stopping the wallet", error)
+    log.error("Wallet rescan selection is uncertain; stopping the node", error)
     candidate.foreach(state => Try(state.registry.close()).failed.foreach(closeError =>
       log.warn("Could not close rescan candidate registry while stopping", closeError)))
     Try(active.registry.close()).failed.foreach(closeError =>
@@ -350,7 +399,7 @@ class ErgoWalletActor(settings: ErgoSettings,
   }
 
   private def abortStagedRescanForChainChange(active: ErgoWalletState,
-                                              candidate: ErgoWalletState, change: Any): Unit = {
+                                              candidate: ErgoWalletState): Unit = {
     val cleanupError = closeAndDiscardCandidate(candidate).failed.toOption
     cleanupError.foreach(error =>
       log.warn("Could not close or discard abandoned rescan registry", error))
@@ -361,7 +410,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       rescanInProgress = false)
     resumeIfSelected(active, new IllegalStateException(errorMessage)) {
       context.become(loadedWallet(restored))
-      loadedWallet(restored)(change)
+      unstashAll()
     }
   }
 
@@ -737,6 +786,8 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.info(s"Rescanning the wallet from height: $fromHeight")
         ergoWalletService.recreateRegistry(state, settings) match {
           case Success(candidate) if state.generation.isDefined =>
+            rescanTipExtensions = 0
+            rescanFutureBlocks = 0
             val targetHeight = state.fullHeight
             val snapshotId = requestAppliedTip()
             context.become(stagedRescan(state.copy(rescanInProgress = true), candidate,

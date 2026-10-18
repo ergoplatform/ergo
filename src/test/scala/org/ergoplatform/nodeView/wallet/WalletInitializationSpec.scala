@@ -736,7 +736,7 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
       val lock = channel.lock()
       try {
         val error = initialization.publishRescan(active, candidate, settings).failed.get
-        error shouldBe a[IOException]
+        error shouldBe a[WalletInitialization.SelectionBusy]
         Files.readAllBytes(descriptor).toSeq shouldBe previousBytes.toSeq
         candidate.registry.fetchDigest()
       } finally {
@@ -1122,9 +1122,9 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
         probe.send(actor, AddScan(ScanRequest("uncertain scan",
           EqualsScanningPredicate(ErgoBox.R0, LongConstant(1)),
           Some(ScanWalletInteraction.Off), Some(true))))
-        probe.expectMsgType[AddScanResponse](5.seconds).response.isFailure shouldBe true
+        probe.expectMsgType[AddScanResponse](5.seconds).response shouldBe a[Failure[_]]
         probe.send(actor, AddBox(ErgoNodeTestConstants.genesisBoxes.head, Set(PaymentsScanId)))
-        probe.expectMsgType[AddBoxResponse](5.seconds).status.isFailure shouldBe true
+        probe.expectMsgType[AddBoxResponse](5.seconds).status shouldBe a[Failure[_]]
         probe.send(actor, CheckSeed(SecretString.create("unused seed"), None))
         probe.expectMsgType[Status.Failure](5.seconds).cause shouldBe error
         probe.send(actor, ReadScans)
@@ -1176,7 +1176,7 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
         probe.send(actor, AddScan(ScanRequest("must not enter old storage",
           EqualsScanningPredicate(ErgoBox.R0, LongConstant(1)),
           Some(ScanWalletInteraction.Off), Some(true))))
-        probe.expectMsgType[AddScanResponse](5.seconds).response.isFailure shouldBe true
+        probe.expectMsgType[AddScanResponse](5.seconds).response shouldBe a[Failure[_]]
         probe.send(actor, ScanInThePast(0, rescan = false))
         probe.send(actor, GetWalletStatus)
         probe.expectMsgType[WalletStatus](5.seconds).error shouldBe Some(uncertain.getMessage)
@@ -1192,7 +1192,7 @@ class WalletInitializationSpec extends AnyPropSpec with Matchers {
         probe.send(reopened, GetWalletStatus)
         probe.expectMsgType[WalletStatus](10.seconds).initialized shouldBe true
         probe.send(reopened, ReadScans)
-        probe.expectMsgType[ReadScansResponse](5.seconds).apps.isEmpty shouldBe true
+        probe.expectMsgType[ReadScansResponse](5.seconds).apps shouldBe empty
       } finally {
         probe.send(reopened, CloseWallet)
         probe.expectTerminated(reopened, 5.seconds)

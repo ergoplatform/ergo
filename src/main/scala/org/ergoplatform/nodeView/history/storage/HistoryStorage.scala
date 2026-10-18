@@ -191,7 +191,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     * @return if object with `id` is in the objects database
     */
   def contains(id: Array[Byte]): Boolean = get(id).isDefined
-  def contains(id: ModifierId): Boolean = modifierById(id).isDefined
+  def contains(id: ModifierId): Boolean = get(id).isDefined
 
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Array[BlockSection]): Try[Unit] = {

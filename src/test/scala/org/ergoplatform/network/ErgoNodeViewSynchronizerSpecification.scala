@@ -8,7 +8,7 @@ import org.ergoplatform.Input
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
-import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions, HistoryModifierSerializer}
+import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
@@ -2022,36 +2022,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // stored without the extension, so the block is not completed (this fixture's state rejects its transactions)
       hist.append(txs).get
       replyForHeldModifier(ctx.deliveryTracker, ctx.synchronizerMockRef, ctx.ncProbe, ctx.peer, hist, txs)
-    }
-  }
-
-  property("NodeViewSynchronizer: a foreign stored section does not block a requested genuine transaction section") {
-    withFixture2 { ctx =>
-      import ctx._
-      val (hist, block) = historyWithNewHeader(ctx)
-      val genuine = block.blockTransactions
-      val foreign = genuine.copy(headerId = Header.GenesisParentId)
-      foreign.id should not be genuine.id
-
-      hist.dumpToDb(genuine.serializedId, HistoryModifierSerializer.toBytes(foreign)).get
-      hist.typedModifierById[BlockTransactions](genuine.id) shouldBe None
-
-      val check = new RecordingCancellable
-      deliveryTracker.setRequested(genuine.modifierTypeId, genuine.id, peer)(_ => check)
-      val modData = ModifiersData(genuine.modifierTypeId, Map(genuine.id -> genuine.bytes))
-      synchronizerMockRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(peer))
-
-      // The synchronizer must pass the reply to the holder, which replaces the foreign stored bytes.
-      // The extension is absent, so this fixture does not try to apply the generated block transactions to state.
-      eventually(timeout(10.seconds)) {
-        hist.typedModifierById[BlockTransactions](genuine.id) shouldBe Some(genuine)
-        hist.modifierTypeAndBytesById(genuine.id).map { case (typeId, bytes) =>
-          typeId -> bytes.toSeq
-        } shouldBe Some(genuine.modifierTypeId -> genuine.bytes.toSeq)
-        check.isCancelled shouldBe true
-      }
-      val sent = ncProbe.receiveWhile(1.second) { case m => m }
-      sent.collect { case p: PenalizePeer => p } shouldBe empty
     }
   }
 

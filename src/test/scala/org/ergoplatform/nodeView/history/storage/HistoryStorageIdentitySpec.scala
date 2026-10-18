@@ -33,6 +33,10 @@ class HistoryStorageIdentitySpec extends ErgoCorePropertyTest {
       val wrongKeyRead = storage.modifierById(requested.id).map(_.id)
       val cacheRead = storage.modifierById(foreign.id).map(_.id)
       (wrongKeyRead, cacheRead) shouldBe ((None, None))
+      // Repair distinguishes a physically present row from a usable typed record.
+      storage.contains(requested.id) shouldBe true
+      storage.contains(idToBytes(requested.id)) shouldBe true
+      storage.contains(foreign.id) shouldBe false
     } finally storage.close()
   }
 

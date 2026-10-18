@@ -2658,4 +2658,32 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  /**
+    * A refused transaction which another peer is asked for by the time the budget is reset is not requested from
+    * the refused peer then, but it is kept for it: if the other peer does not deliver it in time, it is requested
+    * from the refused peer, which announced it once.
+    */
+  property("NodeViewSynchronizer: a refused transaction requested from another peer is requested from its peer if not delivered") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val other = newPeer
+
+      declineTxs(relay, count = DeclinesToThrottlePeer, cost = 1000)
+      val tx = dummyDeclinedTx()
+      invTxAndExpectNoRequest(relay, tx)
+      // another peer announces it and is asked for it
+      invTxAndExpectRequest(other, tx)
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      txIdsRequestedFrom(relay, 2.seconds) should not contain tx.id
+
+      // the other peer does not deliver it in time, and the next mempool result sends the next re-request
+      synchronizerRef ! CheckDelivery(other, ErgoTransaction.modifierTypeId, tx.id)
+      declineTxs(other, count = 1, cost = 1000)
+      txIdsRequestedFrom(relay, 2.seconds) should contain(tx.id)
+    }
+  }
+
 }

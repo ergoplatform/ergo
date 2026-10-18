@@ -186,9 +186,8 @@ trait ErgoHistory
                 .flatMap(getFullBlock)
                 .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 
-              // A singleton can also be the first retained full block after snapshot bootstrap.
-              val noRetainedFullAncestor = invalidatedChain.lengthCompare(1) == 0 ||
-                (invalidatedChain.head.header.height == GenesisHeight && invalidatedIds.contains(invalidatedChain.head.id))
+              // A snapshot floor may leave no valid full ancestor even when several full blocks are retained.
+              val noRetainedFullAncestor = invalidatedIds.contains(invalidatedChain.head.id)
               val branchPointHeader = if (noRetainedFullAncestor) PreGenesisHeader else invalidatedChain.head.header
 
               val validHeadersChain =

@@ -468,6 +468,37 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestHeaderIdOpt shouldBe Some(chain(1).id)
   }
 
+  for (invalidatedIndex <- Seq(0, 1)) {
+    property(s"invalidating retained-floor full block $invalidatedIndex keeps only valid full ancestors") {
+      var history = genHistory(minFullHeight = Some(3))._1
+      val chain = genChain(4, history)
+      history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+      val retained = chain.drop(2)
+      history = applyChain(history, retained)
+      history.getFullBlock(chain(1).header) shouldBe None
+      retained.foreach(block => history.getFullBlock(block.header).map(_.id) shouldBe Some(block.id))
+      history.bestFullBlockIdOpt shouldBe Some(retained.last.id)
+
+      val invalidated = retained.drop(invalidatedIndex)
+      val (recovered, progress) = history.reportModifierIsInvalid(invalidated.head.header,
+        ProgressInfo[PM](Some(invalidated.head.parentId), invalidated, Seq.empty, Seq.empty)).get
+      history = recovered
+
+      progress.toRemove.map(_.id) shouldBe invalidated.map(_.id)
+      progress.toApply shouldBe Seq.empty
+      invalidated.foreach(block => history.isSemanticallyValid(block.id) shouldBe Invalid)
+      history.bestHeaderIdOpt shouldBe Some(invalidated.head.parentId)
+      if (invalidatedIndex == 0) {
+        progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+        history.bestFullBlockIdOpt shouldBe None
+      } else {
+        progress.branchPoint shouldBe Some(retained.head.id)
+        history.bestFullBlockIdOpt shouldBe Some(retained.head.id)
+        history.isSemanticallyValid(retained.head.id) should not be Invalid
+      }
+    }
+  }
+
   property("successive invalidations retain a third valid sibling at the same height") {
     var history = genHistory(2)._1
     val common = history.bestFullBlockOpt.value

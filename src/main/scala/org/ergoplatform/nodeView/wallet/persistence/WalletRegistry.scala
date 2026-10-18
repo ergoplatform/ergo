@@ -266,9 +266,8 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     val maturityBag = removeBoxes(KeyValuePairsBag.empty, maturedBoxes)
     // first, put newly created outputs and related transactions into key-value bag
     // An output may have been registered before its creating block was scanned.
-    val bag0 = scanResults.outputs.foldLeft(maturityBag) { (bag, output) =>
-      getBox(output.box.id).map(previous => removeBox(bag, previous)).getOrElse(bag)
-    }
+    val priorOutputs = scanResults.outputs.flatMap(output => getBox(output.box.id))
+    val bag0 = priorOutputs.foldLeft(maturityBag)(removeBox)
     val bag1 = putBoxes(bag0, scanResults.outputs)
     val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
@@ -276,18 +275,17 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
     val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
-    // A shared reward can already belong to payments; its assets are already in the digest.
-    val previouslyWalletBoxIds = maturedBoxes.filter(_.scans.contains(PaymentsScanId)).map(_.boxId).toSet
-    val receivedWalletBoxes = scanResults.outputs.filter { tb =>
-      tb.scans.contains(PaymentsScanId) && !previouslyWalletBoxIds.contains(tb.boxId)
-    }
+    // Replace the previous payment association as well as its box indexes.
+    // This includes mature shared rewards and boxes registered before block scanning.
+    val priorWalletBoxes = priorOutputs.filter(tb => !tb.isSpent && tb.scans.contains(PaymentsScanId))
+    val receivedWalletBoxes = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
 
     // and update wallet digest
     val result = updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
-      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId))
+      val spentWalletBoxes = spentBoxesWithTx.map(_._2).filter(_.scans.contains(PaymentsScanId)) ++ priorWalletBoxes
       val spentAmt = spentWalletBoxes.map(_.box.value).sum
       val spentTokensAmt = spentWalletBoxes
         .flatMap(_.box.additionalTokens.toArray)

@@ -125,6 +125,35 @@ class WalletRegistrySpec
     }
   }
 
+  it should "remove a pre-registered payment credit when the block assigns only an external scan" in {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(ws)
+      val appId: ScanId = ScanId @@ 21.toShort
+      val tokenId = Array.fill[Byte](32)(1).toTokenId
+      val tokens = Colls.fromItems(tokenId -> 7L)
+      val output = new ErgoBoxCandidate(1000L, TrueTree, 1, tokens)
+      val inputs = IndexedSeq(Input(ADKey @@ Array.fill(32)(0: Byte), emptyProverResult))
+      val transaction = new ErgoTransaction(inputs, IndexedSeq.empty, IndexedSeq(output))
+      val box = transaction.outputs.head
+
+      registry.updateScans(Set(PaymentsScanId), box).get
+      registry.fetchDigest().walletBalance shouldBe 1000L
+      registry.fetchDigest().walletAssetBalances.toMap shouldBe
+        Map(IdUtils.encodedTokenId(tokenId) -> 7L)
+
+      val externalOutput = TrackedBox(transaction.id, 0, Some(1), None, None, box, Set(appId))
+      registry.updateOnBlock(ScanResults(Seq(externalOutput), ArraySeq.empty, ArraySeq.empty),
+        modifierIdGen.sample.get, 1).get
+
+      registry.getBox(box.id).get.scans shouldBe Set(appId)
+      registry.getBox(box.id).get.inclusionHeightOpt shouldBe Some(1)
+      registry.walletUnspentBoxes() shouldBe empty
+      registry.unspentBoxes(appId) shouldBe Seq(externalOutput)
+      registry.fetchDigest().walletBalance shouldBe 0L
+      registry.fetchDigest().walletAssetBalances shouldBe empty
+    }
+  }
+
   private def outputsSpentTest(keepSpent: Boolean): Unit = forAll(Gen.nonEmptyListOf(trackedBoxGen)) { boxes =>
     withVersionedStore(10) { store =>
       val fakeTxId = modifierIdGen.sample.get

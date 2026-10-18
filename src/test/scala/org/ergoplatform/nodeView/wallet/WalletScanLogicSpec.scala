@@ -243,6 +243,72 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
     }
   }
 
+  property("pre-block payment registration is credited once when its creating block is scanned") {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val walletVars = WalletVars(None, Seq.empty, Some(WalletCache(pubkeys, s)))(s)
+      val tokenId = Array.fill[Byte](32)(1).toTokenId
+      val tokens = Colls.fromItems(tokenId -> 7L)
+      val walletScript = ErgoTree.fromSigmaBoolean(pubkeys.head.key)
+      val output = new ErgoBoxCandidate(1000L, walletScript, 1, tokens)
+      val creatingTx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, IndexedSeq(output))
+      val box = creatingTx.outputs.head
+      val expectedAssets = Map(IdUtils.encodedTokenId(tokenId) -> 7L)
+      val creatingBlockId = bytesToId(versionId("pre-block payment creation"))
+
+      registry.updateScans(Set(Constants.PaymentsScanId), box).get
+      registry.fetchDigest().walletBalance shouldBe 1000L
+      registry.fetchDigest().walletAssetBalances.toMap shouldBe expectedAssets
+
+      val (_, offAfterCreation, _) = scanBlockTransactions(registry, OffChainRegistry.empty,
+        walletVars, 1, creatingBlockId, Seq(creatingTx), None, None, WalletProfile.User).get
+      val createdDigest = registry.fetchDigest()
+      createdDigest.walletBalance shouldBe 1000L
+      createdDigest.walletAssetBalances.toMap shouldBe expectedAssets
+      registry.getBox(box.id).get.inclusionHeightOpt shouldBe Some(1)
+      registry.getBox(box.id).get.scans shouldBe Set(Constants.PaymentsScanId)
+      offAfterCreation.digest.walletBalance shouldBe 1000L
+
+      val spendingTx = new ErgoTransaction(
+        IndexedSeq(Input(box.id, emptyProverResult)), IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(1000L, FalseTree, 2, tokens)))
+      scanBlockTransactions(registry, offAfterCreation, walletVars, 2,
+        bytesToId(versionId("pre-block payment spend")), Seq(spendingTx),
+        None, None, WalletProfile.User).get
+      registry.fetchDigest().walletBalance shouldBe 0L
+      registry.fetchDigest().walletAssetBalances shouldBe empty
+
+      registry.rollback(VersionTag @@ creatingBlockId.toString).get
+      registry.fetchDigest() shouldBe createdDigest
+      registry.walletUnspentBoxes().map(_.boxId) shouldBe Seq(bytesToId(box.id))
+    }
+  }
+
+  property("pre-block payment registration is removed by a same-block spend") {
+    withVersionedStore(10) { store =>
+      val registry = new WalletRegistry(store)(settings.walletSettings)
+      val walletVars = WalletVars(None, Seq.empty, Some(WalletCache(pubkeys, s)))(s)
+      val tokenId = Array.fill[Byte](32)(1).toTokenId
+      val tokens = Colls.fromItems(tokenId -> 7L)
+      val walletScript = ErgoTree.fromSigmaBoolean(pubkeys.head.key)
+      val creatingTx = new ErgoTransaction(fakeInputs, IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(1000L, walletScript, 1, tokens)))
+      val box = creatingTx.outputs.head
+      val spendingTx = new ErgoTransaction(
+        IndexedSeq(Input(box.id, emptyProverResult)), IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(1000L, FalseTree, 1, tokens)))
+
+      registry.updateScans(Set(Constants.PaymentsScanId), box).get
+      registry.fetchDigest().walletBalance shouldBe 1000L
+      scanBlockTransactions(registry, OffChainRegistry.empty, walletVars, 1,
+        bytesToId(versionId("same-block pre-registered payment")), Seq(creatingTx, spendingTx),
+        None, None, WalletProfile.User).get
+      registry.walletUnspentBoxes() shouldBe empty
+      registry.fetchDigest().walletBalance shouldBe 0L
+      registry.fetchDigest().walletAssetBalances shouldBe empty
+    }
+  }
+
   property("scanBlockTransactions") {
     withVersionedStore(10) { store =>
       val walletVars = walletVarsGen.sample.get

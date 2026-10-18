@@ -297,7 +297,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           case _: DeclinedTransaction => peerTxInfo.copy(declinedCost = peerTxInfo.declinedCost + chargedCost)
         }
         log.debug(s"Old peer ${peer.connectionId} cost info: ${peerTxInfo.totalCost}, " +
-          s"new: $newPeerCost, tx processing cache size: ${txProcessingCache.size}")
+          s"new: $newPeerCost, still in processing: ${txsInProcessingOf(peer)}, " +
+          s"tx processing cache size: ${txProcessingCache.size}")
         if (peerTxInfo.totalCost < MempoolPeerCostPerBlock && newPeerCost.totalCost >= MempoolPeerCostPerBlock) {
           log.info(s"Peer ${peer.connectionId} exhausted its per-block transaction processing budget " +
             s"($MempoolPeerCostPerBlock), throttling it until the next block")
@@ -1510,9 +1511,13 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     */
   private def peerAdmitsTx(peer: ConnectedPeer): Boolean = {
     val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
-    val inProcessing = txsInProcessing.get(peer).map(_.size).getOrElse(0)
-    peerCost + inProcessing.toLong * MinDeclinedTxCost < MempoolPeerCostPerBlock
+    peerCost + txsInProcessingOf(peer).toLong * MinDeclinedTxCost < MempoolPeerCostPerBlock
   }
+
+  /**
+    * Number of the peer's transactions in processing, see `txsInProcessing`
+    */
+  private def txsInProcessingOf(peer: ConnectedPeer): Int = txsInProcessing.get(peer).map(_.size).getOrElse(0)
 
   // add transaction id to the table of declined transactions, keeping the table size bounded
   private def addDeclined(id: ModifierId): Unit = {

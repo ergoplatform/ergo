@@ -401,6 +401,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           case _: Success[Unit] =>
             // Reset outputs Bloom filter to have it initialized again on next block scanned
             // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
+            pendingScan = None
             context.become(loadedWallet(state.copy(outputsFilter = None)))
         }
       } else {
@@ -447,6 +448,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         log.info(s"Rescanning the wallet from height: $fromHeight")
         ergoWalletService.recreateRegistry(state, settings) match {
           case Success(newState) =>
+            pendingScan = None
             context.become(loadedWallet(newState.copy(rescanInProgress = true)))
             val heightToScanFrom = Math.max(1, Math.min(newState.fullHeight, fromHeight))
             self ! ScanInThePast(heightToScanFrom, rescan = true)

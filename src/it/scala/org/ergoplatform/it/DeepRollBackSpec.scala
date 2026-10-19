@@ -171,14 +171,17 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       // 2. Stop all nodes
       docker.stopNode(minerAGen.containerId)
       docker.stopNode(minerBGen.containerId)
+      // an empty `knownPeers` still dials the peers kept in the peer database (`noConnectionsConfig`)
+      docker.removeFromMountedVolume(localVolumeA, remoteVolumeA, "peers")
+      docker.removeFromMountedVolume(localVolumeB, remoteVolumeB, "peers")
 
-      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, isolatedPeersConfig,
+      val minerAIsolated: Node = docker.startDevNetNode(minerAConfig, noConnectionsConfig,
         specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
 
       // 1. Let nodeA mine `chainLength + delta` blocks in isolation
       Async.await(minerAIsolated.waitForHeight(chainLength + delta))
 
-      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, isolatedPeersConfig,
+      val minerBIsolated: Node = docker.startDevNetNode(minerBConfig, noConnectionsConfig,
         specialVolumeOpt = Some((localVolumeB, remoteVolumeB))).get
       Async.await(observeNodes("isolated miners started", minerAIsolated, minerBIsolated))
 
@@ -193,6 +196,8 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
 
       docker.stopNode(minerAIsolated.containerId)
       docker.stopNode(minerBIsolated.containerId)
+      docker.removeFromMountedVolume(localVolumeA, remoteVolumeA, "peers")
+      docker.removeFromMountedVolume(localVolumeB, remoteVolumeB, "peers")
 
       log.info("heightA: " + minerABestHeight)
       log.info("heightB: " + minerBBestHeight)

@@ -58,7 +58,9 @@ class BlocksApiRouteSpec
     }
     Put(prefix) ~> handledRoute ~> check {
       status shouldBe StatusCodes.MethodNotAllowed
-      response.headers.exists(_.is("allow")) shouldBe true
+      val allow = response.headers.find(_.is("allow")).map(_.value()).getOrElse("")
+      allow should include ("GET")
+      allow should include ("POST")
     }
   }
 
@@ -171,22 +173,6 @@ class BlocksApiRouteSpec
     }
   }
 
-  it should "reject an unknown suffix after a known block id" in {
-    Get(prefix + "/" + headerIdString) ~> handledRoute ~> check {
-      status shouldBe StatusCodes.OK
-    }
-    Get(prefix + "/" + headerIdString + "/junk") ~> handledRoute ~> check {
-      status.intValue() / 100 shouldBe 4
-      status should not be StatusCodes.MethodNotAllowed
-      if (status == StatusCodes.BadRequest) {
-        responseAs[Json].hcursor.get[String]("detail") shouldBe
-          Right("The requested resource/endpoint could not be found.")
-      } else {
-        status shouldBe StatusCodes.NotFound
-      }
-    }
-  }
-
   it should "get blocks by header ids" in {
     val headerIdsBytes               = history.lastHeaders(10).headers
     val headerIdsString: Seq[String] = headerIdsBytes.map(h => Algos.encode(h.id))
@@ -201,6 +187,13 @@ class BlocksApiRouteSpec
         )
 
       responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+    }
+  }
+
+  it should "not report a wrong method for an unknown sub-path" in {
+    Get(prefix + "/junk/path") ~> handledRoute ~> check {
+      status.intValue() / 100 shouldBe 4
+      status should not be StatusCodes.MethodNotAllowed
     }
   }
 

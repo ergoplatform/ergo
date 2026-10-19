@@ -1,5 +1,7 @@
 package scorex.core.api.http
 
+import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.Allow
 import akka.http.scaladsl.server._
 import org.ergoplatform.http.api.ApiError
 
@@ -9,6 +11,19 @@ object ApiRejectionHandler {
     .handleAll[SchemeRejection] { rejections =>
       val schemes = rejections.map(_.supported).mkString(", ")
       ApiError.BadRequest(s"Uri scheme not allowed, supported schemes: $schemes")
+    }
+    .handleAll[MethodRejection] { rejections =>
+      val methods = rejections.map(_.supported).distinct
+      val names = methods.map(_.name).mkString(", ")
+      Directives.extractRequest { request =>
+        Directives.extractMaterializer { implicit materializer =>
+          request.discardEntityBytes()
+          Directives.respondWithHeader(Allow(methods)) {
+            ApiError(StatusCodes.MethodNotAllowed, "method.not.allowed")(
+              s"HTTP method not allowed, supported methods: $names")
+          }
+        }
+      }
     }
     .handle {
       case AuthorizationFailedRejection =>

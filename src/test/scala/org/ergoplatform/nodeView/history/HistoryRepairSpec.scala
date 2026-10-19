@@ -85,7 +85,8 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       db.objects += h.id -> h
       db.objects += h.transactionsId -> txs.copy(headerId = h.id)
       db.objects += h.extensionId -> ext.copy(headerId = h.id)
-      if (stateType.requireProofs) db.objects += h.ADProofsId -> proofs.copy(headerId = h.id)
+      if (stateType.requireProofs || stateType == StateType.Utxo)
+        db.objects += h.ADProofsId -> proofs.copy(headerId = h.id)
     }
     db.indexes += ByteArrayWrapper(Array.fill[Byte](32)(Header.modifierTypeId)) -> idToBytes(tip.id)
     db.indexes += ByteArrayWrapper(Array.fill[Byte](32)(-1)) -> idToBytes(tip.id)
@@ -101,7 +102,16 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     }
   }
 
-  (1 to 3).foreach { failedRemoval =>
+  property("UTXO cleanup removes a stored proof before its invalid header") {
+    val f = new Fixture
+    val child = f.children.head
+    f.db.objects.contains(child.ADProofsId) shouldBe true
+    f.history.forgetHeader(child.id) shouldBe Success(())
+    child.sectionIds.foreach { case (_, id) => f.db.objects.contains(id) shouldBe false }
+    f.db.objects.contains(child.id) shouldBe false
+  }
+
+  (1 to 4).foreach { failedRemoval =>
     property(s"forgetHeader propagates removal $failedRemoval and stops subsequent deletions") {
       val f = new Fixture
       f.db.failAt = failedRemoval
@@ -110,7 +120,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     }
   }
 
-  (1 to 7).foreach { failedRemoval =>
+  (1 to 9).foreach { failedRemoval =>
     property(s"repair propagates removal $failedRemoval without clearing the retry index") {
       val f = new Fixture
       f.db.failAt = failedRemoval
@@ -120,7 +130,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     }
   }
 
-  (1 to 3).foreach { failedRemoval =>
+  (1 to 4).foreach { failedRemoval =>
     property(s"retry discovers all sections after removal $failedRemoval fails") {
       val f = new Fixture
       val child = f.children.head
@@ -129,20 +139,20 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       f.db.objects.contains(child.id) shouldBe true
       f.db.failAt = -1
       f.history.forgetHeader(child.id) shouldBe Success(())
-      (child.id +: child.sectionIdsWithNoProof.map(_._2)).foreach { id =>
+      (child.id +: child.sectionIds.map(_._2)).foreach { id =>
         f.db.objects should not contain key (id)
       }
     }
   }
 
-  (1 to 7).foreach { failedRemoval =>
+  (1 to 9).foreach { failedRemoval =>
     property(s"repair retry finishes after partial progress at removal $failedRemoval") {
       val f = new Fixture
       f.db.failAt = failedRemoval
       ErgoHistory.repairIfNeeded(f.history) shouldBe Failure(f.db.failure)
       f.db.failAt = -1
       ErgoHistory.repairIfNeeded(f.history) shouldBe Success(true)
-      f.children.flatMap(h => h.id +: h.sectionIdsWithNoProof.map(_._2)).foreach { id =>
+      f.children.flatMap(h => h.id +: h.sectionIds.map(_._2)).foreach { id =>
         f.db.objects.contains(id) shouldBe false
       }
       f.db.indexes.contains(f.heightKey) shouldBe false
@@ -150,7 +160,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     }
   }
 
-  Seq(1, 3).foreach { failedRemoval =>
+  Seq(1, 4).foreach { failedRemoval =>
     property(s"repair retries when object removal commits but index removal $failedRemoval fails") {
       val f = new Fixture
       val child = f.children.head
@@ -162,7 +172,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
 
       f.db.failAfterObjectsAt = -1
       ErgoHistory.repairIfNeeded(f.history) shouldBe Success(true)
-      f.children.flatMap(h => h.id +: h.sectionIdsWithNoProof.map(_._2)).foreach { id =>
+      f.children.flatMap(h => h.id +: h.sectionIds.map(_._2)).foreach { id =>
         f.db.objects should not contain key (id)
       }
       f.db.indexes should not contain key (f.heightKey)
@@ -183,10 +193,11 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     }
   }
 
-  property("header-only mode removes just the header") {
+  property("header-only mode removes any stored sections with the header") {
     val f = new Fixture(verifyTransactions = false)
     f.history.forgetHeader(f.children.head.id) shouldBe Success(())
-    f.db.removals.map(_._2).toSeq shouldBe Seq(Seq(f.children.head.id))
+    f.db.removals.map(_._2).toSeq shouldBe
+      (f.children.head.sectionIds.map { case (_, id) => Seq(id) } :+ Seq(f.children.head.id))
   }
 
   property("missing headers still have their header indexes removed") {
@@ -201,11 +212,11 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
   property("repair reports completion only after all removals") {
     val f = new Fixture
     ErgoHistory.repairIfNeeded(f.history) shouldBe Success(true)
-    f.db.removals.size shouldBe 7
+    f.db.removals.size shouldBe 9
     f.db.removals.last shouldBe ((Seq(f.heightKey), Seq.empty))
     f.db.indexes should not contain key (f.heightKey)
     ErgoHistory.repairIfNeeded(f.history) shouldBe Success(false)
-    f.db.removals.size shouldBe 7
+    f.db.removals.size shouldBe 9
   }
 
   property("repair is unnecessary when the full block tip is behind the header tip") {
@@ -226,10 +237,10 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     val f = new Fixture
     f.healthReason should include ("repair completed")
     f.healthReason should include ("repair not needed")
-    f.db.removals.size shouldBe 7
+    f.db.removals.size shouldBe 9
   }
 
-  Seq(1, 7).foreach { failedRemoval =>
+  Seq(1, 9).foreach { failedRemoval =>
     property(s"startup owner propagates removal $failedRemoval failure and closes storage") {
       val f = new Fixture
       f.db.failAt = failedRemoval

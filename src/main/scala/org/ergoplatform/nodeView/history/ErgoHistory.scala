@@ -212,7 +212,7 @@ trait ErgoHistory
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try(typedModifierById[Header](headerId)).flatMap { hOpt =>
     // Keep the header until its sections are removed so a retry can still discover their identifiers.
-    hOpt.toSeq.flatMap(requiredModifiersForHeader).foldLeft[Try[Unit]](Success(())) {
+    hOpt.toSeq.flatMap(_.sectionIds).foldLeft[Try[Unit]](Success(())) {
       case (result, (_, mId)) => result.flatMap { _ =>
         val removal = historyStorage.remove(Array(validityKey(mId)), Array(mId))
         log.info(s"Result of removing modifier $mId: " + removal)

@@ -47,6 +47,34 @@ class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
     changeProofByte((Header.InitialVersion + 1).toByte, outcome = 'failure)
   }
 
+  property("BlockTransactions section version must match its header") {
+    val versionPairs = Seq(
+      ((Header.InitialVersion + 1).toByte, Header.Interpreter50Version),
+      (Header.Interpreter60Version, Header.Interpreter50Version))
+
+    for {
+      stateType <- Seq(StateType.Utxo, StateType.Digest)
+      (headerVersion, sectionVersion) <- versionPairs
+    } {
+      val (history, block) = init(headerVersion, stateType)
+      try {
+        val control = block.blockTransactions
+        val changed = control.copy(blockVersion = sectionVersion, sizeOpt = None)
+        val received = HistoryModifierSerializer.parseBytes(
+          HistoryModifierSerializer.toBytes(changed)).asInstanceOf[BlockTransactions]
+
+        received.headerId shouldBe block.header.id
+        received.id shouldBe control.id
+        received.blockVersion shouldBe sectionVersion
+        history.applicableTry(control) shouldBe 'success
+        history.applicableTry(received) shouldBe 'failure
+        history.append(received).isFailure shouldBe true
+      } finally {
+        history.closeStorage()
+      }
+    }
+  }
+
   property("BlockTransactions commons check") {
     val (history, block) = init()
     commonChecks(history, block.blockTransactions, block.header)
@@ -98,8 +126,33 @@ class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
     commonChecks(history, block.extension, block.header)
   }
 
-  private def init(version: Header.Version = Header.InitialVersion) = {
-    var history = genHistory()
+  // estimatedTip is None exactly while the headers chain is not synced (ErgoHistoryReader.estimatedTip).
+  // In that window no section is accepted (bsHeadersChainSynced), so no block is completed and applied
+  // with estimatedTip = None.
+  property("While estimatedTip is None, no block section is accepted") {
+    val (history, block) = init()
+    try {
+      val sections: Seq[NonHeaderBlockSection] = Seq(block.blockTransactions, block.extension, block.adProofs.get)
+
+      history.isHeadersChainSyncedVar = false
+      history.estimatedTip() shouldBe None
+      sections.foreach { s =>
+        val refused = history.applicableTry(s)
+        refused shouldBe 'failure
+        refused.failed.get.getMessage should include("Headers-chain is not synchronized yet")
+      }
+
+      history.isHeadersChainSyncedVar = true
+      history.estimatedTip() shouldBe Some(history.headersHeight)
+      sections.foreach(s => history.applicableTry(s) shouldBe 'success)
+    } finally {
+      history.closeStorage()
+    }
+  }
+
+  private def init(version: Header.Version = Header.InitialVersion,
+                   stateType: StateType = StateType.Utxo) = {
+    var history = genHistory(stateType)
     val chain = genChain(2, history, version)
     history = applyBlock(history, chain.head)
     history = history.append(chain.last.header).get._1
@@ -131,8 +184,8 @@ class BlockSectionValidationSpecification extends ErgoCorePropertyTest {
     history.applicableTry(section) shouldBe 'failure
   }
 
-  private def genHistory() =
-    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
+  private def genHistory(stateType: StateType) =
+    generateHistory(verifyTransactions = true, stateType, PoPoWBootstrap = false, BlocksToKeep)
 
   private def withUpdatedHeaderId[T <: NonHeaderBlockSection](section: T, newId: ModifierId): T = section match {
     case s: Extension => s.copy(headerId = newId).asInstanceOf[T]

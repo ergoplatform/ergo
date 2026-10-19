@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.extra
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash, Timers}
 import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, GlobalConstants, Pay2SAddress}
-import org.ergoplatform.consensus.ModifierSemanticValidity
+import org.ergoplatform.core.{VersionTag, versionToId}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -75,12 +75,54 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected def historyStorage: HistoryStorage = _history.historyStorage
 
   protected def fullChainHeaderAtHeight(height: Int): Option[Header] = {
+    // No semantic-validity check: Unknown marks are transient (the best-chain marker can be
+    // persisted before validation finishes) and Invalid modifiers are already filtered out by
+    // typedModifierById. The marker does not say that the state has applied the block: history
+    // sets it at append, for every block of a batch, before the state has looked at any of them,
+    // and rolling back a block the state went on to reject is not guaranteed to restore the index.
+    // Use this to compare the index with the best chain and to find rollback targets; a header
+    // to index comes from appliedFullChainHeaderAtHeight.
     _history.headerIdsAtHeight(height)
-      .find { id =>
-        FullBlockProcessor.isInBestFullChain(historyStorage, id) &&
-          _history.isSemanticallyValid(id) == ModifierSemanticValidity.Valid
-      }
+      .find(id => FullBlockProcessor.isInBestFullChain(historyStorage, id))
       .flatMap(id => _history.typedModifierById[Header](id))
+  }
+
+  /**
+    * Header of the last block the state has applied, as far as the indexer knows: the state
+    * version at start, then the header of every `FullBlockApplied`. It is not derived from
+    * the validity mark: a block can be applied and still be marked Unknown.
+    */
+  protected var lastAppliedHeaderOpt: Option[Header] = None
+
+  /**
+    * Applied tip the indexer may index up to. Overridden in tests which drive the indexer
+    * over a history without a state.
+    */
+  protected def appliedTipOpt: Option[Header] = lastAppliedHeaderOpt
+
+  private def appliedTipOnBestFullChain: Option[Header] =
+    appliedTipOpt.filter(tip => FullBlockProcessor.isInBestFullChain(historyStorage, tip.id))
+
+  /**
+    * Height up to which the best full chain is applied: the height of the applied tip while
+    * that tip is on the best full chain, 0 otherwise (nothing applied yet, or history has
+    * switched to a branch of which the state has not reported a block yet). The indexer does
+    * not go above it; the next `FullBlockApplied` sets it.
+    */
+  private def appliedHeight: Int = appliedTipOnBestFullChain.fold(0)(_.height)
+
+  /**
+    * Best-full-chain header at the given height, if the state has applied its block, that is
+    * if it is the applied tip or an ancestor of it. The applied tip is matched by id: during
+    * a chain switch history marks the new branch as best at heights the state still holds
+    * for the old one. No parent links are walked: the best-chain markers form a single chain,
+    * so while the applied tip carries the marker every marked header at or below its height
+    * is the tip or its ancestor. The markers are read under the history lock, which their
+    * writers (`append`, `reportModifierIsInvalid`) hold, so a switch is never seen half-written
+    * for the store; the index cache is filled by unlocked readers too.
+    */
+  private def appliedFullChainHeaderAtHeight(height: Int): Option[Header] = _history.synchronized {
+    appliedTipOnBestFullChain.filter(_.height >= height).flatMap(_ => fullChainHeaderAtHeight(height))
   }
 
   protected def blockTransactionsForHeader(header: Header): Option[BlockTransactions] = {
@@ -133,6 +175,23 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   protected val templates: mutable.HashMap[ModifierId, IndexedContractTemplate] = mutable.HashMap.empty[ModifierId, IndexedContractTemplate]
   protected val tokens: mutable.HashMap[ModifierId, IndexedToken] = mutable.HashMap.empty[ModifierId, IndexedToken]
   protected val segments: mutable.HashMap[ModifierId, Segment[_]] = mutable.HashMap.empty[ModifierId, Segment[_]]
+
+  /**
+    * Whether the storage-rent eligibility index is maintained (`storageRentCollection`
+    * setting). When off, no rent rows are written at all; the schema-version check in
+    * `ErgoHistory.readOrGenerate` then also requires only the base schema, and turning
+    * the flag on later forces a rescan which builds the rows from scratch.
+    */
+  protected val rentIndexEnabled: Boolean
+
+  /**
+    * Storage-rent eligibility index buffers: upserts and deletions keyed by the entry id
+    * (the index key). A box created and spent within the same buffer window is removed from
+    * the upserts only; a box created in an already-flushed batch gets a deletion marker.
+    * Unused when [[rentIndexEnabled]] is off.
+    */
+  protected val rentBoxes: mutable.HashMap[ModifierId, StorageRentBox] = mutable.HashMap.empty[ModifierId, StorageRentBox]
+  protected val rentBoxDeletes: mutable.HashSet[ModifierId] = mutable.HashSet.empty[ModifierId]
 
   /**
     * Input tokens in a transaction, cleared after every transaction
@@ -203,22 +262,46 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     * @return whether the box was found in buffer or database -> should always return true
     */
   private def findAndSpendBox(id: ModifierId, txId: ModifierId, height: Int, spendingProof: ProverResult): Boolean = {
-    boxes.get(id).map(box => {
-      box.asSpent(txId, height, spendingProof).box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
+    def recordTokens(iEb: IndexedErgoBox): Unit =
+      iEb.box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
         inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
       }
-      return true
-    })
-    history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
-      case Some(x) => // box found in DB, update
-        boxes.put(id, x.asSpent(txId, height, spendingProof))
-        x.box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
-          inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
-        }
+    // A spend recorded by another transaction is never overwritten: the block doing the
+    // overwrite can still be rejected by the state, and rolling it back would otherwise
+    // erase the original spend record.
+    def alreadySpentElsewhere(iEb: IndexedErgoBox): Boolean = iEb.spendingTxIdOpt.exists(_ != txId)
+    boxes.get(id) match {
+      case Some(box) if !alreadySpentElsewhere(box) =>
+        recordTokens(box.asSpent(txId, height, spendingProof))
         true
-      case None => // box not found at all (this shouldn't happen)
-        log.warn(s"Unknown box used as input: $id")
+      case Some(box) =>
+        log.warn(s"Box $id already spent by ${box.spendingTxIdOpt}, not spending it again in $txId")
         false
+      case None =>
+        history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
+          case Some(x) if !alreadySpentElsewhere(x) => // box found in DB, update
+            recordTokens(x.asSpent(txId, height, spendingProof))
+            boxes.put(id, x)
+            true
+          case Some(x) =>
+            log.warn(s"Box $id already spent by ${x.spendingTxIdOpt}, not spending it again in $txId")
+            false
+          case None => // box not found at all (this shouldn't happen)
+            log.warn(s"Unknown box used as input: $id")
+            false
+        }
+    }
+  }
+
+  /**
+    * Delete the storage-rent eligibility entry of a box being spent (see [[rentBoxes]]).
+    */
+  private def markRentBoxSpent(iEb: IndexedErgoBox): Unit = {
+    if (rentIndexEnabled) {
+      val srb = StorageRentBox(iEb)
+      if (rentBoxes.remove(srb.id).isEmpty) {
+        rentBoxDeletes += srb.id
+      }
     }
   }
 
@@ -301,7 +384,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   /**
     * @return number of indexes in all buffers
     */
-  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size
+  private def modCount: Int = general.length + boxes.size + trees.size + templates.size + tokens.size +
+    rentBoxes.size + rentBoxDeletes.size
 
   /**
     * Write buffered indexes to database and clear buffers.
@@ -310,6 +394,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     persistencePending = true
     val start: Long = System.currentTimeMillis
 
+    // perform segmentation on big addresses and save their internal segment buffer
     trees.values.foreach { tree =>
       tree.buffer.values.foreach(seg => segments.put(seg.id, seg))
       tree.splitToSegments.foreach(seg => segments.put(seg.id, seg))
@@ -318,6 +403,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       template.buffer.values.foreach(seg => segments.put(seg.id, seg))
       template.splitToSegments.foreach(seg => segments.put(seg.id, seg))
     }
+
+    // perform segmentation on big tokens and save their internal segment buffer
     tokens.values.foreach { token =>
       token.buffer.values.foreach(seg => segments.put(seg.id, seg))
       token.splitToSegments.foreach(seg => segments.put(seg.id, seg))
@@ -326,8 +413,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     val indexedHeaderEntry = state.indexedHeaderId.map { id =>
       IndexedHeaderIdKey -> fastIdToBytes(id)
     }.toArray
-    val objects = (general.iterator ++ boxes.valuesIterator ++ trees.valuesIterator ++
-      templates.valuesIterator ++ tokens.valuesIterator ++ segments.valuesIterator).toArray
+    val objects = ((((((general ++= boxes.values) ++= trees.values)
+      ++= templates.values) ++= tokens.values) ++= segments.values) ++= rentBoxes.values).toArray
     historyStorage.insertExtraTry(
       Array(
         (IndexedHeightKey, ByteBuffer.allocate(4).putInt(state.indexedHeight).array),
@@ -335,19 +422,26 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         (GlobalBoxIndexKey, ByteBuffer.allocate(8).putLong(state.globalBoxIndex).array),
         (RollbackToKey, ByteBuffer.allocate(4).putInt(state.rollbackTo).array)
       ) ++ indexedHeaderEntry,
-      objects
+      objects,
+      // spent storage-rent rows are deleted in the same batch as the progress marker,
+      // so a crash can not leave them behind an advanced checkpoint
+      rentBoxDeletes.toArray
     ).recoverWith { case error =>
       historyStorage.invalidateExtraCache(objects.iterator.map(_.id).toSeq)
       Failure(error)
     }.get
 
     log.debug(s"Processed ${trees.size} ErgoTrees with ${boxes.size} boxes and inserted them to database in ${System.currentTimeMillis - start}ms")
+
+    // clear buffers for next batch
     general.clear()
     boxes.clear()
     trees.clear()
     templates.clear()
     tokens.clear()
     segments.clear()
+    rentBoxes.clear()
+    rentBoxDeletes.clear()
     persistencePending = false
   }
 
@@ -356,7 +450,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     *
     * @param state     - current indexer state
     * @param header       - exact full-chain header to index
-    * @param targetHeight - full-chain height captured for this catch-up pass
+    * @param targetHeight - applied height captured for this catch-up pass
     */
   protected def index(state: IndexerState,
                       header: Header,
@@ -390,6 +484,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           val spendingProof = tx.inputs(i).spendingProof
           if (findAndSpendBox(boxId, tx.id, height, spendingProof)) { // spend box and add tx
             val iEb = boxes(boxId)
+            markRentBoxSpent(iEb)
             findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Left(iEb))(newState)
             findAndUpdateTemplate(hashTreeTemplate(iEb.box.ergoTree), Left(iEb))
               cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
@@ -408,6 +503,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         boxes.put(iEb.id, iEb) // box by id
         general += NumericBoxIndex(newState.globalBoxIndex, iEb.id) // box id by global box number
         outputs(i) = iEb.globalIndex
+
+        // unspent box by creation height (storage-rent eligibility index)
+        if (rentIndexEnabled) {
+          val srb = StorageRentBox(iEb)
+          rentBoxes.put(srb.id, srb)
+        }
 
         // box by address
         findAndUpdateTree(hashErgoTree(iEb.box.ergoTree), Right(boxes(iEb.id)))(newState)
@@ -473,7 +574,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       newState = newState.decrementTxIndex
       while (newState.globalTxIndex > txTarget) {
         val tx: IndexedErgoTransaction = NumericTxIndex.getTxByNumber(history, newState.globalTxIndex).get
-        tx.inputNums.map(NumericBoxIndex.getBoxByNumber(history, _).get).foreach { iEb => // undo all spendings
+        // undo only spendings recorded by this transaction: inputs the index never resolved
+        // are stored as 0, and a rejected block can also reference boxes spent by other,
+        // valid transactions - unspending those would resurrect boxes this block never spent
+        tx.inputNums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
+          .filter(_.spendingTxIdOpt.contains(tx.id))
+          .foreach { iEb => // undo spendings
 
           iEb.spendingHeightOpt = None
           iEb.spendingTxIdOpt = None
@@ -481,11 +587,15 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
           val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
           address.findAndModBox(iEb.globalIndex, history)
+          // the address may have no output removed below: drop the rolled-back transaction numbers here, boxes stay
+          toRemove ++= address.rollback(txTarget, Long.MaxValue, _history)
 
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
           template.findAndModBox(iEb.globalIndex, history)
 
-          historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](iEb, address, template) ++ address.buffer.values ++ template.buffer.values).get
+          val rentRow: Array[ExtraIndex] =
+            if (rentIndexEnabled) Array[ExtraIndex](StorageRentBox(iEb)) else Array.empty
+          historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](iEb, address, template) ++ rentRow ++ address.buffer.values ++ template.buffer.values).get
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
             history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
@@ -523,6 +633,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         }
         toRemove += iEb.id // box by id
         toRemove += bytesToId(NumericBoxIndex.indexToBytes(newState.globalBoxIndex)) // box id by number
+        if (rentIndexEnabled) toRemove += StorageRentBox(iEb).id // unspent box by creation height
         newState = newState.decrementBoxIndex
       }
       newState = newState.incrementBoxIndex
@@ -531,7 +642,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       val completedState = newState.copy(
         indexedHeight = height,
         rollbackTo = 0,
-        caughtUp = height == chainHeight && fullChainHeaderAtHeight(height).exists(_.id == targetHeader.id),
+        caughtUp = height >= appliedHeight && fullChainHeaderAtHeight(height).exists(_.id == targetHeader.id),
         indexedHeaderId = Some(targetHeader.id)
       )
       removeRollbackIndexes(toRemove.toArray).get
@@ -585,7 +696,24 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     }
   }
 
+  /**
+    * Every `FullBlockApplied` sets the applied tip before it is handled, whatever the
+    * indexer is busy with (caught up, catching up, persistence pending, rollback in progress,
+    * where the event is stashed and recorded once more when replayed).
+    */
   protected def loaded(state: IndexerState): Receive = {
+    val behavior = loadedBehavior(state)
+    val recordingAppliedTip: Receive = {
+      case applied: FullBlockApplied =>
+        lastAppliedHeaderOpt = Some(applied.header)
+        behavior(applied)
+      case other =>
+        behavior(other)
+    }
+    recordingAppliedTip
+  }
+
+  private def loadedBehavior(state: IndexerState): Receive = {
 
     // Segmentation mutates parent references before persistence. Flush those rows
     // before either event-driven or self-driven indexing can consume them.
@@ -602,17 +730,20 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     case Index() if !state.caughtUp && !state.rollbackInProgress =>
       cancelRetry()
       if (modCount < saveLimit || persistBuffered(state)) {
-        if (state.indexedHeight == chainHeight && indexedTipIsOnBestFullChain(state)) {
+        // blocks above the applied height are not indexed: having reached it the indexer
+        // waits, as caught up, for the next FullBlockApplied
+        val targetHeight = appliedHeight
+        if (state.indexedHeight >= targetHeight && indexedTipIsOnBestFullChain(state)) {
           val newState = state.copy(caughtUp = true)
           context.become(receive.orElse(loaded(newState)))
           self ! Index()
         } else {
-          val nextHeaderOpt = fullChainHeaderAtHeight(state.indexedHeight + 1)
+          val nextHeaderOpt = appliedFullChainHeaderAtHeight(state.indexedHeight + 1)
           val extendsIndexedTip = nextHeaderOpt.forall { header =>
             state.indexedHeight == 0 || state.indexedHeaderId.contains(header.parentId)
           }
           if (extendsIndexedTip && nextHeaderOpt.isDefined) {
-            index(state.incrementIndexedHeight, nextHeaderOpt.get, chainHeight) match {
+            index(state.incrementIndexedHeight, nextHeaderOpt.get, targetHeight) match {
               case Some(newState) =>
                 context.become(receive.orElse(loaded(newState)))
                 if (continueCatchUpAfterIndex(newState)) self ! Index()
@@ -638,7 +769,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       if (modCount == 0 || persistBuffered(state)) {
         blockCache.clear()
         caughtUpHook()
-        log.info("Indexer caught up with chain")
+        log.info(s"Indexer is at the applied tip: indexed ${state.indexedHeight}, best full block $chainHeight")
       }
 
     case Index() if state.rollbackInProgress =>
@@ -652,12 +783,20 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
       if (isDirectSuccessor) {
         cancelRetry()
-        val targetHeight = chainHeight
+        // the block of this event is applied, blocks history holds above it may not be
+        val targetHeight = appliedHeight
         index(state.incrementIndexedHeight, header, targetHeight) match {
           case Some(newState) =>
             context.become(receive.orElse(loaded(newState)))
             if (newState.caughtUp) {
-              if (persistBuffered(newState)) caughtUpHook(header.height)
+              // While history holds blocks above this one further events are likely to follow:
+              // the block stays buffered, as during catch-up, and the retry timer writes the
+              // buffer if no event arrives.
+              if (chainHeight <= header.height || modCount >= saveLimit) {
+                if (persistBuffered(newState)) caughtUpHook(header.height)
+              } else {
+                scheduleRetry()
+              }
             } else {
               self ! Index()
             }
@@ -691,7 +830,8 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         stash()
       } else if (indexedTipIsOnBestFullChain(state)) {
         log.info(s"Ignoring rollback to $branchPoint because the indexed tip is already on the best full chain")
-        if (!state.caughtUp) self ! Index()
+        // the retry timer cancelled above may have been the one due to write buffered blocks
+        if (!state.caughtUp || modCount > 0) self ! Index()
       } else if (!reconcileIndexedTip(state)) {
         log.info(s"Deferring rollback to $branchPoint until the indexed tip can be reconciled with the best full chain")
         val newState = state.copy(caughtUp = false, rollbackTo = 0)
@@ -738,12 +878,15 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 /**
   * Actor that constructs an index of database elements.
   *
-  * @param cacheSettings - cacheSettings to use for saveLimit size
-  * @param ae            - ergo address encoder to use for handling addresses
+  * @param cacheSettings     - cacheSettings to use for saveLimit size
+  * @param ae                - ergo address encoder to use for handling addresses
+  * @param rentIndexEnabled  - whether to maintain the storage-rent eligibility index
+  *                            (`storageRentCollection` setting)
   */
 class ExtraIndexer(cacheSettings: CacheSettings,
                    ae: ErgoAddressEncoder,
-                   nodeViewHolderRefOpt: Option[ActorRef] = None)
+                   nodeViewHolderRefOpt: Option[ActorRef],
+                   override protected val rentIndexEnabled: Boolean)
   extends ExtraIndexerBase {
 
   override val saveLimit: Int = cacheSettings.history.extraCacheSize * 20
@@ -757,7 +900,7 @@ class ExtraIndexer(cacheSettings: CacheSettings,
     context.system.eventStream.subscribe(self, classOf[Rollback])
     nodeViewHolderRefOpt.foreach { nodeViewHolderRef =>
       nodeViewHolderRef ! GetDataFromCurrentView[ErgoStateReader, StartExtraIndexer] { view =>
-        StartExtraIndexer(view.history)
+        StartExtraIndexer(view.history, Some(view.state.version))
       }
     }
   }
@@ -780,12 +923,15 @@ class ExtraIndexer(cacheSettings: CacheSettings,
 
     case _: Rollback if _history == null => stash()
 
-    case StartExtraIndexer(history: ErgoHistory) =>
+    case StartExtraIndexer(history: ErgoHistory, stateVersionOpt) =>
       log.info(s"Starting extra indexer")
       _history = history
+      // The state version is the id of the last block the state applied. At genesis it is
+      // not a header id: nothing counts as applied until the first FullBlockApplied.
+      lastAppliedHeaderOpt = stateVersionOpt.map(versionToId).flatMap(id => history.typedModifierById[Header](id))
       val state = IndexerState.fromHistory(history)
       context.become(receive.orElse(loaded(state)))
-      log.info(s"Started extra indexer at height ${state.indexedHeight}")
+      log.info(s"Started extra indexer at height ${state.indexedHeight}, applied tip is ${lastAppliedHeaderOpt.map(h => s"${h.id} at height ${h.height}")}")
       self ! Index()
       unstashAll()
 
@@ -800,9 +946,12 @@ object ExtraIndexer {
     /**
       * Initialize ExtraIndexer and start indexing.
       *
-      * @param history - handle to database
+      * @param history         - handle to database
+      * @param stateVersionOpt - version of the state taken together with `history`, which is the id
+      *                          of the last block the state applied. If absent, nothing counts as
+      *                          applied until the first `FullBlockApplied`.
       */
-    case class StartExtraIndexer(history: ErgoHistory)
+    case class StartExtraIndexer(history: ErgoHistory, stateVersionOpt: Option[VersionTag])
 
     /**
       * Retreive the currently used segment treshold
@@ -857,7 +1006,7 @@ object ExtraIndexer {
   /**
     * Current newest database schema version. Used to force extra database resync.
     */
-  val NewestVersion: Int = 8
+  val NewestVersion: Int = 7
   val NewestVersionBytes: Array[Byte] = ByteBuffer.allocate(4).putInt(NewestVersion).array
 
   val IndexedHeightKey: Array[Byte] = Algos.hash("indexed height")
@@ -866,6 +1015,16 @@ object ExtraIndexer {
   val RollbackToKey: Array[Byte] = Algos.hash("rollback to")
   val IndexedHeaderIdKey: Array[Byte] = Algos.hash("indexed header id")
   val SchemaVersionKey: Array[Byte] = Algos.hash("schema version")
+
+  /**
+    * Marker key recording that the extra index contains storage-rent eligibility rows.
+    * Rent rows are written only while `storageRentCollection` is on, which the schema
+    * version can not capture: turning the flag back on after an off period must force a
+    * rebuild (blocks indexed while off have no rent rows), turning it off must not destroy
+    * the index. `ErgoHistory.readOrGenerate` maintains this marker accordingly.
+    */
+  val RentIndexEnabledKey: Array[Byte] = Algos.hash("rent index enabled")
+  val RentIndexEnabledBytes: Array[Byte] = Array(1.toByte)
 
   def getIndex(key: Array[Byte], history: HistoryStorage): ByteBuffer =
     ByteBuffer.wrap(history.modifierBytesById(bytesToId(key)).getOrElse(Array.fill[Byte](8) {
@@ -891,8 +1050,8 @@ object ExtraIndexer {
 
   def apply(chainSettings: ChainSettings,
             cacheSettings: CacheSettings,
-            nodeViewHolderRef: ActorRef)(implicit system: ActorSystem): ActorRef = {
-    val props = Props(new ExtraIndexer(cacheSettings, chainSettings.addressEncoder, Some(nodeViewHolderRef)))
+            nodeViewHolderRef: ActorRef)(implicit system: ActorSystem, rentIndexEnabled: Boolean): ActorRef = {
+    val props = Props(new ExtraIndexer(cacheSettings, chainSettings.addressEncoder, Some(nodeViewHolderRef), rentIndexEnabled))
     system.actorOf(props.withDispatcher(GlobalConstants.IndexerDispatcher))
   }
 }

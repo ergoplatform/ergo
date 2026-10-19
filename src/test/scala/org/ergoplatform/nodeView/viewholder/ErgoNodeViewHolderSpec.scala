@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.viewholder
 
+import akka.testkit.TestProbe
 import java.io.File
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.ErgoFullBlock
@@ -9,16 +10,22 @@ import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
-import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.utils.{BoxUtils, ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, TestCase}
+import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.{CloseWallet, GetTransaction, GetWalletStatus, InitWallet, ReadPublicKeys, ScanInThePast, ScanOnChain, WalletStatus}
+import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoWallet}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.settings.Constants.TrueTree
+import org.ergoplatform.wallet.Constants.PaymentsScanId
+
+import scala.concurrent.duration._
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -522,6 +529,312 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       getBestFullBlockOpt shouldBe None
       getBestHeaderOpt shouldBe None
       getCurrentState.rootDigest shouldEqual initDigest
+    }
+  }
+
+  property("height-zero wallet scans retained blocks before the first direct delivery") {
+    def observe(blocksToKeep: Int, probePendingBody: Boolean = false): (Boolean, Boolean) = {
+      val ordinarySettings = NodeViewTestConfig(
+        StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
+      val testSettings = ordinarySettings.copy(
+        nodeSettings = ordinarySettings.nodeSettings.copy(blocksToKeep = blocksToKeep))
+
+      new NodeViewFixture(testSettings, parameters).apply { fixture =>
+        import fixture._
+        val observer = TestProbe()(actorSystem)
+        val history = getCurrentView.history
+        val walletActor = getCurrentView.vault.walletActor
+        observer.awaitAssert({
+          observer.send(walletActor, GetWalletStatus)
+          observer.expectMsgType[WalletStatus].initialized shouldBe true
+        }, 10.seconds, 100.millis)
+        observer.send(walletActor, ReadPublicKeys(0, 1))
+        val paymentScript = observer.expectMsgType[Seq[org.ergoplatform.P2PKAddress]].head.script
+
+        val (producerState, producerBoxes) = createUtxoState(fixture.settings)
+        val genesisState = WrappedUtxoState(producerState, producerBoxes, fixture.settings)
+        val first = validFullBlock(None, genesisState)
+        val afterFirst = genesisState.applyModifier(first)(_ => ()).get
+        val minTxInputValue = 2 * BoxUtils.sufficientAmount(extendedParameters)
+        val firstSpendable = afterFirst.takeBoxes(afterFirst.size)
+          .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+        val creditTx = validTransactionFromBoxes(
+          IndexedSeq(firstSpendable), issueNew = false, outputsProposition = paymentScript)
+        val second = validFullBlock(Some(first), afterFirst, Seq(creditTx))
+        var producer = afterFirst.applyModifier(second)(_ => ()).get
+        var previous = second
+        val laterBlocks = (3 to 22).map { _ =>
+          val spendable = producer.takeBoxes(producer.size)
+            .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+          val tx = validTransactionFromBoxes(
+            IndexedSeq(spendable), issueNew = false, outputsProposition = TrueTree)
+          val block = validFullBlock(Some(previous), producer, Seq(tx))
+          producer = producer.applyModifier(block)(_ => ()).get
+          previous = block
+          block
+        }
+
+        (first +: second +: laterBlocks).foreach(block => applyHeader(block.header) shouldBe 'success)
+        history.headersHeight shouldBe 22
+        history.fullBlockHeight shouldBe 0
+
+        Seq(first, second, laterBlocks.head).zipWithIndex.foreach { case (block, index) =>
+          applyPayload(block) shouldBe 'success
+          val height = index + 1
+          observer.awaitAssert({
+            history.fullBlockHeight shouldBe height
+            getCurrentState.stateContext.currentHeight shouldBe height
+          }, 10.seconds, 100.millis)
+          if (height == 1) {
+            history.bestFullBlockAt(2) shouldBe None
+            if (probePendingBody) {
+              observer.send(walletActor, ScanOnChain(first))
+              observer.awaitAssert({
+                observer.send(walletActor, GetWalletStatus)
+                observer.expectMsgType[WalletStatus].height shouldBe 1
+              }, 10.seconds, 100.millis)
+            }
+            // A header for h2 exists, but its body has not arrived. It must not advance the wallet.
+            if (probePendingBody) observer.send(walletActor, ScanInThePast(2, rescan = false))
+            observer.send(walletActor, GetWalletStatus)
+            observer.expectMsgType[WalletStatus].height shouldBe (if (probePendingBody) 1 else 0)
+          }
+          if (height == 2 && probePendingBody) {
+            observer.awaitAssert({
+              observer.send(walletActor, GetWalletStatus)
+              observer.expectMsgType[WalletStatus].height shouldBe 2
+            }, 10.seconds, 100.millis)
+          }
+          if (height < 3 && !probePendingBody) {
+            history.headersHeight - history.fullBlockHeight should be >= 20
+            observer.send(walletActor, GetWalletStatus)
+            observer.expectMsgType[WalletStatus].height shouldBe 0
+          }
+        }
+        history.headersHeight - history.fullBlockHeight shouldBe 19
+        observer.awaitAssert({
+          observer.send(walletActor, GetWalletStatus)
+          observer.expectMsgType[WalletStatus].height shouldBe 3
+        }, 10.seconds, 100.millis)
+        observer.send(walletActor, GetTransaction(creditTx.id))
+        val credited = observer.expectMsgType[Option[AugWalletTransaction]]
+          .exists(_.wtx.scanIds.contains(PaymentsScanId))
+        history.getFullBlock(second.header).isDefined -> credited
+      }
+    }
+
+    observe(1) shouldBe ((false, false))
+    observe(3) shouldBe ((true, true))
+    observe(-1) shouldBe ((true, true))
+    observe(3, probePendingBody = true) shouldBe ((true, true))
+  }
+
+  property("height-zero wallet catches up on quiet reopen") {
+    val ordinarySettings = NodeViewTestConfig(
+      StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
+    val testSettings = ordinarySettings.copy(
+      nodeSettings = ordinarySettings.nodeSettings.copy(blocksToKeep = 3))
+
+    new NodeViewFixture(testSettings, parameters).apply { fixture =>
+      import fixture._
+      val observer = TestProbe()(actorSystem)
+      val history = getCurrentView.history
+      val walletActor = getCurrentView.vault.walletActor
+      observer.awaitAssert({
+        observer.send(walletActor, GetWalletStatus)
+        observer.expectMsgType[WalletStatus].initialized shouldBe true
+      }, 10.seconds, 100.millis)
+      observer.send(walletActor, ReadPublicKeys(0, 1))
+      val paymentScript = observer.expectMsgType[Seq[org.ergoplatform.P2PKAddress]].head.script
+
+      val (producerState, producerBoxes) = createUtxoState(fixture.settings)
+      val genesisState = WrappedUtxoState(producerState, producerBoxes, fixture.settings)
+      val first = validFullBlock(None, genesisState)
+      val afterFirst = genesisState.applyModifier(first)(_ => ()).get
+      val minTxInputValue = 2 * BoxUtils.sufficientAmount(extendedParameters)
+      val firstSpendable = afterFirst.takeBoxes(afterFirst.size)
+        .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+      val creditTx = validTransactionFromBoxes(
+        IndexedSeq(firstSpendable), issueNew = false, outputsProposition = paymentScript)
+      val second = validFullBlock(Some(first), afterFirst, Seq(creditTx))
+      var producer = afterFirst.applyModifier(second)(_ => ()).get
+      var previous = second
+      val laterHeaders = (3 to 22).map { _ =>
+        val spendable = producer.takeBoxes(producer.size)
+          .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+        val tx = validTransactionFromBoxes(
+          IndexedSeq(spendable), issueNew = false, outputsProposition = TrueTree)
+        val block = validFullBlock(Some(previous), producer, Seq(tx))
+        producer = producer.applyModifier(block)(_ => ()).get
+        previous = block
+        block.header
+      }
+
+      (Seq(first.header, second.header) ++ laterHeaders)
+        .foreach(header => applyHeader(header) shouldBe 'success)
+      applyPayload(first) shouldBe 'success
+      applyPayload(second) shouldBe 'success
+      observer.awaitAssert({
+        history.fullBlockHeight shouldBe 2
+        getCurrentState.stateContext.currentHeight shouldBe 2
+      }, 10.seconds, 100.millis)
+      observer.send(walletActor, GetWalletStatus)
+      observer.expectMsgType[WalletStatus].height shouldBe 0
+      history.getFullBlock(second.header).isDefined shouldBe true
+
+      observer.watch(walletActor)
+      observer.send(walletActor, CloseWallet)
+      observer.expectTerminated(walletActor)
+      val reopened = ErgoWallet.readOrGenerate(history, fixture.settings, parameters).walletActor
+      observer.awaitAssert({
+        observer.send(reopened, GetWalletStatus)
+        observer.expectMsgType[WalletStatus].height shouldBe 2
+      }, 10.seconds, 100.millis)
+      observer.send(reopened, GetTransaction(creditTx.id))
+      observer.expectMsgType[Option[AugWalletTransaction]]
+        .exists(_.wtx.scanIds.contains(PaymentsScanId)) shouldBe true
+      observer.send(reopened, CloseWallet)
+    }
+  }
+
+  property("height-zero wallet catch-up follows the selected full chain when headers diverge") {
+    val ordinarySettings = NodeViewTestConfig(
+      StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
+    val testSettings = ordinarySettings.copy(
+      nodeSettings = ordinarySettings.nodeSettings.copy(blocksToKeep = 3))
+
+    new NodeViewFixture(testSettings, parameters).apply { fixture =>
+      import fixture._
+      val observer = TestProbe()(actorSystem)
+      val history = getCurrentView.history
+      val walletActor = getCurrentView.vault.walletActor
+      observer.awaitAssert({
+        observer.send(walletActor, GetWalletStatus)
+        observer.expectMsgType[WalletStatus].initialized shouldBe true
+      }, 10.seconds, 100.millis)
+      observer.send(walletActor, ReadPublicKeys(0, 1))
+      val paymentScript = observer.expectMsgType[Seq[org.ergoplatform.P2PKAddress]].head.script
+
+      val (producerState, producerBoxes) = createUtxoState(fixture.settings)
+      val genesisState = WrappedUtxoState(producerState, producerBoxes, fixture.settings)
+      val first = validFullBlock(None, genesisState)
+      applyBlock(first) shouldBe 'success
+      val afterFirst = genesisState.applyModifier(first)(_ => ()).get
+      observer.awaitAssert({
+        observer.send(walletActor, GetWalletStatus)
+        observer.expectMsgType[WalletStatus].height shouldBe 1
+      }, 10.seconds, 100.millis)
+
+      val minTxInputValue = 2 * BoxUtils.sufficientAmount(extendedParameters)
+      val spendable = afterFirst.takeBoxes(afterFirst.size)
+        .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+      val creditTx = validTransactionFromBoxes(
+        IndexedSeq(spendable), issueNew = false, outputsProposition = paymentScript)
+      val second = validFullBlock(Some(first), afterFirst, Seq(creditTx))
+      val afterSecond = afterFirst.applyModifier(second)(_ => ()).get
+      val thirdInput = afterSecond.takeBoxes(afterSecond.size)
+        .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+      val thirdTx = validTransactionFromBoxes(
+        IndexedSeq(thirdInput), issueNew = false, outputsProposition = TrueTree)
+      val third = validFullBlock(Some(second), afterSecond, Seq(thirdTx))
+
+      val bForkState = afterSecond.rollbackTo(afterFirst.version).get
+      val bSecondTx = validTransactionFromBoxes(
+        IndexedSeq(spendable), issueNew = true, outputsProposition = TrueTree)
+      val bSecond = validFullBlock(Some(first), bForkState, Seq(bSecondTx))
+      bSecond.header.id should not be second.header.id
+      var bState = bForkState.applyModifier(bSecond)(_ => ()).get
+      var bPrevious = bSecond
+      val bLater = (3 to 22).map { _ =>
+        val bInput = bState.takeBoxes(bState.size)
+          .filter(box => box.ergoTree == TrueTree && box.value >= minTxInputValue).maxBy(_.value)
+        val bTx = validTransactionFromBoxes(
+          IndexedSeq(bInput), issueNew = false, outputsProposition = TrueTree)
+        val block = validFullBlock(Some(bPrevious), bState, Seq(bTx))
+        bState = bState.applyModifier(block)(_ => ()).get
+        bPrevious = block
+        block
+      }
+      applyHeader(second.header) shouldBe 'success
+      applyHeader(third.header) shouldBe 'success
+      (bSecond +: bLater).foreach(block => applyHeader(block.header) shouldBe 'success)
+      history.headersHeight shouldBe 22
+      history.bestHeaderIdAtHeight(2) shouldBe Some(bSecond.header.id)
+
+      applyPayload(second) shouldBe 'success
+      observer.awaitAssert({
+        history.fullBlockHeight shouldBe 2
+        getCurrentState.stateContext.currentHeight shouldBe 2
+      }, 10.seconds, 100.millis)
+      history.isSelectedFullBlockId(second.header.id) shouldBe true
+      history.getFullBlock(second.header).isDefined shouldBe true
+      history.bestFullBlockAt(2) shouldBe None
+      observer.send(walletActor, GetWalletStatus)
+      observer.expectMsgType[WalletStatus].height shouldBe 1
+
+      applyPayload(third) shouldBe 'success
+      observer.awaitAssert({
+        history.fullBlockHeight shouldBe 3
+        getCurrentState.stateContext.currentHeight shouldBe 3
+      }, 10.seconds, 100.millis)
+      observer.awaitAssert({
+        observer.send(walletActor, GetWalletStatus)
+        observer.expectMsgType[WalletStatus].height shouldBe 3
+      }, 10.seconds, 100.millis)
+      observer.send(walletActor, GetTransaction(creditTx.id))
+      observer.expectMsgType[Option[AugWalletTransaction]]
+        .exists(_.wtx.scanIds.contains(PaymentsScanId)) shouldBe true
+    }
+  }
+
+  property("height-zero wallet catches up after late initialization") {
+    val ordinarySettings = NodeViewTestConfig(
+      StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
+    val testSettings = ordinarySettings.copy(
+      nodeSettings = ordinarySettings.nodeSettings.copy(blocksToKeep = 3),
+      walletSettings = ordinarySettings.walletSettings.copy(testMnemonic = None, testKeysQty = None))
+
+    new NodeViewFixture(testSettings, parameters).apply { fixture =>
+      import fixture._
+      val observer = TestProbe()(actorSystem)
+      val history = getCurrentView.history
+      val walletActor = getCurrentView.vault.walletActor
+      observer.awaitAssert({
+        observer.send(walletActor, GetWalletStatus)
+        observer.expectMsgType[WalletStatus].initialized shouldBe false
+      }, 10.seconds, 100.millis)
+
+      val (producerState, producerBoxes) = createUtxoState(fixture.settings)
+      val genesisState = WrappedUtxoState(producerState, producerBoxes, fixture.settings)
+      val first = validFullBlock(None, genesisState)
+      val afterFirst = genesisState.applyModifier(first)(_ => ()).get
+      val second = validFullBlock(Some(first), afterFirst)
+      applyBlock(first) shouldBe 'success
+      applyBlock(second) shouldBe 'success
+      observer.awaitAssert({
+        history.fullBlockHeight shouldBe 2
+        getCurrentState.stateContext.currentHeight shouldBe 2
+      }, 10.seconds, 100.millis)
+      history.getFullBlock(first.header).isDefined shouldBe true
+      history.getFullBlock(second.header).isDefined shouldBe true
+
+      observer.send(walletActor, ChangedState(getCurrentState.getReader))
+      observer.send(walletActor, GetWalletStatus)
+      val before = observer.expectMsgType[WalletStatus]
+      before.initialized shouldBe false
+      before.height shouldBe 0
+
+      observer.send(walletActor, InitWallet(
+        org.ergoplatform.sdk.SecretString.create("height-zero-test-passphrase"), None))
+      val initialized = observer.expectMsgType[scala.util.Try[org.ergoplatform.sdk.SecretString]]
+      initialized.isSuccess shouldBe true
+      initialized.foreach(_.erase())
+      observer.awaitAssert({
+        observer.send(walletActor, GetWalletStatus)
+        val status = observer.expectMsgType[WalletStatus]
+        status.initialized shouldBe true
+        status.height shouldBe 2
+      }, 10.seconds, 100.millis)
     }
   }
 

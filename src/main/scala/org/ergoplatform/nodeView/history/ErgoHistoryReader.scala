@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTyp
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight, Height}
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.storage._
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, FullBlockProcessor, HeadersProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import org.ergoplatform.validation.MalformedModifierError
@@ -61,6 +61,10 @@ trait ErgoHistoryReader
     */
   def bestFullBlockOpt: Option[ErgoFullBlock] =
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).flatMap(getFullBlock)
+
+  /** Whether a header belongs to the currently selected full-block chain. */
+  def isSelectedFullBlockId(id: ModifierId): Boolean =
+    FullBlockProcessor.isInBestFullChain(historyStorage, id)
 
   /**
     * @param id - modifier id

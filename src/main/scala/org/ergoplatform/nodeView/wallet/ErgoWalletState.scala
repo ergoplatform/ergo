@@ -101,7 +101,13 @@ case class ErgoWalletState(
   }
 
   // expected height of a next block when the wallet is receiving a new block with the height blockHeight
-  def expectedNextBlockHeight(blockHeight: Height, isFullBlocksPruned: Boolean): Height = {
+  def expectedNextBlockHeight(blockHeight: Height, isFullBlocksPruned: Boolean): Height =
+    expectedNextBlockHeight(blockHeight, isFullBlocksPruned, blockHeight)
+
+  // The actor may supply an earlier retained body when a pruned wallet has no checkpoint yet.
+  def expectedNextBlockHeight(blockHeight: Height,
+                              isFullBlocksPruned: Boolean,
+                              firstRetainedHeight: Height): Height = {
     val walletHeight = getWalletHeight
     if (!isFullBlocksPruned) {
       // Node has all the full blocks and applies them sequentially
@@ -109,7 +115,7 @@ case class ErgoWalletState(
     } else {
       // Node has pruned blockchain
       if (walletHeight == 0) {
-        blockHeight // todo: should be height of first non-pruned block
+        Math.max(1, Math.min(blockHeight, firstRetainedHeight))
       } else {
         walletHeight + 1
       }

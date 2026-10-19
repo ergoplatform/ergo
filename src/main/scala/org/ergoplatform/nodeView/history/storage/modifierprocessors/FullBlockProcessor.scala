@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -24,9 +25,8 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
-  def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .map(ByteArrayWrapper.apply)
-    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
+  def isInBestFullChain(id: ModifierId): Boolean =
+    FullBlockProcessor.isInBestFullChain(historyStorage, id)
 
   /**
     * Id of header that contains transactions and proofs
@@ -106,19 +106,27 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          // Marker of what we have pruned so far; read before the floor is advanced below. For
-          // nodes upgraded from the previous sliding-window logic it defaults to the old floor.
-          val prunedFrom = readPrunedHeight()
-          val lastKept = updateBestFullBlock(fullBlock.header) // new minimal full block height
-          // Do not prune block data the wallet has not scanned yet, so it can always catch up.
-          // `None` means the wallet imposes no constraint (mining-only / not-yet-initialized).
-          val pruneUntil = walletScannedHeight match {
-            case Some(walletHeight) => Math.min(lastKept, walletHeight + 1)
-            case None               => lastKept
-          }
-          if (pruneUntil > prunedFrom) {
-            pruneBlockDataAt((prunedFrom until pruneUntil).filter(_ >= 0))
-            writePrunedHeight(pruneUntil)
+          Try {
+            // Marker of what we have pruned so far; read before the floor is advanced below. For
+            // nodes upgraded from the previous sliding-window logic it defaults to the old floor.
+            val prunedFrom = readPrunedHeight()
+            // Preserve the fallback before advancing the floor, including when cleanup must retry.
+            if (historyStorage.getIndex(PrunedHeightKey).isEmpty) writePrunedHeight(prunedFrom)
+            updateBestFullBlock(fullBlock.header)
+            // A failed floor write must not authorize deletion beyond the persisted boundary.
+            val lastKept = minimalFullBlockHeight
+            // Do not prune block data the wallet has not scanned yet, so it can always catch up.
+            // `None` means the wallet imposes no constraint (mining-only / not-yet-initialized).
+            val pruneUntil = walletScannedHeight match {
+              case Some(walletHeight) => Math.min(lastKept, walletHeight + 1)
+              case None               => lastKept
+            }
+            if (pruneUntil > prunedFrom) {
+              pruneBlockDataAt((prunedFrom until pruneUntil).filter(_ >= 0)).get
+              writePrunedHeight(pruneUntil)
+            }
+          }.failed.foreach { error =>
+            log.warn("Full block cleanup deferred; best full block is already recorded and cleanup will retry", error)
           }
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
@@ -297,5 +305,10 @@ object FullBlockProcessor {
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("main_chain".getBytes(CharsetName) ++ idToBytes(id)))
+
+  private[history] def isInBestFullChain(historyStorage: HistoryStorage, id: ModifierId): Boolean =
+    historyStorage.getIndex(chainStatusKey(id))
+      .map(ByteArrayWrapper.apply)
+      .contains(ByteArrayWrapper(BestChainMarker))
 
 }

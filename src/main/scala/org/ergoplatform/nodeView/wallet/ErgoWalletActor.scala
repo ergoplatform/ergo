@@ -4,7 +4,10 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState, WalletScannedHeight}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedHistory, ChangedMempool, ChangedState, WalletScannedHeight}
+import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
@@ -32,12 +35,56 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
 
+  private var pendingScan: Option[ScanInThePast] = None
+
+  private def selectedFullBlockIdAt(height: Height) =
+    historyReader.headerIdsAtHeight(height).find(historyReader.isSelectedFullBlockId)
+
+  private def selectedFullBlockAt(height: Height): Option[ErgoFullBlock] =
+    selectedFullBlockIdAt(height)
+      .flatMap(historyReader.typedModifierById[Header])
+      .flatMap(historyReader.getFullBlock)
+
   /** Report the height up to which the wallet has scanned, so the node view holder can keep
     * history from pruning blocks the wallet has not processed yet. Height 0 (fresh or
     * uninitialized wallet) is not reported, leaving pruning unconstrained in that case. */
   private def reportScannedHeight(state: ErgoWalletState): Unit = {
     val h = state.getWalletHeight
     if (h > 0) context.system.eventStream.publish(WalletScannedHeight(h))
+  }
+
+  /** Find the start of the retained suffix, including any still-readable bodies below the
+    * persisted pruning marker. A wallet with a nonzero checkpoint keeps its ordinary next height.
+    */
+  private def expectedHeightToScan(state: ErgoWalletState, blockHeight: Height): Height = {
+    val pruned = settings.nodeSettings.isFullBlocksPruned
+    val firstRetained = if (pruned && state.getWalletHeight == 0) {
+      var first = Math.max(1, Math.min(blockHeight, historyReader.readPrunedHeight()))
+      while (first > 1 && selectedFullBlockAt(first - 1).isDefined) {
+        first -= 1
+      }
+      first
+    } else {
+      blockHeight
+    }
+    state.expectedNextBlockHeight(blockHeight, pruned, firstRetained)
+  }
+
+  /** Missing block data is only safe to skip after a canonical full chain has reached this
+    * height and the persisted pruning marker confirms that the body was removed.
+    */
+  private def confirmedPruned(blockHeight: Height): Boolean = {
+    val fullHeight = historyReader.fullBlockHeight
+    blockHeight < historyReader.readPrunedHeight() &&
+      blockHeight <= fullHeight &&
+      selectedFullBlockIdAt(blockHeight).isDefined
+  }
+
+  private def resumeWalletCatchUp(state: ErgoWalletState): Unit = {
+    val fullHeight = historyReader.fullBlockHeight
+    if (state.secretIsSet(settings.walletSettings.testMnemonic) && fullHeight > state.getWalletHeight) {
+      self ! ScanInThePast(expectedHeightToScan(state, fullHeight), rescan = false)
+    }
   }
 
   override val supervisorStrategy: OneForOneStrategy =
@@ -72,6 +119,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       case Success(state) =>
         context.system.eventStream.subscribe(self, classOf[ChangedState])
         context.system.eventStream.subscribe(self, classOf[ChangedMempool])
+        context.system.eventStream.subscribe(self, classOf[ChangedHistory])
         self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)
@@ -86,6 +134,7 @@ class ErgoWalletActor(settings: ErgoSettings,
       val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
       context.become(loadedWallet(newState))
       reportScannedHeight(newState) // report persisted height early (e.g. after a restart)
+      resumeWalletCatchUp(newState)
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
@@ -99,6 +148,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           log.info("Wallet is initialized")
           context.become(loadedWallet(newState))
           self ! UnlockWallet(walletPass)
+          resumeWalletCatchUp(newState)
           sender() ! Success(mnemonic)
         case Failure(t) =>
           walletPass.erase()
@@ -114,6 +164,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           log.info("Wallet is restored")
           context.become(loadedWallet(newState))
           self ! UnlockWallet(walletPass)
+          resumeWalletCatchUp(newState)
           sender() ! Success(())
         case Failure(t) =>
           walletPass.erase()
@@ -209,6 +260,14 @@ class ErgoWalletActor(settings: ErgoSettings,
       val newState = ergoWalletService.updateUtxoState(state.copy(mempoolReaderOpt = Some(mr)))
       context.become(loadedWallet(newState))
 
+    case ChangedHistory(_) if pendingScan.nonEmpty =>
+      pendingScan.foreach { retry =>
+        pendingScan = None
+        self ! retry
+      }
+
+    case ChangedHistory(_) => ()
+
     case ChangedState(s: ErgoStateReader@unchecked) =>
       state.storage.updateStateContext(s.stateContext) match {
         case Success(_) =>
@@ -241,11 +300,14 @@ class ErgoWalletActor(settings: ErgoSettings,
       context.become(loadedWallet(newState))
 
     // rescan=true means we serve a user request for rescan from arbitrary height
-    case ScanInThePast(blockHeight, rescan) =>
-      val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
-      if (nextBlockHeight == blockHeight || rescan) {
+    case scan@ScanInThePast(blockHeight, rescan) =>
+      pendingScan = None
+      val nextBlockHeight = expectedHeightToScan(state, blockHeight)
+      if (nextBlockHeight < blockHeight && !rescan) {
+        self ! ScanInThePast(nextBlockHeight, rescan = false)
+      } else if (nextBlockHeight == blockHeight || rescan) {
         val newState =
-          historyReader.bestFullBlockAt(blockHeight) match {
+          selectedFullBlockAt(blockHeight) match {
             case Some(block) =>
               val operation = if (rescan) "rescanning" else "scanning"
               log.info(s"Wallet is $operation a block ${block.id} in the past at height ${block.height}")
@@ -257,11 +319,10 @@ class ErgoWalletActor(settings: ErgoSettings,
                 case Success(updatedState) =>
                   updatedState
               }
-            case None if settings.nodeSettings.isFullBlocksPruned =>
-              // The block data is unavailable - it was pruned before the wallet could scan it.
-              // Advance the wallet height past it (using the still-present header as version tag)
-              // so scanning does not get stuck; the block's wallet transactions, if any, are lost.
-              historyReader.bestHeaderIdAtHeight(blockHeight) match {
+            case None if settings.nodeSettings.isFullBlocksPruned && confirmedPruned(blockHeight) =>
+              // The canonical block was applied and its body is behind the persisted pruning
+              // boundary. Its wallet transactions cannot be recovered from this node.
+              selectedFullBlockIdAt(blockHeight) match {
                 case Some(headerId) =>
                   ergoWalletService.skipBlockUpdate(state, headerId, blockHeight) match {
                     case Failure(ex) =>
@@ -276,24 +337,39 @@ class ErgoWalletActor(settings: ErgoSettings,
                   log.warn(s"No header at height $blockHeight to skip, wallet left at ${state.getWalletHeight}")
                   state
               }
+            case None if settings.nodeSettings.isFullBlocksPruned =>
+              log.warn(s"Wallet waiting for unavailable block body at height $blockHeight; " +
+                s"full-block height ${historyReader.fullBlockHeight}, pruning marker ${historyReader.readPrunedHeight()}")
+              pendingScan = Some(scan)
+              state
             case None =>
-              state // We may do not have a block, e.g. it is not downloaded yet. This is okay, just skip it.
+              pendingScan = Some(scan)
+              state // Retry after history supplies the missing body.
         }
         context.become(loadedWallet(newState))
         reportScannedHeight(newState)
-        if (blockHeight < newState.fullHeight) {
+        if (newState.getWalletHeight >= blockHeight &&
+            blockHeight < Math.max(newState.fullHeight, historyReader.fullBlockHeight)) {
           self ! ScanInThePast(blockHeight + 1, rescan)
-        } else if (rescan) {
+        } else if (rescan && newState.getWalletHeight >= blockHeight) {
           log.info(s"Rescanning finished at height $blockHeight")
           context.become(loadedWallet(newState.copy(rescanInProgress = false)))
         }
       }
 
     //scan block transactions
+    case ScanOnChain(_) if pendingScan.nonEmpty =>
+      pendingScan.foreach { retry =>
+        pendingScan = None
+        self ! retry
+      }
+
     case ScanOnChain(newBlock) =>
-      if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
-        val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)
-        if (nextBlockHeight == newBlock.height) {
+      if (state.secretIsSet(settings.walletSettings.testMnemonic)) {
+        val nextBlockHeight = expectedHeightToScan(state, newBlock.height)
+        if (state.getWalletHeight == 0 && settings.nodeSettings.isFullBlocksPruned) {
+          self ! ScanInThePast(nextBlockHeight, rescan = false)
+        } else if (nextBlockHeight == newBlock.height) {
           log.info(s"Wallet is going to scan a block ${newBlock.id} on chain at height ${newBlock.height}")
           val newState =
             ergoWalletService.scanBlockUpdate(state, newBlock, settings.walletSettings.dustLimit) match {
@@ -308,7 +384,7 @@ class ErgoWalletActor(settings: ErgoSettings,
           reportScannedHeight(newState)
         } else if (nextBlockHeight < newBlock.height) {
           log.warn(s"Wallet: skipped blocks found starting from $nextBlockHeight, going back to scan them")
-          self ! ScanInThePast(nextBlockHeight, false)
+          self ! ScanInThePast(nextBlockHeight, rescan = false)
         } else {
           log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
@@ -372,7 +448,7 @@ class ErgoWalletActor(settings: ErgoSettings,
         ergoWalletService.recreateRegistry(state, settings) match {
           case Success(newState) =>
             context.become(loadedWallet(newState.copy(rescanInProgress = true)))
-            val heightToScanFrom = Math.min(newState.fullHeight, fromHeight)
+            val heightToScanFrom = Math.max(1, Math.min(newState.fullHeight, fromHeight))
             self ! ScanInThePast(heightToScanFrom, rescan = true)
             sender() ! Success(())
           case f@Failure(t) =>

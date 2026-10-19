@@ -263,10 +263,14 @@ class ErgoWalletActor(settings: ErgoSettings,
         } else if (rescan) {
           log.info(s"Rescanning finished at height $blockHeight")
           context.become(loadedWallet(newState.copy(rescanInProgress = false)))
+          unstashAll()
         }
       }
 
     //scan block transactions
+    case ScanOnChain(_) if state.rescanInProgress =>
+      stash()
+
     case ScanOnChain(newBlock) =>
       if (state.secretIsSet(settings.walletSettings.testMnemonic)) { // scan blocks only if wallet is initialized
         val nextBlockHeight = state.expectedNextBlockHeight(newBlock.height, settings.nodeSettings.isFullBlocksPruned)

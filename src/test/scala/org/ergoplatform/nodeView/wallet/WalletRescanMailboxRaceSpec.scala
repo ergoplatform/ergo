@@ -61,12 +61,22 @@ class WalletRescanMailboxRaceSpec
       val history = getHistory
       history.bestFullBlockAt(first.height).map(_.id) shouldBe Some(first.id)
       history.bestFullBlockAt(second.height).map(_.id) shouldBe Some(second.id)
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        getConfirmedBalances.height shouldBe second.height
+      }
+      val thirdPayment = PaymentRequest(address, walletBalance / 4, Array.empty, Map.empty)
+      val thirdTx = await(wallet.generateTransaction(Seq(thirdPayment))).get
+      // Keep the actor's applied-state snapshot at h2 while queuing an h3 delivery.
+      val third = makeNextBlock(getUtxoState, Seq(thirdTx))
+      third.height shouldBe 3
 
       def run(
         name: String,
         fromHeight: Int,
         queueBeforeRescan: Boolean,
-        queueAfterRescan: Boolean
+        queueAfterRescan: Boolean,
+        queueFirstAfterRescan: Boolean = false,
+        queueSuccessorAfterRescan: Boolean = false
       ): RunResult = {
         val actorSettings = w.settings.copy(
           directory = new File(w.nodeViewDir, name).getAbsolutePath,
@@ -137,7 +147,11 @@ class WalletRescanMailboxRaceSpec
           probe.send(actor, ChangedState(fullState))
           if (queueBeforeRescan) probe.send(actor, ScanOnChain(second))
           probe.send(actor, RescanWallet(fromHeight))
-          if (queueAfterRescan) probe.send(actor, ScanOnChain(second))
+          if (queueAfterRescan) {
+            val liveBlock = if (queueFirstAfterRescan) first
+              else if (queueSuccessorAfterRescan) third else second
+            probe.send(actor, ScanOnChain(liveBlock))
+          }
         } finally {
           releaseRead.countDown()
         }
@@ -180,6 +194,25 @@ class WalletRescanMailboxRaceSpec
       defaultRaced.scans.map(_.blockHeight) shouldBe Vector(1, 2)
       defaultRaced.scans.map(_.beforeHeight) shouldBe Vector(0, 1)
       defaultRaced.scans.forall(_.succeeded) shouldBe true
+
+      val firstRaced = run("default-live-first-after-rescan", 0, false, true,
+        queueFirstAfterRescan = true)
+      firstRaced.status.error shouldBe None
+      firstRaced.digest.height shouldBe second.height
+      withClue(s"first-block delivery after rescan, observed ${firstRaced.scans}: ") {
+        firstRaced.digest.walletBalance shouldBe defaultControl.digest.walletBalance
+      }
+      firstRaced.scans.map(_.blockHeight) shouldBe Vector(1, 2)
+      firstRaced.scans.map(_.beforeHeight) shouldBe Vector(0, 1)
+      firstRaced.scans.forall(_.succeeded) shouldBe true
+
+      val successorRaced = run("live-successor-after-rescan", 0, false, true,
+        queueSuccessorAfterRescan = true)
+      successorRaced.status.error shouldBe None
+      successorRaced.digest.height shouldBe third.height
+      successorRaced.scans.map(_.blockHeight) shouldBe Vector(1, 2, 3)
+      successorRaced.scans.map(_.beforeHeight) shouldBe Vector(0, 1, 2)
+      successorRaced.scans.forall(_.succeeded) shouldBe true
 
       val control = run("single-pass", 1, false, false)
       control.scans.map(_.blockHeight) shouldBe Vector(1, 2)

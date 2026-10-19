@@ -401,7 +401,6 @@ class ErgoWalletActor(settings: ErgoSettings,
           case _: Success[Unit] =>
             // Reset outputs Bloom filter to have it initialized again on next block scanned
             // todo: for offchain registry, refresh is also needed, https://github.com/ergoplatform/ergo/issues/1180
-            pendingScan = None
             context.become(loadedWallet(state.copy(outputsFilter = None)))
         }
       } else {

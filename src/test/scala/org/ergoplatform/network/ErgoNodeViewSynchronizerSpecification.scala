@@ -1702,6 +1702,33 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: unsolicited deeply nested snapshot chunk does not stop the actor") {
+    withUtxoBootstrapFixture(utxoBootstrap = false) { ctx =>
+      import ctx._
+
+      synchronizerMockRef ! ChangedState(localStateGen.sample.get)
+      val internal = Array[Byte](0, 0) ++
+        Array.fill[Byte](32)(1) ++ Array.fill[Byte](32)(2) ++ Array.fill[Byte](32)(3)
+      val leaf = Array[Byte](1) ++ Array.fill[Byte](32)(4) ++
+        Array[Byte](0, 0, 0, 1, 5) ++ Array.fill[Byte](32)(6)
+      val chunk = Array.concat(Array.fill(20000)(internal).flatten, leaf,
+        Array.fill(20000)(leaf).flatten)
+
+      synchronizerMockRef ! Message(UtxoSnapshotChunkSpec,
+        Left(UtxoSnapshotChunkSpec.toBytes(chunk)), Some(peer))
+      ncProbe.fishForMessage(3.seconds) {
+        case PenalizePeer(address, PenaltyType.MisbehaviorPenalty) =>
+          address == peer.connectionId.remoteAddress
+        case _ => false
+      }
+
+      val unknownHeaderId = modifierIdGen.sample.get
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(unknownHeaderId)))), Some(peer))
+      requestForModifierSent(ncProbe, Header.modifierTypeId, unknownHeaderId)
+    }
+  }
+
   /*
    * Anti-spam handling of transactions declined by the mempool.
    *

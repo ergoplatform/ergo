@@ -5,10 +5,10 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server.{Directive, Directive1, ExceptionHandler, Route, ValidationRejection}
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.pattern.ask
-import io.circe.Json
+import io.circe.{Encoder, Json}
 import io.circe.syntax.EncoderOps
 import org.ergoplatform.http.api.SortDirection.{ASC, DESC, Direction, INVALID}
-import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
+import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder, ErgoBox}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentThreshold
@@ -17,6 +17,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
+import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType}
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError, ServiceUnavailable}
 import org.ergoplatform.modifiers.history.header.Header
@@ -78,13 +79,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case _ => reject(ValidationRejection("Wrong address format"))
     }
 
+  private val digestMode: Boolean = ergoSettings.nodeSettings.stateType == StateType.Digest
+
   override val route: Route = handleExceptions(recoveryExceptionHandler) {
   if(ergoSettings.nodeSettings.extraIndex)
     pathPrefix("blockchain") {
       getIndexedHeightR ~
-      onSuccess(getRawHistory) { history =>
-        if (getIndex(RollbackToKey, history).getInt != 0 ||
-            !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+      onSuccess(getRawHistoryAndState) { case (history, stateOpt) =>
+        if (recoveryIncomplete(history, stateOpt)) {
           recoveryUnavailable
         } else {
           getTxByIdR ~
@@ -123,19 +125,79 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getRawHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
-  private def checkedHistory(history: ErgoHistoryReader): ErgoHistoryReader = {
-    if (getIndex(RollbackToKey, history).getInt != 0 ||
-        !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+  private def getRawHistoryAndState: Future[(ErgoHistoryReader, Option[ErgoStateReader])] =
+    if (digestMode) {
+      (readersHolder ? GetReaders).mapTo[Readers].map(r => (r.h, Some(r.s)))
+    } else {
+      getRawHistory.map(h => (h, None))
+    }
+
+  private def recoveryIncomplete(history: ErgoHistoryReader, stateOpt: Option[ErgoStateReader]): Boolean =
+    getIndex(RollbackToKey, history).getInt != 0 ||
+      (if (digestMode) {
+        !stateOpt.exists(state => ExtraIndexer.checkpointOnCertifiedDigestFullChain(
+          history, state, ergoSettings.nodeSettings.verifyTransactions))
+      } else {
+        !ExtraIndexer.checkpointOnSelectedFullChain(history)
+      })
+
+  private def checkedHistory(history: ErgoHistoryReader, stateOpt: Option[ErgoStateReader]): ErgoHistoryReader = {
+    if (recoveryIncomplete(history, stateOpt)) {
       throw ExtraIndexRecoveryIncomplete
     }
     history
   }
 
-  private def getHistory: Future[ErgoHistoryReader] =
-    getRawHistory.map(checkedHistory)
+  private def indexCheckpoint(history: ErgoHistoryReader): (Int, Option[ModifierId]) =
+    (getIndex(ExtraIndexer.IndexedHeightKey, history).getInt,
+      history.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey)).map(bytes => bytesToId(bytes)))
 
-  private def getHistoryWithMempool: Future[(ErgoHistoryReader,ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map(r => (checkedHistory(r.h), r.m))
+  private def checkedIndexJson[A: Encoder](history: ErgoHistoryReader,
+                                           stateOpt: Option[ErgoStateReader])(read: => A): Json =
+    history.withExtraIndexReadLock {
+      checkedHistory(history, stateOpt)
+      val result = read.asJson
+      checkedHistory(history, stateOpt)
+      result
+    }
+
+  private def withHistoryJson[A: Encoder](read: ErgoHistoryReader => A): Future[Json] =
+    getRawHistoryAndState.map { case (history, stateOpt) =>
+      checkedIndexJson(history, stateOpt)(read(history))
+    }
+
+  private def withHistoryAndThresholdJson[A: Encoder](read: (ErgoHistoryReader, Int) => A): Future[Json] =
+    getRawHistoryAndState.map { case (history, stateOpt) =>
+      val threshold = segmentTreshold
+      checkedIndexJson(history, stateOpt)(read(history, threshold))
+    }
+
+  private def withHistoryAndMempoolJson[P, A: Encoder](prepare: ErgoMemPoolReader => P)
+                                                      (read: (ErgoHistoryReader, P) => A): Future[Json] =
+    (readersHolder ? GetReaders).mapTo[Readers].map { readers =>
+      val checkpoint = readers.h.withExtraIndexReadLock {
+        checkedHistory(readers.h, Some(readers.s))
+        indexCheckpoint(readers.h)
+      }
+      val prepared = prepare(readers.m)
+      checkedIndexJson(readers.h, Some(readers.s)) {
+        if (indexCheckpoint(readers.h) != checkpoint) throw ExtraIndexRecoveryIncomplete
+        read(readers.h, prepared)
+      }
+    }
+
+  private case class PreparedUnspentMempool(spentBoxIds: Set[ModifierId],
+                                             unconfirmedBoxes: Seq[ErgoBox])
+
+  private def prepareUnspentMempool(mempool: ErgoMemPoolReader,
+                                    unconfirmed: Boolean,
+                                    excludeMempoolSpent: Boolean,
+                                    matchingBoxes: => Seq[ErgoBox]): PreparedUnspentMempool = {
+    val spentBoxIds = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet
+                      else Set.empty[ModifierId]
+    val unconfirmedBoxes = if (unconfirmed) matchingBoxes else Seq.empty[ErgoBox]
+    PreparedUnspentMempool(spentBoxIds, unconfirmedBoxes)
+  }
 
   private def getAddress(tree: ErgoTree)(history: ErgoHistoryReader): Option[IndexedErgoAddress] =
     history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(tree))
@@ -152,8 +214,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case None     => None
     }
 
-  private def getTxByIdF(id: ModifierId): Future[Option[IndexedErgoTransaction]] =
-    getHistory.map { history =>
+  private def getTxByIdF(id: ModifierId): Future[Json] =
+    withHistoryJson { history =>
       getTxById(id)(history)
     }
 
@@ -180,8 +242,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getTxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoTransaction] =
     getTxById(history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(index))).get.m)(history)
 
-  private def getTxByIndexF(index: Long): Future[Option[IndexedErgoTransaction]] =
-    getHistory.map { history =>
+  private def getTxByIndexF(index: Long): Future[Json] =
+    withHistoryJson { history =>
       getTxByIndex(index)(history)
     }
 
@@ -189,10 +251,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getTxByIndexF(index))
   }
 
-  private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoTransaction],Long)] =
-    getHistory.map { history =>
+  private def getTxsByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[Json] =
+    withHistoryAndThresholdJson[(Seq[IndexedErgoTransaction], Long)] { (history, threshold) =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveTxs(history, offset, limit)(segmentTreshold), addr.txCount(segmentTreshold))
+        case Some(addr) => (addr.retrieveTxs(history, offset, limit)(threshold), addr.txCount(threshold))
         case None       => (Seq.empty[IndexedErgoTransaction], 0L)
       }
     }
@@ -215,8 +277,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     validateAndGetTxsByAddress(address, offset, limit)
   }
 
-  private def getTxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
-    getHistory.map { history =>
+  private def getTxRange(offset: Int, limit: Int): Future[Json] =
+    withHistoryJson[Seq[ModifierId]] { history =>
       val base: Long = getIndex(GlobalTxIndexKey, history).getLong - offset
       val txIds: Array[ModifierId] = new Array[ModifierId](limit)
       cfor(0)(_ < limit, _ + 1) { i =>
@@ -236,10 +298,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxById(id: ModifierId)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
     history.typedExtraIndexById[IndexedErgoBox](id)
 
-  private def getBoxByIdF(id: ModifierId): Future[Option[IndexedErgoBox]] =
-    getHistory.map { history =>
-      getBoxById(id)(history)
-    }
+  private def getBoxByIdF(id: ModifierId): Future[Json] =
+    withHistoryJson { history => getBoxById(id)(history) }
 
   private def getBoxByIdR: Route = (get & pathPrefix("box" / "byId") & modifierId) { id =>
     ApiResponse(getBoxByIdF(id))
@@ -248,8 +308,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   private def getBoxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
     getBoxById(history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
 
-  private def getBoxByIndexF(index: Long): Future[Option[IndexedErgoBox]] =
-    getHistory.map { history =>
+  private def getBoxByIndexF(index: Long): Future[Json] =
+    withHistoryJson { history =>
       getBoxByIndex(index)(history)
     }
 
@@ -257,10 +317,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getBoxByIndexF(index))
   }
 
-  private def getBoxesByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
-    getHistory.map { history =>
+  private def getBoxesByAddress(addr: ErgoAddress, offset: Int, limit: Int): Future[Json] =
+    withHistoryAndThresholdJson[(Seq[IndexedErgoBox], Long)] { (history, threshold) =>
       getAddress(addr)(history) match {
-        case Some(addr) => (addr.retrieveBoxes(history, offset, limit)(segmentTreshold).reverse, addr.boxCount(segmentTreshold))
+        case Some(addr) => (addr.retrieveBoxes(history, offset, limit)(threshold).reverse, addr.boxCount(threshold))
         case None       => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -290,14 +350,16 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
                                         sortDir: Direction,
                                         unconfirmed: Boolean,
                                         excludeMempoolSpent: Boolean
-                                      ): Future[Seq[IndexedErgoBox]] = {
-
-    getHistoryWithMempool.map { case (history, mempool) =>
-      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
-
+                                      ): Future[Json] = {
+    val emptyAddress = IndexedErgoAddress(hashErgoTree(addr.script))
+    withHistoryAndMempoolJson { mempool: ErgoMemPoolReader =>
+      prepareUnspentMempool(mempool, unconfirmed, excludeMempoolSpent,
+        emptyAddress.prepareUnconfirmedBoxes(mempool))
+    } { (history, prepared) =>
       getAddress(addr)(history)
-        .getOrElse(IndexedErgoAddress(hashErgoTree(addr.script)))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
+        .getOrElse(emptyAddress)
+        .retrieveUtxosWithPreparedMempool(history, prepared.unconfirmedBoxes,
+          offset, limit, sortDir, unconfirmed, prepared.spentBoxIds)
     }
   }
 
@@ -330,10 +392,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         validateAndGetBoxesByAddressUnspent(address, offset, limit, dir, unconfirmed, excludeMempoolSpent)
     }
 
-  private def getBoxesByTemplateHash(templateHash: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
-    getHistory.map { history =>
+  private def getBoxesByTemplateHash(templateHash: ModifierId, offset: Int, limit: Int): Future[Json] =
+    withHistoryAndThresholdJson[(Seq[IndexedErgoBox], Long)] { (history, threshold) =>
       getTemplate(templateHash)(history) match {
-        case Some(iCt) => (iCt.retrieveBoxes(history, offset, limit)(segmentTreshold), iCt.boxCount(segmentTreshold))
+        case Some(iCt) => (iCt.retrieveBoxes(history, offset, limit)(threshold), iCt.boxCount(threshold))
         case None      => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -348,13 +410,18 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
         }
     }
 
-  private def getBoxesByTemplateHashUnspent(templateHash: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
-    getHistoryWithMempool.map { case (history, mempool) =>
-      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
+  private def getBoxesByTemplateHashUnspent(templateHash: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Json] = {
+    val emptyTemplate = IndexedContractTemplate(templateHash)
+    withHistoryAndMempoolJson { mempool: ErgoMemPoolReader =>
+      prepareUnspentMempool(mempool, unconfirmed, excludeMempoolSpent,
+        emptyTemplate.prepareUnconfirmedBoxes(mempool))
+    } { (history, prepared) =>
       getTemplate(templateHash)(history)
-        .getOrElse(IndexedContractTemplate(templateHash))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
+        .getOrElse(emptyTemplate)
+        .retrieveUtxosWithPreparedMempool(history, prepared.unconfirmedBoxes,
+          offset, limit, sortDir, unconfirmed, prepared.spentBoxIds)
     }
+  }
 
   private def getBoxesByTemplateHashUnspentR: Route =
     (get & pathPrefix("box" / "unspent" / "byTemplateHash") & modifierId & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) {
@@ -368,8 +435,8 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
 
-  private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
-    getHistory.map { history =>
+  private def getBoxRange(offset: Int, limit: Int): Future[Json] =
+    withHistoryJson[Seq[ModifierId]] { history =>
       val base: Long = getIndex(GlobalBoxIndexKey, history).getLong - offset
       val boxIds: Array[ModifierId] = new Array[ModifierId](limit)
       cfor(0)(_ < limit, _ + 1) { i =>
@@ -386,10 +453,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
-    getHistory.map { history =>
+  private def getBoxesByErgoTree(tree: ErgoTree, offset: Int, limit: Int): Future[Json] =
+    withHistoryAndThresholdJson[(Seq[IndexedErgoBox], Long)] { (history, threshold) =>
       getAddress(tree)(history) match {
-        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit)(segmentTreshold).reverse, iEa.boxCount(segmentTreshold))
+        case Some(iEa) => (iEa.retrieveBoxes(history, offset, limit)(threshold).reverse, iEa.boxCount(threshold))
         case None      => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -402,13 +469,18 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
-    getHistoryWithMempool.map { case (history, mempool) =>
-      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
+  private def getBoxesByErgoTreeUnspent(tree: ErgoTree, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Json] = {
+    val emptyAddress = IndexedErgoAddress(hashErgoTree(tree))
+    withHistoryAndMempoolJson { mempool: ErgoMemPoolReader =>
+      prepareUnspentMempool(mempool, unconfirmed, excludeMempoolSpent,
+        emptyAddress.prepareUnconfirmedBoxes(mempool))
+    } { (history, prepared) =>
       getAddress(tree)(history)
-        .getOrElse(IndexedErgoAddress(hashErgoTree(tree)))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
+        .getOrElse(emptyAddress)
+        .retrieveUtxosWithPreparedMempool(history, prepared.unconfirmedBoxes,
+          offset, limit, sortDir, unconfirmed, prepared.spentBoxIds)
     }
+  }
 
   private def getBoxesByErgoTreeUnspentR: Route = (post & pathPrefix("box" / "unspent" / "byErgoTree") & ergoTree & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) { (tree, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
     if(limit > MaxItems) {
@@ -421,14 +493,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getTokenInfoByIds(ids: Seq[ModifierId]): Future[Seq[IndexedToken]] = {
-    getHistory.map { history =>
+  private def getTokenInfoByIds(ids: Seq[ModifierId]): Future[Json] = {
+    withHistoryJson { history =>
       ids.flatMap(id => history.typedExtraIndexById[IndexedToken](uniqueId(id)))
     }
   }
 
-  private def getTokenInfoById(id: ModifierId): Future[Option[IndexedToken]] = {
-    getHistory.map { history =>
+  private def getTokenInfoById(id: ModifierId): Future[Json] = {
+    withHistoryJson { history =>
       history.typedExtraIndexById[IndexedToken](uniqueId(id))
     }
   }
@@ -441,10 +513,10 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getTokenInfoByIds(ids))
   }
 
-  private def getBoxesByTokenId(id: ModifierId, offset: Int, limit: Int): Future[(Seq[IndexedErgoBox],Long)] =
-    getHistory.map { history =>
+  private def getBoxesByTokenId(id: ModifierId, offset: Int, limit: Int): Future[Json] =
+    withHistoryAndThresholdJson[(Seq[IndexedErgoBox], Long)] { (history, threshold) =>
       history.typedExtraIndexById[IndexedToken](uniqueId(id)) match {
-        case Some(token) => (token.retrieveBoxes(history, offset, limit)(segmentTreshold), token.boxCount(segmentTreshold))
+        case Some(token) => (token.retrieveBoxes(history, offset, limit)(threshold), token.boxCount(threshold))
         case None        => (Seq.empty[IndexedErgoBox], 0L)
       }
     }
@@ -453,13 +525,18 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     ApiResponse(getBoxesByTokenId(id, offset, limit))
   }
 
-  private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Seq[IndexedErgoBox]] =
-    getHistoryWithMempool.map { case (history, mempool) =>
-      val spentBoxesIdsInMempool = if (excludeMempoolSpent) mempool.spentInputs.map(bytesToId).toSet else Set.empty[ModifierId]
+  private def getBoxesByTokenIdUnspent(id: ModifierId, offset: Int, limit: Int, sortDir: Direction, unconfirmed: Boolean, excludeMempoolSpent: Boolean): Future[Json] = {
+    val emptyToken = IndexedToken(id)
+    withHistoryAndMempoolJson { mempool: ErgoMemPoolReader =>
+      prepareUnspentMempool(mempool, unconfirmed, excludeMempoolSpent,
+        emptyToken.prepareUnconfirmedBoxes(mempool))
+    } { (history, prepared) =>
       history.typedExtraIndexById[IndexedToken](uniqueId(id))
-        .getOrElse(IndexedToken(id))
-        .retrieveUtxos(history, mempool, offset, limit, sortDir, unconfirmed, spentBoxesIdsInMempool)
+        .getOrElse(emptyToken)
+        .retrieveUtxosWithPreparedMempool(history, prepared.unconfirmedBoxes,
+          offset, limit, sortDir, unconfirmed, prepared.spentBoxIds)
     }
+  }
 
   private def getBoxesByTokenIdUnspentR: Route = (get & pathPrefix("box" / "unspent" / "byTokenId") & modifierId & paging & sortDir & unconfirmed & parameter('excludeMempoolSpent.as[Boolean].?)) { (id, offset, limit, dir, unconfirmed, excludeMempoolSpentOption) =>
     val excludeMempoolSpent = excludeMempoolSpentOption.getOrElse(false)
@@ -482,13 +559,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     bal
   }
 
-  private def getAddressBalanceTotal(address: ErgoAddress): Future[(BalanceInfo,BalanceInfo)] = {
-    getHistoryWithMempool.map { case (history, mempool) =>
+  private def getAddressBalanceTotal(address: ErgoAddress): Future[Json] = {
+    withHistoryAndMempoolJson[BalanceInfo, (BalanceInfo, BalanceInfo)] {
+      mempool => getUnconfirmedForAddress(address)(mempool)
+    } { (history, unconfirmedBalance) =>
       getAddress(address)(history) match {
         case Some(addr) =>
-          (addr.balanceInfo.get.retrieveAdditionalTokenInfo(history), getUnconfirmedForAddress(address)(mempool).retrieveAdditionalTokenInfo(history))
+          (addr.balanceInfo.get.retrieveAdditionalTokenInfo(history), unconfirmedBalance.retrieveAdditionalTokenInfo(history))
         case None =>
-          (BalanceInfo(), getUnconfirmedForAddress(address)(mempool).retrieveAdditionalTokenInfo(history))
+          (BalanceInfo(), unconfirmedBalance.retrieveAdditionalTokenInfo(history))
       }
     }
   }
@@ -534,14 +613,14 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
   }
 
-  private def getIndexedBlockByHeaderId(headerId: ModifierId): Future[Option[IndexedBlock]] = {
-    getHistory.map { history =>
+  private def getIndexedBlockByHeaderId(headerId: ModifierId): Future[Json] = {
+    withHistoryJson { history =>
       getIndexedBlockByHeader(history, headerId)
     }
   }
 
-  private def getIndexedBlocksByHeaderIds(headerIds: Seq[ModifierId]): Future[Seq[IndexedBlock]] =
-    getHistory.map { history =>
+  private def getIndexedBlocksByHeaderIds(headerIds: Seq[ModifierId]): Future[Json] =
+    withHistoryJson { history =>
       headerIds.flatMap { headerId =>
         getIndexedBlockByHeader(history, headerId)
       }

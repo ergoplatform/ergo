@@ -8,7 +8,7 @@ import org.ergoplatform.core.VersionTag
 import scorex.crypto.authds.ADDigest
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.{Failure, Success, Try}
 
@@ -28,6 +28,12 @@ trait ErgoStateReader extends NodeViewComponent with ScorexLogging {
     * Must be ID of last block applied
     */
   def version: VersionTag
+
+  /**
+    * Last block of a persisted, contiguous prefix whose full bodies were applied locally.
+    * Absence does not certify the current state version or any header-only prefix.
+    */
+  def fullBlockBodyFrontier: Option[ModifierId] = None
 
   val store: LDBVersionedStore
 

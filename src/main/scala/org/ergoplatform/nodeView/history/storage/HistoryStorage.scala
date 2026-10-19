@@ -60,6 +60,9 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     finally extraCacheLock.readLock().unlock()
   }
 
+  /** Hold the extra-index store read lock across a compound read. */
+  def withExtraIndexReadLock[A](body: => A): A = withExtraCacheReadLock(body)
+
   private def withExtraCacheWriteLock[A](body: => A): A = {
     extraCacheLock.writeLock().lock()
     try body

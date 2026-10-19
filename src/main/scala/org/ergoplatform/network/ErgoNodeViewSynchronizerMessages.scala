@@ -130,6 +130,14 @@ object ErgoNodeViewSynchronizerMessages {
     case class RemoteBlockApplied(header: Header, txIds: Seq[ModifierId]) extends FullBlockApplied
 
     /**
+      * The contiguous full-body frontier captured from the immutable Digest state returned by
+      * application of `header`. This is separate from FullBlockApplied so consumers of that
+      * existing event keep their current behavior.
+      */
+    case class DigestFullBlockApplied(header: Header, bodyFrontierIdOpt: Option[ModifierId])
+      extends ModificationOutcome
+
+    /**
       * Signal sent by CandidateGenerator when a new block is mined locally.
       * Unlike FullBlockApplied, this is sent immediately upon mining, before
       * the block is applied by NodeViewHolder. This allows fast propagation

@@ -34,6 +34,9 @@ trait ErgoHistoryReader
 
   protected[history] val historyStorage: HistoryStorage
 
+  /** Hold the extra-index store read lock while consuming indexed data. */
+  def withExtraIndexReadLock[A](body: => A): A = historyStorage.withExtraIndexReadLock(body)
+
   protected val settings: ErgoSettings
 
   override protected def nipopowSettings: NipopowSettings = settings.nodeSettings.nipopowSettings

@@ -9,8 +9,9 @@ import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DigestFullBlockApplied, Rollback}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.history.ErgoHistory
@@ -19,11 +20,11 @@ import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.boxSegmentId
-import org.ergoplatform.nodeView.state.{ErgoStateReader, StateType, UtxoStateReader}
+import org.ergoplatform.nodeView.state.{DigestState, ErgoStateContext, ErgoStateReader, StateType, UtxoStateReader}
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.fixtures.NodeViewFixture
-import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createDigestState, createUtxoState, validFullBlock}
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.{createUtxoState, validFullBlock}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig, NodeViewTestOps, untilTimeout}
 import org.slf4j.LoggerFactory
 import scorex.crypto.authds.ADKey
@@ -32,7 +33,9 @@ import sigma.Colls
 import sigma.interpreter.ProverResult
 import sigmastate.eval.Extensions._
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.nio.file.Files
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -55,6 +58,7 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
   import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 
   private val settleTimeout = 15.seconds
+  private case object ReadCertifiedFrontier
 
   private val indexedSettings: ErgoSettings = {
     val base = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false).toSettings
@@ -283,7 +287,9 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     * A real node view holder (history and UTXO state) with four applied blocks and, if asked for,
     * the production indexer caught up with them.
     */
-  private class IndexedNode(fixture: NodeViewFixture, startIndexer: Boolean) {
+  private class IndexedNode(fixture: NodeViewFixture,
+                            startIndexer: Boolean,
+                            onIndexed: Header => Unit) {
 
     import fixture._
 
@@ -306,6 +312,13 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
 
     private val indexerOpt: Option[ActorRef] = if (startIndexer) Some(actorSystem.actorOf(Props(
       new ExtraIndexer(settings.cacheSettings, settings.chainSettings.addressEncoder, Some(nodeViewHolderRef), true) {
+        override protected def index(state: IndexerState,
+                                     header: Header,
+                                     targetHeight: Int): Option[IndexerState] = {
+          val result = super.index(state, header, targetHeight)
+          if (result.nonEmpty) onIndexed(header)
+          result
+        }
         override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
           indexerRestarts.incrementAndGet()
           super.preRestart(reason, message)
@@ -411,9 +424,11 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
   }
 
-  private def withNode(startIndexer: Boolean = true)(test: (NodeViewFixture, IndexedNode) => Unit): Unit =
+  private def withNode(startIndexer: Boolean = true,
+                       onIndexed: Header => Unit = (_: Header) => ())(
+                       test: (NodeViewFixture, IndexedNode) => Unit): Unit =
     new NodeViewFixture(indexedSettings, parameters).apply { fixture =>
-      val node = new IndexedNode(fixture, startIndexer)
+      val node = new IndexedNode(fixture, startIndexer, onIndexed)
       try test(fixture, node) finally {
         node.stopIndexer()
         node.tipState.closeStorage() // all copies of the state share one store
@@ -633,6 +648,187 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
   }
 
+  property("a buffered spend does not mutate the shared persisted box cache across a fork") {
+    val target = new AtomicReference[Option[ModifierId]](None)
+    val buffered = new CountDownLatch(1)
+    val resume = new CountDownLatch(1)
+    withNode(onIndexed = header => {
+      if (target.get().contains(header.id)) {
+        buffered.countDown()
+        resume.await(15, TimeUnit.SECONDS)
+      }
+    }) { (_, node) =>
+      val forkPoint = node.chain.last
+      val (a, b1, afterB1) = fork(node)
+      val b = twoBlockBranch(b1, afterB1)
+      val cachedBox = a.blockTransactions.txs.iterator.flatMap(_.inputs.iterator)
+        .flatMap(input => node.history.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)))
+        .find(box => !box.isSpent).get
+      target.set(Some(a.id))
+
+      try {
+        node.deliver(a)
+        node.awaitApplied(a)
+        buffered.await(15, TimeUnit.SECONDS) shouldBe true
+        node.checkpoint.indexedHeaderId shouldBe Some(forkPoint.id)
+        cachedBox.isSpent shouldBe false
+        (node.history.typedExtraIndexById[IndexedErgoBox](cachedBox.id).get eq cachedBox) shouldBe true
+
+        b.foreach(block => node.deliver(block._1))
+        node.awaitApplied(b.last._1)
+        node.checkpoint.indexedHeaderId shouldBe Some(forkPoint.id)
+        node.history.typedExtraIndexById[IndexedErgoBox](cachedBox.id).get.isSpent shouldBe false
+      } finally resume.countDown()
+
+      node.accept(b)
+      node.indexDifferences(a.blockTransactions.txs) shouldBe empty
+      node.indexerRestarts.get shouldBe 0
+    }
+  }
+
+  property("a real Digest fork quarantines a buffered sibling before it can flush") {
+    val defaults = NodeViewTestConfig(StateType.Digest, verifyTransactions = true,
+      popowBootstrap = false).toSettings
+    val digestSettings = defaults.copy(nodeSettings = defaults.nodeSettings.copy(extraIndex = true))
+    new NodeViewFixture(digestSettings, parameters).apply { fixture =>
+      import fixture._
+      val (sourceState, boxHolder) = createUtxoState(settings)
+      val buffered = new CountDownLatch(1)
+      val resume = new CountDownLatch(1)
+      var indexerOpt = Option.empty[ActorRef]
+      try {
+        var referenceState = WrappedUtxoState(sourceState, boxHolder, settings)
+        var parent = Option.empty[ErgoFullBlock]
+        (1 to 4).foreach { _ =>
+          val block = validFullBlock(parent, referenceState)
+          referenceState = referenceState.applyModifier(block)(_ => ()).get
+          applyBlock(block).get
+          parent = Some(block)
+        }
+        val forkPoint = parent.get
+        val a = validFullBlock(parent, referenceState)
+        val b1 = validFullBlock(parent, referenceState, a.header.timestamp + 1)
+        val afterB1 = referenceState.applyModifier(b1)(_ => ()).get
+        val b2 = validFullBlock(Some(b1), afterB1)
+        getCurrentState.asInstanceOf[DigestState].fullBlockBodyFrontier shouldBe Some(forkPoint.id)
+
+        val indexer = actorSystem.actorOf(Props(new ExtraIndexer(settings.cacheSettings,
+          settings.chainSettings.addressEncoder, Some(nodeViewHolderRef), true) {
+          override protected def index(state: IndexerState,
+                                       header: Header,
+                                       targetHeight: Int): Option[IndexerState] = {
+            val result = super.index(state, header, targetHeight)
+            if (result.nonEmpty && header.id == a.id) {
+              buffered.countDown()
+              resume.await(15, TimeUnit.SECONDS)
+            }
+            result
+          }
+        }))
+        indexerOpt = Some(indexer)
+        val watcher = TestProbe()(actorSystem)
+        watcher.watch(indexer)
+        untilTimeout(settleTimeout, 20.millis) {
+          IndexerState.fromHistory(getHistory).indexedHeaderId shouldBe Some(forkPoint.id)
+        }
+        val cachedBox = a.blockTransactions.txs.iterator.flatMap(_.inputs.iterator)
+          .flatMap(input => getHistory.typedExtraIndexById[IndexedErgoBox](bytesToId(input.boxId)))
+          .find(box => !box.isSpent).get
+
+        try {
+          applyBlock(a).get
+          buffered.await(15, TimeUnit.SECONDS) shouldBe true
+          IndexerState.fromHistory(getHistory).indexedHeaderId shouldBe Some(forkPoint.id)
+          cachedBox.isSpent shouldBe false
+
+          applyBlock(b1).get
+          applyBlock(b2).get
+          untilTimeout(settleTimeout, 20.millis) {
+            getCurrentState.version shouldBe idToVersion(b2.id)
+            getCurrentState.asInstanceOf[DigestState].fullBlockBodyFrontier shouldBe Some(b2.id)
+          }
+          IndexerState.fromHistory(getHistory).indexedHeaderId shouldBe Some(forkPoint.id)
+          getHistory.typedExtraIndexById[IndexedErgoBox](cachedBox.id).get.isSpent shouldBe false
+        } finally resume.countDown()
+
+        watcher.expectTerminated(indexer, settleTimeout)
+        ExtraIndexer.digestFrontierQuarantined(getHistory) shouldBe true
+        IndexerState.fromHistory(getHistory).indexedHeaderId shouldBe Some(forkPoint.id)
+        ExtraIndexer.checkpointOnCertifiedDigestFullChain(getHistory, getCurrentState,
+          verifyTransactions = true) shouldBe false
+      } finally {
+        resume.countDown()
+        indexerOpt.foreach(actorSystem.stop)
+        sourceState.closeStorage()
+      }
+    }
+  }
+
+  property("a Digest full block remains authoritative after only sibling headers become best") {
+    val defaults = NodeViewTestConfig(StateType.Digest, verifyTransactions = true,
+      popowBootstrap = false).toSettings
+    val digestSettings = defaults.copy(nodeSettings = defaults.nodeSettings.copy(extraIndex = true))
+    new NodeViewFixture(digestSettings, parameters).apply { fixture =>
+      import fixture._
+      val (sourceState, boxHolder) = createUtxoState(settings)
+      try {
+        var referenceState = WrappedUtxoState(sourceState, boxHolder, settings)
+        var parent = Option.empty[ErgoFullBlock]
+        (1 to 4).foreach { _ =>
+          val block = validFullBlock(parent, referenceState)
+          referenceState = referenceState.applyModifier(block)(_ => ()).get
+          applyBlock(block).get
+          parent = Some(block)
+        }
+        val a = validFullBlock(parent, referenceState)
+        val b1 = validFullBlock(parent, referenceState, a.header.timestamp + 1)
+        val afterB1 = referenceState.applyModifier(b1)(_ => ()).get
+        val b2 = validFullBlock(Some(b1), afterB1)
+
+        applyBlock(a).get
+        untilTimeout(settleTimeout, 20.millis) {
+          getHistory.bestFullBlockIdOpt shouldBe Some(a.id)
+          getCurrentState.version shouldBe idToVersion(a.id)
+        }
+        val snapshot = ExtraIndexer.digestIndexSnapshot(getCurrentState, verifyTransactions = true).get
+        val expected = Some(ExtraIndexer.DigestIndexAuthority(Some(a.header)))
+        ExtraIndexer.digestIndexAuthority(getHistory, snapshot) shouldBe expected
+
+        applyHeader(b1.header).get
+        applyHeader(b2.header).get
+        val history = getHistory
+        history.bestHeaderOpt.map(_.id) shouldBe Some(b2.id)
+        history.bestHeaderIdAtHeight(a.header.height) shouldBe Some(b1.id)
+        history.bestFullBlockIdOpt shouldBe Some(a.id)
+        val state = getCurrentState.asInstanceOf[DigestState]
+        state.version shouldBe idToVersion(a.id)
+        state.fullBlockBodyFrontier shouldBe Some(a.id)
+        state.stateContext.lastHeaderOpt.map(_.id) shouldBe Some(a.id)
+        ExtraIndexer.digestIndexAuthority(history,
+          ExtraIndexer.digestIndexSnapshot(state, verifyTransactions = true).get) shouldBe expected
+        val siblingState = snapshot.copy(stateVersion = idToVersion(b2.id),
+          stateRoot = b2.header.stateRoot, stateHeaderIdOpt = Some(b2.id))
+        ExtraIndexer.digestIndexAuthority(history, siblingState) shouldBe None
+
+        val indexer = actorSystem.actorOf(Props(new ExtraIndexer(settings.cacheSettings,
+          settings.chainSettings.addressEncoder, Some(nodeViewHolderRef), true)))
+        val watcher = TestProbe()(actorSystem)
+        watcher.watch(indexer)
+        try {
+          untilTimeout(settleTimeout, 20.millis) {
+            IndexerState.fromHistory(getHistory).indexedHeaderId shouldBe Some(a.id)
+          }
+          ExtraIndexer.digestFrontierQuarantined(getHistory) shouldBe false
+          ExtraIndexer.checkpointOnCertifiedDigestFullChain(getHistory, getCurrentState,
+            verifyTransactions = true) shouldBe true
+        } finally {
+          actorSystem.stop(indexer)
+          watcher.expectTerminated(indexer, settleTimeout)
+        }
+      } finally sourceState.closeStorage()
+    }
+  }
+
   property("a better branch with a block the state rejects is indexed up to its last applied block") {
     withNode() { (_, node) =>
       val (a, b1, afterB1) = fork(node)
@@ -657,7 +853,7 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
     }
   }
 
-  property("the indexer follows the applied tip it is told about, not the best-chain marker") {
+  property("the Digest indexer follows certified body events through a chain switch") {
     withNode(startIndexer = false) { (fixture, node) =>
       import fixture._
 
@@ -672,17 +868,36 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
       node.awaitApplied(b2)
       node.accept(b)
       val history = node.history
+      // This UTXO fixture supplies a fresh empty extra DB to the synthetic Digest indexer.
+      history.historyStorage.insertExtraTry(Array(
+        ExtraIndexer.IndexModeProvenanceKey -> ExtraIndexer.DigestIndexProvenanceBytes
+      ), Array.empty).get
 
-      // Starts an indexer which is told at start that the state is at `applied`. Later block
-      // events come from the test only: the node stays idle.
-      def startIndexerAt(applied: ErgoFullBlock): ActorRef = {
-        val viewHolder = TestProbe()
-        val indexer = actorSystem.actorOf(Props(
-          new ExtraIndexer(settings.cacheSettings, settings.chainSettings.addressEncoder, Some(viewHolder.ref), true)))
+      val viewHolder = TestProbe()
+      val digestSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Digest))
+      def replyCurrent(indexer: ActorRef, applied: ErgoFullBlock, frontier: Option[ModifierId]): Unit = {
         val request = viewHolder.expectMsgType[GetDataFromCurrentView[_, _]].asInstanceOf[GetDataFromCurrentView[ErgoStateReader, Any]]
-        val state = createDigestState(idToVersion(applied.id), applied.header.stateRoot)
+        val emptyContext = ErgoStateContext.empty(digestSettings.chainSettings, digestSettings.launchParameters)
+        val stateContext = new ErgoStateContext(Seq(applied.header), None, emptyContext.genesisStateDigest,
+          emptyContext.currentParameters, emptyContext.validationSettings, emptyContext.votingData)(digestSettings.chainSettings)
+        val recovered = DigestState.recover(idToVersion(applied.id), applied.header.stateRoot,
+          stateContext, Files.createTempDirectory("digest-indexer-state").toFile, digestSettings).get
+        val state = if (frontier.isEmpty) recovered else
+          new DigestState(recovered.version, recovered.rootDigest, recovered.store, digestSettings) {
+            override val fullBlockBodyFrontier: Option[ModifierId] = frontier
+          }
         try viewHolder.send(indexer, request.f(CurrentView[ErgoStateReader](history, state, null, null)))
         finally state.close()
+      }
+      // Starts with a synthetic Digest header version but no body certificate.
+      def startIndexerAt(applied: ErgoFullBlock): ActorRef = {
+        val indexer = actorSystem.actorOf(Props(
+          new ExtraIndexer(settings.cacheSettings, settings.chainSettings.addressEncoder, Some(viewHolder.ref), true) {
+            override def receive: Receive = super.receive.orElse {
+              case ReadCertifiedFrontier => sender().tell(lastAppliedHeaderOpt.map(_.id), self)
+            }
+          }))
+        replyCurrent(indexer, applied, None)
         // the indexer answers this once it has taken the snapshot
         viewHolder.send(indexer, GetSegmentThreshold)
         viewHolder.expectMsg(512)
@@ -694,36 +909,43 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
         actorSystem.stop(indexer)
         watcher.expectTerminated(indexer)
       }
-      def awaitIndexedExactly(block: ErgoFullBlock): Unit = {
+      def awaitIndexedExactly(indexer: ActorRef, block: ErgoFullBlock): Unit = {
         untilTimeout(settleTimeout, 20.millis)(node.checkpoint.indexedHeaderId shouldBe Some(block.id))
-        Thread.sleep(1000) // nothing above it follows
+        viewHolder.send(indexer, ReadCertifiedFrontier)
+        viewHolder.expectMsg(Some(block.id))
         node.checkpoint.indexedHeaderId shouldBe Some(block.id)
         node.checkpoint.indexedHeight shouldBe block.header.height
       }
 
-      // an empty index and a state two blocks behind the best full block of history: the
-      // indexer catches up with the state, not with history
+      // A certificate from the abandoned fork at the same height as b1 admits nothing.
       val behind = startIndexerAt(forkPoint)
-      awaitIndexedExactly(forkPoint)
-      stopAndWait(behind)
+      behind ! DigestFullBlockApplied(a.header, Some(a.id))
+      replyCurrent(behind, forkPoint, None)
+      viewHolder.send(behind, ReadCertifiedFrontier)
+      viewHolder.expectMsg(None)
+      node.checkpoint.indexedHeight shouldBe 0
 
-      // the state is on the abandoned branch, at the height of b1: nothing is indexed, though
-      // history has a best-chain block at that height
-      val indexer = startIndexerAt(a)
+      // An explicit contiguous-body certificate admits the fork point, not the header version.
+      behind ! DigestFullBlockApplied(forkPoint.header, Some(forkPoint.id))
+      replyCurrent(behind, forkPoint, Some(forkPoint.id))
+      awaitIndexedExactly(behind, forkPoint)
+      // The selected full chain is b; a was applied by the node but is now abandoned.
+      val indexer = behind
       try {
-        awaitIndexedExactly(forkPoint)
-
-        indexer ! RemoteBlockApplied(b1.header, b1.blockTransactions.txs.map(_.id))
+        indexer ! DigestFullBlockApplied(b1.header, Some(b1.id))
         // the node publishes the rollback of a chain switch after the blocks of the new branch;
         // b1 is still buffered then, as history holds b2 above it, and has to be written
         indexer ! Rollback(forkPoint.id)
-        awaitIndexedExactly(b1)
+        replyCurrent(indexer, b1, Some(b1.id))
+        replyCurrent(indexer, b1, Some(b1.id))
+        awaitIndexedExactly(indexer, b1)
         b2.blockTransactions.txs.foreach { tx =>
           history.typedExtraIndexById[IndexedErgoTransaction](tx.id) shouldBe None
         }
 
-        indexer ! RemoteBlockApplied(b2.header, b2.blockTransactions.txs.map(_.id))
-        awaitIndexedExactly(b2)
+        indexer ! DigestFullBlockApplied(b2.header, Some(b2.id))
+        replyCurrent(indexer, b2, Some(b2.id))
+        awaitIndexedExactly(indexer, b2)
         node.indexDifferences(a.blockTransactions.txs) shouldBe empty
       } finally {
         stopAndWait(indexer)

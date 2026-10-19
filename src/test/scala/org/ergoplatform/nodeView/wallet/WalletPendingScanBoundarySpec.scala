@@ -2,14 +2,17 @@ package org.ergoplatform.nodeView.wallet
 
 import akka.actor.Props
 import akka.testkit.TestProbe
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedHistory
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ChangedState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
+import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.PaymentRequest
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import org.ergoplatform.wallet.boxes.ReplaceCompactCollectBoxSelector
+import org.ergoplatform.wallet.boxes.ChainStatus
 import org.scalatest.concurrent.Eventually
 
 import java.io.File
@@ -147,6 +150,103 @@ class WalletPendingScanBoundarySpec
         releaseRescan.countDown()
         releaseFirstRescan.countDown()
         releaseSecondScan.countDown()
+        probe.watch(actor)
+        probe.send(actor, CloseWallet)
+        probe.expectTerminated(actor, 5.seconds)
+      }
+    }
+  }
+
+  property("pending ordinary scan resumes after wallet rollback") {
+    withFixture { implicit w =>
+      val address = getPublicKeys.head
+      val first = makeGenesisBlock(address.pubkey)
+      applyBlock(first) shouldBe 'success
+      val firstBalance = eventually(timeout(10.seconds), interval(100.millis)) {
+        val digest = getConfirmedBalances
+        digest.height shouldBe first.height
+        digest.walletBalance
+      }
+      val secondPayment = PaymentRequest(address, firstBalance / 2, Array.empty, Map.empty)
+      val secondTx = await(wallet.generateTransaction(Seq(secondPayment))).get
+      val second = makeNextBlock(getUtxoState, Seq(secondTx))
+      applyBlock(second) shouldBe 'success
+      val secondBalance = eventually(timeout(10.seconds), interval(100.millis)) {
+        val digest = getConfirmedBalances
+        digest.height shouldBe second.height
+        digest.walletBalance
+      }
+      val thirdPayment = PaymentRequest(address, secondBalance / 4, Array.empty, Map.empty)
+      val thirdTx = await(wallet.generateTransaction(Seq(thirdPayment))).get
+      val third = makeNextBlock(getUtxoState, Seq(thirdTx))
+      val history = getHistory
+      history.getFullBlock(third.header) shouldBe None
+
+      val actorSettings = w.settings.copy(
+        directory = new File(w.nodeViewDir, "pending-scan-rollback").getAbsolutePath,
+        nodeSettings = w.settings.nodeSettings.copy(blocksToKeep = 3)
+      )
+      val service = new ErgoWalletServiceImpl(actorSettings)
+      val walletSettings = actorSettings.walletSettings
+      val selector = new ReplaceCompactCollectBoxSelector(
+        walletSettings.maxInputs, walletSettings.optimalInputs, None)
+      val actorProps = Props(classOf[ErgoWalletActor], actorSettings, parameters,
+        service, selector, history)
+      val actor = w.actorSystem.actorOf(actorProps)
+      val probe = TestProbe()(w.actorSystem)
+
+      try {
+        probe.awaitAssert({
+          probe.send(actor, GetWalletStatus)
+          val status = probe.expectMsgType[WalletStatus]
+          status.height shouldBe second.height
+          status.error shouldBe None
+        }, 10.seconds, 100.millis)
+        // The Holder's wallet remains subscribed; this actor receives only the chosen history signal.
+        w.actorSystem.eventStream.unsubscribe(actor, classOf[ChangedHistory])
+        w.actorSystem.eventStream.unsubscribe(actor, classOf[ChangedState])
+
+        probe.send(actor, ScanInThePast(third.height, rescan = false))
+        probe.send(actor, GetWalletStatus)
+        probe.expectMsgType[WalletStatus].height shouldBe second.height
+        probe.send(actor, Rollback(idToVersion(first.id)))
+        probe.send(actor, GetWalletStatus)
+        val rolledBack = probe.expectMsgType[WalletStatus]
+        rolledBack.height shouldBe first.height
+        rolledBack.error shouldBe None
+
+        applyBlock(third) shouldBe 'success
+        eventually(timeout(10.seconds), interval(100.millis)) {
+          history.fullBlockHeight shouldBe third.height
+          history.isSelectedFullBlockId(third.id) shouldBe true
+          history.getFullBlock(third.header).isDefined shouldBe true
+        }
+        probe.send(actor, GetWalletStatus)
+        probe.expectMsgType[WalletStatus].height shouldBe first.height
+
+        probe.send(actor, ChangedHistory(history))
+        withClue("pending rollback retry did not reach h3: ") {
+          probe.awaitAssert({
+            probe.send(actor, GetWalletStatus)
+            val status = probe.expectMsgType[WalletStatus]
+            status.height shouldBe third.height
+            status.error shouldBe None
+          }, 10.seconds, 100.millis)
+        }
+        val expectedBalance = eventually(timeout(10.seconds), interval(100.millis)) {
+          val digest = getConfirmedBalances
+          digest.height shouldBe third.height
+          digest.walletBalance
+        }
+        probe.send(actor, ReadBalances(ChainStatus.OnChain))
+        val recoveredDigest = probe.expectMsgType[WalletDigest]
+        recoveredDigest.height shouldBe third.height
+        recoveredDigest.walletBalance shouldBe expectedBalance
+        probe.send(actor, GetTransaction(secondTx.id))
+        probe.expectMsgType[Option[AugWalletTransaction]].isDefined shouldBe true
+        probe.send(actor, GetTransaction(thirdTx.id))
+        probe.expectMsgType[Option[AugWalletTransaction]].isDefined shouldBe true
+      } finally {
         probe.watch(actor)
         probe.send(actor, CloseWallet)
         probe.expectTerminated(actor, 5.seconds)

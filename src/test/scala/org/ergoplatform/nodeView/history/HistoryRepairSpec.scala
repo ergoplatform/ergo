@@ -83,6 +83,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     if (stateType.requireProofs) db.objects += tip.ADProofsId -> proofs.copy(headerId = tip.id)
     children.foreach { h =>
       db.objects += h.id -> h
+      db.indexes += ByteArrayWrapper(Algos.hash("validity".getBytes("UTF-8") ++ idToBytes(h.id))) -> Array(0.toByte)
       db.objects += h.transactionsId -> txs.copy(headerId = h.id)
       db.objects += h.extensionId -> ext.copy(headerId = h.id)
       if (stateType.requireProofs || stateType == StateType.Utxo)

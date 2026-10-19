@@ -650,6 +650,18 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     random20.map(_.transaction.id).toSet shouldBe txs.map(_.transaction.id).toSet
   }
 
+  it should "select every transaction in some window, the last one included" in {
+    val txs = (1 to 4).map(_ => UnconfirmedTransaction(invalidErgoTransactionGen.sample.get, None))
+    val pool = ErgoMemPool.empty(settings).put(txs)
+    val ordered = pool.getAll.map(_.id)
+    ordered.size shouldBe 4
+
+    // every selection holds 3 transactions, and every transaction, the last one included, is in some selection
+    val windows = (1 to 200).map(_ => pool.random(3).map(_.id).toSeq).toSet
+    windows.map(_.size) shouldBe Set(3)
+    windows.flatten.toSet shouldBe ordered.toSet
+  }
+
   it should "track invalidated transactions" in {
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)

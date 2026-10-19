@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 
 import java.io.File
 import java.nio.{ByteBuffer, ByteOrder}
@@ -210,7 +210,9 @@ trait ErgoHistory
     * @param headerId - header id
     * @return Success after every removal, or the first removal failure
     */
-  def forgetHeader(headerId: ModifierId): Try[Unit] = Try(typedModifierById[Header](headerId)).flatMap { hOpt =>
+  def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
+    historyStorage.modifierById(headerId).collect { case h: Header if h.id == headerId => h }
+  }.flatMap { hOpt =>
     // Keep the header until its sections are removed so a retry can still discover their identifiers.
     hOpt.toSeq.flatMap(_.sectionIds).foldLeft[Try[Unit]](Success(())) {
       case (result, (_, mId)) => result.flatMap { _ =>
@@ -243,6 +245,8 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
+  // A retained alternative fork may continue above the selected full-block tip.
+  // Keep a continuation only when it has a readable, matching header and is not invalid.
   // Success(false) means no repair was needed; Success(true) means all removals completed.
   // Failure preserves the first error; the height index is removed only after all headers are forgotten.
   protected[nodeView] def repairIfNeeded(history: ErgoHistory): Try[Boolean] = Try(history.historyStorage.synchronized {
@@ -250,8 +254,18 @@ object ErgoHistory extends ScorexLogging {
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
-      log.warn("Found suspicious continuation, clearing it...")
+    val removableContinuations = afterHeaders.nonEmpty && afterHeaders.forall { id =>
+      history.isSemanticallyValid(id) match {
+        case ModifierSemanticValidity.Invalid => true
+        case _ => !history.historyStorage.modifierById(id).exists {
+          case header: Header => header.id == id
+          case _ => false
+        }
+      }
+    }
+
+    if (bestHeaderHeight == bestFullBlockHeight && removableContinuations) {
+      log.warn("Found invalid or unreadable continuation, clearing it...")
       afterHeaders.foldLeft[Try[Unit]](Success(())) { (result, hId) =>
         result.flatMap(_ => history.forgetHeader(hId))
       }.flatMap { _ =>

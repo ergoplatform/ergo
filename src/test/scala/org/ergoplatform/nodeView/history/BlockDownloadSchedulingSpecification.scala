@@ -167,10 +167,10 @@ class BlockDownloadSchedulingSpecification extends ErgoCorePropertyTest {
     }
   }
 
-  property("near-tip ancestor scheduling respects pruning without losing the ordinary lookback") {
+  property("near-tip ancestor scheduling respects the minimal full block height") {
     Seq(30, 200).foreach { minimumHeight =>
       val reader = new SchedulingReader(deepFork.last, retainedVersions = 231, minimumHeight = minimumHeight)
-      reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, Math.min(minimumHeight, 151) to 300)
+      reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, minimumHeight to 300)
       if (minimumHeight >= 151) reader.traversals shouldBe empty
     }
   }

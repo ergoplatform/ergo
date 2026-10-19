@@ -4,7 +4,8 @@ import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.modifiers.{ErgoFullBlock, NetworkObjectTypeId, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.settings.{ChainSettings, ErgoSettings, NodeConfigurationSettings}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
+import org.ergoplatform.settings.{ChainSettings, Constants, ErgoSettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.annotation.tailrec
@@ -104,13 +105,15 @@ trait ToDownloadProcessor
       case Some(fb) =>
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
+        // (but not below minimal full block height: block sections below it fail `bsTooOld` validation and their sender
+        // is penalized, and there could be no headers below it, e.g. after NiPoPoW bootstrap)
         val lookbackHeight = Math.max(1, fb.header.height - 100)
         val minHeight = if (lookbackHeight > minimalFullBlockHeight) {
           commonAncestorOf(fb)
             .map(h => Math.max(minimalFullBlockHeight, h.height + 1))
             .fold(lookbackHeight)(Math.min(lookbackHeight, _))
         } else {
-          lookbackHeight
+          Math.max(minimalFullBlockHeight, fb.header.height - 100)
         }
         continuation(minHeight, Map.empty, maxHeight = Int.MaxValue)
       case None if (nodeSettings.utxoSettings.utxoBootstrap && !isUtxoSnapshotApplied) =>
@@ -164,11 +167,46 @@ trait ToDownloadProcessor
   private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
     if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       if (updateBestBlock) {
-        updateBestFullBlock(header)
+        val lowestHeight = lowestApplicableHeight(header)
+        updateBestFullBlock(header, lowestHeight)
+        if (lowestHeight > GenesisHeight) warnIfBestFullBlockBelowGap(header)
       } else {
         setHeadersChainSynced()
       }
       log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+    }
+  }
+
+  /**
+    * After bootstrapping with a NiPoPoW proof, headers chain has gaps below the proof suffix. A full block can be
+    * applied first only if its previous `LastHeadersInContext - 1` headers are connected to it (they are needed to
+    * construct state context), so full blocks downloading must not start from a height below that.
+    *
+    * @return the lowest height a full block connected to `header` can be applied first at
+    */
+  private def lowestApplicableHeight(header: Header): Int = {
+    if (nodeSettings.nipopowSettings.nipopowBootstrap && nodeSettings.blocksToKeep >= 0) {
+      // no need to look further back than a full block downloading can start from
+      val depth = nodeSettings.blocksToKeep + chainSettings.voting.votingLength + Constants.LastHeadersInContext
+      val lowestConnected = headerChainBack(depth, header, _ => false).headOption.fold(header.height)(_.height)
+      if (lowestConnected == GenesisHeight) GenesisHeight else lowestConnected + Constants.LastHeadersInContext - 1
+    } else {
+      GenesisHeight
+    }
+  }
+
+  /**
+    * A full block applied before its headers chain was connected (e.g. applied inside a NiPoPoW proof's headers gap by
+    * a node version which did not consider the gap) can not be continued, as there is no header after it, and full
+    * blocks downloading continues from the best full block. Such a database is not repaired, so tell the operator.
+    */
+  private def warnIfBestFullBlockBelowGap(header: Header): Unit = {
+    bestFullBlockOpt.foreach { fb =>
+      if (fb.height < header.height && headerIdsAtHeight(fb.height + 1).isEmpty) {
+        log.warn(s"Best full block ${fb.encodedId} at height ${fb.height} has no header at height ${fb.height + 1} " +
+          s"(headers chain has a gap after NiPoPoW bootstrap), so full blocks can not be applied after it. " +
+          s"Resync the node (remove its database) to bootstrap again")
+      }
     }
   }
 

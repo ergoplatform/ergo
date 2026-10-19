@@ -69,7 +69,7 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   // Testing scenario:
   // 1. Start up {nodesQty} nodes and let them mine common chain of length {initialCommonChainLength};
   // 2. Stop all nodes (a clean shutdown) when they are done, make them offline generating,
-  //    clear known peers and restart them;
+  //    clear their peer databases and restart them with no connections allowed;
   // 3. Let them mine offline until each has its own block {forkLength} above the followers'
   //    headers, so that every follower has a fork;
   // 4. Stop all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
@@ -102,9 +102,13 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       val isolatedNodes = Async.await {
         nodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
-        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
+        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, noConnectionsConfig))
       }
       Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
+      val isolatedPeers = Async.await(Future.traverse(isolatedNodes) { node =>
+        node.connectedPeers.map(peers => node.nodeName -> peers.map(_.name))
+      })
+      isolatedPeers.filter(_._2.nonEmpty) shouldBe empty
       // no follower has node01's block at forkHeight, so every follower has a fork to resolve
       val isolatedIds =
         Async.await(Future.traverse(isolatedNodes)(_.headerIdsByHeight(forkHeight).map(_.headOption)))

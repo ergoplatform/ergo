@@ -34,6 +34,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 private[nodeView] final case class RetryUtxoSnapshotFinalization(generation: Long)
 
@@ -593,11 +594,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               memPool: ErgoMemPool): ErgoMemPool = {
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    val rolledBackTxs = blocksRemoved
+    val rolledBackTxs = rolledBackTransactions(blocksRemoved, appliedTxs).map(tx => UnconfirmedTransaction(tx, None))
+    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
+  }
+
+  /**
+    * Transactions of the rolled-back blocks that the applied blocks do not include: `updateMemPool` returns these
+    * to the pool.
+    */
+  private def rolledBackTransactions(blocksRemoved: Seq[BlockSection],
+                                     appliedTxs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+    blocksRemoved
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
-      .map(tx => UnconfirmedTransaction(tx, None))
-    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
   }
 
   /**
@@ -661,8 +670,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       // if ADProofs block section generated locally, just dump it into the database
       if (pmod.modifierTypeId == ADProofs.modifierTypeId && local && settings.networkType == NetworkType.MainNet) {
         val bytes = HistoryModifierSerializer.toBytes(pmod) //todo: extra allocation here, eliminate
-        history().dumpToDb(pmod.serializedId, bytes)
-        context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
+        history().dumpToDb(pmod.serializedId, bytes) match {
+          case Success(_) =>
+            context.system.eventStream.publish(SyntacticallySuccessfulModifier(pmod.modifierTypeId, pmod.id))
+          case Failure(e) if NonFatal(e) =>
+            log.error(s"Could not persist locally generated ADProof ${pmod.encodedId}", e)
+            context.system.eventStream.publish(RecoverableFailedModification(pmod.modifierTypeId, pmod.id, e))
+          case Failure(e) =>
+            log.error(s"Fatal error while persisting locally generated ADProof ${pmod.encodedId}", e)
+            ErgoApp.shutdownSystem()(context.system)
+            throw e
+        }
       } else {
 
         log.info(s"Apply modifier ${pmod.encodedId} of type ${pmod.modifierTypeId} to nodeViewHolder")
@@ -687,10 +705,28 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  val newMemPool = if (almostSynced) {
+                  // A chain switch returns the rolled-back transactions to the pool however far behind the headers
+                  // it is, if the node holds the UTXO set (at full sync the rebroadcast checks their inputs against
+                  // the UTXO set before announcing them). A digest-mode node never rechecks or rebroadcasts its pool,
+                  // so there a switch taken 20 or more blocks behind still drops them.
+                  val returnRolledBack = almostSynced ||
+                    (progressInfo.chainSwitchingNeeded && settings.nodeSettings.stateType.holdsUtxoSet)
+                  val newMemPool = if (returnRolledBack) {
                     updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
                   } else {
                     memoryPool()
+                  }
+
+                  if (progressInfo.chainSwitchingNeeded) {
+                    val returned = if (returnRolledBack) {
+                      rolledBackTransactions(progressInfo.toRemove, blocksApplied.flatMap(extractTransactions)).size
+                    } else {
+                      0
+                    }
+                    val notReturnedNote = if (returnRolledBack) "" else " (digest mode, 20 or more blocks behind)"
+                    log.info(s"Chain switch: gap between headers and full blocks ${headersHeight - fullBlockHeight}, " +
+                      s"blocks removed ${progressInfo.toRemove.size}, " +
+                      s"rolled-back transactions returned to the mempool $returned$notReturnedNote")
                   }
 
                   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

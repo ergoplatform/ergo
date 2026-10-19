@@ -81,6 +81,7 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
         "promotion", "lock", "rollback", "pending", "pending-during", "duplicate", "fork", "advance",
         "advance-limit", "future-backlog",
         "timeout-mismatch", "prestart-mismatch", "descriptor-mismatch", "busy-selection-lock")) {
+        withClue(s"$cut: ") {
         val selectedTipHeight = getCurrentState.stateContext.currentHeight
         val root = new File(w.nodeViewDir, s"staged-$cut")
         val settings = w.settings.copy(directory = root.getAbsolutePath,
@@ -453,6 +454,7 @@ class WalletRescanStagingSpec extends ErgoCorePropertyTest with WalletTestOps wi
         } finally {
           reopened.registry.close()
           reopened.storage.close()
+        }
         }
       }
     }

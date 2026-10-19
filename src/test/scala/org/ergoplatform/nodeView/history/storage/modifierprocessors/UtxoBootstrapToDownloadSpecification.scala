@@ -176,7 +176,9 @@ class UtxoBootstrapToDownloadSpecification extends ErgoCorePropertyTest {
     // apply UTXO set snapshot and some full blocks after it, so best full block is 100 blocks after a missing header
     val bestFullBlockHeight = continuousFrom - 1 + 100
     val snapshotHeight = bestFullBlockHeight - 12
-    history.onUtxoSnapshotApplied(snapshotHeight)
+    // This scheduling fixture needs the post-snapshot floor; manifest finalization is covered separately.
+    history.writeMinimalFullBlockHeight(snapshotHeight + 1)
+    history.readMinimalFullBlockHeight() shouldBe snapshotHeight + 1
     applyChain(history, senderChain.slice(snapshotHeight, bestFullBlockHeight))
     history.bestFullBlockOpt.map(_.height) shouldBe Some(bestFullBlockHeight)
     history.bestHeaderIdAtHeight(bestFullBlockHeight - 100) shouldBe None

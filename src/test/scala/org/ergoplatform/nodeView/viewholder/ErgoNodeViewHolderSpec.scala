@@ -5,10 +5,12 @@ import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
@@ -774,6 +776,82 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       sourceState.closeStorage()
     }
+  }
+
+  /**
+    * A UTXO node writes the best full block pointer without the block's ADProofs. A digest node started on such a
+    * history (for example copied from the UTXO node, with no state) cannot assemble that block. Once its ADProofs
+    * arrive, the node should apply it and then the next block.
+    */
+  property("digest node applies a best full block whose ADProofs arrive after start-up") {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val utxoSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
+
+    new NodeViewFixture(utxoSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+      val block = validFullBlock(Some(genesis), wusAfterGenesis)
+      val wusAfterBlock = wusAfterGenesis.applyModifier(block)(_ => ()).get
+      val nextBlock = validFullBlock(Some(block), wusAfterBlock)
+      applyBlock(genesis) shouldBe 'success
+      stopNodeViewHolder()
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        history.setHeadersChainSynced()
+        Seq(block.header, block.blockTransactions, block.extension).map(history.append).filter(_.isFailure) shouldBe empty
+        history.bestFullBlockOpt.map(_.id) shouldBe Some(block.id)
+      } finally history.closeStorage()
+      fixture.deleteRecursive(new File(s"${nodeViewDir.getAbsolutePath}/state"))
+
+      settings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Digest))
+      startNodeViewHolder()
+      applyHeader(nextBlock.header) shouldBe 'success
+      subscribeModificationOutcome()
+      nodeViewHolderRef ! LocallyGeneratedModifier(block.adProofs.value)
+      expectModificationOutcome(block.adProofs.value) shouldBe 'success
+      getCurrentState.version shouldBe idToVersion(block.id)
+
+      applyPayload(nextBlock) shouldBe 'success
+      getBestFullBlockOpt.map(_.id) shouldBe Some(nextBlock.id)
+      getCurrentState.version shouldBe idToVersion(nextBlock.id)
+    }
+  }
+
+  /**
+    * Invalidating the genesis block points the best full block at the pre-genesis id, which is not a stored header.
+    * Opening the history keeps that pointer.
+    */
+  property("keep the pre-genesis best full block pointer of an invalidated genesis block when history is reopened") {
+    def pointers(stateType: StateType): (Option[ModifierId], Option[ModifierId]) = {
+      val protoSettings = NodeViewTestConfig(stateType, verifyTransactions = true, popowBootstrap = false).toSettings
+      val nodeSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
+
+      new NodeViewFixture(nodeSettings, parameters).apply { fixture =>
+        import fixture._
+
+        val (us, bh) = createUtxoState(settings)
+        val genesis = validFullBlock(parentOpt = None, us, bh)
+        applyBlock(genesis) shouldBe 'success
+        stopNodeViewHolder()
+
+        val history = ErgoHistory.readOrGenerate(settings)(null)
+        val afterInvalidation = try {
+          history.reportModifierIsInvalid(genesis.header, ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)).get
+          history.bestFullBlockIdOpt
+        } finally history.closeStorage()
+        val reopened = ErgoHistory.readOrGenerate(settings)(null)
+        val afterReopen = try reopened.bestFullBlockIdOpt finally reopened.closeStorage()
+        afterInvalidation -> afterReopen
+      }
+    }
+
+    val preGenesis = Some(PreGenesisHeader.id)
+    Seq(StateType.Utxo, StateType.Digest).map(pointers) shouldBe Seq(preGenesis -> preGenesis, preGenesis -> preGenesis)
   }
 
   property("require every prepared UTXO snapshot trust signal") {

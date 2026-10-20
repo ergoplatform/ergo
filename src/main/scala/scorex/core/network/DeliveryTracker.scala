@@ -237,6 +237,21 @@ class DeliveryTracker(cacheSettings: NetworkCacheSettings,
     }
 
   /**
+    * Set modifier status to Received directly without a prior Requested state.
+    * Used when a modifier is already known (e.g. from a sync message) and
+    * does not need a network download request.
+    *
+    * Precondition: the caller MUST verify that the modifier status is Unknown
+    * before calling this method. If the status is Requested, use `setReceived`
+    * instead to properly clean up the delivery check timeout.
+    */
+  def setReceivedDirectly(id: ModifierId, modifierTypeId: NetworkObjectTypeId.Value, sender: ConnectedPeer): Unit = {
+    tryWithLogging {
+      received.adjust(modifierTypeId)(_.fold(Map(id -> sender))(_.updated(id, sender)))
+    }
+  }
+
+  /**
     * Self-check that transition between states is correct.
     *
     * Modifier may stay in current state,

@@ -7,6 +7,7 @@ import org.ergoplatform.settings.Parameters.{MaxBlockCostIncrease, MinValuePerBy
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.ErgoBox
+import org.ergoplatform.settings.NetworkType.Tests
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
@@ -23,7 +24,9 @@ object ErgoNodeTestConstants extends ScorexLogging {
     Parameters(0, Parameters.DefaultParameters ++ extension, ErgoValidationSettingsUpdate.empty)
   }
 
-  val initSettings: ErgoSettings = ErgoSettingsReader.read(Args(Some("src/test/resources/application.conf"), None))
+  val initSettings: ErgoSettings = ErgoSettingsReader
+    .read(Args(Some("src/test/resources/application.conf"), None))
+    .copy(networkType = Tests)
 
   implicit val settings: ErgoSettings = initSettings
 

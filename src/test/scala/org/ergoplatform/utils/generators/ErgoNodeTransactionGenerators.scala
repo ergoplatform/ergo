@@ -57,7 +57,14 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
-    ergoBoxGen(propGen = propositionGen, tokensGen = Gen.oneOf(tokens, tokens), heightGen = EmptyHistoryHeight)
+    // enough for validUnsignedTransactionFromBoxes to spend the box alone
+    val minValue = BoxUtils.sufficientAmount(extendedParameters)
+    ergoBoxGen(
+      propGen     = propositionGen,
+      tokensGen   = Gen.oneOf(tokens, tokens),
+      valueGenOpt = Some(validValueGen.map(Math.max(_, minValue))),
+      heightGen   = EmptyHistoryHeight
+    )
   }
 
   def unspendableErgoBoxGen(minValue: Long = parameters.minValuePerByte * 200,
@@ -190,9 +197,10 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
       } while (assetsMap.nonEmpty && availableTokenSlots > 0)
     }
 
+    val creationHeight = boxesToSpend.map(_.creationHeight).max
     val newBoxes = outputAmounts.zip(tokenAmounts.toIndexedSeq).map { case (amt, tokens) =>
       val normalizedTokens = tokens.toSeq.map(t => t._1.data.toTokenId -> t._2)
-      testBox(amt, outputsProposition, 0, normalizedTokens)
+      testBox(amt, outputsProposition, creationHeight, normalizedTokens)
     }
     val inputs = boxesToSpend.map(b => Input(b.id, emptyProverResult))
     val dataInputs = dataBoxes.map(b => DataInput(b.id))

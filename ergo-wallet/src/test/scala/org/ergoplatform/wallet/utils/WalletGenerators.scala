@@ -150,15 +150,10 @@ object WalletGenerators {
     }
   }
 
-  def appStatusesGen: Gen[Set[ScanId]] = {
-    if(scala.util.Random.nextBoolean()) {
-      // simulate complex usage scenario
-      Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ScanId @@ id }.toSet)
-    } else {
-      // simulate simple payment
-      Set(PaymentsScanId)
-    }
-  }
+  def appStatusesGen: Gen[Set[ScanId]] = Gen.oneOf(
+    Gen.nonEmptyListOf(Gen.posNum[Short]).map(_.map { id: Short => ScanId @@ id }.toSet),
+    Gen.const(Set(PaymentsScanId))
+  )
 
   def trackedBoxGen: Gen[TrackedBox] = for {
     creationTxId <- modIdGen

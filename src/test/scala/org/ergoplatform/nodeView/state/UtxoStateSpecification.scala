@@ -12,9 +12,10 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.transaction.TooHighCostError
 import org.ergoplatform.core.idToVersion
+import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants.FalseTree
-import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.boxesHolderGen
+import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.scalatest.OptionValues
 import scorex.crypto.authds.ADKey
@@ -166,6 +167,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       bh.take(1000)._1.foreach { box =>
         us.boxById(box.id) shouldBe Some(box)
       }
+      us.closeStorage()
     }
   }
 
@@ -244,6 +246,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       ADProofs.proofDigest(proof1) shouldBe ADProofs.proofDigest(proof2)
       digest1 shouldBe digest2
+      us.closeStorage()
     }
   }
 
@@ -271,6 +274,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val correctTransactions = IndexedSeq(txWithDataInputs)
       val digest = us.proofsForTransactions(correctTransactions).get._2
       us.applyTransactions(correctTransactions, emptyModifierId, digest, emptyStateContext).get
+      us.closeStorage()
     }
   }
 
@@ -328,6 +332,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       // proof of non-existence
       val d2 = us.proofsForTransactions(txsNext).get._2
       us.applyTransactions(txsNext, emptyModifierId, d2, emptyStateContext) shouldBe 'success
+      us.closeStorage()
     }
   }
 
@@ -348,6 +353,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val block = wBlock.copy(header = wBlock.header.copy(height = 1))
       val newSC = us.stateContext.appendFullBlock(block).get
       us.applyTransactions(txs, emptyModifierId, digest, newSC).get
+      us.closeStorage()
     }
   }
 
@@ -373,6 +379,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       val fb = new ErgoFullBlock(header, bt, genExtension(header, us.stateContext), None)
       val newSC = us.stateContext.appendFullBlock(fb).get
       us.applyTransactions(txs, emptyModifierId, digest, newSC).get
+      us.closeStorage()
     }
   }
 
@@ -413,6 +420,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       // Fails on generating state root digest for the block
       us.proofsForTransactions(txs).isSuccess shouldBe false
+      us.closeStorage()
     }
   }
 
@@ -427,7 +435,51 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       us.proofsForTransactions(txsFromHolder).isSuccess shouldBe true
       val d3 = us.rootDigest
       d1.sameElements(d3) shouldBe true
+      us.closeStorage()
     }
+  }
+
+  property("proofsForTransactions() does not modify the UTXO set tree along a growing chain") {
+    // Chain-scale variant of the invariants above, as asked in #1614: at every height of a
+    // growing chain, generating proofs must leave the tree untouched and be repeatable, and
+    // the block built from those proofs must be applicable, landing exactly on the promised digest.
+    // The issue literally asks for 500 blocks of 500 transactions; that would take hours in CI,
+    // so the chain is kept short here - the invariants checked are the same at any scale.
+    val blocksInChain = 20
+
+    var bh = BoxHolder(Seq(genesisEmissionBox))
+    var us = createUtxoState(bh, parameters)
+    var height: Int = GenesisHeight
+
+    (0 until blocksInChain) foreach { _ =>
+      val header: Header = defaultHeaderGen.sample.value
+      val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
+      val txs = t._1
+      bh = t._2
+
+      val rootBefore = us.rootDigest
+      // proof generation leaves the tree at the same root
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      us.rootDigest.sameElements(rootBefore) shouldBe true
+      // and is repeatable, still without touching the tree
+      val (adProofBytes2, adDigest2) = us.proofsForTransactions(txs).get
+      ADProofs.proofDigest(adProofBytes2) shouldBe ADProofs.proofDigest(adProofBytes)
+      adDigest2 shouldBe adDigest
+      us.rootDigest.sameElements(rootBefore) shouldBe true
+
+      val realHeader = header.copy(stateRoot = adDigest,
+        ADProofsRoot = ADProofs.proofDigest(adProofBytes),
+        height = height,
+        parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      val bt = BlockTransactions(realHeader.id, Header.InitialVersion, txs)
+      val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
+      // the state accepts the block built from those proofs and lands exactly on the promised root
+      us = us.applyModifier(fb, None)(_ => ()).get
+      us.rootDigest.sameElements(fb.header.stateRoot) shouldBe true
+      height = height + 1
+    }
+    us.closeStorage()
   }
 
   property("proofsForTransactions() fails if a transaction is spending an output created by a follow-up transaction") {
@@ -446,6 +498,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       val us = createUtxoState(bh, parameters)
       us.proofsForTransactions(txs).isSuccess shouldBe false
+      us.closeStorage()
     }
   }
 
@@ -456,6 +509,7 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
 
       val block = validFullBlock(parentOpt = None, us, bh)
       us.applyModifier(block, None)(_ => ()).get
+      us.closeStorage()
     }
   }
 
@@ -545,6 +599,31 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
   }
 
 
+
+  property("applyTransactions() - failing transaction id is tagged in the validation error") {
+    val (us, bh) = createUtxoState(settings)
+    val wus = WrappedUtxoState(us, bh, settings)
+
+    // Apply a valid genesis block so transaction validation is enabled (height > checkpoint).
+    val genesis = validFullBlock(parentOpt = None, wus)
+    val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
+
+    // Build a valid transaction spending one of the post-genesis boxes,
+    // then corrupt its output value to be negative.
+    val box = wusAfterGenesis.takeBoxes(1).head
+    val validTx = validTransactionFromBoxes(IndexedSeq(box), new RandomWrapper)
+    val invalidOutputs = validTx.outputCandidates.map { out =>
+      new ErgoBoxCandidate(-1, out.ergoTree, out.creationHeight, out.additionalTokens, out.additionalRegisters)
+    }
+    val invalidTx = validTx.copy(outputCandidates = invalidOutputs)
+
+    val error = wusAfterGenesis
+      .applyTransactions(Seq(invalidTx), invalidTx.id, wusAfterGenesis.rootDigest, wusAfterGenesis.stateContext)
+      .failed
+      .get
+
+    ErgoNodeViewHolder.extractFailedTxId(error) shouldBe Some(invalidTx.id)
+  }
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
     nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)

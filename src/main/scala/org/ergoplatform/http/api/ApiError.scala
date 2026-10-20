@@ -32,6 +32,7 @@ object ApiError {
   implicit def toRoute(error: ApiError): Route = error.defaultRoute
 
   object InternalError extends ApiError(StatusCodes.InternalServerError, "internal.error")
+  object ServiceUnavailable extends ApiError(StatusCodes.ServiceUnavailable, "service.unavailable")
   object InvalidJson extends ApiError(StatusCodes.BadRequest, "invalid.json")
   object BadRequest extends ApiError(StatusCodes.BadRequest, "bad.request")
   object ApiKeyNotValid extends ApiError(StatusCodes.Forbidden, "invalid.api-key")

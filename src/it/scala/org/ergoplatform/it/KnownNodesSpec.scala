@@ -12,7 +12,7 @@ class KnownNodesSpec extends AnyFlatSpec with IntegrationSuite {
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(3)
     .map(conf => nonGeneratingPeerConfig
       .withFallback(conf)
-      .withFallback(localOnlyConfig)
+      .withFallback(allowLocalConfig)
     )
 
   val nodes: List[Node] = docker.startDevNetNodes(nodeConfigs, sequentialTopologyConfig).get

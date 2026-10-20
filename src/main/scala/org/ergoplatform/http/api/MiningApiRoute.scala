@@ -4,17 +4,23 @@ import akka.actor.{ActorRef, ActorRefFactory}
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import io.circe.syntax._
-import io.circe.{Encoder, Json}
+import io.circe.Encoder
+import io.circe.Json
+import org.bouncycastle.util.encoders.Hex
+import org.ergoplatform.http.api.requests.MiningRequest
 import org.ergoplatform.mining.CandidateGenerator.Candidate
 import org.ergoplatform.mining.{AutolykosSolution, CandidateGenerator, ErgoMiner}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.wallet.ErgoAddressJsonEncoder
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.{ErgoAddress, ErgoTreePredef, Pay2SAddress}
+import org.ergoplatform.http.api.ApiError.BadRequest
 import scorex.core.api.http.ApiResponse
 import sigma.data.ProveDlog
+import sigma.serialization.GroupElementSerializer
 
 import scala.concurrent.Future
+import scala.util.{Failure, Success, Try}
 
 case class MiningApiRoute(miner: ActorRef,
                           ergoSettings: ErgoSettings)
@@ -27,6 +33,7 @@ case class MiningApiRoute(miner: ActorRef,
   override val route: Route = pathPrefix("mining") {
     candidateR ~
       candidateWithTxsR ~
+      candidateWithTxsAndPkR ~
       solutionR ~
       rewardAddressR ~
       rewardPublicKeyR
@@ -51,6 +58,20 @@ case class MiningApiRoute(miner: ActorRef,
     val prepareCmd = CandidateGenerator.GenerateCandidate(txs, reply = true, forced = false)
     val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
     ApiResponse(candidateF)
+  }
+
+  def candidateWithTxsAndPkR: Route = (path("candidateWithTxsAndPk")
+    & post & entity(as[MiningRequest]) & withAuth) { txsAndPk =>
+    val tryPk = Try(GroupElementSerializer.fromBytes(Hex.decode(txsAndPk.pk)))
+    tryPk match {
+      case Failure(_) =>
+        BadRequest("Could not decode hexadecimal string for given public key")
+      case Success(pk) =>
+        val prepareCmd = CandidateGenerator.GenerateCandidate(txsAndPk.txs, reply = true,
+          forced = false, Some(ProveDlog.apply(pk)))
+        val candidateF = miner.askWithStatus(prepareCmd).mapTo[Candidate].map(_.externalVersion)
+        ApiResponse(candidateF)
+    }
   }
 
   def solutionR: Route = (path("solution") & post & entity(as[AutolykosSolution])) { solution =>

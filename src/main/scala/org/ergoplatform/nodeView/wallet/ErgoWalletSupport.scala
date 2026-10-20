@@ -324,7 +324,7 @@ trait ErgoWalletSupport extends ScorexLogging {
         require(outputs.forall(_.additionalTokens.forall(_._2 > 0)), "Non-positive asset value")
 
         val assetIssueBox = outputs
-          .zip(requests)
+          .zip(requestsWithoutBurnTokens)
           .filter(_._2.isInstanceOf[AssetIssueRequest])
           .map(_._1)
           .headOption

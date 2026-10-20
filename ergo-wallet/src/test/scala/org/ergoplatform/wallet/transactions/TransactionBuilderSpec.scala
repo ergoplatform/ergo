@@ -127,4 +127,40 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
       t => t.getMessage.contains("createFeeOutput should be defined"))
   }
 
+  property("paymentTransaction rejects invalid input ids") {
+    val address = P2PKAddress(rootSecret.privateInput.publicImage)
+
+    def build(inputId: String): UnsignedErgoLikeTransaction =
+      TransactionBuilder.paymentTransaction(
+        address,
+        address,
+        minBoxValue,
+        minBoxValue,
+        0,
+        Array(inputId),
+        currentHeight)
+
+    Seq("00", "not-hex").foreach { inputId =>
+      assertExceptionThrown(build(inputId), t => t.isInstanceOf[IllegalArgumentException])
+    }
+  }
+
+  property("multiPaymentTransaction rejects invalid input ids") {
+    val address = P2PKAddress(rootSecret.privateInput.publicImage)
+    val payments = java.util.Collections.singletonList(TransactionBuilder.Payment(address, minBoxValue))
+
+    def build(inputId: String): UnsignedErgoLikeTransaction =
+      TransactionBuilder.multiPaymentTransaction(
+        Array(inputId),
+        minBoxValue,
+        payments,
+        address,
+        0,
+        currentHeight)
+
+    Seq("00", "not-hex").foreach { inputId =>
+      assertExceptionThrown(build(inputId), t => t.isInstanceOf[IllegalArgumentException])
+    }
+  }
+
 }

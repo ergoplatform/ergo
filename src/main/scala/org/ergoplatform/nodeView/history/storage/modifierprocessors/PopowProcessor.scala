@@ -2,7 +2,7 @@ package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.local.{CorrectNipopowProofVerificationResult, NipopowProofVerificationResult, NipopowVerifier}
-import org.ergoplatform.modifiers.BlockSection
+import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.{NipopowAlgos, NipopowProverWithDbAlgs, NipopowProof, NipopowProofSerializer, PoPowHeader, PoPowParams}
@@ -66,6 +66,11 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
   protected def process(h: Header, nipopowMode: Boolean): Try[ProgressInfo[BlockSection]]
 
   /**
+    * Checks whether it's time to download full chain after header `header`, see `ToDownloadProcessor`
+    */
+  protected def toDownload(header: Header): Seq[(NetworkObjectTypeId.Value, ModifierId)]
+
+  /**
     * Constructs popow header against given header identifier
     *
     * @param headerId - identifier of the header
@@ -107,8 +112,9 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
     * @return PoPow proof if success, Failure instance otherwise
     */
   def popowProof(m: Int, k: Int, headerIdOpt: Option[ModifierId]): Try[NipopowProof] = {
-    val proofParams = PoPowParams(m, k, continuous = true)
-    NipopowProverWithDbAlgs.prove(historyReader, headerIdOpt = headerIdOpt, chainSettings)(proofParams)
+    PoPowParams(m, k, continuous = true).flatMap { proofParams =>
+      NipopowProverWithDbAlgs.prove(historyReader, headerIdOpt = headerIdOpt, chainSettings)(proofParams)
+    }
   }
 
   /**
@@ -145,6 +151,9 @@ trait PopowProcessor extends BasicReaders with ScorexLogging {
               process(h, nipopowMode = true)
             }
           }
+          // proof prefix is sparse, so only the best stored header of the proof is used to check whether headers
+          // chain is synced and full blocks could be downloaded
+          headersToApply.reverseIterator.find(h => historyReader.contains(h.id)).foreach(toDownload)
           nipopowVerifier.reset()
           log.info(s"Nipopow proof applied, best header now is ${historyReader.bestHeaderOpt}")
         } else {

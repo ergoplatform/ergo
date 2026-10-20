@@ -1,5 +1,7 @@
 package org.ergoplatform.it2
 
+import java.nio.file.{Files, Paths}
+
 import com.typesafe.config.Config
 import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -15,11 +17,20 @@ class TestDigestStateOnMainNetSpec
     with IntegrationSuite
     with OptionValues {
 
+  // Persist the synced chain in a stable host dir (not the per-run random localDataDir) so
+  // repeated runs resume sync instead of starting from genesis. Separate dir per state type.
+  // Delete this directory to force a clean full sync.
+  val localVolume = s"$tempDir/ergo-it2-mainnet-digest"
+  val remoteVolume = "/app"
+  Files.createDirectories(Paths.get(localVolume))
+
   val nodeConfig: Config = nodeSeedConfigs.head
+    .withFallback(specialDataDirConfig(remoteVolume))
     .withFallback(digestStatePeerConfig)
     .withFallback(nonGeneratingPeerConfig)
 
-  val node: Node = docker.startMainNetNodeYesImSure(nodeConfig).get
+  val node: Node = docker
+    .startMainNetNodeYesImSure(nodeConfig, specialVolumeOpt = Some((localVolume, remoteVolume))).get
 
   it should "Start a stateType=digest node on mainnet and wait for a full sync" in {
     val result = Async.async {

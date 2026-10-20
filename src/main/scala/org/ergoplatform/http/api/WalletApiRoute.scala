@@ -10,10 +10,10 @@ import org.ergoplatform.http.api.requests.HintExtractionRequest
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.wallet._
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.requests._
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
 import org.ergoplatform.wallet.Constants
-import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.ErgoBoxSerializer
 import org.ergoplatform.http.api.ApiError.{BadRequest, NotExists}
 import scorex.core.api.http.ApiResponse
@@ -367,23 +367,25 @@ case class WalletApiRoute(readersHolder: ActorRef,
 
   def getTransactionsByScanIdR: Route = (path("transactionsByScanId" / Segment) & get & txsByScanIdParams) {
     case (id, minHeight, maxHeight, minConfNum, maxConfNum, includeUnconfirmed) =>
-      if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
-        BadRequest("Bad request: both heights and confirmations set")
-      else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
-        withWalletOp(_.transactionsByScanId(ScanId @@ id.toShort, includeUnconfirmed)) {
-          resp => ApiResponse(resp.result.asJson)
+      withScanId(id) { scanId =>
+        if ((minHeight > 0 || maxHeight < Int.MaxValue) && (minConfNum > 0 || maxConfNum < Int.MaxValue))
+          BadRequest("Bad request: both heights and confirmations set")
+        else if (minHeight == 0 && maxHeight == Int.MaxValue && minConfNum == 0 && maxConfNum == Int.MaxValue) {
+          withWalletOp(_.transactionsByScanId(scanId, includeUnconfirmed)) {
+            resp => ApiResponse(resp.result.asJson)
+          }
         }
-      }
-      else {
-        withWalletOp(_.filteredScanTransactions(
-          List(ScanId @@ id.toShort),
-          minHeight,
-          maxHeight,
-          minConfNum,
-          maxConfNum,
-          includeUnconfirmed)
-        ) {
-          resp => ApiResponse(resp.asJson)
+        else {
+          withWalletOp(_.filteredScanTransactions(
+            List(scanId),
+            minHeight,
+            maxHeight,
+            minConfNum,
+            maxConfNum,
+            includeUnconfirmed)
+          ) {
+            resp => ApiResponse(resp.asJson)
+          }
         }
       }
   }
@@ -463,8 +465,13 @@ case class WalletApiRoute(readersHolder: ActorRef,
   }
 
   def updateChangeAddressR: Route = (path("updateChangeAddress") & post & p2pkAddress) { p2pk =>
-    withWallet { w =>
+    withWalletOp { w =>
       w.updateChangeAddress(p2pk)
+        .map[Either[ChangeAddressValidationException, Unit]](Right(_))
+        .recover { case e: ChangeAddressValidationException => Left(e) }
+    } {
+      case Right(_) => ApiResponse(())
+      case Left(e) => BadRequest(e.getMessage)
     }
   }
 

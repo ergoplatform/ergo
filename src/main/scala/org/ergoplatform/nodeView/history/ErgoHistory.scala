@@ -230,6 +230,37 @@ trait ErgoHistory
   }
 
   /**
+    * A UTXO node writes the best full block pointer before the block's ADProofs, which it stores after the state
+    * update. A node that requires ADProofs, started on a history the UTXO node left between the two writes, cannot
+    * assemble the block the pointer names, and does not apply it when its ADProofs arrive, as the pointer already
+    * names it. Moves the pointer to the highest ancestor this node can assemble, or removes it if there is none.
+    * A pointer to a header that is not stored, such as the pre-genesis id `reportModifierIsInvalid` writes when the
+    * genesis block is invalidated, is left as it is.
+    */
+  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = historyStorage.synchronized {
+    (bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)), bestFullBlockOpt) match {
+      case (Some(bestHeader), None) =>
+        val bestId = bestHeader.id
+        val lowestHeight = minimalFullBlockHeight
+        val ancestors = Iterator
+          .iterate(Option(bestHeader))(_.flatMap(h => typedModifierById[Header](h.parentId)))
+          .takeWhile(_.exists(_.height >= lowestHeight))
+          .flatten
+        val completeOpt = ancestors.find(h => h.id != bestId && getFullBlock(h).isDefined)
+        log.warn(s"Best full block $bestId cannot be assembled in ${nodeSettings.stateType} mode, " +
+          s"moving the pointer to ${completeOpt.map(h => s"${h.id} at height ${h.height}").getOrElse("none")}")
+        completeOpt match {
+          case Some(header) =>
+            historyStorage.insert(Array(BestFullBlockKey -> idToBytes(header.id)), BlockSection.emptyArray)
+          case None =>
+            historyStorage.remove(Array(BestFullBlockKey), Array.empty[ModifierId])
+        }
+      case _ =>
+        Success(())
+    }
+  }
+
+  /**
     * @return read-only copy of this history
     */
   def getReader: ErgoHistoryReader = this
@@ -479,6 +510,7 @@ object ErgoHistory extends ScorexLogging {
     }
 
     repairIfNeeded(history)
+    history.repairIncompleteBestFullBlock().get
 
     // If the node is restarted in the middle of UTXO set snapshot bootstrapping (headers are
     // already persisted, but the snapshot was not applied yet), the headers chain is already

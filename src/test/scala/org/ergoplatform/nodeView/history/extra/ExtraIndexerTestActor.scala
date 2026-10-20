@@ -71,6 +71,17 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
     test.lock.unlock()
   }
 
+  // Akka calls this before it restarts a failed actor. The signal that a test waits for
+  // will not come, so wake the test now with the cause.
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    test.lock.lock()
+    test.fixtureFailure = Some(self.path.name -> reason)
+    test.done.signalAll()
+    test.created.signalAll()
+    test.lock.unlock()
+    super.preRestart(reason, message)
+  }
+
   override def getLastTxForHeight(height: Int): ErgoTransaction = {
     val header = fullChainHeaderAtHeight(height).get
     val block = history.getFullBlock(header)
@@ -245,7 +256,8 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
   def reset(): Unit = {
     resetTransientState()
     stateOpt = None
-    test._history = null
+    // a later test may already use the history of another fixture actor
+    if (test._history eq _history) test._history = null
     general.clear()
     boxes.clear()
     trees.clear()
@@ -265,7 +277,10 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
     writeFailurePhase = ""
     writeFailureProbe = None
     writeFailureObserved = false
-    context.become(receive.orElse(loaded(IndexerState(0, 0, 0, 0, caughtUp = false))))
+    // back to the start-up behavior: `receive` drops an `Index()` that is already in the
+    // mailbox and the block events stashed during a rollback
+    unstashAll()
+    context.become(receive)
   }
 
   def GenerateBetterChainTip(): Unit = {

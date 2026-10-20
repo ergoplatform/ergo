@@ -11,6 +11,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.state.{ErgoState, StateType}
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NodeViewTestConfig}
 
 import java.nio.file.Files
@@ -35,6 +36,42 @@ class HistoryOpenFailureShutdownSpec extends ErgoCorePropertyTest {
     }
   }
 
+  /**
+    * Starts a Holder whose constructor must fail, waits for the failure, the Holder's death
+    * and the coordinated shutdown, and returns the failure's cause chain.
+    */
+  private def expectStartupShutdown(
+    settings: ErgoSettings,
+    target: ActorSystem,
+    observer: ActorSystem
+  ): Vector[Throwable] = {
+    val shutdown        = CoordinatedShutdown(target)
+    val releaseShutdown = Promise[Done]()
+    // Keep the guardian alive until its constructor-failure event has been observed.
+    shutdown.addTask(
+      CoordinatedShutdown.PhaseBeforeServiceUnbind,
+      "observe-holder-failure"
+    ) { () =>
+      releaseShutdown.future
+    }
+    try {
+      val failures = TestProbe()(observer)
+      target.eventStream.subscribe(failures.ref, classOf[Error])
+      val death  = TestProbe()(observer)
+      val holder = ErgoNodeViewRef(settings)(target)
+      death.watch(holder)
+      val failure = failures.fishForSpecificMessage(10.seconds) {
+        case Error(cause: ActorInitializationException, _, _, _) => cause
+      }
+      death.expectTerminated(holder, 10.seconds)
+      // Constructor failure and death are observed first: this is not an elapsed-silence oracle.
+      shutdown.shutdownReason() shouldBe Some(InternalShutdown)
+      Iterator.iterate[Throwable](failure)(_.getCause).takeWhile(_ != null).toVector
+    } finally {
+      releaseShutdown.trySuccess(Done)
+    }
+  }
+
   for (stateType <- Seq(StateType.Utxo, StateType.Digest)) {
     property(s"history open failure shuts down the $stateType ActorSystem and retains a state-directory marker") {
       val directory = Files.createTempDirectory("history-open-failure")
@@ -51,39 +88,16 @@ class HistoryOpenFailureShutdownSpec extends ErgoCorePropertyTest {
         storage.close()
       }
       withSystems { (target, observer) =>
-        val shutdown = CoordinatedShutdown(target)
-        val releaseShutdown = Promise[Done]()
-        // Keep the guardian alive until its constructor-failure event has been observed.
-        shutdown.addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "observe-holder-failure") {
-          () => releaseShutdown.future
-        }
-        try {
-          val failures = TestProbe()(observer)
-          target.eventStream.subscribe(failures.ref, classOf[Error])
-          val death = TestProbe()(observer)
-          val holder = ErgoNodeViewRef(settings)(target)
-          death.watch(holder)
-
-          val failure = failures.fishForMessage(10.seconds) {
-            case Error(_: ActorInitializationException, _, _, _) => true
-            case _ => false
-          }.asInstanceOf[Error].cause
-          val causes = Iterator.iterate(failure)(_.getCause).takeWhile(_ != null).toVector
-          causes.exists(ex => ex.isInstanceOf[UnsupportedOperationException] &&
-            ex.getMessage == "empty.tail") shouldBe true
-          causes.flatMap(_.getStackTrace).exists(frame =>
-            frame.getClassName == "org.ergoplatform.nodeView.history.ErgoHistory$" &&
-              frame.getMethodName == "readOrGenerate") shouldBe true
-          causes.flatMap(_.getStackTrace).exists(frame =>
-            frame.getClassName == "org.ergoplatform.nodeView.ErgoNodeViewHolder" &&
-              frame.getMethodName == "restoreState") shouldBe true
-          death.expectTerminated(holder, 10.seconds)
-
-          // Constructor failure and death are observed first: this is not an elapsed-silence oracle.
-          shutdown.shutdownReason() shouldBe Some(InternalShutdown)
-        } finally {
-          releaseShutdown.trySuccess(Done)
-        }
+        val causes = expectStartupShutdown(settings, target, observer)
+        causes.collect {
+          case e: UnsupportedOperationException => e.getMessage
+        } should contain("empty.tail")
+        causes.flatMap(_.getStackTrace).exists(frame =>
+          frame.getClassName == "org.ergoplatform.nodeView.history.ErgoHistory$" &&
+            frame.getMethodName == "readOrGenerate") shouldBe true
+        causes.flatMap(_.getStackTrace).exists(frame =>
+          frame.getClassName == "org.ergoplatform.nodeView.ErgoNodeViewHolder" &&
+            frame.getMethodName == "restoreState") shouldBe true
         Await.result(target.whenTerminated, 10.seconds)
         Files.readAllBytes(marker).toSeq shouldBe Seq[Byte](42)
       }
@@ -123,30 +137,10 @@ class HistoryOpenFailureShutdownSpec extends ErgoCorePropertyTest {
     val blockedState = Files.write(ErgoState.stateDir(settings).toPath, Array[Byte](42))
 
     withSystems { (target, observer) =>
-      val shutdown = CoordinatedShutdown(target)
-      val releaseShutdown = Promise[Done]()
-      shutdown.addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "observe-state-open-failure") {
-        () => releaseShutdown.future
-      }
-      try {
-        val failures = TestProbe()(observer)
-        target.eventStream.subscribe(failures.ref, classOf[Error])
-        val death = TestProbe()(observer)
-        val holder = ErgoNodeViewRef(settings)(target)
-        death.watch(holder)
-        val failure = failures.fishForMessage(10.seconds) {
-          case Error(_: ActorInitializationException, _, _, _) => true
-          case _ => false
-        }.asInstanceOf[Error].cause
-        val causes = Iterator.iterate(failure)(_.getCause).takeWhile(_ != null).toVector
-        causes.flatMap(_.getStackTrace).exists(frame =>
-          frame.getClassName == "org.ergoplatform.nodeView.state.ErgoState$" &&
-            frame.getMethodName == "readOrGenerate") shouldBe true
-        death.expectTerminated(holder, 10.seconds)
-        shutdown.shutdownReason() shouldBe Some(InternalShutdown)
-      } finally {
-        releaseShutdown.trySuccess(Done)
-      }
+      val causes = expectStartupShutdown(settings, target, observer)
+      causes.flatMap(_.getStackTrace).exists(frame =>
+        frame.getClassName == "org.ergoplatform.nodeView.state.ErgoState$" &&
+          frame.getMethodName == "readOrGenerate") shouldBe true
       Await.result(target.whenTerminated, 10.seconds)
       Files.readAllBytes(blockedState).toSeq shouldBe Seq[Byte](42)
     }
@@ -159,31 +153,10 @@ class HistoryOpenFailureShutdownSpec extends ErgoCorePropertyTest {
     val blockedHistory = Files.write(directory.resolve("history"), Array[Byte](42))
 
     withSystems { (target, observer) =>
-      val shutdown = CoordinatedShutdown(target)
-      val releaseShutdown = Promise[Done]()
-      shutdown.addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "observe-history-path-failure") {
-        () => releaseShutdown.future
-      }
-      try {
-        val failures = TestProbe()(observer)
-        target.eventStream.subscribe(failures.ref, classOf[Error])
-        val death = TestProbe()(observer)
-        val holder = ErgoNodeViewRef(settings)(target)
-        death.watch(holder)
-        val failure = failures.fishForMessage(10.seconds) {
-          case Error(_: ActorInitializationException, _, _, _) => true
-          case _ => false
-        }.asInstanceOf[Error].cause
-        val causes = Iterator.iterate(failure)(_.getCause).takeWhile(_ != null).toVector
-        causes.exists(_.isInstanceOf[NullPointerException]) shouldBe true
-        causes.flatMap(_.getStackTrace).exists(frame =>
-          frame.getClassName == "org.ergoplatform.nodeView.ErgoNodeViewHolder" &&
-            frame.getMethodName == "restoreState") shouldBe true
-        death.expectTerminated(holder, 10.seconds)
-        shutdown.shutdownReason() shouldBe Some(InternalShutdown)
-      } finally {
-        releaseShutdown.trySuccess(Done)
-      }
+      val causes = expectStartupShutdown(settings, target, observer)
+      causes.flatMap(_.getStackTrace).exists(frame =>
+        frame.getClassName == "org.ergoplatform.nodeView.ErgoNodeViewHolder" &&
+          frame.getMethodName == "restoreState") shouldBe true
       Await.result(target.whenTerminated, 10.seconds)
       Files.readAllBytes(blockedHistory).toSeq shouldBe Seq[Byte](42)
     }

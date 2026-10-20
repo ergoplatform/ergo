@@ -4,7 +4,8 @@ import java.io.File
 
 import com.atlassian.oai.validator.OpenApiInteractionValidator
 import com.atlassian.oai.validator.model.{SimpleRequest, SimpleResponse}
-import com.atlassian.oai.validator.report.ValidationReport
+import com.atlassian.oai.validator.report.ValidationReport.Level
+import com.atlassian.oai.validator.report.{LevelResolver, ValidationReport}
 import com.typesafe.config.Config
 import org.asynchttpclient.Response
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
@@ -28,8 +29,14 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
   private val specPath: String =
     new File("src/main/resources/api/openapi.yaml").getAbsolutePath
 
+  // OpenAPI allows fields a schema does not declare; the validator rejects them by default.
+  private val levels: LevelResolver = LevelResolver
+    .create()
+    .withLevel("validation.response.body.schema.additionalProperties", Level.IGNORE)
+    .build()
+
   private val validator: OpenApiInteractionValidator =
-    OpenApiInteractionValidator.createFor(specPath).build()
+    OpenApiInteractionValidator.createFor(specPath).withLevelResolver(levels).build()
 
   private def loadResource(name: String): String = {
     val src = Source.fromInputStream(getClass.getResourceAsStream(name))
@@ -43,13 +50,21 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
   private case class ApiCall(method: String, path: String, body: Option[String] = None)
 
   private def callApi(c: ApiCall): Future[(ApiCall, Response)] = {
+    // A 400 for the sample block or transaction is fine if its body matches the spec.
     val responseFuture: Future[Response] = c.method match {
       case "GET"  => node.singleGet(c.path)
-      case "POST" => node.post(c.path, c.body.getOrElse(""))
-      case other  => Future.failed(new IllegalArgumentException(s"Unsupported method $other"))
+      case "POST" => node.singlePost(c.path, c.body.getOrElse(""))
+      case other =>
+        Future.failed(new IllegalArgumentException(s"Unsupported method $other"))
     }
     responseFuture.map(c -> _)
   }
+
+  // One call at a time: the Docker HTTP client allows 10 connections per host.
+  private def callAll(calls: Seq[ApiCall]): Future[Seq[(ApiCall, Response)]] =
+    calls.foldLeft(Future.successful(Vector.empty[(ApiCall, Response)])) { (done, call) =>
+      done.flatMap(results => callApi(call).map(results :+ _))
+    }
 
   private def toReport(c: ApiCall, resp: Response): ValidationReport = {
     val request = c.method match {
@@ -59,6 +74,7 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
         val builder = SimpleRequest.Builder
           .post(c.path)
           .withHeader("Content-Type", "application/json")
+          .withHeader("api_key", "hello")
         c.body.fold(builder)(builder.withBody).build()
     }
     val response = SimpleResponse.Builder
@@ -95,9 +111,7 @@ class OpenApiSpec extends AnyFlatSpec with IntegrationSuite {
     val result = node
       .waitForHeight(expectedHeight)
       .flatMap(_ => node.headerIdsByHeight(expectedHeight))
-      .flatMap { headerIds =>
-        Future.traverse(buildCalls(headerIds.head))(callApi)
-      }
+      .flatMap(headerIds => callAll(buildCalls(headerIds.head)))
       .map { results =>
         val report = results.foldLeft(ValidationReport.empty()) {
           case (acc, (call, resp)) => acc.merge(toReport(call, resp))

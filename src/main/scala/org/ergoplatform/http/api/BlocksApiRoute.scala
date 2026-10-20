@@ -203,7 +203,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     * This is useful when blockchain database is in invalid state and full resync needs to be avoided.
     * Requires API key authentication for security.
     */
-  def resetBlockchainR: Route = (post & path("reset") & withAuth & entity(as[ResetRequest])) { request =>
+  def resetBlockchainR: Route = (path("reset") & post & withAuth & entity(as[ResetRequest])) { request =>
     // Additional API-level validation
     if (request.height < 0) {
       BadRequest("Height must be non-negative")

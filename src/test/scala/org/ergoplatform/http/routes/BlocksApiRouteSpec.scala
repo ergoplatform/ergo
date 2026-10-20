@@ -29,6 +29,20 @@ class BlocksApiRouteSpec
 
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
 
+  it should "not add a method rejection for unrelated reset subpaths" in {
+    val resetRoute = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).resetBlockchainR
+    Get("/junk/path") ~> Route.seal(resetRoute) ~> check {
+      status shouldBe StatusCodes.NotFound
+    }
+  }
+
+  it should "keep reset restricted to POST after matching the reset path" in {
+    val resetRoute = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).resetBlockchainR
+    Get("/reset") ~> Route.seal(resetRoute) ~> check {
+      status shouldBe StatusCodes.MethodNotAllowed
+    }
+  }
+
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String    = Algos.encode(headerIdBytes)
 

@@ -269,7 +269,7 @@ trait ErgoHistory
       }
 
       if (heightsToRemove.nonEmpty) {
-        historyStorage.remove(heightsToRemove.map(heightIdsKey).toArray, Array.empty)
+        historyStorage.remove(heightsToRemove.map(heightIdsKey).toArray, Array.empty).get
       }
 
       targetHeaderIdOpt match {
@@ -290,10 +290,10 @@ trait ErgoHistory
               BlockSection.emptyArray
             ).get
           } else if (bestFullBlockOpt.isEmpty) {
-            historyStorage.remove(Array(BestFullBlockKey), Array.empty)
+            historyStorage.remove(Array(BestFullBlockKey), Array.empty).get
           }
         case None =>
-          historyStorage.remove(Array(BestHeaderKey, BestFullBlockKey), Array.empty)
+          historyStorage.remove(Array(BestHeaderKey, BestFullBlockKey), Array.empty).get
       }
       this
     }

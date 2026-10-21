@@ -1,19 +1,26 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.server.AuthorizationFailedRejection
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.testkit.TestProbe
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
 import org.ergoplatform.http.api.BlocksApiRoute
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ResetBlockchainTo
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.crypto.hash.Blake2b256
 import scorex.util.ModifierId
+import scala.concurrent.duration._
+import scala.util.Failure
 
 class BlocksApiRouteSpec
   extends AnyFlatSpec
@@ -28,6 +35,54 @@ class BlocksApiRouteSpec
   val prefix = "/blocks"
 
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
+
+  it should "reject reset without a valid configured API key before contacting the node" in {
+    val probe = TestProbe()
+    val secured = settings.copy(scorexSettings = settings.scorexSettings.copy(
+      restApi = settings.scorexSettings.restApi.copy(
+        apiKeyHash = Some("e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10")
+      )
+    ))
+    val protectedRoute = BlocksApiRoute(probe.ref, digestReadersRef, secured).route
+    val request = Post(prefix + "/reset", Json.obj("height" -> 1.asJson))
+    request ~> protectedRoute ~> check {
+      rejections should contain(AuthorizationFailedRejection)
+    }
+    request.withHeaders(RawHeader("api_key", "incorrect-test-key")) ~> protectedRoute ~> check {
+      rejections should contain(AuthorizationFailedRejection)
+    }
+    probe.expectNoMessage(100.millis)
+  }
+
+  it should "report node reset failures as errors rather than successful resets" in {
+    val probe = TestProbe()
+    val failingRoute = BlocksApiRoute(probe.ref, digestReadersRef, settings).route
+    val result = Post(prefix + "/reset", Json.obj("height" -> 1.asJson)) ~> failingRoute ~> runRoute
+    probe.expectMsg(ResetBlockchainTo(1))
+    probe.reply(Failure(new IllegalStateException("rollback unavailable")))
+    check {
+      status shouldBe StatusCodes.InternalServerError
+      responseAs[Json].hcursor.get[String]("detail").toOption.get should include("rollback unavailable")
+    }(result)
+  }
+
+  it should "forward authenticated reset requests and preserve node validation errors" in {
+    val probe = TestProbe()
+    val key = "reset-route-test-key"
+    val secured = settings.copy(scorexSettings = settings.scorexSettings.copy(
+      restApi = settings.scorexSettings.restApi.copy(apiKeyHash = Some(Algos.encode(Blake2b256(key))))
+    ))
+    val protectedRoute = BlocksApiRoute(probe.ref, digestReadersRef, secured).route
+    val request = Post(prefix + "/reset", Json.obj("height" -> 1.asJson))
+      .withHeaders(RawHeader("api_key", key))
+    val result = request ~> protectedRoute ~> runRoute
+    probe.expectMsg(ResetBlockchainTo(1))
+    probe.reply(Failure(new IllegalArgumentException("target version unavailable")))
+    check {
+      status shouldBe StatusCodes.BadRequest
+      responseAs[Json].hcursor.get[String]("detail").toOption.get should include("target version unavailable")
+    }(result)
+  }
 
   it should "not add a method rejection for unrelated reset subpaths" in {
     val resetRoute = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).resetBlockchainR
@@ -159,6 +214,7 @@ class BlocksApiRouteSpec
 
 
   it should "reject reset with negative height" in {
+    val before = (history.headersHeight, history.bestHeaderIdOpt, history.bestFullBlockIdOpt)
     val resetRequestJson = Map("height" -> -1).asJson
     val resetRequestEntity = HttpEntity(resetRequestJson.toString).withContentType(ContentTypes.`application/json`)
 
@@ -167,10 +223,12 @@ class BlocksApiRouteSpec
       val response = responseAs[Json]
       val detail = response.hcursor.get[String]("detail").getOrElse("")
       detail should include("Height must be non-negative")
+      (history.headersHeight, history.bestHeaderIdOpt, history.bestFullBlockIdOpt) shouldBe before
     }
   }
 
   it should "reject reset with height higher than current" in {
+    val before = (history.headersHeight, history.bestHeaderIdOpt, history.bestFullBlockIdOpt)
     val currentHeight = history.headersHeight
     val targetHeight = currentHeight + 100
 
@@ -182,6 +240,7 @@ class BlocksApiRouteSpec
       val response = responseAs[Json]
       val detail = response.hcursor.get[String]("detail").getOrElse("")
       detail should include("higher than current height")
+      (history.headersHeight, history.bestHeaderIdOpt, history.bestFullBlockIdOpt) shouldBe before
     }
   }
 

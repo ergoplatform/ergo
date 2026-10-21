@@ -32,15 +32,39 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
-  import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
   import org.ergoplatform.utils.generators.ChainGenerator._
 
+  private var cleanup = List.empty[() => Unit]
+
+  private def trackedUtxoState(config: ErgoSettings): (UtxoState, BoxHolder) = {
+    val generated = org.ergoplatform.utils.generators.ValidBlocksGenerators.createUtxoState(config)
+    cleanup ::= (() => generated._1.closeStorage())
+    generated
+  }
+
+  private def trackedHistory(verifyTransactions: Boolean, stateType: StateType,
+                             PoPoWBootstrap: Boolean, blocksToKeep: Int)
+      : org.ergoplatform.nodeView.history.ErgoHistory = {
+    val history = org.ergoplatform.utils.HistoryTestHelpers.generateHistory(
+      verifyTransactions, stateType, PoPoWBootstrap, blocksToKeep)
+    cleanup ::= (() => history.closeStorage())
+    history
+  }
+
+  override protected def withFixture(test: NoArgTest): org.scalatest.Outcome = {
+    try super.withFixture(test) finally {
+      val closing = cleanup.map(close => scala.util.Try(close()))
+      cleanup = Nil
+      closing.foreach(_.get)
+    }
+  }
+
   private val t0 = TestCase("check chain is healthy") { fixture =>
-    val (us, bh) = createUtxoState(settings)
+    val (us, bh) = trackedUtxoState(settings)
     val block = validFullBlock(None, us, bh)
 
-    val history = generateHistory(true, StateType.Utxo, false, 2)
+    val history = trackedHistory(true, StateType.Utxo, false, 2)
 
     // too big chain update delay
     val notAcceptableDelay = System.currentTimeMillis() - (initSettings.nodeSettings.acceptableChainUpdateDelay.toMillis + 100)
@@ -66,7 +90,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t3 = TestCase("apply valid block header") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val block = validFullBlock(None, us, bh)
 
     getBestHeaderOpt shouldBe None
@@ -86,7 +110,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t3a = TestCase("do not apply block headers in invalid order") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val parentBlock = validFullBlock(None, us, bh)
     val block = validFullBlock(Some(parentBlock), us, bh)
 
@@ -111,7 +135,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t4 = TestCase("apply valid block as genesis") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
 
     subscribeEvents(classOf[SyntacticallySuccessfulModifier])
@@ -131,7 +155,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t5 = TestCase("apply full blocks after genesis") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
       WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
@@ -153,7 +177,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t6 = TestCase("add transaction to memory pool") { fixture =>
     import fixture._
     if (stateType == Utxo) {
-      val (us, bh) = createUtxoState(fixture.settings)
+      val (us, bh) = trackedUtxoState(fixture.settings)
       val genesis = validFullBlock(parentOpt = None, us, bh)
       applyBlock(genesis) shouldBe 'success
 
@@ -170,7 +194,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t7 = TestCase("apply statefully invalid full block") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
       WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
@@ -225,7 +249,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t8 = TestCase("switching for a better chain") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
       WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
@@ -262,7 +286,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t9 = TestCase("UTXO state should generate adProofs and put them in history") { fixture =>
     import fixture._
     if (stateType == StateType.Utxo) {
-      val (us, bh) = createUtxoState(fixture.settings)
+      val (us, bh) = trackedUtxoState(fixture.settings)
       val genesis = validFullBlock(parentOpt = None, us, bh)
 
       nodeViewHolderRef ! LocallyGeneratedModifier(genesis.header)
@@ -276,7 +300,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t10 = TestCase("NodeViewHolder start from inconsistent state") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
       WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
@@ -299,7 +323,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t11 = TestCase("apply payload in incorrect order (excluding extension)") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val genesis = validFullBlock(parentOpt = None, us, bh)
     val wusAfterGenesis =
       WrappedUtxoState(us, bh, fixture.settings).applyModifier(genesis) { mod =>
@@ -329,7 +353,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t12 = TestCase("Do not apply txs with wrong header id") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val block = validFullBlock(None, us, bh)
     getBestHeaderOpt shouldBe None
     getHistoryHeight shouldBe EmptyHistoryHeight
@@ -382,7 +406,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t13 = TestCase("Do not apply wrong adProofs") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val block = validFullBlock(None, us, bh)
     getBestHeaderOpt shouldBe None
 
@@ -415,7 +439,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     "it's not equal to genesisId from config") { fixture =>
     import fixture._
     updateConfig(genesisIdConfig(modifierIdGen.sample))
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val block = validFullBlock(None, us, bh)
 
     getBestHeaderOpt shouldBe None
@@ -434,7 +458,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t15 = TestCase("apply genesis block header if it's equal to genesisId from config") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val block = validFullBlock(None, us, bh)
     updateConfig(genesisIdConfig(Some(block.header.id)))
 
@@ -454,7 +478,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t16 = TestCase("apply forks that include genesis block") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val wusGenesis = WrappedUtxoState(us, bh, fixture.settings)
 
 
@@ -484,7 +508,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   private val t17 = TestCase("apply invalid genesis header") { fixture =>
     import fixture._
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val header = validFullBlock(None, us, bh).header.copy(parentId = bytesToId(Array.fill(32)(9: Byte)))
 
     getBestHeaderOpt shouldBe None
@@ -503,7 +527,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t18 = TestCase("apply syntactically invalid genesis block") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
 
     val validBlock = validFullBlock(parentOpt = None, us, bh)
     val invalidBlock = validBlock.copy(header = validBlock.header.copy(parentId = bytesToId(Array.fill(32)(9: Byte))))
@@ -516,7 +540,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t19 = TestCase("apply semantically invalid genesis block") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val wusGenesis = WrappedUtxoState(us, bh, fixture.settings)
 
     val invalidBlock = generateInvalidFullBlock(None, wusGenesis)
@@ -536,7 +560,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t20 = TestCase("SemanticallyFailedModification carries failing transaction id") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val wus = WrappedUtxoState(us, bh, fixture.settings)
 
     val genesis = validFullBlock(None, wus)
@@ -586,7 +610,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
   private val t21 = TestCase("txScriptFailure carries failing transaction id") { fixture =>
     import fixture._
 
-    val (us, bh) = createUtxoState(fixture.settings)
+    val (us, bh) = trackedUtxoState(fixture.settings)
     val wus = WrappedUtxoState(us, bh, fixture.settings)
 
     val genesis = validFullBlock(None, wus)
@@ -631,7 +655,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     import fixture._
 
     // sender history: generate a chain and a NiPoPoW proof for it
-    val senderHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+    val senderHistory = trackedHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
     val senderChain = genChain(5000, senderHistory)
     val updSenderHistory = applyChain(senderHistory, senderChain)
     val popowProof = updSenderHistory.nipopowSerializer.parseBytes(updSenderHistory.popowProofBytes().get)

@@ -34,10 +34,15 @@ class ErgoSanityUTXO extends ErgoSanity[UTXO_ST]
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   override val historyGen: Gen[HT] =
-    generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+    Gen.const(()).map { _ =>
+      trackedStorage(generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1))(
+        _.closeStorage())
+    }
 
   override val stateGen: Gen[WrappedUtxoState] =
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings))
+    boxesHolderGen.map { boxes =>
+      trackedStorage(WrappedUtxoState(boxes, createTempDir, parameters, settings))(_.closeStorage())
+    }
 
   override def semanticallyValidModifier(state: UTXO_ST): PM = {
     statefulyValidFullBlock(state.asInstanceOf[WrappedUtxoState])

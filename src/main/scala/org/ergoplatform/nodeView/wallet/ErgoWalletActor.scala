@@ -22,7 +22,7 @@ import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class ErgoWalletActor(settings: ErgoSettings,
                       parameters: Parameters,
@@ -284,6 +284,19 @@ class ErgoWalletActor(settings: ErgoSettings,
           log.warn(s"Wallet: block in the past reported at ${newBlock.height}, blockId: ${newBlock.id}")
         }
       }
+
+    case RollbackForReset(version) =>
+      val result = if (state.secretStorageOpt.isDefined || settings.walletSettings.testMnemonic.isDefined) {
+        Try(state.registry.rollback(version)).flatten
+      } else {
+        Success(())
+      }
+      result match {
+        case Success(_) => context.become(loadedWallet(state.copy(outputsFilter = None, error = None)))
+        case Failure(error) =>
+          context.become(loadedWallet(state.copy(error = Some(s"Reset rollback failed: ${error.getMessage}"))))
+      }
+      sender() ! result
 
     case Rollback(version: VersionTag) =>
       // wallet must be initialized for wallet registry rollback

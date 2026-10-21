@@ -1,7 +1,9 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props, Stash}
+import akka.pattern.ask
+import akka.util.Timeout
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core._
@@ -17,6 +19,7 @@ import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.RollbackForReset
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
 import org.ergoplatform.utils.ScorexEncoding
@@ -30,6 +33,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -41,7 +45,7 @@ import scala.util.{Failure, Success, Try}
   *
   */
 abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSettings)
-  extends Actor with ScorexLogging with ScorexEncoding with FileUtils {
+  extends Actor with Stash with ScorexLogging with ScorexEncoding with FileUtils {
 
   private implicit lazy val actorSystem: ActorSystem = context.system
 
@@ -68,7 +72,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * state (result of log's modifiers application to pre-historical(genesis) state,
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
-  private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+  private var nodeView: NodeView = {
+    BlockchainReset.requireCompleteHistory(settings.directory)
+    restoreState().getOrElse(genesisState)
+  }
 
   /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
   private var chainProgress: Option[ChainProgress] = None
@@ -736,6 +743,77 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       sender() ! healthCheckReply
   }
 
+  private case class ResetCompleted(replyTo: ActorRef, targetHeight: Int, previousHeight: Int,
+                                    targetId: ModifierId, result: Try[(State, ErgoHistory)])
+
+  /** A partial reset must never leave the node processing blocks against a mixed view. */
+  private def failReset(replyTo: ActorRef, error: Throwable): Unit = {
+    log.error("Blockchain reset failed; stopping node to prevent use of a partial view", error)
+    replyTo ! Failure(new IllegalStateException(s"Blockchain reset failed; node is stopping: ${error.getMessage}", error))
+    context.become {
+      case ResetBlockchainTo(_) => sender() ! Failure(new IllegalStateException("Node is stopping after reset failure"))
+      case _ => ()
+    }
+    ErgoApp.shutdownSystem()(context.system)
+  }
+
+  private def handleBlockchainReset: Receive = {
+    case ResetBlockchainTo(height) =>
+      val replyTo = sender()
+      val currentHistory = history()
+      val currentState = minimalState()
+      val previousHeight = currentHistory.headersHeight
+      val target = Try {
+        val header = currentHistory.bestHeaderAtHeight(height)
+        val version = header.map(h => idToVersion(h.id))
+        val canRollback = version.exists(v => currentState.version == v || currentState.rollbackVersions.exists(_ == v))
+        BlockchainReset.validateTarget(height, previousHeight,
+          header.exists(h => currentHistory.getFullBlock(h).isDefined), canRollback).get
+        header.get
+      }
+      target match {
+        case Failure(error) => replyTo ! Failure(error)
+        case Success(header) =>
+          val targetVersion = idToVersion(header.id)
+          val walletActor = vault().walletActor
+          implicit val executionContext: scala.concurrent.ExecutionContext = context.dispatcher
+          implicit val resetTimeout: Timeout = Timeout(20.seconds)
+          // Stash every message while waiting for the wallet; never process another mutation
+          // or publish the new view until the persistent rollback has been acknowledged.
+          context.become {
+            case ResetCompleted(recipient, targetHeight, oldHeight, targetId, Success((state, newHistory))) =>
+              Try {
+                updateNodeView(Some(newHistory), Some(state), updatedMempool = Some(ErgoMemPool.empty(settings)))
+                chainProgress = None
+                context.system.eventStream.publish(Rollback(targetId))
+              } match {
+                case Success(_) =>
+                  recipient ! Success(s"Blockchain successfully reset from height $oldHeight to height $targetHeight. " +
+                    "All block sections and validity indices cleaned to ensure proper revalidation.")
+                  context.become(receive)
+                  unstashAll()
+                case Failure(error) => failReset(recipient, error)
+              }
+            case ResetCompleted(recipient, _, _, _, Failure(error)) => failReset(recipient, error)
+            case _ => stash()
+          }
+          BlockchainReset.run[State, ErgoHistory](
+            () => {
+              val rollback = if (currentState.version == targetVersion) Success(currentState) else currentState.rollbackTo(targetVersion)
+              rollback.flatMap { state => Try {
+                require(state.version == targetVersion && java.util.Arrays.equals(state.rootDigest, header.stateRoot),
+                  "Rolled-back state does not match the requested header")
+                state
+              } }
+            },
+            () => (walletActor ? RollbackForReset(targetVersion)).mapTo[Try[Unit]],
+            () => BlockchainReset.pruneHistory(settings.directory, height)(currentHistory.resetToHeight(height))
+          ).onComplete { result =>
+            self ! ResetCompleted(replyTo, height, previousHeight, header.id, result.flatten)
+          }
+      }
+  }
+
   override def receive: Receive =
     processRemoteModifiers orElse
       processLocallyGeneratedModifiers orElse
@@ -743,7 +821,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       getCurrentInfo orElse
       getNodeViewChanges orElse
       processStateSnapshot orElse
-      handleHealthCheck orElse {
+      handleHealthCheck orElse
+      handleBlockchainReset orElse {
         case a: Any => log.error("Strange input: " + a)
       }
 
@@ -806,6 +885,7 @@ object ErgoNodeViewHolder {
     sealed trait HealthCheckResult
     case object ChainIsHealthy extends HealthCheckResult
     case class ChainIsStuck(reason: String) extends HealthCheckResult
+    case class ResetBlockchainTo(height: Int)
   }
 
   case class BlockAppliedTransactions(txs: Seq[ModifierId]) extends NodeViewHolderEvent

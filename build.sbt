@@ -191,11 +191,13 @@ inConfig(IntegrationTest)(Seq(
 // Cap how many forked test JVMs run concurrently.  sbt's default
 // concurrentRestrictions already contains Tags.limit(Tags.ForkedTestGroup, 1);
 // simply += adds a second, looser rule and the strictest wins, so the
-// 2-way parallelism would be a no-op.  We replace the default rule by
-// keeping the other defaults and setting ForkedTestGroup to 2.
+// parallelism would be a no-op.  We replace the default rule by
+// keeping the other defaults and setting ForkedTestGroup to 3.
+// Three integration suites start at most ~11 node containers of 1 GB each,
+// which fits the 16 GB of a GitHub-hosted runner.
 Global / concurrentRestrictions := Seq(
   Tags.limitAll(math.max(1, java.lang.Runtime.getRuntime.availableProcessors())),
-  Tags.limit(Tags.ForkedTestGroup, 2),
+  Tags.limit(Tags.ForkedTestGroup, 3),
   Tags.exclusiveGroup(Tags.Clean)
 )
 

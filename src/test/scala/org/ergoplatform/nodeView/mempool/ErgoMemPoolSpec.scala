@@ -64,7 +64,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
-    val inputBox = wus.takeBoxes(1).head
+    val inputBox = wus.takeBoxes(100).find(_.ergoTree == TrueTree).get
     val feeOut = new ErgoBoxCandidate(inputBox.value, feeProp, creationHeight = 0)
     val tx = ErgoTransaction(
       IndexedSeq(new Input(inputBox.id, ProverResult.empty)),

@@ -92,6 +92,12 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
+  def headerChainDiffConfig(headerChainDiff: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.headerChainDiff=$headerChainDiff
+    """.stripMargin
+  )
+
   val nonGeneratingPeerConfig: Config = ConfigFactory.parseString(
     """
       |ergo.node.mining=false

@@ -8,7 +8,7 @@ import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, applyHeaderChain, genChain}
 import org.ergoplatform.wallet.utils.FileUtils
 
-/** Regression scenarios reported by cafebedouin in #2575. */
+/** Regression scenarios reported by cafebedouin in #2575 and #2785. */
 class DeepForkDownloadSpecification extends ErgoCorePropertyTest with FileUtils {
 
   Seq(129, 130).foreach { headerLead =>
@@ -96,6 +96,53 @@ class DeepForkDownloadSpecification extends ErgoCorePropertyTest with FileUtils 
       } finally {
         history.historyStorage.close()
       }
+    }
+  }
+
+  // The order of events in node10's logs in the failed DeepRollBackSpec runs of #2785
+  property("download the first fork block after an own block at its height") {
+    var history = generateHistory(
+      verifyTransactions = true,
+      StateType.Utxo,
+      PoPoWBootstrap = false,
+      blocksToKeep   = -1
+    )
+    try {
+      val common = genChain(10, history)
+      history = applyChain(history, common)
+      val heavier = genChain(240, common.last).tail
+      val own     = genChain(40, common.last).tail
+      // The synced flag is kept in memory only, so a restart clears it.
+      history.isHeadersChainSyncedVar = false
+
+      // The first fresh fork header enables sync, but its append requests no sections.
+      val (afterFirstHeader, progress) = history.append(heavier.head.header).get
+      history = afterFirstHeader
+      progress.toDownload shouldBe empty
+      // Then the node applies its own block at that height,
+      // and keeps mining while the heavier chain arrives.
+      history = applyChain(history, own.take(1))
+      history.bestFullBlockOpt.get.header.id shouldBe own.head.header.id
+      history = applyChain(history, heavier.tail)
+      history = applyChain(history, own.tail)
+
+      history.bestHeaderOpt.get.id shouldBe heavier.last.header.id
+      history.bestFullBlockOpt.get.header.id shouldBe own.last.header.id
+
+      val firstForkSections =
+        history.requiredModifiersForHeader(heavier.head.header).map(_._2).toSet
+      val requested = history
+        .nextModifiersToDownload(1000, (_, id) => !history.contains(id))
+        .values
+        .flatten
+        .toSet
+      firstForkSections.subsetOf(requested) shouldBe true
+
+      // The first fork block is the only block missing to switch to the heavier chain.
+      history = applyChain(history, heavier.take(1))
+      history.bestFullBlockOpt.get.header.id shouldBe heavier.last.header.id
+    } finally {
+      history.historyStorage.close()
     }
   }
 }

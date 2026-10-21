@@ -1,5 +1,8 @@
 package org.ergoplatform.nodeView.history
 
+import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
+import ch.qos.logback.classic.spi.{ILoggingEvent, ThrowableProxy}
+import ch.qos.logback.core.AppenderBase
 import com.google.common.primitives.Ints
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.BlockSection
@@ -16,6 +19,7 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.initSettings
 import org.ergoplatform.utils.generators.ErgoCoreGenerators.{defaultHeaderGen, randomADProofsGen}
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.invalidErgoTransactionGen
+import org.slf4j.LoggerFactory
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, idToBytes}
 
@@ -26,13 +30,37 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
   private val testSettings = initSettings.copy(nodeSettings = initSettings.nodeSettings.copy(
     stateType = StateType.Utxo, verifyTransactions = true, extraIndex = false))
 
-  // Ordinary storage-return failures isolate each caller join, independently of the storage implementation.
+  private def captureHistoryErrors[A](body: => A): (A, Vector[ILoggingEvent]) = {
+    val logger = LoggerFactory.getLogger(classOf[ErgoHistory].getPackage.getName).asInstanceOf[LogbackLogger]
+    val previousLevel = logger.getLevel
+    val events = mutable.ArrayBuffer.empty[ILoggingEvent]
+    val appender = new AppenderBase[ILoggingEvent] {
+      override def append(event: ILoggingEvent): Unit = {
+        if (event.getLevel == Level.ERROR) events += event
+      }
+    }
+    appender.setContext(logger.getLoggerContext)
+    appender.start()
+    logger.setLevel(Level.ERROR)
+    logger.addAppender(appender)
+    try {
+      val result = body
+      (result, events.toVector)
+    } finally {
+      logger.detachAppender(appender)
+      logger.setLevel(previousLevel)
+      appender.stop()
+    }
+  }
+
+  // Storage-return failures and pre-return throws isolate each caller join.
   private class TestStorage extends HistoryStorage(null, null, null, testSettings.cacheSettings) {
     val indexes: mutable.Map[ByteArrayWrapper, Array[Byte]] = mutable.Map.empty
     val objects: mutable.Map[ModifierId, BlockSection] = mutable.Map.empty
     val removals: mutable.Buffer[(Seq[ByteArrayWrapper], Seq[ModifierId])] = mutable.Buffer.empty
     val failure = new IllegalStateException("history removal sentinel")
     var failAt: Int = -1
+    var throwAt: Int = -1
     var failAfterObjectsAt: Int = -1
     var closed: Boolean = false
     var closeFailure: Option[RuntimeException] = None
@@ -46,6 +74,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     override def contains(id: ModifierId): Boolean = objects.contains(id)
     override def remove(keys: Array[ByteArrayWrapper], ids: Array[ModifierId]): Try[Unit] = {
       removals += ((keys.toSeq, ids.toSeq))
+      if (removals.size == throwAt) throw failure
       if (removals.size == failAt) Failure(failure)
       else if (removals.size == failAfterObjectsAt) {
         ids.foreach(objects.remove)
@@ -106,10 +135,10 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
   property("UTXO cleanup removes a stored proof before its invalid header") {
     val f = new Fixture
     val child = f.children.head
-    f.db.objects.contains(child.ADProofsId) shouldBe true
+    f.db.objects should contain key (child.ADProofsId)
     f.history.forgetHeader(child.id) shouldBe Success(())
-    child.sectionIds.foreach { case (_, id) => f.db.objects.contains(id) shouldBe false }
-    f.db.objects.contains(child.id) shouldBe false
+    child.sectionIds.foreach { case (_, id) => f.db.objects should not contain key (id) }
+    f.db.objects should not contain key (child.id)
   }
 
   (1 to 4).foreach { failedRemoval =>
@@ -118,6 +147,26 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       f.db.failAt = failedRemoval
       f.history.forgetHeader(f.children.head.id) shouldBe Failure(f.db.failure)
       f.db.removals.size shouldBe failedRemoval
+    }
+  }
+
+  Seq((1, "modifier"), (4, "header")).foreach { case (failedRemoval, kind) =>
+    Seq(false, true).foreach { throws =>
+      property(s"$kind removal ${if (throws) "throw" else "Failure"} logs its original error") {
+        val f = new Fixture
+        val child = f.children.head
+        if (throws) f.db.throwAt = failedRemoval else f.db.failAt = failedRemoval
+
+        val (result, events) = captureHistoryErrors { f.history.forgetHeader(child.id) }
+        result shouldBe Failure(f.db.failure)
+        f.db.removals.size shouldBe failedRemoval
+        f.db.objects should contain key (child.id)
+
+        val failedId = if (failedRemoval == 1) child.sectionIds.head._2 else child.id
+        val matching = events.filter(_.getFormattedMessage.contains(s"Failed to remove $kind $failedId"))
+        matching.size shouldBe 1
+        matching.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs f.db.failure
+      }
     }
   }
 
@@ -137,7 +186,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       val child = f.children.head
       f.db.failAt = failedRemoval
       f.history.forgetHeader(child.id)
-      f.db.objects.contains(child.id) shouldBe true
+      f.db.objects should contain key (child.id)
       f.db.failAt = -1
       f.history.forgetHeader(child.id) shouldBe Success(())
       (child.id +: child.sectionIds.map(_._2)).foreach { id =>
@@ -154,9 +203,9 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       f.db.failAt = -1
       ErgoHistory.repairIfNeeded(f.history) shouldBe Success(true)
       f.children.flatMap(h => h.id +: h.sectionIds.map(_._2)).foreach { id =>
-        f.db.objects.contains(id) shouldBe false
+        f.db.objects should not contain key (id)
       }
-      f.db.indexes.contains(f.heightKey) shouldBe false
+      f.db.indexes should not contain key (f.heightKey)
       f.history.bestFullBlockOpt.map(_.id) shouldBe Some(f.tip.id)
     }
   }
@@ -169,7 +218,11 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
 
       ErgoHistory.repairIfNeeded(f.history) shouldBe Failure(f.db.failure)
       f.db.indexes should contain key f.heightKey
-      f.db.objects.contains(child.id) shouldBe (failedRemoval == 1)
+      if (failedRemoval == 1) {
+        f.db.objects should contain key (child.id)
+      } else {
+        f.db.objects should not contain key (child.id)
+      }
 
       f.db.failAfterObjectsAt = -1
       ErgoHistory.repairIfNeeded(f.history) shouldBe Success(true)
@@ -187,10 +240,10 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       f.db.failAt = failedRemoval
       f.history.forgetHeader(f.children.head.id) shouldBe Failure(f.db.failure)
       f.db.removals.size shouldBe failedRemoval
-      f.db.objects.contains(f.children.head.id) shouldBe true
+      f.db.objects should contain key (f.children.head.id)
       f.db.failAt = -1
       f.history.forgetHeader(f.children.head.id) shouldBe Success(())
-      f.children.head.sectionIds.foreach { case (_, id) => f.db.objects.contains(id) shouldBe false }
+      f.children.head.sectionIds.foreach { case (_, id) => f.db.objects should not contain key (id) }
     }
   }
 
@@ -267,9 +320,15 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     val closeError = new IllegalStateException("history close sentinel")
     f.db.failAt = 1
     f.db.closeFailure = Some(closeError)
-    val error = intercept[IllegalStateException] { ErgoHistory.readOrGenerate(testSettings, f.db)(null) }
+    val (error, events) = captureHistoryErrors {
+      intercept[IllegalStateException] { ErgoHistory.readOrGenerate(testSettings, f.db)(null) }
+    }
     error should be theSameInstanceAs f.db.failure
     error.getSuppressed.toSeq shouldBe Seq(closeError)
+    val startupErrors = events.filter(_.getFormattedMessage.startsWith("History repair failed; stop this node."))
+    startupErrors.size shouldBe 1
+    startupErrors.head.getFormattedMessage should include ("keep history/index and history/objects intact")
+    startupErrors.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs f.db.failure
   }
 
   property("startup avoids self-suppression if closing returns the repair error") {

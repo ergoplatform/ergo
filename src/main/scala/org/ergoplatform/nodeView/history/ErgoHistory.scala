@@ -216,16 +216,24 @@ trait ErgoHistory
     // Keep the header until its sections are removed so a retry can still discover their identifiers.
     hOpt.toSeq.flatMap(_.sectionIds).foldLeft[Try[Unit]](Success(())) {
       case (result, (_, mId)) => result.flatMap { _ =>
-        val removal = historyStorage.remove(Array(validityKey(mId)), Array(mId))
-        log.info(s"Result of removing modifier $mId: " + removal)
+        val removal = Try(historyStorage.remove(Array(validityKey(mId)), Array(mId))).flatten
+        removal match {
+          case Success(_) => log.info(s"Result of removing modifier $mId: " + removal)
+          case Failure(error) =>
+            log.error(s"Failed to remove modifier $mId during history repair", error)
+        }
         removal
       }
     }.flatMap { _ =>
-      val removal = historyStorage.remove(
+      val removal = Try(historyStorage.remove(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
-      )
-      log.info(s"Result of removing header $headerId: " + removal)
+      )).flatten
+      removal match {
+        case Success(_) => log.info(s"Result of removing header $headerId: " + removal)
+        case Failure(error) =>
+          log.error(s"Failed to remove header $headerId during history repair", error)
+      }
       removal
     }
   }
@@ -489,6 +497,12 @@ object ErgoHistory extends ScorexLogging {
         Try(history.closeStorage()).failed.foreach { closeError =>
           if (closeError ne error) error.addSuppressed(closeError)
         }
+        log.error(
+          "History repair failed; stop this node. Operator recovery: " +
+            "inspect the error and correct its cause (disk space, permissions, " +
+            "or open handles); keep history/index and history/objects intact, " +
+            "then restart to retry.",
+          error)
         throw error
       case Success(_) =>
     }

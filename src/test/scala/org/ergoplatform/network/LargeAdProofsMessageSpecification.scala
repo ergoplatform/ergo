@@ -49,12 +49,12 @@ class LargeAdProofsMessageSpecification extends ErgoCorePropertyTest {
 
   property("AD proofs section above the single limit is refused by the serializer (written with count 0)") {
     val bytes = Array.fill(ModifiersSpec.maxSingleAdProofsMsgSize - Overhead + 1)(3: Byte)
-    roundTrip(ModifiersData(ProofsTypeId.value, Map(id(3) -> bytes))).isFailure shouldBe true // count = 0
+    roundTrip(ModifiersData(ProofsTypeId.value, Map(id(3) -> bytes))).get.modifiers shouldBe empty // count = 0
   }
 
   property("other block sections keep the reserve limit (oversized one written with count 0)") {
     val bytes = Array.fill(ModifiersSpec.maxMsgSizeWithReserve)(5: Byte)
-    roundTrip(ModifiersData(BlockTransactionsTypeId.value, Map(id(4) -> bytes))).isFailure shouldBe true // count = 0
+    roundTrip(ModifiersData(BlockTransactionsTypeId.value, Map(id(4) -> bytes))).get.modifiers shouldBe empty // count = 0
   }
 
   property("serializer and parser agree at the reserve boundary") {
@@ -62,13 +62,17 @@ class LargeAdProofsMessageSpecification extends ErgoCorePropertyTest {
     roundTrip(ModifiersData(BlockTransactionsTypeId.value, Map(id(5) -> fits))).get.modifiers.size shouldBe 1
 
     val tooBig = Array.fill(ModifiersSpec.maxMsgSizeWithReserve - Overhead + 1)(9: Byte)
-    roundTrip(ModifiersData(BlockTransactionsTypeId.value, Map(id(5) -> tooBig))).isFailure shouldBe true
+    roundTrip(ModifiersData(BlockTransactionsTypeId.value, Map(id(5) -> tooBig))).get.modifiers shouldBe empty
   }
 
   property("two AD proofs sections keep the reserve limit") {
     val half = Array.fill(5 * 1024 * 1024)(1: Byte)
     val parsed = roundTrip(ModifiersData(ProofsTypeId.value, Map(id(6) -> half, id(7) -> half))).get
     parsed.modifiers.size shouldBe 1 // the second one does not fit and is left out
+  }
+
+  property("a zero-count message from an older node parses as empty, not as malformed") {
+    ModifiersSpec.parseBytesTry(crafted(ProofsTypeId.value, Seq.empty)).get.modifiers shouldBe empty
   }
 
   private def crafted(typeId: Byte, entries: Seq[(ModifierId, Int, Int)]): Array[Byte] = {

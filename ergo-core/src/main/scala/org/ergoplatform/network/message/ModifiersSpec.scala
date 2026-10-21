@@ -115,7 +115,9 @@ object ModifiersSpec extends MessageSpecV1[ModifiersData] with ScorexLogging {
   override def parse(r: Reader): ModifiersData = {
     val typeId = NetworkObjectTypeId.fromByte(r.getByte()) // 1 byte
     val count = r.getUInt().toIntExact // 8 bytes
-    require(count > 0, s"Illegal message with 0 modifiers of type $typeId")
+    // An older node serializes a modifier that doesn't fit its size limit as a message with 0 modifiers.
+    // Treat it as non-delivery (handled by the delivery tracker) rather than as a malformed message,
+    // which would get an honest older peer permanently banned.
     val resMap = immutable.Map.newBuilder[ModifierId, Array[Byte]]
     val maxSize = maxMessageSizeFor(typeId, count)
     (0 until count).foldLeft(HeaderLength.toLong) { case (msgSize, _) =>

@@ -837,18 +837,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
-    log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
-    log.debug("Modifier ids: " + modifiers.keys)
-
-    lastModifierGotTime = System.currentTimeMillis()
-
-    // filter out non-requested modifiers
-    val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
-
-    if (typeId == ErgoTransaction.modifierTypeId) {
-      transactionsFromRemote(requestedModifiers, mp, remote)
+    if (modifiers.isEmpty) {
+      // e.g. an older node answering a request for a section too big for its message limit.
+      // Not delivery progress: don't touch lastModifierGotTime, so the delivery tracker
+      // still counts the missing objects as not delivered and penalizes/re-requests as usual.
+      log.info(s"Got an empty Modifiers message of type $typeId from remote connected peer: ${remote.connectionId}")
     } else {
-      blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
+      log.debug("Modifier ids: " + modifiers.keys)
+
+      lastModifierGotTime = System.currentTimeMillis()
+
+      // filter out non-requested modifiers
+      val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
+
+      if (typeId == ErgoTransaction.modifierTypeId) {
+        transactionsFromRemote(requestedModifiers, mp, remote)
+      } else {
+        blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      }
     }
   }
 

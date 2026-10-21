@@ -3,7 +3,6 @@ package org.ergoplatform.it
 import java.io.File
 import akka.japi.Option.Some
 import com.typesafe.config.Config
-import org.asynchttpclient.util.HttpConstants
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -53,10 +52,8 @@ class PrunedDigestNodeSync2Spec extends AnyFlatSpec with IntegrationSuite {
       Async.await(digestNode.waitForHeight(approxTargetHeight))
       val earlyBlockId = Async.await(minerNode.headerIdsByHeight(earlyHeight)).head
       Async.await(
-        digestNode
-          .singleGet(s"/blocks/$earlyBlockId")
-          .map(_.getStatusCode == HttpConstants.ResponseStatusCodes.OK_200)
-      ) shouldBe false
+        digestNode.singleGet(s"/blocks/$earlyBlockId").map(_.getStatusCode)
+      ) shouldBe 404
     }
 
     Await.result(result, 3.minute)

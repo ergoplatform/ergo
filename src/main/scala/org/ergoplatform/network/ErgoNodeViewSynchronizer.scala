@@ -38,7 +38,6 @@ import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, Subtr
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -1296,28 +1295,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
                 s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
 
-    @tailrec
-    def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
-      var size = 5 //message type id + message size
-      var batch = mods.takeWhile { case (_, modBytes) =>
-        size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
-        size < ModifiersSpec.maxMessageSize
-      }
-      if (batch.isEmpty) {
-        // send modifier anyway
-        val ho = mods.headOption
-        batch = ho.toSeq
-        log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
-      }
-      remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
-      val remaining = mods.drop(batch.length)
-      if (remaining.nonEmpty) {
-        sendByParts(remaining)
-      }
-    }
-
     if (objs.nonEmpty) {
-      sendByParts(objs)
+      val (batches, skipped) = ModifiersSpec.planBatches(invData.typeId, objs, LargeAdProofsFilter.condition(remote))
+      skipped.foreach { case (id, length) =>
+        // never send a message the peer can't parse: an empty or oversized Modifiers message
+        // would get this node penalized as malicious
+        log.warn(s"Not sending modifier $id of type ${invData.typeId} and size $length " +
+          s"to ${remote.connectionId}: too big for this peer")
+      }
+      batches.foreach { batch =>
+        if (batch.size == 1 && ModifiersSpec.singleModifierMessageSize(batch.head._2.length) >= ModifiersSpec.maxMessageSize) {
+          log.info(s"Sending big modifier ${batch.head._1} of type ${invData.typeId} and size ${batch.head._2.length} " +
+            s"to ${remote.connectionId}")
+        }
+        remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+      }
     }
   }
 

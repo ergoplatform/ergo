@@ -12,6 +12,7 @@ import org.ergoplatform.network.{ModePeerFeature, Version}
 import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.message.Message
+import org.ergoplatform.network.peer.LargeAdProofsPeerFeature
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages._
 import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo, PeerManager, PeersStatus, PenaltyType, RestApiUrlPeerFeature, SessionIdPeerFeature}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Time
@@ -402,7 +403,7 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
     }
 
-    val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature)
+    val mandatoryFeatures = Array(modePeerFeature, mySessionIdFeature, LargeAdProofsPeerFeature())
 
     val remoteAddress = connectionId.remoteAddress.getAddress
     val isLocal = (remoteAddress != null) && (remoteAddress.isSiteLocalAddress || remoteAddress.isLoopbackAddress)

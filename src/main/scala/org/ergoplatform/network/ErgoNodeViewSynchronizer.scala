@@ -1274,13 +1274,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   //other node asking for objects by their ids
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
-      val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
+      // (id, bytes, served from mined-block memory)
+      val found: Seq[(ModifierId, Array[Byte], Boolean)] = invData.typeId match {
         case typeId: NetworkObjectTypeId.Value if typeId == ErgoTransaction.modifierTypeId =>
           mp.getAll(invData.ids).map { unconfirmedTx =>
-            unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
+            (unconfirmedTx.transaction.id,
+              unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes),
+              false)
           }
         case expectedTypeId: NetworkObjectTypeId.Value =>
-          val found = invData.ids.flatMap { id =>
+          invData.ids.flatMap { id =>
             minedModifier(id).map(true -> _).orElse(hr.modifierTypeAndBytesById(id).map(false -> _)).flatMap {
               case (fromMinedMemory, (mTypeId, bytes)) =>
                 if (mTypeId == expectedTypeId) {
@@ -1291,16 +1294,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 }
             }
           }
-          val servedFromMemory = found.count { case (_, _, fromMinedMemory) => fromMinedMemory }
-          if (servedFromMemory > 0) {
-            log.info(s"Served $servedFromMemory of ${invData.ids.length} requested ids of type $expectedTypeId " +
-                     s"from mined-block memory to $remote")
-          }
-          found.map { case (id, bytes, _) => id -> bytes }
       }
-
-      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
-                s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
+      val objs: Seq[(ModifierId, Array[Byte])] = found.map { case (id, bytes, _) => id -> bytes }
 
     if (objs.nonEmpty) {
       val (batches, skipped) = ModifiersSpec.planBatches(invData.typeId, objs, LargeAdProofsFilter.condition(remote))
@@ -1310,6 +1305,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         log.warn(s"Not sending modifier $id of type ${invData.typeId} and size $length " +
           s"to ${remote.connectionId}: too big for this peer")
       }
+      // log only what is actually sent, after skipping
+      val sentIds = batches.flatten.map(_._1)
+      val sentIdSet = sentIds.toSet
+      val servedFromMemory = found.count { case (id, _, fromMinedMemory) => fromMinedMemory && sentIdSet.contains(id) }
+      if (servedFromMemory > 0) {
+        log.info(s"Served $servedFromMemory of ${invData.ids.length} requested ids of type ${invData.typeId} " +
+                 s"from mined-block memory to $remote")
+      }
+      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
+                s"sending ${sentIds.length} modifiers ${idsToString(invData.typeId, sentIds)} ")
       batches.foreach { batch =>
         if (batch.size == 1 && ModifiersSpec.singleModifierMessageSize(batch.head._2.length) >= ModifiersSpec.maxMessageSize) {
           log.info(s"Sending big modifier ${batch.head._1} of type ${invData.typeId} and size ${batch.head._2.length} " +
@@ -1317,6 +1322,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         }
         remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
       }
+    } else {
+      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, sending 0 modifiers")
     }
   }
 

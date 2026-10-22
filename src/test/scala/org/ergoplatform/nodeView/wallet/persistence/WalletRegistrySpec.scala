@@ -5,15 +5,17 @@ import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.wallet.boxes.TrackedBox
-import org.ergoplatform.core.VersionTag
+import org.ergoplatform.core.{VersionTag, bytesToId, idToBytes}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.db.LDBVersionedStore
 import scorex.util.encode.Base16
 
+import java.io.IOException
 import scala.collection.compat.immutable.ArraySeq
-import scala.util.Success
+import scala.util.{Failure, Success, Try}
 
 class WalletRegistrySpec
   extends AnyFlatSpec
@@ -31,6 +33,234 @@ class WalletRegistrySpec
   private val walletBoxStatus = Set(PaymentsScanId)
 
   private val ws = settings.walletSettings
+
+  it should "seed a new registry with the pre-genesis version" in {
+    val freshSettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 2)
+    )
+    WalletRegistry(freshSettings).get.close()
+
+    val store = new LDBVersionedStore(WalletRegistry.registryFolder(freshSettings), 2)
+    try {
+      store.lastVersionID.map(_.toSeq) shouldBe Some(WalletRegistry.PreGenesisStateVersion.toSeq)
+      store.versionIdExists(WalletRegistry.PreGenesisStateVersion) shouldBe true
+    } finally store.close()
+  }
+
+  it should "open an existing committed registry for recovery without seeding missing data" in {
+    val recoverySettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 2)
+    )
+    val registryDir = WalletRegistry.registryFolder(recoverySettings)
+
+    WalletRegistry.openExistingForRecovery(recoverySettings).isFailure shouldBe true
+    registryDir.exists() shouldBe false
+
+    registryDir.mkdirs() shouldBe true
+    val emptyStore = new LDBVersionedStore(registryDir, 2)
+    emptyStore.close()
+    WalletRegistry.openExistingForRecovery(recoverySettings).isFailure shouldBe true
+    val stillEmpty = new LDBVersionedStore(registryDir, 2, createIfMissing = false)
+    try stillEmpty.lastVersionID shouldBe None
+    finally stillEmpty.close()
+
+    val missingDigestId = bytesToId(byteString32("wallet-recovery-no-digest"))
+    val noDigest = new LDBVersionedStore(registryDir, 2, createIfMissing = false)
+    try noDigest.update(idToBytes(missingDigestId), Seq.empty, Seq.empty).get
+    finally noDigest.close()
+    WalletRegistry.openExistingForRecovery(recoverySettings).isFailure shouldBe true
+
+    val blockId = bytesToId(byteString32("wallet-recovery-checkpoint"))
+    val registry = WalletRegistry(recoverySettings).get
+    try registry.updateOnBlock(
+      ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), blockId, 1).get
+    finally registry.close()
+
+    val recovered = WalletRegistry.openExistingForRecovery(recoverySettings).get
+    try {
+      val (version, digest) = recovered.committedVersionAndDigest.get
+      version shouldBe blockId
+      digest.height shouldBe 1
+    } finally recovered.close()
+
+    val preGenesisSettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 2)
+    )
+    val preGenesisRegistry = WalletRegistry(preGenesisSettings).get
+    try {
+      val scannedId = bytesToId(byteString32("wallet-recovery-pre-genesis"))
+      preGenesisRegistry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), scannedId, 1).get
+      preGenesisRegistry.rollbackDurably(
+        VersionTag @@ Base16.encode(WalletRegistry.PreGenesisStateVersion)).get
+    } finally preGenesisRegistry.close()
+
+    val recoveredPreGenesis = WalletRegistry.openExistingForRecovery(preGenesisSettings).get
+    try {
+      val (version, digest) = recoveredPreGenesis.committedVersionAndDigest.get
+      version shouldBe bytesToId(WalletRegistry.PreGenesisStateVersion)
+      digest shouldBe WalletDigest.empty
+    } finally recoveredPreGenesis.close()
+  }
+
+  it should "retain the committed block version when reopening without the pre-genesis checkpoint" in {
+    Seq(0, 2).foreach { keepVersions =>
+      withClue(s"keepVersions=$keepVersions: ") {
+        val reopenSettings = settings.copy(
+          directory = createTempDir.getAbsolutePath,
+          nodeSettings = settings.nodeSettings.copy(keepVersions = keepVersions)
+        )
+        val blockIds = (1 to keepVersions + 1).map(height => bytesToId(byteString32(s"wallet-reopen-$height")))
+        val registry = WalletRegistry(reopenSettings).get
+        try {
+          blockIds.zipWithIndex.foreach { case (blockId, index) =>
+            registry.updateOnBlock(
+              ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), blockId, index + 1).get
+          }
+          registry.fetchDigest().height shouldBe blockIds.size
+        } finally registry.close()
+
+        val beforeReopen = new LDBVersionedStore(WalletRegistry.registryFolder(reopenSettings), keepVersions)
+        try {
+          beforeReopen.lastVersionID.map(_.toSeq) shouldBe Some(idToBytes(blockIds.last).toSeq)
+          beforeReopen.versionIdExists(WalletRegistry.PreGenesisStateVersion) shouldBe false
+        } finally beforeReopen.close()
+
+        val reopened = WalletRegistry(reopenSettings).get
+        try reopened.fetchDigest().height shouldBe blockIds.size
+        finally reopened.close()
+
+        val afterReopen = new LDBVersionedStore(WalletRegistry.registryFolder(reopenSettings), keepVersions)
+        try afterReopen.lastVersionID.map(_.toSeq) shouldBe Some(idToBytes(blockIds.last).toSeq)
+        finally afterReopen.close()
+
+        val continued = WalletRegistry(reopenSettings).get
+        try {
+          val nextBlockId = bytesToId(byteString32(s"wallet-reopen-${blockIds.size + 1}"))
+          continued.updateOnBlock(
+            ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), nextBlockId, blockIds.size + 1).get
+          continued.fetchDigest().height shouldBe blockIds.size + 1
+          if (keepVersions > 0) {
+            continued.rollback(VersionTag @@ Base16.encode(idToBytes(blockIds.last))).get
+            continued.fetchDigest().height shouldBe blockIds.size
+          }
+        } finally continued.close()
+      }
+    }
+  }
+
+  it should "sync a committed checkpoint that remains rollbackable after reopening" in {
+    val checkpointSettings = settings.copy(
+      directory = createTempDir.getAbsolutePath,
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 4)
+    )
+    val firstId = bytesToId(byteString32("wallet-sync-checkpoint-1"))
+    val secondId = bytesToId(byteString32("wallet-sync-checkpoint-2"))
+    val firstVersion = VersionTag @@ Base16.encode(idToBytes(firstId))
+    val emptyScan = ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty)
+    val registry = WalletRegistry(checkpointSettings).get
+    try {
+      registry.updateOnBlock(emptyScan, firstId, 1).get
+      registry.updateOnBlock(emptyScan, secondId, 2).get
+      registry.syncCommittedCheckpoint(secondId, 2).get
+      registry.committedVersionAndDigest.get match {
+        case (version, digest) =>
+          version shouldBe secondId
+          digest.height shouldBe 2
+      }
+    } finally registry.close()
+
+    val reopened = WalletRegistry(checkpointSettings).get
+    try {
+      val (committedVersion, committedDigest) = reopened.committedVersionAndDigest.get
+      committedVersion shouldBe secondId
+      committedDigest.height shouldBe 2
+      reopened.hasVersion(firstVersion) shouldBe true
+
+      reopened.rollbackDurably(firstVersion).get
+      val (restoredVersion, restoredDigest) = reopened.committedVersionAndDigest.get
+      restoredVersion shouldBe firstId
+      restoredDigest.height shouldBe 1
+    } finally reopened.close()
+
+    val afterRollback = WalletRegistry(checkpointSettings).get
+    try {
+      val (version, digest) = afterRollback.committedVersionAndDigest.get
+      version shouldBe firstId
+      digest.height shouldBe 1
+    } finally afterRollback.close()
+  }
+
+  it should "fail a same-version retained rollback when its sync barrier fails" in {
+    val registryDir = createTempDir
+    val blockId = bytesToId(byteString32("wallet-same-version-sync"))
+    val blockVersion = VersionTag @@ Base16.encode(idToBytes(blockId))
+    var failSync = true
+    var syncBatchSizes = Vector.empty[Int]
+    val store = new LDBVersionedStore(registryDir, 2) {
+      override def updateSync(versionID: Array[Byte],
+                             toRemove: TraversableOnce[Array[Byte]],
+                             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = {
+        val updates = toUpdate.toIterator.toVector
+        syncBatchSizes :+= updates.size
+        if (failSync) Failure(new IOException("injected checkpoint sync failure"))
+        else super.updateSync(versionID, toRemove, updates)
+      }
+    }
+    val registry = new WalletRegistry(store)(ws)
+    val originalDigest = try {
+      registry.updateOnBlock(
+        ScanResults(Seq.empty, ArraySeq.empty, ArraySeq.empty), blockId, 1).get
+      val digest = registry.committedVersionAndDigest.get._2
+
+      registry.rollbackDurably(blockVersion).failed.get.getMessage should include(
+        "injected checkpoint sync failure")
+      syncBatchSizes shouldBe Vector(1)
+
+      failSync = false
+      registry.rollbackDurably(blockVersion).get
+      syncBatchSizes shouldBe Vector(1, 1)
+      registry.committedVersionAndDigest.get shouldBe (blockId -> digest)
+      digest
+    } finally registry.close()
+
+    val reopened = new WalletRegistry(
+      new LDBVersionedStore(registryDir, 2, createIfMissing = false))(ws)
+    try reopened.committedVersionAndDigest.get shouldBe (blockId -> originalDigest)
+    finally reopened.close()
+  }
+
+  it should "sync the canonical empty digest for a same-version pre-genesis rollback" in {
+    val registryDir = createTempDir
+    var syncedValues = Vector.empty[Array[Byte]]
+    val store = new LDBVersionedStore(registryDir, 2) {
+      override def updateSync(versionID: Array[Byte],
+                             toRemove: TraversableOnce[Array[Byte]],
+                             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = {
+        val updates = toUpdate.toIterator.toVector
+        syncedValues ++= updates.map(_._2)
+        super.updateSync(versionID, toRemove, updates)
+      }
+    }
+    val registry = new WalletRegistry(store)(ws)
+    try {
+      store.update(WalletRegistry.PreGenesisStateVersion, Seq.empty, Seq.empty).get
+      val preGenesisVersion = VersionTag @@ Base16.encode(WalletRegistry.PreGenesisStateVersion)
+      registry.rollbackDurably(preGenesisVersion).get
+      syncedValues.map(_.toSeq) shouldBe Vector(WalletDigestSerializer.toBytes(WalletDigest.empty).toSeq)
+      registry.committedVersionAndDigest.get shouldBe
+        (bytesToId(WalletRegistry.PreGenesisStateVersion) -> WalletDigest.empty)
+    } finally registry.close()
+
+    val reopened = new WalletRegistry(
+      new LDBVersionedStore(registryDir, 2, createIfMissing = false))(ws)
+    try reopened.committedVersionAndDigest.get shouldBe
+      (bytesToId(WalletRegistry.PreGenesisStateVersion) -> WalletDigest.empty)
+    finally reopened.close()
+  }
 
   it should "read unspent wallet boxes" in {
     forAll(trackedBoxGen) { box =>

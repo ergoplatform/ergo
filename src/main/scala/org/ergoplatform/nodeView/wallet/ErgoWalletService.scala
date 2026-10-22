@@ -27,6 +27,7 @@ import sigma.Extensions.CollBytesOps
 import sigma.data.SigmaBoolean
 
 import java.io.FileNotFoundException
+import java.nio.file.{Files, LinkOption}
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.{Failure, Success, Try}
 
@@ -416,11 +417,14 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
   override def recreateRegistry(state: ErgoWalletState, settings: ErgoSettings): Try[ErgoWalletState] = {
     val registryFolder = WalletRegistry.registryFolder(settings)
     log.info(s"Removing the registry folder $registryFolder")
-    state.registry.close()
-
-    deleteRecursive(registryFolder)
-
-    WalletRegistry.apply(settings).map { reg =>
+    Try {
+      state.registry.close()
+      deleteRecursive(registryFolder)
+      // FileUtils.deleteRecursive does not report failed deletes. Reopening a
+      // surviving registry would mix old-fork boxes into the selected replay.
+      require(Files.notExists(registryFolder.toPath, LinkOption.NOFOLLOW_LINKS),
+        "Wallet registry folder remains after removal")
+    }.flatMap(_ => WalletRegistry.apply(settings)).map { reg =>
       state.copy(registry = reg)
     }
   }

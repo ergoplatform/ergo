@@ -1906,6 +1906,7 @@ components:
         - changeAddress
         - walletHeight
         - error
+        - rescanState
       properties:
         isInitialized:
           type: boolean
@@ -1924,7 +1925,17 @@ components:
           description: last scanned height for the wallet (and external scans)
         error:
           type: string
-          description: last wallet error caught
+          description: >-
+            Last wallet error. During a rescan this is a generic status message;
+            internal failure details are available only in node logs.
+        rescanState:
+          type: string
+          enum: [inactive, in_progress, needs_recovery]
+          description: >-
+            State of an explicitly requested rescan. in_progress means the accepted
+            replay is still running; needs_recovery means it stopped before a
+            verified selected tip and must be retried. Completion is inactive
+            with an empty error.
 
     InitWallet:
       type: object
@@ -4403,7 +4414,12 @@ paths:
     post:
       security:
         - ApiKeyAuth: [api_key]
-      summary: Rescan wallet (all the available full blocks). When fromHeight is set wallet would not see any boxes below it.
+      summary: Start an asynchronous wallet rescan from the selected full chain. When fromHeight is set wallet will not see boxes below it.
+      description: >-
+        A successful response acknowledges durable start, not completed replay.
+        Poll /wallet/status until rescanState is inactive with an empty error;
+        needs_recovery reports a replay that requires retry or operator recovery.
+        fromHeight must not exceed the current selected applied full-block tip.
       operationId: walletRescan
       tags:
         - wallet
@@ -4420,9 +4436,36 @@ paths:
                   type: integer
                   format: int32
                   minimum: 0
+                  description: >-
+                    First block height to scan. Values 0 and 1 both start at genesis
+                    height 1. A value above the selected applied full-block tip is rejected.
       responses:
-        '200':
-          description: Wallet rescanned
+        '202':
+          description: Rescan start accepted; poll /wallet/status for completion or recovery state
+        '400':
+          description: Invalid rescan start height or disallowed retry height
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Another rescan or retained rollback prevents starting this request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: The selected applied full-block tip is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: The wallet could not read or persist rescan recovery state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         default:
           description: Error
           content:

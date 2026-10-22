@@ -237,8 +237,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
   private def cacheRecordProcessable(txId: ModifierId,
                                      record: TransactionProcessingCacheRecord,
                                      mp: ErgoMemPool): Boolean = {
-    val peerCost = perPeerCost.getOrElse(record.source, IncomingTxInfo.empty()).totalCost
-    peerCost < MempoolPeerCostPerBlock &&
+    peerWithinBudget(record.source) &&
       !mp.contains(txId) && !mp.isInvalidated(txId) && !declined.contains(txId)
   }
 
@@ -1564,9 +1563,10 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       hr.fullBlockHeight == hr.headersHeight // we have all the full blocks
   }
 
-  private def peerWithinBudget(peer: ConnectedPeer): Boolean = {
-    perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost < MempoolPeerCostPerBlock
-  }
+  // cost charged to the peer since the last block
+  private def peerCost(peer: ConnectedPeer): Long = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
+
+  private def peerWithinBudget(peer: ConnectedPeer): Boolean = peerCost(peer) < MempoolPeerCostPerBlock
 
   // a transaction not known to the node in any way: not requested or received already, not in the mempool,
   // not invalidated, not applied in a recent block, not declined since the last block
@@ -1642,8 +1642,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       while (!requested && peersInTurn.hasNext) {
         val peer = peersInTurn.next()
         val ids = refusedTxs(peer)
-        val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
-        val peerTxsToAsk = math.min(txsToAsk.toLong, (MempoolPeerCostPerBlock - peerCost) / MinDeclinedTxCost).toInt
+        val peerTxsToAsk =
+          math.min(txsToAsk.toLong, (MempoolPeerCostPerBlock - peerCost(peer)) / MinDeclinedTxCost).toInt
         val toAsk = mutable.ArrayBuffer[ModifierId]()
         while (toAsk.size < peerTxsToAsk && ids.nonEmpty) {
           val id = ids.head
@@ -1677,8 +1677,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     * of them are processed between two blocks, whatever the order of deliveries and mempool results.
     */
   private def peerAdmitsTx(peer: ConnectedPeer): Boolean = {
-    val peerCost = perPeerCost.getOrElse(peer, IncomingTxInfo.empty()).totalCost
-    peerCost + txsInProcessingOf(peer).toLong * MinDeclinedTxCost < MempoolPeerCostPerBlock
+    peerCost(peer) + txsInProcessingOf(peer).toLong * MinDeclinedTxCost < MempoolPeerCostPerBlock
   }
 
   /**

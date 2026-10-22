@@ -15,6 +15,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
+  import org.ergoplatform.utils.ErgoNodeTestConstants.{settings => baseSettings}
   import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.generators.ChainGenerator._
   import org.ergoplatform.utils.generators.CoreObjectGenerators.{smallInt, positiveLongGen}
@@ -24,8 +25,25 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
-                         minFullHeight: Option[Int] = Some(GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
-    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+                         minFullHeight: Option[Int] = Some(GenesisHeight),
+                         votingLength: Option[Int] = None): (ErgoHistory, Seq[ErgoFullBlock]) = {
+    val inHistory = votingLength match {
+      case None =>
+        generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+      case Some(vl) =>
+        val voting = baseSettings.chainSettings.voting.copy(votingLength = vl)
+        val historySettings = baseSettings.copy(
+          directory = createTempDir.getAbsolutePath,
+          chainSettings = baseSettings.chainSettings.copy(epochLength = 100000000, useLastEpochs = 10, voting = voting),
+          nodeSettings = baseSettings.nodeSettings.copy(
+            stateType = StateType.Digest,
+            verifyTransactions = true,
+            blocksToKeep = BlocksToKeep,
+            extraIndex = false
+          )
+        )
+        ErgoHistory.readOrGenerate(historySettings)(null)
+    }
     minFullHeight.foreach { h =>
       inHistory.writeMinimalFullBlockHeight(h)
       inHistory.isHeadersChainSyncedVar = true
@@ -377,6 +395,54 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     chain.takeRight(BlocksToKeep).foreach { b =>
       history.modifierById(b.header.transactionsId).isDefined shouldBe true
       history.modifierById(b.header.ADProofsId).isDefined shouldBe true
+    }
+  }
+
+  property("prune blocks applied together with the first full block") {
+    val votingLength = 4
+    var history = genHistory(votingLength = Some(votingLength))._1
+    history.bestFullBlockOpt shouldBe None
+
+    val blocksToPrune = 7
+    val chain = genChain(BlocksToKeep + blocksToPrune)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.value shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    // Append heights 2..16 before the first full block (height 1) arrives
+    chain.tail.dropRight(2).foreach { b =>
+      history = applyBlock(history, b)
+    }
+    history.bestFullBlockOpt shouldBe None
+
+    // Applying height 1 queues heights 1..16 for state application without pruning them yet
+    history = applyBlock(history, chain.head)
+    history.bestFullBlockOpt.value.header shouldBe chain.dropRight(2).last.header
+    chain.dropRight(2).foreach { b =>
+      b.header.sectionIds.foreach(id => history.contains(id._2) shouldBe true)
+    }
+
+    // Next block (height 17): h = 7 > votingLength (4), so the floor rounds down to epoch start 4 and prunes 1..3
+    history = applyBlock(history, chain.dropRight(1).last)
+    history.bestFullBlockOpt.value.header shouldBe chain.dropRight(1).last.header
+    chain.take(votingLength - 1).foreach { b =>
+      b.header.sectionIds.foreach(id => history.contains(id._2) shouldBe false)
+    }
+    chain.slice(votingLength - 1, chain.length - 1).foreach { b =>
+      b.header.sectionIds.foreach(id => history.contains(id._2) shouldBe true)
+    }
+
+    // Next block (height 18): h = 8 reaches the next epoch start, so the floor jumps 4 -> 8 and prunes 4..7
+    history = applyBlock(history, chain.last)
+    history.bestFullBlockOpt.value.header shouldBe chain.last.header
+
+    chain.take(blocksToPrune).foreach { b =>
+      b.header.sectionIds.foreach(id => history.contains(id._2) shouldBe false)
+    }
+
+    chain.takeRight(BlocksToKeep).foreach { b =>
+      b.header.sectionIds.foreach(id => history.contains(id._2) shouldBe true)
     }
   }
 

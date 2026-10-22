@@ -4,7 +4,7 @@ import com.github.benmanes.caffeine.cache.Caffeine
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
-import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, Segment}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, ExtraIndexSerializer, IndexedErgoBox, Segment, StorageRentBox}
 import org.ergoplatform.settings.{Algos, CacheSettings, ErgoSettings}
 import org.ergoplatform.utils.ScorexEncoding
 import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
@@ -14,7 +14,8 @@ import scala.util.{Failure, Success, Try}
 import spire.syntax.all.cfor
 
 import java.io.File
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import scala.jdk.CollectionConverters.asScalaIteratorConverter
 
 /**
@@ -50,6 +51,20 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     Caffeine.newBuilder()
       .maximumSize(config.history.indexesCacheSize)
       .build[ByteArrayWrapper, Array[Byte]]
+
+  private val extraCacheLock = new ReentrantReadWriteLock()
+
+  private def withExtraCacheReadLock[A](body: => A): A = {
+    extraCacheLock.readLock().lock()
+    try body
+    finally extraCacheLock.readLock().unlock()
+  }
+
+  private def withExtraCacheWriteLock[A](body: => A): A = {
+    extraCacheLock.writeLock().lock()
+    try body
+    finally extraCacheLock.writeLock().unlock()
+  }
 
   private def cacheModifier(mod: BlockSection): Unit = mod.modifierTypeId match {
     case Header.modifierTypeId => headersCache.put(mod.id, mod)
@@ -89,7 +104,7 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
       }
     }
 
-  def getExtraIndex(id: ModifierId): Option[ExtraIndex] = {
+  def getExtraIndex(id: ModifierId): Option[ExtraIndex] = withExtraCacheReadLock {
     Option(extraCache.getIfPresent(id)) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
       ExtraIndexSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
@@ -112,6 +127,50 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
         value
       }
     }
+
+  /**
+    * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
+    * transaction spending them failed validation during block assembly, so retrying the claim
+    * is futile. An entry whose [[IndexedErgoBox]] is not in the extra index can not be
+    * located and is left in place.
+    */
+  def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit = {
+    val keys = boxIds.flatMap { boxId =>
+      getExtraIndex(boxId) match {
+        case Some(iEb: IndexedErgoBox) => Some(StorageRentBox(iEb).id)
+        case _ =>
+          log.warn(s"Can not remove storage-rent eligibility entry of box $boxId, box not indexed")
+          None
+      }
+    }
+    if (keys.nonEmpty) removeExtra(keys.toArray)
+  }
+
+  /**
+    * Read up to `limit` storage-rent eligibility entries for currently-unspent boxes created
+    * at or before `creationHeight`, in ascending (creationHeight, globalIndex) order.
+    * Returns an empty array when the extra index is disabled or does not cover the height.
+    */
+  def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
+    val start = StorageRentBox.key(0, 0L)
+    extraStore.scanFrom(
+      start,
+      limit,
+      keyFilter = key =>
+        key.length == StorageRentBox.KeyLength &&
+          key(0) == StorageRentBox.KeyMarker &&
+          java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight,
+      // stop when the marker byte changes (the iterator left the rent namespace) or at
+      // the first in-namespace key whose height bytes pass the cutoff. Any key with height
+      // bytes > cutoff sorts after every key with height bytes <= cutoff, so no eligible
+      // rent row can come after it; foreign 32-byte ids sharing the marker byte are
+      // skipped over (excluded by keyFilter) while their height bytes are within the
+      // cutoff, and end the scan when beyond it.
+      continueScan = key =>
+        key.nonEmpty && key(0) == StorageRentBox.KeyMarker &&
+          (key.length < 5 || java.nio.ByteBuffer.wrap(key, 1, 4).getInt <= creationHeight)
+    ).map { case (key, _) => StorageRentBox.fromKey(key) }
+  }
 
   /**
     * @return object with `id` if it is in the objects database
@@ -150,16 +209,57 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
 
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[ExtraIndex]): Unit = {
-    extraStore.insert(
-      objectsToInsert.map(mod => mod.serializedId),
-      objectsToInsert.map(mod => ExtraIndexSerializer.toBytes(mod))
-    )
-    cfor(0)(_ < indexesToInsert.length, _ + 1) { i => extraStore.insert(indexesToInsert(i)._1, indexesToInsert(i)._2)}
+    insertExtraTry(indexesToInsert, objectsToInsert).failed.foreach { error =>
+      log.error("Failed to insert extra indexes", error)
+    }
+  }
+
+  private[history] def invalidateExtraCache(ids: Iterable[ModifierId]): Unit = withExtraCacheWriteLock {
+    ids.foreach(extraCache.invalidate)
+  }
+
+  def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
+                     objectsToInsert: Array[ExtraIndex]): Try[Unit] =
+    insertExtraTry(indexesToInsert, objectsToInsert, Array.empty)
+
+  /**
+    * Insert indexes and objects and remove `indexesToRemove` in a single store batch, so a
+    * crash can not leave inserts (e.g. the indexer progress marker) committed without the
+    * removals (e.g. spent storage-rent rows) or vice versa.
+    */
+  def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
+                     objectsToInsert: Array[ExtraIndex],
+                     indexesToRemove: Array[ModifierId]): Try[Unit] = {
+    val objectIds = objectsToInsert.iterator.flatMap(obj => Try(obj.id).toOption).toArray
+    Try {
+      val keys = objectsToInsert.map(_.serializedId) ++ indexesToInsert.map(_._1)
+      val values = objectsToInsert.map(ExtraIndexSerializer.toBytes) ++ indexesToInsert.map(_._2)
+      keys -> values
+    }.flatMap { case (keys, values) =>
+      withExtraCacheWriteLock {
+        extraStore.update(keys, values, indexesToRemove.map(idToBytes)).map { _ =>
+          objectIds.foreach(extraCache.invalidate)
+          cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+        }
+      }
+    }.recoverWith { case error =>
+      invalidateExtraCache(objectIds)
+      Failure(error)
+    }
   }
 
   def removeExtra(indexesToRemove: Array[ModifierId]) : Unit = {
-    extraStore.remove(indexesToRemove.map(idToBytes))
-    cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+    removeExtraTry(indexesToRemove).failed.foreach { error =>
+      log.error("Failed to remove extra indexes", error)
+    }
+  }
+
+  def removeExtraTry(indexesToRemove: Array[ModifierId]): Try[Unit] = {
+    withExtraCacheWriteLock {
+      extraStore.remove(indexesToRemove.map(idToBytes)).map { _ =>
+        cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+      }
+    }
   }
 
   /**
@@ -205,26 +305,37 @@ class HistoryStorage(indexStore: LDBKVStore, objectsStore: LDBKVStore, extraStor
     * Delete the extra index database and reopen it.
     *
     * @param ergoSettings - settings to use
-    * @return new HistoryStorage instance with empty extra database, or this instance in case of failure
+    * @return new HistoryStorage instance with an empty extra database
     */
-  def deleteExtraDB(ergoSettings: ErgoSettings): HistoryStorage = {
-    log.warn(s"Removing extra index database due to old schema.")
-    close()
-    // org.ergoplatform.wallet.utils.FileUtils
+  def deleteExtraDB(ergoSettings: ErgoSettings): HistoryStorage =
+    deleteExtraDBTry(ergoSettings).get
+
+  /**
+    * Delete the extra index database and reopen it, preserving deletion failures.
+    */
+  def deleteExtraDBTry(ergoSettings: ErgoSettings): Try[HistoryStorage] = {
+    log.warn("Removing extra index database after an invalid checkpoint.")
     val root = new File(s"${ergoSettings.directory}/history/extra")
-    if (root.exists()) {
-      Files.walk(root.toPath).iterator().asScala.toSeq.reverse.foreach(path => Try(Files.delete(path)))
-    }else {
-      log.error(s"Could not delete ${root.toString}")
-      return this
+    Try(close()).flatMap { _ =>
+      HistoryStorage.deleteRecursively(root.toPath, Files.delete)
+    }.map { _ =>
+      log.info(s"Deleted ${root.toString}")
+      HistoryStorage.apply(ergoSettings)
     }
-    log.info(s"Deleted ${root.toString}")
-    HistoryStorage.apply(ergoSettings)
   }
 
 }
 
 object HistoryStorage {
+  private[storage] def deleteRecursively(root: Path, deletePath: Path => Unit): Try[Unit] = Try {
+    if (Files.exists(root)) {
+      val paths = Files.walk(root)
+      try paths.iterator().asScala.toSeq.reverse.foreach(deletePath)
+      finally paths.close()
+    }
+    require(!Files.exists(root), s"Could not delete $root")
+  }
+
   def apply(ergoSettings: ErgoSettings): HistoryStorage = {
     val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
     val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")

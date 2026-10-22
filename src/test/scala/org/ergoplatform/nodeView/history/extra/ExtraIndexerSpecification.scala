@@ -1,25 +1,43 @@
 package org.ergoplatform.nodeView.history.extra
 
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{Actor, ActorIdentity, ActorRef, ActorSystem, Identify, Props, Terminated}
+import akka.testkit.TestProbe
 import org.ergoplatform.ErgoAddressEncoder
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.http.api.SortDirection
+import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
+import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{RemoteBlockApplied, Rollback}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.Index
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.{GetSegmentThreshold, Index}
 import org.ergoplatform.nodeView.history.extra.IndexedContractTemplateSerializer.hashTreeTemplate
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.state.ErgoStateReader
+import org.ergoplatform.settings.{ErgoSettings, NetworkType}
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.utils.generators.ValidBlocksGenerators.createDigestState
+import org.scalactic.source.Position
+import org.scalatest.Outcome
 import scorex.util.{ModifierId, bytesToId}
+import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
+import java.util.concurrent.TimeUnit
+import java.nio.ByteBuffer
+import java.nio.file.Files
 import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -31,6 +49,19 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   case class Reset()
   case class GenerateBetterChainTip()
   case class SetCaughtUp(caughtUp: Boolean)
+  case class CacheBlockTransactions(height: Int, transactions: BlockTransactions)
+  case class DeferNextHeaderOnce(height: Int)
+  case class DeferBlockTransactionsOnce(height: Int)
+  case class ObserveUnavailableHeader(height: Int, probe: ActorRef)
+  case class Reload()
+  case class ForceRollback(height: Int)
+  case class GetLoadedState()
+  case class FailNextRollbackRemoval(probe: ActorRef)
+  case class PauseBufferedCatchUpAt(height: Int, saveLimit: Int, probe: ActorRef)
+  case class ConfigureWriteFailure(phase: String, probe: ActorRef)
+  case class AllowWrites()
+  case class ReopenCheckpoint()
+  case class CheckpointSettings()
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
@@ -39,19 +70,94 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   implicit val segmentThreshold: Int = 8
 
   val system: ActorSystem = ActorSystem.create("indexer-test")
-  val indexer: ActorRef = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this))
+  val indexer: ActorRef = system.actorOf(
+    Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)),
+    "indexer"
+  )
 
   var _history: ErgoHistory = _
   def history: ErgoHistoryReader = _history.getReader
 
+  def fullChainHeaderAt(height: Int): Header = {
+    val bestFullBlock = history.bestFullBlockOpt.get
+    history.headerChainBack(bestFullBlock.height - height + 1, bestFullBlock.header, _.height == height)
+      .headers
+      .find(_.height == height)
+      .get
+  }
+
+  def fullChainTransactionsAt(height: Int): BlockTransactions = {
+    val header = fullChainHeaderAt(height)
+    history.typedModifierById[BlockTransactions](header.transactionsId).get
+  }
+
   val lock: ReentrantLock = new ReentrantLock()
   val done: Condition = lock.newCondition()
   val created: Condition = lock.newCondition()
+  private val conditionNames: Map[Condition, String] =
+    Map(done -> "done", created -> "created")
+  // name and cause of a fixture actor that failed; set under `lock` when it restarts
+  var fixtureFailure: Option[(String, Throwable)] = None
 
-  def awaitCondition(condition: Condition): Unit = {
+  /**
+    * Runs `trigger` while holding `lock`, then waits for `condition`. A `Condition`
+    * drops a signal when no thread waits for it. The fixture actors take `lock` before
+    * they signal, so they cannot signal before this wait starts. `trigger` must only
+    * send messages: an actor that signals blocks until this wait starts. A failure
+    * names the line that called this method.
+    */
+  def awaitAfter(condition: Condition)(trigger: => Unit)(implicit pos: Position): Unit = {
     lock.lock()
-    try condition.await()
-    finally lock.unlock()
+    try {
+      fixtureFailure = None
+      trigger
+      // bounded, so a fixture that never signals fails the test instead of hanging the suite
+      val signalled = condition.await(2.minutes.toMillis, TimeUnit.MILLISECONDS)
+      fixtureFailure.foreach { case (actor, e) =>
+        fail(s"Indexer fixture actor $actor failed and restarted: $e", e)
+      }
+      if (!signalled) {
+        val name = conditionNames(condition)
+        fail(s"Timed out waiting for the indexer fixture condition $name")
+      }
+    } finally lock.unlock()
+  }
+
+  /**
+    * Sends `CreateDB(height)` and `Index()` to `target`, then waits until `target` has
+    * indexed the chain.
+    */
+  def createAndIndex(height: Int, target: ActorRef = indexer)
+                    (implicit pos: Position): Unit =
+    awaitAfter(done) {
+      target ! CreateDB(height)
+      target ! Index()
+    }
+
+  // After a failed test, reset the shared indexer and wait until it has handled the
+  // reset. Otherwise the next test's `CreateDB` would extend the old chain, and an
+  // `Index()` already in the mailbox would index the next test's chain.
+  override def withFixture(test: NoArgTest): Outcome = {
+    val outcome = super.withFixture(test)
+    if (!outcome.isSucceeded) {
+      try {
+        val probe = TestProbe()(system)
+        probe.send(indexer, Reset())
+        probe.send(indexer, Identify(None))
+        if (Option(probe.receiveOne(10.seconds)).isEmpty) {
+          System.err.println(
+            s"The shared indexer did not handle Reset() within 10 s after '${test.name}'"
+          )
+        }
+      } catch {
+        // the cleanup must not hide the failure of the test itself
+        case NonFatal(e) =>
+          System.err.println(
+            s"Could not reset the shared indexer after '${test.name}': $e"
+          )
+      }
+    }
+    outcome
   }
 
   def manualIndex(limit: Int): (ID_LL, // address -> (erg,tokenSum)
@@ -65,8 +171,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val templates: ID_LL = mutable.HashMap[ModifierId, (Long, Long)]()
     val indexedTokens: ID_LL = mutable.HashMap[ModifierId, (Long, Long)]()
     cfor(1)(_ <= limit, _ + 1) { i =>
-      val header = history.headerIdsAtHeight(i).last
-      val block = history.getFullBlock(history.typedModifierById[Header](header).get)
+      val header = fullChainHeaderAt(i)
+      val block = history.getFullBlock(header)
       block.get.transactions.foreach { tx =>
         txsIndexed += 1
         if (i != 1) {
@@ -161,8 +267,128 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       seg._1.boxCount == seg._2._1
     })
 
+  /**
+    * Verify the storage-rent eligibility index against the ground truth: every unspent
+    * IndexedErgoBox must have exactly one rent entry with matching fields, in ascending
+    * (creationHeight, globalIndex) order.
+    */
+  def checkRentIndex(): Unit = {
+    val state = IndexerState.fromHistory(_history)
+    val expected = (0L until state.globalBoxIndex).flatMap { boxNum =>
+      NumericBoxIndex.getBoxByNumber(history, boxNum).filter(!_.isSpent)
+    }
+    val rentEntries = history.storageRentBoxesAtOrBefore(Int.MaxValue, math.max(expected.length * 2, 100))
+    rentEntries.length shouldBe expected.length
+    val byGlobalIndex = expected.map(iEb => iEb.globalIndex -> iEb).toMap
+    rentEntries.foreach { srb =>
+      byGlobalIndex.get(srb.globalIndex) match {
+        case Some(iEb) =>
+          srb.creationHeight shouldBe iEb.box.creationHeight
+          // the resolution the claim path uses must land on the same box
+          NumericBoxIndex.getBoxByNumber(history, srb.globalIndex).map(_.id) shouldBe Some(iEb.id)
+        case None =>
+          fail(s"Unexpected storage-rent entry for global index ${srb.globalIndex}")
+      }
+    }
+    // ascending order by (creationHeight, globalIndex); note globalIndex alone is NOT
+    // monotonic here: test chains create boxes whose R3 creation height differs from the
+    // inclusion order, and the rent clock runs on R3
+    rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq shouldBe
+      rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq.sorted
+  }
+
+  /**
+    * Ground truth for the rent index derived WITHOUT any indexer state: replay the best
+    * chain's blocks and keep the boxes that were created and never spent, assigning the
+    * global box index in output order. The genesis box is not part of the chain's blocks,
+    * so the produced indices are offset relative to `NumericBoxIndex`, which counts from
+    * the genesis box.
+    *
+    * This is deliberately independent of `IndexerState` and `NumericBoxIndex`: those are
+    * maintained by the indexer under test, so a systematic miscount of the rent rows
+    * could cancel out in a comparison using them on both sides.
+    */
+  def unspentBoxesFromChain(height: Int): Map[ModifierId, (Int, Long)] = {
+    val created = mutable.HashMap.empty[ModifierId, (Int, Long)]
+    val spent = mutable.HashSet.empty[ModifierId]
+    var globalIndex = 0L
+    var h = 1
+    while (h <= height) {
+      history.bestHeaderIdAtHeight(h).foreach { headerId =>
+        history.typedModifierById[Header](headerId).foreach { header =>
+          history.getFullBlock(header).foreach { block =>
+            block.transactions.foreach { tx =>
+              tx.inputs.foreach(in => spent += bytesToId(in.boxId))
+              tx.outputs.foreach { out =>
+                created.put(bytesToId(out.id), (out.creationHeight, globalIndex))
+                globalIndex += 1
+              }
+            }
+          }
+        }
+      }
+      h += 1
+    }
+    created.filterNot { case (id, _) => spent.contains(id) }.toMap
+  }
+
+  /**
+    * The rent index must hold exactly the boxes the chain has created and never spent, and
+    * its rows must be ordered by (creationHeight, globalIndex) - the order the ascending
+    * range scan in `HistoryStorage.storageRentBoxesAtOrBefore` relies on.
+    *
+    * Box ids are compared against the chain-derived truth, so this catches rent rows that
+    * survive a rollback for boxes that no longer exist, and rows missing for boxes that do.
+    */
+  def checkRentIndexAgainstChain(height: Int): Unit = {
+    val expected = unspentBoxesFromChain(height)
+    val rentEntries =
+      history.storageRentBoxesAtOrBefore(Int.MaxValue, math.max(expected.size * 4, 1000))
+
+    withClue(s"rent index size at height $height: ") {
+      rentEntries.length shouldBe expected.size
+    }
+
+    // rent rows carry no payload, so resolve the box id through the box-number index,
+    // exactly like the claim path in CandidateGenerator does
+    val resolved = rentEntries.flatMap(e => NumericBoxIndex.getBoxByNumber(history, e.globalIndex))
+    withClue("every rent row must resolve to a box: ") {
+      resolved.length shouldBe rentEntries.length
+    }
+    val actualIds = resolved.map(_.id).toSet
+    withClue("rent index must cover exactly the boxes unspent on the best chain: ") {
+      actualIds shouldBe expected.keySet
+    }
+
+    // creation height is part of the key, so it must match the box exactly
+    rentEntries.foreach { e =>
+      NumericBoxIndex.getBoxByNumber(history, e.globalIndex).foreach { iEb =>
+        e.creationHeight shouldBe iEb.box.creationHeight
+        iEb.isSpent shouldBe false
+      }
+    }
+
+    // The global index cannot be compared against a chain replay: the indexer counts
+    // from the genesis box while a chain replay only sees block outputs. What matters
+    // for the range scan is that the numbering is strictly increasing in
+    // (creationHeight, globalIndex) order, so the rows form one ascending, unique run.
+    val keys = rentEntries.map(e => (e.creationHeight, e.globalIndex)).toSeq
+    withClue("rent rows must be strictly ascending by (creationHeight, globalIndex): ") {
+      keys shouldBe keys.sorted
+      keys.distinct.length shouldBe keys.length
+    }
+
+  }
+
   // example G-30;R-20;G-35;R-30
-  def rollbackWithPattern(pattern: String): Unit = {
+  def rollbackWithPattern(pattern: String, checkChain: Boolean = false): Unit = {
+    // when checkChain is set, the rent rows are additionally verified against the
+    // chain-derived unspent set, which does not rely on indexer state
+    var rolledBackTo: Int = 0
+    def checkRent(): Unit = {
+      checkRentIndex()
+      if (checkChain) checkRentIndexAgainstChain(rolledBackTo)
+    }
 
     def rollback(n: Int): Unit = {
       println(s"Rollback to $n")
@@ -175,9 +401,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(n)
 
       // perform rollback
-      indexer ! Rollback(history.bestHeaderIdAtHeight(n).get)
-      lock.lock()
-      done.await()
+      awaitAfter(done)(indexer ! ForceRollback(n))
       state = IndexerState.fromHistory(_history)
 
       // address balances
@@ -215,14 +439,14 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         else
           boxOpt shouldBe None
       }
+
+      rolledBackTo = n
+      checkRent()
     }
 
     def generate(n: Int): Unit = {
       println(s"Generate to $n")
-      indexer ! CreateDB(n)
-      indexer ! Index()
-      lock.lock()
-      done.await()
+      createAndIndex(n)
 
       val (addresses, _, _, _, _) = manualIndex(n)
 
@@ -239,11 +463,13 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         utxos.exists(_.isSpent) shouldBe false
       }
 
+      rolledBackTo = n
+      checkRent()
     }
 
     pattern.split(";").map(_.split("-")).map(x => x(0) -> x(1).toInt).foreach {
-      case ("G", n) => generate(n)
-      case ("R", n) => rollback(n)
+      case ("G", n) => withClue(s"G-$n: ")(generate(n))
+      case ("R", n) => withClue(s"R-$n: ")(rollback(n))
       case _ => System.err.println(s"Malformed rollback pattern: $pattern")
     }
 
@@ -251,12 +477,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   }
 
   property("skips a duplicate applied block without blocking later blocks") {
-    indexer ! CreateDB(HEIGHT)
-    indexer ! Index()
-    awaitCondition(done)
+    createAndIndex(HEIGHT)
 
-    indexer ! ExtendDB(HEIGHT + 2)
-    awaitCondition(created)
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 2))
     val firstHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
     val secondHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 2).get).get
     val blocks = (1 to HEIGHT + 2).map(height => history.bestBlockTransactionsAt(height).get)
@@ -275,11 +498,478 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("transactions") {
+  property("catches up past a direct block event when history is already ahead") {
+    createAndIndex(HEIGHT)
+
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 2))
+    val firstHeader = fullChainHeaderAt(HEIGHT + 1)
+    indexer ! RemoteBlockApplied(firstHeader, history.getFullBlock(firstHeader).get.transactions.map(_.id))
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 2
+      state.indexedHeaderId shouldBe Some(fullChainHeaderAt(HEIGHT + 2).id)
+    }
+    indexer ! Reset()
+  }
+
+  property("restores the exact persisted indexed header after the best header changes") {
+    createAndIndex(HEIGHT)
+
+    val persistedState = IndexerState.fromHistory(_history)
+    persistedState.indexedHeaderId shouldBe history.bestHeaderIdAtHeight(HEIGHT)
+
+    awaitAfter(created)(indexer ! GenerateBetterChainTip())
+    awaitAfter(created)(indexer ! CreateDB(HEIGHT + 1))
+    history.bestHeaderIdAtHeight(HEIGHT) should not be persistedState.indexedHeaderId
+
+    IndexerState.fromHistory(_history).indexedHeaderId shouldBe persistedState.indexedHeaderId
+    indexer ! Reset()
+  }
+
+  property("rebuilds legacy, malformed, and interrupted checkpoints") {
+    def intBytes(value: Int): Array[Byte] = ByteBuffer.allocate(4).putInt(value).array
+    def longBytes(value: Long): Array[Byte] = ByteBuffer.allocate(8).putLong(value).array
+    val schema = ExtraIndexer.SchemaVersionKey -> intBytes(ExtraIndexer.NewestVersion)
+    val emptyMetadata = Array(
+      ExtraIndexer.IndexedHeightKey -> intBytes(0),
+      ExtraIndexer.GlobalTxIndexKey -> longBytes(0),
+      ExtraIndexer.GlobalBoxIndexKey -> longBytes(0),
+      ExtraIndexer.RollbackToKey -> intBytes(0)
+    )
+    val invalidCheckpoints = Seq[(String, Array[(Array[Byte], Array[Byte])])](
+      "legacy non-empty" -> Array(
+        ExtraIndexer.SchemaVersionKey -> intBytes(6),
+        ExtraIndexer.IndexedHeightKey -> intBytes(1),
+        ExtraIndexer.GlobalTxIndexKey -> longBytes(0),
+        ExtraIndexer.GlobalBoxIndexKey -> longBytes(0),
+        ExtraIndexer.RollbackToKey -> intBytes(0)
+      ),
+      "legacy height zero with stale counters" -> Array(
+        ExtraIndexer.SchemaVersionKey -> intBytes(6),
+        ExtraIndexer.IndexedHeightKey -> intBytes(0),
+        ExtraIndexer.GlobalTxIndexKey -> longBytes(7),
+        ExtraIndexer.GlobalBoxIndexKey -> longBytes(9),
+        ExtraIndexer.RollbackToKey -> intBytes(0)
+      ),
+      "missing header id" -> (Array(schema) ++ emptyMetadata.updated(0, ExtraIndexer.IndexedHeightKey -> intBytes(1))),
+      "short header id" -> (Array(schema) ++ emptyMetadata.updated(0, ExtraIndexer.IndexedHeightKey -> intBytes(1)) ++
+        Array(ExtraIndexer.IndexedHeaderIdKey -> Array[Byte](1, 2, 3))),
+      "unknown header id" -> (Array(schema) ++ emptyMetadata.updated(0, ExtraIndexer.IndexedHeightKey -> intBytes(1)) ++
+        Array(ExtraIndexer.IndexedHeaderIdKey -> Array.fill[Byte](32)(1))),
+      "interrupted rollback" -> (Array(schema) ++ emptyMetadata.updated(3, ExtraIndexer.RollbackToKey -> intBytes(1))),
+      "short indexed height" -> (Array(schema) ++ emptyMetadata.updated(0, ExtraIndexer.IndexedHeightKey -> Array[Byte](1))),
+      "long transaction index" -> (Array(schema) ++ emptyMetadata.updated(1, ExtraIndexer.GlobalTxIndexKey -> Array.fill[Byte](9)(1))),
+      "short box index" -> (Array(schema) ++ emptyMetadata.updated(2, ExtraIndexer.GlobalBoxIndexKey -> Array[Byte](1))),
+      "short rollback target" -> (Array(schema) ++ emptyMetadata.updated(3, ExtraIndexer.RollbackToKey -> Array[Byte](1))),
+      "current schema height zero with stale transaction counter" ->
+        (Array(schema) ++ emptyMetadata.updated(1, ExtraIndexer.GlobalTxIndexKey -> longBytes(1))),
+      "current schema height zero with stale box counter" ->
+        (Array(schema) ++ emptyMetadata.updated(2, ExtraIndexer.GlobalBoxIndexKey -> longBytes(1))),
+      "negative box index" -> (Array(schema) ++ emptyMetadata.updated(2, ExtraIndexer.GlobalBoxIndexKey -> longBytes(-1)))
+    )
+
+    invalidCheckpoints.foreach { case (name, entries) =>
+      val dbDir = Files.createTempDirectory("extra-indexer-checkpoint").toFile
+      val dbSettings = initSettings.copy(
+        directory = dbDir.getAbsolutePath,
+        nodeSettings = initSettings.nodeSettings.copy(extraIndex = true)
+      )
+      val db = HistoryStorage(dbSettings)
+      db.insertExtraTry(entries, Array.empty).get
+      db.close()
+
+      val probe = TestProbe()(system)
+      system.actorOf(Props(new Actor {
+        override def preStart(): Unit = {
+          val reloaded = ErgoHistory.readOrGenerate(dbSettings)(context)
+          probe.ref ! ((
+            ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, reloaded).getInt,
+            ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, reloaded).getLong,
+            ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, reloaded).getLong,
+            ExtraIndexer.getIndex(ExtraIndexer.RollbackToKey, reloaded).getInt,
+            reloaded.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+          ))
+          reloaded.closeStorage()
+          context.stop(self)
+        }
+
+        override def receive: Receive = Actor.emptyBehavior
+      }))
+      withClue(name) {
+        probe.expectMsg((0, 0L, 0L, 0, None))
+      }
+    }
+  }
+
+  property("preserves a valid non-empty checkpoint across storage reopen") {
+    val dbDir = Files.createTempDirectory("extra-indexer-valid-checkpoint").toFile
+    val dbSettings = initSettings.copy(
+      directory = dbDir.getAbsolutePath,
+      networkType = NetworkType.TestNet,
+      nodeSettings = initSettings.nodeSettings.copy(extraIndex = true, headerChainDiff = 5000)
+    )
+    val generationSettings = dbSettings.copy(
+      nodeSettings = dbSettings.nodeSettings.copy(extraIndex = false)
+    )
+    val probe = TestProbe()(system)
+    system.actorOf(Props(new Actor {
+      override def preStart(): Unit = {
+        val generatedHistory = ErgoHistory.readOrGenerate(generationSettings)(context)
+        ChainGenerator.generate(1, dbDir, generatedHistory, None)
+        generatedHistory.closeStorage()
+
+        val indexedHistory = ErgoHistory.readOrGenerate(dbSettings)(context)
+        val header = indexedHistory.bestFullBlockOpt.get.header
+        val blockTransactions = indexedHistory.typedModifierById[BlockTransactions](header.transactionsId).get
+        val txCount = blockTransactions.txs.size.toLong
+        val boxCount = blockTransactions.txs.map(_.outputs.size.toLong).sum
+        val lastTx = blockTransactions.txs.last
+        val lastTxIndex = txCount - 1
+        val lastBoxIndex = boxCount - 1
+        val outputIndexes = Array.tabulate(lastTx.outputs.size) { i =>
+          boxCount - lastTx.outputs.size.toLong + i.toLong
+        }
+        val indexedTx = IndexedErgoTransaction.fromTx(
+          lastTx,
+          blockTransactions.txs.size - 1,
+          header.height,
+          lastTxIndex,
+          Array.fill(lastTx.inputs.size)(0L),
+          outputIndexes,
+          header.id
+        )
+        val indexedBoxes = lastTx.outputs.zip(outputIndexes).map { case (output, outputIndex) =>
+          new IndexedErgoBox(
+            header.height,
+            None,
+            None,
+            None,
+            output,
+            outputIndex
+          )
+        }.toArray
+        val numericBoxes = indexedBoxes.map(box => NumericBoxIndex(box.globalIndex, box.id))
+        val lastBox = indexedBoxes.last
+        val numericTx = NumericTxIndex(lastTxIndex, lastTx.id)
+        val numericBox = numericBoxes.last
+        val checkpointMetadata = Array(
+          ExtraIndexer.SchemaVersionKey -> ByteBuffer.allocate(4).putInt(ExtraIndexer.NewestVersion).array,
+          ExtraIndexer.IndexedHeightKey -> ByteBuffer.allocate(4).putInt(header.height).array,
+          ExtraIndexer.GlobalTxIndexKey -> ByteBuffer.allocate(8).putLong(txCount).array,
+          ExtraIndexer.GlobalBoxIndexKey -> ByteBuffer.allocate(8).putLong(boxCount).array,
+          ExtraIndexer.RollbackToKey -> ByteBuffer.allocate(4).putInt(0).array,
+          ExtraIndexer.IndexedHeaderIdKey -> ExtraIndexer.fastIdToBytes(header.id)
+        )
+        val checkpointObjects = Array[ExtraIndex](numericTx, indexedTx) ++ numericBoxes ++ indexedBoxes
+        indexedHistory.historyStorage.insertExtraTry(
+          checkpointMetadata,
+          checkpointObjects
+        ).get
+        indexedHistory.closeStorage()
+
+        val reloaded = ErgoHistory.readOrGenerate(dbSettings)(context)
+        val state = IndexerState.fromHistory(reloaded)
+        val terminalRowsPreserved =
+          reloaded.typedExtraIndexById[NumericTxIndex](numericTx.id).contains(numericTx) &&
+            reloaded.typedExtraIndexById[IndexedErgoTransaction](indexedTx.id).exists { tx =>
+              tx.txid == indexedTx.txid && tx.globalIndex == indexedTx.globalIndex &&
+                tx.height == indexedTx.height && tx.blockId == header.id &&
+                tx.outputNums.sameElements(indexedTx.outputNums)
+            } &&
+            reloaded.typedExtraIndexById[NumericBoxIndex](numericBox.id).contains(numericBox) &&
+            reloaded.typedExtraIndexById[IndexedErgoBox](lastBox.id).exists(_.globalIndex == lastBoxIndex)
+        probe.ref ! state
+        probe.ref ! terminalRowsPreserved
+        reloaded.closeStorage()
+
+        val interrupted = HistoryStorage(dbSettings)
+        interrupted.insertExtraTry(
+          Array(ExtraIndexer.RollbackToKey -> ByteBuffer.allocate(4).putInt(header.height).array),
+          Array.empty
+        ).get
+        interrupted.close()
+
+        val rebuiltAfterInterruptedRollback = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterInterruptedRollback).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterInterruptedRollback).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterInterruptedRollback).getLong,
+          rebuiltAfterInterruptedRollback.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterInterruptedRollback.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterInterruptedRollback.closeStorage()
+
+        val wrongSchema = HistoryStorage(dbSettings)
+        wrongSchema.insertExtraTry(
+          Array(ExtraIndexer.SchemaVersionKey -> ByteBuffer.allocate(4).putInt(ExtraIndexer.NewestVersion - 1).array),
+          Array.empty
+        ).get
+        wrongSchema.close()
+
+        val rebuiltAfterSchemaMismatch = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterSchemaMismatch).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterSchemaMismatch).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterSchemaMismatch).getLong,
+          rebuiltAfterSchemaMismatch.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterSchemaMismatch.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterSchemaMismatch.closeStorage()
+
+        val malformed = HistoryStorage(dbSettings)
+        val malformedTx = indexedTx.copy(outputNums = indexedTx.outputNums ++ Array(lastBoxIndex))
+        malformed.insertExtraTry(Array.empty, Array(malformedTx)).get
+        malformed.close()
+
+        val rebuiltAfterMalformedTx = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterMalformedTx).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterMalformedTx).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterMalformedTx).getLong,
+          rebuiltAfterMalformedTx.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterMalformedTx.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterMalformedTx.closeStorage()
+
+        val malformedBlockId = HistoryStorage(dbSettings)
+        val wrongBlockTx = indexedTx.copy(blockId = bytesToId(Array.fill[Byte](32)(1)))
+        malformedBlockId.insertExtraTry(Array.empty, Array(wrongBlockTx)).get
+        malformedBlockId.close()
+
+        val rebuiltAfterWrongBlockId = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterWrongBlockId).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterWrongBlockId).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterWrongBlockId).getLong,
+          rebuiltAfterWrongBlockId.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterWrongBlockId.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterWrongBlockId.closeStorage()
+
+        val malformedInputs = HistoryStorage(dbSettings)
+        val malformedInputTx = indexedTx.copy(inputNums = indexedTx.inputNums.map(_ + 1L))
+        malformedInputs.insertExtraTry(Array.empty, Array(malformedInputTx)).get
+        malformedInputs.close()
+
+        val rebuiltAfterMalformedInputs = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterMalformedInputs).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterMalformedInputs).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterMalformedInputs).getLong,
+          rebuiltAfterMalformedInputs.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterMalformedInputs.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterMalformedInputs.closeStorage()
+
+        val malformedSpentOutput = HistoryStorage(dbSettings)
+        val spentTerminalBox = new IndexedErgoBox(
+          header.height,
+          Some(lastTx.id),
+          Some(header.height + 1),
+          None,
+          lastTx.outputs.last,
+          lastBoxIndex
+        )
+        malformedSpentOutput.insertExtraTry(Array.empty, Array(spentTerminalBox)).get
+        malformedSpentOutput.close()
+
+        val rebuiltAfterSpentOutput = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterSpentOutput).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterSpentOutput).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterSpentOutput).getLong,
+          rebuiltAfterSpentOutput.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterSpentOutput.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        rebuiltAfterSpentOutput.closeStorage()
+
+        val corrupted = HistoryStorage(dbSettings)
+        corrupted.removeExtraTry(Array(numericBox.id)).get
+        corrupted.close()
+
+        val rebuilt = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuilt).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuilt).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuilt).getLong,
+          rebuilt.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuilt.closeStorage()
+
+        val invalidatedHeaderHistory = ErgoHistory.readOrGenerate(dbSettings)(context)
+        invalidatedHeaderHistory.historyStorage.insertExtraTry(checkpointMetadata, checkpointObjects).get
+        invalidatedHeaderHistory.historyStorage.insert(
+          Array(invalidatedHeaderHistory.validityKey(header.id) -> Array(0.toByte)),
+          org.ergoplatform.modifiers.BlockSection.emptyArray
+        ).get
+        invalidatedHeaderHistory.closeStorage()
+
+        val rebuiltAfterInvalidatedHeader = ErgoHistory.readOrGenerate(dbSettings)(context)
+        probe.ref ! ((
+          ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, rebuiltAfterInvalidatedHeader).getInt,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalTxIndexKey, rebuiltAfterInvalidatedHeader).getLong,
+          ExtraIndexer.getIndex(ExtraIndexer.GlobalBoxIndexKey, rebuiltAfterInvalidatedHeader).getLong,
+          rebuiltAfterInvalidatedHeader.historyStorage.modifierBytesById(bytesToId(ExtraIndexer.IndexedHeaderIdKey))
+        ))
+        rebuiltAfterInvalidatedHeader.closeStorage()
+        context.stop(self)
+      }
+
+      override def receive: Receive = Actor.emptyBehavior
+    }))
+    val preserved = probe.expectMsgType[IndexerState]
+    preserved.indexedHeight shouldBe 1
+    preserved.indexedHeaderId should not be empty
+    preserved.globalTxIndex should be > 0L
+    preserved.globalBoxIndex should be > 0L
+    probe.expectMsg(true)
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+    probe.expectMsg((0, 0L, 0L, None))
+  }
+
+  property("binds cached transactions to the selected header") {
+    val commandProbe = TestProbe()(system)
+    def awaitProcessed(message: Any): Unit = {
+      commandProbe.send(indexer, message)
+      commandProbe.send(indexer, GetLoadedState())
+      commandProbe.expectMsgType[IndexerState]
+    }
+
     indexer ! CreateDB(HEIGHT)
     indexer ! Index()
-    lock.lock()
-    done.await()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
+    }
+    val originalTransactions = history.bestBlockTransactionsAt(HEIGHT).get
+    val staleTransactions = originalTransactions.copy(
+      txs = history.bestBlockTransactionsAt(HEIGHT - 1).get.txs
+    )
+
+    indexer ! ForceRollback(HEIGHT - 1)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT - 1
+    }
+    val branchState = IndexerState.fromHistory(_history)
+
+    awaitProcessed(GenerateBetterChainTip())
+    awaitProcessed(CreateDB(HEIGHT + 1))
+    val selectedTransactions = history.bestBlockTransactionsAt(HEIGHT).get
+    selectedTransactions.headerId should not be originalTransactions.headerId
+    selectedTransactions.txs.head.id should not be staleTransactions.txs.head.id
+
+    awaitProcessed(CacheBlockTransactions(HEIGHT, staleTransactions))
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+      NumericTxIndex.getTxByNumber(history, branchState.globalTxIndex).map(_.id) shouldBe
+        Some(selectedTransactions.txs.head.id)
+    }
+    indexer ! Reset()
+  }
+
+  property("retries catch-up after a transient non-extending header") {
+    awaitAfter(created)(indexer ! CreateDB(HEIGHT))
+    awaitAfter(created)(indexer ! DeferNextHeaderOnce(2))
+    indexer ! Index()
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe history.bestHeaderIdAtHeight(HEIGHT)
+    }
+    indexer ! Reset()
+  }
+
+  property("retries catch-up when the selected block transactions are temporarily unavailable") {
+    awaitAfter(created)(indexer ! CreateDB(HEIGHT))
+    awaitAfter(created)(indexer ! DeferBlockTransactionsOnce(2))
+    indexer ! Index()
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(fullChainHeaderAt(HEIGHT).id)
+    }
+    indexer ! Reset()
+  }
+
+  property("the production actor pulls an applied-state snapshot before catch-up") {
+    val dbDir = Files.createTempDirectory("extra-indexer-production-start").toFile
+    val dbSettings = initSettings.copy(
+      directory = dbDir.getAbsolutePath,
+      networkType = NetworkType.TestNet,
+      nodeSettings = initSettings.nodeSettings.copy(extraIndex = true, headerChainDiff = 5000)
+    )
+    val setupProbe = TestProbe()(system)
+    system.actorOf(Props(new Actor {
+      override def preStart(): Unit = {
+        val generatedHistory = ErgoHistory.readOrGenerate(dbSettings)(context)
+        ChainGenerator.generate(5, dbDir, generatedHistory, None)
+        setupProbe.ref ! generatedHistory
+        context.stop(self)
+      }
+
+      override def receive: Receive = Actor.emptyBehavior
+    }))
+    val history = setupProbe.expectMsgType[ErgoHistory](30.seconds)
+    IndexerState.fromHistory(history).indexedHeight shouldBe 0
+
+    val viewHolderProbe = TestProbe()(system)
+    val productionIndexer = system.actorOf(Props(new ExtraIndexer(
+      dbSettings.cacheSettings,
+      dbSettings.chainSettings.addressEncoder,
+      Some(viewHolderProbe.ref),
+      true
+    )))
+    val request = viewHolderProbe.expectMsgType[GetDataFromCurrentView[_, _]]
+      .asInstanceOf[GetDataFromCurrentView[ErgoStateReader, Any]]
+    val thresholdProbe = TestProbe()(system)
+    thresholdProbe.send(productionIndexer, GetSegmentThreshold)
+    thresholdProbe.expectMsg(512)
+    // the state of the snapshot is two blocks behind the best full block of history
+    val applied = history.bestHeaderAtHeight(history.fullBlockHeight - 2).get
+    val notApplied = (applied.height + 1 to history.fullBlockHeight).map(history.bestFullBlockAt(_).get)
+    productionIndexer ! RemoteBlockApplied(
+      applied, history.getFullBlock(applied).get.blockTransactions.txs.map(_.id))
+    val probe = TestProbe()(system)
+    probe.send(productionIndexer, Identify("started"))
+    probe.expectMsg(ActorIdentity("started", Some(productionIndexer)))
+    val appliedState = createDigestState(idToVersion(applied.id), applied.stateRoot)
+    try viewHolderProbe.send(productionIndexer, request.f(CurrentView[ErgoStateReader](history, appliedState, null, null)))
+    finally appliedState.close()
+
+    // the indexer catches up with the state of the snapshot and stops there
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
+    }
+    Thread.sleep(1000) // nothing above it follows
+    IndexerState.fromHistory(history).indexedHeaderId shouldBe Some(applied.id)
+    IndexerState.fromHistory(history).indexedHeight shouldBe applied.height
+
+    notApplied.foreach { block =>
+      productionIndexer ! RemoteBlockApplied(block.header, block.blockTransactions.txs.map(_.id))
+    }
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(history)
+      state.indexedHeight shouldBe history.fullBlockHeight
+      state.indexedHeaderId shouldBe Some(history.bestFullBlockOpt.get.header.id)
+    }
+
+    probe.watch(productionIndexer)
+    system.stop(productionIndexer)
+    probe.expectTerminated(productionIndexer)
+    history.closeStorage()
+  }
+
+  property("transactions") {
+    createAndIndex(HEIGHT)
     val state = IndexerState.fromHistory(_history)
     cfor(0)(_ < state.globalTxIndex, _ + 1) { n =>
       val id = history.typedExtraIndexById[NumericTxIndex](bytesToId(NumericTxIndex.indexToBytes(n)))
@@ -290,10 +980,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   }
 
   property("boxes") {
-    indexer ! CreateDB(HEIGHT)
-    indexer ! Index()
-    lock.lock()
-    done.await()
+    createAndIndex(HEIGHT)
     val state = IndexerState.fromHistory(_history)
     cfor(0)(_ < state.globalBoxIndex, _ + 1) { n =>
       val id = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(n)))
@@ -304,34 +991,104 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   }
 
   property("addresses") {
-    indexer ! CreateDB(HEIGHT)
-    indexer ! Index()
-    lock.lock()
-    done.await()
+    createAndIndex(HEIGHT)
     val (addresses, _, _, _, _) = manualIndex(HEIGHT)
     checkAddresses(addresses) shouldBe 0
     indexer ! Reset()
   }
 
   property("templates") {
-    indexer ! CreateDB(HEIGHT)
-    indexer ! Index()
-    lock.lock()
-    done.await()
+    createAndIndex(HEIGHT)
     val (_, templates, _, _, _) = manualIndex(HEIGHT)
     checkTemplates(templates) shouldBe 0
     indexer ! Reset()
   }
 
   property("tokens") {
-    indexer ! CreateDB(HEIGHT)
-    indexer ! Index()
-    lock.lock()
-    done.await()
+    createAndIndex(HEIGHT)
     val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
     checkTokens(indexedTokens) shouldBe 0
     indexer ! Reset()
   }
+
+  property("storage rent eligibility index") {
+    createAndIndex(HEIGHT)
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("rent index entries are removable by box id") {
+    createAndIndex(HEIGHT)
+
+    val before = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
+    before.length should be > 2
+
+    // remove the first two entries by box id, as CandidateGenerator does for a rejected claim
+    val toRemove = before.take(2)
+      .flatMap(e => NumericBoxIndex.getBoxByNumber(history, e.globalIndex)).map(_.id)
+    toRemove.length shouldBe 2
+    history.removeStorageRentBoxes(toRemove)
+
+    val after = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue)
+    after.length shouldBe before.length - 2
+    after.map(_.globalIndex).toSet shouldBe before.drop(2).map(_.globalIndex).toSet
+
+    // removing again is a no-op: the boxes are still indexed, but the entries are gone
+    history.removeStorageRentBoxes(toRemove)
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+
+    // removing an entry of a box which is not indexed at all does not corrupt the index
+    history.removeStorageRentBoxes(Seq(bytesToId(Array.fill(32)(42.toByte))))
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).length shouldBe before.length - 2
+
+    indexer ! Reset()
+  }
+
+  property("rent index rows are not written when rent collection is off") {
+    val noRentIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(false)))
+    createAndIndex(HEIGHT, noRentIndexer)
+    // the extra index is fully built, but no storage-rent rows are written
+    IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
+    history.storageRentBoxesAtOrBefore(Int.MaxValue, 1000) shouldBe empty
+    noRentIndexer ! Reset()
+  }
+
+  property("rent index is trimmed to the unspent set after a rollback") {
+    createAndIndex(HEIGHT)
+    checkRentIndexAgainstChain(HEIGHT)
+
+    // rolling back discards the blocks that created some boxes, so those rows must go;
+    // ForceRollback is needed: a plain Rollback is ignored while the indexed tip remains
+    // on the best chain, so `done` would never fire
+    val back = BRANCHPOINT
+    awaitAfter(done)(indexer ! ForceRollback(back))
+
+    checkRentIndexAgainstChain(back)
+    indexer ! Reset()
+  }
+
+  property("rent index stays correct across repeated rollbacks") {
+    createAndIndex(HEIGHT)
+    checkRentIndexAgainstChain(HEIGHT)
+
+    // each rollback must re-derive the rent rows of the surviving range only; rolling
+    // forward again is separate (the chain generator cannot extend a rolled-back chain,
+    // so this covers successive rollbacks, as rollbackWithPattern does)
+    Seq(HEIGHT - 10, BRANCHPOINT, 8, 1).foreach { back =>
+      awaitAfter(done)(indexer ! ForceRollback(back))
+      checkRentIndexAgainstChain(back)
+    }
+    indexer ! Reset()
+  }
+
+  property("rent index survives rollback interleaved with generation") {
+    // same rollback/generate interleaving as rollbackWithPattern, but the rent rows are
+    // checked against chain-derived truth rather than indexer state
+    rollbackWithPattern("G-30;R-20;G-35;R-30", checkChain = true)
+  }
+
+
 
   property("alternating gens and rollbacks") {
     rollbackWithPattern("G-10;R-5;G-15;R-10;G-20;R-5")
@@ -353,44 +1110,764 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     rollbackWithPattern("G-5;G-15;R-5;G-20;G-25;R-15;G-30;R-10;G-50;R-25")
   }
 
-  property("indexes replacement blocks after rolling back an orphan block") {
-    indexer ! CreateDB(HEIGHT)
+  property("uses the production rollback point when the indexed tip becomes invalid") {
+    createAndIndex(HEIGHT)
+    val originalTipId = IndexerState.fromHistory(_history).indexedHeaderId.get
+
+    awaitAfter(created)(indexer ! GenerateBetterChainTip())
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 1))
+    val branchPoint = fullChainHeaderAt(HEIGHT - 1)
+    val replacementHeader = fullChainHeaderAt(HEIGHT)
+    val replacementTip = fullChainHeaderAt(HEIGHT + 1)
+
+    _history.historyStorage.insert(
+      Array(_history.validityKey(originalTipId) -> Array(0.toByte)),
+      org.ergoplatform.modifiers.BlockSection.emptyArray
+    ).get
+    val eventProbe = TestProbe()(system)
+    eventProbe.send(indexer, RemoteBlockApplied(
+      replacementHeader,
+      history.getFullBlock(replacementHeader).get.transactions.map(_.id)
+    ))
+    eventProbe.send(indexer, RemoteBlockApplied(
+      replacementTip,
+      history.getFullBlock(replacementTip).get.transactions.map(_.id)
+    ))
+    eventProbe.send(indexer, Rollback(branchPoint.id))
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 1
+      state.indexedHeaderId shouldBe Some(replacementTip.id)
+    }
+    indexer ! Reset()
+  }
+
+  property("reconciles an invalid indexed checkpoint after extra indexer actor restart") {
+    val commandProbe = TestProbe()(system)
+    def awaitProcessed(message: Any): Unit = {
+      commandProbe.send(indexer, message)
+      commandProbe.send(indexer, GetLoadedState())
+      commandProbe.expectMsgType[IndexerState](10.seconds)
+    }
+    try {
+      awaitProcessed(CreateDB(HEIGHT))
+      indexer ! Index()
+      org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+        IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
+      }
+      val indexedTip = fullChainHeaderAt(HEIGHT)
+      awaitProcessed(GenerateBetterChainTip())
+      awaitProcessed(ExtendDB(HEIGHT + 1))
+      val selectedTip = fullChainHeaderAt(HEIGHT + 1)
+      selectedTip.id should not be indexedTip.id
+      history.chainToHeader(Some(indexedTip), selectedTip)._1 shouldBe
+        Some(indexedTip.parentId)
+
+      _history.historyStorage.insert(
+        Array(_history.validityKey(indexedTip.id) -> Array(0.toByte)),
+        BlockSection.emptyArray
+      ).get
+      history.typedModifierById[Header](indexedTip.id) shouldBe None
+      _history.historyStorage.modifierById(indexedTip.id) shouldBe Some(indexedTip)
+      val expectedTransactions = (1 to HEIGHT + 1).flatMap(fullChainTransactionsAt(_).txs)
+      val expectedBoxes = expectedTransactions.flatMap(_.outputs)
+
+      val restartedIndexer = system.actorOf(Props(new ExtraIndexer(
+        initSettings.cacheSettings,
+        initSettings.chainSettings.addressEncoder,
+        None,
+        true
+      )))
+      val probe = TestProbe()(system)
+      probe.watch(restartedIndexer)
+      try {
+        probe.send(restartedIndexer,
+          ExtraIndexer.ReceivableMessages.StartExtraIndexer(_history, Some(idToVersion(_history.bestFullBlockIdOpt.get))))
+
+        org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+          val state = IndexerState.fromHistory(_history)
+          state.indexedHeight shouldBe HEIGHT + 1
+          state.indexedHeaderId shouldBe Some(selectedTip.id)
+          state.globalTxIndex shouldBe expectedTransactions.size
+          state.globalBoxIndex shouldBe expectedBoxes.size
+        }
+        expectedTransactions.zipWithIndex.foreach { case (tx, index) =>
+          NumericTxIndex.getTxByNumber(history, index).map(_.id) shouldBe Some(tx.id)
+        }
+        expectedBoxes.zipWithIndex.foreach { case (box, index) =>
+          NumericBoxIndex.getBoxByNumber(history, index).map(_.id) shouldBe Some(bytesToId(box.id))
+        }
+      } finally {
+        system.stop(restartedIndexer)
+        probe.expectTerminated(restartedIndexer)
+      }
+    } finally {
+      indexer ! Reset()
+    }
+  }
+
+  property("rolls back through an invalid indexed parent to the selected full tip") {
+    val commandProbe = TestProbe()(system)
+    def awaitProcessed(message: Any): Unit = {
+      commandProbe.send(indexer, message)
+      commandProbe.send(indexer, GetLoadedState())
+      commandProbe.expectMsgType[IndexerState](10.seconds)
+    }
+    try {
+      awaitProcessed(CreateDB(HEIGHT + 1))
+      indexer ! Index()
+      org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+        IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+      }
+      val indexedTip = fullChainHeaderAt(HEIGHT + 1)
+      val invalidParent = fullChainHeaderAt(HEIGHT)
+      val selectedTip = fullChainHeaderAt(HEIGHT - 1)
+      IndexerState.fromHistory(_history).indexedHeaderId shouldBe Some(indexedTip.id)
+
+      _history.reportModifierIsInvalid(
+        invalidParent,
+        ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+          org.ergoplatform.utils.ScorexEncoder.default
+        )
+      ).get
+      history.bestFullBlockOpt.map(_.header.id) shouldBe Some(selectedTip.id)
+      history.typedModifierById[Header](invalidParent.id) shouldBe None
+      _history.historyStorage.modifierById(invalidParent.id) shouldBe Some(invalidParent)
+      _history.historyStorage.modifierById(indexedTip.id) shouldBe Some(indexedTip)
+      IndexerState.fromHistory(_history).indexedHeaderId shouldBe Some(indexedTip.id)
+
+      val expectedTransactions = (1 until HEIGHT).flatMap(fullChainTransactionsAt(_).txs)
+      val expectedBoxes = expectedTransactions.flatMap(_.outputs)
+      val probe = TestProbe()(system)
+      probe.watch(indexer)
+      probe.send(indexer, Rollback(selectedTip.id))
+
+      val deadline = 10.seconds.fromNow
+      var state = IndexerState.fromHistory(_history)
+      while (state.indexedHeaderId != Some(selectedTip.id) && deadline.hasTimeLeft()) {
+        probe.receiveOne(50.millis) match {
+          case Terminated(`indexer`) => fail("Rollback through invalid parent stopped the indexer")
+          case null => ()
+          case message => fail(s"Unexpected indexer lifecycle message: $message")
+        }
+        state = IndexerState.fromHistory(_history)
+      }
+      state.indexedHeight shouldBe HEIGHT - 1
+      state.indexedHeaderId shouldBe Some(selectedTip.id)
+      state.globalTxIndex shouldBe expectedTransactions.size
+      state.globalBoxIndex shouldBe expectedBoxes.size
+      probe.send(indexer, GetLoadedState())
+      probe.expectMsgType[IndexerState].indexedHeaderId shouldBe Some(selectedTip.id)
+      expectedTransactions.zipWithIndex.foreach { case (tx, index) =>
+        NumericTxIndex.getTxByNumber(history, index).map(_.id) shouldBe Some(tx.id)
+      }
+      expectedBoxes.zipWithIndex.foreach { case (box, index) =>
+        NumericBoxIndex.getBoxByNumber(history, index).map(_.id) shouldBe Some(bytesToId(box.id))
+      }
+      history.typedExtraIndexById[NumericTxIndex](
+        bytesToId(NumericTxIndex.indexToBytes(expectedTransactions.size))
+      ) shouldBe None
+      history.typedExtraIndexById[NumericBoxIndex](
+        bytesToId(NumericBoxIndex.indexToBytes(expectedBoxes.size))
+      ) shouldBe None
+    } finally {
+      indexer ! Reset()
+    }
+  }
+
+  property("defers rollback when an invalid indexed parent is missing from storage") {
+    val commandProbe = TestProbe()(system)
+    def awaitProcessed(message: Any): Unit = {
+      commandProbe.send(indexer, message)
+      commandProbe.send(indexer, GetLoadedState())
+      commandProbe.expectMsgType[IndexerState](10.seconds)
+    }
+    try {
+      awaitProcessed(CreateDB(HEIGHT + 1))
+      indexer ! Index()
+      org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+        IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+      }
+      val before = IndexerState.fromHistory(_history)
+      val indexedTip = fullChainHeaderAt(HEIGHT + 1)
+      val invalidParent = fullChainHeaderAt(HEIGHT)
+      val selectedTip = fullChainHeaderAt(HEIGHT - 1)
+      before.indexedHeaderId shouldBe Some(indexedTip.id)
+
+      _history.reportModifierIsInvalid(
+        invalidParent,
+        ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+          org.ergoplatform.utils.ScorexEncoder.default
+        )
+      ).get
+      history.bestFullBlockOpt.map(_.header.id) shouldBe Some(selectedTip.id)
+      _history.historyStorage.remove(
+        Array.empty[ByteArrayWrapper], Array(invalidParent.id)
+      ).get
+      _history.historyStorage.modifierById(invalidParent.id) shouldBe None
+      _history.historyStorage.modifierById(indexedTip.id) shouldBe Some(indexedTip)
+
+      val probe = TestProbe()(system)
+      probe.watch(indexer)
+      probe.send(indexer, Rollback(selectedTip.id))
+      probe.send(indexer, GetLoadedState())
+      val deferred = probe.expectMsgType[IndexerState](10.seconds)
+      deferred.indexedHeaderId shouldBe before.indexedHeaderId
+      deferred.indexedHeight shouldBe before.indexedHeight
+      deferred.globalTxIndex shouldBe before.globalTxIndex
+      deferred.globalBoxIndex shouldBe before.globalBoxIndex
+      deferred.rollbackInProgress shouldBe false
+      deferred.caughtUp shouldBe false
+
+      probe.send(indexer, Index())
+      probe.send(indexer, GetLoadedState())
+      probe.expectMsgType[IndexerState](10.seconds) shouldBe deferred
+      val persisted = IndexerState.fromHistory(_history)
+      persisted.indexedHeaderId shouldBe before.indexedHeaderId
+      persisted.indexedHeight shouldBe before.indexedHeight
+      persisted.globalTxIndex shouldBe before.globalTxIndex
+      persisted.globalBoxIndex shouldBe before.globalBoxIndex
+      probe.expectNoMessage(200.millis)
+    } finally {
+      indexer ! Reset()
+    }
+  }
+
+  property("reconciles rollback events whose branch point is absent from indexed ancestry") {
+    val commandProbe = TestProbe()(system)
+    def awaitProcessed(message: Any): Unit = {
+      commandProbe.send(indexer, message)
+      commandProbe.send(indexer, GetLoadedState())
+      commandProbe.expectMsgType[IndexerState](10.seconds)
+    }
+    awaitProcessed(CreateDB(HEIGHT + 1))
     indexer ! Index()
-    awaitCondition(done)
-    indexer ! GenerateBetterChainTip()
-    lock.lock()
-    created.await()
-    val newBestHeaderOpt = history.typedModifierById[Header](history.headerIdsAtHeight(history.fullBlockHeight).last)
-    indexer ! RemoteBlockApplied(newBestHeaderOpt.get, Seq.empty) // will be ignored
-    indexer ! CreateDB(HEIGHT + 1)
-    lock.lock()
-    created.await()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+    val indexedTip = fullChainHeaderAt(HEIGHT + 1)
+    val indexedBranchHeader = fullChainHeaderAt(HEIGHT)
+    IndexerState.fromHistory(_history).indexedHeaderId shouldBe Some(indexedTip.id)
+
+    _history.reportModifierIsInvalid(
+      indexedTip,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default
+      )
+    ).get
+    fullChainHeaderAt(HEIGHT).id shouldBe indexedBranchHeader.id
+
+    awaitProcessed(GenerateBetterChainTip())
+    awaitProcessed(ExtendDB(HEIGHT + 1))
+    val unindexedBranchPoint = fullChainHeaderAt(HEIGHT)
+    unindexedBranchPoint.id should not be indexedBranchHeader.id
+    val firstReplacementTip = fullChainHeaderAt(HEIGHT + 1)
+    firstReplacementTip.parentId shouldBe unindexedBranchPoint.id
+
+    awaitProcessed(GenerateBetterChainTip())
+    awaitProcessed(ExtendDB(HEIGHT + 2))
+    val secondReplacementHeader = fullChainHeaderAt(HEIGHT + 1)
+    val selectedTip = fullChainHeaderAt(HEIGHT + 2)
+    secondReplacementHeader.id should not be firstReplacementTip.id
+    secondReplacementHeader.parentId shouldBe unindexedBranchPoint.id
+    selectedTip.parentId shouldBe secondReplacementHeader.id
+    history.chainToHeader(Some(indexedTip), selectedTip)._1 shouldBe
+      Some(indexedBranchHeader.parentId)
+    (HEIGHT to HEIGHT + 2).foreach { height =>
+      history.getFullBlock(fullChainHeaderAt(height)).isDefined shouldBe true
+    }
+    val branchPointLastTx = fullChainTransactionsAt(HEIGHT).txs.last
+    history.typedExtraIndexById[IndexedErgoTransaction](branchPointLastTx.id) shouldBe None
+
+    val expectedTransactions = (1 to HEIGHT + 2).flatMap(fullChainTransactionsAt(_).txs)
+    val expectedBoxes = expectedTransactions.flatMap(_.outputs)
+    val eventProbe = TestProbe()(system)
+    eventProbe.send(indexer, GetLoadedState())
+    val beforeEvent = eventProbe.expectMsgType[IndexerState]
+    beforeEvent.indexedHeaderId shouldBe Some(indexedTip.id)
+    beforeEvent.rollbackInProgress shouldBe false
+    val lifecycleProbe = TestProbe()(system)
+    lifecycleProbe.watch(indexer)
+    eventProbe.send(indexer, Rollback(unindexedBranchPoint.id))
+
+    val deadline = 10.seconds.fromNow
+    var state = IndexerState.fromHistory(_history)
+    while (state.indexedHeaderId != Some(selectedTip.id) && deadline.hasTimeLeft()) {
+      lifecycleProbe.receiveOne(50.millis) match {
+        case Terminated(`indexer`) => fail("Rollback to unindexed branch point stopped the indexer")
+        case null => ()
+        case message => fail(s"Unexpected indexer lifecycle message: $message")
+      }
+      state = IndexerState.fromHistory(_history)
+    }
+    val loadedAtTimeout = if (state.indexedHeaderId != Some(selectedTip.id)) {
+      eventProbe.send(indexer, GetLoadedState())
+      Option(eventProbe.receiveOne(250.millis))
+    } else None
+    withClue(s"Persisted checkpoint: $state; actor state: $loadedAtTimeout. ") {
+      state.indexedHeight shouldBe HEIGHT + 2
+      state.indexedHeaderId shouldBe Some(selectedTip.id)
+    }
+    state.globalTxIndex shouldBe expectedTransactions.size
+    state.globalBoxIndex shouldBe expectedBoxes.size
+    eventProbe.send(indexer, GetLoadedState())
+    eventProbe.expectMsgType[IndexerState].indexedHeaderId shouldBe Some(selectedTip.id)
+    expectedTransactions.zipWithIndex.foreach { case (tx, index) =>
+      NumericTxIndex.getTxByNumber(history, index).map(_.id) shouldBe Some(tx.id)
+    }
+    expectedBoxes.zipWithIndex.foreach { case (box, index) =>
+      NumericBoxIndex.getBoxByNumber(history, index).map(_.id) shouldBe Some(bytesToId(box.id))
+    }
+    indexer ! Reset()
+  }
+
+  property("persists buffered catch-up rows before processing a reorg") {
+    awaitAfter(created)(indexer ! CreateDB(HEIGHT))
+    val pauseProbe = TestProbe()(system)
+    pauseProbe.send(indexer, PauseBufferedCatchUpAt(HEIGHT, Int.MaxValue, pauseProbe.ref))
+    pauseProbe.expectMsg("configured")
     indexer ! Index()
-    lock.lock()
-    done.await()
-    indexer ! Rollback(history.bestHeaderIdAtHeight(HEIGHT).get)
-    lock.lock()
-    done.await()
-    val (_, _, indexedTokens, _, _) = manualIndex(HEIGHT)
+
+    val bufferedState = pauseProbe.expectMsgType[IndexerState](10.seconds)
+    bufferedState.indexedHeight shouldBe HEIGHT
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 0
+    val originalTipId = bufferedState.indexedHeaderId.get
+
+    awaitAfter(created)(indexer ! GenerateBetterChainTip())
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 1))
+    val branchPoint = fullChainHeaderAt(HEIGHT - 1)
+    val replacementHeader = fullChainHeaderAt(HEIGHT)
+    val replacementTip = fullChainHeaderAt(HEIGHT + 1)
+    replacementHeader.id should not be originalTipId
+
+    val eventProbe = TestProbe()(system)
+    eventProbe.send(indexer, RemoteBlockApplied(
+      replacementHeader,
+      history.getFullBlock(replacementHeader).get.transactions.map(_.id)
+    ))
+    eventProbe.send(indexer, RemoteBlockApplied(
+      replacementTip,
+      history.getFullBlock(replacementTip).get.transactions.map(_.id)
+    ))
+    eventProbe.send(indexer, Rollback(branchPoint.id))
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 1
+      state.indexedHeaderId shouldBe Some(replacementTip.id)
+    }
+
+    val expectedTransactions = (1 to HEIGHT + 1).flatMap(fullChainTransactionsAt(_).txs)
+    val expectedBoxes = expectedTransactions.flatMap(_.outputs)
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe expectedTransactions.size
+    state.globalBoxIndex shouldBe expectedBoxes.size
+    expectedTransactions.zipWithIndex.foreach { case (tx, index) =>
+      NumericTxIndex.getTxByNumber(history, index).map(_.id) shouldBe Some(tx.id)
+    }
+    expectedBoxes.zipWithIndex.foreach { case (box, index) =>
+      NumericBoxIndex.getBoxByNumber(history, index).map(_.id) shouldBe Some(bytesToId(box.id))
+    }
+    val (addresses, templates, indexedTokens, _, _) = manualIndex(HEIGHT + 1)
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
     checkTokens(indexedTokens) shouldBe 0
     indexer ! Reset()
   }
 
-  property("resumes catch-up from a deferred state on FullBlockApplied") {
-    indexer ! CreateDB(HEIGHT)
+  property("requests only extra indexer stop when final removal fails after partial rollback writes") {
+    val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
+    val lifecycleProbe = TestProbe()(system)
+    lifecycleProbe.watch(failingIndexer)
+
+    createAndIndex(HEIGHT, failingIndexer)
+    val spentInputId = bytesToId(fullChainTransactionsAt(HEIGHT).txs.flatMap(_.inputs).head.boxId)
+    history.typedExtraIndexById[IndexedErgoBox](spentInputId).exists(_.isSpent) shouldBe true
+
+    val probe = TestProbe()(system)
+    awaitAfter(created)(failingIndexer ! FailNextRollbackRemoval(probe.ref))
+    failingIndexer ! ForceRollback(HEIGHT - 1)
+
+    probe.expectMsg("indexer-stop-requested")
+    lifecycleProbe.expectTerminated(failingIndexer)
+    system.whenTerminated.isCompleted shouldBe false
+    ExtraIndexer.getIndex(ExtraIndexer.RollbackToKey, _history).getInt shouldBe HEIGHT - 1
+    _history.historyStorage.invalidateExtraCache(Seq(spentInputId))
+    history.typedExtraIndexById[IndexedErgoBox](spentInputId).exists(_.isSpent) shouldBe false
+  }
+
+  property("blocks every indexing entry while a segmented checkpoint write is pending") {
+    createAndIndex(HEIGHT)
+    val probe = TestProbe()(system)
+    probe.send(indexer, ConfigureWriteFailure("forward", probe.ref))
+    probe.expectMsg("configured")
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 1))
+    val first = fullChainHeaderAt(HEIGHT + 1)
+    probe.send(indexer, RemoteBlockApplied(first, fullChainTransactionsAt(HEIGHT + 1).txs.map(_.id)))
+    val pendingIds = probe.expectMsgType[Seq[ModifierId]]
+    pendingIds should not be empty
+    pendingIds.foreach(id => history.typedExtraIndexById[ExtraIndex](id) shouldBe None)
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 2))
+    val second = fullChainHeaderAt(HEIGHT + 2)
+    probe.send(indexer, RemoteBlockApplied(second, fullChainTransactionsAt(HEIGHT + 2).txs.map(_.id)))
+    probe.send(indexer, GetLoadedState())
+    probe.expectMsgType[IndexerState].indexedHeight shouldBe HEIGHT + 1
+    probe.send(indexer, SetCaughtUp(caughtUp = false))
+    probe.send(indexer, Index())
+    probe.send(indexer, GetLoadedState())
+    probe.expectMsgType[IndexerState].indexedHeight shouldBe HEIGHT + 1
+    IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT
+    probe.send(indexer, AllowWrites())
+    probe.expectMsg("writes-allowed")
+    probe.send(indexer, Index())
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 2
+    }
+    pendingIds.foreach(id => history.typedExtraIndexById[ExtraIndex](id).isDefined shouldBe true)
+    val (addresses, templates, indexedTokens, txCount, boxCount) = manualIndex(HEIGHT + 2)
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe txCount
+    IndexerState.fromHistory(_history).globalBoxIndex shouldBe boxCount
+    indexer ! Reset()
+  }
+
+  property("reopens a produced non-genesis checkpoint and rejects a changed terminal input mapping") {
+    createAndIndex(6)
+    val expected = IndexerState.fromHistory(_history)
+    expected.indexedHeight shouldBe 6
+    val lastTx = fullChainTransactionsAt(6).txs.last
+    val indexedTx = history.typedExtraIndexById[IndexedErgoTransaction](lastTx.id).get
+    indexedTx.inputNums should not be empty
+    val probe = TestProbe()(system)
+    probe.send(indexer, ReopenCheckpoint())
+    probe.expectMsg(expected)
+    history.typedExtraIndexById[IndexedErgoTransaction](lastTx.id).isDefined shouldBe true
+
+    _history.historyStorage.insertExtraTry(Array.empty,
+      Array(indexedTx.copy(inputNums = indexedTx.inputNums.map(_ + 1L)))).get
+    probe.send(indexer, ReopenCheckpoint())
+    val rebuilt = probe.expectMsgType[IndexerState]
+    rebuilt.indexedHeight shouldBe 0
+    rebuilt.globalTxIndex shouldBe 0
+    rebuilt.globalBoxIndex shouldBe 0
+    rebuilt.indexedHeaderId shouldBe None
+    history.typedExtraIndexById[IndexedErgoTransaction](lastTx.id) shouldBe None
+    indexer ! Reset()
+  }
+
+  property("indexes the selected full chain while a competing header is first at its height") {
+    awaitAfter(created)(indexer ! CreateDB(6))
+    val selected = fullChainHeaderAt(3)
+    val competing = selected.copy(timestamp = selected.timestamp + 1)
+    val competingTransactions = fullChainTransactionsAt(3).copy(headerId = competing.id)
+    competingTransactions.id shouldBe competing.transactionsId
+    val heightKey = ByteArrayWrapper(org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(3).array))
+    val ids = ExtraIndexer.fastIdToBytes(competing.id) ++ ExtraIndexer.fastIdToBytes(selected.id)
+    _history.historyStorage.insert(Array(heightKey -> ids, _history.validityKey(competing.id) -> Array[Byte](1)),
+      Array[org.ergoplatform.modifiers.BlockSection](competing, competingTransactions)).get
+    history.bestHeaderIdAtHeight(3) shouldBe Some(competing.id)
+    fullChainHeaderAt(3).id shouldBe selected.id
     indexer ! Index()
-    awaitCondition(done)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    expectedTxs.zipWithIndex.foreach { case (tx, num) =>
+      NumericTxIndex.getTxByNumber(history, num).map(_.id) shouldBe Some(tx.id)
+    }
+    val txAtCompetingHeight = fullChainTransactionsAt(3).txs.head
+    val hydrated = history.typedExtraIndexById[IndexedErgoTransaction](txAtCompetingHeight.id).get
+      .retrieveBody(history)
+    hydrated.blockId shouldBe selected.id
+    hydrated.timestamp shouldBe selected.timestamp
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    indexer ! Reset()
+  }
 
-    indexer ! ExtendDB(HEIGHT + 1)
-    awaitCondition(created)
-    val nextHeader = history.typedModifierById[Header](history.bestHeaderIdAtHeight(HEIGHT + 1).get).get
+  property("indexes selected headers with missing validity marks during catch-up") {
+    awaitAfter(created)(indexer ! CreateDB(6))
+    val missingValidityHeaders = Seq(fullChainHeaderAt(3), fullChainHeaderAt(4))
+    missingValidityHeaders.foreach { header =>
+      FullBlockProcessor.isInBestFullChain(_history.historyStorage, header.id) shouldBe true
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Valid
+    }
+    _history.historyStorage.remove(
+      missingValidityHeaders.map(header => _history.validityKey(header.id)).toArray,
+      Array.empty[ModifierId]
+    ).get
+    missingValidityHeaders.foreach { header =>
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
+    }
 
-    // Simulate the state after a headers-only fork briefly became the best chain
-    // and then lost: caughtUp=false, but the indexed tip is still on the main chain.
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+    // the indexer does not gate on semantic validity: indexed without touching the marks
+    missingValidityHeaders.foreach { header =>
+      _history.isSemanticallyValid(header.id) shouldBe ModifierSemanticValidity.Unknown
+    }
+    // the blocks are indexed like any other best-chain block
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    expectedTxs.zipWithIndex.foreach { case (tx, num) =>
+      NumericTxIndex.getTxByNumber(history, num).map(_.id) shouldBe Some(tx.id)
+    }
+    indexer ! Reset()
+  }
+
+  property("does not index an invalid block during catch-up") {
+    awaitAfter(created)(indexer ! CreateDB(6))
+    val invalidHeader = fullChainHeaderAt(4)
+    _history.historyStorage.insert(
+      Array(_history.validityKey(invalidHeader.id) -> Array(0.toByte)),
+      BlockSection.emptyArray
+    ).get
+    _history.isSemanticallyValid(invalidHeader.id) shouldBe ModifierSemanticValidity.Invalid
+
+    val probe = TestProbe()(system)
+    indexer ! ObserveUnavailableHeader(4, probe.ref)
+    indexer ! Index()
+    probe.expectMsg(3.seconds, 4)
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    }
+    Thread.sleep(500)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    _history.isSemanticallyValid(invalidHeader.id) shouldBe ModifierSemanticValidity.Invalid
+    indexer ! Reset()
+  }
+
+  property("does not index an unknown-validity block with a missing body during catch-up") {
+    awaitAfter(created)(indexer ! CreateDB(6))
+    val bodilessHeader = fullChainHeaderAt(4)
+    _history.historyStorage.remove(
+      Array(_history.validityKey(bodilessHeader.id)),
+      Array(bodilessHeader.transactionsId)
+    ).get
+    _history.isSemanticallyValid(bodilessHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    history.getFullBlock(bodilessHeader) shouldBe None
+
+    // the header is selected (no validity gating), but the missing body blocks indexing
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    }
+    Thread.sleep(500)
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 3
+    _history.isSemanticallyValid(bodilessHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    indexer ! Reset()
+  }
+
+  property("does not index a block outside the best full chain during catch-up") {
+    awaitAfter(created)(indexer ! CreateDB(6))
+    val selectedBlock = history.getFullBlock(fullChainHeaderAt(4)).get
+    // section ids are derived from the header id, so a competing header needs its own sections
+    val competingHeader = selectedBlock.header.copy(timestamp = selectedBlock.header.timestamp + 1)
+    val competingSections: Seq[NonHeaderBlockSection] = Seq(
+      selectedBlock.adProofs.get.copy(headerId = competingHeader.id),
+      selectedBlock.blockTransactions.copy(headerId = competingHeader.id),
+      selectedBlock.extension.copy(headerId = competingHeader.id)
+    )
+    competingSections.map(_.id) shouldBe competingHeader.sectionIds.map(_._2).toSeq
+    val heightKey = ByteArrayWrapper(
+      org.ergoplatform.settings.Algos.hash(ByteBuffer.allocate(4).putInt(4).array))
+    // a complete block, neither selected nor marked valid or invalid
+    _history.historyStorage.insert(
+      Array(heightKey -> (ExtraIndexer.fastIdToBytes(competingHeader.id) ++
+        ExtraIndexer.fastIdToBytes(selectedBlock.header.id))),
+      (competingHeader +: competingSections).toArray[BlockSection]
+    ).get
+    _history.isSemanticallyValid(competingHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, competingHeader.id) shouldBe false
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, selectedBlock.header.id) shouldBe true
+    history.getFullBlock(competingHeader).isDefined shouldBe true
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+    // only the selected block is indexed, the orphan is left untouched
+    _history.isSemanticallyValid(competingHeader.id) shouldBe ModifierSemanticValidity.Unknown
+    _history.isSemanticallyValid(selectedBlock.header.id) shouldBe ModifierSemanticValidity.Valid
+    val expectedTxs = (1 to 6).flatMap(fullChainTransactionsAt(_).txs)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe expectedTxs.size
+    indexer ! Reset()
+  }
+
+  property("rollback of an indexed then rejected block with unknown input leaves the index intact") {
+    createAndIndex(HEIGHT)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+
+    // valid PoW, spending a nonexistent box, never applied to the state - the best-full-chain
+    // marker is set at append, semantic validity stays Unknown
+    val forged = ChainGenerator.forgeUnvalidatedBlock(_history, Seq(scorex.utils.Random.randomBytes(32)))
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    FullBlockProcessor.isInBestFullChain(_history.historyStorage, forged.header.id) shouldBe true
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    // the state rejects the block: markers flip, the indexer reconciles on its next message
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    // the index is exactly as if the rejected block never existed
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("rollback of an indexed then rejected block double-spending a box leaves the index intact") {
+    createAndIndex(HEIGHT)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+
+    // a box already spent on the valid chain
+    val spendingTx = fullChainTransactionsAt(2).txs.find(_.inputs.nonEmpty).get
+    val spentBoxId = spendingTx.inputs.head.boxId
+
+    val forged = ChainGenerator.forgeUnvalidatedBlock(_history, Seq(spentBoxId))
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    // while indexed, the original spend record must not be overwritten by the unvalidated block
+    history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
+      .spendingTxIdOpt shouldBe Some(spendingTx.id)
+
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    // the box stays spent by its original, valid spending transaction
+    val spentBox = history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
+    spentBox.spendingTxIdOpt shouldBe Some(spendingTx.id)
+    spentBox.spendingHeightOpt shouldBe Some(2)
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
+    indexer ! Reset()
+  }
+
+  property("box by number lookup tolerates a missing number row") {
+    awaitAfter(created)(indexer ! CreateDB(2))
+    NumericBoxIndex.getBoxByNumber(history, 1000000L) shouldBe None
+    indexer ! Reset()
+  }
+
+  Seq("initial", "intermediate", "final").foreach { phase =>
+    property(s"preserves recovery at the $phase rollback write failure") {
+      val failingIndexer = system.actorOf(Props.create(classOf[ExtraIndexerTestActor], this, Boolean.box(true)))
+      val probe = TestProbe()(system)
+      probe.watch(failingIndexer)
+      createAndIndex(HEIGHT, failingIndexer)
+      val expected = IndexerState.fromHistory(_history)
+      val sentinelId = fullChainTransactionsAt(1).txs.head.id
+      val spentId = bytesToId(fullChainTransactionsAt(HEIGHT).txs.flatMap(_.inputs).head.boxId)
+      val originalSpentBytes = _history.historyStorage.get(spentId).get.toSeq
+      probe.send(failingIndexer, CheckpointSettings())
+      val dbSettings = probe.expectMsgType[ErgoSettings]
+      probe.send(failingIndexer, ConfigureWriteFailure(phase, probe.ref))
+      probe.expectMsg("configured")
+      probe.send(failingIndexer, ForceRollback(HEIGHT - 1))
+      probe.expectMsgType[Seq[ModifierId]]
+      val completedWrites = probe.expectMsgType[Vector[String]]
+      phase match {
+        case "initial" => completedWrites shouldBe empty
+        case "intermediate" => completedWrites shouldBe Vector("marked")
+        case "final" =>
+          completedWrites.head shouldBe "marked"
+          completedWrites should contain("rows")
+          completedWrites.last shouldBe "remove"
+          completedWrites should not contain "unmarked"
+      }
+      probe.expectTerminated(failingIndexer)
+      system.whenTerminated.isCompleted shouldBe false
+      ExtraIndexer.getIndex(ExtraIndexer.RollbackToKey, _history).getInt shouldBe
+        (if (phase == "initial") 0 else HEIGHT - 1)
+      if (phase == "initial") {
+        IndexerState.fromHistory(_history) shouldBe expected
+        _history.historyStorage.get(spentId).get.toSeq shouldBe originalSpentBytes
+      }
+      _history.historyStorage.getExtraIndex(sentinelId).isDefined shouldBe true
+      _history.closeStorage()
+      system.actorOf(Props(new Actor {
+        override def preStart(): Unit = {
+          val reopened = ErgoHistory.readOrGenerate(dbSettings.copy(
+            nodeSettings = dbSettings.nodeSettings.copy(extraIndex = true)))(context)
+          probe.ref ! ((IndexerState.fromHistory(reopened), reopened.historyStorage.getExtraIndex(sentinelId).isDefined))
+          reopened.closeStorage()
+          context.stop(self)
+        }
+        override def receive: Receive = Actor.emptyBehavior
+      }))
+      val (reopened, retained) = probe.expectMsgType[(IndexerState, Boolean)]
+      if (phase == "initial") {
+        reopened shouldBe expected
+        retained shouldBe true
+      } else {
+        reopened.indexedHeight shouldBe 0
+        reopened.globalTxIndex shouldBe 0
+        reopened.globalBoxIndex shouldBe 0
+        reopened.rollbackTo shouldBe 0
+        reopened.indexedHeaderId shouldBe None
+        retained shouldBe false
+      }
+    }
+  }
+
+  property("resumes catch-up from a deferred state on FullBlockApplied") {
+    createAndIndex(HEIGHT)
+
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 1))
+    val nextHeader = fullChainHeaderAt(HEIGHT + 1)
     indexer ! SetCaughtUp(caughtUp = false)
-
-    // Without the FullBlockApplied handler for !caughtUp, this event would be
-    // dropped and the indexer would stay stalled.
     indexer ! RemoteBlockApplied(nextHeader, history.getFullBlock(nextHeader).get.transactions.map(_.id))
 
     org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
@@ -398,6 +1875,53 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       state.indexedHeight shouldBe HEIGHT + 1
       state.caughtUp shouldBe true
     }
+    indexer ! Reset()
+  }
+
+  property("recovers a reloaded checkpoint without waiting for block or rollback events") {
+    createAndIndex(HEIGHT)
+    val originalTipId = IndexerState.fromHistory(_history).indexedHeaderId
+    val branchPointId = fullChainHeaderAt(HEIGHT - 1).id
+
+    awaitAfter(created)(indexer ! GenerateBetterChainTip())
+    awaitAfter(created)(indexer ! ExtendDB(HEIGHT + 1))
+
+    val replacementHeader = fullChainHeaderAt(HEIGHT)
+    val replacementChild = fullChainHeaderAt(HEIGHT + 1)
+    replacementHeader.id should not be originalTipId.get
+
+    awaitAfter(created)(indexer ! Reload())
+
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT + 1
+      state.indexedHeaderId shouldBe Some(replacementChild.id)
+    }
+
+    val expectedTransactions = (1 to HEIGHT + 1).flatMap(fullChainTransactionsAt(_).txs)
+    val expectedBoxes = expectedTransactions.flatMap(_.outputs)
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe expectedTransactions.size
+    state.globalBoxIndex shouldBe expectedBoxes.size
+    expectedTransactions.zipWithIndex.foreach { case (tx, index) =>
+      NumericTxIndex.getTxByNumber(history, index).map(_.id) shouldBe Some(tx.id)
+    }
+    expectedBoxes.zipWithIndex.foreach { case (box, index) =>
+      NumericBoxIndex.getBoxByNumber(history, index).map(_.id) shouldBe Some(bytesToId(box.id))
+    }
+
+    val (addresses, templates, indexedTokens, _, _) = manualIndex(HEIGHT + 1)
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+
+    val probe = TestProbe()(system)
+    probe.send(indexer, Rollback(branchPointId))
+    probe.send(indexer, GetLoadedState())
+    val stateAfterLateRollback = probe.expectMsgType[IndexerState]
+    stateAfterLateRollback.indexedHeight shouldBe HEIGHT + 1
+    stateAfterLateRollback.indexedHeaderId shouldBe Some(replacementChild.id)
+    IndexerState.fromHistory(_history) shouldBe stateAfterLateRollback
     indexer ! Reset()
   }
 }

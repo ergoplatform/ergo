@@ -6,7 +6,7 @@ import akka.actor.{ActorRef, ActorSystem, Cancellable, Props}
 import akka.testkit.{TestActorRef, TestProbe}
 import org.ergoplatform.Input
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
@@ -1726,6 +1726,46 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! Message(InvSpec,
         Left(InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(unknownHeaderId)))), Some(peer))
       requestForModifierSent(ncProbe, Header.modifierTypeId, unknownHeaderId)
+    }
+  }
+
+  property("NodeViewSynchronizer: sections evicted from the view holder's cache by another peer's sections become requestable again") {
+    withUtxoBootstrapFixture(utxoBootstrap = false) { ctx =>
+      import ctx._
+
+      synchronizerMockRef ! ChangedState(localStateGen.sample.get)
+      val baseBlock = validFullBlock(None, localStateGen.sample.get)
+
+      // Peer A: 40 extensions for unknown headers are requested and delivered; they wait in the
+      // view holder's sections cache (their headers are unknown, so they cannot be applied yet)
+      val extensions = (1 to 40).map(_ => baseBlock.extension.copy(headerId = modifierIdGen.sample.get))
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Extension.modifierTypeId, extensions.map(_.id)))), Some(peer))
+      requestForModifierSent(ncProbe, Extension.modifierTypeId, extensions.head.id)
+      synchronizerMockRef ! Message(ModifiersSpec,
+        Left(ModifiersSpec.toBytes(ModifiersData(Extension.modifierTypeId,
+          extensions.map(e => e.id -> ExtensionSerializer.toBytes(e)).toMap))), Some(peer))
+
+      eventually(timeout(15.seconds), interval(200.millis)) {
+        extensions.forall(e => deliveryTracker.status(e.id, Extension.modifierTypeId, Seq.empty) == Received) shouldBe true
+      }
+
+      // 400 more sections of another type arrive at the view holder (e.g. relayed by a peer whose
+      // deliveries passed the synchronizer); the cache (384 entries) evicts the 40 oldest entries,
+      // which are exactly the extensions above
+      val blockTransactions = (1 to 400).map(_ => baseBlock.blockTransactions.copy(headerId = modifierIdGen.sample.get))
+      nodeViewHolderMockRef ! ErgoNodeViewHolder.ReceivableMessages.ModifiersFromRemote(blockTransactions)
+
+      // the evicted extensions must be reset to Unknown under their own type; reported under the
+      // batch's type they would stay Received until a ChainIsStuck-driven delivery tracker reset
+      eventually(timeout(15.seconds), interval(200.millis)) {
+        extensions.forall(e => deliveryTracker.status(e.id, Extension.modifierTypeId, Seq.empty) == Unknown) shouldBe true
+      }
+
+      // and so they are requestable again
+      synchronizerMockRef ! Message(InvSpec,
+        Left(InvSpec.toBytes(InvData(Extension.modifierTypeId, Seq(extensions.head.id)))), Some(peer))
+      requestForModifierSent(ncProbe, Extension.modifierTypeId, extensions.head.id)
     }
   }
 

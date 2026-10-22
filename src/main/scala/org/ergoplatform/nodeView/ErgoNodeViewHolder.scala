@@ -69,7 +69,16 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * state (result of log's modifiers application to pre-historical(genesis) state,
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
-  private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+  private var nodeView: NodeView = try {
+    restoreState().getOrElse(genesisState)
+  } catch {
+    case NonFatal(ex) =>
+      log.error("Failed to initialize node view, shutting down the node. " +
+        "Try to resync from genesis manually", ex)
+      // Rethrowing stops the Holder; coordinated shutdown also stops the rest of the node.
+      ErgoApp.shutdownSystem()(context.system)
+      throw ex
+  }
 
   /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
   private var chainProgress: Option[ChainProgress] = None
@@ -475,7 +484,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
+    val storedState = Try(ErgoState.readOrGenerate(settings).asInstanceOf[State])
+    val consistentState = storedState.flatMap(state => Try(restoreConsistentState(state, history)).flatten)
+    consistentState match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -485,9 +496,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info("Wallet database read")
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
-        log.error("Failed to recover state, try to resync from genesis manually", ex)
-        ErgoApp.shutdownSystem()(context.system)
-        None
+        Try(history.closeStorage()).failed.foreach { closeError =>
+          if (closeError ne ex) ex.addSuppressed(closeError)
+        }
+        storedState.toOption.foreach { state =>
+          Try(state.closeStorage()).failed.foreach { closeError =>
+            if (closeError ne ex) ex.addSuppressed(closeError)
+          }
+        }
+        throw ex
     }
   }
 

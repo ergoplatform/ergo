@@ -21,7 +21,7 @@ import org.ergoplatform.validation.RecoverableModifierError
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
-import scala.annotation.nowarn
+import scala.annotation.{nowarn, tailrec}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -238,6 +238,45 @@ trait ErgoHistory
         log.error(s"Failed to remove $kind $id during history repair", error)
     }
     removal
+  }
+
+  /**
+    * Moves a best full block pointer that names a block this node cannot assemble to the highest ancestor it can
+    * assemble, down to `minimalFullBlockHeight`, or removes the pointer if there is none. Otherwise the block is
+    * never applied, as the pointer already names it. The skipped headers lose their best-chain marker, so that the
+    * markers still form one chain. Any section missing in any state mode starts the repair: for example the
+    * ADProofs a UTXO node stores only after the state update, missing in a history opened in digest mode (#2788),
+    * or a lost section (#2778, case 2). A pointer to a header that is not stored, such as the pre-genesis id
+    * `reportModifierIsInvalid` writes when the genesis block is invalidated, is left as it is.
+    */
+  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = historyStorage.synchronized {
+    bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).filter(getFullBlock(_).isEmpty) match {
+      case Some(bestHeader) =>
+        val lowestHeight = minimalFullBlockHeight
+
+        @tailrec
+        def walk(headerOpt: Option[Header], skipped: List[Header]): (List[Header], Option[Header]) =
+          headerOpt match {
+            case Some(h) if h.height >= lowestHeight && getFullBlock(h).isEmpty =>
+              walk(typedModifierById[Header](h.parentId), h :: skipped)
+            case Some(h) if h.height >= lowestHeight => (skipped, Some(h))
+            case _ => (skipped, None)
+          }
+
+        val (skipped, completeOpt) = walk(typedModifierById[Header](bestHeader.parentId), List(bestHeader))
+        log.warn(s"Best full block ${bestHeader.id} cannot be assembled in ${nodeSettings.stateType} mode, " +
+          s"moving the pointer to ${completeOpt.map(h => s"${h.id} at height ${h.height}").getOrElse("none")}")
+        val markers = skipped.map(h => FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
+        completeOpt match {
+          case Some(header) =>
+            historyStorage.insert((BestFullBlockKey -> idToBytes(header.id)) +: markers.toArray, BlockSection.emptyArray)
+          case None =>
+            historyStorage.insert(markers.toArray, BlockSection.emptyArray)
+              .flatMap(_ => historyStorage.remove(Array(BestFullBlockKey), Array.empty[ModifierId]))
+        }
+      case None =>
+        Success(())
+    }
   }
 
   /**
@@ -494,13 +533,14 @@ object ErgoHistory extends ScorexLogging {
         }
     }
 
-    repairIfNeeded(history) match {
+    // A failed repair closes the store and rethrows its error, which stops the start-up.
+    def stopOnFailure(step: String, result: Try[_]): Unit = result match {
       case Failure(error) =>
         Try(history.closeStorage()).failed.foreach { closeError =>
           if (closeError ne error) error.addSuppressed(closeError)
         }
         log.error(
-          "History repair failed; stop this node. Operator recovery: " +
+          s"$step failed; stop this node. Operator recovery: " +
             "inspect the error and correct its cause (disk space, permissions, " +
             "or open handles); keep history/index and history/objects intact, " +
             "then restart to retry.",
@@ -508,6 +548,9 @@ object ErgoHistory extends ScorexLogging {
         throw error
       case Success(_) =>
     }
+
+    stopOnFailure("History repair", repairIfNeeded(history))
+    stopOnFailure("Best full block repair", history.repairIncompleteBestFullBlock())
 
     // If the node is restarted in the middle of UTXO set snapshot bootstrapping (headers are
     // already persisted, but the snapshot was not applied yet), the headers chain is already

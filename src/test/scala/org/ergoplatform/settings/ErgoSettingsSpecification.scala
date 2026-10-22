@@ -303,8 +303,10 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     val malformedIds = Seq("", mainnetGenesisId.toUpperCase, mainnetGenesisId.dropRight(1), mainnetGenesisId + "0",
       mainnetGenesisId.dropRight(1) + "g")
     malformedIds.foreach { id =>
-      val error = the[Error] thrownBy readWithGenesisId(id)
-      error.getMessage should include(s"genesisId = '$id'")
+      withClue(s"genesisId = '$id': ") {
+        val error = the[Error] thrownBy readWithGenesisId(id)
+        error.getMessage should include(s"genesisId = '$id'")
+      }
     }
   }
 

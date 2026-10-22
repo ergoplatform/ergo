@@ -785,7 +785,8 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     * the best full block in history has no ADProofs, and the state is at its parent (before the state commit)
     * or at the block itself (after it). On restart the node should regenerate the proofs, so a digest-mode peer
     * can get the block. With `keepNoParentVersion` (used with `stateCommitted`) the state keeps no undo version
-    * of the block's parent: the node then starts at the block, and the proofs stay missing.
+    * of the block's parent: the node then starts at the block, and the proofs stay missing, so a digest-mode
+    * reader of the same history moves the best full block pointer back to the parent.
     */
   private def restartWithoutBestBlockProofs(stateCommitted: Boolean, keepNoParentVersion: Boolean = false): Unit = {
     val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
@@ -833,7 +834,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       val storedProofsId = getModifierById(block.header.ADProofsId).map(_.id)
       stopNodeViewHolder()
       val expected: (Option[ModifierId], Option[ModifierId]) =
-        if (keepNoParentVersion) (None, None) else (Some(block.header.ADProofsId), Some(block.id))
+        if (keepNoParentVersion) (None, Some(genesis.id)) else (Some(block.header.ADProofsId), Some(block.id))
       (storedProofsId, digestBestFullBlockId()) shouldBe expected
     }
   }
@@ -878,7 +879,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         Seq(block.header, block.blockTransactions, block.extension).map(history.append).filter(_.isFailure) shouldBe empty
         history.bestFullBlockOpt.map(_.id) shouldBe Some(block.id)
       } finally history.closeStorage()
-      fixture.deleteRecursive(new File(s"${nodeViewDir.getAbsolutePath}/state"))
+      fixture.deleteRecursive(new File(nodeViewDir, "state"))
 
       settings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Digest))
       startNodeViewHolder()

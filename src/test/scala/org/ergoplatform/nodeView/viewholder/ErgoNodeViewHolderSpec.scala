@@ -5,6 +5,7 @@ import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactions
+import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
@@ -596,7 +597,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
 
     // Create a valid tx that pays to a FalseTree output.
-    val box = wusAfterGenesis.takeBoxes(1).head
+    val box = wusAfterGenesis.takeBoxes(100).find(_.ergoTree == TrueTree).get
     val validTx = validTransactionFromBoxes(IndexedSeq(box), outputsProposition = FalseTree)
 
     val validBlock = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
@@ -881,6 +882,38 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   property("nipopow proof starts full blocks downloading when utxoBootstrap disabled") {
     t22.run(parameters, NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true, utxoBootstrap = false))
+  }
+
+  property("block sections evicted from an overfull cache are reported under their own type") {
+    val config = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+    new NodeViewFixture(config.toSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (us, bh) = createUtxoState(fixture.settings)
+      val block = validFullBlock(None, us, bh)
+
+      subscribeEvents(classOf[BlockSectionsProcessingCacheUpdate])
+
+      // sections whose headers are unknown can neither be applied nor dropped; they pile up in the
+      // sections cache (cap 384)
+      val extensions = (1 to 250).map(_ => block.extension.copy(headerId = modifierIdGen.sample.value))
+      nodeViewHolderRef ! ModifiersFromRemote(extensions)
+
+      val upd1 = expectMsgType[BlockSectionsProcessingCacheUpdate]
+      upd1.cleared._2 shouldBe empty
+
+      val blockTransactions = (1 to 250).map(_ => block.blockTransactions.copy(headerId = modifierIdGen.sample.value))
+      nodeViewHolderRef ! ModifiersFromRemote(blockTransactions)
+
+      // 500 sections > 384 cache: the oldest 116 entries (extensions) are evicted; the update must
+      // report them under their own type, so the synchronizer resets their delivery status correctly
+      val upd2 = expectMsgType[BlockSectionsProcessingCacheUpdate]
+      upd2.cleared._1 shouldBe Extension.modifierTypeId
+      upd2.cleared._2.length shouldBe 500 - 384
+      upd2.cleared._2.toSet.subsetOf(extensions.map(_.id).toSet) shouldBe true
+
+      expectNoMsg()
+    }
   }
 
   property("extractFailedTxId should extract failing transaction id from validation error shapes") {

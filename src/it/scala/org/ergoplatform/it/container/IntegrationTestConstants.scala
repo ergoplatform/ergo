@@ -74,6 +74,12 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
+  def getPeersIntervalConfig(millis: Int): Config = ConfigFactory.parseString(
+    s"""
+       |scorex.network.getPeersInterval=${millis}ms
+    """.stripMargin
+  )
+
   def blockIntervalConfig(millis: Int): Config = ConfigFactory.parseString(
     s"""
        |ergo.chain.blockInterval=${millis}ms
@@ -83,6 +89,12 @@ trait IntegrationTestConstants {
   def keepVersionsConfig(keepVersions: Int): Config = ConfigFactory.parseString(
     s"""
        |ergo.node.keepVersions=$keepVersions
+    """.stripMargin
+  )
+
+  def headerChainDiffConfig(headerChainDiff: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.headerChainDiff=$headerChainDiff
     """.stripMargin
   )
 

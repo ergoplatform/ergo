@@ -403,16 +403,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           log.debug(s"Application time: ${at - at0}")
 
           val cleared = modifiersCache.cleanOverfull()
-
-          if (cleared.nonEmpty) {
+          // the cache holds sections of every type, so evicted ones are reported under their own type: the
+          // synchronizer resets their delivery status by (id, type), and under another type they stay `Received`
+          if (cleared.isEmpty) {
+            context.system.eventStream.publish(
+              BlockSectionsProcessingCacheUpdate(headersCache.size, modifiersCache.size, head.modifierTypeId -> Seq.empty)
+            )
+          } else {
             log.debug(s"Cleared from cache: ${modifiersCache.size} block sections")
+            cleared.groupBy(_.modifierTypeId).foreach { case (typeId, sections) =>
+              context.system.eventStream.publish(
+                BlockSectionsProcessingCacheUpdate(headersCache.size, modifiersCache.size, typeId -> sections.map(_.id))
+              )
+            }
           }
-          val upd = BlockSectionsProcessingCacheUpdate(
-            headersCache.size,
-            modifiersCache.size,
-            head.modifierTypeId -> cleared.map(_.id)
-          )
-          context.system.eventStream.publish(upd)
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case None =>
           log.debug("None path in processRemoteModifiers")

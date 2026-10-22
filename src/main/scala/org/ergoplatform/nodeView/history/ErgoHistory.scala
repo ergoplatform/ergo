@@ -216,26 +216,28 @@ trait ErgoHistory
     // Keep the header until its sections are removed so a retry can still discover their identifiers.
     hOpt.toSeq.flatMap(_.sectionIds).foldLeft[Try[Unit]](Success(())) {
       case (result, (_, mId)) => result.flatMap { _ =>
-        val removal = Try(historyStorage.remove(Array(validityKey(mId)), Array(mId))).flatten
-        removal match {
-          case Success(_) => log.info(s"Result of removing modifier $mId: " + removal)
-          case Failure(error) =>
-            log.error(s"Failed to remove modifier $mId during history repair", error)
-        }
-        removal
+        removeLogged("modifier", mId)(Array(validityKey(mId)), Array(mId))
       }
     }.flatMap { _ =>
-      val removal = Try(historyStorage.remove(
+      removeLogged("header", headerId)(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
-      )).flatten
-      removal match {
-        case Success(_) => log.info(s"Result of removing header $headerId: " + removal)
-        case Failure(error) =>
-          log.error(s"Failed to remove header $headerId during history repair", error)
-      }
-      removal
+      )
     }
+  }
+
+  // Removes the rows and logs the result; a thrown storage error counts as a Failure.
+  private def removeLogged(kind: String, id: ModifierId)(
+    indicesToRemove: Array[ByteArrayWrapper],
+    idsToRemove: Array[ModifierId]
+  ): Try[Unit] = {
+    val removal = Try(historyStorage.remove(indicesToRemove, idsToRemove)).flatten
+    removal match {
+      case Success(_) => log.info(s"Result of removing $kind $id: $removal")
+      case Failure(error) =>
+        log.error(s"Failed to remove $kind $id during history repair", error)
+    }
+    removal
   }
 
   /**

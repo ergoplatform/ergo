@@ -164,7 +164,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
 
         val failedId = if (failedRemoval == 1) child.sectionIds.head._2 else child.id
         val matching = events.filter(_.getFormattedMessage.contains(s"Failed to remove $kind $failedId"))
-        matching.size shouldBe 1
+        matching should have size 1
         matching.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs f.db.failure
       }
     }
@@ -326,7 +326,7 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     error should be theSameInstanceAs f.db.failure
     error.getSuppressed.toSeq shouldBe Seq(closeError)
     val startupErrors = events.filter(_.getFormattedMessage.startsWith("History repair failed; stop this node."))
-    startupErrors.size shouldBe 1
+    startupErrors should have size 1
     startupErrors.head.getFormattedMessage should include ("keep history/index and history/objects intact")
     startupErrors.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs f.db.failure
   }

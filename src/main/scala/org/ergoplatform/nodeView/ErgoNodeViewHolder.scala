@@ -649,11 +649,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (ErgoState.genesisStateVersion, None, _) =>
         log.info("State and history are both empty on startup")
         Success(stateIn)
-      case (stateId, Some(block), _: UtxoState) if stateId == block.id && missingRecentProofs(block, history) &&
-        stateIn.rollbackVersions.exists(_ == idToVersion(block.parentId)) =>
-        log.info(s"ADProofs of best full block ${block.encodedId} at height ${block.height} are missing " +
-          s"(headers height ${history.headersHeight}), re-applying the block to regenerate them")
-        stateIn.rollbackTo(idToVersion(block.parentId)).flatMap(applyOnStartup(_, Seq(block), history))
+      case (stateId, Some(block), _: UtxoState) if stateId == block.id && missingRecentProofs(block, history) =>
+        val parentVersion = idToVersion(block.parentId)
+        if (stateIn.rollbackVersions.exists(_ == parentVersion)) {
+          log.info(s"ADProofs of best full block ${block.encodedId} at height ${block.height} are missing " +
+            s"(headers height ${history.headersHeight}), re-applying the block to regenerate them")
+          stateIn.rollbackTo(parentVersion).flatMap(applyOnStartup(_, Seq(block), history))
+        } else {
+          log.warn(s"ADProofs of best full block ${block.encodedId} at height ${block.height} are missing, " +
+            "and the state keeps no version of its parent to regenerate them from")
+          Success(stateIn)
+        }
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         Success(stateIn)
@@ -688,16 +694,22 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * the state update, so a crash between the two leaves an applied block without them.
     */
   private def missingRecentProofs(block: ErgoFullBlock, history: ErgoHistory): Boolean =
-    block.adProofs.isEmpty && block.height >= history.headersHeight - settings.nodeSettings.adProofsSuffixLength
+    block.adProofs.isEmpty && UtxoState.withinAdProofsSuffix(block.height, startupTip(history), settings)
 
   /**
-    * Applies blocks to the state on start-up. The headers chain is not marked as synced yet, so `estimatedTip()`
+    * Tip estimate for blocks applied on start-up. The headers chain is not marked as synced yet, so `estimatedTip()`
     * is `None`, and with it a UTXO state generates no ADProofs. The stored headers height is used instead, the
-    * estimate a running node passes. History refuses block sections until the headers chain is synced, so the
-    * generated ADProofs are written to the database directly.
+    * estimate a running node passes. It also decides which re-applied blocks keep undo versions and whether a
+    * snapshot is taken; with `None`, a UTXO state keeps versions for every block and takes no snapshot.
+    */
+  private def startupTip(history: ErgoHistory): Option[Int] = Some(history.headersHeight)
+
+  /**
+    * Applies blocks to the state on start-up, with `startupTip` as the tip estimate. History refuses block
+    * sections until the headers chain is synced, so the generated ADProofs are written to the database directly.
     */
   private def applyOnStartup(initState: State, blocks: Seq[ErgoFullBlock], history: ErgoHistory): Try[State] = {
-    val chainTipOpt = Some(history.headersHeight)
+    val chainTipOpt = startupTip(history)
     blocks.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
       log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")
       acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => storeStartupProofs(history, lm.pmod)))

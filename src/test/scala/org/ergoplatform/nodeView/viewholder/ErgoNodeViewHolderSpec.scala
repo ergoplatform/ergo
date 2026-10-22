@@ -782,9 +782,10 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     * block's ADProofs only after the state update. This builds the state a crash between those writes leaves:
     * the best full block in history has no ADProofs, and the state is at its parent (before the state commit)
     * or at the block itself (after it). On restart the node should regenerate the proofs, so a digest-mode peer
-    * can get the block.
+    * can get the block. With `keepNoParentVersion` (used with `stateCommitted`) the state keeps no undo version
+    * of the block's parent: the node then starts at the block, and the proofs stay missing.
     */
-  private def restartWithoutBestBlockProofs(stateCommitted: Boolean): Unit = {
+  private def restartWithoutBestBlockProofs(stateCommitted: Boolean, keepNoParentVersion: Boolean = false): Unit = {
     val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
       .toSettings
     val utxoSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
@@ -820,6 +821,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
         state.version shouldBe idToVersion(genesis.id)
         if (stateCommitted) {
           state.applyModifier(block, None)(_ => ()).get.version shouldBe idToVersion(block.id)
+          if (keepNoParentVersion) state.store.clean(0)
         }
       } finally state.closeStorage()
 
@@ -828,7 +830,9 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       getCurrentState.version shouldBe idToVersion(block.id)
       val storedProofsId = getModifierById(block.header.ADProofsId).map(_.id)
       stopNodeViewHolder()
-      (storedProofsId, digestBestFullBlockId()) shouldBe ((Some(block.header.ADProofsId), Some(block.id)))
+      val expected: (Option[ModifierId], Option[ModifierId]) =
+        if (keepNoParentVersion) (None, None) else (Some(block.header.ADProofsId), Some(block.id))
+      (storedProofsId, digestBestFullBlockId()) shouldBe expected
     }
   }
 
@@ -838,6 +842,10 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   property("regenerate the best block's ADProofs on restart when the state was updated") {
     restartWithoutBestBlockProofs(stateCommitted = true)
+  }
+
+  property("start at the best block on restart when its ADProofs are missing and no parent version is kept") {
+    restartWithoutBestBlockProofs(stateCommitted = true, keepNoParentVersion = true)
   }
 
   property("require every prepared UTXO snapshot trust signal") {

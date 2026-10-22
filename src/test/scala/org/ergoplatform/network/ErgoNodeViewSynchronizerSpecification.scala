@@ -2029,43 +2029,21 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       txIdsRequestedFromAny(Set(peer), duration)
 
     /** Transaction ids the node requested from any of `peers` via `RequestModifier` during `duration` */
-    def txIdsRequestedFromAny(peers: Set[ConnectedPeer], duration: FiniteDuration): Seq[scorex.util.ModifierId] = {
-      val deadline = System.currentTimeMillis() + duration.toMillis
-      val requested = scala.collection.mutable.ArrayBuffer[scorex.util.ModifierId]()
-      while (System.currentTimeMillis() < deadline) {
-        ncProbe.receiveOne(100.millis) match {
-          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
-            stn.sendingStrategy match {
-              case SendToPeer(p) if peers.contains(p) =>
-                val data = stn.message.data.get.asInstanceOf[InvData]
-                if (data.typeId == ErgoTransaction.modifierTypeId) requested ++= data.ids
-              case _ => // a request to another peer, ignore
-            }
-          case _ => // not a request, ignore
-        }
+    def txIdsRequestedFromAny(peers: Set[ConnectedPeer], duration: FiniteDuration): Seq[scorex.util.ModifierId] =
+      txRequestsTo(peers, ncProbe.receiveWhile(duration) { case m => m }).flatten
+
+    /** Id batches of the `RequestModifier`s for transactions among `messages` sent to any of `peers` */
+    private def txRequestsTo(peers: Set[ConnectedPeer], messages: Seq[AnyRef]): Seq[Seq[scorex.util.ModifierId]] =
+      messages.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
+          stn.sendingStrategy -> stn.message.data.get.asInstanceOf[InvData]
+      }.collect {
+        case (SendToPeer(p), data) if peers.contains(p) && data.typeId == ErgoTransaction.modifierTypeId => data.ids
       }
-      requested
-    }
 
     /** `RequestModifier`s for transactions sent to `peer` so far, one id batch per request (drains `ncProbe`) */
-    def txRequestsSentTo(peer: ConnectedPeer): Seq[Seq[scorex.util.ModifierId]] = {
-      val requests = scala.collection.mutable.ArrayBuffer[Seq[scorex.util.ModifierId]]()
-      var msg = ncProbe.receiveOne(50.millis)
-      while (msg != null) {
-        msg match {
-          case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
-            stn.sendingStrategy match {
-              case SendToPeer(p) if p == peer =>
-                val data = stn.message.data.get.asInstanceOf[InvData]
-                if (data.typeId == ErgoTransaction.modifierTypeId) requests += data.ids
-              case _ => // a request to another peer, ignore
-            }
-          case _ => // not a request, ignore
-        }
-        msg = ncProbe.receiveOne(50.millis)
-      }
-      requests
-    }
+    def txRequestsSentTo(peer: ConnectedPeer): Seq[Seq[scorex.util.ModifierId]] =
+      txRequestsTo(Set(peer), ncProbe.receiveWhile(max = 10.seconds, idle = 50.millis) { case m => m })
   }
 
   private def withDeclinedTransactionsFixture(testCode: DeclinedTransactionsFixture => Any): Unit = {
@@ -2679,10 +2657,9 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(relay))
 
       // the first transaction of the delivery is being processed, the rest is cached
-      val processed = vhProbe.fishForMessage(5.seconds) {
-        case _: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => true
-        case _ => false
-      }.asInstanceOf[ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote].unconfirmedTx.id
+      val processed = vhProbe.fishForSpecificMessage(5.seconds) {
+        case t: ErgoNodeViewHolder.ReceivableMessages.TransactionFromRemote => t.unconfirmedTx.id
+      }
       invTxAndExpectRequest(honest, dummyDeclinedTx())
       synchronizerTestRef.underlyingActor.txProcessingCacheSize shouldBe txs.size - 1
 

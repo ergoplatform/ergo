@@ -10,6 +10,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
@@ -775,6 +776,77 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       sourceState.closeStorage()
     }
+  }
+
+  /**
+    * A UTXO node writes the best full block pointer together with the block's last mandatory section, and the
+    * block's ADProofs only after the state update. This builds the state a crash between those writes leaves:
+    * the best full block in history has no ADProofs, and the state is at its parent (before the state commit)
+    * or at the block itself (after it). On restart the node should regenerate the proofs, so a digest-mode peer
+    * can get the block. With `keepNoParentVersion` (used with `stateCommitted`) the state keeps no undo version
+    * of the block's parent: the node then starts at the block, and the proofs stay missing.
+    */
+  private def restartWithoutBestBlockProofs(stateCommitted: Boolean, keepNoParentVersion: Boolean = false): Unit = {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val utxoSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
+
+    new NodeViewFixture(utxoSettings, parameters).apply { fixture =>
+      import fixture._
+
+      def digestBestFullBlockId(): Option[ModifierId] = {
+        val digestSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Digest))
+        val digestHistory = ErgoHistory.readOrGenerate(digestSettings)(null)
+        try digestHistory.bestFullBlockOpt.map(_.id) finally digestHistory.closeStorage()
+      }
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+      val block = validFullBlock(Some(genesis), wusAfterGenesis)
+      applyBlock(genesis) shouldBe 'success
+      getModifierById(genesis.header.ADProofsId) shouldBe genesis.adProofs
+      stopNodeViewHolder()
+      digestBestFullBlockId() shouldBe Some(genesis.id)
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        history.setHeadersChainSynced()
+        Seq(block.header, block.blockTransactions, block.extension).map(history.append).filter(_.isFailure) shouldBe empty
+        history.bestFullBlockOpt.map(_.id) shouldBe Some(block.id)
+        history.modifierById(block.header.ADProofsId) shouldBe None
+      } finally history.closeStorage()
+
+      val state = ErgoState.readOrGenerate(settings).asInstanceOf[UtxoState]
+      try {
+        state.version shouldBe idToVersion(genesis.id)
+        if (stateCommitted) {
+          state.applyModifier(block, None)(_ => ()).get.version shouldBe idToVersion(block.id)
+          if (keepNoParentVersion) state.store.clean(0)
+        }
+      } finally state.closeStorage()
+
+      startNodeViewHolder()
+      getBestFullBlockOpt.map(_.id) shouldBe Some(block.id)
+      getCurrentState.version shouldBe idToVersion(block.id)
+      val storedProofsId = getModifierById(block.header.ADProofsId).map(_.id)
+      stopNodeViewHolder()
+      val expected: (Option[ModifierId], Option[ModifierId]) =
+        if (keepNoParentVersion) (None, None) else (Some(block.header.ADProofsId), Some(block.id))
+      (storedProofsId, digestBestFullBlockId()) shouldBe expected
+    }
+  }
+
+  property("regenerate the best block's ADProofs on restart when the state was not updated") {
+    restartWithoutBestBlockProofs(stateCommitted = false)
+  }
+
+  property("regenerate the best block's ADProofs on restart when the state was updated") {
+    restartWithoutBestBlockProofs(stateCommitted = true)
+  }
+
+  property("start at the best block on restart when its ADProofs are missing and no parent version is kept") {
+    restartWithoutBestBlockProofs(stateCommitted = true, keepNoParentVersion = true)
   }
 
   property("require every prepared UTXO snapshot trust signal") {

@@ -28,9 +28,8 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
         if (scala.util.Properties.isWin) "java.exe" else "java")
       .toString
     val output = new java.lang.StringBuffer
-    val processLogger = ProcessLogger(
-      line => { output.append(line).append(System.lineSeparator()); () },
-      line => { output.append(line).append(System.lineSeparator()); () })
+    val processLogger =
+      ProcessLogger(line => { output.append(line).append(System.lineSeparator()); () })
     val exitCode = Process(Seq(
       javaExecutable,
       "-cp",

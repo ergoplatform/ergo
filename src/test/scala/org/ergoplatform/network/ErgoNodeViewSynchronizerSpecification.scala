@@ -2686,4 +2686,50 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  /**
+    * While a re-request's tail waits in the processing cache, the peer (within its budget) announces and delivers
+    * another transaction through the ordinary inv path. Both paths count the peer's transactions in processing against
+    * its budget, so between two blocks no more of them are processed than the budget admits at the floor charge.
+    */
+  property("NodeViewSynchronizer: a re-request's cached tail and an inv delivery together stay within the peer's budget") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val relay = newPeer
+      val budgetInDeclines = PeerBudgetBetweenBlocks / MinDeclinedTxCost
+
+      declineTxs(relay, count = DeclinesToThrottlePeer, cost = 1000)
+      val refused = Seq.fill(20)(dummyDeclinedTx())
+      val byId = refused.map(tx => tx.id -> tx).toMap
+      invTxIds(relay, refused.map(_.id))
+
+      synchronizerRef ! RemoteBlockApplied(declinedHistory.bestHeaderOpt.get, Seq.empty)
+      val first = txRequestsSentTo(relay)
+      first.size shouldBe 1
+
+      // the relay spends its budget but for what the re-request carries
+      val spent = budgetInDeclines - first.head.size
+      declineTxs(relay, count = spent, cost = 1000)
+
+      // the re-request is delivered: its first transaction is processed, the rest is cached
+      val modData = ModifiersData(ErgoTransaction.modifierTypeId, first.head.map(id => id -> byId(id).bytes).toMap)
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(relay))
+
+      // the relay, within its budget, announces a new transaction, is asked for it and delivers it
+      val fresh = dummyDeclinedTx()
+      invTxAndExpectRequest(relay, fresh)
+      val freshData = ModifiersData(ErgoTransaction.modifierTypeId, Map(fresh.id -> fresh.bytes))
+      synchronizerRef ! Message(ModifiersSpec, Left(ModifiersSpec.toBytes(freshData)), Some(relay))
+
+      // the mempool declines every transaction forwarded for processing, at the cheapest check, until none is
+      def declineForwarded(): Seq[UnconfirmedTransaction] = {
+        val forwarded = txsForwardedToMempool()
+        forwarded.foreach(utx => synchronizerRef ! DeclinedTransaction(utx.withCost(1000)))
+        if (forwarded.isEmpty) forwarded else forwarded ++ declineForwarded()
+      }
+
+      spent + declineForwarded().count(_.source.contains(relay)) should be <= budgetInDeclines
+    }
+  }
+
 }

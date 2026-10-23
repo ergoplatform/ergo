@@ -208,25 +208,36 @@ trait ErgoHistory
   /**
     * Remove header, corresponding block parts, and corresponding indexes from storage and caches
     * @param headerId - header id
-    * @return
+    * @return Success after every removal, or the first removal failure
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = historyStorage.modifierById(headerId).collect { case h: Header if h.id == headerId => h }
-      val hRes = historyStorage.remove(
+    historyStorage.modifierById(headerId).collect { case h: Header if h.id == headerId => h }
+  }.flatMap { hOpt =>
+    // Keep the header until its sections are removed so a retry can still discover their identifiers.
+    hOpt.toSeq.flatMap(_.sectionIds).foldLeft[Try[Unit]](Success(())) {
+      case (result, (_, mId)) => result.flatMap { _ =>
+        removeLogged("modifier", mId)(Array(validityKey(mId)), Array(mId))
+      }
+    }.flatMap { _ =>
+      removeLogged("header", headerId)(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
       )
-    log.info(s"Result of removing header $headerId: " + hRes)
-
-    hOpt.foreach { h =>
-      h.sectionIds.foreach { case (_, mId) =>
-        val mRes = historyStorage.remove(
-          indicesToRemove = Array(validityKey(mId)),
-          idsToRemove = Array(mId)
-        )
-        log.info(s"Result of removing modifier $mId: " + mRes)
-      }
     }
+  }
+
+  // Removes the rows and logs the result; a thrown storage error counts as a Failure.
+  private def removeLogged(kind: String, id: ModifierId)(
+    indicesToRemove: Array[ByteArrayWrapper],
+    idsToRemove: Array[ModifierId]
+  ): Try[Unit] = {
+    val removal = Try(historyStorage.remove(indicesToRemove, idsToRemove)).flatten
+    removal match {
+      case Success(_) => log.info(s"Result of removing $kind $id: $removal")
+      case Failure(error) =>
+        log.error(s"Failed to remove $kind $id during history repair", error)
+    }
+    removal
   }
 
   /**
@@ -285,7 +296,9 @@ object ErgoHistory extends ScorexLogging {
 
   // A retained alternative fork may continue above the selected full-block tip.
   // Keep a continuation only when it has a readable, matching header and is not invalid.
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
+  // Success(false) means no repair was needed; Success(true) means all removals completed.
+  // Failure preserves the first error; the height index is removed only after all headers are forgotten.
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Try[Boolean] = Try(history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
@@ -302,23 +315,26 @@ object ErgoHistory extends ScorexLogging {
 
     if (bestHeaderHeight == bestFullBlockHeight && removableContinuations) {
       log.warn("Found invalid or unreadable continuation, clearing it...")
-      // Iterator.toSeq is a lazy Stream on Scala 2.12; force every deletion before dropping the row.
-      afterHeaders.foreach { hId =>
-        history.forgetHeader(hId)
-      }
-      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
-      true
+      afterHeaders.foldLeft[Try[Unit]](Success(())) { (result, hId) =>
+        result.flatMap(_ => history.forgetHeader(hId))
+      }.flatMap { _ =>
+        history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
+      }.map(_ => true)
     } else {
-      false
+      Success(false)
     }
-  }
+  }).flatten
 
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory =
+    readOrGenerate(ergoSettings, HistoryStorage(ergoSettings))
+
   @nowarn("cat=unused")
-  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    var db = HistoryStorage(ergoSettings)
+  private[history] def readOrGenerate(ergoSettings: ErgoSettings,
+                                    storage: HistoryStorage)(implicit context: ActorContext): ErgoHistory = {
+    var db = storage
 
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
@@ -517,14 +533,14 @@ object ErgoHistory extends ScorexLogging {
         }
     }
 
-    repairIfNeeded(history)
-    history.repairIncompleteBestFullBlock() match {
+    // A failed repair closes the store and rethrows its error, which stops the start-up.
+    def stopOnFailure(step: String, result: Try[_]): Unit = result match {
       case Failure(error) =>
         Try(history.closeStorage()).failed.foreach { closeError =>
           if (closeError ne error) error.addSuppressed(closeError)
         }
         log.error(
-          "Best full block repair failed; stop this node. Operator recovery: " +
+          s"$step failed; stop this node. Operator recovery: " +
             "inspect the error and correct its cause (disk space, permissions, " +
             "or open handles); keep history/index and history/objects intact, " +
             "then restart to retry.",
@@ -532,6 +548,9 @@ object ErgoHistory extends ScorexLogging {
         throw error
       case Success(_) =>
     }
+
+    stopOnFailure("History repair", repairIfNeeded(history))
+    stopOnFailure("Best full block repair", history.repairIncompleteBestFullBlock())
 
     // If the node is restarted in the middle of UTXO set snapshot bootstrapping (headers are
     // already persisted, but the snapshot was not applied yet), the headers chain is already

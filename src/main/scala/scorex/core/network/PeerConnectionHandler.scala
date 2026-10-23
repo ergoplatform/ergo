@@ -12,6 +12,7 @@ import org.ergoplatform.network.message.MessageConstants.{
   MaxMessageSize
 }
 import org.ergoplatform.network.message.MessageSerializer
+import org.ergoplatform.network.message.MessageSerializer.UnknownMessageCodeException
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import org.ergoplatform.settings.ScorexSettings
 import scorex.core.app.ScorexContext
@@ -51,6 +52,8 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   private var handshakeTimeoutCancellableOpt: Option[Cancellable] = None
 
   private var chunksBuffer: ByteString = CompactByteString.empty
+
+  private var loggedUnknownMessageCodes: Set[Byte] = Set.empty
 
   private var outMessagesBuffer: TreeMap[Long, ByteString] = TreeMap.empty
 
@@ -213,6 +216,14 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
             chunksBuffer = chunksBuffer.drop(message.messageLength)
             process()
           case Success(None) =>
+          case Failure(UnknownMessageCodeException(code, messageLength)) =>
+            if (!loggedUnknownMessageCodes.contains(code)) {
+              val peerVersion = selfPeer.flatMap(_.peerInfo).map(_.peerSpec.protocolVersion.toString).getOrElse("unknown")
+              log.info(s"Skipping unsupported message code $code from $connectionId, protocol version $peerVersion")
+              loggedUnknownMessageCodes += code
+            }
+            chunksBuffer = chunksBuffer.drop(messageLength)
+            process()
           case Failure(e) =>
             e match {
               //peer is doing bad things, ban it
@@ -222,7 +233,8 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
                 networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
               //non-malicious corruptions
               case _ =>
-                log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}")
+                log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}, closing connection")
+                self ! CloseConnection
             }
         }
       }

@@ -236,7 +236,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
       if (nextBlockHeight == blockHeight || rescan) {
-        val newState =
+        val (newState, scanFailed) =
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
               val operation = if (rescan) "rescanning" else "scanning"
@@ -245,19 +245,22 @@ class ErgoWalletActor(settings: ErgoSettings,
                 case Failure(ex) =>
                   val errorMsg = s"Block ${block.id} $operation at height $blockHeight failed : ${ex.getMessage}"
                   log.error(errorMsg, ex)
-                  state.copy(error = Some(errorMsg))
+                  (state.copy(error = Some(errorMsg)), true)
                 case Success(updatedState) =>
-                  updatedState
+                  (updatedState, false)
               }
             case None =>
-              state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
+              (state, false) // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
-        context.become(loadedWallet(newState))
-        if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1, rescan)
-        } else if (rescan) {
-          log.info(s"Rescanning finished at height $blockHeight")
-          context.become(loadedWallet(newState.copy(rescanInProgress = false)))
+        val nextState = if (scanFailed && rescan) newState.copy(rescanInProgress = false) else newState
+        context.become(loadedWallet(nextState))
+        if (!scanFailed) {
+          if (blockHeight < nextState.fullHeight) {
+            self ! ScanInThePast(blockHeight + 1, rescan)
+          } else if (rescan) {
+            log.info(s"Rescanning finished at height $blockHeight")
+            context.become(loadedWallet(nextState.copy(rescanInProgress = false)))
+          }
         }
       }
 

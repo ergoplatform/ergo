@@ -282,6 +282,41 @@ class ErgoWalletServiceSpec
     }
   }
 
+  property("wallet should not spend or list off-chain boxes tracked by external scans only") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val customScanId = ScanId @@ 42.toShort
+        val emptyTx = ErgoLikeTransaction(IndexedSeq(), IndexedSeq())
+        val walletBox =
+          TrackedBox(emptyTx, creationOutIndex = 0, None, testBox(1000000000L, TrueTree, 0), Set(PaymentsScanId))
+        val customScanBox =
+          TrackedBox(emptyTx, creationOutIndex = 1, None, testBox(2000000000L, TrueTree, 0, boxIndex = 1), Set(customScanId))
+        val sharedBox =
+          TrackedBox(emptyTx, creationOutIndex = 2, None, testBox(3000000000L, TrueTree, 0, boxIndex = 2), Set(PaymentsScanId, customScanId))
+        val offChainRegistry = OffChainRegistry.empty.copy(offChainBoxes = Seq(walletBox, customScanBox, sharedBox))
+        val walletState = initialState(store, versionedStore).copy(offChainRegistry = offChainRegistry)
+        val walletService = new ErgoWalletServiceImpl(settings)
+        val walletBoxIds = Seq(walletBox.boxId, sharedBox.boxId)
+
+        // inputs of /wallet/payment/send and /wallet/boxes/collect, and of /wallet/transaction/send,
+        // /wallet/transaction/generate and /wallet/transaction/generateUnsigned when no inputs are given
+        walletState.getBoxesToSpend.map(_.boxId) should contain theSameElementsAs walletBoxIds
+
+        // /wallet/boxes/unspent with minConfirmations = -1
+        walletService.getWalletBoxes(walletState, unspentOnly = true, considerUnconfirmed = true)
+          .map(_.trackedBox.boxId) should contain theSameElementsAs walletBoxIds
+
+        // /wallet/boxes with minConfirmations = -1
+        walletService.getWalletBoxes(walletState, unspentOnly = false, considerUnconfirmed = true)
+          .map(_.trackedBox.boxId) should contain theSameElementsAs walletBoxIds
+
+        // the external scan still sees its own box and the shared one
+        walletService.getScanUnspentBoxes(walletState, customScanId, considerUnconfirmed = true, minHeight = 0, maxHeight = Int.MaxValue)
+          .map(_.trackedBox.boxId) should contain theSameElementsAs Seq(customScanBox.boxId, sharedBox.boxId)
+      }
+    }
+  }
+
   property("it should generate signed and unsigned transaction") {
     withVersionedStore(2) { versionedStore =>
       withStore { store =>

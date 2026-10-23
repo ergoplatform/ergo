@@ -38,7 +38,6 @@ import org.ergoplatform.serialization.{ErgoSerializer, ManifestSerializer, Subtr
 import scorex.crypto.authds.avltree.batch.VersionedLDBAVLStorage.splitDigest
 import sigma.VersionContext
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -838,18 +837,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
-    log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
-    log.debug("Modifier ids: " + modifiers.keys)
-
-    lastModifierGotTime = System.currentTimeMillis()
-
-    // filter out non-requested modifiers
-    val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
-
-    if (typeId == ErgoTransaction.modifierTypeId) {
-      transactionsFromRemote(requestedModifiers, mp, remote)
+    if (modifiers.isEmpty) {
+      // e.g. an older node answering a request for a section too big for its message limit.
+      // Not delivery progress: don't touch lastModifierGotTime, so the delivery tracker
+      // still counts the missing objects as not delivered and penalizes/re-requests as usual.
+      log.info(s"Got an empty Modifiers message of type $typeId from remote connected peer: ${remote.connectionId}")
     } else {
-      blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
+      log.debug("Modifier ids: " + modifiers.keys)
+
+      lastModifierGotTime = System.currentTimeMillis()
+
+      // filter out non-requested modifiers
+      val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
+
+      if (typeId == ErgoTransaction.modifierTypeId) {
+        transactionsFromRemote(requestedModifiers, mp, remote)
+      } else {
+        blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      }
     }
   }
 
@@ -1268,13 +1274,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   //other node asking for objects by their ids
   protected def modifiersReq(hr: ErgoHistory, mp: ErgoMemPool, invData: InvData, remote: ConnectedPeer): Unit = {
-      val objs: Seq[(ModifierId, Array[Byte])] = invData.typeId match {
+      // (id, bytes, served from mined-block memory)
+      val found: Seq[(ModifierId, Array[Byte], Boolean)] = invData.typeId match {
         case typeId: NetworkObjectTypeId.Value if typeId == ErgoTransaction.modifierTypeId =>
           mp.getAll(invData.ids).map { unconfirmedTx =>
-            unconfirmedTx.transaction.id -> unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes)
+            (unconfirmedTx.transaction.id,
+              unconfirmedTx.transactionBytes.getOrElse(unconfirmedTx.transaction.bytes),
+              false)
           }
         case expectedTypeId: NetworkObjectTypeId.Value =>
-          val found = invData.ids.flatMap { id =>
+          invData.ids.flatMap { id =>
             minedModifier(id).map(true -> _).orElse(hr.modifierTypeAndBytesById(id).map(false -> _)).flatMap {
               case (fromMinedMemory, (mTypeId, bytes)) =>
                 if (mTypeId == expectedTypeId) {
@@ -1285,39 +1294,36 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 }
             }
           }
-          val servedFromMemory = found.count { case (_, _, fromMinedMemory) => fromMinedMemory }
-          if (servedFromMemory > 0) {
-            log.info(s"Served $servedFromMemory of ${invData.ids.length} requested ids of type $expectedTypeId " +
-                     s"from mined-block memory to $remote")
-          }
-          found.map { case (id, bytes, _) => id -> bytes }
       }
-
-      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
-                s"sending ${objs.length} modifiers ${idsToString(invData.typeId, objs.map(_._1))} ")
-
-    @tailrec
-    def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
-      var size = 5 //message type id + message size
-      var batch = mods.takeWhile { case (_, modBytes) =>
-        size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
-        size < ModifiersSpec.maxMessageSize
-      }
-      if (batch.isEmpty) {
-        // send modifier anyway
-        val ho = mods.headOption
-        batch = ho.toSeq
-        log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
-      }
-      remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
-      val remaining = mods.drop(batch.length)
-      if (remaining.nonEmpty) {
-        sendByParts(remaining)
-      }
-    }
+      val objs: Seq[(ModifierId, Array[Byte])] = found.map { case (id, bytes, _) => id -> bytes }
 
     if (objs.nonEmpty) {
-      sendByParts(objs)
+      val (batches, skipped) = ModifiersSpec.planBatches(invData.typeId, objs, LargeAdProofsFilter.condition(remote))
+      skipped.foreach { case (id, length) =>
+        // never send a message the peer can't parse: an empty or oversized Modifiers message
+        // would get this node penalized as malicious
+        log.warn(s"Not sending modifier $id of type ${invData.typeId} and size $length " +
+          s"to ${remote.connectionId}: too big for this peer")
+      }
+      // log only what is actually sent, after skipping
+      val sentIds = batches.flatten.map(_._1)
+      val sentIdSet = sentIds.toSet
+      val servedFromMemory = found.count { case (id, _, fromMinedMemory) => fromMinedMemory && sentIdSet.contains(id) }
+      if (servedFromMemory > 0) {
+        log.info(s"Served $servedFromMemory of ${invData.ids.length} requested ids of type ${invData.typeId} " +
+                 s"from mined-block memory to $remote")
+      }
+      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, " +
+                s"sending ${sentIds.length} modifiers ${idsToString(invData.typeId, sentIds)} ")
+      batches.foreach { batch =>
+        if (batch.size == 1 && ModifiersSpec.singleModifierMessageSize(batch.head._2.length) >= ModifiersSpec.maxMessageSize) {
+          log.info(s"Sending big modifier ${batch.head._1} of type ${invData.typeId} and size ${batch.head._2.length} " +
+            s"to ${remote.connectionId}")
+        }
+        remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+      }
+    } else {
+      log.debug(s"Requested ${invData.ids.length} modifiers ${idsToString(invData)}, sending 0 modifiers")
     }
   }
 

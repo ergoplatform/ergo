@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import org.ergoplatform.network.peer.LargeAdProofsPeerFeature
 import scorex.core.network.ConnectedPeer
 
 /**
@@ -69,6 +70,20 @@ object UtxoSetNetworkingFilter extends VersionBasedPeerFilteringRule {
     // If neighbour version is >= `UtxoSnapsnotActivationVersion`, the neighbour supports utxo snapshots exchange
     version.compare(Version.UtxoSnapsnotActivationVersion) >= 0
   }
+
+}
+
+/**
+  * Filter for peers able to parse a Modifiers message with a single AD proofs section bigger than
+  * `ModifiersSpec.maxMsgSizeWithReserve`, i.e. peers announcing `LargeAdProofsPeerFeature` in the handshake.
+  * Older peers reject such a message as malformed and penalize the sender. A capability flag is used rather
+  * than a version threshold, as version numbers don't reliably tell which builds contain the change.
+  */
+object LargeAdProofsFilter extends PeerFilteringRule {
+
+  def condition(spec: PeerSpec): Boolean = spec.features.exists(_.isInstanceOf[LargeAdProofsPeerFeature])
+
+  override def condition(peer: ConnectedPeer): Boolean = peer.peerInfo.exists(pi => condition(pi.peerSpec))
 
 }
 

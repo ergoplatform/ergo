@@ -11,6 +11,7 @@ import scorex.util.serialization.{Reader, Writer}
   */
 object SubtreeSerializer extends ErgoSerializer[BatchAVLProverSubtree[DigestType]] with ScorexLogging {
   private val nodeSerializer = VersionedLDBAVLStorage.noStoreSerializer
+  private val MaxSubtreeNodeLevels = 127 // max AVL+ tree height
 
   override def serialize(subtree: BatchAVLProverSubtree[DigestType], w: Writer): Unit = {
     def loop(node: ProverNodes[DigestType]): Unit = {
@@ -29,17 +30,18 @@ object SubtreeSerializer extends ErgoSerializer[BatchAVLProverSubtree[DigestType
   }
 
   override def parse(r: Reader): BatchAVLProverSubtree[DigestType] = {
-    def loop(): ProverNodes[DigestType] = {
+    def loop(level: Int): ProverNodes[DigestType] = {
+      require(level <= MaxSubtreeNodeLevels, "Snapshot subtree exceeds maximum AVL height")
       val node = nodeSerializer.parse(r)
       node match {
         case _: ProverLeaf[DigestType] => node
         case i: InternalProverNode[DigestType] =>
-          val left = loop()
-          val right = loop()
+          val left = loop(level + 1)
+          val right = loop(level + 1)
           i.getNew(newLeft = left, newRight = right)
       }
     }
-    val tree = loop()
+    val tree = loop(level = 0)
     new BatchAVLProverSubtree[DigestType](tree)
   }
 

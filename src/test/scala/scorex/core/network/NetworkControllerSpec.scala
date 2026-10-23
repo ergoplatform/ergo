@@ -132,7 +132,10 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       tcpManagerProbe: TestProbe,
       remoteAddress: InetSocketAddress
     ): Unit = {
-      val localAddress = settings.scorexSettings.network.bindAddress
+      val localAddress = new InetSocketAddress(
+        settings.scorexSettings.network.bindAddress.getAddress,
+        55000
+      )
 
       val peerInfo = PeerInfo(
         defaultPeerSpec.copy(declaredAddress = Some(remoteAddress)),

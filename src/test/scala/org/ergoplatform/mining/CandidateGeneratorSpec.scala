@@ -1613,4 +1613,78 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "reject an ordering solution that fits neither current nor previous candidate" in new TestKit(
+    ActorSystem()
+  ) {
+    val validNonce = Array.fill(8)(1: Byte)
+    val invalidNonce = Array.fill(8)(2: Byte)
+    val selectivePow = new DefaultFakePowScheme(
+      defaultSettings.chainSettings.powScheme.k,
+      defaultSettings.chainSettings.powScheme.n
+    ) {
+      override def validate(header: Header): Try[Unit] =
+        if (java.util.Arrays.equals(header.powSolution.n, validNonce)) scala.util.Success(())
+        else Failure(new Exception("Invalid PoW solution"))
+    }
+    val settings = defaultSettings.copy(
+      directory = s"${defaultSettings.directory}-prev-candidate-pow-${System.currentTimeMillis()}",
+      chainSettings = defaultSettings.chainSettings.copy(powScheme = selectivePow)
+    )
+
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val newBlockMinedProbe = new TestProbe(system)
+    system.eventStream.subscribe(
+      newBlockMinedProbe.ref,
+      classOf[org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.NewBlockMined]
+    )
+
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        settings
+      )
+
+    // 1. Initial candidate -> cachedCandidate = Some(c1), cachedPreviousCandidate = None
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), replyProbe.ref)
+    val firstCandidate = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // 2. Forced regeneration -> cachedCandidate = Some(c2), cachedPreviousCandidate = Some(c1)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), replyProbe.ref)
+    replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(_: Candidate) => ()
+    }
+
+    // 3. Submit an ordering solution whose nonce fits neither candidate
+    val sampleBlock = selectivePow
+      .proveCandidate(firstCandidate.candidateBlock, defaultMinerSecret.w, 0, 1000, firstCandidate.parameters) match {
+      case org.ergoplatform.OrderingBlockFound(b) => b
+      case org.ergoplatform.InputBlockFound(b)    => b
+      case _ => throw new RuntimeException("Unexpected proveCandidate result")
+    }
+    val badSolution = new org.ergoplatform.AutolykosSolution(
+      sampleBlock.header.powSolution.pk,
+      sampleBlock.header.powSolution.w,
+      invalidNonce,
+      sampleBlock.header.powSolution.d
+    )
+
+    candidateGenerator.tell(OrderingSolutionFound(badSolution), replyProbe.ref)
+    replyProbe.expectMsgPF(blockValidationDelay) {
+      case r: StatusReply[_] if r.isError => ()
+    }
+
+    viewHolderProbe.expectNoMessage(300.millis)
+    newBlockMinedProbe.expectNoMessage(300.millis)
+
+    system.terminate()
+  }
+
 }

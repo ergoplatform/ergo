@@ -252,7 +252,11 @@ class CandidateGenerator(
               }
               .orElse {
                 log.info(s"Using previous candidate as a solution: ${state.cachedPreviousCandidate}")
-                state.cachedPreviousCandidate.map(c => c -> completeOrderingBlock(c.candidateBlock, solution))
+                state.cachedPreviousCandidate
+                  .map(c => c -> completeOrderingBlock(c.candidateBlock, solution))
+                  .filter { case (_, block) =>
+                    ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess
+                  }
               }
 
             candidateAndBlock match {

@@ -246,7 +246,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
   }
 
   private def getBoxByIndex(index: Long)(history: ErgoHistoryReader): Option[IndexedErgoBox] =
-    getBoxById(history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(index))).get.m)(history)
+    if (index <= 0) None else NumericBoxIndex.getBoxByNumber(history, index)
 
   private def getBoxByIndexF(index: Long): Future[Option[IndexedErgoBox]] =
     getHistory.map { history =>
@@ -370,16 +370,15 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   private def getBoxRange(offset: Int, limit: Int): Future[Seq[ModifierId]] =
     getHistory.map { history =>
-      val base: Long = getIndex(GlobalBoxIndexKey, history).getLong - offset
-      val boxIds: Array[ModifierId] = new Array[ModifierId](limit)
-      cfor(0)(_ < limit, _ + 1) { i =>
-        boxIds(i) = history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(base - limit + i))).get.m
-      }
-      boxIds.reverse
+      val last = getIndex(GlobalBoxIndexKey, history).getLong - 1L - offset.toLong
+      val count = math.min(limit.toLong, math.max(0L, last)).toInt
+      (0 until count).flatMap(i => NumericBoxIndex.getBoxByNumber(history, last - i).map(_.id))
     }
 
   private def getBoxRangeR: Route = (pathPrefix("box" / "range") & paging) { (offset, limit) =>
-    if(limit > MaxItems) {
+    if (offset < 0 || limit < 0) {
+      BadRequest("Offset and limit must be non-negative")
+    } else if(limit > MaxItems) {
       BadRequest(s"No more than $MaxItems boxes can be requested")
     }else {
       ApiResponse(getBoxRange(offset, limit))

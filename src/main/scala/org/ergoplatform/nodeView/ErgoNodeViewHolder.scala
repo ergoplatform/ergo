@@ -74,7 +74,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   } catch {
     case NonFatal(ex) =>
       log.error("Failed to initialize node view, shutting down the node. " +
-        "Try to resync from genesis manually", ex)
+        "Follow the recovery steps logged above, if any; " +
+        "otherwise check the error before removing any data", ex)
       // Rethrowing stops the Holder; coordinated shutdown also stops the rest of the node.
       ErgoApp.shutdownSystem()(context.system)
       throw ex

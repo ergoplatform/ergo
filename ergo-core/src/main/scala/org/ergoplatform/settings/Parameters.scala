@@ -14,6 +14,7 @@ import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandida
 import Extension.SystemParametersPrefix
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.sdk.BlockchainParameters
+import scorex.util.ScorexLogging
 
 import scala.annotation.nowarn
 
@@ -23,7 +24,7 @@ import scala.annotation.nowarn
 class Parameters(val height: Height,
                  val parametersTable: Map[Byte, Int],
                  val proposedUpdate: ErgoValidationSettingsUpdate)
-  extends BlockchainParameters {
+  extends BlockchainParameters with ScorexLogging {
 
   import Parameters._
 
@@ -192,9 +193,10 @@ class Parameters(val height: Height,
       if (paramId == Parameters.SoftFork) {
         voteForFork
       } else if (paramId > 0) {
-        ownTargets.get(paramId).exists(_ > parametersTable(paramId))
+        ownTargets.get(paramId).exists(v => parametersTable.get(paramId).exists(v > _))
       } else if (paramId < 0) {
-        ownTargets.get((-paramId).toByte).exists(_ < parametersTable((-paramId).toByte))
+        val id = (-paramId).toByte
+        ownTargets.get(id).exists(v => parametersTable.get(id).exists(v < _))
       } else {
         false
       }
@@ -206,12 +208,18 @@ class Parameters(val height: Height,
     val vs = ownTargets.flatMap { case (paramId, value) =>
       if (paramId == SoftFork) {
         None
-      } else if (value > parametersTable(paramId)) {
-        Some(paramId)
-      } else if (value < parametersTable(paramId)) {
-        Some((-paramId).toByte)
       } else {
-        None
+        parametersTable.get(paramId) match {
+          case Some(currentValue) if value > currentValue =>
+            Some(paramId)
+          case Some(currentValue) if value < currentValue =>
+            Some((-paramId).toByte)
+          case Some(_) =>
+            None
+          case None =>
+            log.warn(s"Parameter $paramId is missing from the parameters table, skipping voting target $value")
+            None
+        }
       }
     }.take(ParamVotesCount).toArray
     padVotes(if (voteForFork) vs :+ SoftFork else vs)

@@ -20,7 +20,9 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
   private def runBootstrapProbe(stateType: String,
                                 utxoBootstrap: Boolean,
                                 verifyTransactions: Boolean,
-                                nipopowBootstrap: Boolean): (Int, String) = {
+                                nipopowBootstrap: Boolean,
+                                mining: Boolean = false,
+                                votingIds: String = ""): (Int, String) = {
     val javaExecutable = Paths
       .get(
         System.getProperty("java.home"),
@@ -38,7 +40,9 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
       stateType,
       utxoBootstrap.toString,
       verifyTransactions.toString,
-      nipopowBootstrap.toString
+      nipopowBootstrap.toString,
+      mining.toString,
+      votingIds
     )).!(processLogger)
     exitCode -> output.toString
   }
@@ -375,6 +379,52 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     }
   }
 
+  property("VotingTargets and consistentSettings validate voteable parameter ids when mining") {
+    val validConfig = ConfigFactory
+      .parseString(
+        """
+          |ergo.node.mining = true
+          |ergo.voting {
+          |  1 = 1000000
+          |  9 = 40
+          |  120 = 1
+          |  "rulesToDisable" = [215, 409]
+          |}
+        """.stripMargin
+      )
+      .withFallback(ConfigFactory.load())
+
+    val targets = ErgoSettingsReader.fromConfig(validConfig).votingTargets
+    targets.targets shouldBe Map[Byte, Int](
+      Parameters.StorageFeeFactorIncrease -> 1000000,
+      Parameters.SubblocksPerBlockIncrease -> 40,
+      Parameters.SoftFork -> 1
+    )
+
+    val nonMiningBadConfig = ConfigFactory
+      .parseString(
+        """
+          |ergo.node.mining = false
+          |ergo.voting {
+          |  "-1" = 1
+          |  "0" = 1
+          |  "10" = 1
+          |  "99" = 1
+          |  "123" = 1
+          |}
+        """.stripMargin
+      )
+      .withFallback(ConfigFactory.load())
+    (ErgoSettingsReader.fromConfig(nonMiningBadConfig).votingTargets.targets.keySet --
+      VotingTargets.VoteableParameterIds) shouldBe Set[Byte](-1, 0, 10, 99, 123)
+
+    val (exitCode, output) = runBootstrapProbe(
+      "utxo", utxoBootstrap = false, verifyTransactions = true, nipopowBootstrap = false,
+      mining = true, votingIds = "-1,0,10,99,123")
+    exitCode shouldBe 1
+    output should include("Unsupported voting target parameter id(s): -1, 0, 10, 99, 123")
+  }
+
 }
 
 object ErgoSettingsReaderBootstrapProbe {
@@ -383,10 +433,12 @@ object ErgoSettingsReaderBootstrapProbe {
     val utxoBootstrap = args(1).toBoolean
     val verifyTransactions = args(2).toBoolean
     val nipopowBootstrap = args(3).toBoolean
-    val config = ConfigFactory
+    val mining = args.lift(4).exists(_.toBoolean)
+    val votingIds = args.lift(5).toSeq.flatMap(_.split(",").filter(_.nonEmpty))
+    val baseConfig = ConfigFactory
       .load()
       .withValue("ergo.node.stateType", ConfigValueFactory.fromAnyRef(stateType))
-      .withValue("ergo.node.mining", ConfigValueFactory.fromAnyRef(Boolean.box(false)))
+      .withValue("ergo.node.mining", ConfigValueFactory.fromAnyRef(Boolean.box(mining)))
       .withValue("ergo.node.extraIndex", ConfigValueFactory.fromAnyRef(Boolean.box(false)))
       .withValue("ergo.node.blocksToKeep",
         ConfigValueFactory.fromAnyRef(Int.box(if (verifyTransactions) 1000 else 0)))
@@ -394,6 +446,9 @@ object ErgoSettingsReaderBootstrapProbe {
       .withValue("ergo.node.utxo.utxoBootstrap", ConfigValueFactory.fromAnyRef(Boolean.box(utxoBootstrap)))
       .withValue("ergo.node.nipopow.nipopowBootstrap", ConfigValueFactory.fromAnyRef(Boolean.box(nipopowBootstrap)))
       .withValue("ergo.chain.genesisId", ConfigValueFactory.fromAnyRef("0" * 64))
+    val config = votingIds.foldLeft(baseConfig) { (cfg, id) =>
+      cfg.withValue(s"""ergo.voting."$id"""", ConfigValueFactory.fromAnyRef(Int.box(1)))
+    }
 
     val settings = ErgoSettingsReader.fromConfig(config)
     require(settings.nodeSettings.stateType == (if (stateType == "digest") StateType.Digest else StateType.Utxo))

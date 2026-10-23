@@ -1,0 +1,35 @@
+{
+  "id": "2ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+  "inputs": [
+    {
+      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+      "spendingProof": {
+        "proofBytes": "46dc83d572290479218cfe2a8cb9a0d979de4a61da6a96260a53479683f55a2b561ba4ec1faea4a0d4d19efc960a188ebe3fb8fb83e39d3b",
+        "extension": {
+          "1": "0101"
+        }
+      }
+    }
+  ],
+  "dataInputs": [
+    { "boxId": "fee3087d7ecd4fbef2bea80dae2d0ef86e690c26a68084123c9fa1036761e82b" }
+  ],
+  "outputs": [
+    {
+      "boxId": "1ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+      "value": 147,
+      "ergoTree": "1001070361a3df05f414e9b01394487c4cc9838857575408677ddc166047a52f93e4ed26cd7300",
+      "assets": [
+        {
+          "tokenId": "4ab9da11fc216660e974842cc3b7705e62ebb9e0bf5ff78e53f9cd40abadd117",
+          "amount": 1000
+        }
+      ],
+      "additionalRegisters": {
+        "R4": "0101"
+      },
+      "creationHeight": 1149
+    }
+  ],
+  "size": 0
+}

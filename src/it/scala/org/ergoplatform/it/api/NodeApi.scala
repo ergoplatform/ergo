@@ -61,6 +61,16 @@ trait NodeApi {
       .toScala
   }
 
+  /** One JSON POST with the API key; unlike `post`, any status code completes the future. */
+  def singlePost(path: String, body: String): Future[Response] = {
+    val request = _post(s"http://$restAddress:$nodeRestPort$path")
+      .setHeader("api_key", "hello")
+      .setHeader("Content-type", "application/json")
+      .setBody(body)
+      .build()
+    client.executeRequest(request).toCompletableFuture.toScala
+  }
+
   def getWihApiKey(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] = retrying {
     _get(s"http://$restAddress:$nodeRestPort$path")
       .setHeader("api_key", "hello")

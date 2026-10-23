@@ -2,7 +2,7 @@ package org.ergoplatform.wallet.interpreter
 
 import org.ergoplatform.sdk.wallet.secrets.{DlogSecretKey, ExtendedSecretKey}
 import org.ergoplatform.wallet.crypto.ErgoSignature
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, UnsignedErgoLikeTransaction, UnsignedInput}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoLikeTransaction, UnsignedErgoLikeTransaction, UnsignedInput}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -25,6 +25,37 @@ class ErgoProvingInterpreterSpec
 
 
   private def obtainSecretKey() = ExtendedSecretKey.deriveMasterKey(Random.randomBytes(32), usePre1627KeyDerivation = false)
+
+  private case class TransactionBoxes(prover: ErgoProvingInterpreter,
+                                      unsignedTx: UnsignedErgoLikeTransaction,
+                                      signedTx: ErgoLikeTransaction,
+                                      inputBox: ErgoBox,
+                                      otherInputBox: ErgoBox,
+                                      dataBox: ErgoBox,
+                                      otherDataBox: ErgoBox)
+
+  private def transactionBoxes(): TransactionBoxes = {
+    val prover = ErgoProvingInterpreter(obtainSecretKey(), parameters)
+    val boxCandidate = new ErgoBoxCandidate(
+      100000000L,
+      ErgoTree.fromSigmaBoolean(prover.hdPubKeys.head.key),
+      10000
+    )
+    val firstTxId = ModifierId @@ Base16.encode(Array.fill(32)(5: Byte))
+    val secondTxId = ModifierId @@ Base16.encode(Array.fill(32)(6: Byte))
+    val inputBox = boxCandidate.toBox(firstTxId, 0.toShort)
+    val otherInputBox = boxCandidate.toBox(secondTxId, 0.toShort)
+    val dataBox = boxCandidate.toBox(firstTxId, 1.toShort)
+    val otherDataBox = boxCandidate.toBox(secondTxId, 1.toShort)
+    val unsignedTx = new UnsignedErgoLikeTransaction(
+      IndexedSeq(new UnsignedInput(inputBox.id, ContextExtension.empty)),
+      IndexedSeq(DataInput(dataBox.id)),
+      IndexedSeq(boxCandidate)
+    )
+    val signedTx = prover.sign(unsignedTx, IndexedSeq(inputBox), IndexedSeq(dataBox), stateContext).get
+
+    TransactionBoxes(prover, unsignedTx, signedTx, inputBox, otherInputBox, dataBox, otherDataBox)
+  }
 
   it should "produce proofs with primitive secrets" in {
     val extendedSecretKey = obtainSecretKey()
@@ -142,6 +173,104 @@ class ErgoProvingInterpreterSpec
     thb.secretHints(0).hints.size shouldBe 1
 
     thb.publicHints(0).hints.size shouldBe 1
+  }
+
+  it should "reject commitments for a different input box" in {
+    val fixture = transactionBoxes()
+
+    fixture.prover.generateCommitmentsFor(
+      fixture.unsignedTx,
+      IndexedSeq(fixture.otherInputBox),
+      IndexedSeq(fixture.dataBox),
+      stateContext
+    ).isFailure shouldBe true
+  }
+
+  it should "reject commitments when input boxes are reordered" in {
+    val fixture = transactionBoxes()
+    val unsignedTx = new UnsignedErgoLikeTransaction(
+      IndexedSeq(
+        new UnsignedInput(fixture.inputBox.id, ContextExtension.empty),
+        new UnsignedInput(fixture.otherInputBox.id, ContextExtension.empty)
+      ),
+      IndexedSeq(DataInput(fixture.dataBox.id)),
+      IndexedSeq(fixture.inputBox.toCandidate, fixture.otherInputBox.toCandidate)
+    )
+
+    fixture.prover.generateCommitmentsFor(
+      unsignedTx,
+      IndexedSeq(fixture.otherInputBox, fixture.inputBox),
+      IndexedSeq(fixture.dataBox),
+      stateContext
+    ).isFailure shouldBe true
+  }
+
+  it should "reject commitments with extra data boxes" in {
+    val fixture = transactionBoxes()
+
+    fixture.prover.generateCommitmentsFor(
+      fixture.unsignedTx,
+      IndexedSeq(fixture.inputBox),
+      IndexedSeq(fixture.dataBox, fixture.otherDataBox),
+      stateContext
+    ).isFailure shouldBe true
+  }
+
+  it should "reject signing with a different data-input box" in {
+    val fixture = transactionBoxes()
+
+    fixture.prover.sign(
+      fixture.unsignedTx,
+      IndexedSeq(fixture.inputBox),
+      IndexedSeq(fixture.otherDataBox),
+      stateContext
+    ).isFailure shouldBe true
+  }
+
+  it should "reject hint extraction with missing input boxes" in {
+    val fixture = transactionBoxes()
+
+    an[IllegalArgumentException] should be thrownBy fixture.prover.bagForTransaction(
+      fixture.signedTx,
+      IndexedSeq.empty,
+      IndexedSeq(fixture.dataBox),
+      stateContext,
+      Seq.empty,
+      Seq.empty
+    )
+  }
+
+  it should "reject hint extraction with a different data-input box" in {
+    val fixture = transactionBoxes()
+
+    an[IllegalArgumentException] should be thrownBy fixture.prover.bagForTransaction(
+      fixture.signedTx,
+      IndexedSeq(fixture.inputBox),
+      IndexedSeq(fixture.otherDataBox),
+      stateContext,
+      Seq.empty,
+      Seq.empty
+    )
+  }
+
+  it should "accept matching input and data-input boxes for distributed signing" in {
+    val fixture = transactionBoxes()
+
+    fixture.prover.generateCommitmentsFor(
+      fixture.unsignedTx,
+      IndexedSeq(fixture.inputBox),
+      IndexedSeq(fixture.dataBox),
+      stateContext
+    ).isSuccess shouldBe true
+
+    noException should be thrownBy fixture.prover.bagForTransaction(
+      fixture.signedTx,
+      IndexedSeq(fixture.inputBox),
+      IndexedSeq(fixture.dataBox),
+      stateContext,
+      Seq.empty,
+      Seq.empty
+    )
   }
 
 }

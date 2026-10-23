@@ -1579,29 +1579,49 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  /**
+    * A candidate generator on a fresh chain of its own, for the two solved-block cases below.
+    */
+  private class SolvedBlockFixture(directorySuffix: String)
+    extends TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val settings: ErgoSettings = defaultSettings.copy(
+      directory =
+        s"${defaultSettings.directory}-$directorySuffix-${System.currentTimeMillis()}"
+    )
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        settings
+      )
+
+    val otherPk: ProveDlog =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes())).publicImage
+
+    def candidate(optPk: Option[ProveDlog]): Candidate = {
+      val request =
+        GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = optPk)
+      candidateGenerator.tell(request, testProbe.ref)
+      testProbe.fishForSpecificMessage(newBlockDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+    }
+
+    def solve(c: Candidate): ErgoFullBlock =
+      settings.chainSettings.powScheme
+        .proveCandidate(c.candidateBlock, defaultMinerSecret.w, 0, 1000)
+        .get
+  }
 
   it should "clear the solved block on its FullBlockApplied when the candidate was already regenerated on it" in
-    new TestKit(ActorSystem()) {
-      val testProbe = new TestProbe(system)
-      system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-
-      // a fresh chain of its own
-      val settings: ErgoSettings =
-        defaultSettings.copy(directory = s"${defaultSettings.directory}-solved-clear-${System.currentTimeMillis()}")
-      val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
-      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
-      val candidateGenerator: ActorRef =
-        CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
-
-      def candidate(optPk: Option[ProveDlog]): Candidate = {
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = optPk), testProbe.ref)
-        testProbe.fishForMessage(newBlockDelay) { case StatusReply.Success(_: Candidate) => true; case _ => false } match {
-          case StatusReply.Success(c: Candidate) => c
-        }
-      }
-      def solve(c: Candidate): ErgoFullBlock =
-        settings.chainSettings.powScheme.proveCandidate(c.candidateBlock, defaultMinerSecret.w, 0, 1000).get
-
+    new SolvedBlockFixture("solved-clear") {
       // the first reply means the generator is initialized and subscribed; from here on the block-applied event
       // (LocalBlockApplied, the FullBlockApplied the node view holder publishes for its own block) is delivered to it
       // by hand, to fix the order of events
@@ -1614,7 +1634,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
       // a request the cache does not answer (another miner key, as /mining/candidateWithTxsAndPk sends) is processed
       // after the solved block is applied and before the generator sees the block-applied event for it
-      val otherPk = DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes())).publicImage
       candidate(Some(otherPk)).candidateBlock.parentOpt.map(_.id) shouldBe Some(solved.id)
       candidateGenerator ! LocalBlockApplied(solved.header, solved.blockTransactions.transactions.map(_.id))
 
@@ -1631,25 +1650,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
 
   it should "keep the solved block when the block-applied event that arrives is for its parent" in
-    new TestKit(ActorSystem()) {
-      val testProbe = new TestProbe(system)
-      system.eventStream.subscribe(testProbe.ref, newBlockSignal)
-
-      val settings: ErgoSettings =
-        defaultSettings.copy(directory = s"${defaultSettings.directory}-solved-keep-${System.currentTimeMillis()}")
-      val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
-      val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
-      val candidateGenerator: ActorRef =
-        CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
-
-      def candidate(optPk: Option[ProveDlog]): Candidate = {
-        candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = optPk), testProbe.ref)
-        testProbe.fishForMessage(newBlockDelay) { case StatusReply.Success(_: Candidate) => true; case _ => false } match {
-          case StatusReply.Success(c: Candidate) => c
-        }
-      }
-      def solve(c: Candidate): ErgoFullBlock =
-        settings.chainSettings.powScheme.proveCandidate(c.candidateBlock, defaultMinerSecret.w, 0, 1000).get
+    new SolvedBlockFixture("solved-keep") {
       // fake PoW always finds nonce 0; another solution for the same candidate needs another nonce
       def solveAt(c: Candidate, nonce: Long): ErgoFullBlock = {
         val s = solve(c).header.powSolution
@@ -1665,7 +1666,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == parent.id; case _ => false }
 
       // a candidate on the new block is generated, and solved, before the generator sees that block's applied event
-      val otherPk = DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes())).publicImage
       val onParent = candidate(Some(otherPk))
       onParent.candidateBlock.parentOpt.map(_.id) shouldBe Some(parent.id)
       val solved = solve(onParent)

@@ -185,8 +185,10 @@ class CandidateGenerator(
         context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
-        if (state.solvedBlock.isDefined && solvedBlockAfter.isEmpty) {
-          log.info(s"Candidate already on applied block ${header.id}, released solved block ${state.solvedBlock.map(_.id)}")
+        if (solvedBlockAfter.isEmpty) state.solvedBlock.foreach { released =>
+          log.info(
+            s"Candidate already on applied block ${header.id}, released solved block ${released.id}"
+          )
         }
         context.become(initialized(stateWithAppliedTxs))
       }

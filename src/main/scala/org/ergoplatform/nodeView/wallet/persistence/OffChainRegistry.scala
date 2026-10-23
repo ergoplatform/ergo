@@ -32,10 +32,11 @@ case class OffChainRegistry(height: Int,
   lazy val walletOffChainBoxes: Seq[TrackedBox] = offChainBoxes.filter(_.scans.contains(PaymentsScanId))
 
   /**
-    * Off-chain index considering on-chain balances.
+    * Off-chain index considering on-chain balances. Like the on-chain wallet digest, it counts only
+    * boxes tracked by the payments scan.
     */
   lazy val digest: WalletDigest = {
-    val offChainBalances = offChainBoxes.map(Balance.apply)
+    val offChainBalances = walletOffChainBoxes.map(Balance.apply)
     val balance = offChainBalances.map(_.value).sum + onChainBalances.map(_.value).sum
     val tokensBalance = (offChainBalances ++ onChainBalances)
       .flatMap(_.assets)

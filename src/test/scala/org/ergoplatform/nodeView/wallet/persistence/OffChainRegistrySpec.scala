@@ -34,8 +34,10 @@ class OffChainRegistrySpec
     forAll(Gen.listOf(trackedBoxGen)) { boxes =>
       //apply transaction outputs to empty offchain registry
       var registry = OffChainRegistry.empty.updateOnTransaction(boxes, Seq.empty, Seq.empty)
-      val balance = balanceAmount(boxes.map(_.box))
-      val assetsBalance = assetAmount(boxes.map(_.box))
+      // the off-chain balance counts boxes tracked by the payments scan only
+      val walletBoxes = boxes.filter(_.scans.contains(PaymentsScanId))
+      val balance = balanceAmount(walletBoxes.map(_.box))
+      val assetsBalance = assetAmount(walletBoxes.map(_.box))
       registry.digest.walletBalance shouldEqual balance
       registry.digest.walletAssetBalances.toMap shouldEqual assetsBalance.toMap
 
@@ -52,9 +54,10 @@ class OffChainRegistrySpec
         val p = EqualsScanningPredicate(ErgoBox.R1, ByteArrayConstant(TrueTree.bytes))
         val scan = Scan(scanId, "_", p, ScanWalletInteraction.Off, removeOffchain = false)
         val filtered = boxes.filter(tb => tb.scans.contains(scanId))
+        val filteredWalletBoxes = filtered.filter(_.scans.contains(PaymentsScanId))
 
-        val fbalance = balanceAmount(filtered.map(_.box))
-        val fassetsBalance = assetAmount(filtered.map(_.box))
+        val fbalance = balanceAmount(filteredWalletBoxes.map(_.box))
+        val fassetsBalance = assetAmount(filteredWalletBoxes.map(_.box))
 
         registry = registry.updateOnTransaction(filtered, Seq.empty, Seq.empty)
         registry.digest.walletBalance shouldEqual fbalance

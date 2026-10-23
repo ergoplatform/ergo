@@ -431,77 +431,81 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
     log.info(s"Processing ordering block announcement for $headerId")
 
-    history().typedModifierById[Header](parentId) match {
-      case Some(_) =>
-        // apply header and extension section got from ordering block announcement
-        pmodModify(
-          header,
-          local = false,
-          excludedDownloadTypes =
-            Set(BlockTransactions.modifierTypeId, Extension.modifierTypeId)
-        )
-        val ext = Extension(header.id, oba.extensionFields)
-        pmodModify(ext, local = false)
+    val canApply =
+      (header.isGenesis && history().bestHeaderOpt.isEmpty && parentId == Header.GenesisParentId) ||
+        history().typedModifierById[Header](parentId).isDefined
 
-        val broadcastedTransactionIds = oba.broadcastedTransactionIds
-        val mempoolTransactions = memoryPool().getAll(broadcastedTransactionIds).map(_.transaction) // todo: more efficint iteration
+    if (canApply) {
+      // apply header and extension section got from ordering block announcement
+      pmodModify(
+        header,
+        local = false,
+        excludedDownloadTypes =
+          Set(BlockTransactions.modifierTypeId, Extension.modifierTypeId)
+      )
+      val ext = Extension(header.id, oba.extensionFields)
+      pmodModify(ext, local = false)
 
-        val allTransactionsDownloaded = mempoolTransactions.size == broadcastedTransactionIds.size
+      val broadcastedTransactionIds = oba.broadcastedTransactionIds
+      val mempoolTransactions = memoryPool().getAll(broadcastedTransactionIds).map(_.transaction) // todo: more efficint iteration
 
-        // todo: download only txs which are not in the mempool if allTransactionsDownloaded == false,
-        // todo: currently the whole block is downloaded
+      val allTransactionsDownloaded = mempoolTransactions.size == broadcastedTransactionIds.size
 
-        if (allTransactionsDownloaded) {
-          val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ mempoolTransactions
-          history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
-          val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
+      // todo: download only txs which are not in the mempool if allTransactionsDownloaded == false,
+      // todo: currently the whole block is downloaded
 
-          // todo: check if ordering block transactions should come first
-          val txs = orderingBlockTransactions ++ inputBlocksTransactions
+      if (allTransactionsDownloaded) {
+        val orderingBlockTransactions = oba.nonBroadcastedTransactions ++ mempoolTransactions
+        history().saveOrderingBlockTransactions(headerId, orderingBlockTransactions)
+        val inputBlocksTransactions = history().getCollectedInputBlocksTransactions(headerId).getOrElse(Seq.empty)
 
-          log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
-            s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +
-            s"total transactions: ${txs.length} ")
+        // todo: check if ordering block transactions should come first
+        val txs = orderingBlockTransactions ++ inputBlocksTransactions
 
-          val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
-          val blockDigest = header.transactionsRoot
+        log.debug(s"For ordering block ${header}, applying ${orderingBlockTransactions.length} ordering-block " +
+          s"transactions and ${inputBlocksTransactions.length} input-blocks transactions, " +
+          s"total transactions: ${txs.length} ")
 
-          // checking Merkle root of collected transactions
-          val merkleRootCorrect = blockDigest.sameElements(calculatedDigest)
-          if (merkleRootCorrect) {
-            // we apply header and extension from ordering block announcement
-            log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
-            val bs = new BlockTransactions(headerId, header.version, txs)
-            pmodModify(bs, local = false)
+        val calculatedDigest = BlockTransactions.transactionsRoot(txs, header.version)
+        val blockDigest = header.transactionsRoot
 
-            // for other cases, NewBestInputBlock(None) is sent in applyState() of this class
-            context.system.eventStream.publish(NewBestInputBlock(None, local = false))
-          } else {
-            log.warn(s"Downloading block transactions fully for $headerId as Merkle root does not match")
-            context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
-          }
+        // checking Merkle root of collected transactions
+        val merkleRootCorrect = blockDigest.sameElements(calculatedDigest)
+        if (merkleRootCorrect) {
+          // we apply header and extension from ordering block announcement
+          log.info(s"Applying block transactions from input-blocks for $headerId with transactions: ${txs.length}")
+          val bs = new BlockTransactions(headerId, header.version, txs)
+          pmodModify(bs, local = false)
+
+          // for other cases, NewBestInputBlock(None) is sent in applyState() of this class
+          context.system.eventStream.publish(NewBestInputBlock(None, local = false))
         } else {
-          log.warn(s"Downloading block transactions fully for $headerId as not all the transactions available")
+          log.warn(s"Downloading block transactions fully for $headerId as Merkle root does not match")
           context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
         }
+      } else {
+        log.warn(s"Downloading block transactions fully for $headerId as not all the transactions available")
+        context.system.eventStream.publish(DownloadRequest(Map(BlockTransactions.modifierTypeId -> Seq(header.transactionsId))))
+      }
 
-        applyFromCacheLoop(headersCache)
+      applyFromCacheLoop(headersCache)
 
-        // todo: check ADProofs section generation
-        
-      case None =>
-        // Parent header is missing - cache the ordering block and request the parent
-        log.warn(s"Parent header not found for ordering block $headerId, caching its header and requesting parent $parentId")
-        
-        // Also put the header into headersCache so it can be applied when parent arrives
-        headersCache.put(headerId, header)
-        
-        // Request the parent header from peers
-        context.system.eventStream.publish(
-          DownloadRequest(Map(Header.modifierTypeId -> Seq(parentId)))
-        )
-        
-        log.info(s"Requested parent header $parentId for ordering block $headerId")
+      // todo: check ADProofs section generation
+    } else if (parentId != Header.GenesisParentId) {
+      // Parent header is missing - cache the ordering block and request the parent
+      log.warn(s"Parent header not found for ordering block $headerId, caching its header and requesting parent $parentId")
+
+      // Also put the header into headersCache so it can be applied when parent arrives
+      headersCache.put(headerId, header)
+
+      // Request the parent header from peers
+      context.system.eventStream.publish(
+        DownloadRequest(Map(Header.modifierTypeId -> Seq(parentId)))
+      )
+
+      log.info(s"Requested parent header $parentId for ordering block $headerId")
+    } else {
+      log.warn(s"Ignoring ordering block $headerId with genesis parent $parentId at height ${header.height}")
     }
   }
 

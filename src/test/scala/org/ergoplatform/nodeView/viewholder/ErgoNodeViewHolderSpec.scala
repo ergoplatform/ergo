@@ -7,7 +7,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import java.io.File
 import org.ergoplatform.ErgoApp.InternalShutdown
-import org.ergoplatform.core.idToVersion
+import org.ergoplatform.core.{idToVersion, versionToBytes}
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
@@ -1121,8 +1121,9 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       val genesis = validFullBlock(parentOpt = None, us, bh)
       val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
 
-      val chain1block1 = validFullBlock(Some(genesis), wusAfterGenesis)
-      val chain2block1 = validFullBlock(Some(genesis), wusAfterGenesis)
+      val chain1block1 = validFullBlock(Some(genesis), wusAfterGenesis, genesis.header.timestamp + 1)
+      val chain2block1 = validFullBlock(Some(genesis), wusAfterGenesis, genesis.header.timestamp + 2)
+      chain2block1.id should not be chain1block1.id
       val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1)(_ => ()).get
       val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
       val wusChain2Block2 = wusChain2Block1.applyModifier(chain2block2)(_ => ()).get
@@ -1138,6 +1139,10 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       // Applying height 2 while estimatedTip is 4 and keepVersions is 1 drops the undo log for genesis.
       applyBlock(chain1block1) shouldBe 'success
       getCurrentState.version shouldBe idToVersion(chain1block1.id)
+      val genesisVersion = idToVersion(genesis.id)
+      getCurrentState.rollbackVersions.toSeq should not contain genesisVersion
+      getCurrentState.store.db.delete(versionToBytes(genesisVersion))
+      getCurrentState.rollbackTo(genesisVersion) shouldBe 'failure
 
       val logger = LoggerFactory.getLogger(classOf[UtxoNodeViewHolder]).asInstanceOf[Logger]
       val previousLevel = logger.getLevel
@@ -1155,7 +1160,6 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
         applyPayload(chain2block1) shouldBe 'success
         nodeViewHolderRef ! ModifiersFromRemote(chain2block2.blockSections ++ chain2block3.blockSections)
-        chain2block3.blockSections.foreach(s => nodeViewHolderRef ! LocallyGeneratedModifier(s))
 
         rollbackProbe.expectMsg(RollbackFailed)
         deathProbe.expectTerminated(nodeViewHolderRef)
@@ -1168,11 +1172,12 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
             message.contains("A restart may recover a digest node or a transient I/O error; " +
               "otherwise check the error before resyncing from genesis manually")
         }
-        errorEvents.size shouldBe 1
+        errorEvents should have size 1
         Option(errorEvents.head.getThrowableProxy) shouldBe defined
 
         val reopenedHistory = ErgoHistory.readOrGenerate(settings)(null)
         try {
+          reopenedHistory.bestFullBlockIdOpt shouldBe Some(chain2block2.id)
           reopenedHistory.isSemanticallyValid(chain2block3.id) should not be ModifierSemanticValidity.Invalid
         } finally {
           reopenedHistory.closeStorage()

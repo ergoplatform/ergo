@@ -130,12 +130,12 @@ class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
     val history0 = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, BlocksToKeep)
     val block = genChain(1, history0).head
     val history1 = history0.append(block.header).get._1
-    // a UTXO-mode node stores downloaded proofs as they are
+    // the proofs section is appended directly: the property needs one stored section of each type, not a download
     val history = history1.append(block.adProofs.value).get._1
 
     val warnings = Seq[BlockSection](block.header, block.adProofs.value).flatMap { stored =>
       history.contains(stored.id) shouldBe true
-      // a second copy, as when it was delivered twice, is still in the cache
+      // a copy still in the cache after the same section was stored from another source
       val modifiersCache = new ErgoModifiersCache(10)
       modifiersCache.put(stored.id, stored)
 

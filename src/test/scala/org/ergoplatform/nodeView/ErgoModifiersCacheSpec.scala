@@ -186,4 +186,32 @@ class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
     warnings shouldBe empty
   }
 
+  property("a longer fork that is lighter per block is applied through the cache once it is heavier in total") {
+    val (node, scratch, forkPoint) = retargetingForkPair()
+    val interval = node.difficultyCalculator.desiredInterval.toMillis
+    val nodeChain = appendHeaders(node, forkPoint, 8, interval / 4) // fast blocks, difficulty rises; best at 16
+    val fork = appendHeaders(scratch, forkPoint, 40, interval)      // steady blocks, lower difficulty, longer
+
+    val nodeScore = node.scoreOf(nodeChain.last.id).value
+    // lighter than the node's chain one height above its best header, heavier in total
+    scratch.scoreOf(fork(nodeChain.size).id).value should be < nodeScore
+    scratch.scoreOf(fork.last.id).value should be > nodeScore
+    node.bestHeaderOpt.value.id shouldBe nodeChain.last.id
+
+    // the fork arrives from a peer, through the cache
+    val cache = new ErgoModifiersCache(1000)
+    fork.foreach(h => cache.put(h.id, h))
+    @tailrec
+    def drain(): Unit = cache.popCandidate(node) match {
+      case Some(h) =>
+        node.append(h).get
+        drain()
+      case None =>
+    }
+    drain()
+
+    fork.filterNot(h => node.contains(h.id)).map(_.height) shouldBe empty
+    node.bestHeaderOpt.value.id shouldBe fork.last.id
+  }
+
 }

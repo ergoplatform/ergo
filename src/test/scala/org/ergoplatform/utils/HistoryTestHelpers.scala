@@ -1,5 +1,7 @@
 package org.ergoplatform.utils
 
+import org.ergoplatform.mining.difficulty.DifficultySerializer
+import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{EmptyBlockSectionProcessor, FullBlockPruningProcessor, ToDownloadProcessor}
@@ -77,6 +79,46 @@ object HistoryTestHelpers extends FileUtils {
       nodeSettings, scorexSettings, walletSettings, settings.cacheSettings)
 
     ErgoHistory.readOrGenerate(fullHistorySettings)(null)
+  }
+
+  val RetargetingInitialDifficulty: BigInt = BigInt(1000000)
+
+  /**
+    * Headers-only history that recalculates difficulty every 4 headers over the last 2 epochs, so a few headers
+    * apart in time move the difficulty
+    */
+  def retargetingHistory(): ErgoHistory =
+    generateHistory(verifyTransactions = false, StateType.Digest, PoPoWBootstrap = false, blocksToKeep = 0,
+      epochLength = 4, useLastEpochs = 2, initialDiffOpt = Some(RetargetingInitialDifficulty))
+
+  /**
+    * Appends `n` headers after `from` to `history`, each `dt` ms after its parent and carrying the difficulty
+    * `history` requires after that parent, and returns them
+    */
+  def appendHeaders(history: ErgoHistory, from: Header, n: Int, dt: Long): Seq[Header] =
+    (1 to n).foldLeft(Vector(from)) { (acc, _) =>
+      val parent = acc.last
+      val next = nextHeader(Some(parent), history.difficultyCalculator, tsOpt = Some(parent.timestamp + dt),
+        diffBitsOpt = Some(DifficultySerializer.encodeCompactBits(history.requiredDifficultyAfter(parent))),
+        useRealTs = false)
+      history.append(next).get
+      acc :+ next
+    }.tail
+
+  /**
+    * Two retargeting histories holding the same genesis and `prefixLength` headers at the desired interval: the
+    * node under test, and a scratch history to build a competing chain in. The last shared header is the fork point.
+    */
+  def retargetingForkPair(prefixLength: Int = 7): (ErgoHistory, ErgoHistory, Header) = {
+    val node = retargetingHistory()
+    val scratch = retargetingHistory()
+    val genesis = nextHeader(None, node.difficultyCalculator, tsOpt = Some(1L),
+      diffBitsOpt = Some(DifficultySerializer.encodeCompactBits(RetargetingInitialDifficulty)), useRealTs = false)
+    node.append(genesis).get
+    scratch.append(genesis).get
+    val prefix = appendHeaders(node, genesis, prefixLength, node.difficultyCalculator.desiredInterval.toMillis)
+    prefix.foreach(scratch.append(_).get)
+    (node, scratch, prefix.last)
   }
 
   /**

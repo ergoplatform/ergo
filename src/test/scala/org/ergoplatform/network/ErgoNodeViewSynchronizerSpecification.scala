@@ -86,6 +86,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
   class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
 
+  // At start-up the synchronizer asks the view holder for its history, state and
+  // mempool. A late answer replaces the history and mempool that a fixture gave
+  // the synchronizer, so this view holder answers with the fixture's. The state
+  // still comes from the view holder.
+  class InjectedReadersNodeViewHolder(
+    injectedHistory: ErgoHistory,
+    injectedMempool: ErgoMemPool
+  ) extends NodeViewHolderMock {
+
+    override protected def getNodeViewChanges: Receive = {
+      case request: ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges =>
+        if (request.history) sender() ! ChangedHistory(injectedHistory)
+        super.getNodeViewChanges(request.copy(history = false, mempool = false))
+        if (request.mempool) sender() ! ChangedMempool(injectedMempool)
+    }
+  }
+
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,
                          syncInfoSpec: ErgoSyncInfoMessageSpec.type,
@@ -157,7 +174,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
     // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef =
+      system.actorOf(Props(new InjectedReadersNodeViewHolder(history, pool)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -260,8 +278,19 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       )
     )
 
+    val history = generateHistory(verifyTransactions = true,
+                                  StateType.Utxo,
+                                  PoPoWBootstrap = false,
+                                  blocksToKeep = -1,
+                                  utxoBootstrap = utxoBootstrap)
+    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val updHistory = applyHeaderChain(history, chain)
+    val mempool    = ErgoMemPool.empty(synchronizerSettings)
+
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+
+    val nodeViewHolderMockRef =
+      system.actorOf(Props(new InjectedReadersNodeViewHolder(updHistory, mempool)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -273,16 +302,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker)
     ))
 
-    val history = generateHistory(verifyTransactions = true,
-                                  StateType.Utxo,
-                                  PoPoWBootstrap = false,
-                                  blocksToKeep = -1,
-                                  utxoBootstrap = utxoBootstrap)
-    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
-    val updHistory = applyHeaderChain(history, chain)
-
     synchronizerMockRef ! ChangedHistory(updHistory)
-    synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(synchronizerSettings))
+    synchronizerMockRef ! ChangedMempool(mempool)
 
     val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))

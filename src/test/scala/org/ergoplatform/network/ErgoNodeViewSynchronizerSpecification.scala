@@ -1899,7 +1899,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
     /** `peer` announces transaction `ids` via `Inv` messages of the max allowed size */
-    def invTxIds(peer: ConnectedPeer, ids: Seq[scorex.util.ModifierId]): Unit = {
+    def invTxIds(peer: ConnectedPeer, ids: Seq[ModifierId]): Unit = {
       ids.grouped(InvSpec.maxInvObjects).foreach { group =>
         val invData = InvData(ErgoTransaction.modifierTypeId, group)
         synchronizerRef ! Message(InvSpec, Left(InvSpec.toBytes(invData)), Some(peer))
@@ -1907,15 +1907,15 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
 
     /** Transaction ids the node requested from `peer` via `RequestModifier` during `duration` */
-    def txIdsRequestedFrom(peer: ConnectedPeer, duration: FiniteDuration): Seq[scorex.util.ModifierId] =
+    def txIdsRequestedFrom(peer: ConnectedPeer, duration: FiniteDuration): Seq[ModifierId] =
       txIdsRequestedFromAny(Set(peer), duration)
 
     /** Transaction ids the node requested from any of `peers` via `RequestModifier` during `duration` */
-    def txIdsRequestedFromAny(peers: Set[ConnectedPeer], duration: FiniteDuration): Seq[scorex.util.ModifierId] =
+    def txIdsRequestedFromAny(peers: Set[ConnectedPeer], duration: FiniteDuration): Seq[ModifierId] =
       txRequestsTo(peers, ncProbe.receiveWhile(duration) { case m => m }).flatten
 
     /** Id batches of the `RequestModifier`s for transactions among `messages` sent to any of `peers` */
-    private def txRequestsTo(peers: Set[ConnectedPeer], messages: Seq[AnyRef]): Seq[Seq[scorex.util.ModifierId]] =
+    private def txRequestsTo(peers: Set[ConnectedPeer], messages: Seq[AnyRef]): Seq[Seq[ModifierId]] =
       messages.collect {
         case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode =>
           stn.sendingStrategy -> stn.message.data.get.asInstanceOf[InvData]
@@ -1924,7 +1924,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
     /** `RequestModifier`s for transactions sent to `peer` so far, one id batch per request (drains `ncProbe`) */
-    def txRequestsSentTo(peer: ConnectedPeer): Seq[Seq[scorex.util.ModifierId]] =
+    def txRequestsSentTo(peer: ConnectedPeer): Seq[Seq[ModifierId]] =
       txRequestsTo(Set(peer), ncProbe.receiveWhile(max = 10.seconds, idle = 50.millis) { case m => m })
   }
 
@@ -2449,7 +2449,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     withDeclinedTransactionsFixture { ctx =>
       import ctx._
 
-      def randomIds(n: Int): Seq[scorex.util.ModifierId] = Seq.fill(n)(bytesToId(scorex.utils.Random.randomBytes(32)))
+      def randomIds(n: Int): Seq[ModifierId] = Seq.fill(n)(bytesToId(scorex.utils.Random.randomBytes(32)))
       def kept: Int = synchronizerTestRef.underlyingActor.refusedTxsCount
 
       val peers = Seq.fill(MaxRefusedTxs / MaxRefusedTxsPerPeer + 1)(newPeer)

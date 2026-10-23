@@ -424,7 +424,7 @@ object CandidateGenerator extends ScorexLogging {
     if (miningTimes.nonEmpty) {
       Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
     } else {
-      1000.millis
+      Duration.Zero
     }
   }
 

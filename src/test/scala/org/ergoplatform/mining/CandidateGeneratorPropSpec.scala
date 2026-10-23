@@ -432,9 +432,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     avgMiningTime shouldBe 200.millis
   }
 
-  property("average block mining time with fewer than two timestamps is the 1 s default") {
+  property("average block mining time with fewer than two timestamps is zero") {
     // a chain with only its first block gives one timestamp, so there is no interval to average
-    CandidateGenerator.getBlockMiningTimeAvg(Vector(System.currentTimeMillis())) shouldBe 1000.millis
-    CandidateGenerator.getBlockMiningTimeAvg(Vector.empty) shouldBe 1000.millis
+    CandidateGenerator.getBlockMiningTimeAvg(Vector(System.currentTimeMillis())) shouldBe Duration.Zero
+    CandidateGenerator.getBlockMiningTimeAvg(Vector.empty) shouldBe Duration.Zero
   }
 }

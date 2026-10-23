@@ -1589,7 +1589,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     def candidateFrom(generator: ActorRef): Candidate = {
       generator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None), testProbe.ref)
-      testProbe.fishForMessage(newBlockDelay) { case StatusReply.Success(_: Candidate) => true; case _ => false } match {
+      testProbe.fishForSpecificMessage(newBlockDelay) {
         case StatusReply.Success(c: Candidate) => c
       }
     }

@@ -189,12 +189,60 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
+  /**
+    * A replacement may remove a transaction which supplied one of its own inputs.
+    * Follow surviving unconfirmed producers and check only outputs whose old pool
+    * producer disappears. Other inputs were already present before this mutation.
+    */
+  private def inputsRemainAvailable(tx: ErgoTransaction,
+                                    proposedPool: OrderedTxPool,
+                                    utxo: UtxoState): Boolean = {
+    val pending = mutable.Queue.empty[BoxId]
+    pending ++= tx.inputs.map(_.boxId)
+    pending ++= tx.dataInputs.map(_.boxId)
+    val visitedProducers = mutable.Set.empty[ModifierId]
+
+    while (pending.nonEmpty) {
+      val boxId = pending.dequeue()
+      proposedPool.outputs.get(boxId) match {
+        case Some(producerKey) =>
+          proposedPool.orderedTransactions.get(producerKey) match {
+            case Some(producer) if producer.id != tx.id =>
+              if (visitedProducers.add(producer.id)) {
+                pending ++= producer.transaction.inputs.map(_.boxId)
+                pending ++= producer.transaction.dataInputs.map(_.boxId)
+              }
+            case _ => return false
+          }
+        case None =>
+          // A removed pool producer may also have been confirmed meanwhile, so the
+          // output is lost only when the underlying UTXO state lacks it as well.
+          if (pool.outputs.contains(boxId) && utxo.boxById(boxId).isEmpty) return false
+      }
+    }
+    true
+  }
+
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
   private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction,
-                                    validationStartTime: Long): (ErgoMemPool, ProcessingOutcome) = {
+                                    validationStartTime: Long,
+                                    utxoState: Option[UtxoState]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTransaction.transaction
+
+    def acceptProposedPool(proposedPool: OrderedTxPool): (ErgoMemPool, ProcessingOutcome) = {
+      // put() can evict a capacity victim in addition to explicit double-spend losers.
+      // Only an eviction can remove a dependency already available during validation.
+      val hasEviction = proposedPool.size <= pool.size
+      if (hasEviction && utxoState.exists(utxo => !inputsRemainAvailable(tx, proposedPool, utxo))) {
+        val exc = new Exception("Transaction inputs unavailable after mempool update")
+        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+      } else {
+        new ErgoMemPool(proposedPool, stats, sortingOption) ->
+          new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+      }
+    }
 
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
@@ -208,8 +256,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
         val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
-        val updPool = new ErgoMemPool(p, stats, sortingOption)
-        updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        acceptProposedPool(p)
       } else {
         this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id), validationStartTime)
       }
@@ -220,8 +267,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
         val exc = new Exception("Transaction pays less than any other in the pool being full")
         this -> new ProcessingOutcome.Declined(exc, validationStartTime)
       } else {
-        val updPool = new ErgoMemPool(pool.put(unconfirmedTransaction, feeF), stats, sortingOption)
-        updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        acceptProposedPool(pool.put(unconfirmedTransaction, feeF))
       }
     }
   }
@@ -326,7 +372,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
-                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime, Some(utxo))
                   case Failure(ex) =>
                     this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }
@@ -337,7 +383,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
+              acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime, None)
           }
         } else {
           val msg = if (this.contains(tx.id)) {

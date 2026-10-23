@@ -6,7 +6,7 @@ import org.ergoplatform.modifiers.history.ADProofs
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.utils.{ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.core._
-import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import sigma.interpreter.ProverResult
 
 class DigestStateSpecification extends ErgoCorePropertyTest {
@@ -175,6 +175,43 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
 
       val txs3 = IndexedSeq(txWithDataInputs, headTx, nextTx)
       ds.validateTransactions(txs3, digest2, proof2, emptyStateContext) shouldBe 'failure
+
+      ds.close()
+      us.closeStorage()
+    }
+  }
+
+  // A miner can pad a proof so that it still replays to the declared state root, and set header.ADProofsRoot
+  // to the hash of the padded proof. Utxo-mode nodes regenerate the proof and reject the block, so
+  // digest-mode nodes have to reject it as well, or they are split off from the chain.
+  property("validateTransactions() - padded proof is rejected") {
+    forAll(boxesHolderGen) { bh =>
+      val us = createUtxoState(bh, parameters)
+      val ds = createDigestState(us.version, us.rootDigest)
+      val block = validFullBlock(parentOpt = None, us, bh)
+
+      val origProofs = block.adProofs.get
+      val txs = block.blockTransactions.txs
+      val expectedHash = block.header.stateRoot
+
+      def validate(proofBytes: Array[Byte]) = {
+        val proof = ADProofs(origProofs.headerId, SerializedAdProof @@ proofBytes)
+        ds.validateTransactions(txs, expectedHash, proof, emptyStateContext)
+      }
+
+      validate(origProofs.proofBytes) shouldBe 'success
+
+      val withTrailingByte = validate(origProofs.proofBytes :+ 't'.toByte)
+      withTrailingByte shouldBe 'failure
+      withTrailingByte.failed.get.getMessage should include("bytes, but")
+
+      // flipping any bit of the last byte either changes what the proof means or is a padding bit,
+      // in both cases the block is invalid
+      (0 to 7).foreach { bit =>
+        val flipped = origProofs.proofBytes.clone()
+        flipped(flipped.length - 1) = (flipped.last ^ (1 << bit)).toByte
+        validate(flipped) shouldBe 'failure
+      }
 
       ds.close()
       us.closeStorage()

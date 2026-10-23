@@ -116,7 +116,7 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
     val auditor: ActorRef = TestActorRef(new MempoolAuditor(probe.ref, probe.ref, settingsToTest))
 
 
-    auditor ! RecheckMempool(us, new FakeMempool(txs))
+    auditor ! RecheckMempool(us, new FakeMempool(txs), java.util.UUID.randomUUID())
 
     probe.fishForMessage(3.seconds) {
       case _: SendToNetwork => true

@@ -3,12 +3,15 @@ package org.ergoplatform.nodeView.viewholder
 import java.io.File
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
+import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactions
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.transaction.TooHighCostError
+import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType.Utxo
 import org.ergoplatform.nodeView.state._
@@ -596,7 +599,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     val wusAfterGenesis = wus.applyModifier(genesis)(_ => ()).get
 
     // Create a valid tx that pays to a FalseTree output.
-    val box = wusAfterGenesis.takeBoxes(1).head
+    val box = wusAfterGenesis.takeBoxes(100).find(_.ergoTree == TrueTree).get
     val validTx = validTransactionFromBoxes(IndexedSeq(box), outputsProposition = FalseTree)
 
     val validBlock = validFullBlock(Some(genesis), wusAfterGenesis, Seq(validTx))
@@ -776,6 +779,154 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  /**
+    * A UTXO node writes the best full block pointer together with the block's last mandatory section, and the
+    * block's ADProofs only after the state update. This builds the state a crash between those writes leaves:
+    * the best full block in history has no ADProofs, and the state is at its parent (before the state commit)
+    * or at the block itself (after it). On restart the node should regenerate the proofs, so a digest-mode peer
+    * can get the block. With `keepNoParentVersion` (used with `stateCommitted`) the state keeps no undo version
+    * of the block's parent: the node then starts at the block, and the proofs stay missing, so a digest-mode
+    * reader of the same history moves the best full block pointer back to the parent.
+    */
+  private def restartWithoutBestBlockProofs(stateCommitted: Boolean, keepNoParentVersion: Boolean = false): Unit = {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val utxoSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
+
+    new NodeViewFixture(utxoSettings, parameters).apply { fixture =>
+      import fixture._
+
+      def digestBestFullBlockId(): Option[ModifierId] = {
+        val digestSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Digest))
+        val digestHistory = ErgoHistory.readOrGenerate(digestSettings)(null)
+        try digestHistory.bestFullBlockOpt.map(_.id) finally digestHistory.closeStorage()
+      }
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+      val block = validFullBlock(Some(genesis), wusAfterGenesis)
+      applyBlock(genesis) shouldBe 'success
+      getModifierById(genesis.header.ADProofsId) shouldBe genesis.adProofs
+      stopNodeViewHolder()
+      digestBestFullBlockId() shouldBe Some(genesis.id)
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        history.setHeadersChainSynced()
+        Seq(block.header, block.blockTransactions, block.extension).map(history.append).filter(_.isFailure) shouldBe empty
+        history.bestFullBlockOpt.map(_.id) shouldBe Some(block.id)
+        history.modifierById(block.header.ADProofsId) shouldBe None
+      } finally history.closeStorage()
+
+      val state = ErgoState.readOrGenerate(settings).asInstanceOf[UtxoState]
+      try {
+        state.version shouldBe idToVersion(genesis.id)
+        if (stateCommitted) {
+          state.applyModifier(block, None)(_ => ()).get.version shouldBe idToVersion(block.id)
+          if (keepNoParentVersion) state.store.clean(0)
+        }
+      } finally state.closeStorage()
+
+      startNodeViewHolder()
+      getBestFullBlockOpt.map(_.id) shouldBe Some(block.id)
+      getCurrentState.version shouldBe idToVersion(block.id)
+      val storedProofsId = getModifierById(block.header.ADProofsId).map(_.id)
+      stopNodeViewHolder()
+      val expected: (Option[ModifierId], Option[ModifierId]) =
+        if (keepNoParentVersion) (None, Some(genesis.id)) else (Some(block.header.ADProofsId), Some(block.id))
+      (storedProofsId, digestBestFullBlockId()) shouldBe expected
+    }
+  }
+
+  property("regenerate the best block's ADProofs on restart when the state was not updated") {
+    restartWithoutBestBlockProofs(stateCommitted = false)
+  }
+
+  property("regenerate the best block's ADProofs on restart when the state was updated") {
+    restartWithoutBestBlockProofs(stateCommitted = true)
+  }
+
+  property("start at the best block on restart when its ADProofs are missing and no parent version is kept") {
+    restartWithoutBestBlockProofs(stateCommitted = true, keepNoParentVersion = true)
+  }
+
+  /**
+    * A UTXO node writes the best full block pointer without the block's ADProofs. A digest node started on such a
+    * history (for example copied from the UTXO node, with no state) cannot assemble that block. Once its ADProofs
+    * arrive, the node should apply it and then the next block.
+    */
+  property("digest node applies a best full block whose ADProofs arrive after start-up") {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val utxoSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
+
+    new NodeViewFixture(utxoSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+      val block = validFullBlock(Some(genesis), wusAfterGenesis)
+      val wusAfterBlock = wusAfterGenesis.applyModifier(block)(_ => ()).get
+      val nextBlock = validFullBlock(Some(block), wusAfterBlock)
+      applyBlock(genesis) shouldBe 'success
+      stopNodeViewHolder()
+
+      val history = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        history.setHeadersChainSynced()
+        Seq(block.header, block.blockTransactions, block.extension).map(history.append).filter(_.isFailure) shouldBe empty
+        history.bestFullBlockOpt.map(_.id) shouldBe Some(block.id)
+      } finally history.closeStorage()
+      fixture.deleteRecursive(new File(nodeViewDir, "state"))
+
+      settings = settings.copy(nodeSettings = settings.nodeSettings.copy(stateType = StateType.Digest))
+      startNodeViewHolder()
+      applyHeader(nextBlock.header) shouldBe 'success
+      subscribeModificationOutcome()
+      nodeViewHolderRef ! LocallyGeneratedModifier(block.adProofs.value)
+      expectModificationOutcome(block.adProofs.value) shouldBe 'success
+      getCurrentState.version shouldBe idToVersion(block.id)
+
+      applyPayload(nextBlock) shouldBe 'success
+      getBestFullBlockOpt.map(_.id) shouldBe Some(nextBlock.id)
+      getCurrentState.version shouldBe idToVersion(nextBlock.id)
+    }
+  }
+
+  /**
+    * Invalidating the genesis block points the best full block at the pre-genesis id, which is not a stored header.
+    * Opening the history keeps that pointer.
+    */
+  property("keep the pre-genesis best full block pointer of an invalidated genesis block when history is reopened") {
+    def pointers(stateType: StateType): (Option[ModifierId], Option[ModifierId]) = {
+      val protoSettings = NodeViewTestConfig(stateType, verifyTransactions = true, popowBootstrap = false).toSettings
+      val nodeSettings = protoSettings.copy(nodeSettings = protoSettings.nodeSettings.copy(extraIndex = false))
+
+      new NodeViewFixture(nodeSettings, parameters).apply { fixture =>
+        import fixture._
+
+        val (us, bh) = createUtxoState(settings)
+        val genesis = validFullBlock(parentOpt = None, us, bh)
+        applyBlock(genesis) shouldBe 'success
+        stopNodeViewHolder()
+
+        val history = ErgoHistory.readOrGenerate(settings)(null)
+        val afterInvalidation = try {
+          history.reportModifierIsInvalid(genesis.header, ProgressInfo(None, Seq.empty, Seq.empty, Seq.empty)).get
+          history.bestFullBlockIdOpt
+        } finally history.closeStorage()
+        val reopened = ErgoHistory.readOrGenerate(settings)(null)
+        val afterReopen = try reopened.bestFullBlockIdOpt finally reopened.closeStorage()
+        afterInvalidation -> afterReopen
+      }
+    }
+
+    val preGenesis = Some(PreGenesisHeader.id)
+    Seq(StateType.Utxo, StateType.Digest).map(pointers) shouldBe Seq(preGenesis -> preGenesis, preGenesis -> preGenesis)
+  }
+
   property("require every prepared UTXO snapshot trust signal") {
     val (state, boxHolder) = createUtxoState(settings)
 
@@ -881,6 +1032,38 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
   property("nipopow proof starts full blocks downloading when utxoBootstrap disabled") {
     t22.run(parameters, NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = true, utxoBootstrap = false))
+  }
+
+  property("block sections evicted from an overfull cache are reported under their own type") {
+    val config = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+    new NodeViewFixture(config.toSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (us, bh) = createUtxoState(fixture.settings)
+      val block = validFullBlock(None, us, bh)
+
+      subscribeEvents(classOf[BlockSectionsProcessingCacheUpdate])
+
+      // sections whose headers are unknown can neither be applied nor dropped; they pile up in the
+      // sections cache (cap 384)
+      val extensions = (1 to 250).map(_ => block.extension.copy(headerId = modifierIdGen.sample.value))
+      nodeViewHolderRef ! ModifiersFromRemote(extensions)
+
+      val upd1 = expectMsgType[BlockSectionsProcessingCacheUpdate]
+      upd1.cleared._2 shouldBe empty
+
+      val blockTransactions = (1 to 250).map(_ => block.blockTransactions.copy(headerId = modifierIdGen.sample.value))
+      nodeViewHolderRef ! ModifiersFromRemote(blockTransactions)
+
+      // 500 sections > 384 cache: the oldest 116 entries (extensions) are evicted; the update must
+      // report them under their own type, so the synchronizer resets their delivery status correctly
+      val upd2 = expectMsgType[BlockSectionsProcessingCacheUpdate]
+      upd2.cleared._1 shouldBe Extension.modifierTypeId
+      upd2.cleared._2.length shouldBe 500 - 384
+      upd2.cleared._2.toSet.subsetOf(extensions.map(_.id).toSet) shouldBe true
+
+      expectNoMsg()
+    }
   }
 
   property("extractFailedTxId should extract failing transaction id from validation error shapes") {

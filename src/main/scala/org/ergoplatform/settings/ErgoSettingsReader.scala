@@ -172,6 +172,9 @@ object ErgoSettingsReader extends ScorexLogging
     val nodeSettings = settings.nodeSettings
     if (nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
+    } else if (nodeSettings.stateType == Digest && nodeSettings.utxoSettings.utxoBootstrap) {
+      failWithError("UTXO snapshot bootstrap requires node.stateType = utxo; " +
+        "set node.utxo.utxoBootstrap = false for digest state")
     } else if (!nodeSettings.verifyTransactions && !nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {

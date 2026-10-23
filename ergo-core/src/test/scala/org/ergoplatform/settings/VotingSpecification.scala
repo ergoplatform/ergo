@@ -1,7 +1,5 @@
 package org.ergoplatform.settings
 
-import sigmastate.utils.Helpers._ // needed for Scala 2.11
-
 import org.ergoplatform.modifiers.history.extension.ExtensionCandidate
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
@@ -215,7 +213,6 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
       val expectedKnownValue = StorageFeeFactorDefault + direction * StorageFeeFactorStep
       val receivedTable = initialTable.updated(StorageFeeFactorIncrease, expectedKnownValue)
-        .updated(unknownParameter, 100)
       val receivedParameters = Parameters(4, receivedTable, ErgoValidationSettingsUpdate.empty)
       val nextExtension = (receivedParameters.toExtensionCandidate ++
         afterUnknownVotes.toExtensionCandidate).toExtension(headerId)
@@ -228,23 +225,11 @@ class VotingSpecification extends ErgoCorePropertyTest {
       next.currentParameters.softForkStartingHeight shouldBe None
       next.votingData.epochVotes.toMap shouldBe Map(unknownVote -> 1)
 
-      // Once received in an extension, the formerly unknown parameter is in the local table.
-      val votedAgain = next.appendHeader(nextHeader.copy(height = 5)).get
-      votedAgain.votingData.epochVotes.toMap shouldBe Map(unknownVote -> 2)
-      val expectedNextTable = receivedTable.updated(unknownParameter, 100 + direction)
-      def followingExtension(table: Map[Byte, Int]) = {
-        val params = Parameters(6, table, ErgoValidationSettingsUpdate.empty)
-        (params.toExtensionCandidate ++ afterUnknownVotes.toExtensionCandidate).toExtension(headerId)
-      }
-      val followingHeader = nextHeader.copy(height = 6, votes = Array.fill(3)(NoParameter))
-      val following = votedAgain.process(followingHeader, Some(followingExtension(expectedNextTable))).get
-      following.currentParameters.parametersTable shouldBe expectedNextTable
-      following.votingData shouldBe VotingData.empty
-
-      val mismatchedTable = expectedNextTable.updated(unknownParameter, 100)
-      val mismatched = votedAgain.process(followingHeader, Some(followingExtension(mismatchedTable)))
-      mismatched.failed.get.getMessage should include(
-        s"Calculated and received parameters differ in parameter $unknownParameter"
+      val extraTable = receivedTable.updated(unknownParameter, 100)
+      val extraExtension = (Parameters(4, extraTable, ErgoValidationSettingsUpdate.empty).toExtensionCandidate ++
+        afterUnknownVotes.toExtensionCandidate).toExtension(headerId)
+      voted.process(nextHeader, Some(extraExtension)).failed.get.getMessage should include(
+        "Parameters differ in size"
       )
     }
   }
@@ -264,7 +249,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
       DefaultParameters
   }
 
-  property("version 6 parameter matching should require calculated parameters") {
+  property("version 6 parameter matching should require exact calculated parameters") {
     val versionBefore60 = (Header.Interpreter60Version - 1).toByte
     val unknownParameter = 42.toByte
 
@@ -282,6 +267,10 @@ class VotingSpecification extends ErgoCorePropertyTest {
       Header.Interpreter60Version,
       _ - SubblocksPerBlockIncrease
     )
+    val replacedKnownWithUnknown60 = processParameters(
+      Header.Interpreter60Version,
+      table => (table - StorageFeeFactorIncrease).updated(unknownParameter, 100)
+    )
     val mismatchedKnown60 = processParameters(
       Header.Interpreter60Version,
       table => table.updated(StorageFeeFactorIncrease, table(StorageFeeFactorIncrease) + 1)
@@ -290,9 +279,10 @@ class VotingSpecification extends ErgoCorePropertyTest {
     val results = Seq(
       "pre-6 extra parameter rejected" -> pre60Extra.isFailure,
       "version 6 exact parameters accepted" -> exact60.isSuccess,
-      "version 6 extra parameter accepted" -> extra60.isSuccess,
+      "version 6 extra parameter rejected" -> extra60.isFailure,
       "version 6 missing known parameter rejected" -> missingKnown60.isFailure,
       "version 6 missing subblocks parameter rejected" -> missingSubblocks60.isFailure,
+      "version 6 replaced known parameter rejected" -> replacedKnownWithUnknown60.isFailure,
       "version 6 mismatched known parameter rejected" -> mismatchedKnown60.isFailure
     )
 
@@ -300,9 +290,12 @@ class VotingSpecification extends ErgoCorePropertyTest {
     pre60Extra.failed.get.getMessage should include(
       "At the beginning of the epoch, the extension should contain all the system parameters"
     )
-    Seq(missingKnown60, missingSubblocks60).foreach { result =>
+    Seq(extra60, missingKnown60, missingSubblocks60).foreach { result =>
       result.failed.get.getMessage should include("Parameters differ in size")
     }
+    replacedKnownWithUnknown60.failed.get.getMessage should include(
+      s"key not found: $StorageFeeFactorIncrease"
+    )
     mismatchedKnown60.failed.get.getMessage should include(
       s"Calculated and received parameters differ in parameter $StorageFeeFactorIncrease"
     )

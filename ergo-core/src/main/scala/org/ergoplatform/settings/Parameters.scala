@@ -413,10 +413,9 @@ object Parameters {
   }
 
   // in 6.0 previous matchParameters rule is switched off,
-  // and this similar one is introduced
-  // the difference is,
-  // the new rule is not checking that locally calculated parameters has the same size as received in a block
-  // with this relaxation new parameters may be introduced without breaking consensus with older clients
+  // and this rule is active for blockVersion >= 4 (Interpreter60Version).
+  // Require an exact parameter table match until a future gated change so that
+  // an epoch-start block with an extra key cannot split patched nodes from 6.0.9 / 6.1.7.
   def matchParameters60(p1: Parameters, p2: Parameters, blockVersion: Header.Version): Try[Unit] = {
     if (blockVersion < Header.Interpreter60Version) {
       Success(())
@@ -425,7 +424,7 @@ object Parameters {
         if (p1.height != p2.height) {
           throw new Exception(s"Different height in parameters, p1 = $p1, p2 = $p2")
         }
-        if (!(p1.parametersTable.size <= p2.parametersTable.size)) { // the only difference from matchParameters
+        if (p1.parametersTable.size != p2.parametersTable.size) {
           throw new Exception(s"Parameters differ in size, p1 = $p1, p2 = $p2")
         }
         if (p1.proposedUpdate != p2.proposedUpdate) {

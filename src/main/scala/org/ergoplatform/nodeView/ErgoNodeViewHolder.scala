@@ -233,7 +233,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         context.system.eventStream.publish(RollbackFailed)
         ErgoApp.shutdownSystem()(context.system)
         context.stop(self)
-        throw e
+        throw new Exception(e)
     }
   }
 

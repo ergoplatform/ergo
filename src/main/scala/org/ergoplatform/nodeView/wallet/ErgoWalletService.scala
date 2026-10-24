@@ -340,7 +340,7 @@ class ErgoWalletServiceImpl(override val ergoSettings: ErgoSettings) extends Erg
             // remove old wallet state, see https://github.com/ergoplatform/ergo/issues/1313
             // set initial wallet height to current chain height to avoid rescanning from height 0, see https://github.com/ergoplatform/ergo/issues/1722
             recreateRegistry(state, settings).flatMap { stateV1 =>
-              stateV1.registry.updateHeight(state.fullHeight).flatMap { _ =>
+              stateV1.registry.updateHeight(state.fullHeight, state.stateContext.lastHeaderOpt.map(_.id)).flatMap { _ =>
                 recreateStorage(stateV1, settings).map { stateV2 =>
                   mnemonic -> stateV2.copy(secretStorageOpt = Some(newSecretStorage), walletVars = stateV2.walletVars.copy(stateCacheProvided = stateV2.walletVars.stateCacheOpt)(settings))
                 }

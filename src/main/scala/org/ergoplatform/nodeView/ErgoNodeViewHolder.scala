@@ -223,10 +223,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             (history, Failure(ex), suffixTrimmed)
         }
       case Failure(e) =>
-        log.error("Rollback failed: ", e)
+        val branchPoint = progressInfo.branchPoint.fold("none")(Algos.encode)
+        log.error(
+          s"Rollback to branch point $branchPoint failed, shutting down the node. " +
+            "A restart may recover a digest node or a transient I/O error; " +
+            "otherwise check the error before resyncing from genesis manually",
+          e
+        )
         context.system.eventStream.publish(RollbackFailed)
-        //todo: what to return here? the situation is totally wrong
-        ???
+        ErgoApp.shutdownSystem()(context.system)
+        context.stop(self)
+        throw new Exception(e)
     }
   }
 

@@ -72,6 +72,12 @@ object Extension extends ApiCodecs {
   val ValidationRulesPrefix: Byte = 0x02
 
   /**
+    * Node software version string (UTF-8 encoded) written by the miner into every block it produces. Not consensus-critical,
+    * enables network-wide version statistics. A single key `Array(MinerVersionPrefix, 0x00)` holds the version value.
+    */
+  val MinerVersionPrefix: Byte = 0x03
+
+  /**
     * Id a type of network object encoding extension
     */
   val modifierTypeId: NetworkObjectTypeId.Value = ExtensionTypeId.value

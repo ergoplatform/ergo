@@ -338,7 +338,21 @@ object ErgoHistory extends ScorexLogging {
 
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
-      def storedBytes(key: Array[Byte]): Option[Array[Byte]] = db.modifierBytesById(bytesToId(key))
+      // Only preflight reads use this guard. Rebuild operations already close their own stores.
+      def readPreflight[A](read: => A): A = Try(read).recoverWith { case error =>
+        Try(db.close()).failed.foreach { closeError =>
+          if (closeError ne error) error.addSuppressed(closeError)
+        }
+        log.error(
+          "Extra-index preflight read failed; stop this node. Operator recovery: " +
+            "inspect the error and correct its cause (disk space, permissions, or open handles); " +
+            "keep history/index and history/objects intact, then restart to retry.",
+          error)
+        Failure(error)
+      }.get
+
+      def storedBytes(key: Array[Byte]): Option[Array[Byte]] =
+        readPreflight(db.modifierBytesById(bytesToId(key)))
       def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
         .filter(_.length == Integer.BYTES)
         .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
@@ -360,7 +374,7 @@ object ErgoHistory extends ScorexLogging {
       val globalTxIndex = globalTxIndexOpt.getOrElse(0L)
       val globalBoxIndex = globalBoxIndexOpt.getOrElse(0L)
       val rollbackTo = rollbackToOpt.getOrElse(0)
-      val indexedHeaderIdBytesOpt = db.modifierBytesById(bytesToId(IndexedHeaderIdKey))
+      val indexedHeaderIdBytesOpt = readPreflight(db.modifierBytesById(bytesToId(IndexedHeaderIdKey)))
       val indexedHeaderOpt = indexedHeaderIdBytesOpt
         .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
         .flatMap { idBytes =>
@@ -369,8 +383,8 @@ object ErgoHistory extends ScorexLogging {
         // Unknown validity is accepted: the indexer does not gate on semantic validity, so a
         // checkpoint over a not-yet-marked header is legitimate. An explicitly Invalid
         // checkpoint header still forces a rebuild - the indexed chain was invalidated.
-        val isInvalid = db.getIndex(validityKey).exists(_.sameElements(Array(0.toByte)))
-        if (!isInvalid && FullBlockProcessor.isInBestFullChain(db, id)) db.modifierById(id).collect {
+        val isInvalid = readPreflight(db.getIndex(validityKey)).exists(_.sameElements(Array(0.toByte)))
+        if (!isInvalid && readPreflight(FullBlockProcessor.isInBestFullChain(db, id))) readPreflight(db.modifierById(id)).collect {
           case header: Header if header.height == indexedHeight && header.id == id => header
         } else None
       }
@@ -378,7 +392,7 @@ object ErgoHistory extends ScorexLogging {
         if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
           false
         } else {
-          db.modifierById(header.transactionsId).collect {
+          readPreflight(db.modifierById(header.transactionsId)).collect {
             case transactions: BlockTransactions if transactions.headerId == header.id =>
               val lastTx = transactions.txs.last
               val lastTxIndex = globalTxIndex - 1
@@ -389,7 +403,7 @@ object ErgoHistory extends ScorexLogging {
               } else {
                 val inputNums = lastTx.inputs.map { input =>
                   val inputId = bytesToId(input.boxId)
-                  db.getExtraIndex(inputId).collect {
+                  readPreflight(db.getExtraIndex(inputId)).collect {
                     case box: IndexedErgoBox
                       if box.id == inputId && box.spendingTxIdOpt.contains(lastTx.id) &&
                         box.spendingHeightOpt.contains(header.height) => box.globalIndex
@@ -397,11 +411,11 @@ object ErgoHistory extends ScorexLogging {
                 }
                 if (inputNums.forall(_.isDefined)) Some(inputNums.flatten.toArray) else None
               }
-              val numericTxMatches = db.getExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex))).exists {
+              val numericTxMatches = readPreflight(db.getExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex)))).exists {
                 case NumericTxIndex(index, id) => index == lastTxIndex && id == lastTx.id
                 case _ => false
               }
-              val indexedTxMatches = db.getExtraIndex(lastTx.id).exists {
+              val indexedTxMatches = readPreflight(db.getExtraIndex(lastTx.id)).exists {
                 case tx: IndexedErgoTransaction =>
                   tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
                     tx.blockId == header.id &&
@@ -412,11 +426,11 @@ object ErgoHistory extends ScorexLogging {
               }
               val outputRowsMatch = expectedOutputNums.zip(lastTx.outputs).forall { case (boxIndex, output) =>
                 val boxId = bytesToId(output.id)
-                val numericBoxMatches = db.getExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex))).exists {
+                val numericBoxMatches = readPreflight(db.getExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex)))).exists {
                   case NumericBoxIndex(index, id) => index == boxIndex && id == boxId
                   case _ => false
                 }
-                val indexedBoxMatches = db.getExtraIndex(boxId).exists {
+                val indexedBoxMatches = readPreflight(db.getExtraIndex(boxId)).exists {
                   case box: IndexedErgoBox =>
                     box.globalIndex == boxIndex && box.inclusionHeight == header.height && box.id == boxId &&
                       box.spendingTxIdOpt.isEmpty && box.spendingHeightOpt.isEmpty && box.spendingProofOpt.isEmpty
@@ -487,7 +501,7 @@ object ErgoHistory extends ScorexLogging {
       // version can not capture (see ExtraIndexer.RentIndexEnabledKey): turning the flag
       // on after an off period must rebuild the index (blocks indexed while off have no
       // rent rows); turning it off just clears the marker, keeping the index intact.
-      val rentEnabledStored = db.modifierBytesById(bytesToId(RentIndexEnabledKey))
+      val rentEnabledStored = readPreflight(db.modifierBytesById(bytesToId(RentIndexEnabledKey)))
         .exists(_.sameElements(RentIndexEnabledBytes))
       if (ergoSettings.nodeSettings.storageRentCollection && !rentEnabledStored) {
         log.warn("storageRentCollection is on but the extra index has no rent rows, rebuilding it")

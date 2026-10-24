@@ -11,6 +11,8 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsStuck, ChainProgress}
+import org.ergoplatform.nodeView.history.extra.ExtraIndex
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{RentIndexEnabledKey, SchemaVersionKey}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockSectionProcessor
 import org.ergoplatform.nodeView.state.StateType
@@ -21,7 +23,7 @@ import org.ergoplatform.utils.generators.ErgoCoreGenerators.{defaultHeaderGen, r
 import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators.invalidErgoTransactionGen
 import org.slf4j.LoggerFactory
 import scorex.db.ByteArrayWrapper
-import scorex.util.{ModifierId, idToBytes}
+import scorex.util.{ModifierId, bytesToId, idToBytes}
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
@@ -63,9 +65,11 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     var throwAt: Int = -1
     var failAfterObjectsAt: Int = -1
     var closed: Boolean = false
+    var closeCount: Int = 0
     var closeFailure: Option[RuntimeException] = None
     override def close(): Unit = {
       closed = true
+      closeCount += 1
       closeFailure.foreach(error => throw error)
     }
 
@@ -338,5 +342,54 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     val error = intercept[IllegalStateException] { ErgoHistory.readOrGenerate(testSettings, f.db)(null) }
     error should be theSameInstanceAs f.db.failure
     error.getSuppressed shouldBe empty
+  }
+
+  property("extra-index preflight read failure closes storage and preserves its cause") {
+    val settings = testSettings.copy(nodeSettings = testSettings.nodeSettings.copy(extraIndex = true))
+    val readError = new IllegalStateException("extra-index preflight read sentinel")
+    val closeError = new IllegalStateException("extra-index preflight close sentinel")
+    val db = new TestStorage {
+      override def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+        if (id == bytesToId(SchemaVersionKey)) throw readError else None
+    }
+    db.closeFailure = Some(closeError)
+
+    val (error, events) = captureHistoryErrors {
+      intercept[IllegalStateException] { ErgoHistory.readOrGenerate(settings, db)(null) }
+    }
+    error should be theSameInstanceAs readError
+    error.getSuppressed.toSeq shouldBe Seq(closeError)
+    db.closed shouldBe true
+    val startupErrors = events.filter(_.getFormattedMessage.startsWith("Extra-index preflight read failed;"))
+    startupErrors should have size 1
+    startupErrors.head.getFormattedMessage should include ("keep history/index and history/objects intact")
+    startupErrors.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs readError
+  }
+
+  property("extra-index preflight read failure after rebuild closes only the current storage") {
+    val settings = testSettings.copy(nodeSettings = testSettings.nodeSettings.copy(extraIndex = true))
+    val readError = new IllegalStateException("rebuilt extra-index read sentinel")
+    val rebuilt = new TestStorage {
+      override def insertExtraTry(_indexes: Array[(Array[Byte], Array[Byte])],
+                                  _objects: Array[ExtraIndex]): Try[Unit] = Success(())
+      override def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
+        if (id == bytesToId(RentIndexEnabledKey)) throw readError else None
+    }
+    val original = new TestStorage {
+      override def modifierBytesById(_id: ModifierId): Option[Array[Byte]] = None
+      override def deleteExtraDBTry(_ergoSettings: ErgoSettings): Try[HistoryStorage] = {
+        close()
+        Success(rebuilt)
+      }
+    }
+
+    val (error, events) = captureHistoryErrors {
+      intercept[IllegalStateException] { ErgoHistory.readOrGenerate(settings, original)(null) }
+    }
+    error should be theSameInstanceAs readError
+    original.closeCount shouldBe 1
+    rebuilt.closeCount shouldBe 1
+    rebuilt.closed shouldBe true
+    events.filter(_.getFormattedMessage.startsWith("Extra-index preflight read failed;")) should have size 1
   }
 }

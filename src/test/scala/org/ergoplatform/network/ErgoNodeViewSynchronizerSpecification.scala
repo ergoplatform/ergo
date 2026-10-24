@@ -406,6 +406,25 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: empty Modifiers reply is not delivery progress, requested section still counts as not delivered") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      val typeId = ADProofs.modifierTypeId
+      val id: ModifierId = bytesToId(Array.fill(32)(7: Byte))
+      deliveryTracker.setRequested(typeId, id, peer)(_ => Cancellable.alreadyCancelled)
+      Thread.sleep(20)
+      // what an older node sends for a section above its message limit: type id + count 0
+      val zeroCount = Array[Byte](typeId, 0: Byte)
+      synchronizer ! Message(ModifiersSpec, Left(zeroCount), Some(peer))
+      synchronizer ! CheckDelivery(peer, typeId, id)
+      val messages = ncProbe.receiveWhile(max = 3.seconds, idle = 1.second) { case m => m }
+      messages should contain (PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.NonDeliveryPenalty))
+      messages should not contain PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.PermanentPenalty)
+      messages should not contain PenalizePeer(peer.connectionId.remoteAddress, PenaltyType.MisbehaviorPenalty)
+    }
+  }
+
   property("NodeViewSynchronizer: wrong-version transaction section does not poison its canonical id") {
     withFixture2 { ctx =>
       import ctx._

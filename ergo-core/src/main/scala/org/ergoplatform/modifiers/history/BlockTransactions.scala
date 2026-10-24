@@ -15,7 +15,8 @@ import org.ergoplatform.serialization.ErgoSerializer
 import scorex.crypto.authds.LeafData
 import scorex.crypto.authds.merkle.{Leaf, MerkleProof, MerkleTree}
 import scorex.crypto.hash.Digest32
-import scorex.util.serialization.{Reader, Writer}
+import scorex.util.ByteArrayBuilder
+import scorex.util.serialization.{Reader, VLQByteBufferWriter, Writer}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import scorex.util.Extensions._
 import sigma.VersionContext
@@ -100,6 +101,15 @@ object BlockTransactions extends ApiCodecs {
 
   val modifierTypeId: NetworkObjectTypeId.Value = BlockTransactionsTypeId.value
 
+  /**
+    * Complete wire size, measured by the section writer in its existing block-version context.
+    *
+    * @param txs nonempty transaction sequence, as required by [[BlockTransactions]]
+    * @throws AssertionError if `txs` is empty
+    */
+  def sizeOf(txs: Seq[ErgoTransaction], blockVersion: Version): Int =
+    BlockTransactions(Header.GenesisParentId, blockVersion, txs).bytes.length
+
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)
   def transactionsRoot(txs: Seq[ErgoTransaction], blockVersion: Version): Digest32 = {
     if (blockVersion == Header.InitialVersion) {
@@ -141,23 +151,41 @@ object BlockTransactionsSerializer extends ErgoSerializer[BlockTransactions] {
 
   override def serialize(bt: BlockTransactions, w: Writer): Unit = {
     w.putBytes(idToBytes(bt.headerId))
-    val blockVersion = bt.blockVersion
+    serializeMetadata(bt.blockVersion, bt.txs.size, w)
+    bt.txs.foreach(tx => serializeTransaction(tx, bt.blockVersion, w))
+  }
+
+  private def serializeMetadata(blockVersion: Version, transactionCount: Int, w: Writer): Unit = {
     if (blockVersion > 1) {
       // see comments in parse()
-      w.putUInt(MaxTransactionsInBlock.toLong + bt.blockVersion)
+      w.putUInt(MaxTransactionsInBlock.toLong + blockVersion)
     }
-    w.putUInt(bt.txs.size.toLong)
-    bt.txs.foreach { tx =>
-      if (blockVersion >= VersionContext.V6SoftForkVersion) {
-        // since 6.0 we use versioned serializers
-        VersionContext.withVersions(blockVersion, blockVersion) {
-          ErgoTransactionSerializer.serialize(tx, w)
-        }
-      } else {
-        // before 6.0 activation, VersionContext is not used
+    w.putUInt(transactionCount.toLong)
+  }
+
+  private def serializeTransaction(tx: ErgoTransaction, blockVersion: Version, w: Writer): Unit = {
+    if (blockVersion >= VersionContext.V6SoftForkVersion) {
+      // since 6.0 we use versioned serializers
+      VersionContext.withVersions(blockVersion, blockVersion) {
         ErgoTransactionSerializer.serialize(tx, w)
       }
+    } else {
+      // before 6.0 activation, VersionContext is not used
+      ErgoTransactionSerializer.serialize(tx, w)
     }
+  }
+
+  // Internal incremental accounting uses the same writer and version rules as sizeOf.
+  private[ergoplatform] def transactionSize(tx: ErgoTransaction, blockVersion: Version): Int = {
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    serializeTransaction(tx, blockVersion, w)
+    w.result().toBytes.length
+  }
+
+  private[ergoplatform] def sectionSize(blockVersion: Version, transactionCount: Int, payloadSize: Long): Long = {
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    serializeMetadata(blockVersion, transactionCount, w)
+    Constants.ModifierIdSize.toLong + w.result().toBytes.length + payloadSize
   }
 
   override def parse(r: Reader): BlockTransactions = {

@@ -249,7 +249,7 @@ trait ErgoHistory
     * or a lost section (#2778, case 2). A pointer to a header that is not stored, such as the pre-genesis id
     * `reportModifierIsInvalid` writes when the genesis block is invalidated, is left as it is.
     */
-  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = historyStorage.synchronized {
+  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = Try(historyStorage.synchronized {
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).filter(getFullBlock(_).isEmpty) match {
       case Some(bestHeader) =>
         val lowestHeight = minimalFullBlockHeight
@@ -277,7 +277,7 @@ trait ErgoHistory
       case None =>
         Success(())
     }
-  }
+  }).flatten
 
   /**
     * @return read-only copy of this history
@@ -571,11 +571,13 @@ object ErgoHistory extends ScorexLogging {
     // next fresh header arrives, see ToDownloadProcessor). A header persisted during an
     // interrupted bootstrap is at the network tip, so recovery after a mid-bootstrap restart
     // is unaffected.
-    if (nodeSettings.utxoSettings.utxoBootstrap &&
-        history.bestHeaderOpt.exists(_.isNew(ergoSettings.chainSettings.blockInterval * nodeSettings.headerChainDiff)) &&
-        !history.isUtxoSnapshotApplied) {
-      history.setHeadersChainSynced()
-    }
+    stopOnFailure("UTXO bootstrap recovery", Try {
+      if (nodeSettings.utxoSettings.utxoBootstrap &&
+          history.bestHeaderOpt.exists(_.isNew(ergoSettings.chainSettings.blockInterval * nodeSettings.headerChainDiff)) &&
+          !history.isUtxoSnapshotApplied) {
+        history.setHeadersChainSynced()
+      }
+    })(history.closeStorage())
 
     log.info("History database read")
     history

@@ -107,8 +107,10 @@ trait FullBlockProcessor extends HeadersProcessor {
 
         if (nodeSettings.isFullBlocksPruned) {
           val prevMinHeight = minimalFullBlockHeight
-          val lastKept = updateBestFullBlock(fullBlock.header)
-          pruneBlockDataAt(prevMinHeight until lastKept)
+          // Use the received block, not the new best one: from the new best block,
+          // a step that fills a gap could prune blocks the state has not applied yet.
+          val newMinHeight = updateBestFullBlock(fullBlock.header)
+          pruneBlockDataAt(prevMinHeight until newMinHeight)
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
       }

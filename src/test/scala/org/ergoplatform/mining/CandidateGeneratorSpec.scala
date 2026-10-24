@@ -1718,8 +1718,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         settings
       )
 
-    val otherPk: ProveDlog =
-      DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes())).publicImage
+    val otherMiner: DLogProverInput =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes()))
+    val otherPk: ProveDlog = otherMiner.publicImage
 
     def candidate(optPk: Option[ProveDlog]): Candidate = {
       val request =
@@ -1730,9 +1731,9 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       }
     }
 
-    def solve(c: Candidate): ErgoFullBlock =
+    def solve(c: Candidate, secret: DLogProverInput = defaultMinerSecret): ErgoFullBlock =
       settings.chainSettings.powScheme
-        .proveCandidate(c.candidateBlock, defaultMinerSecret.w, 0, 1000)
+        .proveCandidate(c.candidateBlock, secret.w, 0, 1000)
         .get
   }
 
@@ -1769,7 +1770,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     new SolvedBlockFixture("solved-keep") {
       // fake PoW always finds nonce 0; another solution for the same candidate needs another nonce
       def solveAt(c: Candidate, nonce: Long): ErgoFullBlock = {
-        val s = solve(c).header.powSolution
+        val s = solve(c, otherMiner).header.powSolution
         CandidateGenerator.completeBlock(c.candidateBlock, s.copy(n = Longs.toByteArray(nonce)))
       }
 
@@ -1784,7 +1785,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       // a candidate on the new block is generated, and solved, before the generator sees that block's applied event
       val onParent = candidate(Some(otherPk))
       onParent.candidateBlock.parentOpt.map(_.id) shouldBe Some(parent.id)
-      val solved = solve(onParent)
+      val solved = solve(onParent, otherMiner)
+      solved.header.powSolution.pk shouldBe otherPk.value
       candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
       testProbe.fishForMessage(blockValidationDelay) {
         case StatusReply.Success(()) => true

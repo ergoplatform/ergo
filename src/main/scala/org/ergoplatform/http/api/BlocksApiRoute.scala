@@ -124,7 +124,8 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     }
   }
 
-  def postBlocksR: Route = (post & entity(as[ErgoFullBlock]) & withAuth) { block =>
+  def postBlocksR: Route = (pathEndOrSingleSlash & post &
+    entity(as[ErgoFullBlock]) & withAuth) { block =>
     if (ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess) {
       log.info(s"Received a new valid block through API: ${block.id}")
 
@@ -191,7 +192,7 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
     ApiResponse(getFullBlockByHeaderId(id))
   }
 
-  def getFullBlockByHeaderIdsR: Route = (post & path("headerIds") & modifierIds) { ids =>
+  def getFullBlockByHeaderIdsR: Route = (path("headerIds") & post & modifierIds) { ids =>
     ApiResponse(getFullBlockByHeaderIds(ids))
   }
 

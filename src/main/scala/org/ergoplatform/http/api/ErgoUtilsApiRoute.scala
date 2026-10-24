@@ -35,7 +35,9 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     seedRoute ~
     length ~
     hashBlake2b ~
+    rawToAddressPostR ~
     rawToAddressR ~
+    addressToRawPostR ~
     addressToRawR ~
     validateAddressPostR ~
     validateAddressGetR ~
@@ -66,7 +68,7 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
     }
   }
 
-  def rawToAddressR: Route = (get & path("rawToAddress" / Segment)) { pubKeyHex =>
+  private def rawToAddressResponse(pubKeyHex: String) = {
     Base16
       .decode(pubKeyHex)
       .flatMap(pkBytes =>
@@ -79,7 +81,17 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
       )
   }
 
-  def addressToRawR: Route = (get & path("addressToRaw" / Segment)) { addressStr =>
+  def rawToAddressGetR: Route = (get & path("rawToAddress" / Segment))(rawToAddressResponse)
+  def rawToAddressR: Route = rawToAddressGetR
+
+  def rawToAddressPostR: Route = (post & path("rawToAddress") & entity(as[Json])) { json =>
+    json.as[String] match {
+      case Right(pubKeyHex) => rawToAddressResponse(pubKeyHex)
+      case Left(ex)         => ApiError(StatusCodes.BadRequest, ex.getMessage())
+    }
+  }
+
+  private def addressToRawResponse(addressStr: String) = {
     ergoAddressEncoder
       .fromString(addressStr)
       .map(address => address.contentBytes)
@@ -88,6 +100,16 @@ class ErgoUtilsApiRoute(val ergoSettings: ErgoSettings)(
         e => BadRequest(e.getMessage),
         raw => ApiResponse(Map("raw" -> raw).asJson)
       )
+  }
+
+  def addressToRawGetR: Route = (get & path("addressToRaw" / Segment))(addressToRawResponse)
+  def addressToRawR: Route = addressToRawGetR
+
+  def addressToRawPostR: Route = (post & path("addressToRaw") & entity(as[Json])) { json =>
+    json.as[String] match {
+      case Right(addressStr) => addressToRawResponse(addressStr)
+      case Left(ex)          => ApiError(StatusCodes.BadRequest, ex.getMessage())
+    }
   }
 
   private def ergoTreeToAddressResponse(ergoTreeHex: String) = {

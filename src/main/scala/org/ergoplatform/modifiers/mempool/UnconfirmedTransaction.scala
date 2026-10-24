@@ -12,13 +12,17 @@ import scorex.util.{ModifierId, ScorexLogging}
   * @param lastCheckedTime - when last validity check was done
   * @param transactionBytes - transaction bytes, to avoid serializations when we send it over the wire
   * @param source - peer which delivered the transaction (None if transaction submitted via API)
+  * @param isUsingBlockchainContext - whether any of the transaction inputs' ErgoTrees uses blockchain context
+  * @param validationResult - validation result during last check
   */
 class UnconfirmedTransaction(val transaction: ErgoTransaction,
                              val lastCost: Option[Int],
                              val createdTime: Long,
                              val lastCheckedTime: Long,
                              val transactionBytes: Option[Array[Byte]],
-                             val source: Option[ConnectedPeer])
+                             val source: Option[ConnectedPeer],
+                             val isUsingBlockchainContext: Option[Boolean] = None,
+                             val validationResult: Option[Boolean] = None)
   extends ScorexLogging {
 
   def id: ModifierId = transaction.id
@@ -33,7 +37,26 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
       createdTime,
       lastCheckedTime = System.currentTimeMillis(),
       transactionBytes,
-      source)
+      source,
+      isUsingBlockchainContext,
+      validationResult)
+  }
+
+  /**
+    * Updates blockchain context usage flag, validation result, optional cost, and last checked time
+    */
+  def withValidationResult(usesBlockchainContext: Boolean,
+                           isValid: Boolean,
+                           costOpt: Option[Int]): UnconfirmedTransaction = {
+    new UnconfirmedTransaction(
+      transaction,
+      lastCost = costOpt.orElse(lastCost),
+      createdTime,
+      lastCheckedTime = System.currentTimeMillis(),
+      transactionBytes,
+      source,
+      isUsingBlockchainContext = Some(usesBlockchainContext),
+      validationResult = Some(isValid))
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -57,4 +80,3 @@ object UnconfirmedTransaction {
   }
 
 }
-

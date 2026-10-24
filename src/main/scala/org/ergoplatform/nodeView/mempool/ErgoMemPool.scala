@@ -324,12 +324,24 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                   }
                 }
 
+                val usesBlockchainContext =
+                  resolvedInputs.exists(_.exists(_.ergoTree.isUsingBlockchainContext))
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
-                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                    val updatedTx = unconfirmedTx.withValidationResult(
+                      usesBlockchainContext = usesBlockchainContext,
+                      isValid = true,
+                      costOpt = Some(cost)
+                    )
+                    acceptIfNoDoubleSpend(updatedTx, validationStartTime)
                   case Failure(ex) =>
-                    this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
+                    val updatedTx = unconfirmedTx.withValidationResult(
+                      usesBlockchainContext = usesBlockchainContext,
+                      isValid = false,
+                      costOpt = None
+                    )
+                    this.invalidate(updatedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }
               } else {
                 val exc = new Exception("not all utxos in place yet")

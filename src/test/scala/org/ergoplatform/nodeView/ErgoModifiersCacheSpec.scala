@@ -54,6 +54,27 @@ class ErgoModifiersCacheSpec extends ErgoCorePropertyTest with OptionValues {
     modifiersCache.remove(genKey(1)).isEmpty shouldBe true
   }
 
+  property("queue cleanup preserves the newest key for later eviction") {
+    val modifiersCache = new ErgoModifiersCache(1)
+
+    // Leave maxSize + cleaningThreshold stale entries in the eviction queue.
+    (1 to 51).foreach { i =>
+      val (key, header) = genCachePair(i)
+      modifiersCache.put(key, header)
+      modifiersCache.remove(key).value shouldBe header
+    }
+
+    val (aKey, aHeader) = genCachePair(52)
+    val (bKey, bHeader) = genCachePair(53)
+    modifiersCache.put(aKey, aHeader)
+    modifiersCache.put(bKey, bHeader)
+    modifiersCache.cleanOverfull()
+
+    modifiersCache.size shouldBe 1
+    modifiersCache.modifierById(aKey) shouldBe None
+    modifiersCache.modifierById(bKey).value shouldBe bHeader
+  }
+
   property("cache is proposing a reasonable candidate to enhance history") {
     val limit = 25
     val modifiersCache = new ErgoModifiersCache(limit)

@@ -33,6 +33,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProg
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
 import org.ergoplatform.wallet.utils.FileUtils
 import org.slf4j.LoggerFactory
+import scorex.crypto.hash.Blake2b256
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
@@ -1071,6 +1072,46 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       upd2.cleared._2.length shouldBe 500 - 384
       upd2.cleared._2.toSet.subsetOf(extensions.map(_.id).toSet) shouldBe true
 
+      expectNoMsg()
+    }
+  }
+
+  property("remote section cache evicts the oldest pending section after queue cleanup") {
+    val config = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+    new NodeViewFixture(config.toSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (us, bh) = createUtxoState(fixture.settings)
+      val block = validFullBlock(None, us, bh)
+      applyBlock(block) shouldBe 'success
+      val storedSection = block.blockTransactions
+      getHistory.contains(storedSection.id) shouldBe true
+      subscribeEvents(classOf[BlockSectionsProcessingCacheUpdate])
+
+      // Each duplicate is dropped from the cache but leaves one entry in its eviction queue.
+      // The section cache holds 384 entries and cleans the queue after 50 more entries.
+      (1 to (384 + 50)).foreach { _ =>
+        nodeViewHolderRef ! ModifiersFromRemote(Seq(storedSection))
+        val update = expectMsgType[BlockSectionsProcessingCacheUpdate]
+        update.blockSectionsCacheSize shouldBe 0
+        update.cleared._2 shouldBe empty
+      }
+
+      val pending = (0 to 384).map { i =>
+        block.extension.copy(headerId = bytesToId(Blake2b256(s"pending-extension-$i")))
+      }
+      pending.map(_.id).distinct.size shouldBe pending.size
+      val oldestPending = pending.head
+      nodeViewHolderRef ! ModifiersFromRemote(Seq(oldestPending))
+      val atBoundary = expectMsgType[BlockSectionsProcessingCacheUpdate]
+      atBoundary.blockSectionsCacheSize shouldBe 1
+      atBoundary.cleared._2 shouldBe empty
+
+      nodeViewHolderRef ! ModifiersFromRemote(pending.tail)
+      val overfull = expectMsgType[BlockSectionsProcessingCacheUpdate]
+      overfull.blockSectionsCacheSize shouldBe 384
+      overfull.cleared._1 shouldBe Extension.modifierTypeId
+      overfull.cleared._2 shouldBe Seq(oldestPending.id)
       expectNoMsg()
     }
   }

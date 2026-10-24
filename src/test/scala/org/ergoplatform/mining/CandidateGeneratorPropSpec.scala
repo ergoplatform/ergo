@@ -290,40 +290,6 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     }
   }
 
-  property("fee boxes are collected in chunks of at most MaxFeeBoxesPerTransaction") {
-    val height = EmptyHistoryHeight
-    val chunkSize = CandidateGenerator.MaxFeeBoxesPerTransaction
-
-    // gather fee-paying transactions until there are more fee boxes than fit in one chunk
-    val gen = validErgoTransactionGenTemplate(minAssets = 0, propositionGen = feeProp)
-    var blockTxs = gen.sample.toSeq.map(_._2)
-    while (blockTxs.flatMap(_.outputs).size <= chunkSize * 2) {
-      gen.sample.foreach(s => blockTxs = blockTxs :+ s._2)
-    }
-    val feeBoxes = blockTxs.flatMap(_.outputs)
-    feeBoxes.size should be > chunkSize
-
-    val txs = CandidateGenerator.collectRewards(
-      None,
-      height,
-      blockTxs,
-      defaultMinerPk,
-      emptyStateContext
-    )
-
-    // no emission box was passed in, so these are all fee-collecting transactions
-    txs.length shouldBe math.ceil(feeBoxes.size.toDouble / chunkSize).toInt
-    txs.foreach(_.inputs.length should be <= chunkSize)
-
-    // every fee box is spent exactly once across the chunks, and nothing is spent twice
-    val spent = txs.flatMap(_.inputs.map(_.boxId.toSeq))
-    spent.distinct.size shouldBe spent.size
-    spent.toSet shouldBe feeBoxes.map(_.id.toSeq).toSet
-
-    // and the miner still receives the whole amount
-    txs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
-  }
-
   property("collectTxs includes every fee chunk when fee boxes exceed MaxFeeBoxesPerTransaction") {
     val chunkSize = CandidateGenerator.MaxFeeBoxesPerTransaction
     val bh        = boxesHolderGen.sample.get
@@ -368,8 +334,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
         Seq(expectedRewardOutputScriptBytes(defaultMinerPk).toSeq)
     }
     val spent = feeTxs.flatMap(_.inputs.map(_.boxId.toSeq))
-    spent.distinct.size shouldBe spent.size
-    spent.toSet shouldBe feeBoxes.map(_.id.toSeq).toSet
+    spent should contain theSameElementsAs feeBoxes.map(_.id.toSeq)
     feeTxs.flatMap(_.outputs).map(_.value).sum shouldBe feeBoxes.map(_.value).sum
   }
 

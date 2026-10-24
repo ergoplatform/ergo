@@ -15,7 +15,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
-  import org.ergoplatform.utils.ErgoNodeTestConstants.{settings => baseSettings}
   import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.generators.ChainGenerator._
   import org.ergoplatform.utils.generators.CoreObjectGenerators.{smallInt, positiveLongGen}
@@ -27,23 +26,13 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   private def genHistory(blocksNum: Int = 0,
                          minFullHeight: Option[Int] = Some(GenesisHeight),
                          votingLength: Option[Int] = None): (ErgoHistory, Seq[ErgoFullBlock]) = {
-    val inHistory = votingLength match {
-      case None =>
-        generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
-      case Some(vl) =>
-        val voting = baseSettings.chainSettings.voting.copy(votingLength = vl)
-        val historySettings = baseSettings.copy(
-          directory = createTempDir.getAbsolutePath,
-          chainSettings = baseSettings.chainSettings.copy(epochLength = 100000000, useLastEpochs = 10, voting = voting),
-          nodeSettings = baseSettings.nodeSettings.copy(
-            stateType = StateType.Digest,
-            verifyTransactions = true,
-            blocksToKeep = BlocksToKeep,
-            extraIndex = false
-          )
-        )
-        ErgoHistory.readOrGenerate(historySettings)(null)
-    }
+    val inHistory = generateHistory(
+      verifyTransactions = true,
+      StateType.Digest,
+      PoPoWBootstrap = false,
+      BlocksToKeep,
+      votingLength = votingLength
+    )
     minFullHeight.foreach { h =>
       inHistory.writeMinimalFullBlockHeight(h)
       inHistory.isHeadersChainSyncedVar = true

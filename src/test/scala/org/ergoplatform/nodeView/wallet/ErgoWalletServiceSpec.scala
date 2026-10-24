@@ -32,6 +32,7 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.encode.Base16
 import sigma.Extensions.ArrayOps
 import sigma.ast.{ByteArrayConstant, EvaluatedValue, FalseLeaf, SType}
+import sigma.interpreter.ContextExtension
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
@@ -122,6 +123,27 @@ class ErgoWalletServiceSpec
         val txWithChangeBoxesButNoChangeAddress =
           prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option.empty)
         txWithChangeBoxesButNoChangeAddress.isFailure shouldBe true
+
+        val customExtension = ContextExtension(Map((1: Byte) -> ByteArrayConstant(Array[Byte](1, 2, 3))))
+        val txWithExt = prepareUnsignedTransaction(
+          Seq(outputCandidate),
+          startHeight,
+          selectionResult,
+          ergoBoxes,
+          Option(proveDlog),
+          Seq(customExtension)
+        ).get
+        txWithExt.inputs.map(_.extension) shouldBe IndexedSeq(customExtension)
+
+        val tooManyExtensions = prepareUnsignedTransaction(
+          Seq(outputCandidate),
+          startHeight,
+          selectionResult,
+          ergoBoxes,
+          Option(proveDlog),
+          Seq(customExtension, customExtension)
+        )
+        tooManyExtensions.isFailure shouldBe true
     }
   }
 

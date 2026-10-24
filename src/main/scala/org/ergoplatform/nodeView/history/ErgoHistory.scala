@@ -249,7 +249,7 @@ trait ErgoHistory
     * or a lost section (#2778, case 2). A pointer to a header that is not stored, such as the pre-genesis id
     * `reportModifierIsInvalid` writes when the genesis block is invalidated, is left as it is.
     */
-  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = historyStorage.synchronized {
+  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = Try(historyStorage.synchronized {
     bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).filter(getFullBlock(_).isEmpty) match {
       case Some(bestHeader) =>
         val lowestHeight = minimalFullBlockHeight
@@ -277,7 +277,7 @@ trait ErgoHistory
       case None =>
         Success(())
     }
-  }
+  }).flatten
 
   /**
     * @return read-only copy of this history

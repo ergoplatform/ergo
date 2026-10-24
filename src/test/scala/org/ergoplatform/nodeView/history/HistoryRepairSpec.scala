@@ -370,14 +370,17 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     val settings = testSettings.copy(nodeSettings = testSettings.nodeSettings.copy(extraIndex = true))
     val readError = new IllegalStateException("rebuilt extra-index read sentinel")
     val rebuilt = new TestStorage {
-      override def insertExtraTry(_indexes: Array[(Array[Byte], Array[Byte])],
-                                  _objects: Array[ExtraIndex]): Try[Unit] = Success(())
+      override def insertExtraTry(
+        indexesToInsert: Array[(Array[Byte], Array[Byte])],
+        objectsToInsert: Array[ExtraIndex]
+      ): Try[Unit] =
+        Success(())
       override def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
         if (id == bytesToId(RentIndexEnabledKey)) throw readError else None
     }
     val original = new TestStorage {
-      override def modifierBytesById(_id: ModifierId): Option[Array[Byte]] = None
-      override def deleteExtraDBTry(_ergoSettings: ErgoSettings): Try[HistoryStorage] = {
+      override def modifierBytesById(id: ModifierId): Option[Array[Byte]] = None
+      override def deleteExtraDBTry(ergoSettings: ErgoSettings): Try[HistoryStorage] = {
         close()
         Success(rebuilt)
       }

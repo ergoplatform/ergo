@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
   IndexedHeightKey, NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -360,6 +360,14 @@ object ErgoHistory extends ScorexLogging {
 
       def storedBytes(key: Array[Byte]): Option[Array[Byte]] =
         readPreflight(db.modifierBytesById(bytesToId(key)))
+      def storedIndex(key: ByteArrayWrapper): Option[Array[Byte]] =
+        readPreflight(db.getIndex(key))
+      def storedModifier(id: ModifierId): Option[BlockSection] =
+        readPreflight(db.modifierById(id))
+      def storedExtraIndex(id: ModifierId): Option[ExtraIndex] =
+        readPreflight(db.getExtraIndex(id))
+      def inBestFullChain(id: ModifierId): Boolean =
+        readPreflight(FullBlockProcessor.isInBestFullChain(db, id))
       def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
         .filter(_.length == Integer.BYTES)
         .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
@@ -390,8 +398,8 @@ object ErgoHistory extends ScorexLogging {
         // Unknown validity is accepted: the indexer does not gate on semantic validity, so a
         // checkpoint over a not-yet-marked header is legitimate. An explicitly Invalid
         // checkpoint header still forces a rebuild - the indexed chain was invalidated.
-        val isInvalid = readPreflight(db.getIndex(validityKey)).exists(_.sameElements(Array(0.toByte)))
-        if (!isInvalid && readPreflight(FullBlockProcessor.isInBestFullChain(db, id))) readPreflight(db.modifierById(id)).collect {
+        val isInvalid = storedIndex(validityKey).exists(_.sameElements(Array(0.toByte)))
+        if (!isInvalid && inBestFullChain(id)) storedModifier(id).collect {
           case header: Header if header.height == indexedHeight && header.id == id => header
         } else None
       }
@@ -399,7 +407,7 @@ object ErgoHistory extends ScorexLogging {
         if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
           false
         } else {
-          readPreflight(db.modifierById(header.transactionsId)).collect {
+          storedModifier(header.transactionsId).collect {
             case transactions: BlockTransactions if transactions.headerId == header.id =>
               val lastTx = transactions.txs.last
               val lastTxIndex = globalTxIndex - 1
@@ -410,7 +418,7 @@ object ErgoHistory extends ScorexLogging {
               } else {
                 val inputNums = lastTx.inputs.map { input =>
                   val inputId = bytesToId(input.boxId)
-                  readPreflight(db.getExtraIndex(inputId)).collect {
+                  storedExtraIndex(inputId).collect {
                     case box: IndexedErgoBox
                       if box.id == inputId && box.spendingTxIdOpt.contains(lastTx.id) &&
                         box.spendingHeightOpt.contains(header.height) => box.globalIndex
@@ -418,11 +426,11 @@ object ErgoHistory extends ScorexLogging {
                 }
                 if (inputNums.forall(_.isDefined)) Some(inputNums.flatten.toArray) else None
               }
-              val numericTxMatches = readPreflight(db.getExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex)))).exists {
+              val numericTxMatches = storedExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex))).exists {
                 case NumericTxIndex(index, id) => index == lastTxIndex && id == lastTx.id
                 case _ => false
               }
-              val indexedTxMatches = readPreflight(db.getExtraIndex(lastTx.id)).exists {
+              val indexedTxMatches = storedExtraIndex(lastTx.id).exists {
                 case tx: IndexedErgoTransaction =>
                   tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
                     tx.blockId == header.id &&
@@ -433,11 +441,11 @@ object ErgoHistory extends ScorexLogging {
               }
               val outputRowsMatch = expectedOutputNums.zip(lastTx.outputs).forall { case (boxIndex, output) =>
                 val boxId = bytesToId(output.id)
-                val numericBoxMatches = readPreflight(db.getExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex)))).exists {
+                val numericBoxMatches = storedExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex))).exists {
                   case NumericBoxIndex(index, id) => index == boxIndex && id == boxId
                   case _ => false
                 }
-                val indexedBoxMatches = readPreflight(db.getExtraIndex(boxId)).exists {
+                val indexedBoxMatches = storedExtraIndex(boxId).exists {
                   case box: IndexedErgoBox =>
                     box.globalIndex == boxIndex && box.inclusionHeight == header.height && box.id == boxId &&
                       box.spendingTxIdOpt.isEmpty && box.spendingHeightOpt.isEmpty && box.spendingProofOpt.isEmpty

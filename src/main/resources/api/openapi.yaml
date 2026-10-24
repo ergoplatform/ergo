@@ -727,6 +727,18 @@ components:
           items:
             type: string
             description: hex-encoded serialized box bytes
+        context:
+          description: Optional context variables to be attached to transaction inputs
+          type: object
+          properties:
+            extension:
+              description: Sequence of context extensions, one entry per inputsRaw box in order (a shorter list is padded with empty extensions)
+              type: array
+              items:
+                type: object
+                description: Variables to be put into context for an input
+                additionalProperties:
+                  $ref: '#/components/schemas/SValue'
 
     SourceHolder:
       type: object

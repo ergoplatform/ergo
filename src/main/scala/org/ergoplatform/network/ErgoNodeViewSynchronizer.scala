@@ -838,18 +838,25 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                                     blockAppliedTxsCache: FixedSizeApproximateCacheQueue): Unit = {
     val typeId = data.typeId
     val modifiers = data.modifiers
-    log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
-    log.debug("Modifier ids: " + modifiers.keys)
-
-    lastModifierGotTime = System.currentTimeMillis()
-
-    // filter out non-requested modifiers
-    val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
-
-    if (typeId == ErgoTransaction.modifierTypeId) {
-      transactionsFromRemote(requestedModifiers, mp, remote)
+    if (modifiers.isEmpty) {
+      // e.g. an older node answering a request for a section too big for its message limit.
+      // Not delivery progress: lastModifierGotTime is not updated, so the delivery tracker
+      // still treats the requested objects as not delivered and penalizes / re-requests as usual.
+      log.debug(s"Got an empty Modifiers message of type $typeId from remote connected peer: ${remote.connectionId}")
     } else {
-      blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      log.info(s"Got ${modifiers.size} modifiers of type $typeId from remote connected peer: ${remote.connectionId}")
+      log.debug("Modifier ids: " + modifiers.keys)
+
+      lastModifierGotTime = System.currentTimeMillis()
+
+      // filter out non-requested modifiers
+      val requestedModifiers = processSpam(remote, typeId, modifiers, blockAppliedTxsCache)
+
+      if (typeId == ErgoTransaction.modifierTypeId) {
+        transactionsFromRemote(requestedModifiers, mp, remote)
+      } else {
+        blockSectionsFromRemote(hr, typeId, requestedModifiers, remote)
+      }
     }
   }
 
@@ -1299,18 +1306,26 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
     @tailrec
     def sendByParts(mods: Seq[(ModifierId, Array[Byte])]): Unit = {
       var size = 5 //message type id + message size
-      var batch = mods.takeWhile { case (_, modBytes) =>
+      val batch = mods.takeWhile { case (_, modBytes) =>
         size += ErgoNodeViewModifier.ModifierIdSize + 4 + modBytes.length
         size < ModifiersSpec.maxMessageSize
       }
-      if (batch.isEmpty) {
-        // send modifier anyway
-        val ho = mods.headOption
-        batch = ho.toSeq
-        log.warn(s"Sending too big modifier ${ho.map(_._1)}, its size ${ho.map(_._2.length)}")
+      if (batch.nonEmpty) {
+        remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
+      } else {
+        val (id, bytes) = mods.head
+        if (ModifiersSpec.singleModifierFits(bytes.length)) {
+          // send modifier anyway
+          log.warn(s"Sending too big modifier $id, its size ${bytes.length}")
+          remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, Map(id -> bytes))), None)
+        } else {
+          // ModifiersSpec.serialize would write a message with 0 modifiers, which the peer can't use
+          // and an older peer rejects as malformed, penalizing this node. Skip it.
+          log.warn(s"Not sending modifier $id of type ${invData.typeId} and size ${bytes.length} " +
+                   s"to ${remote.connectionId}: too big for a Modifiers message")
+        }
       }
-      remote.handlerRef ! Message(ModifiersSpec, Right(ModifiersData(invData.typeId, batch.toMap)), None)
-      val remaining = mods.drop(batch.length)
+      val remaining = mods.drop(math.max(batch.length, 1))
       if (remaining.nonEmpty) {
         sendByParts(remaining)
       }

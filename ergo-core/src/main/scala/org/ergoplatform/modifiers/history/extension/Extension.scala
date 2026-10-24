@@ -1,5 +1,7 @@
 package org.ergoplatform.modifiers.history.extension
 
+import java.nio.charset.StandardCharsets
+
 import cats.syntax.either._
 import sigmastate.utils.Helpers._
 import com.google.common.primitives.Bytes
@@ -70,6 +72,36 @@ object Extension extends ApiCodecs {
     * against the genesis block are to be written into a single key space defined by the value below.
     */
   val ValidationRulesPrefix: Byte = 0x02
+
+  /**
+    * Key space for optional metadata fields set by block producers (see issue #962).
+    * Such fields are not part of the consensus protocol and are not validated beyond the generic
+    * extension field rules (2-byte keys, values up to 64 bytes, no duplicate keys, see ExtensionValidator).
+    * The first byte of a key defines the metadata key space, the second byte the field within it.
+    *
+    * The prefix starts at 0x06: on the weak-blocks branch (see #2055), 0x03 is the input-block
+    * key space (`InputBlockTransactionsDigestKey` is `[0x03, 0x00]`) and 0x04 / 0x05 are reserved
+    * there, so each extension key keeps one meaning across the branches that will merge.
+    */
+  val BlockMetadataPrefix: Byte = 0x06
+
+  /**
+    * Key of the extension field holding the version of the node software which produced the block,
+    * as a UTF-8 string (see `org.ergoplatform.Version.VersionString`). Allows gathering statistics
+    * about node versions in use without affecting consensus.
+    */
+  val NodeVersionKey: Array[Byte] = Array(BlockMetadataPrefix, 0x00.toByte)
+
+  /**
+    * Builds the node-version extension field for the given node version string.
+    * The value is truncated to `FieldValueMaxSize` bytes (version strings are ASCII, so the
+    * truncation is character-safe), keeping blocks produced with it valid under the generic
+    * extension field rules.
+    */
+  def nodeVersionField(version: String): (Array[Byte], Array[Byte]) = {
+    val versionBytes = version.getBytes(StandardCharsets.UTF_8).take(FieldValueMaxSize)
+    NodeVersionKey.clone() -> versionBytes
+  }
 
   /**
     * Id a type of network object encoding extension

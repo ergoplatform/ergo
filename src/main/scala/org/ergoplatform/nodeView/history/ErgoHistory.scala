@@ -336,20 +336,27 @@ object ErgoHistory extends ScorexLogging {
                                     storage: HistoryStorage)(implicit context: ActorContext): ErgoHistory = {
     var db = storage
 
-    // ExtraIndexer db check
-    if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
-      // Only preflight reads use this guard. Rebuild operations already close their own stores.
-      def readPreflight[A](read: => A): A = Try(read).recoverWith { case error =>
-        Try(db.close()).failed.foreach { closeError =>
+    // The close action follows the store owned at this stage of startup.
+    def stopOnFailure[A](step: String, result: Try[A])(closeStore: => Unit): A = result match {
+      case Failure(error) =>
+        Try(closeStore).failed.foreach { closeError =>
           if (closeError ne error) error.addSuppressed(closeError)
         }
         log.error(
-          "Extra-index preflight read failed; stop this node. Operator recovery: " +
-            "inspect the error and correct its cause (disk space, permissions, or open handles); " +
-            "keep history/index and history/objects intact, then restart to retry.",
+          s"$step failed; stop this node. Operator recovery: " +
+            "inspect the error and correct its cause (disk space, permissions, " +
+            "or open handles); keep history/index and history/objects intact, " +
+            "then restart to retry.",
           error)
-        Failure(error)
-      }.get
+        throw error
+      case Success(value) => value
+    }
+
+    // ExtraIndexer db check
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
+      // Only preflight reads use this guard. Rebuild operations already close their own stores.
+      def readPreflight[A](read: => A): A =
+        stopOnFailure("Extra-index preflight read", Try(read))(db.close())
 
       def storedBytes(key: Array[Byte]): Option[Array[Byte]] =
         readPreflight(db.modifierBytesById(bytesToId(key)))
@@ -374,7 +381,7 @@ object ErgoHistory extends ScorexLogging {
       val globalTxIndex = globalTxIndexOpt.getOrElse(0L)
       val globalBoxIndex = globalBoxIndexOpt.getOrElse(0L)
       val rollbackTo = rollbackToOpt.getOrElse(0)
-      val indexedHeaderIdBytesOpt = readPreflight(db.modifierBytesById(bytesToId(IndexedHeaderIdKey)))
+      val indexedHeaderIdBytesOpt = storedBytes(IndexedHeaderIdKey)
       val indexedHeaderOpt = indexedHeaderIdBytesOpt
         .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
         .flatMap { idBytes =>
@@ -501,7 +508,7 @@ object ErgoHistory extends ScorexLogging {
       // version can not capture (see ExtraIndexer.RentIndexEnabledKey): turning the flag
       // on after an off period must rebuild the index (blocks indexed while off have no
       // rent rows); turning it off just clears the marker, keeping the index intact.
-      val rentEnabledStored = readPreflight(db.modifierBytesById(bytesToId(RentIndexEnabledKey)))
+      val rentEnabledStored = storedBytes(RentIndexEnabledKey)
         .exists(_.sameElements(RentIndexEnabledBytes))
       if (ergoSettings.nodeSettings.storageRentCollection && !rentEnabledStored) {
         log.warn("storageRentCollection is on but the extra index has no rent rows, rebuilding it")
@@ -547,24 +554,9 @@ object ErgoHistory extends ScorexLogging {
         }
     }
 
-    // A failed repair closes the store and rethrows its error, which stops the start-up.
-    def stopOnFailure(step: String, result: Try[_]): Unit = result match {
-      case Failure(error) =>
-        Try(history.closeStorage()).failed.foreach { closeError =>
-          if (closeError ne error) error.addSuppressed(closeError)
-        }
-        log.error(
-          s"$step failed; stop this node. Operator recovery: " +
-            "inspect the error and correct its cause (disk space, permissions, " +
-            "or open handles); keep history/index and history/objects intact, " +
-            "then restart to retry.",
-          error)
-        throw error
-      case Success(_) =>
-    }
-
-    stopOnFailure("History repair", repairIfNeeded(history))
-    stopOnFailure("Best full block repair", history.repairIncompleteBestFullBlock())
+    // A failed repair closes the constructed history and stops the start-up.
+    stopOnFailure("History repair", repairIfNeeded(history))(history.closeStorage())
+    stopOnFailure("Best full block repair", history.repairIncompleteBestFullBlock())(history.closeStorage())
 
     // If the node is restarted in the middle of UTXO set snapshot bootstrapping (headers are
     // already persisted, but the snapshot was not applied yet), the headers chain is already

@@ -65,9 +65,11 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     var throwAt: Int = -1
     var failAfterObjectsAt: Int = -1
     var closed: Boolean = false
+    var closeCount: Int = 0
     var closeFailure: Option[RuntimeException] = None
     override def close(): Unit = {
       closed = true
+      closeCount += 1
       closeFailure.foreach(error => throw error)
     }
 
@@ -367,17 +369,11 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
   property("extra-index preflight read failure after rebuild closes only the current storage") {
     val settings = testSettings.copy(nodeSettings = testSettings.nodeSettings.copy(extraIndex = true))
     val readError = new IllegalStateException("rebuilt extra-index read sentinel")
-    var originalCloses = 0
-    var rebuiltCloses = 0
     val rebuilt = new TestStorage {
       override def insertExtraTry(_indexes: Array[(Array[Byte], Array[Byte])],
                                   _objects: Array[ExtraIndex]): Try[Unit] = Success(())
       override def modifierBytesById(id: ModifierId): Option[Array[Byte]] =
         if (id == bytesToId(RentIndexEnabledKey)) throw readError else None
-      override def close(): Unit = {
-        rebuiltCloses += 1
-        super.close()
-      }
     }
     val original = new TestStorage {
       override def modifierBytesById(_id: ModifierId): Option[Array[Byte]] = None
@@ -385,19 +381,15 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
         close()
         Success(rebuilt)
       }
-      override def close(): Unit = {
-        originalCloses += 1
-        super.close()
-      }
     }
 
     val (error, events) = captureHistoryErrors {
       intercept[IllegalStateException] { ErgoHistory.readOrGenerate(settings, original)(null) }
     }
     error should be theSameInstanceAs readError
-    originalCloses shouldBe 1
-    rebuiltCloses shouldBe 1
+    original.closeCount shouldBe 1
+    rebuilt.closeCount shouldBe 1
     rebuilt.closed shouldBe true
-    events.count(_.getFormattedMessage.startsWith("Extra-index preflight read failed;")) shouldBe 1
+    events.filter(_.getFormattedMessage.startsWith("Extra-index preflight read failed;")) should have size 1
   }
 }

@@ -772,6 +772,51 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "use the candidate key for a v2 solution without pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings60)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        defaultSettings60
+      )
+
+    val customMiner =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("external_v2_miner".getBytes()))
+    val customPk = customMiner.publicImage
+    customPk should not be defaultMinerSecret.publicImage
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(customPk)),
+      replyProbe.ref
+    )
+    val candidate = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    candidate.externalVersion.pk shouldBe customPk
+
+    val minedBlock = defaultSettings60.chainSettings.powScheme
+      .proveCandidate(candidate.candidateBlock, customMiner.w, 0, 1000)
+      .get
+    val solutionWithoutPk =
+      minedBlock.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+    candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
+
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
+      case LocallyGeneratedModifier(header: Header) => header
+    }
+    submittedHeader.powSolution.pk shouldBe customPk.value
+
+    system.terminate()
+  }
+
   it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)

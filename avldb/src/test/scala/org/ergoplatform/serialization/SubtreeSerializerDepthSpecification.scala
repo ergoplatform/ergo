@@ -14,8 +14,8 @@ class SubtreeSerializerDepthSpecification extends AnyPropSpec with Matchers {
 
   property("rejects excessive subtree nesting without exhausting the parser stack") {
     SubtreeSerializer.parseBytesTry(encoded(1)).isSuccess shouldBe true
-    SubtreeSerializer.parseBytesTry(encoded(255)).isSuccess shouldBe true
-    SubtreeSerializer.parseBytesTry(encoded(256)).isFailure shouldBe true
+    SubtreeSerializer.parseBytesTry(encoded(127)).isSuccess shouldBe true
+    SubtreeSerializer.parseBytesTry(encoded(128)).isFailure shouldBe true
 
     val outcome = try {
       if (SubtreeSerializer.parseBytesTry(encoded(20000)).isFailure) "rejected" else "accepted"

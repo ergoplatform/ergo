@@ -48,4 +48,24 @@ class MessageSerializerSpecification extends ErgoCorePropertyTest {
   property("message serializer waits for header before checking payload length") {
     serializer.deserialize(ByteString(Array.fill(HeaderLength - 1)(0.toByte)), None).get shouldBe None
   }
+
+  property("wrong magic failure does not echo bytes after the declared frame") {
+    val wrongMagic = Array(9: Byte, 0: Byte, 2: Byte, 4: Byte)
+    val wrongMagicFrame = ByteString.createBuilder
+      .putBytes(wrongMagic)
+      .putByte(ModifiersSpec.messageCode)
+      .putInt(0)
+      .result()
+    wrongMagicFrame.length shouldBe HeaderLength
+
+    // TCP may deliver a second frame in the same read. Its bytes are not part of this frame.
+    val nextFrameBytes = ByteString("\nREMOTE_FORGED_LOG_LINE")
+    val result = serializer.deserialize(wrongMagicFrame ++ nextFrameBytes, None)
+
+    result.isFailure shouldBe true
+    val failure = result.failed.get
+    failure shouldBe a[MaliciousBehaviorException]
+    failure.getMessage shouldBe s"Wrong magic bytes, expected ${magic.mkString}, got ${wrongMagic.mkString}"
+    failure.getMessage should not include "REMOTE_FORGED_LOG_LINE"
+  }
 }

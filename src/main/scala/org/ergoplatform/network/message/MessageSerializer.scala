@@ -61,7 +61,7 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
         //peer is from another network
         if (!java.util.Arrays.equals(magic, magicBytes)) {
           throw MaliciousBehaviorException(
-            s"Wrong magic bytes, expected ${magicBytes.mkString}, got ${magic.mkString} in : ${byteString.utf8String}"
+            s"Wrong magic bytes, expected ${magicBytes.mkString}, got ${magic.mkString}"
           )
         }
         val spec = specsMap

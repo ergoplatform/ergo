@@ -565,11 +565,13 @@ object ErgoHistory extends ScorexLogging {
     // next fresh header arrives, see ToDownloadProcessor). A header persisted during an
     // interrupted bootstrap is at the network tip, so recovery after a mid-bootstrap restart
     // is unaffected.
-    if (nodeSettings.utxoSettings.utxoBootstrap &&
-        history.bestHeaderOpt.exists(_.isNew(ergoSettings.chainSettings.blockInterval * nodeSettings.headerChainDiff)) &&
-        !history.isUtxoSnapshotApplied) {
-      history.setHeadersChainSynced()
-    }
+    stopOnFailure("UTXO bootstrap recovery", Try {
+      if (nodeSettings.utxoSettings.utxoBootstrap &&
+          history.bestHeaderOpt.exists(_.isNew(ergoSettings.chainSettings.blockInterval * nodeSettings.headerChainDiff)) &&
+          !history.isUtxoSnapshotApplied) {
+        history.setHeadersChainSynced()
+      }
+    })
 
     log.info("History database read")
     history

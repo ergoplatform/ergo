@@ -29,6 +29,8 @@ import scala.util.{Failure, Success, Try}
 class HistoryRepairSpec extends ErgoCorePropertyTest {
   private val testSettings = initSettings.copy(nodeSettings = initSettings.nodeSettings.copy(
     stateType = StateType.Utxo, verifyTransactions = true, extraIndex = false))
+  private val bootstrapSettings = testSettings.copy(nodeSettings = testSettings.nodeSettings.copy(
+    utxoSettings = testSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
 
   private def captureHistoryErrors[A](body: => A): (A, Vector[ILoggingEvent]) = {
     val logger = LoggerFactory.getLogger(classOf[ErgoHistory].getPackage.getName).asInstanceOf[LogbackLogger]
@@ -66,14 +68,24 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     var throwOnReadId: Option[ModifierId] = None
     var throwOnReadAt: Int = -1
     var targetedReads: Int = 0
+    var throwOnIndexKey: Option[ByteArrayWrapper] = None
+    var targetedIndexReads: Int = 0
     var closed: Boolean = false
+    var closeCount: Int = 0
     var closeFailure: Option[RuntimeException] = None
     override def close(): Unit = {
       closed = true
+      closeCount += 1
       closeFailure.foreach(error => throw error)
     }
 
-    override def getIndex(key: ByteArrayWrapper): Option[Array[Byte]] = indexes.get(key)
+    override def getIndex(key: ByteArrayWrapper): Option[Array[Byte]] = {
+      if (throwOnIndexKey.contains(key)) {
+        targetedIndexReads += 1
+        throw readFailure
+      }
+      indexes.get(key)
+    }
     override def modifierById(id: ModifierId): Option[BlockSection] = {
       if (throwOnReadId.contains(id)) {
         targetedReads += 1
@@ -98,7 +110,9 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     }
   }
 
-  private class Fixture(stateType: StateType = StateType.Utxo, verifyTransactions: Boolean = true) {
+  private class Fixture(stateType: StateType = StateType.Utxo,
+                        verifyTransactions: Boolean = true,
+                        freshTip: Boolean = false) {
     val fixtureSettings: ErgoSettings = testSettings.copy(nodeSettings = testSettings.nodeSettings.copy(
       stateType = stateType, verifyTransactions = verifyTransactions))
     val db = new TestStorage
@@ -111,7 +125,8 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     val txs = BlockTransactions(seed.id, seed.version, Seq(invalidErgoTransactionGen.sample.get))
     val ext = Extension(seed.id, Seq.empty)
     val proofs = randomADProofsGen.sample.get
-    val tip: Header = seed.copy(transactionsRoot = txs.digest, extensionRoot = ext.digest, ADProofsRoot = proofs.digest)
+    val tip: Header = seed.copy(transactionsRoot = txs.digest, extensionRoot = ext.digest,
+      ADProofsRoot = proofs.digest, timestamp = if (freshTip) System.currentTimeMillis() else seed.timestamp)
     val children: Seq[Header] = (1 to 2).map(i => tip.copy(
       parentId = tip.id, height = tip.height + 1, timestamp = tip.timestamp + i))
     val heightKey: ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(tip.height + 1)))
@@ -350,6 +365,30 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     f.db.closed shouldBe true
     f.db.removals shouldBe empty
     val startupErrors = events.filter(_.getFormattedMessage.startsWith("Best full block repair failed; stop this node."))
+    startupErrors should have size 1
+    startupErrors.head.getFormattedMessage should include ("keep history/index and history/objects intact")
+    startupErrors.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs f.db.readFailure
+  }
+
+  property("startup closes storage and logs a UTXO bootstrap recovery read failure") {
+    val f = new Fixture(freshTip = true)
+    val bestFullKey = ByteArrayWrapper(Array.fill[Byte](32)(-1))
+    val minFullHeightKey = ByteArrayWrapper(Algos.hash("minfullheight".getBytes("UTF-8")))
+    f.db.indexes.remove(bestFullKey)
+    f.tip.isNew(bootstrapSettings.chainSettings.blockInterval *
+      bootstrapSettings.nodeSettings.headerChainDiff) shouldBe true
+    f.history.bestHeaderOpt.map(_.id) shouldBe Some(f.tip.id)
+    f.history.isUtxoSnapshotApplied shouldBe false
+    f.db.throwOnIndexKey = Some(minFullHeightKey)
+
+    val (error, events) = captureHistoryErrors {
+      intercept[IllegalStateException] { ErgoHistory.readOrGenerate(bootstrapSettings, f.db)(null) }
+    }
+    error should be theSameInstanceAs f.db.readFailure
+    f.db.targetedIndexReads shouldBe 1
+    f.db.closeCount shouldBe 1
+    f.db.removals shouldBe empty
+    val startupErrors = events.filter(_.getFormattedMessage.startsWith("UTXO bootstrap recovery failed; stop this node."))
     startupErrors should have size 1
     startupErrors.head.getFormattedMessage should include ("keep history/index and history/objects intact")
     startupErrors.head.getThrowableProxy.asInstanceOf[ThrowableProxy].getThrowable should be theSameInstanceAs f.db.readFailure

@@ -16,6 +16,7 @@ import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
 import scorex.util.ModifierId
 import sigma.data.{ProveDlog, SigmaBoolean}
+import sigma.interpreter.ContextExtension
 import sigmastate.crypto.DLogProtocol.DLogProverInput
 
 import scala.util.Try
@@ -69,7 +70,8 @@ object ErgoWalletActorMessages {
   final case class GenerateTransaction(requests: Seq[TransactionGenerationRequest],
                                        inputsRaw: Seq[String],
                                        dataInputsRaw: Seq[String],
-                                       sign: Boolean)
+                                       sign: Boolean,
+                                       contextExtensions: Seq[ContextExtension] = Seq.empty)
 
   /**
    * Request to generate commitments for an unsigned transaction

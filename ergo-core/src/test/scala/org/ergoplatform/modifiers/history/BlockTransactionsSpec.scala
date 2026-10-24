@@ -11,6 +11,8 @@ import sigma.ast.{Constant, ErgoTree, SInt, SOption}
 import sigma.data.TrivialProp.TrueProp
 import sigma.interpreter.ProverResult
 
+import scala.util.Failure
+
 class BlockTransactionsSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.generators.CoreObjectGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
@@ -101,12 +103,12 @@ class BlockTransactionsSpec extends ErgoCorePropertyTest {
   property("version four still rejects V6-only types in registers") {
     val tx = VersionContext.withVersions(3, 3) { transaction(1, versionedRegister = true, treeVersion = 3) }
     val section = BlockTransactions(Header.GenesisParentId, 4.toByte, Seq(tx))
-    BlockTransactionsSerializer.parseBytesTry(section.bytes).isFailure shouldBe true
+    BlockTransactionsSerializer.parseBytesTry(section.bytes) shouldBe a[Failure[_]]
   }
 
   property("section sizing does not force an uncached standalone size in the default version context") {
     val tx = VersionContext.withVersions(3, 3) { transaction(2, versionedRegister = true) }
-    scala.util.Try(tx.size).isFailure shouldBe true
+    scala.util.Try(tx.size) shouldBe a[Failure[_]]
     BlockTransactions.sizeOf(Seq(tx), 4.toByte) shouldBe originalBytes(
       BlockTransactions(Header.GenesisParentId, 4.toByte, Seq(tx))).length
   }

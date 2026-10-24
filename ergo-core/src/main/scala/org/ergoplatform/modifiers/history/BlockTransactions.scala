@@ -107,7 +107,7 @@ object BlockTransactions extends ApiCodecs {
     * @param txs nonempty transaction sequence, as required by [[BlockTransactions]]
     * @throws AssertionError if `txs` is empty
     */
-  def sizeOf(txs: Seq[ErgoTransaction], blockVersion: Version): Int =
+  private[ergoplatform] def sizeOf(txs: Seq[ErgoTransaction], blockVersion: Version): Int =
     BlockTransactions(Header.GenesisParentId, blockVersion, txs).bytes.length
 
   // Used in the miner when a BlockTransaction instance is not generated yet (because a header is not known)

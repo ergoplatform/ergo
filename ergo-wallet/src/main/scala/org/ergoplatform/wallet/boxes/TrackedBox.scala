@@ -116,7 +116,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     } else {
       w.putShort(appsCount)
       obj.scans.foreach { scanId =>
-        w.putShort(scanId)
+        Constants.putScanId(w, scanId)
       }
     }
     ErgoBoxSerializer.serialize(obj.box, w)
@@ -133,7 +133,7 @@ object TrackedBoxSerializer extends ErgoWalletSerializer[TrackedBox] {
     val appStatuses: Set[ScanId] = if (appsCount == 0){
       Set(Constants.PaymentsScanId)
     } else {
-      (0 until appsCount).map(_ => ScanId @@ r.getShort()).toSet
+      (0 until appsCount).map(_ => Constants.getScanId(r)).toSet
     }
     val box = ErgoBoxSerializer.parse(r)
     TrackedBox(

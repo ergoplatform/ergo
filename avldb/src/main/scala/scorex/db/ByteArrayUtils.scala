@@ -37,6 +37,18 @@ object ByteArrayUtils {
     buf(pos + 3) = v.toByte
   }
 
+  /** Put the given Long bytes at the given position in the buffer array. */
+  @inline final def putLong(buf: Array[Byte], pos: Int, v: Long): Unit = {
+    buf(pos) = (v >> 56).toByte
+    buf(pos + 1) = (v >> 48).toByte
+    buf(pos + 2) = (v >> 40).toByte
+    buf(pos + 3) = (v >> 32).toByte
+    buf(pos + 4) = (v >> 24).toByte
+    buf(pos + 5) = (v >> 16).toByte
+    buf(pos + 6) = (v >> 8).toByte
+    buf(pos + 7) = v.toByte
+  }
+
   /** Replicate the given value n times in the buffer starting from the given position. */
   @inline final def putReplicated(buf: Array[Byte], pos: Int, n: Int, v: Byte): Unit = {
     val limit = pos + n

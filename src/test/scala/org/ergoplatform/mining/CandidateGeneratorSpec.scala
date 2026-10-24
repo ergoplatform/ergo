@@ -1675,6 +1675,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       val onParent = candidate(Some(otherPk))
       onParent.candidateBlock.parentOpt.map(_.id) shouldBe Some(parent.id)
       val solved = solveWithOtherPk(onParent)
+      solved.header.powSolution.pk shouldBe otherPk.value
       candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
       testProbe.fishForMessage(blockValidationDelay) {
         case StatusReply.Success(()) => true

@@ -817,6 +817,77 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "use the previous candidate key for a v2 solution without pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val acceptedHeaderId = new java.util.concurrent.atomic.AtomicReference[Option[String]](None)
+    val basePow = defaultSettings60.chainSettings.powScheme
+    val gatedPow = new DefaultFakePowScheme(basePow.k, basePow.n) {
+      override def validate(header: Header): Try[Unit] =
+        if (acceptedHeaderId.get().forall(_ == header.id.toString)) scala.util.Success(())
+        else Failure(new IllegalArgumentException("Not the previous candidate header"))
+    }
+    val settings = defaultSettings60.copy(
+      chainSettings = defaultSettings60.chainSettings.copy(powScheme = gatedPow)
+    )
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+    val candidateGenerator: ActorRef = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    val previousMiner =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("external_previous_v2_miner".getBytes()))
+    val previousPk = previousMiner.publicImage
+    previousPk should not be defaultMinerSecret.publicImage
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(previousPk)),
+      replyProbe.ref
+    )
+    val previous = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    previous.externalVersion.pk shouldBe previousPk
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false),
+      replyProbe.ref
+    )
+    val current = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    current.externalVersion.pk shouldBe defaultMinerSecret.publicImage
+
+    val minedPrevious = gatedPow.proveCandidate(previous.candidateBlock, previousMiner.w, 0, 1000).get
+    val solutionWithoutPk = minedPrevious.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+    val expectedPrevious = CandidateGenerator.completeBlock(
+      previous.candidateBlock,
+      minedPrevious.header.powSolution
+    )
+    val currentAttempt = CandidateGenerator.completeBlock(
+      current.candidateBlock,
+      solutionWithoutPk.copy(pk = current.externalVersion.pk.value)
+    )
+    currentAttempt.id should not be expectedPrevious.id
+    acceptedHeaderId.set(Some(expectedPrevious.id.toString))
+    candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
+
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
+      case LocallyGeneratedModifier(header: Header) => header
+    }
+    submittedHeader.id shouldBe expectedPrevious.header.id
+    submittedHeader.powSolution.pk shouldBe previousPk.value
+
+    system.terminate()
+  }
+
   it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)

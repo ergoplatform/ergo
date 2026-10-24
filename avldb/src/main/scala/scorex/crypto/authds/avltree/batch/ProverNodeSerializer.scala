@@ -9,6 +9,8 @@ import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
 import scorex.util.serialization.{Reader, Writer}
 
+import scala.collection.mutable
+
 /**
   * ErgoSerializer based prover nodes serializer (alternative to one provided in scrypto which is doing much more
   * allocations)
@@ -40,6 +42,47 @@ class ProverNodeSerializer(store: LDBVersionedStore) extends ErgoSerializer[Prov
         w.putBytes(n.value)
         w.putBytes(n.nextLeafKey)
     }
+  }
+
+  override def toBytes(node: ProverNodes[DigestType]): Array[Byte] = {
+    val builder = new mutable.ArrayBuilder.ofByte
+    node match {
+      case n: ProxyInternalNode[DigestType] =>
+        val key = n.key
+        val leftLabel = n.leftLabel
+        val rightLabel = n.rightLabel
+        builder.sizeHint(2 + key.length + leftLabel.length + rightLabel.length)
+        builder += InternalNodePrefix
+        builder += n.balance
+        builder ++= key
+        builder ++= leftLabel
+        builder ++= rightLabel
+      case n: InternalProverNode[DigestType] =>
+        val key = n.key
+        val leftLabel = n.left.label
+        val rightLabel = n.right.label
+        builder.sizeHint(2 + key.length + leftLabel.length + rightLabel.length)
+        builder += InternalNodePrefix
+        builder += n.balance
+        builder ++= key
+        builder ++= leftLabel
+        builder ++= rightLabel
+      case n: ProverLeaf[DigestType] =>
+        val key = n.key
+        val value = n.value
+        val valueLength = value.length
+        val nextLeafKey = n.nextLeafKey
+        builder.sizeHint(1 + key.length + 4 + valueLength + nextLeafKey.length)
+        builder += LeafPrefix
+        builder ++= key
+        builder += (valueLength >> 24).toByte
+        builder += (valueLength >> 16).toByte
+        builder += (valueLength >> 8).toByte
+        builder += valueLength.toByte
+        builder ++= value
+        builder ++= nextLeafKey
+    }
+    builder.result()
   }
 
   override def parse(r: Reader): ProverNodes[DigestType] = {

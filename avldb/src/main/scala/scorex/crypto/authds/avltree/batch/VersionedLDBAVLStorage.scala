@@ -10,6 +10,7 @@ import scorex.crypto.hash
 import scorex.crypto.hash.Digest32
 import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.ScorexLogging
+import spire.syntax.all.cfor
 
 import scala.collection.mutable
 import scala.util.{Failure, Try}
@@ -58,32 +59,57 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
   override def update[K <: Array[Byte], V <: Array[Byte]](prover: BatchAVLProver[DigestType, _],
                                                           additionalData: Seq[(K, V)]): Try[Unit] = {
     val digestWrapper = prover.digest
-    val indexes = Seq(topNodeHashKey -> nodeLabel(prover.topNode),
-      topNodeHeightKey -> Ints.toByteArray(prover.rootNodeHeight))
+    val indexes = Array(
+      topNodeHashKey -> nodeLabel(prover.topNode),
+      topNodeHeightKey -> Ints.toByteArray(prover.rootNodeHeight)
+    )
     val toInsert = serializedVisitedNodes(prover.topNode, isTop = true)
-    val toRemove = prover.removedNodes().map(rn => rn.label)
-    val toUpdate = indexes ++ toInsert
-    val toUpdateWithWrapped = toUpdate ++ additionalData
 
-    store.update(digestWrapper, toRemove, toUpdateWithWrapped)
+    val removedNodes = prover.removedNodes()
+    val toRemove = new mutable.ArrayBuilder.ofRef[Array[Byte]]
+    toRemove.sizeHint(removedNodes.length)
+    var curRemoved = removedNodes
+    while (curRemoved.nonEmpty) {
+      toRemove += curRemoved.head.label
+      curRemoved = curRemoved.tail
+    }
+
+    val toUpdate = new mutable.ArrayBuilder.ofRef[(Array[Byte], Array[Byte])]
+    toUpdate.sizeHint(indexes.length + toInsert.length + additionalData.length)
+    cfor(0)(_ < indexes.length, _ + 1) { i =>
+      toUpdate += indexes(i)
+    }
+    cfor(0)(_ < toInsert.length, _ + 1) { i =>
+      toUpdate += toInsert(i)
+    }
+    cfor(0)(_ < additionalData.length, _ + 1) { i =>
+      toUpdate += additionalData(i)
+    }
+
+    store.update(digestWrapper, toRemove.result(), toUpdate.result())
   }
 
-  //todo: optimize the method
   private def serializedVisitedNodes(node: ProverNodes[DigestType],
                                      isTop: Boolean): Array[(Array[Byte], Array[Byte])] = {
-    // Should always serialize top node. It may not be new if it is the creation of the tree
-    if (node.isNew || isTop) {
-      val pair: (Array[Byte], Array[Byte]) = (nodeLabel(node), VersionedLDBAVLStorage.noStoreSerializer.toBytes(node))
-      node match {
-        case n: InternalProverNode[DigestType] =>
-          val leftSubtree = serializedVisitedNodes(n.left, isTop = false)
-          val rightSubtree = serializedVisitedNodes(n.right, isTop = false)
-          pair +: (leftSubtree ++ rightSubtree)
-        case _: ProverLeaf[DigestType] => Array(pair)
+    val builder = new mutable.ArrayBuilder.ofRef[(Array[Byte], Array[Byte])]
+
+    def loop(currentNode: ProverNodes[DigestType], isTopNode: Boolean): Unit = {
+      // Should always serialize top node. It may not be new if it is the creation of the tree
+      if (currentNode.isNew || isTopNode) {
+        val pair: (Array[Byte], Array[Byte]) =
+          (nodeLabel(currentNode), VersionedLDBAVLStorage.noStoreSerializer.toBytes(currentNode))
+        builder += pair
+        currentNode match {
+          case n: InternalProverNode[DigestType] =>
+            loop(n.left, isTopNode = false)
+            loop(n.right, isTopNode = false)
+          case _: ProverLeaf[DigestType] =>
+        }
       }
-    } else {
-      Array.empty
     }
+
+    loop(node, isTop)
+    builder.result()
   }
 
   //todo: this method is not used, should be removed on next scrypto update?

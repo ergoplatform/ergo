@@ -696,9 +696,15 @@ class ErgoWalletServiceSpec
         initializedState.fullHeight shouldBe 10
         initializedState.getWalletHeight shouldBe 10
 
+        // restore into a fresh secret directory: the secret file written by initWallet is not overwritten
+        val restoreSettings = isolatedSettings.copy(
+          walletSettings = isolatedSettings.walletSettings.copy(
+            secretStorage = isolatedSettings.walletSettings.secretStorage.copy(secretDir = createTempDir.getAbsolutePath)
+          )
+        )
         val restoredState = walletService.restoreWallet(
           initializedState,
-          isolatedSettings,
+          restoreSettings,
           mnemonic,
           mnemonicPassOpt = None,
           walletPass = wpass,

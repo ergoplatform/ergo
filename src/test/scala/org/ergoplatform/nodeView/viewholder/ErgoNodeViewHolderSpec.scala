@@ -7,7 +7,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import java.io.File
 import org.ergoplatform.ErgoApp.InternalShutdown
-import org.ergoplatform.core.{idToVersion, versionToBytes}
+import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
@@ -1141,8 +1141,6 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
       getCurrentState.version shouldBe idToVersion(chain1block1.id)
       val genesisVersion = idToVersion(genesis.id)
       getCurrentState.rollbackVersions.toSeq should not contain genesisVersion
-      // With only the undo log gone, UtxoState.rollbackTo still returns Success today (#2815).
-      getCurrentState.store.db.delete(versionToBytes(genesisVersion))
       getCurrentState.rollbackTo(genesisVersion) shouldBe 'failure
 
       val logger = LoggerFactory.getLogger(classOf[UtxoNodeViewHolder]).asInstanceOf[Logger]

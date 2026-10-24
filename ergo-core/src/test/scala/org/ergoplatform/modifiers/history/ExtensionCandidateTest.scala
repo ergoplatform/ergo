@@ -49,10 +49,10 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
     proof shouldBe None
   }
 
-  property("nodeVersionField should encode the node version under key 0x03/0x00") {
+  property("nodeVersionField should encode the node version under key 0x06/0x00") {
     forAll { version: String =>
       val (key, value) = Extension.nodeVersionField(version)
-      key shouldBe Array(0x03.toByte, 0x00.toByte)
+      key shouldBe Array(0x06.toByte, 0x00.toByte)
       key.lengthCompare(Extension.FieldKeySize) shouldBe 0
       value.lengthCompare(Extension.FieldValueMaxSize) should be <= 0
       value shouldBe version.getBytes(StandardCharsets.UTF_8).take(Extension.FieldValueMaxSize)
@@ -64,5 +64,11 @@ class ExtensionCandidateTest extends ErgoCorePropertyTest {
     key.head should not be Extension.SystemParametersPrefix
     key.head should not be Extension.InterlinksVectorPrefix
     key.head should not be Extension.ValidationRulesPrefix
+    // On the weak-blocks branch (#2055), 0x03 is the input-block key space
+    // (InputBlockTransactionsDigestKey is [0x03, 0x00]) and 0x04 / 0x05 are reserved
+    // there; the node-version key must stay clear of those prefixes as well.
+    key.head should not be 0x03.toByte
+    key.head should not be 0x04.toByte
+    key.head should not be 0x05.toByte
   }
 }

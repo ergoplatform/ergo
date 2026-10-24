@@ -78,8 +78,12 @@ object Extension extends ApiCodecs {
     * Such fields are not part of the consensus protocol and are not validated beyond the generic
     * extension field rules (2-byte keys, values up to 64 bytes, no duplicate keys, see ExtensionValidator).
     * The first byte of a key defines the metadata key space, the second byte the field within it.
+    *
+    * The prefix starts at 0x06: on the weak-blocks branch (see #2055), 0x03 is the input-block
+    * key space (`InputBlockTransactionsDigestKey` is `[0x03, 0x00]`) and 0x04 / 0x05 are reserved
+    * there, so each extension key keeps one meaning across the branches that will merge.
     */
-  val BlockMetadataPrefix: Byte = 0x03
+  val BlockMetadataPrefix: Byte = 0x06
 
   /**
     * Key of the extension field holding the version of the node software which produced the block,

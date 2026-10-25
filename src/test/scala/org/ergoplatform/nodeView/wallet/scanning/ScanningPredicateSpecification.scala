@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import io.circe.parser._
-import org.ergoplatform.ErgoBox.R1
+import org.ergoplatform.ErgoBox.{R1, R4}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
-import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.ast.{ByteArrayConstant, ErgoTree, IntConstant, ShortConstant}
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.helpers.TestingHelpers._
 
@@ -57,6 +57,25 @@ class ScanningPredicateSpecification extends ErgoCorePropertyTest {
       //then change random byte
       val scriptBytesModified = mutateRandomByte(mpBytes)
       EqualsScanningPredicate(R1, scriptBytesModified).filter(box) shouldBe false
+    }
+  }
+
+  property("equals - short register matches") {
+    forAll(ergoAddressGen) { address =>
+      val registers = Map(R4 -> ShortConstant(42.toShort))
+      val box = testBox(1, address.script, 0, Seq.empty, registers)
+      val predicate = EqualsScanningPredicate(R4, ShortConstant(42.toShort))
+
+      predicate.filter(box) shouldBe true
+    }
+  }
+
+  property("equals - short predicate rejects int register") {
+    forAll(ergoAddressGen) { address =>
+      val box = testBox(1, address.script, 0, Seq.empty, Map(R4 -> IntConstant(42)))
+      val predicate = EqualsScanningPredicate(R4, ShortConstant(42.toShort))
+
+      predicate.filter(box) shouldBe false
     }
   }
 

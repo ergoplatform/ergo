@@ -337,13 +337,18 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /* WALLET COMMANDS */
     case CheckSeed(mnemonic, passOpt) =>
-      state.secretStorageOpt match {
-        case Some(secretStorage) =>
-          val checkResult = secretStorage.checkSeed(mnemonic, passOpt)
-          sender() ! checkResult
-        case None =>
-          sender() ! Failure(new Exception("Wallet not initialized"))
+      val reply: Any = try {
+        state.secretStorageOpt match {
+          case Some(secretStorage) =>
+            secretStorage.checkSeed(mnemonic, passOpt)
+          case None =>
+            Failure(new Exception("Wallet not initialized"))
+        }
+      } finally {
+        mnemonic.erase()
+        passOpt.foreach(_.erase())
       }
+      sender() ! reply
 
     case UnlockWallet(walletPass) =>
       log.info("Unlocking wallet")

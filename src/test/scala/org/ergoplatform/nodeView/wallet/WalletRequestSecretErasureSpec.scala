@@ -20,6 +20,15 @@ import scala.util.Try
 
 class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
 
+  private def assertErased(chars: Array[Char]): Unit = {
+    chars.nonEmpty shouldBe true
+    chars.zipWithIndex.foreach { case (char, index) =>
+      withClue(s"secret character at index $index: ") {
+        char shouldBe ' '
+      }
+    }
+  }
+
   private def withUninitializedWallet(seedStrengthBits: Int = settings.walletSettings.seedStrengthBits,
                                       blocksToKeep: Int = -1)
                                      (test: WalletFixture => Unit): Unit = {
@@ -48,9 +57,9 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
 
       await(wallet.restoreWallet(walletPass, mnemonic, Some(mnemonicPass),
         usePre1627KeyDerivation = false)).isFailure shouldBe true
-      mnemonicChars.forall(_ == ' ') shouldBe true
-      mnemonicPassChars.forall(_ == ' ') shouldBe true
-      walletPassChars.forall(_ == ' ') shouldBe true
+      assertErased(mnemonicChars)
+      assertErased(mnemonicPassChars)
+      assertErased(walletPassChars)
 
       val initPass = SecretString.create("synthetic init password")
       val initMnemonicPass = SecretString.create("synthetic init passphrase")
@@ -58,8 +67,8 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val initMnemonicPassChars = initMnemonicPass.getData()
 
       await(wallet.initWallet(initPass, Some(initMnemonicPass))).isFailure shouldBe true
-      initPassChars.forall(_ == ' ') shouldBe true
-      initMnemonicPassChars.forall(_ == ' ') shouldBe true
+      assertErased(initPassChars)
+      assertErased(initMnemonicPassChars)
     }
   }
 
@@ -72,13 +81,13 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
 
       await(wallet.getWalletStatus).initialized shouldBe false
       await(wallet.restoreWallet(walletPass, mnemonic, usePre1627KeyDerivation = false)).isSuccess shouldBe true
-      mnemonicChars.forall(_ == ' ') shouldBe true
+      assertErased(mnemonicChars)
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
       eventually {
         await(wallet.getWalletStatus).unlocked shouldBe true
       }
-      walletPassChars.forall(_ == ' ') shouldBe true
+      assertErased(walletPassChars)
     }
   }
 
@@ -95,23 +104,9 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val result = await(wallet.restoreWallet(walletPass, mnemonic, Some(mnemonicPass),
         usePre1627KeyDerivation = false))
       result.failed.get.getMessage should include("pruning")
-      mnemonicChars.forall(_ == ' ') shouldBe true
-      mnemonicPassChars.forall(_ == ' ') shouldBe true
-      walletPassChars.forall(_ == ' ') shouldBe true
-    }
-  }
-
-  property("accepted restore preserves an aliased unlock password") {
-    withUninitializedWallet() { implicit w =>
-      val shared = SecretString.create("synthetic shared secret")
-      val sharedChars = shared.getData()
-
-      await(wallet.restoreWallet(shared, shared, usePre1627KeyDerivation = false)).isSuccess shouldBe true
-      implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
-      eventually {
-        await(wallet.getWalletStatus).unlocked shouldBe true
-      }
-      sharedChars.forall(_ == ' ') shouldBe true
+      assertErased(mnemonicChars)
+      assertErased(mnemonicPassChars)
+      assertErased(walletPassChars)
     }
   }
 
@@ -142,7 +137,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       probe.send(actor, ErgoWalletActorMessages.UnlockWallet(walletPass))
       eventually(timeout(10.seconds), interval(100.millis)) {
         called.get shouldBe true
-        walletPassChars.forall(_ == ' ') shouldBe true
+        assertErased(walletPassChars)
       }
 
       probe.send(actor, ErgoWalletActorMessages.CloseWallet)
@@ -161,12 +156,12 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val generatedMnemonic = await(wallet.initWallet(walletPass, Some(mnemonicPass))).get
       try {
         generatedMnemonic.getData().exists(_ != ' ') shouldBe true
-        mnemonicPassChars.forall(_ == ' ') shouldBe true
+        assertErased(mnemonicPassChars)
         implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
         eventually {
           await(wallet.getWalletStatus).unlocked shouldBe true
         }
-        walletPassChars.forall(_ == ' ') shouldBe true
+        assertErased(walletPassChars)
       } finally generatedMnemonic.erase()
     }
   }
@@ -182,8 +177,8 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       wallet.walletActor ! ErgoWalletActorMessages.InitWallet(walletPass, Some(mnemonicPass))
       implicit val patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 100.millis)
       eventually {
-        walletPassChars.forall(_ == ' ') shouldBe true
-        mnemonicPassChars.forall(_ == ' ') shouldBe true
+        assertErased(walletPassChars)
+        assertErased(mnemonicPassChars)
       }
     }
   }

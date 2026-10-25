@@ -45,8 +45,9 @@ import scala.util.Try
   * afterwards, one by one, and can reject one of them. These tests run the production indexer
   * against a real node view holder (history and UTXO state), hand the node blocks in orders the
   * P2P layer can produce, and compare the index with the chain the state has applied: checkpoint,
-  * transaction and box rows, their numbering, spent flags and spending heights, address balances,
-  * the box lists of contract-template rows, token rows with their box lists, storage-rent rows.
+  * transaction and box rows, their numbering, spent flags and spending heights, address balances
+  * and transaction lists, the box lists of contract-template rows, token rows with their box
+  * lists, storage-rent rows.
   * Proof of work is not modelled: the node-view test settings use a fake PoW scheme.
   */
 class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTestOps {
@@ -120,6 +121,12 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
       history.typedExtraIndexById[T](row.factory(boxSegmentId(row.id, n)).id).toSeq.flatMap(_.boxes)
     } ++ row.boxes
 
+  /** Transaction numbers an address row lists, in its segments and in the row. */
+  private def listedTxs(history: ErgoHistory, row: IndexedErgoAddress): Seq[Long] =
+    (0 until row.txSegmentCount).flatMap { n =>
+      history.typedExtraIndexById[IndexedErgoAddress](SegmentSerializer.txSegmentId(row.id, n)).toSeq.flatMap(_.txs)
+    } ++ row.txs
+
   /** Child of `parent` with valid headers and sections, whose transactions the state rejects. */
   private def rejectedChild(parent: ErgoFullBlock, stateAfterParent: WrappedUtxoState, shape: Shape): ErgoFullBlock = {
     val valid = validFullBlock(Some(parent), stateAfterParent)
@@ -134,9 +141,9 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
 
   /**
     * Compares the index with the chain the state has applied: checkpoint, transaction and box
-    * rows, their numbering, spent flags and spending heights, address balances, the box lists of
-    * contract-template rows, token rows with their box lists, and storage-rent rows. The
-    * transaction and box lists of address rows are not compared.
+    * rows, their numbering, spent flags and spending heights, address balances and transaction
+    * lists, the box lists of contract-template rows, token rows with their box lists, and
+    * storage-rent rows. The box lists of address rows are not compared.
     *
     * @param chain   - blocks the state has applied, from height 1
     * @param foreign - transactions of blocks which are not on that chain
@@ -220,6 +227,19 @@ class ExtraIndexerAppliedBlocksSpec extends ErgoCorePropertyTest with NodeViewTe
       val expected = boxes.filter(unspentInIndex).map(_.value).sum
       val indexed = history.typedExtraIndexById[IndexedErgoAddress](address).flatMap(_.balanceInfo).map(_.nanoErgs)
       check(indexed.contains(expected), s"address $address holds $expected nanoErg, its row says $indexed")
+    }
+
+    // an address lists the transactions which create a box of it or spend one, by their numbers
+    val addressOf: Map[ModifierId, ModifierId] = created.map(box => bytesToId(box.id) -> hashErgoTree(box.ergoTree)).toMap
+    txs.zipWithIndex.flatMap { case ((tx, block), number) =>
+      val spent = if (block.header.height > 1) inputIds(tx).flatMap(addressOf.get) else Seq.empty
+      (spent ++ tx.outputs.map(out => hashErgoTree(out.ergoTree))).distinct.map(_ -> number.toLong)
+    }.groupBy(_._1).foreach { case (address, entries) =>
+      val expected = entries.map(_._2)
+      val indexed = history.typedExtraIndexById[IndexedErgoAddress](address).map(row => listedTxs(history, row))
+      check(indexed.contains(expected), s"address $address: transactions of the chain missing from its row " +
+        s"${expected.diff(indexed.getOrElse(Seq.empty))}, entries of its row which are not its transactions on the chain " +
+        s"${indexed.map(_.diff(expected))}, or the order differs")
     }
 
     // box numbers as template and token rows list them: negative if the index has the box as spent

@@ -1,7 +1,7 @@
 package org.ergoplatform.settings
 
 import org.ergoplatform.network.{ModeFeatureSerializer, PeerFeature}
-import org.ergoplatform.network.peer.{LocalAddressPeerFeatureSerializer, RestApiUrlPeerFeatureSerializer, SessionIdPeerFeatureSerializer}
+import org.ergoplatform.network.peer.{LargeAdProofsPeerFeatureSerializer, LocalAddressPeerFeatureSerializer, RestApiUrlPeerFeatureSerializer, SessionIdPeerFeatureSerializer}
 
 /**
   * Repository of existing peer feature identifiers, stores their ids along with serializers
@@ -23,6 +23,11 @@ object PeerFeatureDescriptors {
   val RestApiUrlFeatureId: Byte = 4: Byte
 
   /**
+    * See `LargeAdProofsPeerFeature`
+    */
+  val LargeAdProofsFeatureId: Byte = 5: Byte
+
+  /**
     * See `ModePeerFeature`
     */
   val ModeFeatureId: Byte = 16: Byte
@@ -34,6 +39,7 @@ object PeerFeatureDescriptors {
     LocalAddressPeerFeatureId -> LocalAddressPeerFeatureSerializer,
     SessionIdPeerFeatureId -> SessionIdPeerFeatureSerializer,
     RestApiUrlFeatureId -> RestApiUrlPeerFeatureSerializer,
+    LargeAdProofsFeatureId -> LargeAdProofsPeerFeatureSerializer,
     ModeFeatureId -> ModeFeatureSerializer
   )
 

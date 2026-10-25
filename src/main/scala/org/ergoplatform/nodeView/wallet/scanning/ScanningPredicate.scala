@@ -100,7 +100,7 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
       case LongConstant(long) =>
         box.get(regId).exists {
           _ match {
-            case IntConstant(l) => long == l
+            case LongConstant(l) => long == l
             case _ => false
           }
         }

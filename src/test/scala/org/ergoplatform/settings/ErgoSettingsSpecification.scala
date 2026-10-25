@@ -6,7 +6,8 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.ErgoCorePropertyTest
 
 import java.net.{InetSocketAddress, URI}
-import java.nio.file.Paths
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import scala.concurrent.duration._
 import scala.sys.process.{Process, ProcessLogger}
 
@@ -423,6 +424,63 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
       mining = true, votingIds = "-1,0,10,99,123")
     exitCode shouldBe 1
     output should include("Unsupported voting target parameter id(s): -1, 0, 10, 99, 123")
+  }
+
+  property("ErgoApp.main logs startup config errors to ergo.log before exiting") {
+    val javaExecutable = Paths
+      .get(
+        System.getProperty("java.home"),
+        "bin",
+        if (scala.util.Properties.isWin) "java.exe" else "java")
+      .toString
+    val cases = Seq(
+      ("""ergo.node.keepVersions = "not-an-int"""", "keepVersions"),
+      ("""ergo.chain.genesisId = "invalid"""", "genesisId = 'invalid'"),
+      ("""scorex.restApi.apiKeyHash = null""", "API key hash must be set")
+    )
+
+    cases.foreach { case (configHocon, expectedLogFragment) =>
+      val tempDir = Files.createTempDirectory("ergo-app-startup-log-")
+      try {
+        val dataDir = Files.createDirectories(tempDir.resolve("data"))
+        val secretDir = Files.createDirectories(dataDir.resolve("wallet/keystore"))
+        val confPath = tempDir.resolve("user.conf")
+        val fullHocon =
+          s"""ergo.directory = "${dataDir.toString.replace("\\", "/")}"
+             |ergo.wallet.secretStorage.secretDir = "${secretDir.toString.replace("\\", "/")}"
+             |$configHocon
+             |""".stripMargin
+        Files.write(confPath, fullHocon.getBytes(StandardCharsets.UTF_8))
+
+        val output = new java.lang.StringBuffer
+        val processLogger =
+          ProcessLogger(line => { output.append(line).append(System.lineSeparator()); () })
+        val exitCode = Process(
+          Seq(
+            javaExecutable,
+            "-Dlogback.configurationFile=logback.xml",
+            "-cp",
+            System.getProperty("java.class.path"),
+            "org.ergoplatform.ErgoApp",
+            "-c",
+            confPath.toString
+          ),
+          tempDir.toFile
+        ).!(processLogger)
+
+        val logPath = tempDir.resolve("ergo.log")
+        withClue(s"config=$configHocon, processOutput=$output") {
+          exitCode shouldBe 1
+          Files.exists(logPath) shouldBe true
+          val logContent = new String(Files.readAllBytes(logPath), StandardCharsets.UTF_8)
+          logContent should include(expectedLogFragment)
+        }
+      } finally {
+        Files.walk(tempDir)
+          .sorted(java.util.Comparator.reverseOrder())
+          .forEach(p => { p.toFile.delete(); () })
+      }
+    }
   }
 
 }

@@ -4,9 +4,10 @@ import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicBoolean
 
-import akka.actor.Props
+import akka.actor.{ActorRef, Props}
 import akka.testkit.TestProbe
 import org.ergoplatform.sdk.SecretString
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.ErgoNodeTestConstants.settings
@@ -16,7 +17,7 @@ import org.ergoplatform.wallet.utils.FileUtils
 import org.scalatest.concurrent.Eventually
 
 import scala.concurrent.duration._
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTestOps with Eventually {
 
@@ -43,6 +44,32 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
           secretDir = new File(directory, "keystore").getPath)))
     try new WalletFixture(isolated, parameters, getCurrentView(_).vault).apply(test)
     finally fileUtils.deleteRecursive(directory)
+  }
+
+  private def throwingSetupActor(implicit w: WalletFixture): (ActorRef, TestProbe) = {
+    val actorSettings = w.settings.copy(
+      directory = new File(w.nodeViewDir, "throwing-setup").getAbsolutePath)
+    val service = new ErgoWalletServiceImpl(actorSettings) {
+      override def initWallet(state: ErgoWalletState,
+                              settings: ErgoSettings,
+                              walletPass: SecretString,
+                              mnemonicPassOpt: Option[SecretString]): Try[(SecretString, ErgoWalletState)] =
+        throw new IOException("synthetic init failure")
+
+      override def restoreWallet(state: ErgoWalletState,
+                                 settings: ErgoSettings,
+                                 mnemonic: SecretString,
+                                 mnemonicPassOpt: Option[SecretString],
+                                 walletPass: SecretString,
+                                 usePre1627KeyDerivation: Boolean): Try[ErgoWalletState] =
+        throw new IOException("synthetic restore failure")
+    }
+    val walletSettings = actorSettings.walletSettings
+    val selector = new ReplaceCompactCollectBoxSelector(
+      walletSettings.maxInputs, walletSettings.optimalInputs, None)
+    val actor = w.actorSystem.actorOf(
+      Props(classOf[ErgoWalletActor], actorSettings, parameters, service, selector, getHistory))
+    actor -> TestProbe()(w.actorSystem)
   }
 
   property("rejected restore and init requests erase supplied secrets") {
@@ -163,6 +190,50 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
         }
         assertErased(walletPassChars)
       } finally generatedMnemonic.erase()
+    }
+  }
+
+  property("a synchronous init throw replies after erasing request passwords") {
+    withUninitializedWallet() { implicit w =>
+      val (actor, probe) = throwingSetupActor
+      val initPass = SecretString.create("synthetic init password")
+      val initMnemonicPass = SecretString.create("synthetic init passphrase")
+      val initPassChars = initPass.getData()
+      val initMnemonicPassChars = initMnemonicPass.getData()
+      probe.send(actor, ErgoWalletActorMessages.InitWallet(initPass, Some(initMnemonicPass)))
+      probe.expectMsgPF(5.seconds) {
+        case Failure(ex: IOException) if ex.getMessage == "synthetic init failure" =>
+          assertErased(initPassChars)
+          assertErased(initMnemonicPassChars)
+      }
+
+      probe.watch(actor)
+      probe.send(actor, ErgoWalletActorMessages.CloseWallet)
+      probe.expectTerminated(actor, 5.seconds)
+    }
+  }
+
+  property("a synchronous restore throw replies after erasing request secrets") {
+    withUninitializedWallet() { implicit w =>
+      val (actor, probe) = throwingSetupActor
+      val mnemonic = SecretString.create("synthetic restore phrase")
+      val restorePass = SecretString.create("synthetic restore password")
+      val restoreMnemonicPass = SecretString.create("synthetic restore passphrase")
+      val mnemonicChars = mnemonic.getData()
+      val restorePassChars = restorePass.getData()
+      val restoreMnemonicPassChars = restoreMnemonicPass.getData()
+      probe.send(actor, ErgoWalletActorMessages.RestoreWallet(
+        mnemonic, Some(restoreMnemonicPass), restorePass, usePre1627KeyDerivation = false))
+      probe.expectMsgPF(5.seconds) {
+        case Failure(ex: IOException) if ex.getMessage == "synthetic restore failure" =>
+          assertErased(mnemonicChars)
+          assertErased(restorePassChars)
+          assertErased(restoreMnemonicPassChars)
+      }
+
+      probe.watch(actor)
+      probe.send(actor, ErgoWalletActorMessages.CloseWallet)
+      probe.expectTerminated(actor, 5.seconds)
     }
   }
 

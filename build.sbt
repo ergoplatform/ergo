@@ -39,7 +39,7 @@ lazy val commonSettings = Seq(
 
 publishArtifact in (Compile, packageDoc) := false
 
-val circeVersion = "0.14.15"
+val circeVersion = "0.14.16"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 

@@ -47,13 +47,11 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
   override def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean = {
     unlockedSecret.fold(false) { uSecret =>
       val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
-      try {
-        val secret = ExtendedSecretKey.deriveMasterKey(seed, uSecret.usePre1627KeyDerivation)
-        try secret.equals(uSecret)
-        finally secret.zeroSecret()
-      } finally {
-        util.Arrays.fill(seed, 0: Byte)
-      }
+      val secret = ExtendedSecretKey.deriveMasterKey(seed, uSecret.usePre1627KeyDerivation)
+      val matches = secret.equals(uSecret)
+      secret.zeroSecret()
+      util.Arrays.fill(seed, 0: Byte)
+      matches
     }
   }
 

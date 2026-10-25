@@ -60,7 +60,7 @@ class JsonSecretStorageSpec
     }
   }
 
-  property("checking a seed erases both inputs without clearing the stored key") {
+  property("checking a seed keeps the stored key while the caller erases inputs") {
     val phrase = "synthetic check seed"
     val phrasePass = "synthetic passphrase"
     val encryptionPass = "synthetic wallet password"
@@ -79,21 +79,25 @@ class JsonSecretStorageSpec
     val storage = JsonSecretStorage.init(seed, SecretString.create(encryptionPass),
       usePre1627KeyDerivation = false)(settings)
 
-    def checkAndAssertErased(candidatePhrase: String, candidatePass: Option[String], expected: Boolean): Unit = {
+    def checkAndEraseInputs(candidatePhrase: String, candidatePass: Option[String], expected: Boolean): Unit = {
       val input = SecretString.create(candidatePhrase)
       val pass = candidatePass.map(SecretString.create)
       val inputChars = input.getData()
       val passChars = pass.map(_.getData())
-      storage.checkSeed(input, pass) shouldBe expected
-      inputChars.forall(_ == ' ') shouldBe true
-      passChars.foreach(chars => chars.forall(_ == ' ') shouldBe true)
+      try storage.checkSeed(input, pass) shouldBe expected
+      finally {
+        input.erase()
+        pass.foreach(_.erase())
+      }
+      inputChars.toSeq shouldBe Seq.fill(inputChars.length)(' ')
+      passChars.foreach(chars => chars.toSeq shouldBe Seq.fill(chars.length)(' '))
     }
 
-    checkAndAssertErased(phrase, Some(phrasePass), expected = false)
+    checkAndEraseInputs(phrase, Some(phrasePass), expected = false)
     storage.unlock(SecretString.create(encryptionPass)) shouldBe 'success
-    checkAndAssertErased(phrase, Some(phrasePass), expected = true)
-    checkAndAssertErased("another synthetic phrase", Some(phrasePass), expected = false)
-    checkAndAssertErased(phrase, None, expected = false)
+    checkAndEraseInputs(phrase, Some(phrasePass), expected = true)
+    checkAndEraseInputs("another synthetic phrase", Some(phrasePass), expected = false)
+    checkAndEraseInputs(phrase, None, expected = false)
     storage.secret.get.isErased shouldBe false
   }
 

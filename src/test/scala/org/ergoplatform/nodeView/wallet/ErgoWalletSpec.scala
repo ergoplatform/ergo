@@ -48,8 +48,8 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val mnemonicChars = mnemonic.getData()
       val passChars = pass.getData()
       await(wallet.checkSeed(mnemonic, Some(pass)).failed)
-      mnemonicChars.forall(_ == ' ') shouldBe true
-      passChars.forall(_ == ' ') shouldBe true
+      mnemonicChars.toSeq shouldBe Seq.fill(mnemonicChars.length)(' ')
+      passChars.toSeq shouldBe Seq.fill(passChars.length)(' ')
     }
   }
 

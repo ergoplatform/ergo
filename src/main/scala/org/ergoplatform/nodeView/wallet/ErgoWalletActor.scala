@@ -312,6 +312,8 @@ class ErgoWalletActor(settings: ErgoSettings,
           val checkResult = secretStorage.checkSeed(mnemonic, passOpt)
           sender() ! checkResult
         case None =>
+          mnemonic.erase()
+          passOpt.foreach(_.erase())
           sender() ! Failure(new Exception("Wallet not initialized"))
       }
 

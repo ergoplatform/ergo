@@ -2,6 +2,7 @@ package org.ergoplatform.wallet.secrets
 
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.sdk.wallet.settings.EncryptionSettings
+import org.ergoplatform.wallet.mnemonic.Mnemonic
 import org.ergoplatform.wallet.settings.SecretStorageSettings
 import org.ergoplatform.wallet.utils.FileUtils
 import org.scalacheck.Arbitrary
@@ -57,6 +58,43 @@ class JsonSecretStorageSpec
 
       storage.secret.isEmpty shouldBe true
     }
+  }
+
+  property("checking a seed erases both inputs without clearing the stored key") {
+    val phrase = "synthetic check seed"
+    val phrasePass = "synthetic passphrase"
+    val encryptionPass = "synthetic wallet password"
+    val mnemonic = SecretString.create(phrase)
+    val mnemonicPass = SecretString.create(phrasePass)
+    val seed = try Mnemonic.toSeed(mnemonic, Some(mnemonicPass))
+    finally {
+      mnemonic.erase()
+      mnemonicPass.erase()
+    }
+    val dir = createTempDir
+    val settings = SecretStorageSettings(
+      dir.getAbsolutePath,
+      EncryptionSettings("HmacSHA1", 7, 256)
+    )
+    val storage = JsonSecretStorage.init(seed, SecretString.create(encryptionPass),
+      usePre1627KeyDerivation = false)(settings)
+
+    def checkAndAssertErased(candidatePhrase: String, candidatePass: Option[String], expected: Boolean): Unit = {
+      val input = SecretString.create(candidatePhrase)
+      val pass = candidatePass.map(SecretString.create)
+      val inputChars = input.getData()
+      val passChars = pass.map(_.getData())
+      storage.checkSeed(input, pass) shouldBe expected
+      inputChars.forall(_ == ' ') shouldBe true
+      passChars.foreach(chars => chars.forall(_ == ' ') shouldBe true)
+    }
+
+    checkAndAssertErased(phrase, Some(phrasePass), expected = false)
+    storage.unlock(SecretString.create(encryptionPass)) shouldBe 'success
+    checkAndAssertErased(phrase, Some(phrasePass), expected = true)
+    checkAndAssertErased("another synthetic phrase", Some(phrasePass), expected = false)
+    checkAndAssertErased(phrase, None, expected = false)
+    storage.secret.get.isErased shouldBe false
   }
 
   property("restore from mnemonic") {

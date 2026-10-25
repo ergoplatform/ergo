@@ -45,10 +45,20 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
     * @param mnemonicPassOpt - optional SecretString mnemonic password to be erased after use.
     */
   override def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean = {
-    unlockedSecret.fold(false){ uSecret => 
-      val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
-      val secret = ExtendedSecretKey.deriveMasterKey(seed, uSecret.usePre1627KeyDerivation)
-      secret.equals(uSecret)
+    try {
+      unlockedSecret.fold(false) { uSecret =>
+        val seed = Mnemonic.toSeed(mnemonic, mnemonicPassOpt)
+        try {
+          val secret = ExtendedSecretKey.deriveMasterKey(seed, uSecret.usePre1627KeyDerivation)
+          try secret.equals(uSecret)
+          finally secret.zeroSecret()
+        } finally {
+          util.Arrays.fill(seed, 0: Byte)
+        }
+      }
+    } finally {
+      mnemonic.erase()
+      mnemonicPassOpt.foreach(_.erase())
     }
   }
 

@@ -19,7 +19,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
-import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.utils.{LoggingUtil, ScorexEncoding}
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.{ModifierId, ScorexLogging}
@@ -223,10 +223,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             (history, Failure(ex), suffixTrimmed)
         }
       case Failure(e) =>
-        log.error("Rollback failed: ", e)
+        val branchPoint = progressInfo.branchPoint.fold("none")(Algos.encode)
+        log.error(
+          s"Rollback to branch point $branchPoint failed, shutting down the node. " +
+            "A restart may recover a digest node or a transient I/O error; " +
+            "otherwise check the error before resyncing from genesis manually",
+          e
+        )
         context.system.eventStream.publish(RollbackFailed)
-        //todo: what to return here? the situation is totally wrong
-        ???
+        ErgoApp.shutdownSystem()(context.system)
+        context.stop(self)
+        throw new Exception(e)
     }
   }
 
@@ -958,9 +965,13 @@ object ErgoNodeViewHolder {
         history.bestFullBlockOpt
           .filter(_.id != lastMod.id)
           .fold("")(fb => s"\n best full block: $fb")
-      val repairNeeded = ErgoHistory.repairIfNeeded(history)
+      val repairStatus = ErgoHistory.repairIfNeeded(history) match {
+        case Success(false) => "repair not needed"
+        case Success(true) => "repair completed"
+        case Failure(error) => s"repair failed: ${LoggingUtil.getReasonMsg(error)}"
+      }
       ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
-        s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
+        s"block-height $blockHeight, chain synced: $chainSynced, $repairStatus, " +
         s"last modifier applied: $lastMod, " +
         s"possible best full block $bestFullBlockOpt")
     } else {

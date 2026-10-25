@@ -1,9 +1,15 @@
 package org.ergoplatform.nodeView.viewholder
 
+import akka.actor.CoordinatedShutdown
+import akka.testkit.TestProbe
+import ch.qos.logback.classic.{Level, Logger}
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import java.io.File
+import org.ergoplatform.ErgoApp.InternalShutdown
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.ErgoBoxCandidate
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.extension.Extension
@@ -22,13 +28,16 @@ import org.ergoplatform.utils.fixtures.NodeViewFixture
 import org.ergoplatform.validation.MalformedModifierError
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier}
+import org.ergoplatform.nodeView.{ErgoNodeViewHolder, LocallyGeneratedModifier, UtxoNodeViewHolder}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.ChainProgress
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Accepted
 import org.ergoplatform.wallet.utils.FileUtils
+import org.slf4j.LoggerFactory
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
+
+import scala.collection.JavaConverters._
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -1094,6 +1103,89 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
 
       // unrelated exception
       ErgoNodeViewHolder.extractFailedTxId(new Exception("unrelated")) shouldBe None
+    }
+  }
+
+
+  property("shut down the node cleanly when state rollback fails during a chain switch") {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val keepOneSettings = protoSettings.copy(
+      nodeSettings = protoSettings.nodeSettings.copy(keepVersions = 1, extraIndex = false)
+    )
+
+    new NodeViewFixture(keepOneSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val wusAfterGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+
+      val chain1block1 = validFullBlock(Some(genesis), wusAfterGenesis, genesis.header.timestamp + 1)
+      val chain2block1 = validFullBlock(Some(genesis), wusAfterGenesis, genesis.header.timestamp + 2)
+      chain2block1.id should not be chain1block1.id
+      val wusChain2Block1 = wusAfterGenesis.applyModifier(chain2block1)(_ => ()).get
+      val chain2block2 = validFullBlock(Some(chain2block1), wusChain2Block1)
+      val wusChain2Block2 = wusChain2Block1.applyModifier(chain2block2)(_ => ()).get
+      val chain2block3 = validFullBlock(Some(chain2block2), wusChain2Block2)
+      us.closeStorage()
+
+      applyBlock(genesis) shouldBe 'success
+      applyHeader(chain2block1.header) shouldBe 'success
+      applyHeader(chain2block2.header) shouldBe 'success
+      applyHeader(chain2block3.header) shouldBe 'success
+      getHistory.estimatedTip() shouldBe Some(4)
+
+      // Applying height 2 while estimatedTip is 4 and keepVersions is 1 drops the undo log for genesis.
+      applyBlock(chain1block1) shouldBe 'success
+      getCurrentState.version shouldBe idToVersion(chain1block1.id)
+      val genesisVersion = idToVersion(genesis.id)
+      getCurrentState.rollbackVersions.toSeq should not contain genesisVersion
+      getCurrentState.rollbackTo(genesisVersion) shouldBe 'failure
+
+      val logger = LoggerFactory.getLogger(classOf[UtxoNodeViewHolder]).asInstanceOf[Logger]
+      val previousLevel = logger.getLevel
+      val appender = new ListAppender[ILoggingEvent]
+      appender.start()
+      logger.addAppender(appender)
+      logger.setLevel(Level.ERROR)
+      try {
+        val shutdown = CoordinatedShutdown(actorSystem)
+        shutdown.shutdownReason() shouldBe None
+        val rollbackProbe = new TestProbe(actorSystem)
+        val deathProbe = new TestProbe(actorSystem)
+        actorSystem.eventStream.subscribe(rollbackProbe.ref, RollbackFailed.getClass)
+        deathProbe.watch(nodeViewHolderRef)
+
+        applyPayload(chain2block1) shouldBe 'success
+        nodeViewHolderRef ! ModifiersFromRemote(chain2block2.blockSections ++ chain2block3.blockSections)
+
+        rollbackProbe.expectMsg(RollbackFailed)
+        deathProbe.expectTerminated(nodeViewHolderRef)
+        shutdown.shutdownReason() shouldBe Some(InternalShutdown)
+
+        val errorEvents = appender.list.asScala.filter { event =>
+          val message = event.getFormattedMessage
+          event.getLevel == Level.ERROR &&
+            message.contains(s"Rollback to branch point ${Algos.encode(genesis.id)} failed, shutting down the node.") &&
+            message.contains("A restart may recover a digest node or a transient I/O error; " +
+              "otherwise check the error before resyncing from genesis manually")
+        }
+        errorEvents should have size 1
+        Option(errorEvents.head.getThrowableProxy) shouldBe defined
+
+        val reopenedHistory = ErgoHistory.readOrGenerate(settings)(null)
+        try {
+          reopenedHistory.bestFullBlockIdOpt shouldBe Some(chain2block2.id)
+          reopenedHistory.isSemanticallyValid(chain2block3.id) should not be ModifierSemanticValidity.Invalid
+        } finally {
+          reopenedHistory.closeStorage()
+        }
+      } finally {
+        logger.detachAppender(appender)
+        appender.stop()
+        logger.setLevel(previousLevel)
+      }
     }
   }
 

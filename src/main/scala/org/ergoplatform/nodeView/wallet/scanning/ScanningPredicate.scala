@@ -90,6 +90,13 @@ case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedVa
             case _ => false
           }
         }
+      case Constant(short: Short, SShort) =>
+        box.get(regId).exists { register =>
+          register.tpe == SShort && (register match {
+            case Constant(s: Short, SShort) => short == s
+            case _ => false
+          })
+        }
       case LongConstant(long) =>
         box.get(regId).exists {
           _ match {

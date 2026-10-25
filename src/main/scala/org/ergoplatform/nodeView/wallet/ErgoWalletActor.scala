@@ -22,7 +22,7 @@ import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class ErgoWalletActor(settings: ErgoSettings,
                       parameters: Parameters,
@@ -88,15 +88,10 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def loadedWallet(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      val initialized = try {
-        ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt)
-      } catch {
-        case t: Throwable =>
-          walletPass.erase()
-          throw t
-      } finally {
-        mnemonicPassOpt.foreach(_.erase())
-      }
+      val initialized =
+        try {
+          Try(ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt)).flatten
+        } finally mnemonicPassOpt.foreach(_.erase())
       initialized match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
@@ -112,16 +107,22 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      val restored = try {
-        ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation)
-      } catch {
-        case t: Throwable =>
-          walletPass.erase()
-          throw t
-      } finally {
-        mnemonic.erase()
-        mnemonicPassOpt.foreach(_.erase())
-      }
+      val restored =
+        try {
+          Try(
+            ergoWalletService.restoreWallet(
+              state,
+              settings,
+              mnemonic,
+              mnemonicPassOpt,
+              walletPass,
+              usePre1627KeyDerivation
+            )
+          ).flatten
+        } finally {
+          mnemonic.erase()
+          mnemonicPassOpt.foreach(_.erase())
+        }
       restored match {
         case Success(newState) =>
           log.info("Wallet is restored")

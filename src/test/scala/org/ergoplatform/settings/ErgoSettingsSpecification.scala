@@ -8,6 +8,7 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import java.net.{InetSocketAddress, URI}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
+import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 import scala.concurrent.duration._
 import scala.sys.process.{Process, ProcessLogger}
 
@@ -433,15 +434,18 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
         "bin",
         if (scala.util.Properties.isWin) "java.exe" else "java")
       .toString
-    val cases = Seq(
-      ("""ergo.node.keepVersions = "not-an-int"""", "keepVersions"),
-      ("""ergo.chain.genesisId = "invalid"""", "genesisId = 'invalid'"),
-      ("""scorex.restApi.apiKeyHash = null""", "API key hash must be set")
-    )
 
-    cases.foreach { case (configHocon, expectedLogFragment) =>
-      val tempDir = Files.createTempDirectory("ergo-app-startup-log-")
-      try {
+    val tempRoot = Files.createTempDirectory("ergo-app-startup-log-")
+    try {
+      val missingSecretDir = tempRoot.resolve("missing-secret-dir").toString.replace("\\", "/")
+      val cases = Seq(
+        ("""ergo.node.keepVersions = "not-an-int"""", "keepVersions"),
+        ("""ergo.chain.genesisId = "invalid"""", "genesisId = 'invalid'"),
+        (s"""ergo.wallet.secretStorage.secretDir = "$missingSecretDir"""", "does not exist or not readable")
+      )
+
+      cases.zipWithIndex.foreach { case ((configHocon, expectedLogFragment), idx) =>
+        val tempDir = Files.createDirectories(tempRoot.resolve(s"case-$idx"))
         val dataDir = Files.createDirectories(tempDir.resolve("data"))
         val secretDir = Files.createDirectories(dataDir.resolve("wallet/keystore"))
         val confPath = tempDir.resolve("user.conf")
@@ -455,7 +459,7 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
         val output = new java.lang.StringBuffer
         val processLogger =
           ProcessLogger(line => { output.append(line).append(System.lineSeparator()); () })
-        val exitCode = Process(
+        val proc = Process(
           Seq(
             javaExecutable,
             "-Dlogback.configurationFile=logback.xml",
@@ -466,7 +470,12 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
             confPath.toString
           ),
           tempDir.toFile
-        ).!(processLogger)
+        ).run(processLogger)
+        val exitCode = try {
+          Await.result(Future(blocking(proc.exitValue()))(ExecutionContext.global), 30.seconds)
+        } finally {
+          proc.destroy()
+        }
 
         val logPath = tempDir.resolve("ergo.log")
         withClue(s"config=$configHocon, processOutput=$output") {
@@ -475,11 +484,11 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
           val logContent = new String(Files.readAllBytes(logPath), StandardCharsets.UTF_8)
           logContent should include(expectedLogFragment)
         }
-      } finally {
-        Files.walk(tempDir)
-          .sorted(java.util.Comparator.reverseOrder())
-          .forEach(p => { p.toFile.delete(); () })
       }
+    } finally {
+      Files.walk(tempRoot)
+        .sorted(java.util.Comparator.reverseOrder())
+        .forEach(p => { p.toFile.delete(); () })
     }
   }
 

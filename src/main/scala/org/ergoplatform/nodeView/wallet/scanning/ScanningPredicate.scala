@@ -48,11 +48,10 @@ case class ContainsScanningPredicate(regId: ErgoBox.RegisterId,
 
 
 /**
-  * Scanning predicate to track boxes which contain a register which, in turn, contains certain bytes
-  * (exact matching, so register contains exactly bytes)
+  * Scanning predicate to test a selected register against an evaluated value.
   *
   * @param regId - register identifier
-  * @param value - bytes to track
+  * @param value - evaluated value to match
   */
 case class EqualsScanningPredicate(regId: ErgoBox.RegisterId, value: EvaluatedValue[SType]) extends ScanningPredicate {
   //todo: try to remove boilerplate below

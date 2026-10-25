@@ -86,7 +86,18 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def loadedWallet(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
+      var serviceReturned = false
+      val initialized = try {
+        val result = ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt)
+        serviceReturned = true
+        result
+      } finally {
+        mnemonicPassOpt.foreach { pass =>
+          if (!(pass eq walletPass)) pass.erase()
+        }
+        if (!serviceReturned) walletPass.erase()
+      }
+      initialized match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
           context.become(loadedWallet(newState))
@@ -101,7 +112,21 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) match {
+      var serviceReturned = false
+      val restored = try {
+        val result = ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation)
+        serviceReturned = true
+        result
+      } finally {
+        // A caller may reuse the encryption password as the mnemonic input.
+        // The accepted password must remain live until UnlockWallet handles it.
+        if (!(mnemonic eq walletPass)) mnemonic.erase()
+        mnemonicPassOpt.foreach { pass =>
+          if (!(pass eq walletPass)) pass.erase()
+        }
+        if (!serviceReturned) walletPass.erase()
+      }
+      restored match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(loadedWallet(newState))
@@ -115,7 +140,15 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     // branch for key already being set
-    case _: RestoreWallet | _: InitWallet =>
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, _) =>
+      mnemonic.erase()
+      mnemonicPassOpt.foreach(_.erase())
+      walletPass.erase()
+      sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
+
+    case InitWallet(walletPass, mnemonicPassOpt) =>
+      walletPass.erase()
+      mnemonicPassOpt.foreach(_.erase())
       sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
 
     /* READERS */
@@ -317,14 +350,15 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     case UnlockWallet(walletPass) =>
       log.info("Unlocking wallet")
-      ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation) match {
+      val unlocked = try {
+        ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation)
+      } finally walletPass.erase()
+      unlocked match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
-          walletPass.erase()
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
-          walletPass.erase()
           log.warn("Wallet unlock failed with: ", t)
           sender() ! f
       }

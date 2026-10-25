@@ -58,27 +58,36 @@ final class JsonSecretStorage(val secretFile: File, encryptionSettings: Encrypti
     * @param pass - password to be used to decrypt secret, also SecretString to be erased after use
     */
   override def unlock(pass: SecretString): Try[Unit] = {
-    val secretFileRaw = scala.io.Source.fromFile(secretFile, "UTF-8").getLines().mkString
-    decode[EncryptedSecret](secretFileRaw)
-      .right
-      .map { encryptedSecret =>
-        Base16.decode(encryptedSecret.cipherText)
-          .flatMap(txt => Base16.decode(encryptedSecret.salt)
-            .flatMap(salt => Base16.decode(encryptedSecret.iv)
-              .flatMap(iv => Base16.decode(encryptedSecret.authTag)
-                .map(tag => (txt, salt, iv, tag, encryptedSecret.usePre1627KeyDerivation))
+    val secretFileRaw = Try {
+      val source = scala.io.Source.fromFile(secretFile, "UTF-8")
+      try source.getLines().mkString
+      finally source.close()
+    }.recoverWith {
+      case NonFatal(error) =>
+        Failure(new IOException("Wallet secret file could not be read", error))
+    }
+    secretFileRaw.flatMap { raw =>
+      decode[EncryptedSecret](raw)
+        .right
+        .map { encryptedSecret =>
+          Base16.decode(encryptedSecret.cipherText)
+            .flatMap(txt => Base16.decode(encryptedSecret.salt)
+              .flatMap(salt => Base16.decode(encryptedSecret.iv)
+                .flatMap(iv => Base16.decode(encryptedSecret.authTag)
+                  .map(tag => (txt, salt, iv, tag, encryptedSecret.usePre1627KeyDerivation))
+                )
               )
             )
-          )
-          .flatMap { case (cipherText, salt, iv, tag, usePre1627KeyDerivation) => {
-              val res = crypto.AES.decrypt(cipherText, pass.getData(), salt, iv, tag)(encryptionSettings)
-              res
-                .map(seed => unlockedSecret = Some(ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation.getOrElse(true))))
+            .flatMap { case (cipherText, salt, iv, tag, usePre1627KeyDerivation) => {
+                val res = crypto.AES.decrypt(cipherText, pass.getData(), salt, iv, tag)(encryptionSettings)
+                res
+                  .map(seed => unlockedSecret = Some(ExtendedSecretKey.deriveMasterKey(seed, usePre1627KeyDerivation.getOrElse(true))))
+              }
             }
-          }
-      }
-      .fold(Failure(_), Success(_))
-      .flatten
+        }
+        .fold(Failure(_), Success(_))
+        .flatten
+    }
   }
 
   /**

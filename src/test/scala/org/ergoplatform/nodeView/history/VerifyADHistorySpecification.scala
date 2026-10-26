@@ -659,4 +659,21 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     }
   }
 
+  property("take the pruned height record no higher than the height after the best full block") {
+    val settings = prunedHistorySettings()
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20
+    (1 to 14).foreach(h => history = applyBlock(history, chain(h - 1)))
+    // a floor above the best full block, with nothing pruned below it, as an earlier version's restart could store
+    history.writeMinimalFullBlockHeight(20)
+    history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get
+    history.closeStorage()
+
+    history = ErgoHistory.readOrGenerate(settings)(null)
+    history.readPrunedBelowHeight() shouldBe Some(15)
+    history.closeStorage()
+  }
+
 }

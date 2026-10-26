@@ -676,4 +676,25 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.closeStorage()
   }
 
+
+  property("do not prune the block just applied when the stored floor is above it") {
+    val settings = prunedHistorySettings()
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20
+    def at(h: Int) = chain(h - 1)
+    (1 to 14).foreach(h => history = applyBlock(history, at(h)))
+    // block 15's transactions and extension arrive while the floor is 4; then a floor above it is stored, as an
+    // earlier restart could; its ADProofs are still accepted (transactions already stored) and complete the block
+    history = applyHeaderChain(history, HeaderChain(Seq(at(15).header)))
+    history = applySection(history, at(15).blockTransactions)
+    history = applySection(history, at(15).extension)
+    history.writeMinimalFullBlockHeight(20)
+    history = applySection(history, at(15).adProofs.value)
+
+    history.bestFullBlockOpt.map(_.header) shouldBe Some(at(15).header)
+    at(15).header.sectionIds.map(_._2).filterNot(history.contains) shouldBe empty
+  }
+
 }

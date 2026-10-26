@@ -456,8 +456,8 @@ object WalletRegistry {
       dir.mkdirs()
       new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
     }.flatMap {
-      case store if !store.versionIdExists(PreGenesisStateVersion) =>
-        // Create pre-genesis state checkpoint
+      case store if store.lastVersionID.isEmpty =>
+        // Create the pre-genesis checkpoint only for a new registry.
         store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).map { _ =>
           new WalletRegistry(store)(settings.walletSettings)
         }

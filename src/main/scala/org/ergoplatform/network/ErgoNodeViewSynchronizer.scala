@@ -1574,12 +1574,21 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       val now = System.currentTimeMillis()
       if (now - lastCheckForModifiersToDownload >= 50) { // do not process command more often than every 50 ms
         lastCheckForModifiersToDownload = now
-        requestDownload(
-          maxModifiers = deliveryTracker.modifiersToDownload,
-          minModifiersPerBucket,
-          maxModifiersPerBucket
-        )(getPeersForDownloadingBlocks) { howManyPerType =>
-          historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
+        // Snapshot discovery uses snapshot-capable peers, which need not serve old block sections.
+        val snapshotInfoNeeded = settings.nodeSettings.utxoSettings.utxoBootstrap &&
+          historyReader.bestFullBlockOpt.isEmpty &&
+          historyReader.nextModifiersToDownload(1, downloadRequired(historyReader))
+            .contains(SnapshotsInfoTypeId.value)
+        if (snapshotInfoNeeded) {
+          requestSnapshotsInfo()
+        } else {
+          requestDownload(
+            maxModifiers = deliveryTracker.modifiersToDownload,
+            minModifiersPerBucket,
+            maxModifiersPerBucket
+          )(getPeersForDownloadingBlocks) { howManyPerType =>
+            historyReader.nextModifiersToDownload(howManyPerType, downloadRequired(historyReader))
+          }
         }
       }
 

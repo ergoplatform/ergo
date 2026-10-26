@@ -4,10 +4,10 @@ import org.ergoplatform.modifiers.history.HeaderChain
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.settings.ErgoSettings
-import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
+import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.initSettings
 
-class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest with NoShrink {
+class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.generators.ChainGenerator._
 
@@ -55,7 +55,7 @@ class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest with NoShri
     val windowStart = 30 - BlocksToKeep + 1
     floor shouldBe (if (windowStart > votingLength) windowStart - windowStart % votingLength else windowStart)
     (prunedFrom until floor).filter(h => sections(h).exists(history.contains)) shouldBe empty
-    (floor to 30).filter(h => !sections(h).forall(history.contains)) shouldBe empty
+    (floor to 30).filterNot(h => sections(h).forall(history.contains)) shouldBe empty
     history.closeStorage()
   }
 

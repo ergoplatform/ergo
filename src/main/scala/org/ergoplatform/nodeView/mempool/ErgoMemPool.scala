@@ -6,9 +6,10 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState}
-import org.ergoplatform.settings.{Constants, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
+import ErgoMemPool.{Available, BudgetExceeded, InputAvailability, Missing, UnresolvedProducer}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import sigma.VersionContext
@@ -194,33 +195,54 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     * Follow surviving unconfirmed producers and check only outputs whose old pool
     * producer disappears. Other inputs were already present before this mutation.
     */
-  private def inputsRemainAvailable(tx: ErgoTransaction,
-                                    proposedPool: OrderedTxPool,
-                                    utxo: UtxoState): Boolean = {
+  private val MaxAncestryProducerExpansions = 500
+  private val MaxAncestryScanNanos = 500L * 1000L * 1000L
+
+  private[mempool] def inputsRemainAvailable(
+    tx: ErgoTransaction,
+    proposedPool: OrderedTxPool,
+    utxo: UtxoState,
+    maxProducerExpansions: Int = MaxAncestryProducerExpansions,
+    maxScanNanos: Long = MaxAncestryScanNanos,
+    nowNanos: () => Long = () => System.nanoTime()
+  ): InputAvailability = {
+    val scanStartNanos = nowNanos()
     val pending = mutable.Queue.empty[BoxId]
-    pending ++= tx.inputs.map(_.boxId)
-    pending ++= tx.dataInputs.map(_.boxId)
+    def withinDeadline: Boolean = nowNanos() - scanStartNanos < maxScanNanos
+    def enqueueBeforeDeadline(boxes: Iterator[BoxId]): Boolean = {
+      while (boxes.hasNext) {
+        if (!withinDeadline) return false
+        pending.enqueue(boxes.next())
+      }
+      true
+    }
+    if (!enqueueBeforeDeadline(tx.inputs.iterator.map(_.boxId))) return BudgetExceeded
+    if (!enqueueBeforeDeadline(tx.dataInputs.iterator.map(_.boxId))) return BudgetExceeded
     val visitedProducers = mutable.Set.empty[ModifierId]
 
     while (pending.nonEmpty) {
+      // Abort rather than accept a partially checked ancestry. UTXO-only leaves
+      // use the time budget at enqueue and dequeue, but not the producer count.
+      if (!withinDeadline) return BudgetExceeded
       val boxId = pending.dequeue()
       proposedPool.outputs.get(boxId) match {
         case Some(producerKey) =>
           proposedPool.orderedTransactions.get(producerKey) match {
             case Some(producer) if producer.id != tx.id =>
               if (visitedProducers.add(producer.id)) {
-                pending ++= producer.transaction.inputs.map(_.boxId)
-                pending ++= producer.transaction.dataInputs.map(_.boxId)
+                if (visitedProducers.size > maxProducerExpansions) return BudgetExceeded
+                if (!enqueueBeforeDeadline(producer.transaction.inputs.iterator.map(_.boxId))) return BudgetExceeded
+                if (!enqueueBeforeDeadline(producer.transaction.dataInputs.iterator.map(_.boxId))) return BudgetExceeded
               }
-            case _ => return false
+            case _ => return UnresolvedProducer
           }
         case None =>
-          // A removed pool producer may also have been confirmed meanwhile, so the
-          // output is lost only when the underlying UTXO state lacks it as well.
-          if (pool.outputs.contains(boxId) && utxo.boxById(boxId).isEmpty) return false
+          // Holder recheck can put a just-confirmed producer back in this pool
+          // (ErgoNodeViewHolder, #2517). Its box is lost only if UTXO also lacks it.
+          if (pool.outputs.contains(boxId) && utxo.boxById(boxId).isEmpty) return Missing(boxId)
       }
     }
-    true
+    Available
   }
 
   // Check if transaction is double-spending inputs spent in the mempool.
@@ -235,12 +257,20 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       // put() can evict a capacity victim in addition to explicit double-spend losers.
       // Only an eviction can remove a dependency already available during validation.
       val hasEviction = proposedPool.size <= pool.size
-      if (hasEviction && utxoState.exists(utxo => !inputsRemainAvailable(tx, proposedPool, utxo))) {
-        val exc = new Exception("Transaction inputs unavailable after mempool update")
+      if (proposedPool.get(tx.id).isEmpty) {
+        val exc = new Exception("Transaction not retained after mempool update")
         this -> new ProcessingOutcome.Declined(exc, validationStartTime)
       } else {
-        new ErgoMemPool(proposedPool, stats, sortingOption) ->
-          new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        val availability = if (hasEviction) {
+          utxoState.map(utxo => inputsRemainAvailable(tx, proposedPool, utxo)).getOrElse(Available)
+        } else Available
+        ErgoMemPool.availabilityDeclineReason(availability) match {
+          case Some(reason) =>
+            this -> new ProcessingOutcome.Declined(new Exception(reason), validationStartTime)
+          case None =>
+            new ErgoMemPool(proposedPool, stats, sortingOption) ->
+              new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        }
       }
     }
 
@@ -468,6 +498,23 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 }
 
 object ErgoMemPool extends ScorexLogging {
+  private[mempool] sealed trait InputAvailability
+  private[mempool] case object Available extends InputAvailability
+  private[mempool] final case class Missing(boxId: BoxId) extends InputAvailability
+  private[mempool] case object UnresolvedProducer extends InputAvailability
+  private[mempool] case object BudgetExceeded extends InputAvailability
+
+  private[mempool] def availabilityDeclineReason(result: InputAvailability): Option[String] = result match {
+    case Available => None
+    case Missing(boxId) =>
+      Some("Transaction input box " + Algos.encode(boxId) +
+        " was available at validation, but its unconfirmed producer would be evicted")
+    case UnresolvedProducer =>
+      Some("Transaction input producer could not be resolved after mempool update")
+    case BudgetExceeded =>
+      Some("Transaction input ancestry check exceeded mempool admission budget")
+  }
+
   /**
    * Create empty mempool
    *

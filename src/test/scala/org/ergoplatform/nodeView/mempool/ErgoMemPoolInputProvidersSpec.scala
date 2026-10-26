@@ -8,7 +8,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.{
   SortingOption
 }
 import org.ergoplatform.nodeView.state.{BoxHolder, UtxoState}
-import org.ergoplatform.settings.{Constants, ErgoSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoNodeTestConstants
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.scalatest.flatspec.AnyFlatSpec
@@ -20,8 +20,8 @@ import sigma.interpreter.ProverResult
 import scala.util.Try
 
 /**
-  * Regression specification for #2724. Unsafe evictions are expected to be declined;
-  * those assertions fail until admission checks the proposed pool's input providers.
+  * Regression specification for #2724. Unsafe evictions are declined when the
+  * proposed pool no longer supplies inputs that were available at validation.
   * Fixtures use real UTXO validation and admit every ancestor through process().
   */
 class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestFileUtils {
@@ -104,7 +104,8 @@ class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestF
     before: ErgoMemPool,
     incoming: ErgoTransaction,
     provider: ErgoTransaction,
-    dependent: ErgoTransaction
+    dependent: ErgoTransaction,
+    expectedMissingBox: Option[ErgoBox] = None
   ): Unit = {
     before.contains(provider.id) shouldBe true
     f.state.boxById(provider.outputs.head.id) shouldBe None
@@ -119,6 +120,10 @@ class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestF
       s"dependent validation after admission: ${validation(f, after, dependent)}. "
     ) {
       outcome shouldBe a[ProcessingOutcome.Declined]
+    }
+    expectedMissingBox.foreach { box =>
+      val actual = outcome.asInstanceOf[ProcessingOutcome.Declined].e.getMessage
+      actual shouldBe ErgoMemPool.availabilityDeclineReason(ErgoMemPool.Missing(box.id)).get
     }
     after.getAll shouldBe before.getAll
     after.pool.transactionsRegistry shouldBe before.pool.transactionsRegistry
@@ -139,7 +144,7 @@ class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestF
         Seq(provider.outputs.head)
       )
 
-      expectDeclined(f, before, incoming, provider, incoming)
+      expectDeclined(f, before, incoming, provider, incoming, Some(provider.outputs.head))
     }
   }
 
@@ -329,6 +334,135 @@ class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestF
 
       after.getAll.map(_.id) shouldBe Seq(incoming.id)
       validation(f, after, incoming).isSuccess shouldBe true
+    }
+  }
+
+  it should "decline a child evicted by its own insertion and accept an independent control" in {
+    withFixture(capacity = 2) { f =>
+      val provider = transaction(f, Seq(f.confirmed(0)), LOW_FEE)
+      val other    = transaction(f, Seq(f.confirmed(1)), HIGH_FEE * 8)
+      val before   = admit(f, admit(f, f.emptyPool, provider), other)
+
+      val control = transaction(f, Seq(f.confirmed(2)), HIGH_FEE * 2)
+      val (controlAfter, controlOutcome) =
+        before.process(UnconfirmedTransaction(control, None), f.state)
+      controlOutcome shouldBe a[ProcessingOutcome.Accepted]
+      controlAfter.contains(control.id) shouldBe true
+      controlAfter.contains(provider.id) shouldBe false
+
+      val incoming = transaction(f, Seq(provider.outputs.head), HIGH_FEE)
+      validation(f, before, incoming).isSuccess shouldBe true
+      val proposed = before.pool.put(UnconfirmedTransaction(incoming, None), incoming.size)
+      proposed.get(provider.id).isDefined shouldBe true
+      proposed.get(other.id).isDefined shouldBe true
+      proposed.get(incoming.id) shouldBe None
+
+      val (after, outcome) = before.process(UnconfirmedTransaction(incoming, None), f.state)
+      withClue("Incoming retained: " + after.contains(incoming.id) + "; ") {
+        outcome shouldBe a[ProcessingOutcome.Declined]
+      }
+      after.getAll shouldBe before.getAll
+      after.pool.transactionsRegistry shouldBe before.pool.transactionsRegistry
+      after.pool.inputs shouldBe before.pool.inputs
+      after.pool.outputs shouldBe before.pool.outputs
+      after.stats shouldBe before.stats
+    }
+  }
+
+  it should "bound distinct unconfirmed producers without counting confirmed input leaves" in {
+    withFixture() { f =>
+      val provider = transaction(f, Seq(f.confirmed(0)), LOW_FEE)
+      val pool = admit(f, f.emptyPool, provider)
+      val dependent = transaction(f, Seq(provider.outputs.head), HIGH_FEE)
+      val stoppedClock: () => Long = () => 0L
+
+      pool.inputsRemainAvailable(
+        dependent, pool.pool, f.state,
+        maxProducerExpansions = 1, maxScanNanos = 1L, nowNanos = stoppedClock
+      ) shouldBe ErgoMemPool.Available
+      pool.inputsRemainAvailable(
+        dependent, pool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 1L, nowNanos = stoppedClock
+      ) shouldBe ErgoMemPool.BudgetExceeded
+
+      val confirmedOnly = transaction(
+        f, Seq(f.confirmed(0), f.confirmed(1)), HIGH_FEE,
+        dataInputs = Seq(f.confirmed(2), f.confirmed(3))
+      )
+      val emptyPool = f.emptyPool
+      emptyPool.inputsRemainAvailable(
+        confirmedOnly, emptyPool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 1L, nowNanos = stoppedClock
+      ) shouldBe ErgoMemPool.Available
+    }
+  }
+
+  it should "decline when the ancestry deadline expires during initial enqueue" in {
+    withFixture() { f =>
+      val confirmedOnly = transaction(
+        f, Seq(f.confirmed(0), f.confirmed(1)), HIGH_FEE,
+        dataInputs = Seq(f.confirmed(2), f.confirmed(3))
+      )
+      val pool = f.emptyPool
+      val stoppedClock: () => Long = () => 0L
+      pool.inputsRemainAvailable(
+        confirmedOnly, pool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 2L, nowNanos = stoppedClock
+      ) shouldBe ErgoMemPool.Available
+
+      var tick = 0L
+      val advancingClock: () => Long = () => {
+        tick += 1
+        tick
+      }
+      pool.inputsRemainAvailable(
+        confirmedOnly, pool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 2L, nowNanos = advancingClock
+      ) shouldBe ErgoMemPool.BudgetExceeded
+      tick shouldBe 3L
+    }
+  }
+
+  it should "decline when the ancestry deadline expires during producer enqueue" in {
+    withFixture() { f =>
+      val provider = transaction(f, Seq(f.confirmed(0), f.confirmed(1)), LOW_FEE)
+      val pool = admit(f, f.emptyPool, provider)
+      val dependent = transaction(f, Seq(provider.outputs.head), HIGH_FEE)
+      val stoppedClock: () => Long = () => 0L
+      pool.inputsRemainAvailable(
+        dependent, pool.pool, f.state,
+        maxProducerExpansions = 1, maxScanNanos = 4L, nowNanos = stoppedClock
+      ) shouldBe ErgoMemPool.Available
+
+      var tick = 0L
+      val advancingClock: () => Long = () => {
+        tick += 1
+        tick
+      }
+      pool.inputsRemainAvailable(
+        dependent, pool.pool, f.state,
+        maxProducerExpansions = 1, maxScanNanos = 4L, nowNanos = advancingClock
+      ) shouldBe ErgoMemPool.BudgetExceeded
+      tick shouldBe 5L
+    }
+  }
+
+  it should "name only a proven missing input box in the decline detail" in {
+    withFixture() { f =>
+      val boxId = f.confirmed(0).id
+      val encoded = Algos.encode(boxId)
+      val missing = ErgoMemPool.availabilityDeclineReason(ErgoMemPool.Missing(boxId)).get
+      missing should include(encoded)
+      missing should include("available at validation")
+
+      val budget = ErgoMemPool.availabilityDeclineReason(ErgoMemPool.BudgetExceeded).get
+      budget should include("budget")
+      budget should not include encoded
+
+      val unresolved = ErgoMemPool.availabilityDeclineReason(ErgoMemPool.UnresolvedProducer).get
+      unresolved should include("could not be resolved")
+      unresolved should not include encoded
+      ErgoMemPool.availabilityDeclineReason(ErgoMemPool.Available) shouldBe None
     }
   }
 }

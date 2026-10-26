@@ -8,7 +8,9 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.settings.ErgoSettings
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
+import org.ergoplatform.utils.ErgoNodeTestConstants.initSettings
 import org.ergoplatform.consensus.ModifierSemanticValidity._
 
 import scala.collection.mutable.ArrayBuffer
@@ -583,6 +585,72 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.append(deepEnoughHeader).isSuccess shouldBe true
 
     history.bestFullBlockOpt.value shouldBe chain.last
+  }
+
+  property("prune the height below a step that applies a block stored ahead of it") {
+    var history = genHistory()._1
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20
+    def at(h: Int) = chain(h - 1)
+    def sections(h: Int) = at(h).header.sectionIds.map(_._2)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    (1 to 14).foreach(h => history = applyBlock(history, at(h)))
+    history.readMinimalFullBlockHeight() shouldBe 4
+
+    // height 16 arrives before 15 and is only stored; receiving 15 then applies 15 and 16 in one step
+    history = applyBlock(history, at(16))
+    history.bestFullBlockOpt.value.header shouldBe at(14).header
+    history.readMinimalFullBlockHeight() shouldBe 4
+    history = applyBlock(history, at(15))
+    history.bestFullBlockOpt.value.header shouldBe at(16).header
+    (17 to 20).foreach(h => history = applyBlock(history, at(h)))
+
+    val floor = history.readMinimalFullBlockHeight()
+    floor shouldBe 10
+    (2 until floor).filter(h => sections(h).exists(history.contains)) shouldBe empty
+    (floor to 20).filter(h => !sections(h).forall(history.contains)) shouldBe empty
+  }
+
+  // A pruned digest history on its own settings, so that a test can close it and read it again, as a restart does
+  private def prunedHistorySettings(): ErgoSettings = initSettings.copy(
+    directory = createTempDir.getAbsolutePath,
+    chainSettings = initSettings.chainSettings.copy(epochLength = 100000000, useLastEpochs = 10),
+    nodeSettings = initSettings.nodeSettings.copy(
+      stateType = StateType.Digest, verifyTransactions = true, blocksToKeep = BlocksToKeep, extraIndex = false))
+
+  // Applies heights 1..14 (floor 4), runs `beforeRestart`, closes the history and reads it again (the headers-synced
+  // flag is not stored, so it starts false), appends header 15 (fresh: the latch sets the flag and moves the floor to 5
+  // before any block is applied), applies 15..20 and checks the pruning below and above the floor (10).
+  private def checkPruningAcrossRestart(beforeRestart: ErgoHistory => Unit): Unit = {
+    val settings = prunedHistorySettings()
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20, stamped with the current time, so each header is fresh
+    def at(h: Int) = chain(h - 1)
+    def sections(h: Int) = at(h).header.sectionIds.map(_._2)
+
+    (1 to 14).foreach(h => history = applyBlock(history, at(h)))
+    history.readMinimalFullBlockHeight() shouldBe 4
+    beforeRestart(history)
+    history.closeStorage()
+
+    history = ErgoHistory.readOrGenerate(settings)(null)
+    history.isHeadersChainSynced shouldBe false
+    history = applyHeaderChain(history, HeaderChain(Seq(at(15).header)))
+    history.isHeadersChainSynced shouldBe true
+    history.readMinimalFullBlockHeight() shouldBe 5
+    (15 to 20).foreach(h => history = applyBlock(history, at(h)))
+
+    val floor = history.readMinimalFullBlockHeight()
+    floor shouldBe 10
+    (2 until floor).filter(h => sections(h).exists(history.contains)) shouldBe empty
+    (floor to 20).filter(h => !sections(h).forall(history.contains)) shouldBe empty
+    history.closeStorage()
+  }
+
+  property("prune the old floor height after a restart moves the floor") {
+    checkPruningAcrossRestart(_ => ())
   }
 
 }

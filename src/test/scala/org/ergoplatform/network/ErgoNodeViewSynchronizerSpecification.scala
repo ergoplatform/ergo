@@ -1649,7 +1649,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         )
       }
       snapshotPeers.foreach { p =>
-        syncTracker.updateStatus(p, org.ergoplatform.consensus.Older, Some(chain.last.height))
+        syncTracker.updateStatus(p, org.ergoplatform.consensus.Older, Some(ctx.chain.last.height))
       }
       syncTracker.knownPeers().toSet shouldBe snapshotPeers.toSet
       UtxoSetNetworkingFilter.filter(snapshotPeers).toSet shouldBe snapshotPeers.toSet
@@ -1667,7 +1667,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
 
       // After snapshot application, ordinary block-section downloads still need block-serving peers.
-      updHistory.onUtxoSnapshotApplied(chain.last.height)
+      updHistory.onUtxoSnapshotApplied(ctx.chain.last.height)
       synchronizerMockRef ! ChangedHistory(updHistory)
       val sectionId = modifierIdGen.sample.get
       synchronizerMockRef ! ErgoNodeViewHolder.DownloadRequest(Map(Extension.modifierTypeId -> Seq(sectionId)))

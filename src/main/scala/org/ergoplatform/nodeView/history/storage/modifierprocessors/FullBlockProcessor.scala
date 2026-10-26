@@ -108,8 +108,9 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nodeSettings.isFullBlocksPruned) {
           // Start where the last prune stopped, not at the floor before this step: the floor also moves without a
           // prune (after a restart the first fresh header sets it again), and a prune can fail after it moved.
-          val pruneFrom = readPrunedBelowHeight().getOrElse {
-            val floor = minimalFullBlockHeight
+          // If the floor is below that height (it can move down to a voting epoch start), start at the floor.
+          val floor = minimalFullBlockHeight
+          val pruneFrom = readPrunedBelowHeight().map(Math.min(_, floor)).getOrElse {
             writePrunedBelowHeight(floor).failed.foreach(e => log.warn(s"Pruned height record not written: ${e.getMessage}"))
             floor
           }

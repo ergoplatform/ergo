@@ -666,7 +666,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.isHeadersChainSyncedVar = true
     val chain = genChain(BlocksToKeep + 9) // heights 1..20
     (1 to 14).foreach(h => history = applyBlock(history, chain(h - 1)))
-    // a floor above the best full block, with nothing pruned below it, as an earlier version's restart could store
+    // a floor above the best full block, nothing pruned between the old floor (4) and it, as an earlier restart stores
     history.writeMinimalFullBlockHeight(20)
     history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get
     history.closeStorage()

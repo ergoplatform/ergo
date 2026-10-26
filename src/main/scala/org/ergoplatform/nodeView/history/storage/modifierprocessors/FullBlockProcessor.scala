@@ -106,11 +106,24 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          val prevMinHeight = minimalFullBlockHeight
+          // Start where the last prune stopped, not at the floor before this step: the floor also moves without a
+          // prune (after a restart the first fresh header sets it again), and a prune can fail after it moved.
+          val pruneFrom = readPrunedBelowHeight().getOrElse {
+            val floor = minimalFullBlockHeight
+            writePrunedBelowHeight(floor).failed.foreach(e => log.warn(s"Pruned height record not written: ${e.getMessage}"))
+            floor
+          }
           // Use the received block, not the new best one: from the new best block,
           // a step that fills a gap could prune blocks the state has not applied yet.
           val newMinHeight = updateBestFullBlock(fullBlock.header)
-          pruneBlockDataAt(prevMinHeight until newMinHeight)
+          if (pruneFrom < newMinHeight) {
+            pruneBlockDataAt(pruneFrom until newMinHeight)
+              .flatMap(_ => writePrunedBelowHeight(newMinHeight))
+              .failed.foreach { e =>
+                log.warn(s"Pruning full blocks at heights $pruneFrom until $newMinHeight failed, " +
+                  s"to be retried with the next block: ${e.getMessage}")
+              }
+          }
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
       }

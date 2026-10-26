@@ -653,4 +653,11 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     checkPruningAcrossRestart(_ => ())
   }
 
+  property("prune the old floor height after a restart into this version (no pruned height record yet)") {
+    checkPruningAcrossRestart { history =>
+      history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get
+      history.readPrunedBelowHeight() shouldBe None
+    }
+  }
+
 }

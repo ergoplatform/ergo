@@ -758,7 +758,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
             requestBlockSection(modifierTypeId, modifierIds, peer)
           }
         }
-      case _ =>
+      case Some(_) =>
+        log.warn(
+          "No peers available in requestDownload: all candidate peers are pruned or bootstrapped"
+        )
+      case None =>
         log.warn("No peers available in requestDownload")
     }
   }

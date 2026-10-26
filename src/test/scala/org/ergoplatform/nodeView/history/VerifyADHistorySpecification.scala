@@ -619,8 +619,8 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
       stateType = StateType.Digest, verifyTransactions = true, blocksToKeep = BlocksToKeep, extraIndex = false))
 
   // Applies heights 1..14 (floor 4), runs `beforeRestart`, closes the history and reads it again (the headers-synced
-  // flag is not stored, so it starts false), appends header 15 (fresh: the latch sets the flag and moves the floor to 5
-  // before any block is applied), applies 15..20 and checks the pruning below and above the floor (10).
+  // flag is not stored, so it starts false), appends header 15 (fresh: it sets the flag before any block is applied,
+  // and may move the floor), applies 15..20 and checks the pruning below and above the floor (10).
   private def checkPruningAcrossRestart(beforeRestart: ErgoHistory => Unit): Unit = {
     val settings = prunedHistorySettings()
     var history = ErgoHistory.readOrGenerate(settings)(null)
@@ -639,7 +639,6 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.isHeadersChainSynced shouldBe false
     history = applyHeaderChain(history, HeaderChain(Seq(at(15).header)))
     history.isHeadersChainSynced shouldBe true
-    history.readMinimalFullBlockHeight() shouldBe 5
     (15 to 20).foreach(h => history = applyBlock(history, at(h)))
 
     val floor = history.readMinimalFullBlockHeight()

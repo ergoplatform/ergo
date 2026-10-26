@@ -51,8 +51,8 @@ class ErgoMemPoolReplacementDependenciesSpec extends AnyFlatSpec with ErgoTestHe
         replacement, validationContext, Int.MaxValue, None).isSuccess shouldBe true
       val (after, outcome) = pool.process(UnconfirmedTransaction(replacement, None), wus)
       outcome.isInstanceOf[ProcessingOutcome.Declined] shouldBe true
-      outcome.asInstanceOf[ProcessingOutcome.Declined].e.getMessage should include (
-        "unavailable after mempool update")
+      outcome.asInstanceOf[ProcessingOutcome.Declined].e.getMessage shouldBe
+        ErgoMemPool.availabilityDeclineReason(ErgoMemPool.Missing(y.id)).get
       after.contains(parent.id) shouldBe true
       after.contains(replacement.id) shouldBe false
     }

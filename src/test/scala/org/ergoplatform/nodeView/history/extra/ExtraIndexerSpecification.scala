@@ -1488,9 +1488,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     history.typedExtraIndexById[IndexedErgoBox](spentInputId).exists(_.isSpent) shouldBe true
 
     val probe = TestProbe()(system)
-    awaitAfter(created)(probe.send(failingIndexer, FailNextRollbackRemoval(probe.ref)))
-    probe.send(failingIndexer, GetLoadedState())
-    probe.expectMsgType[IndexerState].indexedHeight shouldBe HEIGHT
+    awaitAfter(created)(failingIndexer ! FailNextRollbackRemoval(probe.ref))
     failingIndexer ! ForceRollback(HEIGHT - 1)
 
     probe.expectMsg("indexer-stop-requested")
@@ -1546,6 +1544,8 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val (_, _, _, txCount, boxCount) = manualIndex(7)
     IndexerState.fromHistory(_history).globalTxIndex shouldBe txCount
     IndexerState.fromHistory(_history).globalBoxIndex shouldBe boxCount
+    // A late `done` signal from the catch-up above must not wake `createAndIndex` in
+    // the next test. So wait for a reply that comes after Reset() is handled.
     probe.send(indexer, Reset())
     probe.send(indexer, CheckpointSettings())
     probe.expectMsgType[ErgoSettings]

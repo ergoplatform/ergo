@@ -211,7 +211,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
           if (observeCheckpointAttempts && marker.contains(0)) {
             checkpointWriteAttempts += test.CheckpointWriteAttempt(
               objects.iterator.map(_.id).toVector,
-              objects.collect { case row: StorageRentBox => row.id }.toVector)
+              objects.iterator.collect { case row: StorageRentBox => row.id }.toVector)
           }
           val shouldFail = writeFailurePhase match {
             case "forward" => marker.contains(0)

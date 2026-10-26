@@ -441,8 +441,13 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     case AddBox(box: ErgoBox, scanIds: Set[ScanId]) =>
-      state.registry.updateScans(scanIds, box)
-      sender() ! AddBoxResponse(Success(())) // todo: what is the reasoning behind returning always success?
+      val result = state.registry.updateScans(scanIds, box)
+      result.foreach { _ =>
+        if (scanIds.nonEmpty) {
+          state.outputsFilter.foreach(_.put(box.id))
+        }
+      }
+      sender() ! AddBoxResponse(result)
 
     case StopTracking(scanId: ScanId, boxId: BoxId) =>
       sender() ! StopTrackingResponse(state.registry.removeScan(boxId, scanId))

@@ -252,6 +252,60 @@ class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestF
     }
   }
 
+  it should "accept capacity eviction when a former pool output is now confirmed" in {
+    withFixture(capacity = 1) { f =>
+      val provider       = transaction(f, Seq(f.confirmed(0)), LOW_FEE)
+      val before         = admit(f, f.emptyPool, provider)
+      val formerlyPooled = provider.outputs.head
+      val incoming       = transaction(
+        f,
+        Seq(f.confirmed(1)),
+        HIGH_FEE,
+        Seq(formerlyPooled)
+      )
+
+      before.pool.outputs.contains(formerlyPooled.id) shouldBe true
+      f.state.boxById(formerlyPooled.id) shouldBe None
+      val (withoutConfirmation, missingOutcome) =
+        before.process(UnconfirmedTransaction(incoming, None), f.state)
+      missingOutcome shouldBe a[ProcessingOutcome.Declined]
+      (withoutConfirmation eq before) shouldBe true
+
+      // Model a stale pool against a later UTXO view: P's spent input is gone,
+      // while the output P supplied is now confirmed.
+      val confirmedState = UtxoState.fromBoxHolder(
+        BoxHolder(f.confirmed.drop(1) :+ formerlyPooled),
+        None,
+        createTempDir,
+        f.settings,
+        f.settings.launchParameters
+      )
+      try {
+        confirmedState.boxById(f.confirmed(0).id) shouldBe None
+        confirmedState.boxById(formerlyPooled.id).isDefined shouldBe true
+        confirmedState.withMempool(before).validateWithCost(
+          incoming,
+          confirmedState.stateContext.simplifiedUpcoming(),
+          f.settings.nodeSettings.maxTransactionCost,
+          None
+        ).isSuccess shouldBe true
+
+        val (after, outcome) = before.process(
+          UnconfirmedTransaction(incoming, None),
+          confirmedState
+        )
+        outcome shouldBe a[ProcessingOutcome.Accepted]
+        after.getAll.map(_.id) shouldBe Seq(incoming.id)
+        confirmedState.withMempool(after).validateWithCost(
+          incoming,
+          confirmedState.stateContext.simplifiedUpcoming(),
+          f.settings.nodeSettings.maxTransactionCost,
+          None
+        ).isSuccess shouldBe true
+      } finally confirmedState.closeStorage()
+    }
+  }
+
   it should "accept an independent higher-fee RBF replacement" in {
     withFixture() { f =>
       val provider = transaction(f, Seq(f.confirmed(0)), LOW_FEE)

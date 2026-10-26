@@ -92,6 +92,7 @@ object NumericBoxIndex {
     * @return box with given index, if found
     */
   def getBoxByNumber(history: ErgoHistoryReader, n: Long): Option[IndexedErgoBox] =
-    history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(math.abs(n))))
+    if (n == 0L || n == Long.MinValue) None
+    else history.typedExtraIndexById[NumericBoxIndex](bytesToId(NumericBoxIndex.indexToBytes(math.abs(n))))
       .flatMap(ni => history.typedExtraIndexById[IndexedErgoBox](ni.m))
 }

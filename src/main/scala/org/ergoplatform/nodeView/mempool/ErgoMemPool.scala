@@ -69,9 +69,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     val start = if (total <= limit) {
       0
     } else {
-      val max = total - limit
-      // max > 0 always
-      scala.util.Random.nextInt(max)
+      // a window of `limit` transactions can start at 0 .. total - limit, the last start included
+      scala.util.Random.nextInt(total - limit + 1)
     }
 
     cfor(start)(_ < Math.min(start + limit, total), _ + 1) { idx =>

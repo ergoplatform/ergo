@@ -39,7 +39,7 @@ lazy val commonSettings = Seq(
 
 publishArtifact in (Compile, packageDoc) := false
 
-val circeVersion = "0.14.15"
+val circeVersion = "0.14.16"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
@@ -171,17 +171,48 @@ inConfig(Linux)(
   )
 )
 
+// Number of integration test groups, which all run at once (see concurrentRestrictions)
+val itTestGroups = 3
+
 Defaults.itSettings
 configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
-  // Run integration suites in parallel. Each suite is forked into its own JVM (testGrouping
-  // below) and the number running at once is bounded by the global Tags.ForkedTestGroup limit,
-  // so we get parallelism without exhausting host RAM (a suite can launch ~4 node containers).
+  // Run integration suites in parallel, in itTestGroups fixed groups. Each group is forked
+  // into its own JVM and runs its suites in sequence. sbt starts forked groups in a random
+  // order. With one group per suite, a long suite could start last and set the job time.
+  // The groups are packed by each suite's time on a GitHub-hosted runner, in seconds. A
+  // suite that is not listed counts as 30 s.
   parallelExecution := true,
   testGrouping := {
     val opts = forkOptions.value
-    definedTests.value.map { t =>
-      Tests.Group(name = t.name, tests = Seq(t), runPolicy = Tests.SubProcess(opts))
+    val seconds = Map(
+      "DeepRollBackSpec"            -> 145,
+      "PrunedDigestNodeSyncSpec"    -> 115,
+      "ForkResolutionSpec"          -> 62,
+      "LongChainSyncSpec"           -> 51,
+      "UtxoStateNodesSyncSpec"      -> 45,
+      "PrunedDigestNodeSync2Spec"   -> 40,
+      "StateRecoveryDigestNodeSpec" -> 33,
+      "KnownNodesSpec"              -> 25,
+      "NodeRecoverySpec"            -> 18,
+      "NodeApiWaitSpec"             -> 11,
+      "WalletSpec"                  -> 9,
+      "DockerVolumeCleanupSpec"     -> 5,
+      "ConvergenceObservationsSpec" -> 1,
+      "StallWatchSpec"              -> 1
+    )
+    def secondsOf(t: TestDefinition): Int = seconds.getOrElse(t.name.split('.').last, 30)
+    // Longest suite first, each into the group with the least time so far
+    val empty  = Vector.fill(itTestGroups)((0, Vector.empty[TestDefinition]))
+    val sorted = definedTests.value.sortBy(t => (-secondsOf(t), t.name))
+    val groups = sorted.foldLeft(empty) { (gs, t) =>
+      val i             = gs.indexOf(gs.minBy(_._1))
+      val (time, tests) = gs(i)
+      gs.updated(i, (time + secondsOf(t), tests :+ t))
+    }
+    groups.map(_._2).filter(_.nonEmpty).zipWithIndex.map {
+      case (tests, i) =>
+        Tests.Group(name = s"group-$i", tests = tests, runPolicy = Tests.SubProcess(opts))
     }
   },
   test := (test dependsOn docker).value,
@@ -191,11 +222,13 @@ inConfig(IntegrationTest)(Seq(
 // Cap how many forked test JVMs run concurrently.  sbt's default
 // concurrentRestrictions already contains Tags.limit(Tags.ForkedTestGroup, 1);
 // simply += adds a second, looser rule and the strictest wins, so the
-// 2-way parallelism would be a no-op.  We replace the default rule by
-// keeping the other defaults and setting ForkedTestGroup to 2.
+// parallelism would be a no-op.  We replace the default rule by
+// keeping the other defaults and setting ForkedTestGroup to itTestGroups.
+// Three integration suites start at most ~11 node containers of 1 GB each,
+// which fits the 16 GB of a GitHub-hosted runner.
 Global / concurrentRestrictions := Seq(
   Tags.limitAll(math.max(1, java.lang.Runtime.getRuntime.availableProcessors())),
-  Tags.limit(Tags.ForkedTestGroup, 2),
+  Tags.limit(Tags.ForkedTestGroup, itTestGroups),
   Tags.exclusiveGroup(Tags.Clean)
 )
 

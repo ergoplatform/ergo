@@ -24,8 +24,15 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
-                         minFullHeight: Option[Int] = Some(GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
-    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+                         minFullHeight: Option[Int] = Some(GenesisHeight),
+                         votingLength: Option[Int] = None): (ErgoHistory, Seq[ErgoFullBlock]) = {
+    val inHistory = generateHistory(
+      verifyTransactions = true,
+      StateType.Digest,
+      PoPoWBootstrap = false,
+      BlocksToKeep,
+      votingLength = votingLength
+    )
     minFullHeight.foreach { h =>
       inHistory.writeMinimalFullBlockHeight(h)
       inHistory.isHeadersChainSyncedVar = true
@@ -378,6 +385,51 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
       history.modifierById(b.header.transactionsId).isDefined shouldBe true
       history.modifierById(b.header.ADProofsId).isDefined shouldBe true
     }
+  }
+
+  property("prune blocks applied together with the first full block") {
+    val votingLength = 4
+    var history = genHistory(votingLength = Some(votingLength))._1
+    history.bestFullBlockOpt shouldBe None
+
+    val blocksToPrune = 7
+    val chain = genChain(BlocksToKeep + blocksToPrune)
+
+    val firstBatch = chain.dropRight(2) // heights 1..16
+    val next       = chain.init.last // height 17
+
+    def sectionIds(bs: Seq[ErgoFullBlock]) = bs.flatMap(_.header.sectionIds.map(_._2))
+    def stored(bs: Seq[ErgoFullBlock])     = sectionIds(bs).filter(history.contains)
+    def missing(bs: Seq[ErgoFullBlock])    = sectionIds(bs).filterNot(history.contains)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.value shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    // Append heights 2..16 before the first full block (height 1) arrives
+    firstBatch.tail.foreach { b =>
+      history = applyBlock(history, b)
+    }
+    history.bestFullBlockOpt shouldBe None
+
+    // Applying height 1 queues heights 1..16 for state application without pruning them yet
+    history = applyBlock(history, firstBatch.head)
+    history.bestFullBlockOpt.value.header shouldBe firstBatch.last.header
+    missing(firstBatch) shouldBe empty
+
+    // Next block (height 17): h = 7 > votingLength (4), so the floor rounds down to epoch start 4 and prunes 1..3
+    history = applyBlock(history, next)
+    history.bestFullBlockOpt.value.header shouldBe next.header
+    val (prunedAtNext, keptAtNext) = chain.init.splitAt(votingLength - 1)
+    stored(prunedAtNext) shouldBe empty
+    missing(keptAtNext) shouldBe empty
+
+    // Next block (height 18): h = 8 reaches the next epoch start, so the floor jumps 4 -> 8 and prunes 4..7
+    history = applyBlock(history, chain.last)
+    history.bestFullBlockOpt.value.header shouldBe chain.last.header
+    val (prunedAtLast, keptAtLast) = chain.splitAt(blocksToPrune)
+    stored(prunedAtLast) shouldBe empty
+    missing(keptAtLast) shouldBe empty
   }
 
   property("process fork from genesis") {

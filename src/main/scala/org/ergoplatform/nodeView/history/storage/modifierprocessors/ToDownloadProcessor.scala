@@ -163,17 +163,28 @@ trait ToDownloadProcessor
     * the chain is at the tip then). When `updateBestBlock` is true the best full block pointer
     * is persisted as well, which advances minimalFullBlockHeight; callers in the UTXO snapshot
     * bootstrap path must not do that (see above).
+    * A node that can continue from its best full block (e.g. after a restart) keeps minimalFullBlockHeight,
+    * which then moves as blocks are applied: a height computed from this header could be above the best
+    * full block, and the blocks the node needs next would be rejected as too old. If such a height is
+    * already stored (by an earlier version), it is lowered to the height after the best full block.
     */
   private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
     if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       if (updateBestBlock) {
         val lowestHeight = lowestApplicableHeight(header)
-        updateBestFullBlock(header, lowestHeight)
+        bestFullBlockOpt.filter(fb => headerIdsAtHeight(fb.height + 1).nonEmpty) match {
+          case Some(fb) =>
+            if (minimalFullBlockHeight > fb.height + 1) writeMinimalFullBlockHeight(fb.height + 1)
+            setHeadersChainSynced()
+          case None =>
+            updateBestFullBlock(header, lowestHeight)
+        }
         if (lowestHeight > GenesisHeight) warnIfBestFullBlockBelowGap(header)
       } else {
         setHeadersChainSynced()
       }
-      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}, " +
+        s"minimal full block height $minimalFullBlockHeight")
     }
   }
 

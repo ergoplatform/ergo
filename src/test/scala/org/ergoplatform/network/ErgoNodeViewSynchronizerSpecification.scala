@@ -1657,14 +1657,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
       synchronizerMockRef ! CheckModifiersToDownload
       // A throttled explicit check can fall through to the scheduled 5-second check.
-      val request = ncProbe.fishForMessage(7.seconds) {
-        case stn: SendToNetwork => stn.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
-        case _ => false
-      }.asInstanceOf[SendToNetwork]
-      request.sendingStrategy match {
-        case SendToPeers(chosen) => chosen.toSet shouldBe snapshotPeers.toSet
-        case other => fail(s"Expected snapshot peers, got $other")
+      val chosen = ncProbe.fishForSpecificMessage(7.seconds) {
+        case SendToNetwork(msg, SendToPeers(peers))
+            if msg.spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+          peers
       }
+      chosen.toSet shouldBe snapshotPeers.toSet
 
       // After snapshot application, ordinary block-section downloads still need block-serving peers.
       updHistory.onUtxoSnapshotApplied(ctx.chain.last.height)

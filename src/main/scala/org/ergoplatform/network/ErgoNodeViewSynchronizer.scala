@@ -1576,7 +1576,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
         lastCheckForModifiersToDownload = now
         // Snapshot discovery uses snapshot-capable peers, which need not serve old block sections.
         val snapshotInfoNeeded = settings.nodeSettings.utxoSettings.utxoBootstrap &&
-          historyReader.bestFullBlockOpt.isEmpty &&
+          historyReader.fullBlockHeight == 0 &&
           historyReader.nextModifiersToDownload(1, downloadRequired(historyReader))
             .contains(SnapshotsInfoTypeId.value)
         if (snapshotInfoNeeded) {

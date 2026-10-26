@@ -66,7 +66,9 @@ class ScanningPredicateSpecification extends ErgoCorePropertyTest {
         val registers: AdditionalRegisters = Map(R4 -> ShortConstant(value))
         val box = testBox(1, address.script, 0, Seq.empty, registers)
 
-        EqualsScanningPredicate(R4, ShortConstant(value)).filter(box) shouldBe true
+        withClue(s"value = $value: ") {
+          EqualsScanningPredicate(R4, ShortConstant(value)).filter(box) shouldBe true
+        }
       }
     }
   }
@@ -118,7 +120,9 @@ class ScanningPredicateSpecification extends ErgoCorePropertyTest {
           val registers: AdditionalRegisters = Map(R4 -> LongConstant(value))
           val box = testBox(1, address.script, 0, Seq.empty, registers)
 
-          EqualsScanningPredicate(R4, LongConstant(value)).filter(box) shouldBe true
+          withClue(s"value = $value: ") {
+            EqualsScanningPredicate(R4, LongConstant(value)).filter(box) shouldBe true
+          }
         }
     }
   }

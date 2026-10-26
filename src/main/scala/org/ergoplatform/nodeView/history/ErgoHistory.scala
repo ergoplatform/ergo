@@ -620,6 +620,18 @@ object ErgoHistory extends ScorexLogging {
       }
     })(history.closeStorage())
 
+    // Pruning starts where the last prune stopped (FullBlockProcessor). A node that prunes and has full blocks but no
+    // such record (its first start with this version) gets it from its stored floor here, before the first fresh
+    // header after the start can move the floor. A node without full blocks gets it at its first prune, so the first
+    // range after a UTXO-snapshot or NiPoPoW bootstrap does not start at genesis.
+    stopOnFailure("Pruned height record", Try {
+      if (nodeSettings.isFullBlocksPruned && history.bestFullBlockOpt.isDefined && history.readPrunedBelowHeight().isEmpty) {
+        val floor = history.readMinimalFullBlockHeight()
+        history.writePrunedBelowHeight(floor).get
+        log.info(s"Full blocks below height $floor are taken as pruned")
+      }
+    })(history.closeStorage())
+
     log.info("History database read")
     history
   }

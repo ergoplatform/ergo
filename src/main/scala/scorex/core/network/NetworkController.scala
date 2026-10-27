@@ -117,7 +117,7 @@ class NetworkController(ergoSettings: ErgoSettings,
       context stop self
   }
 
-  private def time(): Time = System.currentTimeMillis()
+  protected def time(): Time = System.currentTimeMillis()
 
   private def businessLogic: Receive = {
     // a message coming in from another peer

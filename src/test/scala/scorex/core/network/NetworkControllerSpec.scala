@@ -7,7 +7,8 @@ import akka.util.ByteString
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
 import org.ergoplatform.network.{Handshake, HandshakeSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.peer.PeerInfo
+import org.ergoplatform.network.PeerFeature
+import org.ergoplatform.network.peer.{LocalAddressPeerFeature, PeerInfo}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.core.app.ScorexContext
@@ -30,14 +31,22 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
     case class EstablishedConnection(connectionProbe: TestProbe, handlerRef: ActorRef)
 
-    def createController(maxConnections: Int): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
+    // The controller's clock in milliseconds, when a test sets it (`clock`); otherwise the system clock
+    var clockMillis: Long = System.currentTimeMillis()
+
+    def createController(maxConnections: Int,
+                         inactiveConnectionDeadline: FiniteDuration =
+                           settings.scorexSettings.network.inactiveConnectionDeadline,
+                         clock: Boolean = false
+                        ): (TestActorRef[NetworkController], TestProbe, TestProbe) = {
       val peerManagerProbe = TestProbe("PeerManager")
       val tcpManagerProbe = TestProbe("TcpManager")
 
       val testSettings = settings.copy(
         scorexSettings = settings.scorexSettings.copy(
           network = settings.scorexSettings.network.copy(
-            maxConnections = maxConnections
+            maxConnections = maxConnections,
+            inactiveConnectionDeadline = inactiveConnectionDeadline
           )
         )
       )
@@ -48,7 +57,9 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
         scorexContext,
         tcpManagerProbe.ref,
         _ => Map.empty[MessageCode, ActorRef]
-      ))
+      ) {
+        override protected def time(): Long = if (clock) clockMillis else super.time()
+      })
 
       tcpManagerProbe.expectMsgType[Tcp.Bind]
       controller ! Tcp.Bound(testSettings.scorexSettings.network.bindAddress)
@@ -126,6 +137,24 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       connection.expectMsg(Tcp.ResumeReading)
       connection.expectMsgType[Tcp.Write]
       handler
+    }
+
+    // An incoming connection from `remoteAddress` that completes its handshake, declaring `declaredAddress` and
+    // `features` (the controller then has a message from the network within the last connection timeout)
+    def handshakeIncoming(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress,
+      declaredAddress: Option[InetSocketAddress] = None,
+      features: Seq[PeerFeature] = Seq.empty
+    ): Unit = {
+      val connection = establishIncomingConnectionWithHandler(controller, peerManagerProbe, remoteAddress)
+      val peerInfo = PeerInfo(
+        defaultPeerSpec.copy(declaredAddress = declaredAddress.orElse(Some(remoteAddress)), features = features),
+        System.currentTimeMillis()
+      )
+      controller.tell(NetworkController.ReceivableMessages.Handshaked(peerInfo), connection.handlerRef)
+      peerManagerProbe.expectMsgType[AddOrUpdatePeer]
     }
 
     def establishOutgoingConnection(
@@ -566,6 +595,98 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
       val outgoingAddress = new InetSocketAddress("8.8.8.8", 8001)
       f.establishOutgoingConnection(controller, peerManagerProbe, tcpManagerProbe, outgoingAddress)
+    }
+  }
+
+  property("a failed dial keeps a peer until dials to it have failed for inactiveConnectionDeadline") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30, clock = true)
+      val deadline = settings.scorexSettings.network.inactiveConnectionDeadline.toMillis
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.40", 9040))
+      val restarting = new InetSocketAddress("203.0.113.41", 9041)
+
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
+
+      // another peer's handshake just before each later dial, so connectivity is not lost
+      f.clockMillis += deadline - 1
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.46", 9046))
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
+
+      f.clockMillis += 1
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.47", 9047))
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectMsg(RemovePeer(restarting))
+    }
+  }
+
+  property("a failed dial removes the peer at once when inactiveConnectionDeadline is zero") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30, inactiveConnectionDeadline = Duration.Zero)
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.42", 9042))
+      val dead = new InetSocketAddress("203.0.113.43", 9043)
+
+      controller ! Tcp.CommandFailed(Tcp.Connect(dead))
+      peerManager.expectMsg(RemovePeer(dead))
+    }
+  }
+
+  property("a handshake with a peer restarts the time its dials have been failing") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30, clock = true)
+      val restarting = new InetSocketAddress("203.0.113.44", 9044)
+
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.45", 9045))
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
+
+      // the peer connects in from another port and declares the address the node dials, and a local address too
+      f.clockMillis += settings.scorexSettings.network.inactiveConnectionDeadline.toMillis
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.44", 50044), Some(restarting),
+        Seq(LocalAddressPeerFeature(new InetSocketAddress("10.0.0.44", 9044))))
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
+    }
+  }
+
+  property("a handshake declaring the local address the node dials restarts the time for that address") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30, clock = true)
+      val dialled = new InetSocketAddress("203.0.113.48", 9048)
+
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.49", 9049))
+      controller ! Tcp.CommandFailed(Tcp.Connect(dialled))
+      peerManager.expectNoMessage(200.millis)
+
+      // the dial goes to the local address when a peer declares one (NetworkController.getPeerAddress)
+      f.clockMillis += settings.scorexSettings.network.inactiveConnectionDeadline.toMillis
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.48", 50048),
+        Some(new InetSocketAddress("198.51.100.48", 9048)), Seq(LocalAddressPeerFeature(dialled)))
+      controller ! Tcp.CommandFailed(Tcp.Connect(dialled))
+      peerManager.expectNoMessage(200.millis)
+    }
+  }
+
+  property("a failed dial while no peer has talked for the connection window restarts the time for every address") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30, clock = true)
+      val window = settings.scorexSettings.network.connectionTimeout.toMillis * 6
+      val restarting = new InetSocketAddress("203.0.113.50", 9050)
+
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.51", 9051))
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
+
+      // the node's own connectivity is lost: nothing heard for longer than the window, and a dial fails
+      f.clockMillis += window
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
+
+      f.clockMillis += settings.scorexSettings.network.inactiveConnectionDeadline.toMillis
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.52", 9052))
+      controller ! Tcp.CommandFailed(Tcp.Connect(restarting))
+      peerManager.expectNoMessage(200.millis)
     }
   }
 }

@@ -71,6 +71,14 @@ class NetworkController(ergoSettings: ErgoSettings,
     * Used to check whether connectivity is lost.
     */
   private var lastIncomingMessageTime: Time = 0L
+
+  /**
+    * Time of the first failed dial to an address since it last completed a handshake, counted only while other
+    * peers are talking. The address is removed from the peers database only after dials to it have failed for
+    * `inactiveConnectionDeadline`, so a peer that is restarting keeps its entry.
+    */
+  private var failingSince = Map.empty[InetSocketAddress, Time]
+
   private val activityDelta: Long = 60 * 1000 // 1 min
 
   // incoming connections limit (number oof incoming connections should be strictly less than the limit)
@@ -235,11 +243,24 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
 
       // If a message received from p2p within connection timeout,
-      // connectivity is not lost thus we're removing the peer
+      // connectivity is not lost thus the failure counts against the peer,
+      // which is removed once dials to it have failed for inactiveConnectionDeadline
       // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
-      val noNetworkMessagesFor = time() - lastIncomingMessageTime
+      val now = time()
+      val noNetworkMessagesFor = now - lastIncomingMessageTime
       if (noNetworkMessagesFor < networkSettings.connectionTimeout.toMillis * 6) {
-        peerManagerRef ! RemovePeer(c.remoteAddress)
+        val firstFailure = failingSince.getOrElse(c.remoteAddress, now)
+        if (now - firstFailure >= networkSettings.inactiveConnectionDeadline.toMillis) {
+          failingSince -= c.remoteAddress
+          peerManagerRef ! RemovePeer(c.remoteAddress)
+        } else {
+          log.info(s"${c.remoteAddress} kept in peers database: dials to it failing for ${(now - firstFailure) / 1000} s " +
+            s"of ${networkSettings.inactiveConnectionDeadline.toSeconds} s")
+          failingSince += c.remoteAddress -> firstFailure
+        }
+      } else {
+        // connectivity is lost, so failed dials say nothing about the peers: their times start again
+        failingSince = Map.empty
       }
 
     case Terminated(ref) =>
@@ -457,6 +478,7 @@ class NetworkController(ergoSettings: ErgoSettings,
         peerManagerRef ! RemovePeer(peerAddress)
         connections -= connectedPeer.connectionId.remoteAddress
       } else {
+        failingSince = failingSince - remoteAddress - peerAddress -- getPeerAddress(peerInfo)
         val newPeerInfo = peerInfo.copy(lastStoredActivityTime = time())
         peerManagerRef ! AddOrUpdatePeer(newPeerInfo)
 

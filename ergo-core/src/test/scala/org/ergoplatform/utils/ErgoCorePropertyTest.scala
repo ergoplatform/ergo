@@ -19,11 +19,11 @@ trait ErgoCorePropertyTest extends AnyPropSpec
   // stack trace, and the cause if it can be sent.
   override def withFixture(test: NoArgTest): Outcome = super.withFixture(test) match {
     case Failed(e: PropertyCheckFailedException) =>
-      val message = e.getMessage
-      val cause = Option(e.getCause).filter(isSerializable)
+      val message = e.message
+      val cause = e.cause.filter(isSerializable)
       val failure = e.position match {
-        case Some(pos) => new TestFailedException((_: StackDepthException) => Some(message), cause, pos)
-        case None => new TestFailedException(Some(message), cause, e.failedCodeStackDepth)
+        case Some(pos) => new TestFailedException((_: StackDepthException) => message, cause, pos)
+        case None => new TestFailedException(message, cause, e.failedCodeStackDepth)
       }
       failure.setStackTrace(e.getStackTrace)
       Failed(failure)

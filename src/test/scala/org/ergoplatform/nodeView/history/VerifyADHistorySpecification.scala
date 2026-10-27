@@ -410,7 +410,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.bestHeaderIdAtHeight(second.height) shouldBe Some(second.id)
   }
 
-  property("invalidating the only full genesis clears both selected tips") {
+  property("invalidating the only full genesis keeps the pre-genesis full pointer") {
     var history = genHistory()._1
     val first = genChain(1, history).head
     val siblingTag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(1: Byte, 1: Byte)))
@@ -428,7 +428,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     progress.toRemove.map(_.id) shouldBe Seq(first.id)
     progress.toApply shouldBe Seq.empty
     history.bestHeaderIdOpt shouldBe None
-    history.bestFullBlockIdOpt shouldBe None
+    history.bestFullBlockIdOpt shouldBe Some(PreGenesisHeader.id)
     history.isSemanticallyValid(first.id) shouldBe Invalid
 
     history = applyChain(history, Seq(second))
@@ -473,6 +473,24 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     progress.toRemove.map(_.id) shouldBe Seq(chain.last.id)
     history.bestFullBlockIdOpt shouldBe None
     history.bestHeaderIdOpt shouldBe Some(chain(1).id)
+  }
+
+  property("invalidating genesis with a pruned full prefix clears the full pointer") {
+    var history = genHistory(minFullHeight = Some(3))._1
+    val chain = genChain(4, history)
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    val retained = chain.drop(2)
+    history = applyChain(history, retained)
+    history.bestFullBlockIdOpt shouldBe Some(retained.last.id)
+    history.getFullBlock(chain.head.header) shouldBe None
+
+    val (recovered, progress) = history.reportModifierIsInvalid(chain.head.header,
+      ProgressInfo[PM](Some(PreGenesisHeader.id), retained, Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe retained.map(_.id)
+    history.bestHeaderIdOpt shouldBe None
+    history.bestFullBlockIdOpt shouldBe None
   }
 
   for (invalidatedIndex <- Seq(0, 1)) {

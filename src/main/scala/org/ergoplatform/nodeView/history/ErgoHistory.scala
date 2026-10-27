@@ -201,7 +201,12 @@ trait ErgoHistory
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val newBestFullOpt = validHeadersChain.lastOption.filterNot(_.id == PreGenesisHeader.id)
+              // Keep the pre-genesis pointer after invalidating a stored full genesis.
+              // An elided full-block prefix has no retained full ancestor.
+              val preservePreGenesisBestFull =
+                invalidatedChain.head.header.isGenesis && noRetainedFullAncestor
+              val newBestFullOpt = validHeadersChain.lastOption
+                .filterNot(h => h.id == PreGenesisHeader.id && !preservePreGenesisBestFull)
               val changedLinks = newBestFullOpt.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
               val toInsert = validityRow ++ changedLinks ++ chainStatusRow ++ selectedHeaderRows

@@ -1543,6 +1543,30 @@ components:
           type: number
           example: 987654321
 
+    PowSolutionsRequest:
+      description: >
+        PoW solution submitted for the selected mining candidate. Autolykos V2
+        submissions may omit pk, w and d. When pk is omitted, the node uses the
+        selected candidate's miner key. A decoded request still undergoes PoW
+        validation before the block can be applied.
+      type: object
+      required:
+        - n
+      properties:
+        pk:
+          type: string
+          description: Base16-encoded public key
+          example: '0350e25cee8562697d55275c96bb01b34228f9bd68fd9933f2a25ff195526864f5'
+        w:
+          type: string
+          example: '0366ea253123dfdb8d6d9ca2cb9ea98629e8f34015b1e4ba942b1d88badfcc6a12'
+        n:
+          type: string
+          example: '0000000000000000'
+        d:
+          type: number
+          example: 987654321
+
     BlockHeaderWithoutPow:
       type: object
       required:
@@ -5328,7 +5352,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PowSolutions'
+              $ref: '#/components/schemas/PowSolutionsRequest'
       responses:
         '200':
           description: Solution is valid

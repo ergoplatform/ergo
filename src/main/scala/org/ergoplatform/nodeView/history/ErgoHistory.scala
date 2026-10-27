@@ -277,9 +277,13 @@ object ErgoHistory extends ScorexLogging {
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory =
+    readOrGenerate(ergoSettings, HistoryStorage(ergoSettings))
+
   @nowarn("cat=unused")
-  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    var db = HistoryStorage(ergoSettings)
+  private[history] def readOrGenerate(ergoSettings: ErgoSettings,
+                                    storage: HistoryStorage)(implicit context: ActorContext): ErgoHistory = {
+    var db = storage
 
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance

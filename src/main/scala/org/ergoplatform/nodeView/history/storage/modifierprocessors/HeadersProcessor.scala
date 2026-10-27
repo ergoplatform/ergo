@@ -1,6 +1,6 @@
 package org.ergoplatform.nodeView.history.storage.modifierprocessors
 
-import com.google.common.primitives.Ints
+import com.google.common.primitives.{Bytes, Ints}
 import org.ergoplatform.CriticalSystemException
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
@@ -205,7 +205,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     */
   private def orphanedBlockHeaderIdsRow(h: Header, score: Difficulty): Seq[(ByteArrayWrapper, Array[Byte])] = {
     log.info(s"New orphaned header ${h.encodedId} at height ${h.height} with score $score")
-    Seq(heightIdsKey(h.height) -> (headerIdsAtHeight(h.height) :+ h.id).flatMap(idToBytes).toArray)
+    Seq(heightIdsKey(h.height) -> heightIdsBytes(headerIdsAtHeight(h.height) :+ h.id))
   }
 
   /**
@@ -216,14 +216,14 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     val prevHeight = headersHeight
     log.info(s"New best header ${h.encodedId} with score $score. New height ${h.height}, old height $prevHeight")
     val self: (ByteArrayWrapper, Array[Byte]) =
-      heightIdsKey(h.height) -> (Seq(h.id) ++ headerIdsAtHeight(h.height)).flatMap(idToBytes).toArray
+      heightIdsKey(h.height) -> heightIdsBytes(Seq(h.id) ++ headerIdsAtHeight(h.height))
     val parentHeaderOpt: Option[Header] = typedModifierById[Header](h.parentId)
     val forkHeaders = parentHeaderOpt.toSeq
       .flatMap(parent => headerChainBack(h.height, parent, h => isInBestChain(h)).headers)
       .filter(h => !isInBestChain(h))
     val forkIds: Seq[(ByteArrayWrapper, Array[Byte])] = forkHeaders.map { header =>
       val otherIds = headerIdsAtHeight(header.height).filter(id => id != header.id)
-      heightIdsKey(header.height) -> (Seq(header.id) ++ otherIds).flatMap(idToBytes).toArray
+      heightIdsKey(header.height) -> heightIdsBytes(Seq(header.id) ++ otherIds)
     }
     forkIds :+ self
   }
@@ -328,6 +328,10 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   private def bestHeadersChainScore: BigInt = bestHeaderIdOpt.flatMap(id => scoreOf(id)).getOrElse(0)
 
   protected def heightIdsKey(height: Int): ByteArrayWrapper = ByteArrayWrapper(Algos.hash(Ints.toByteArray(height)))
+
+  // Copies each 32-byte id once. `flatMap(idToBytes)` builds a collection element per byte.
+  private def heightIdsBytes(ids: Seq[ModifierId]): Array[Byte] =
+    Bytes.concat(ids.map(idToBytes): _*)
 
   /**
     * Calculate difficulty for the next block

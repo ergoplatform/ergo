@@ -27,7 +27,7 @@ class WalletCheckSeedErasureSpec extends ErgoCorePropertyTest with WalletTestOps
 
     try new WalletFixture(isolated, parameters, getCurrentView(_).vault).apply { implicit w =>
       val walletPass = SecretString.create("synthetic wallet password")
-      val generatedMnemonic = await(wallet.initWallet(walletPass, None)).get
+      val generatedMnemonic = await(wallet.initWallet(walletPass, None)).result.get
       try {
         implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
         eventually {
@@ -41,7 +41,7 @@ class WalletCheckSeedErasureSpec extends ErgoCorePropertyTest with WalletTestOps
         candidateChars.exists(_ != ' ') shouldBe true
         passChars.exists(_ != ' ') shouldBe true
 
-        await(wallet.checkSeed(candidate, Some(candidatePass))) shouldBe false
+        await(wallet.checkSeed(candidate, Some(candidatePass))).matched.get shouldBe false
         candidateChars.toSeq shouldBe Seq.fill(candidateChars.length)(' ')
         passChars.toSeq shouldBe Seq.fill(passChars.length)(' ')
       } finally generatedMnemonic.erase()
@@ -60,7 +60,7 @@ class WalletCheckSeedErasureSpec extends ErgoCorePropertyTest with WalletTestOps
 
     try new WalletFixture(isolated, parameters, getCurrentView(_).vault).apply { implicit w =>
       val walletPass = SecretString.create("synthetic wallet password")
-      val generatedMnemonic = await(wallet.initWallet(walletPass, None)).get
+      val generatedMnemonic = await(wallet.initWallet(walletPass, None)).result.get
       try {
         implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
         eventually {

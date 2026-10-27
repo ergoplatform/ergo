@@ -808,7 +808,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       minedBlock.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
     candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
 
-    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(SolutionAck))
     val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
       case LocallyGeneratedModifier(header: Header) => header
     }
@@ -878,7 +878,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     acceptedHeaderId.set(Some(expectedPrevious.id.toString))
     candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
 
-    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(SolutionAck))
     val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
       case LocallyGeneratedModifier(header: Header) => header
     }
@@ -1750,7 +1750,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         var applied = false
         candidateGenerator.tell(solutionWithoutPk, testProbe.ref)
         testProbe.fishForMessage(newBlockDelay) {
-          case StatusReply.Success(()) =>
+          case StatusReply.Success(SolutionAck) =>
             acknowledged = true
             acknowledged && applied
           case FullBlockApplied(header) if header.id == solved.id =>
@@ -1795,7 +1795,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       nextSolved.parentId shouldBe solved.id
       candidateGenerator.tell(nextSolved.header.powSolution, testProbe.ref)
       testProbe.fishForMessage(blockValidationDelay) {
-        case StatusReply.Success(()) => true
+        case StatusReply.Success(SolutionAck) => true
         case StatusReply.Error(e)    => fail(s"next solution rejected: ${e.getMessage}")
         case _                       => false
       }
@@ -1825,7 +1825,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       solved.header.powSolution.pk shouldBe otherPk.value
       candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
       testProbe.fishForMessage(blockValidationDelay) {
-        case StatusReply.Success(()) => true
+        case StatusReply.Success(SolutionAck) => true
         case StatusReply.Error(e)    => fail(s"solution rejected: ${e.getMessage}")
         case _                       => false
       }
@@ -1837,7 +1837,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       candidateGenerator.tell(second.header.powSolution, testProbe.ref)
       testProbe.fishForMessage(blockValidationDelay) {
         case StatusReply.Error(e)    => e.getMessage should include(s"Block already solved : Some(${solved.id})"); true
-        case StatusReply.Success(()) => fail("a second solution at the solved block's height was accepted")
+        case StatusReply.Success(SolutionAck) => fail("a second solution at the solved block's height was accepted")
         case _                       => false
       }
       system.terminate()

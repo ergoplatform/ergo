@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
@@ -32,7 +32,7 @@ import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
 import scorex.crypto.authds.ADKey
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
@@ -85,6 +85,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   }
 
   class NodeViewHolderMock extends ErgoNodeViewHolder[UtxoState](settings)
+
+  // At start-up the synchronizer asks the view holder for its history, state and
+  // mempool. A late answer replaces the history and mempool that a fixture gave
+  // the synchronizer, so this view holder answers with the fixture's. The state
+  // still comes from the view holder.
+  class InjectedReadersNodeViewHolder(
+    injectedHistory: ErgoHistory,
+    injectedMempool: ErgoMemPool
+  ) extends NodeViewHolderMock {
+
+    override protected def getNodeViewChanges: Receive = {
+      case request: ErgoNodeViewHolder.ReceivableMessages.GetNodeViewChanges =>
+        if (request.history) sender() ! ChangedHistory(injectedHistory)
+        super.getNodeViewChanges(request.copy(history = false, mempool = false))
+        if (request.mempool) sender() ! ChangedMempool(injectedMempool)
+    }
+  }
 
   class SynchronizerMock(networkControllerRef: ActorRef,
                          viewHolderRef: ActorRef,
@@ -157,7 +174,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
 
     // each test should always start with empty history
     deleteRecursive(ErgoHistory.historyDir(settings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+    val nodeViewHolderMockRef =
+      system.actorOf(Props(new InjectedReadersNodeViewHolder(history, pool)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -260,8 +278,19 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       )
     )
 
+    val history = generateHistory(verifyTransactions = true,
+                                  StateType.Utxo,
+                                  PoPoWBootstrap = false,
+                                  blocksToKeep = -1,
+                                  utxoBootstrap = utxoBootstrap)
+    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
+    val updHistory = applyHeaderChain(history, chain)
+    val mempool    = ErgoMemPool.empty(synchronizerSettings)
+
     deleteRecursive(ErgoHistory.historyDir(synchronizerSettings))
-    val nodeViewHolderMockRef = system.actorOf(Props(new NodeViewHolderMock))
+
+    val nodeViewHolderMockRef =
+      system.actorOf(Props(new InjectedReadersNodeViewHolder(updHistory, mempool)))
 
     val synchronizerMockRef = system.actorOf(Props(
       new SynchronizerMock(
@@ -273,16 +302,8 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker)
     ))
 
-    val history = generateHistory(verifyTransactions = true,
-                                  StateType.Utxo,
-                                  PoPoWBootstrap = false,
-                                  blocksToKeep = -1,
-                                  utxoBootstrap = utxoBootstrap)
-    val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)
-    val updHistory = applyHeaderChain(history, chain)
-
     synchronizerMockRef ! ChangedHistory(updHistory)
-    synchronizerMockRef ! ChangedMempool(ErgoMemPool.empty(synchronizerSettings))
+    synchronizerMockRef ! ChangedMempool(mempool)
 
     val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
     @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -1622,6 +1643,56 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // Verify header inv was broadcast for the second block
       receivedInvs.get(Header.modifierTypeId) shouldBe defined
       receivedInvs(Header.modifierTypeId) should contain(newBlock2.header.id)
+    }
+  }
+
+  /**
+    * Snapshot metadata can come from peers that do not have the full block history.
+    */
+  property("NodeViewSynchronizer: discover snapshots from peers without full block history") {
+    withUtxoBootstrapFixture(utxoBootstrap = true) { ctx =>
+      import ctx._
+
+      updHistory.setHeadersChainSynced()
+      updHistory.bestFullBlockOpt shouldBe None
+      updHistory.utxoSetSnapshotDownloadPlan() shouldBe None
+      updHistory.nextModifiersToDownload(1, (_, _) => true).keySet should contain (SnapshotsInfoTypeId.value)
+
+      val snapshotMode = ModePeerFeature(StateType.Utxo, true, None, ModePeerFeature.UTXOSetBootstrapped)
+      val snapshotSpec = defaultPeerSpec.copy(
+        protocolVersion = Version(6, 0, 10),
+        features = Seq(snapshotMode)
+      )
+      val snapshotPeers = Seq(39001, 39002).map { port =>
+        peer.copy(
+          connectionId = peer.connectionId.copy(remoteAddress = new InetSocketAddress("127.0.0.1", port)),
+          peerInfo = Some(PeerInfo(snapshotSpec, System.currentTimeMillis()))
+        )
+      }
+      snapshotPeers.foreach { p =>
+        syncTracker.updateStatus(p, org.ergoplatform.consensus.Older, Some(ctx.chain.last.height))
+      }
+      syncTracker.knownPeers().toSet shouldBe snapshotPeers.toSet
+      UtxoSetNetworkingFilter.filter(snapshotPeers).toSet shouldBe snapshotPeers.toSet
+      BlockSectionsDownloadFilter.filter(snapshotPeers) shouldBe empty
+
+      synchronizerMockRef ! CheckModifiersToDownload
+      // A throttled explicit check can fall through to the scheduled 5-second check.
+      val chosen = ncProbe.fishForSpecificMessage(7.seconds) {
+        case SendToNetwork(msg, SendToPeers(peers))
+            if msg.spec.messageCode == GetSnapshotsInfoSpec.messageCode =>
+          peers
+      }
+      chosen.toSet shouldBe snapshotPeers.toSet
+
+      // After snapshot application, ordinary block-section downloads still need block-serving peers.
+      updHistory.onUtxoSnapshotApplied(ctx.chain.last.height)
+      synchronizerMockRef ! ChangedHistory(updHistory)
+      val sectionId = modifierIdGen.sample.get
+      synchronizerMockRef ! ErgoNodeViewHolder.DownloadRequest(Map(Extension.modifierTypeId -> Seq(sectionId)))
+      val sectionRequests = ncProbe.receiveWhile(max = 500.millis, idle = 500.millis) { case m => m }
+        .collect { case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode => stn }
+      sectionRequests shouldBe empty
     }
   }
 

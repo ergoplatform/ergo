@@ -64,6 +64,8 @@ object Mnemonic {
 
   /**
     * Converts mnemonic phrase to seed it was derived from.
+    * After normalizing the inputs, erases `passOpt` if present.
+    * The mnemonic is not erased.
     */
   def toSeed(mnemonic: SecretString, passOpt: Option[SecretString] = None): Array[Byte] = {
     val normalizedMnemonic = normalize(ArrayCharSequence(mnemonic.getData()), NFKD).toCharArray

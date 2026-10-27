@@ -161,7 +161,8 @@ class NonVerifyADHistorySpecification extends ErgoCorePropertyTest {
     val currentSummary = ErgoSyncInfoV2(Seq(sideTail.last, sideTail(18)))
     currentSummary.lastHeaders.map(_.height) shouldBe Seq(44, 28)
     leader.compareV2(currentSummary) shouldBe Unknown
-    leader.continuationIdsV2(currentSummary, 100) shouldBe empty
+    // no header of the summary is on the selected chain, so the answer starts at genesis, not after sideTail(18)
+    leader.continuationIdsV2(currentSummary, 100).head._2 shouldBe common.head.id
 
     val advertised = ErgoSyncInfoV2(currentSummary.lastHeaders :+ common.head)
     leader.compareV2(advertised) shouldBe Fork

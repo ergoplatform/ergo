@@ -908,6 +908,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.isHeadersChainSyncedVar = true
     val chain = genChain(BlocksToKeep + 9) // heights 1..20
     def at(h: Int) = chain(h - 1)
+    def missingSections(heights: Range) = heights.filterNot(h => at(h).header.sectionIds.map(_._2).forall(history.contains))
     (1 to 14).foreach(h => history = applyBlock(history, at(h)))
     // block 15's transactions and extension arrive while the floor is 4; then a floor above it is stored, as an
     // earlier restart could; its ADProofs are still accepted (transactions already stored) and complete the block
@@ -915,7 +916,12 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history = applySection(history, at(15).blockTransactions)
     history = applySection(history, at(15).extension)
     history.writeMinimalFullBlockHeight(20)
+    // heights 5 to 14 are within the BlocksToKeep (11) blocks the node keeps at best block 15
+    missingSections(5 to 14) shouldBe empty
     history = applySection(history, at(15).adProofs.value)
+    missingSections(5 to 14) shouldBe empty
+    // and height 4, below them, is pruned
+    at(4).header.sectionIds.map(_._2).filter(history.contains) shouldBe empty
 
     history.bestFullBlockOpt.map(_.header) shouldBe Some(at(15).header)
     at(15).header.sectionIds.map(_._2).filterNot(history.contains) shouldBe empty

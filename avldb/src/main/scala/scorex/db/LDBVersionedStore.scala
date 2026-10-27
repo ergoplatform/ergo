@@ -24,10 +24,14 @@ import scala.util.{Failure, Success, Try}
   *
   * @param dir - folder to store data
   * @param initialKeepVersions - number of versions to keep when the store is created. Can be changed after.
+  * @param createIfMissing - whether to create the main and undo databases when absent.
   *
   */
-class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
+class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int,
+                        createIfMissing: Boolean)
   extends KVStoreReader with ScorexLogging {
+
+  def this(dir: File, initialKeepVersions: Int) = this(dir, initialKeepVersions, true)
 
   type VersionID = Array[Byte]
 
@@ -37,10 +41,28 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
   private var keepVersions: Int = initialKeepVersions
 
-  override val db: DB = createDB(dir, "ldb_main") // storage for main data
+  private val databases: (DB, DB) = {
+    val mainDir = new File(dir, "ldb_main")
+    val undoDir = new File(dir, "ldb_undo")
+    if (!createIfMissing && (!mainDir.isDirectory || !undoDir.isDirectory)) {
+      throw new IllegalStateException("Both wallet registry databases must already exist")
+    }
+    val main = createDB(mainDir)
+    try {
+      (main, createDB(undoDir))
+    }
+    catch {
+      case t: Throwable =>
+        try main.close()
+        catch { case closeError: Throwable => t.addSuppressed(closeError) }
+        throw t
+    }
+  }
+
+  override val db: DB = databases._1 // storage for main data
   override val lock = new ReentrantReadWriteLock()
 
-  private val undo: DB = createDB(dir, "ldb_undo") // storage for undo data
+  private val undo: DB = databases._2 // storage for undo data
   private var lsn: LSN = getLastLSN // last assigned logical serial number
   private var versionLsn = ArrayBuffer.empty[LSN] // LSNs of versions (var because we need to invert this array)
 
@@ -52,11 +74,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
 
-  private def createDB(dir: File, storeName: String): DB = {
+  private def createDB(storeDir: File): DB = {
     val op = new Options()
-    op.createIfMissing(true)
+    op.createIfMissing(createIfMissing)
     op.paranoidChecks(true)
-    factory.open(new File(dir, storeName), op)
+    factory.open(storeDir, op)
   }
 
   /** Set new keep versions threshold, remove not needed versions and return old value of keep versions */
@@ -238,7 +260,30 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
     */
   def update(versionID: VersionID,
              toRemove: TraversableOnce[Array[Byte]],
-             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] = Try {
+             toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] =
+    updateWithOptions(versionID, toRemove, toUpdate, writeOptions)
+
+  /** Sync the undo and main writes before a caller clears its durable recovery intent.
+    * They are separate databases, so a failed main write can still leave a newer undo record.
+    */
+  def updateSync(versionID: VersionID,
+                 toRemove: TraversableOnce[Array[Byte]],
+                 toUpdate: TraversableOnce[(Array[Byte], Array[Byte])]): Try[Unit] =
+    updateWithOptions(versionID, toRemove, toUpdate, new WriteOptions().sync(true))
+
+  private[db] def writeUpdateUndo(batch: WriteBatch, options: WriteOptions): Unit =
+    undo.write(batch, options)
+
+  private[db] def writeUpdateMain(batch: WriteBatch, options: WriteOptions): Unit =
+    db.write(batch, options)
+
+  private[db] def writeUpdatePruneUndo(batch: WriteBatch, options: WriteOptions): Unit =
+    undo.write(batch, options)
+
+  private def updateWithOptions(versionID: VersionID,
+                                toRemove: TraversableOnce[Array[Byte]],
+                                toUpdate: TraversableOnce[(Array[Byte], Array[Byte])],
+                                options: WriteOptions): Try[Unit] = Try {
     lock.writeLock().lock()
     val lastLsn = lsn // remember current LSN value
     val batch = db.createWriteBatch()
@@ -266,11 +311,11 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         if (lsn == lastLsn) { // no records were written for this version: generate dummy record
           undoBatch.put(newLSN(), serializeUndo(versionID, new Array[Byte](0), null))
         }
-        undo.write(undoBatch, writeOptions)
+        writeUpdateUndo(undoBatch, options)
         if (lastVersion.isEmpty || !versionID.sameElements(lastVersion.get)) {
           versions += versionID
           versionLsn += lastLsn + 1 // first LSN for this version
-          cleanStart(keepVersions)
+          cleanStart(keepVersions, options)
         }
       } else {
         //keepVersions = 0
@@ -284,7 +329,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         }
       }
 
-      db.write(batch, writeOptions)
+      writeUpdateMain(batch, options)
       lastVersion = Some(versionID)
     } finally {
       // Make sure you close the batch to avoid resource leaks.
@@ -300,7 +345,9 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
 
   // Keep last "count"+1 versions and remove undo information for older versions
-  private def cleanStart(count: Int): Unit = {
+  private def cleanStart(count: Int): Unit = cleanStart(count, writeOptions)
+
+  private def cleanStart(count: Int, options: WriteOptions): Unit = {
     val deteriorated = versions.size - count - 1
     if (deteriorated >= 0) {
       val fromLsn = versionLsn(0)
@@ -310,7 +357,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         for (lsn <- fromLsn until tillLsn) {
           batch.delete(encodeLSN(lsn))
         }
-        undo.write(batch, writeOptions)
+        writeUpdatePruneUndo(batch, options)
       } finally {
         batch.close()
       }
@@ -318,7 +365,7 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
       if (count == 0) {
-        db.put(last_version_key, versions(0))
+        db.put(last_version_key, versions(0), options)
       }
     }
   }
@@ -350,7 +397,22 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
   }
 
   // Rollback to the specified version: undo all changes done after specified version
-  def rollbackTo(versionID: VersionID): Try[Unit] = Try {
+  def rollbackTo(versionID: VersionID): Try[Unit] = rollbackToWithOptions(versionID, writeOptions)
+
+  /** Sync both database writes before a caller clears its durable rollback intent.
+    * The two databases still cannot be written atomically, so the caller must
+    * keep the intent if either write or a later validation fails.
+    */
+  def rollbackToSync(versionID: VersionID): Try[Unit] =
+    rollbackToWithOptions(versionID, new WriteOptions().sync(true))
+
+  private[db] def writeRollbackMain(batch: WriteBatch, options: WriteOptions): Unit =
+    db.write(batch, options)
+
+  private[db] def writeRollbackUndo(batch: WriteBatch, options: WriteOptions): Unit =
+    undo.write(batch, options)
+
+  private def rollbackToWithOptions(versionID: VersionID, options: WriteOptions): Try[Unit] = Try {
     lock.writeLock().lock()
     try {
       val versionIndex = versions.indexWhere(_.sameElements(versionID))
@@ -382,8 +444,8 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
                 }
               }
             }
-            db.write(batch, writeOptions)
-            undo.write(undoBatch, writeOptions)
+            writeRollbackMain(batch, options)
+            writeRollbackUndo(undoBatch, options)
           } finally {
             // Make sure you close the batch to avoid resource leaks.
             iterator.close()

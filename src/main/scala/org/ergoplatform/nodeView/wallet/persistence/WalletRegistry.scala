@@ -257,18 +257,21 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @param blockHeight - block height
     */
   def updateOnBlock(scanResults: ScanResults, blockId: ModifierId, blockHeight: Int): Try[Unit] = {
+    val result = Try {
+      // Capture the previous box and indexes before staging the replacement in cache.
+      val oldBoxes = scanResults.outputs.flatMap(b => getBox(b.box.id))
+      val previouslyPaid = oldBoxes.filter(_.scans.contains(PaymentsScanId)).map(_.boxId).toSet
+      val newlyPaidOutputs = scanResults.outputs.filter(b =>
+        b.scans.contains(PaymentsScanId) && !previouslyPaid.contains(b.boxId))
+      cache ++= scanResults.outputs.map(b => b.boxId -> b)
+      val bag1 = putBoxes(removeBoxes(KeyValuePairsBag.empty, oldBoxes), scanResults.outputs)
+      val bag2 = putTxs(bag1, scanResults.relatedTransactions)
 
-    // first, put newly created outputs and related transactions into key-value bag
-    cache ++= scanResults.outputs.map(b => b.boxId -> b)
-    val bag1 = putBoxes(KeyValuePairsBag.empty, scanResults.outputs)
-    val bag2 = putTxs(bag1, scanResults.relatedTransactions)
+      // Process spent boxes and update the digest in the same block batch.
+      val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
+      val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
 
-    // process spent boxes
-    val spentBoxesWithTx = scanResults.inputsSpent.map(t => t.inputTxId -> t.trackedBox)
-    val bag3 = processSpentBoxes(bag2, spentBoxesWithTx, blockHeight)
-
-    // and update wallet digest
-    updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
+      updateDigest(bag3) { case WalletDigest(height, wBalance, wTokensSeq) =>
       if (height + 1 != blockHeight) {
         log.error(s"Blocks were skipped during wallet scanning, from $height until $blockHeight")
       }
@@ -279,7 +282,7 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
         }
-      val receivedTokensAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId))
+      val receivedTokensAmt = newlyPaidOutputs
         .flatMap(_.box.additionalTokens.toArray)
         .foldLeft(Map.empty[EncodedTokenId, Long]) { case (acc, (id, amt)) =>
           acc.updated(encodedTokenId(id), acc.getOrElse(encodedTokenId(id), 0L) + amt)
@@ -301,21 +304,81 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
           }
         }
 
-      val receivedAmt = scanResults.outputs.filter(_.scans.contains(PaymentsScanId)).map(_.box.value).sum
+      val receivedAmt = newlyPaidOutputs.map(_.box.value).sum
       val newBalance = wBalance + receivedAmt - spentAmt
       if ((newBalance >= 0 && newTokensBalance.forall(_._2 >= 0)) || ws.testMnemonic.isDefined)
         Success(WalletDigest(blockHeight, newBalance, newTokensBalance.toSeq))
       else
         Failure(new IllegalStateException("Balance could not be negative"))
-    }.flatMap { bag4 =>
-      bag4.transact(store, idToBytes(blockId))
-    }
+      }.flatMap { bag4 =>
+        bag4.transact(store, idToBytes(blockId))
+      }
+    }.flatten
+    if (result.isFailure) cache.clear()
+    result
   }
 
   def rollback(version: VersionTag): Try[Unit] = {
     cache.clear()
     store.rollbackTo(org.ergoplatform.core.versionToBytes(version))
   }
+
+  /** Retained rollback used with a durable intent in WalletStorage. */
+  def rollbackDurably(version: VersionTag): Try[Unit] = {
+    cache.clear()
+    val targetBytes = org.ergoplatform.core.versionToBytes(version)
+    val alreadyAtTarget = store.lastVersionID.exists(_.sameElements(targetBytes))
+    store.rollbackToSync(targetBytes).flatMap { _ =>
+      committedVersionAndDigest.flatMap { case (committedVersion, digest) =>
+        if (committedVersion == org.ergoplatform.core.versionToId(version)) {
+          if (alreadyAtTarget) syncCommittedCheckpoint(committedVersion, digest.height)
+          else Success(())
+        }
+        else Failure(new IllegalStateException("Wallet rollback committed a different version"))
+      }
+    }
+  }
+
+  /** Whether a rollback can reach this exact committed registry version. */
+  def hasVersion(version: VersionTag): Boolean =
+    store.versionIdExists(org.ergoplatform.core.versionToBytes(version))
+
+  /** Read the committed tip and digest without treating missing or malformed data as an empty wallet. */
+  def committedVersionAndDigest: Try[(ModifierId, WalletDigest)] = Try {
+    val version = store.lastVersionID.getOrElse(
+      throw new IllegalStateException("Wallet registry has no committed version")
+    )
+    val digest = store.get(RegistrySummaryKey) match {
+      case Some(bytes) => WalletDigestSerializer.parseBytesTry(bytes).get
+      case None if version.sameElements(PreGenesisStateVersion) => WalletDigest.empty
+      case None => throw new IllegalStateException("Wallet registry digest is missing")
+    }
+    bytesToId(version) -> digest
+  }
+
+  /** Make a checkpoint durable in both registry databases before clearing a
+    * recovery intent. The same-version digest write is nonempty so that a
+    * synchronous LevelDB write also fences preceding asynchronous batches.
+    */
+  def syncCommittedCheckpoint(expectedTip: ModifierId, expectedHeight: Int): Try[Unit] =
+    committedVersionAndDigest.flatMap { case (tip, digest) =>
+      if (tip != expectedTip || digest.height != expectedHeight) {
+        Failure(new IllegalStateException("Wallet registry checkpoint differs from selected rescan tip"))
+      } else {
+        Try(store.get(RegistrySummaryKey) match {
+          case Some(bytes) => bytes
+          case None if tip == PreGenesisHeader.id && digest == WalletDigest.empty =>
+            WalletDigestSerializer.toBytes(WalletDigest.empty)
+          case None => throw new IllegalStateException("Wallet registry digest is missing")
+        })
+          .flatMap(bytes => store.updateSync(idToBytes(expectedTip), Seq.empty,
+            Seq(RegistrySummaryKey -> bytes)))
+          .flatMap(_ => committedVersionAndDigest.flatMap {
+            case (`expectedTip`, checkedDigest) if checkedDigest == digest => Success(())
+            case _ => Failure(new IllegalStateException("Wallet registry checkpoint changed during sync"))
+          })
+      }
+    }
 
   /**
     * Transits used boxes to a spent state or simply deletes them depending on a settings.
@@ -456,13 +519,32 @@ object WalletRegistry {
       dir.mkdirs()
       new LDBVersionedStore(dir, settings.nodeSettings.keepVersions)
     }.flatMap {
-      case store if !store.versionIdExists(PreGenesisStateVersion) =>
-        // Create pre-genesis state checkpoint
+      case store if store.lastVersionID.isEmpty =>
+        // Create the pre-genesis checkpoint only for a new registry.
         store.update(PreGenesisStateVersion, Seq.empty, Seq.empty).map { _ =>
           new WalletRegistry(store)(settings.walletSettings)
         }
       case store =>
         Success(new WalletRegistry(store)(settings.walletSettings))
+    }
+
+  /** Open a retained-rollback registry without seeding a missing pre-genesis checkpoint. */
+  def openExistingForRecovery(settings: ErgoSettings): Try[WalletRegistry] =
+    Try(new LDBVersionedStore(registryFolder(settings), settings.nodeSettings.keepVersions,
+      createIfMissing = false)).flatMap { store =>
+      val validated = Try {
+        val registry = new WalletRegistry(store)(settings.walletSettings)
+        val (version, _) = registry.committedVersionAndDigest.get
+        if (store.get(RegistrySummaryKey).isEmpty && version != PreGenesisHeader.id) {
+          throw new IllegalStateException("Wallet registry digest is missing")
+        }
+        registry
+      }
+      validated.recoverWith { case error =>
+        try store.close()
+        catch { case closeError: Throwable => error.addSuppressed(closeError) }
+        Failure(error)
+      }
     }
 
   private val BoxKeyPrefix: Byte = 0x01

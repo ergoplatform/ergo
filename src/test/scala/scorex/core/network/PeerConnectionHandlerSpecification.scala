@@ -1,5 +1,6 @@
 package scorex.core.network
 
+import akka.actor.ActorSystem
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
@@ -21,7 +22,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, DurationInt}
 
 class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
-  private final class ConnectedHandler(val connection: TestProbe,
+  private final class ConnectedHandler(val system: ActorSystem,
+                                       val connection: TestProbe,
                                        val watcher: TestProbe,
                                        val handler: TestActorRef[PeerConnectionHandler])
 
@@ -54,7 +56,7 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
       connection.expectMsg(Tcp.ResumeReading)
       connection.expectMsgType[Tcp.Write]
 
-      test(new ConnectedHandler(connection, controller, handler))
+      test(new ConnectedHandler(system, connection, controller, handler))
     } finally {
       Await.result(fixture.system.terminate(), Duration.Inf)
     }
@@ -75,6 +77,56 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
 
       test(fixture)
     }
+
+  private def stopTransport(fixture: ConnectedHandler): Unit = {
+    val transportWatcher = TestProbe()(fixture.system)
+    transportWatcher.watch(fixture.connection.ref)
+    fixture.watcher.watch(fixture.handler)
+    fixture.system.stop(fixture.connection.ref)
+    transportWatcher.expectTerminated(fixture.connection.ref)
+    fixture.watcher.expectTerminated(fixture.handler)
+  }
+
+  property("transport lifecycle stops the handler on normal peer closure") {
+    withConnectedHandler(Seq.empty, localPort = 9193) { fixture =>
+      fixture.connection.send(fixture.handler, Tcp.PeerClosed)
+      fixture.watcher.expectTerminated(fixture.handler)
+    }
+  }
+
+  property("transport lifecycle stops the handler before a handshake") {
+    withHandler(Seq.empty, localPort = 9203)(stopTransport)
+  }
+
+  property("transport lifecycle stops the handler after an accepted handshake") {
+    withConnectedHandler(Seq.empty, localPort = 9213)(stopTransport)
+  }
+
+  property("transport lifecycle stops the handler while buffering a failed write") {
+    withConnectedHandler(Seq(GetPeersSpec), localPort = 9223) { fixture =>
+      fixture.handler ! Message(GetPeersSpec, Right(()), None)
+      val failedWrite = fixture.connection.expectMsgType[Tcp.Write]
+      fixture.connection.send(fixture.handler, Tcp.CommandFailed(failedWrite))
+      fixture.connection.expectMsg(Tcp.ResumeWriting)
+
+      stopTransport(fixture)
+    }
+  }
+
+  property("transport lifecycle stops the handler while closing an oversized handshake") {
+    withHandler(Seq.empty, localPort = 9233) { fixture =>
+      val header = ByteString(
+        Array[Byte](0, 1, 'a'.toByte, 4, 0, 100, 0, 0, 1, 127, 0xa0.toByte, 0x3f)
+      )
+      val incompleteHandshake = header ++ ByteString(
+        Array.fill[Byte](HandshakeSerializer.maxHandshakeSize - header.length)(0)
+      )
+      fixture.connection.send(fixture.handler, Tcp.Received(incompleteHandshake))
+      fixture.connection.expectMsg(Tcp.Abort)
+
+      stopTransport(fixture)
+    }
+  }
 
   property("abort before a fifth maximum snapshot frame is retained") {
     withConnectedHandler(Seq(UtxoSnapshotChunkSpec), localPort = 9083) { fixture =>

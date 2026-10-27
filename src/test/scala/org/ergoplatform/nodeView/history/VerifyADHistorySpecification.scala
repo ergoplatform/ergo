@@ -695,6 +695,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
 
     history.bestFullBlockOpt.map(_.header) shouldBe Some(at(15).header)
     at(15).header.sectionIds.map(_._2).filterNot(history.contains) shouldBe empty
+    history.closeStorage()
   }
 
 }

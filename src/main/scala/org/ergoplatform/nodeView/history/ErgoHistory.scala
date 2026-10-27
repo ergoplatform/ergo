@@ -203,8 +203,7 @@ trait ErgoHistory
 
               // Keep the pre-genesis pointer after invalidating a stored full genesis.
               // An elided full-block prefix has no retained full ancestor.
-              val preservePreGenesisBestFull =
-                invalidatedChain.head.header.isGenesis && noRetainedFullAncestor
+              val preservePreGenesisBestFull = invalidatedChain.head.header.isGenesis
               val newBestFullOpt = validHeadersChain.lastOption
                 .filterNot(h => h.id == PreGenesisHeader.id && !preservePreGenesisBestFull)
               val changedLinks = newBestFullOpt.map(b => BestFullBlockKey -> idToBytes(b.id)) ++

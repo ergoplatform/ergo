@@ -19,7 +19,7 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet.ErgoWallet
 import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, NetworkType, ScorexSettings}
-import org.ergoplatform.utils.ScorexEncoding
+import org.ergoplatform.utils.{LoggingUtil, ScorexEncoding}
 import org.ergoplatform.validation.{MalformedModifierError, RecoverableModifierError}
 import org.ergoplatform.wallet.utils.FileUtils
 import scorex.util.{ModifierId, ScorexLogging}
@@ -69,7 +69,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     * state (result of log's modifiers application to pre-historical(genesis) state,
     * user-specific information stored in vault (it could be e.g. a wallet), and a memory pool.
     */
-  private var nodeView: NodeView = restoreState().getOrElse(genesisState)
+  private var nodeView: NodeView = try {
+    restoreState().getOrElse(genesisState)
+  } catch {
+    case NonFatal(ex) =>
+      log.error("Failed to initialize node view, shutting down the node. " +
+        "Follow the recovery steps logged above, if any; " +
+        "otherwise check the error before removing any data", ex)
+      // Rethrowing stops the Holder; coordinated shutdown also stops the rest of the node.
+      ErgoApp.shutdownSystem()(context.system)
+      throw ex
+  }
 
   /** Tracking last modifier and header & block heights in time, being periodically checked for possible stuck */
   private var chainProgress: Option[ChainProgress] = None
@@ -214,10 +224,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
             (history, Failure(ex), suffixTrimmed)
         }
       case Failure(e) =>
-        log.error("Rollback failed: ", e)
+        val branchPoint = progressInfo.branchPoint.fold("none")(Algos.encode)
+        log.error(
+          s"Rollback to branch point $branchPoint failed, shutting down the node. " +
+            "A restart may recover a digest node or a transient I/O error; " +
+            "otherwise check the error before resyncing from genesis manually",
+          e
+        )
         context.system.eventStream.publish(RollbackFailed)
-        //todo: what to return here? the situation is totally wrong
-        ???
+        ErgoApp.shutdownSystem()(context.system)
+        context.stop(self)
+        throw new Exception(e)
     }
   }
 
@@ -403,16 +420,20 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           log.debug(s"Application time: ${at - at0}")
 
           val cleared = modifiersCache.cleanOverfull()
-
-          if (cleared.nonEmpty) {
+          // the cache holds sections of every type, so evicted ones are reported under their own type: the
+          // synchronizer resets their delivery status by (id, type), and under another type they stay `Received`
+          if (cleared.isEmpty) {
+            context.system.eventStream.publish(
+              BlockSectionsProcessingCacheUpdate(headersCache.size, modifiersCache.size, head.modifierTypeId -> Seq.empty)
+            )
+          } else {
             log.debug(s"Cleared from cache: ${modifiersCache.size} block sections")
+            cleared.groupBy(_.modifierTypeId).foreach { case (typeId, sections) =>
+              context.system.eventStream.publish(
+                BlockSectionsProcessingCacheUpdate(headersCache.size, modifiersCache.size, typeId -> sections.map(_.id))
+              )
+            }
           }
-          val upd = BlockSectionsProcessingCacheUpdate(
-            headersCache.size,
-            modifiersCache.size,
-            head.modifierTypeId -> cleared.map(_.id)
-          )
-          context.system.eventStream.publish(upd)
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case None =>
           log.debug("None path in processRemoteModifiers")
@@ -429,11 +450,19 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               memPool: ErgoMemPool): ErgoMemPool = {
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
     context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
-    val rolledBackTxs = blocksRemoved
+    val rolledBackTxs = rolledBackTransactions(blocksRemoved, appliedTxs).map(tx => UnconfirmedTransaction(tx, None))
+    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
+  }
+
+  /**
+    * Transactions of the rolled-back blocks that the applied blocks do not include: `updateMemPool` returns these
+    * to the pool.
+    */
+  private def rolledBackTransactions(blocksRemoved: Seq[BlockSection],
+                                     appliedTxs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+    blocksRemoved
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
-      .map(tx => UnconfirmedTransaction(tx, None))
-    memPool.removeWithDoubleSpends(appliedTxs).put(rolledBackTxs)
   }
 
   /**
@@ -463,7 +492,9 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     val history = ErgoHistory.readOrGenerate(settings)
     log.info("History database read")
     val memPool = ErgoMemPool.empty(settings)
-    restoreConsistentState(ErgoState.readOrGenerate(settings).asInstanceOf[State], history) match {
+    val storedState = Try(ErgoState.readOrGenerate(settings).asInstanceOf[State])
+    val consistentState = storedState.flatMap(state => Try(restoreConsistentState(state, history)).flatten)
+    consistentState match {
       case Success(state) =>
         log.info(s"State database read, state synchronized")
         val wallet = ErgoWallet.readOrGenerate(
@@ -473,9 +504,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         log.info("Wallet database read")
         Some((history, state, wallet, memPool))
       case Failure(ex) =>
-        log.error("Failed to recover state, try to resync from genesis manually", ex)
-        ErgoApp.shutdownSystem()(context.system)
-        None
+        Try(history.closeStorage()).failed.foreach { closeError =>
+          if (closeError ne ex) ex.addSuppressed(closeError)
+        }
+        storedState.toOption.foreach { state =>
+          Try(state.closeStorage()).failed.foreach { closeError =>
+            if (closeError ne ex) ex.addSuppressed(closeError)
+          }
+        }
+        throw ex
     }
   }
 
@@ -529,10 +566,28 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                   val fullBlockHeight = newHistory.fullBlockHeight
                   val almostSynced = (headersHeight - fullBlockHeight) < almostSyncedGap
 
-                  val newMemPool = if (almostSynced) {
+                  // A chain switch returns the rolled-back transactions to the pool however far behind the headers
+                  // it is, if the node holds the UTXO set (at full sync the rebroadcast checks their inputs against
+                  // the UTXO set before announcing them). A digest-mode node never rechecks or rebroadcasts its pool,
+                  // so there a switch taken 20 or more blocks behind still drops them.
+                  val returnRolledBack = almostSynced ||
+                    (progressInfo.chainSwitchingNeeded && settings.nodeSettings.stateType.holdsUtxoSet)
+                  val newMemPool = if (returnRolledBack) {
                     updateMemPool(progressInfo.toRemove, blocksApplied, memoryPool())
                   } else {
                     memoryPool()
+                  }
+
+                  if (progressInfo.chainSwitchingNeeded) {
+                    val returned = if (returnRolledBack) {
+                      rolledBackTransactions(progressInfo.toRemove, blocksApplied.flatMap(extractTransactions)).size
+                    } else {
+                      0
+                    }
+                    val notReturnedNote = if (returnRolledBack) "" else " (digest mode, 20 or more blocks behind)"
+                    log.info(s"Chain switch: gap between headers and full blocks ${headersHeight - fullBlockHeight}, " +
+                      s"blocks removed ${progressInfo.toRemove.size}, " +
+                      s"rolled-back transactions returned to the mempool $returned$notReturnedNote")
                   }
 
                   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
@@ -623,6 +678,17 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       case (ErgoState.genesisStateVersion, None, _) =>
         log.info("State and history are both empty on startup")
         Success(stateIn)
+      case (stateId, Some(block), _: UtxoState) if stateId == block.id && missingRecentProofs(block, history) =>
+        val parentVersion = idToVersion(block.parentId)
+        if (stateIn.rollbackVersions.exists(_ == parentVersion)) {
+          log.info(s"ADProofs of best full block ${block.encodedId} at height ${block.height} are missing " +
+            s"(headers height ${history.headersHeight}), re-applying the block to regenerate them")
+          stateIn.rollbackTo(parentVersion).flatMap(applyOnStartup(_, Seq(block), history))
+        } else {
+          log.warn(s"ADProofs of best full block ${block.encodedId} at height ${block.height} are missing, " +
+            "and the state keeps no version of its parent to regenerate them from")
+          Success(stateIn)
+        }
       case (stateId, Some(block), _) if stateId == block.id =>
         log.info(s"State and history have the same version ${encoder.encode(stateId)}, no recovery needed.")
         Success(stateIn)
@@ -648,11 +714,43 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           history.getFullBlock(h)
             .fold(throw new Error(s"Failed to get full block for header $h"))(fb => fb)
         }
-        toApply.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
-          log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")
-          val chainTipOpt = history.estimatedTip()
-          acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => self ! lm))
-        }
+        applyOnStartup(initState, toApply, history)
+    }
+  }
+
+  /**
+    * A UTXO node generates the ADProofs of a block within `adProofsSuffixLength` of the tip and stores them after
+    * the state update, so a crash between the two leaves an applied block without them.
+    */
+  private def missingRecentProofs(block: ErgoFullBlock, history: ErgoHistory): Boolean =
+    block.adProofs.isEmpty && UtxoState.withinAdProofsSuffix(block.height, startupTip(history), settings)
+
+  /**
+    * Tip estimate for blocks applied on start-up. The headers chain is not marked as synced yet, so `estimatedTip()`
+    * is `None`, and with it a UTXO state generates no ADProofs. The stored headers height is used instead, the
+    * estimate a running node passes. It also decides which re-applied blocks keep undo versions and whether a
+    * snapshot is taken; with `None`, a UTXO state keeps versions for every block and takes no snapshot.
+    */
+  private def startupTip(history: ErgoHistory): Option[Int] = Some(history.headersHeight)
+
+  /**
+    * Applies blocks to the state on start-up, with `startupTip` as the tip estimate. History refuses block
+    * sections until the headers chain is synced, so the generated ADProofs are written to the database directly.
+    */
+  private def applyOnStartup(initState: State, blocks: Seq[ErgoFullBlock], history: ErgoHistory): Try[State] = {
+    val chainTipOpt = startupTip(history)
+    blocks.foldLeft[Try[State]](Success(initState)) { case (acc, m) =>
+      log.info(s"Applying block ${m.height} during node start-up to restore consistent state: ${m.id}")
+      acc.flatMap(_.applyModifier(m, chainTipOpt)(lm => storeStartupProofs(history, lm.pmod)))
+    }
+  }
+
+  private def storeStartupProofs(history: ErgoHistory, proofs: BlockSection): Unit = {
+    history.dumpToDb(proofs.serializedId, HistoryModifierSerializer.toBytes(proofs)) match {
+      case Success(_) =>
+        log.info(s"Stored ADProofs ${proofs.encodedId} generated on start-up")
+      case Failure(e) =>
+        log.error(s"Could not store ADProofs ${proofs.encodedId} generated on start-up", e)
     }
   }
 
@@ -868,9 +966,13 @@ object ErgoNodeViewHolder {
         history.bestFullBlockOpt
           .filter(_.id != lastMod.id)
           .fold("")(fb => s"\n best full block: $fb")
-      val repairNeeded = ErgoHistory.repairIfNeeded(history)
+      val repairStatus = ErgoHistory.repairIfNeeded(history) match {
+        case Success(false) => "repair not needed"
+        case Success(true) => "repair completed"
+        case Failure(error) => s"repair failed: ${LoggingUtil.getReasonMsg(error)}"
+      }
       ChainIsStuck(s"Chain not modified for $chainUpdateDelay ms, headers-height: $headersHeight, " +
-        s"block-height $blockHeight, chain synced: $chainSynced, repair needed: $repairNeeded, " +
+        s"block-height $blockHeight, chain synced: $chainSynced, $repairStatus, " +
         s"last modifier applied: $lastMod, " +
         s"possible best full block $bestFullBlockOpt")
     } else {

@@ -7,10 +7,13 @@ import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoCorePropertyTest, ErgoNodeTestConstants}
 import org.ergoplatform.utils.generators.ChainGenerator.{applyBlock, genChain, nextBlock}
 import org.ergoplatform.wallet.utils.FileUtils
+import scorex.db.ByteArrayWrapper
+import scorex.util.ModifierId
 import scorex.util.encode.Base16
 
 class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with FileUtils {
@@ -288,6 +291,44 @@ class StartupContinuationRepairSpecification extends ErgoCorePropertyTest with F
         reopened.isSemanticallyValid(a8.id) shouldBe ModifierSemanticValidity.Valid
         reopened.isSemanticallyValid(sibling.id) shouldBe ModifierSemanticValidity.Invalid
         reopened.bestFullBlockIdOpt shouldBe Some(b7.id)
+      } finally reopened.closeStorage()
+    }
+  }
+
+  property("startup moves a best full block pointer it cannot assemble to the highest ancestor it can") {
+    val lostSections: Seq[(StateType, ErgoFullBlock => ModifierId)] = Seq(
+      StateType.Digest -> ((b: ErgoFullBlock) => b.header.ADProofsId),
+      StateType.Utxo -> ((b: ErgoFullBlock) => b.header.transactionsId)
+    )
+    lostSections.foreach { case (stateType, lostSection) =>
+      withFork(withSibling = false, stateType) { (history, _, b7, _, settings) =>
+        history.historyStorage.remove(Array.empty[ByteArrayWrapper], Array(lostSection(b7))).get
+        history.bestFullBlockIdOpt shouldBe Some(b7.id)
+        history.bestFullBlockOpt shouldBe None
+        history.closeStorage()
+        val reopened = ErgoHistory.readOrGenerate(settings)(null)
+        try withClue(s"$stateType (pointer, best-chain marker of the block, of its parent): ") {
+          (reopened.bestFullBlockIdOpt,
+            FullBlockProcessor.isInBestFullChain(reopened.historyStorage, b7.id),
+            FullBlockProcessor.isInBestFullChain(reopened.historyStorage, b7.parentId)) shouldBe
+            ((Some(b7.parentId), false, true))
+        } finally reopened.closeStorage()
+      }
+    }
+  }
+
+  property("startup removes a best full block pointer when no ancestor down to the minimal full block height is complete") {
+    withFork(withSibling = false) { (history, _, b7, _, settings) =>
+      history.historyStorage.remove(Array.empty[ByteArrayWrapper], Array(b7.header.ADProofsId)).get
+      history.writeMinimalFullBlockHeight(b7.height)
+      history.closeStorage()
+      val reopened = ErgoHistory.readOrGenerate(settings)(null)
+      try {
+        withClue("(pointer, best-chain marker of the block): ") {
+          (reopened.bestFullBlockIdOpt, FullBlockProcessor.isInBestFullChain(reopened.historyStorage, b7.id)) shouldBe
+            ((None, false))
+        }
+        reopened.typedModifierById[Header](b7.parentId).flatMap(reopened.getFullBlock) should not be empty
       } finally reopened.closeStorage()
     }
   }

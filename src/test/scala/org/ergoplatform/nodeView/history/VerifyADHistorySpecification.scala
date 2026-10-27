@@ -1,14 +1,15 @@
 package org.ergoplatform.nodeView.history
 
 import org.ergoplatform.consensus.ProgressInfo
-import org.ergoplatform.modifiers.history.extension.Extension
+import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.HeaderChain
-import org.ergoplatform.modifiers.history.header.Header
+import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
+import org.ergoplatform.utils.ErgoCoreTestConstants.defaultExtension
 import org.ergoplatform.consensus.ModifierSemanticValidity._
 
 import scala.collection.mutable.ArrayBuffer
@@ -315,18 +316,241 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     val common = history.bestFullBlockOpt.value
 
     val fork1 = genChain(3, common).tail
-    val fork2 = genChain(2, common).tail
+    val fork2Tag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(1: Byte, 0: Byte)))
+    val fork2 = genChain(2, history, extension = defaultExtension ++ fork2Tag).tail
 
     history = applyChain(history, fork1)
     history = applyChain(history, fork2)
 
+    fork1.length shouldBe 3
+    fork2.length shouldBe 2
+    fork1.take(2).map(_.header.height) shouldBe fork2.map(_.header.height)
+    fork1.head.header.id should not be fork2.head.header.id
+    fork1(1).header.id should not be fork2(1).header.id
+    fork2.indices.foreach { i =>
+      history.bestHeaderIdAtHeight(fork2(i).header.height) shouldBe Some(fork1(i).header.id)
+    }
     history.bestHeaderOpt.value shouldBe fork1.last.header
 
     val progressInfo = ProgressInfo[PM](Some(common.parentId), fork1, Seq.empty, Seq.empty)
-    history.reportModifierIsInvalid(fork1.head.header, progressInfo)
+    history = history.reportModifierIsInvalid(fork1.head.header, progressInfo).get._1
 
     history.bestHeaderOpt.value shouldBe fork2.last.header
+    fork2.foreach { block =>
+      history.bestHeaderIdAtHeight(block.header.height) shouldBe Some(block.header.id)
+      history.isInBestChain(block.header) shouldBe true
+    }
+    history.isInBestChain(fork1.last.header) shouldBe false
+    history.bestHeaderIdAtHeight(fork1.last.header.height) shouldBe None
+    history.syncInfoV2(full = false).lastHeaders.map(_.id) shouldBe Seq(fork2.last.header.id)
+    history.continuationIds(ErgoSyncInfoV2(Seq(common.header)), fork2.length + 1)
+      .map(_._2) shouldBe fork2.map(_.header.id)
     history.bestFullBlockOpt.value shouldBe fork2.last
+  }
+
+  property("invalidating a header-only tip should select the other header at its height") {
+    var history = genHistory(2)._1
+    val common = history.bestFullBlockOpt.value.header
+    val first = nextHeader(Some(common), history.difficultyCalculator, useRealTs = false)
+    val second = nextHeader(Some(common), history.difficultyCalculator,
+      tsOpt = Some(first.timestamp + 1), useRealTs = false)
+    first.id should not be second.id
+
+    history = history.append(first).get._1
+    history = history.append(second).get._1
+    history.bestHeaderOpt.value shouldBe first
+    val fullBlockBefore = history.bestFullBlockIdOpt
+
+    history = history.reportModifierIsInvalid(first,
+      ProgressInfo[PM](Some(common.id), Seq.empty, Seq.empty, Seq.empty)).get._1
+    history.bestHeaderOpt.value shouldBe second
+    history.bestHeaderIdAtHeight(second.height) shouldBe Some(second.id)
+    history.isInBestChain(second) shouldBe true
+    history.bestFullBlockIdOpt shouldBe fullBlockBefore
+  }
+
+  property("invalidating a header-only best tip marks its semantic validity invalid") {
+    var history = genHistory(2)._1
+    val common = history.bestFullBlockOpt.value.header
+    val tip = nextHeader(Some(common), history.difficultyCalculator, useRealTs = false)
+
+    history = history.append(tip).get._1
+    val child = nextHeader(Some(tip), history.difficultyCalculator, useRealTs = false)
+    history.bestHeaderOpt.value shouldBe tip
+    history.isSemanticallyValid(tip.id) shouldBe Unknown
+    history.applicable(child) shouldBe true
+
+    history = history.reportModifierIsInvalid(tip,
+      ProgressInfo[PM](Some(common.id), Seq.empty, Seq.empty, Seq.empty)).get._1
+
+    history.bestHeaderOpt.value shouldBe common
+    history.isSemanticallyValid(tip.id) shouldBe Invalid
+    history.applicable(child) shouldBe false
+  }
+
+  property("invalidating the only selected header clears its tip before an equal-score sibling") {
+    var history = genHistory()._1
+    val first = nextHeader(None, history.difficultyCalculator, useRealTs = false)
+    val second = nextHeader(None, history.difficultyCalculator,
+      tsOpt = Some(first.timestamp + 1), useRealTs = false)
+    first.id should not be second.id
+
+    history = history.append(first).get._1
+    history.bestHeaderIdOpt shouldBe Some(first.id)
+    history.bestFullBlockIdOpt shouldBe None
+
+    history = history.reportModifierIsInvalid(first,
+      ProgressInfo[PM](None, Seq.empty, Seq.empty, Seq.empty)).get._1
+    history.bestHeaderIdOpt shouldBe None
+    history.isEmpty shouldBe true
+    history.isSemanticallyValid(first.id) shouldBe Invalid
+
+    history = history.append(second).get._1
+    history.bestHeaderIdOpt shouldBe Some(second.id)
+    history.bestHeaderIdAtHeight(second.height) shouldBe Some(second.id)
+  }
+
+  property("invalidating the only full genesis keeps the pre-genesis full pointer") {
+    var history = genHistory()._1
+    val first = genChain(1, history).head
+    val siblingTag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(1: Byte, 1: Byte)))
+    val second = genChain(1, history, extension = defaultExtension ++ siblingTag).head
+    first.id should not be second.id
+
+    history = applyChain(history, Seq(first))
+    history.bestHeaderIdOpt shouldBe Some(first.id)
+    history.bestFullBlockIdOpt shouldBe Some(first.id)
+
+    val (recovered, progress) = history.reportModifierIsInvalid(first.header,
+      ProgressInfo[PM](Some(PreGenesisHeader.id), Seq(first), Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe Seq(first.id)
+    progress.toApply shouldBe Seq.empty
+    history.bestHeaderIdOpt shouldBe None
+    history.bestFullBlockIdOpt shouldBe Some(PreGenesisHeader.id)
+    history.isSemanticallyValid(first.id) shouldBe Invalid
+
+    history = applyChain(history, Seq(second))
+    history.bestHeaderIdOpt shouldBe Some(second.id)
+    history.bestFullBlockIdOpt shouldBe Some(second.id)
+  }
+
+  property("invalidating full genesis selects a previously received full sibling") {
+    var history = genHistory()._1
+    val firstChain = genChain(2, history)
+    val first = firstChain.head
+    val siblingTag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(2: Byte, 1: Byte)))
+    val second = genChain(1, history, extension = defaultExtension ++ siblingTag).head
+    first.id should not be second.id
+
+    history = applyChain(history, firstChain :+ second)
+    history.bestHeaderIdOpt shouldBe Some(firstChain.last.id)
+    history.bestFullBlockIdOpt shouldBe Some(firstChain.last.id)
+
+    val (recovered, progress) = history.reportModifierIsInvalid(first.header,
+      ProgressInfo[PM](Some(PreGenesisHeader.id), firstChain, Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe firstChain.map(_.id)
+    progress.toApply.map(_.id) shouldBe Seq(second.id)
+    history.bestHeaderIdOpt shouldBe Some(second.id)
+    history.bestFullBlockIdOpt shouldBe Some(second.id)
+    history.bestHeaderIdAtHeight(second.header.height) shouldBe Some(second.id)
+    history.isSemanticallyValid(first.id) shouldBe Invalid
+  }
+
+  property("invalidating a retained-floor full block clears its selected full tip") {
+    var history = genHistory(minFullHeight = Some(3))._1
+    val chain = genChain(3, history)
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history = applyBlock(history, chain.last)
+    history.bestFullBlockIdOpt shouldBe Some(chain.last.id)
+
+    val (recovered, progress) = history.reportModifierIsInvalid(chain.last.header,
+      ProgressInfo[PM](Some(chain(1).id), Seq(chain.last), Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.toRemove.map(_.id) shouldBe Seq(chain.last.id)
+    history.bestFullBlockIdOpt shouldBe None
+    history.bestHeaderIdOpt shouldBe Some(chain(1).id)
+  }
+
+  property("invalidating genesis with a pruned full prefix clears the full pointer") {
+    var history = genHistory(minFullHeight = Some(3))._1
+    val chain = genChain(4, history)
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    val retained = chain.drop(2)
+    history = applyChain(history, retained)
+    history.bestFullBlockIdOpt shouldBe Some(retained.last.id)
+    history.getFullBlock(chain.head.header) shouldBe None
+
+    val (recovered, progress) = history.reportModifierIsInvalid(chain.head.header,
+      ProgressInfo[PM](Some(PreGenesisHeader.id), retained, Seq.empty, Seq.empty)).get
+    history = recovered
+    progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+    progress.toRemove.map(_.id) shouldBe retained.map(_.id)
+    history.bestHeaderIdOpt shouldBe None
+    history.bestFullBlockIdOpt shouldBe None
+  }
+
+  for (invalidatedIndex <- Seq(0, 1)) {
+    property(s"invalidating retained-floor full block $invalidatedIndex keeps only valid full ancestors") {
+      var history = genHistory(minFullHeight = Some(3))._1
+      val chain = genChain(4, history)
+      history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+      val retained = chain.drop(2)
+      history = applyChain(history, retained)
+      history.getFullBlock(chain(1).header) shouldBe None
+      retained.foreach(block => history.getFullBlock(block.header).map(_.id) shouldBe Some(block.id))
+      history.bestFullBlockIdOpt shouldBe Some(retained.last.id)
+
+      val invalidated = retained.drop(invalidatedIndex)
+      val (recovered, progress) = history.reportModifierIsInvalid(invalidated.head.header,
+        ProgressInfo[PM](Some(invalidated.head.parentId), invalidated, Seq.empty, Seq.empty)).get
+      history = recovered
+
+      progress.toRemove.map(_.id) shouldBe invalidated.map(_.id)
+      progress.toApply shouldBe Seq.empty
+      invalidated.foreach(block => history.isSemanticallyValid(block.id) shouldBe Invalid)
+      history.bestHeaderIdOpt shouldBe Some(invalidated.head.parentId)
+      if (invalidatedIndex == 0) {
+        progress.branchPoint shouldBe Some(PreGenesisHeader.id)
+        history.bestFullBlockIdOpt shouldBe None
+      } else {
+        progress.branchPoint shouldBe Some(retained.head.id)
+        history.bestFullBlockIdOpt shouldBe Some(retained.head.id)
+        history.isSemanticallyValid(retained.head.id) should not be Invalid
+      }
+    }
+  }
+
+  property("successive invalidations retain a third valid sibling at the same height") {
+    var history = genHistory(2)._1
+    val common = history.bestFullBlockOpt.value
+    val siblings = (0 until 3).map { i =>
+      val minerTag = ExtensionCandidate(Seq(Array(0: Byte, 2: Byte) -> Array(i.toByte, 0.toByte)))
+      nextBlock(Some(common), common.blockTransactions.txs, defaultExtension ++ minerTag)
+    }
+    siblings.map(_.header.id).distinct.size shouldBe 3
+
+    history = applyChain(history, siblings.take(2))
+    history = history.append(siblings(2).header).get._1
+    history.bestHeaderIdOpt shouldBe Some(siblings.head.id)
+    history.bestFullBlockIdOpt shouldBe Some(siblings.head.id)
+
+    history = history.reportModifierIsInvalid(siblings.head.header,
+      ProgressInfo[PM](Some(common.id), Seq.empty, Seq.empty, Seq.empty)).get._1
+    history.isSemanticallyValid(siblings.head.id) shouldBe Invalid
+    history.bestHeaderIdOpt shouldBe Some(siblings(1).id)
+    history.bestFullBlockIdOpt shouldBe Some(siblings(1).id)
+
+    history = applyChain(history, Seq(siblings(2)))
+    history.bestFullBlockIdOpt shouldBe Some(siblings(1).id)
+
+    history = history.reportModifierIsInvalid(siblings(1).header,
+      ProgressInfo[PM](Some(common.id), Seq.empty, Seq.empty, Seq.empty)).get._1
+    history.bestFullBlockIdOpt shouldBe Some(siblings(2).id)
+    history.bestHeaderIdOpt shouldBe Some(siblings(2).id)
   }
 
   property("reportModifierIsInvalid for non-last block in best chain without better forks") {

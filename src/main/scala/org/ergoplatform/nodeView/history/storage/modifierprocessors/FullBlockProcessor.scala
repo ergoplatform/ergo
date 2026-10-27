@@ -59,9 +59,10 @@ trait FullBlockProcessor extends HeadersProcessor {
       nonBestBlock
 
   private def isValidFirstFullBlock(header: Header): Boolean = {
+    // Invalidating genesis persists the pre-genesis sentinel, which is not a stored full block.
     isHeadersChainSynced &&
       header.height == minimalFullBlockHeight &&
-      bestFullBlockIdOpt.isEmpty
+      bestFullBlockIdOpt.forall(id => id == Header.GenesisParentId && header.isGenesis)
   }
 
   private def processValidFirstBlock: BlockProcessing = {

@@ -8,13 +8,16 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
 import org.ergoplatform.utils.ErgoNodeTestConstants.initSettings
 import org.ergoplatform.consensus.ModifierSemanticValidity._
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import scorex.db.{ByteArrayWrapper, LDBFactory}
+
+import scala.util.{Failure, Random, Try}
 
 class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   import org.ergoplatform.utils.HistoryTestHelpers._
@@ -618,10 +621,11 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     nodeSettings = initSettings.nodeSettings.copy(
       stateType = StateType.Digest, verifyTransactions = true, blocksToKeep = BlocksToKeep, extraIndex = false))
 
-  // Applies heights 1..14 (floor 4), runs `beforeRestart`, closes the history and reads it again (the headers-synced
-  // flag is not stored, so it starts false), appends header 15 (fresh: it sets the flag before any block is applied,
-  // and may move the floor), applies 15..20 and checks the pruning below and above the floor (10).
-  private def checkPruningAcrossRestart(beforeRestart: ErgoHistory => Unit): Unit = {
+  // Applies heights 1..14 (floor 4), runs `beforeRestart`, closes the history and reads it again with `reopen` (the
+  // headers-synced flag is not stored, so it starts false), appends header 15 (fresh: it sets the flag before any
+  // block is applied, and may move the floor), applies 15..20 and checks the pruning below and above the floor (10).
+  private def checkPruningAcrossRestart(beforeRestart: ErgoHistory => Unit,
+                                        reopen: ErgoSettings => ErgoHistory = ErgoHistory.readOrGenerate(_)(null)): Unit = {
     val settings = prunedHistorySettings()
     var history = ErgoHistory.readOrGenerate(settings)(null)
     history.writeMinimalFullBlockHeight(GenesisHeight)
@@ -635,7 +639,7 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     beforeRestart(history)
     history.closeStorage()
 
-    history = ErgoHistory.readOrGenerate(settings)(null)
+    history = reopen(settings)
     history.isHeadersChainSynced shouldBe false
     history = applyHeaderChain(history, HeaderChain(Seq(at(15).header)))
     history.isHeadersChainSynced shouldBe true
@@ -656,6 +660,44 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     checkPruningAcrossRestart { history =>
       history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get
       history.readPrunedBelowHeight() shouldBe None
+    }
+  }
+
+  property("stop the start when the pruned height record cannot be written, and prune the old floor height after a retry") {
+    checkPruningAcrossRestart(
+      history => history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get,
+      settings => {
+        val storage = new StorageFailingFirstPrunedHeightWrite(settings)
+        val error = intercept[IllegalStateException](ErgoHistory.readOrGenerate(settings, storage)(null))
+        error should be theSameInstanceAs storage.failure
+        storage.closed shouldBe true
+        ErgoHistory.readOrGenerate(settings)(null)
+      })
+  }
+
+  // History storage over the settings' directory whose first write of the pruned height record fails
+  private class StorageFailingFirstPrunedHeightWrite(settings: ErgoSettings) extends HistoryStorage(
+    LDBFactory.createKvDb(s"${settings.directory}/history/index"),
+    LDBFactory.createKvDb(s"${settings.directory}/history/objects"),
+    LDBFactory.createKvDb(s"${settings.directory}/history/extra"),
+    settings.cacheSettings) {
+    private val prunedBelowHeightKey = ByteArrayWrapper(Algos.hash("prunedbelow".getBytes("UTF-8")))
+    val failure = new IllegalStateException("pruned height record write sentinel")
+    private var failed = false
+    var closed = false
+
+    override def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
+                        objectsToInsert: Array[BlockSection]): Try[Unit] =
+      if (!failed && indexesToInsert.exists { case (key, _) => key == prunedBelowHeightKey }) {
+        failed = true
+        Failure(failure)
+      } else {
+        super.insert(indexesToInsert, objectsToInsert)
+      }
+
+    override def close(): Unit = {
+      closed = true
+      super.close()
     }
   }
 

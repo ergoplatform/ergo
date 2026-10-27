@@ -508,13 +508,24 @@ object ErgoHistory extends ScorexLogging {
     // header after the start can move the floor, but no higher than the height after its best full block: an earlier
     // version's restart could store a floor above it without pruning below it. A node without full blocks gets it at
     // its first prune, so the first range after a UTXO-snapshot or NiPoPoW bootstrap does not start at genesis.
-    if (nodeSettings.isFullBlocksPruned && history.bestFullBlockOpt.isDefined && history.readPrunedBelowHeight().isEmpty) {
-      val floor = Math.min(history.readMinimalFullBlockHeight(), history.bestFullBlockOpt.get.height + 1)
-      history.writePrunedBelowHeight(floor) match {
-        case Success(_) => log.info(s"Full blocks below height $floor are taken as pruned")
-        case Failure(e) => log.warn(s"Pruned height record not written at start: ${e.getMessage}")
+    Try {
+      if (nodeSettings.isFullBlocksPruned && history.bestFullBlockOpt.isDefined && history.readPrunedBelowHeight().isEmpty) {
+        val floor = Math.min(history.readMinimalFullBlockHeight(), history.bestFullBlockOpt.get.height + 1)
+        history.writePrunedBelowHeight(floor).get
+        log.info(s"Full blocks below height $floor are taken as pruned")
       }
-    }
+    }.recoverWith { case error =>
+      Try(history.closeStorage()).failed.foreach { closeError =>
+        if (closeError ne error) error.addSuppressed(closeError)
+      }
+      log.error(
+        "Pruned height record failed; stop this node. Operator recovery: " +
+          "inspect the error and correct its cause (disk space, permissions, " +
+          "or open handles); keep history/index and history/objects intact, " +
+          "then restart to retry.",
+        error)
+      Failure(error)
+    }.get
 
     log.info("History database read")
     history

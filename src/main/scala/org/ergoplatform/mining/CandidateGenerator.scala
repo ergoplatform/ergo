@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
+import akka.actor.{Actor, ActorRef, ActorRefFactory, Cancellable, Props, Terminated}
 import akka.pattern.StatusReply
 import com.google.common.primitives.Longs
 import org.ergoplatform.ErgoBox.TokenId
@@ -57,6 +57,118 @@ class CandidateGenerator(
 
   private val candidateGenInterval =
     ergoSettings.nodeSettings.blockCandidateGenerationInterval
+
+  private var pendingRetries = Map.empty[RetryKey, (Long, Cancellable)]
+  private var watchedRetrySenders = Set.empty[ActorRef]
+  private var nextRetryToken = 0L
+
+  override def postStop(): Unit = {
+    pendingRetries.values.foreach(_._2.cancel())
+    super.postStop()
+  }
+
+  private def removePendingRetry(key: RetryKey): Unit = {
+    pendingRetries.get(key).foreach(_._2.cancel())
+    pendingRetries -= key
+  }
+
+  private def unwatchIdleSender(senderRef: ActorRef): Unit = {
+    if (watchedRetrySenders.contains(senderRef) &&
+        !pendingRetries.keys.exists(_.senderRef == senderRef)) {
+      context.unwatch(senderRef)
+      watchedRetrySenders -= senderRef
+    }
+  }
+
+  private def scheduleRetry(key: RetryKey, avgGenTime: FiniteDuration): Unit = {
+    val minDelay = 100.millis
+    val baseDelay = if (avgGenTime < minDelay) minDelay else avgGenTime
+    val retryDelay = key.command.retryDeadline match {
+      case Some(deadline) =>
+        val remaining = deadline.timeLeft
+        if (remaining <= minDelay) None
+        else {
+          val halfBudget = remaining / 2
+          val budgetDelay = if (halfBudget < minDelay) minDelay else halfBudget
+          Some(if (baseDelay < budgetDelay) baseDelay else budgetDelay)
+        }
+      case None =>
+        val pollInterval = ergoSettings.nodeSettings.internalMinerPollingInterval
+        val maxDelay = if (pollInterval < minDelay) minDelay else pollInterval
+        Some(if (baseDelay < maxDelay) baseDelay else maxDelay)
+    }
+    if (key.senderRef != context.system.deadLetters) retryDelay.foreach { delay =>
+      nextRetryToken += 1
+      val token = nextRetryToken
+      val scheduled = context.system.scheduler.scheduleOnce(delay, self, RetryCandidate(key, token))(
+        context.system.dispatcher,
+        self
+      )
+      pendingRetries += key -> (token -> scheduled)
+      if (key.command.retryDeadline.isEmpty && !watchedRetrySenders.contains(key.senderRef)) {
+        context.watch(key.senderRef)
+        watchedRetrySenders += key.senderRef
+      }
+    }
+  }
+
+  private def processGenerateCandidate(
+    state: CandidateGeneratorState,
+    gen: GenerateCandidate,
+    senderRef: ActorRef
+  ): Unit = {
+    val key = RetryKey(senderRef, gen)
+    if (gen.retryDeadline.exists(!_.hasTimeLeft())) {
+      removePendingRetry(key)
+      unwatchIdleSender(senderRef)
+      return
+    }
+
+    val GenerateCandidate(txsToInclude, reply, forced, optPk, _) = gen
+    val senderOpt = if (reply) Some(senderRef) else None
+    val effectiveMinerPk = optPk.getOrElse(minerPk)
+    if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
+      removePendingRetry(key)
+      senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
+    } else {
+      val start = System.currentTimeMillis()
+      CandidateGenerator.generateCandidate(
+        state.hr,
+        state.sr,
+        state.mpr,
+        effectiveMinerPk,
+        txsToInclude,
+        state.lastAppliedBlockTxs,
+        ergoSettings
+      ) match {
+        case Some(Failure(ex)) =>
+          removePendingRetry(key)
+          log.error(s"Candidate generation failed", ex)
+          senderOpt.foreach(
+            _ ! StatusReply.error(s"Candidate generation failed : ${ex.getMessage}")
+          )
+        case Some(Success((candidate, eliminatedTxs))) =>
+          removePendingRetry(key)
+          if (eliminatedTxs.ids.nonEmpty) {
+            viewHolderRef ! eliminatedTxs
+          }
+          val generationTook = System.currentTimeMillis() - start
+          log.info(s"Generated new candidate in $generationTook ms")
+          context.become(
+            initialized(
+              state.copy(cachedCandidate = Some(candidate), cachedPreviousCandidate = state.cachedCandidate, avgGenTime = generationTook.millis)
+            )
+          )
+          senderOpt.foreach(_ ! StatusReply.success(candidate))
+        case None =>
+          log.warn(
+            "Can not generate block candidate: either mempool is empty or chain is not synced (maybe last block not fully applied yet"
+          )
+          senderOpt.foreach(s => scheduleRetry(RetryKey(s, gen), state.avgGenTime))
+      }
+    }
+    unwatchIdleSender(senderRef)
+  }
 
   /** retrieve Readers once on start and then get updated by events */
   override def preStart(): Unit = {
@@ -139,6 +251,8 @@ class CandidateGenerator(
       context.system.eventStream.subscribe(self, classOf[SyntacticallyFailedModification])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
+    case gen: GenerateCandidate if gen.retryDeadline.exists(!_.hasTimeLeft()) =>
+      log.debug("Dropping expired candidate request before readers are available")
     case m =>
       // retry until initialized
       context.system.scheduler
@@ -204,51 +318,32 @@ class CandidateGenerator(
     case SyntacticallyFailedModification(_, modId, error) =>
       onSolvedBlockFailed(state, modId, error)
 
-    case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
-      val senderOpt = if (reply) Some(sender()) else None
-      val effectiveMinerPk = optPk.getOrElse(minerPk)
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
-        senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
-      } else {
-        val start = System.currentTimeMillis()
-        CandidateGenerator.generateCandidate(
-          state.hr,
-          state.sr,
-          state.mpr,
-          effectiveMinerPk,
-          txsToInclude,
-          state.lastAppliedBlockTxs,
-          ergoSettings
-        ) match {
-          case Some(Failure(ex)) =>
-            log.error(s"Candidate generation failed", ex)
-            senderOpt.foreach(
-              _ ! StatusReply.error(s"Candidate generation failed : ${ex.getMessage}")
-            )
-          case Some(Success((candidate, eliminatedTxs))) =>
-            if (eliminatedTxs.ids.nonEmpty) {
-              viewHolderRef ! eliminatedTxs
-            }
-            val generationTook = System.currentTimeMillis() - start
-            log.info(s"Generated new candidate in $generationTook ms")
-            context.become(
-              initialized(
-                state.copy(cachedCandidate = Some(candidate), cachedPreviousCandidate = state.cachedCandidate, avgGenTime = generationTook.millis)
-              )
-            )
-            senderOpt.foreach(_ ! StatusReply.success(candidate))
-          case None =>
-            log.warn(
-              "Can not generate block candidate: either mempool is empty or chain is not synced (maybe last block not fully applied yet"
-            )
-            senderOpt.foreach { s =>
-              context.system.scheduler.scheduleOnce(state.avgGenTime, self, gen)(
-                context.system.dispatcher,
-                s
-              )
-            }
+    case gen: GenerateCandidate =>
+      val senderRef = sender()
+      val key = RetryKey(senderRef, gen)
+      if (gen.retryDeadline.exists(!_.hasTimeLeft())) {
+        removePendingRetry(key)
+        unwatchIdleSender(senderRef)
+      } else if (pendingRetries.contains(key)) {
+        val effectiveMinerPk = gen.optPk.getOrElse(minerPk)
+        if (!gen.forced && cachedFor(state.cachedCandidate, gen.txsToInclude, effectiveMinerPk)) {
+          removePendingRetry(key)
+          senderRef ! StatusReply.success(state.cachedCandidate.get)
+          unwatchIdleSender(senderRef)
         }
+      } else {
+        processGenerateCandidate(state, gen, senderRef)
       }
+
+    case RetryCandidate(key, token) =>
+      if (pendingRetries.get(key).exists(_._1 == token)) {
+        removePendingRetry(key)
+        processGenerateCandidate(state, key.command, key.senderRef)
+      }
+
+    case Terminated(ref) =>
+      pendingRetries.keys.filter(_.senderRef == ref).toVector.foreach(removePendingRetry)
+      watchedRetrySenders -= ref
 
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
@@ -327,8 +422,12 @@ object CandidateGenerator extends ScorexLogging {
     txsToInclude: Seq[ErgoTransaction],
     reply: Boolean,
     forced: Boolean,
-    optPk: Option[ProveDlog] = None
+    optPk: Option[ProveDlog] = None,
+    retryDeadline: Option[Deadline] = None
   )
+
+  private case class RetryKey(senderRef: ActorRef, command: GenerateCandidate)
+  private case class RetryCandidate(key: RetryKey, token: Long)
 
   /** Local state of candidate generator to avoid mutable vars */
   case class CandidateGeneratorState(

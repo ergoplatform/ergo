@@ -25,6 +25,16 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     */
   case class RegisteredDB(impl: DB, path: File) extends DB {
 
+    // Guarded by the registry lock, shared with open for this path.
+    private var closeAttempted = false
+    private var closeFailure: Option[Throwable] = None
+
+    private[StoreRegistry] def requireUsable(): Unit = {
+      if (closeAttempted) {
+        throw new IllegalStateException("Database close was attempted; restart before reopening", closeFailure.orNull)
+      }
+    }
+
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
 
     def get(key: Array[Byte], options: ReadOptions): Array[Byte] = impl.get(key, options)
@@ -60,24 +70,39 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     def compactRange(begin: Array[Byte], end: Array[Byte]): Unit = impl.compactRange(begin, end)
 
     override def close(): Unit = {
-      remove(path)
-      impl.close()
+      lock.writeLock().lock()
+      try {
+        if (!closeAttempted) {
+          closeAttempted = true
+          try {
+            impl.close()
+            if (map.get(path).exists(_ eq this)) map.remove(path)
+          } catch {
+            case failure: Throwable =>
+              closeFailure = Some(failure)
+              throw failure
+          }
+        } else {
+          closeFailure.foreach(throw _)
+        }
+      } finally {
+        lock.writeLock().unlock()
+      }
     }
   }
 
   private def add(file: File, create: => DB): DB = {
     lock.writeLock().lock()
     try {
-      map.getOrElseUpdate(file, RegisteredDB(create, file))
-    } finally {
-      lock.writeLock().unlock()
-    }
-  }
-
-  private def remove(path: File): Option[RegisteredDB] = {
-    lock.writeLock().lock()
-    try {
-      map.remove(path)
+      map.get(file) match {
+        case Some(registered) =>
+          registered.requireUsable()
+          registered
+        case None =>
+          val registered = RegisteredDB(create, file)
+          map += file -> registered
+          registered
+      }
     } finally {
       lock.writeLock().unlock()
     }

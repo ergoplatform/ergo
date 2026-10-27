@@ -12,7 +12,7 @@ import scala.util.Try
 
 class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
 
-  private val key = Array[Byte](1)
+  private val entryKey = Array[Byte](1)
   private val previousVersion = Longs.toByteArray(0L)
   private val firstVersion = Longs.toByteArray(1L)
   private val latestVersion = Longs.toByteArray(2L)
@@ -26,15 +26,15 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
   private def seedPreviousMarker(dir: File): Unit = {
     val store = new LDBVersionedStore(dir, 0)
     try {
-      store.update(previousVersion, Seq.empty, Seq(key -> Array[Byte](0))).get
+      store.update(previousVersion, Seq.empty, Seq(entryKey -> Array[Byte](0))).get
     } finally {
       store.close()
     }
   }
 
   private def addTwoVersions(store: LDBVersionedStore): Unit = {
-    store.update(firstVersion, Seq.empty, Seq(key -> firstValue)).get
-    store.update(latestVersion, Seq.empty, Seq(key -> latestValue)).get
+    store.update(firstVersion, Seq.empty, Seq(entryKey -> firstValue)).get
+    store.update(latestVersion, Seq.empty, Seq(entryKey -> latestValue)).get
   }
 
   private class StopBeforeUndoWrite(dir: File) extends LDBVersionedStore(dir, 100) {
@@ -75,13 +75,13 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
       val reopened = new LDBVersionedStore(dir, reopenKeepVersions)
       try {
         reopened.lastVersionID.get.sameElements(latestVersion) shouldBe true
-        reopened(key).sameElements(latestValue) shouldBe true
+        reopened(entryKey).sameElements(latestValue) shouldBe true
         if (reopenKeepVersions == 0) {
           reopened.versionIdExists(firstVersion) shouldBe false
         } else {
           reopened.versionIdExists(firstVersion) shouldBe true
           reopened.rollbackTo(firstVersion).get
-          reopened(key).sameElements(firstValue) shouldBe true
+          reopened(entryKey).sameElements(firstValue) shouldBe true
         }
       } finally {
         reopened.close()
@@ -109,10 +109,10 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
       val reopened = new LDBVersionedStore(dir, 100)
       try {
         reopened.lastVersionID.get.sameElements(latestVersion) shouldBe true
-        reopened(key).sameElements(latestValue) shouldBe true
+        reopened(entryKey).sameElements(latestValue) shouldBe true
         reopened.versionIdExists(firstVersion) shouldBe true
         reopened.rollbackTo(firstVersion).get
-        reopened(key).sameElements(firstValue) shouldBe true
+        reopened(entryKey).sameElements(firstValue) shouldBe true
       } finally {
         reopened.close()
       }
@@ -132,7 +132,7 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
     val reopened = new LDBVersionedStore(dir, 0)
     try {
       reopened.lastVersionID.get.sameElements(latestVersion) shouldBe true
-      reopened(key).sameElements(latestValue) shouldBe true
+      reopened(entryKey).sameElements(latestValue) shouldBe true
       reopened.versionIdExists(firstVersion) shouldBe false
     } finally {
       reopened.close()

@@ -31,7 +31,7 @@ class WalletRescanFailureSpec extends ErgoCorePropertyTest with WalletTestOps wi
         balance
       }
       val payment = PaymentRequest(address, walletBalance / 2, Array.empty, Map.empty)
-      val spendingTx = await(wallet.generateTransaction(Seq(payment))).get
+      val spendingTx = await(wallet.generateTransaction(Seq(payment))).tx.get
       val second = makeNextBlock(getUtxoState, Seq(spendingTx))
       applyBlock(second) shouldBe 'success
 
@@ -65,7 +65,7 @@ class WalletRescanFailureSpec extends ErgoCorePropertyTest with WalletTestOps wi
         val probe = TestProbe()(w.actorSystem)
         probe.send(actor, ChangedState(getCurrentState))
         probe.send(actor, RescanWallet(1))
-        probe.expectMsg(scala.util.Success(()))
+        probe.expectMsg(RescanWalletResponse(scala.util.Success(())))
 
         eventually(timeout(10.seconds), interval(100.millis)) {
           probe.send(actor, GetWalletStatus)
@@ -85,7 +85,7 @@ class WalletRescanFailureSpec extends ErgoCorePropertyTest with WalletTestOps wi
 
         val finalStatus = if (failFirst) {
           probe.send(actor, RescanWallet(1))
-          probe.expectMsg(scala.util.Success(()))
+          probe.expectMsg(RescanWalletResponse(scala.util.Success(())))
           eventually(timeout(10.seconds), interval(100.millis)) {
             probe.send(actor, GetWalletStatus)
             val retried = probe.expectMsgType[WalletStatus]

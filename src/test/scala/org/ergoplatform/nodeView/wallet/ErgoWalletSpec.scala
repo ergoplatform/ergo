@@ -47,7 +47,7 @@ class ErgoWalletSpec extends ErgoCorePropertyTest with WalletTestOps with Eventu
       val pass = SecretString.create("synthetic passphrase")
       val mnemonicChars = mnemonic.getData()
       val passChars = pass.getData()
-      await(wallet.checkSeed(mnemonic, Some(pass)).failed)
+      await(wallet.checkSeed(mnemonic, Some(pass))).matched.isFailure shouldBe true
       mnemonicChars.toSeq shouldBe Seq.fill(mnemonicChars.length)(' ')
       passChars.toSeq shouldBe Seq.fill(passChars.length)(' ')
     }

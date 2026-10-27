@@ -223,7 +223,11 @@ trait NodeApi {
           } else {
             log.debug(s"Request:  ${request.getUrl} \n Unexpected status code(${response.getStatusCode}): " +
               s"${response.getResponseBody}")
-            throw UnexpectedStatusCodeException(request, response)
+            throw UnexpectedStatusCodeException(
+              request.getUrl,
+              response.getStatusCode,
+              response.getResponseBody
+            )
           }
         }
       }).toCompletableFuture.toScala
@@ -267,9 +271,14 @@ trait NodeApi {
 
 object NodeApi extends ScorexLogging {
 
-  case class UnexpectedStatusCodeException(request: Request, response: Response)
-    extends Exception(s"Request: ${request.getUrl}\n Unexpected status code (${response.getStatusCode}): " +
-      s"${response.getResponseBody}")
+  /** Holds plain values, so that a forked test JVM can report it. */
+  case class UnexpectedStatusCodeException(
+    url: String,
+    statusCode: Int,
+    responseBody: String
+  ) extends Exception(
+      s"Request: $url\n Unexpected status code ($statusCode): $responseBody"
+    )
 
   /** Not an IOException nor a TimeoutException, so that nothing retries it; serializable,
     * so that a forked test JVM can report it. */

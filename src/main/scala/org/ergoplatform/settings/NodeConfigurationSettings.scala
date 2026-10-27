@@ -9,7 +9,12 @@ import scorex.util.ModifierId
 
 import scala.concurrent.duration.FiniteDuration
 
-case class CheckpointSettings(height: Height, blockId: ModifierId)
+case class CheckpointSettings(height: Height, blockId: ModifierId) {
+  // The configured id is compared as a string with header ids at the checkpoint height.
+  if (!blockId.matches("[0-9a-f]{64}")) {
+    throw new Error(s"Malformed checkpoint blockId = '$blockId': expected 64 lower-case hex characters")
+  }
+}
 
 trait CheckpointingSettingsReader extends ModifierIdReader {
   implicit val checkpointSettingsReader: ValueReader[CheckpointSettings] = { (cfg, path) =>

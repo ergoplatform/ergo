@@ -381,6 +381,28 @@ class ErgoSettingsSpecification extends ErgoCorePropertyTest {
     }
   }
 
+  property("checkpoint blockId must be 64 lower-case hex characters") {
+    val validCheckpointId = "ca5aa96a2d560f49cd5652eae4b9e16bbf410ee32365313dc16544ee5fda1e6d"
+    def readWithCheckpointId(id: String): ErgoSettings = ErgoSettingsReader.fromConfig(
+      ConfigFactory.parseString(
+        s"""ergo.node.checkpoint.height = 42
+           |ergo.node.checkpoint.blockId = "$id"""".stripMargin
+      ).withFallback(ConfigFactory.load()))
+
+    val checkpoint = readWithCheckpointId(validCheckpointId).nodeSettings.checkpoint
+    checkpoint.map(_.height) shouldBe Some(42)
+    checkpoint.map(_.blockId.toString) shouldBe Some(validCheckpointId)
+
+    val malformedIds = Seq("", validCheckpointId.toUpperCase, validCheckpointId.dropRight(1),
+      validCheckpointId + "0", validCheckpointId.dropRight(1) + "g")
+    malformedIds.foreach { id =>
+      withClue(s"checkpoint blockId = '$id': ") {
+        val error = the[Error] thrownBy readWithCheckpointId(id)
+        error.getMessage should include(s"checkpoint blockId = '$id'")
+      }
+    }
+  }
+
   property("VotingTargets and consistentSettings validate voteable parameter ids when mining") {
     val validConfig = ConfigFactory
       .parseString(

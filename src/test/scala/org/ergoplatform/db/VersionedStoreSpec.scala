@@ -1,6 +1,7 @@
 package org.ergoplatform.db
 
 import java.io.File
+import scala.util.Try
 
 import org.ergoplatform.settings.Algos.HF
 import org.scalatest.matchers.should.Matchers
@@ -175,6 +176,30 @@ class VersionedStoreSpec extends AnyPropSpec with Matchers with DBSpec {
       store.rollbackTo(versions.head.id) shouldBe 'success
       store.lastVersionID.map(_.toSeq) shouldBe Some(versions.head.id.toSeq)
       store.get(keyA).map(_.toSeq) shouldBe Some(versions.head.value.toSeq)
+    }
+  }
+
+  property("failed zero-retention marker write keeps rollback history after reopen") {
+    val dir = createTempDir
+    val versions = written("failed-marker", 2)
+    val interrupted = new LDBVersionedStore(dir, 100)
+    try {
+      writeVersions(interrupted, versions)
+      interrupted.db.close()
+      intercept[Exception] {
+        interrupted.setKeepVersions(0)
+      }
+    } finally {
+      Try(interrupted.close())
+    }
+
+    withVersionedStore(100, dir) { reopened =>
+      reopened.lastVersionID.map(_.toSeq) shouldBe Some(versions.last.id.toSeq)
+      reopened.get(keyA).map(_.toSeq) shouldBe Some(versions.last.value.toSeq)
+      reopened.versionIdExists(versions.head.id) shouldBe true
+      reopened.rollbackTo(versions.head.id) shouldBe 'success
+      reopened.lastVersionID.map(_.toSeq) shouldBe Some(versions.head.id.toSeq)
+      reopened.get(keyA).map(_.toSeq) shouldBe Some(versions.head.value.toSeq)
     }
   }
 

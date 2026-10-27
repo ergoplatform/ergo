@@ -277,9 +277,13 @@ object ErgoHistory extends ScorexLogging {
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory =
+    readOrGenerate(ergoSettings, HistoryStorage(ergoSettings))
+
   @nowarn("cat=unused")
-  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    var db = HistoryStorage(ergoSettings)
+  private[history] def readOrGenerate(ergoSettings: ErgoSettings,
+                                    storage: HistoryStorage)(implicit context: ActorContext): ErgoHistory = {
+    var db = storage
 
     // ExtraIndexer db check
     if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
@@ -498,6 +502,30 @@ object ErgoHistory extends ScorexLogging {
         !history.isUtxoSnapshotApplied) {
       history.setHeadersChainSynced()
     }
+
+    // Pruning starts where the last prune stopped (FullBlockProcessor). A node that prunes and has full blocks but no
+    // such record (its first start with this version) gets it from its stored floor here, before the first fresh
+    // header after the start can move the floor, but no higher than the height after its best full block: an earlier
+    // version's restart could store a floor above it without pruning below it. A node without full blocks gets it at
+    // its first prune, so the first range after a UTXO-snapshot or NiPoPoW bootstrap does not start at genesis.
+    Try {
+      if (nodeSettings.isFullBlocksPruned && history.bestFullBlockOpt.isDefined && history.readPrunedBelowHeight().isEmpty) {
+        val floor = Math.min(history.readMinimalFullBlockHeight(), history.bestFullBlockOpt.get.height + 1)
+        history.writePrunedBelowHeight(floor).get
+        log.info(s"Full blocks below height $floor are taken as pruned")
+      }
+    }.recoverWith { case error =>
+      Try(history.closeStorage()).failed.foreach { closeError =>
+        if (closeError ne error) error.addSuppressed(closeError)
+      }
+      log.error(
+        "Pruned height record failed; stop this node. Operator recovery: " +
+          "inspect the error and correct its cause (disk space, permissions, " +
+          "or open handles); keep history/index and history/objects intact, " +
+          "then restart to retry.",
+        error)
+      Failure(error)
+    }.get
 
     log.info("History database read")
     history

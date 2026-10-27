@@ -8,11 +8,16 @@ import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.ErgoModifiersCache
 import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.{ErgoCorePropertyTest, NoShrink}
+import org.ergoplatform.utils.ErgoNodeTestConstants.initSettings
 import org.ergoplatform.consensus.ModifierSemanticValidity._
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import scorex.db.{ByteArrayWrapper, LDBFactory}
+
+import scala.util.{Failure, Random, Try}
 
 class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   import org.ergoplatform.utils.HistoryTestHelpers._
@@ -24,8 +29,15 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
   type PM = BlockSection
 
   private def genHistory(blocksNum: Int = 0,
-                         minFullHeight: Option[Int] = Some(GenesisHeight)): (ErgoHistory, Seq[ErgoFullBlock]) = {
-    val inHistory = generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, BlocksToKeep)
+                         minFullHeight: Option[Int] = Some(GenesisHeight),
+                         votingLength: Option[Int] = None): (ErgoHistory, Seq[ErgoFullBlock]) = {
+    val inHistory = generateHistory(
+      verifyTransactions = true,
+      StateType.Digest,
+      PoPoWBootstrap = false,
+      BlocksToKeep,
+      votingLength = votingLength
+    )
     minFullHeight.foreach { h =>
       inHistory.writeMinimalFullBlockHeight(h)
       inHistory.isHeadersChainSyncedVar = true
@@ -380,6 +392,51 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     }
   }
 
+  property("prune blocks applied together with the first full block") {
+    val votingLength = 4
+    var history = genHistory(votingLength = Some(votingLength))._1
+    history.bestFullBlockOpt shouldBe None
+
+    val blocksToPrune = 7
+    val chain = genChain(BlocksToKeep + blocksToPrune)
+
+    val firstBatch = chain.dropRight(2) // heights 1..16
+    val next       = chain.init.last // height 17
+
+    def sectionIds(bs: Seq[ErgoFullBlock]) = bs.flatMap(_.header.sectionIds.map(_._2))
+    def stored(bs: Seq[ErgoFullBlock])     = sectionIds(bs).filter(history.contains)
+    def missing(bs: Seq[ErgoFullBlock])    = sectionIds(bs).filterNot(history.contains)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    history.bestHeaderOpt.value shouldBe chain.last.header
+    history.bestFullBlockOpt shouldBe None
+
+    // Append heights 2..16 before the first full block (height 1) arrives
+    firstBatch.tail.foreach { b =>
+      history = applyBlock(history, b)
+    }
+    history.bestFullBlockOpt shouldBe None
+
+    // Applying height 1 queues heights 1..16 for state application without pruning them yet
+    history = applyBlock(history, firstBatch.head)
+    history.bestFullBlockOpt.value.header shouldBe firstBatch.last.header
+    missing(firstBatch) shouldBe empty
+
+    // Next block (height 17): h = 7 > votingLength (4), so the floor rounds down to epoch start 4 and prunes 1..3
+    history = applyBlock(history, next)
+    history.bestFullBlockOpt.value.header shouldBe next.header
+    val (prunedAtNext, keptAtNext) = chain.init.splitAt(votingLength - 1)
+    stored(prunedAtNext) shouldBe empty
+    missing(keptAtNext) shouldBe empty
+
+    // Next block (height 18): h = 8 reaches the next epoch start, so the floor jumps 4 -> 8 and prunes 4..7
+    history = applyBlock(history, chain.last)
+    history.bestFullBlockOpt.value.header shouldBe chain.last.header
+    val (prunedAtLast, keptAtLast) = chain.splitAt(blocksToPrune)
+    stored(prunedAtLast) shouldBe empty
+    missing(keptAtLast) shouldBe empty
+  }
+
   property("process fork from genesis") {
     var (history, c) = genHistory(1)
     val genesis = c.head
@@ -531,6 +588,162 @@ class VerifyADHistorySpecification extends ErgoCorePropertyTest with NoShrink {
     history.append(deepEnoughHeader).isSuccess shouldBe true
 
     history.bestFullBlockOpt.value shouldBe chain.last
+  }
+
+  property("prune the height below a step that applies a block stored ahead of it") {
+    var history = genHistory()._1
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20
+    def at(h: Int) = chain(h - 1)
+    def sections(h: Int) = at(h).header.sectionIds.map(_._2)
+
+    history = applyHeaderChain(history, HeaderChain(chain.map(_.header)))
+    (1 to 14).foreach(h => history = applyBlock(history, at(h)))
+    history.readMinimalFullBlockHeight() shouldBe 4
+
+    // height 16 arrives before 15 and is only stored; receiving 15 then applies 15 and 16 in one step
+    history = applyBlock(history, at(16))
+    history.bestFullBlockOpt.value.header shouldBe at(14).header
+    history.readMinimalFullBlockHeight() shouldBe 4
+    history = applyBlock(history, at(15))
+    history.bestFullBlockOpt.value.header shouldBe at(16).header
+    (17 to 20).foreach(h => history = applyBlock(history, at(h)))
+
+    val floor = history.readMinimalFullBlockHeight()
+    floor shouldBe 10
+    (2 until floor).filter(h => sections(h).exists(history.contains)) shouldBe empty
+    (floor to 20).filter(h => !sections(h).forall(history.contains)) shouldBe empty
+  }
+
+  // A pruned digest history on its own settings, so that a test can close it and read it again, as a restart does
+  private def prunedHistorySettings(): ErgoSettings = initSettings.copy(
+    directory = createTempDir.getAbsolutePath,
+    chainSettings = initSettings.chainSettings.copy(epochLength = 100000000, useLastEpochs = 10),
+    nodeSettings = initSettings.nodeSettings.copy(
+      stateType = StateType.Digest, verifyTransactions = true, blocksToKeep = BlocksToKeep, extraIndex = false))
+
+  // Applies heights 1..14 (floor 4), runs `beforeRestart`, closes the history and reads it again with `reopen` (the
+  // headers-synced flag is not stored, so it starts false), appends header 15 (fresh: it sets the flag before any
+  // block is applied, and may move the floor), applies 15..20 and checks the pruning below and above the floor (10).
+  private def checkPruningAcrossRestart(beforeRestart: ErgoHistory => Unit,
+                                        reopen: ErgoSettings => ErgoHistory = ErgoHistory.readOrGenerate(_)(null)): Unit = {
+    val settings = prunedHistorySettings()
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20, stamped with the current time, so each header is fresh
+    def at(h: Int) = chain(h - 1)
+    def sections(h: Int) = at(h).header.sectionIds.map(_._2)
+
+    (1 to 14).foreach(h => history = applyBlock(history, at(h)))
+    history.readMinimalFullBlockHeight() shouldBe 4
+    beforeRestart(history)
+    history.closeStorage()
+
+    history = reopen(settings)
+    history.isHeadersChainSynced shouldBe false
+    history = applyHeaderChain(history, HeaderChain(Seq(at(15).header)))
+    history.isHeadersChainSynced shouldBe true
+    (15 to 20).foreach(h => history = applyBlock(history, at(h)))
+
+    val floor = history.readMinimalFullBlockHeight()
+    floor shouldBe 10
+    (2 until floor).filter(h => sections(h).exists(history.contains)) shouldBe empty
+    (floor to 20).filter(h => !sections(h).forall(history.contains)) shouldBe empty
+    history.closeStorage()
+  }
+
+  property("prune the old floor height after a restart moves the floor") {
+    checkPruningAcrossRestart(_ => ())
+  }
+
+  property("prune the old floor height after a restart into this version (no pruned height record yet)") {
+    checkPruningAcrossRestart { history =>
+      history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get
+      history.readPrunedBelowHeight() shouldBe None
+    }
+  }
+
+  property("stop the start when the pruned height record cannot be written, and prune the old floor height after a retry") {
+    checkPruningAcrossRestart(
+      history => history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get,
+      settings => {
+        val storage = new StorageFailingFirstPrunedHeightWrite(settings)
+        val error = intercept[IllegalStateException](ErgoHistory.readOrGenerate(settings, storage)(null))
+        error should be theSameInstanceAs storage.failure
+        storage.closed shouldBe true
+        ErgoHistory.readOrGenerate(settings)(null)
+      })
+  }
+
+  // History storage over the settings' directory whose first write of the pruned height record fails
+  private class StorageFailingFirstPrunedHeightWrite(settings: ErgoSettings) extends HistoryStorage(
+    LDBFactory.createKvDb(s"${settings.directory}/history/index"),
+    LDBFactory.createKvDb(s"${settings.directory}/history/objects"),
+    LDBFactory.createKvDb(s"${settings.directory}/history/extra"),
+    settings.cacheSettings) {
+    private val prunedBelowHeightKey = ByteArrayWrapper(Algos.hash("prunedbelow".getBytes("UTF-8")))
+    val failure = new IllegalStateException("pruned height record write sentinel")
+    private var failed = false
+    var closed = false
+
+    override def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
+                        objectsToInsert: Array[BlockSection]): Try[Unit] =
+      if (!failed && indexesToInsert.exists { case (key, _) => key == prunedBelowHeightKey }) {
+        failed = true
+        Failure(failure)
+      } else {
+        super.insert(indexesToInsert, objectsToInsert)
+      }
+
+    override def close(): Unit = {
+      closed = true
+      super.close()
+    }
+  }
+
+  property("take the pruned height record no higher than the height after the best full block") {
+    val settings = prunedHistorySettings()
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20
+    (1 to 14).foreach(h => history = applyBlock(history, chain(h - 1)))
+    // a floor above the best full block, nothing pruned between the old floor (4) and it, as an earlier restart stores
+    history.writeMinimalFullBlockHeight(20)
+    history.historyStorage.remove(Array(history.PrunedBelowHeightKey), Array.empty).get
+    history.closeStorage()
+
+    history = ErgoHistory.readOrGenerate(settings)(null)
+    history.readPrunedBelowHeight() shouldBe Some(15)
+    history.closeStorage()
+  }
+
+
+  property("do not prune the block just applied when the stored floor is above it") {
+    val settings = prunedHistorySettings()
+    var history = ErgoHistory.readOrGenerate(settings)(null)
+    history.writeMinimalFullBlockHeight(GenesisHeight)
+    history.isHeadersChainSyncedVar = true
+    val chain = genChain(BlocksToKeep + 9) // heights 1..20
+    def at(h: Int) = chain(h - 1)
+    def missingSections(heights: Range) = heights.filterNot(h => at(h).header.sectionIds.map(_._2).forall(history.contains))
+    (1 to 14).foreach(h => history = applyBlock(history, at(h)))
+    // block 15's transactions and extension arrive while the floor is 4; then a floor above it is stored, as an
+    // earlier restart could; its ADProofs are still accepted (transactions already stored) and complete the block
+    history = applyHeaderChain(history, HeaderChain(Seq(at(15).header)))
+    history = applySection(history, at(15).blockTransactions)
+    history = applySection(history, at(15).extension)
+    history.writeMinimalFullBlockHeight(20)
+    // heights 5 to 14 are within the BlocksToKeep (11) blocks the node keeps at best block 15
+    missingSections(5 to 14) shouldBe empty
+    history = applySection(history, at(15).adProofs.value)
+    missingSections(5 to 14) shouldBe empty
+    // and height 4, below them, is pruned
+    at(4).header.sectionIds.map(_._2).filter(history.contains) shouldBe empty
+
+    history.bestFullBlockOpt.map(_.header) shouldBe Some(at(15).header)
+    at(15).header.sectionIds.map(_._2).filterNot(history.contains) shouldBe empty
+    history.closeStorage()
   }
 
 }

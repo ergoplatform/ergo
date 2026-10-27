@@ -413,8 +413,10 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
     val indexedHeaderEntry = state.indexedHeaderId.map { id =>
       IndexedHeaderIdKey -> fastIdToBytes(id)
     }.toArray
-    val objects = ((((((general ++= boxes.values) ++= trees.values)
-      ++= templates.values) ++= tokens.values) ++= segments.values) ++= rentBoxes.values).toArray
+    // Keep source buffers intact so a failed checkpoint write retries the same objects.
+    val objects = (general.iterator ++ boxes.valuesIterator ++ trees.valuesIterator ++
+      templates.valuesIterator ++ tokens.valuesIterator ++ segments.valuesIterator ++
+      rentBoxes.valuesIterator).toArray
     historyStorage.insertExtraTry(
       Array(
         (IndexedHeightKey, ByteBuffer.allocate(4).putInt(state.indexedHeight).array),

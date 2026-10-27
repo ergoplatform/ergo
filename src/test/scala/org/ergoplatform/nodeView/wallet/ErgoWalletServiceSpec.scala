@@ -780,4 +780,58 @@ class ErgoWalletServiceSpec
     }
   }
 
+
+  // Controlled service outcomes exercise the real actor and persistent WalletStorage.
+  // This isolates ScanOnChain cleanup; it does not simulate peer gossip or funds loss.
+  for (scanFails <- Seq(true, false)) {
+    property(if (scanFails) "failed block scan retains pending transaction records"
+      else "successful block scan removes confirmed pending transaction records") {
+      withVersionedStore(2) { versionedStore =>
+        withStore { store =>
+          val actorSystem = akka.actor.ActorSystem("pending-scan-" + java.util.UUID.randomUUID().toString)
+          try {
+            val initial = initialState(store, versionedStore)
+            val tx = validErgoTransactionGen.sample.get._2
+            val header = defaultHeaderGen.sample.get.copy(height = 1)
+            val block = org.ergoplatform.modifiers.ErgoFullBlock(header,
+              org.ergoplatform.modifiers.history.BlockTransactions(header.id, header.version, Seq(tx)),
+              org.ergoplatform.modifiers.history.extension.Extension(header.id, Seq.empty), None)
+            initial.storage.addUnconfirmedTransaction(tx, 0).get
+            val service = new ErgoWalletServiceImpl(settings) {
+              override def readWallet(state: ErgoWalletState, mnemonic: Option[SecretString],
+                  keys: Option[Int], secretSettings: org.ergoplatform.wallet.settings.SecretStorageSettings): ErgoWalletState = state
+              override def restoreOffChainState(state: ErgoWalletState): ErgoWalletState = state
+              override def scanBlockUpdate(state: ErgoWalletState,
+                  block: org.ergoplatform.modifiers.ErgoFullBlock,
+                  dustLimit: Option[Long]): scala.util.Try[ErgoWalletState] = {
+                if (scanFails) scala.util.Failure(new IllegalStateException("injected wallet registry scan failure"))
+                else Success(state)
+              }
+            }
+            val ref = actorSystem.actorOf(akka.actor.Props(new ErgoWalletActor(
+              settings, parameters, service, null, null) {
+              override def preStart(): Unit = self ! ErgoWalletActorMessages.ReadWallet(initial)
+            }))
+            val probe = akka.testkit.TestProbe()(actorSystem)
+            probe.send(ref, ErgoWalletActorMessages.GetWalletStatus)
+            probe.expectMsgType[ErgoWalletActorMessages.WalletStatus](scala.concurrent.duration.Duration(10, "seconds"))
+            probe.send(ref, ErgoWalletActorMessages.ScanOnChain(block))
+            probe.send(ref, ErgoWalletActorMessages.GetWalletStatus)
+            val status = probe.expectMsgType[ErgoWalletActorMessages.WalletStatus](scala.concurrent.duration.Duration(10, "seconds"))
+            if (scanFails) {
+              status.error shouldBe defined
+              initial.storage.unconfirmedTransactionHeights should contain key tx.id
+            } else {
+              initial.storage.unconfirmedTransactionHeights should not contain key(tx.id)
+            }
+            probe.watch(ref)
+            actorSystem.stop(ref)
+            probe.expectTerminated(ref)
+          } finally {
+            scala.concurrent.Await.result(actorSystem.terminate(), scala.concurrent.duration.Duration(15, "seconds"))
+          }
+        }
+      }
+    }
+  }
 }

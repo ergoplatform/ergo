@@ -1696,16 +1696,17 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   }
 
   /**
-    * A candidate generator on a fresh chain of its own, for the two solved-block cases below.
+    * A candidate generator on a fresh chain of its own for the solved-block cases below.
     */
-  private class SolvedBlockFixture(directorySuffix: String)
+  private class SolvedBlockFixture(directorySuffix: String,
+                                   baseSettings: ErgoSettings = defaultSettings)
     extends TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val settings: ErgoSettings = defaultSettings.copy(
+    val settings: ErgoSettings = baseSettings.copy(
       directory =
-        s"${defaultSettings.directory}-$directorySuffix-${System.currentTimeMillis()}"
+        s"${baseSettings.directory}-$directorySuffix-${System.currentTimeMillis()}"
     )
     val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
@@ -1736,6 +1737,41 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         .proveCandidate(c.candidateBlock, secret.w, 0, 1000)
         .get
   }
+
+  it should "apply a v2 solution without pk using the selected candidate key" in
+    new SolvedBlockFixture("v2-keyless-apply", defaultSettings60) {
+      try {
+        val selected = candidate(Some(otherPk))
+        selected.externalVersion.pk shouldBe otherPk
+        val solved = solve(selected, otherMiner)
+        val solutionWithoutPk = solved.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+
+        var acknowledged = false
+        var applied = false
+        candidateGenerator.tell(solutionWithoutPk, testProbe.ref)
+        testProbe.fishForMessage(newBlockDelay) {
+          case StatusReply.Success(()) =>
+            acknowledged = true
+            acknowledged && applied
+          case FullBlockApplied(header) if header.id == solved.id =>
+            header.powSolution.pk shouldBe otherPk.value
+            applied = true
+            acknowledged && applied
+          case StatusReply.Error(e) =>
+            fail(s"keyless solution rejected: ${e.getMessage}")
+          case _ => false
+        }
+        acknowledged shouldBe true
+        applied shouldBe true
+
+        val readersProbe = new TestProbe(system)
+        readersProbe.awaitAssert({
+          readersProbe.send(readersHolderRef, GetReaders)
+          val readers = readersProbe.expectMsgType[Readers](candidateGenDelay)
+          readers.h.bestFullBlockIdOpt shouldBe Some(solved.id)
+        }, newBlockDelay, 100.millis)
+      } finally system.terminate()
+    }
 
   it should "clear the solved block on its FullBlockApplied when the candidate was already regenerated on it" in
     new SolvedBlockFixture("solved-clear") {

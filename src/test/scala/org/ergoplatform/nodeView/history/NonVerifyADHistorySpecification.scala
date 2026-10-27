@@ -170,6 +170,36 @@ class NonVerifyADHistorySpecification extends ErgoCorePropertyTest {
     continuation.last._2 shouldBe selectedTail.last.id
   }
 
+  // A leader on a 30-header common chain extended to 140, and a follower on its own 40-header fork from height 30: the
+  // follower's full V2 locator (heights 70 and 54; no header at 70 - 128) holds no header of the leader's chain
+  private def leaderAndForkedFollower(): (ErgoHistory, ErgoHistory, HeaderChain) = {
+    val emptyLeader = genHistory()
+    val common = genHeaderChain(30, emptyLeader, diffBitsOpt = None, useRealTs = false)
+    val leaderOnCommon = applyHeaderChain(emptyLeader, common)
+    val followerOnCommon = applyHeaderChain(genHistory(), common)
+    val leaderTail = genHeaderChain(110, Some(common.last), leaderOnCommon.difficultyCalculator,
+      diffBitsOpt = None, useRealTs = false).tail
+    val followerTail = genHeaderChain(40, Some(common.last), leaderOnCommon.difficultyCalculator,
+      extensionHash = Algos.hash(Array[Byte](1)), diffBitsOpt = None, useRealTs = false).tail
+    (applyHeaderChain(leaderOnCommon, leaderTail), applyHeaderChain(followerOnCommon, followerTail), leaderTail)
+  }
+
+  property("V2 continuation reaches a peer whose own fork is more than 16 headers long, tip at height 128 or lower") {
+    val (leader, follower, leaderTail) = leaderAndForkedFollower()
+    val locator = follower.syncInfoV2(full = true)
+    locator.lastHeaders.map(_.height) shouldBe Seq(70, 54)
+    leader.compareV2(locator) shouldBe Younger
+
+    val continuation = leader.continuationIdsV2(locator, 100)
+    continuation.map(_._2) should contain (leaderTail.headers.head.id)
+  }
+
+  property("V2 continuation stays empty when no locator is on the chain and the answer could not reach the fork") {
+    val (leader, follower, _) = leaderAndForkedFollower()
+    // 20 headers from genesis end below the fork at height 30
+    leader.continuationIdsV2(follower.syncInfoV2(full = true), 20) shouldBe empty
+  }
+
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {
     var history = genHistory()
     val chain = genHeaderChain(BlocksInChain, history, diffBitsOpt = None, useRealTs = false)

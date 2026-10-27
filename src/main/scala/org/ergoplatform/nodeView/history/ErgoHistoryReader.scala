@@ -287,12 +287,17 @@ trait ErgoHistoryReader
     * if comparison status is YOUNGER of FORK, for sync message V2.
     */
   def continuationIdsV2(syncV2: ErgoSyncInfoV2, size: Int): ModifierIds = {
-    if (syncV2.lastHeaders.isEmpty) {
-      // if other node has no headers yet, send up to `size` headers from genesis
+    // up to `size` headers from genesis
+    def fromGenesis: ModifierIds = {
       val heightTo = Math.min(headersHeight, size + EmptyHistoryHeight)
       (GenesisHeight to heightTo)
         .flatMap(height => bestHeaderIdAtHeight(height))
         .map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+    }
+
+    if (syncV2.lastHeaders.isEmpty) {
+      // if other node has no headers yet, send up to `size` headers from genesis
+      fromGenesis
     } else {
       commonPoint(syncV2.lastHeaders) match {
         case Some(commonHeader) =>
@@ -300,6 +305,13 @@ trait ErgoHistoryReader
           ((commonHeader.height + 1) to heightTo)
             .flatMap(height => bestHeaderIdAtHeight(height))
             .map(h => Header.modifierTypeId -> h) //todo: remove modifierTypeId ?
+        case None if syncV2.lastHeaders.last.height <= size =>
+          // no header of the other node is on the selected chain, so its fork point is below its lowest header;
+          // when that is within `size` headers from genesis, so is the fork point (a node at height 128 or lower
+          // whose own fork is more than 16 headers long sends only headers of its fork)
+          log.info(s"No header of the sync info (heights ${syncV2.lastHeaders.map(_.height).mkString(", ")}) " +
+            s"is on the selected chain; sending up to $size header ids from genesis")
+          fromGenesis
         case None =>
           Seq.empty
       }

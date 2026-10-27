@@ -196,6 +196,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     * producer disappears. Other inputs were already present before this mutation.
     */
   private val MaxAncestryProducerExpansions = 500
+  private val MaxAncestryBoxReferences = 4096
   private val MaxAncestryScanNanos = 500L * 1000L * 1000L
 
   private[mempool] def inputsRemainAvailable(
@@ -204,15 +205,19 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     utxo: UtxoState,
     maxProducerExpansions: Int = MaxAncestryProducerExpansions,
     maxScanNanos: Long = MaxAncestryScanNanos,
-    nowNanos: () => Long = () => System.nanoTime()
+    nowNanos: () => Long = () => System.nanoTime(),
+    maxBoxReferences: Int = MaxAncestryBoxReferences
   ): InputAvailability = {
     val scanStartNanos = nowNanos()
     val pending = mutable.Queue.empty[BoxId]
+    var enqueuedBoxReferences = 0
     def withinDeadline: Boolean = nowNanos() - scanStartNanos < maxScanNanos
     def enqueueBeforeDeadline(boxes: Iterator[BoxId]): Boolean = {
       while (boxes.hasNext) {
-        if (!withinDeadline) return false
+        // Count every reference, including repeats, before growing the pending queue.
+        if (!withinDeadline || enqueuedBoxReferences >= maxBoxReferences) return false
         pending.enqueue(boxes.next())
+        enqueuedBoxReferences += 1
       }
       true
     }

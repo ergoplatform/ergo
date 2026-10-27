@@ -397,6 +397,51 @@ class ErgoMemPoolInputProvidersSpec extends AnyFlatSpec with Matchers with TestF
     }
   }
 
+  it should "bound all enqueued ancestry box references independently of the clock" in {
+    withFixture() { f =>
+      val stoppedClock: () => Long = () => 0L
+      val confirmedOnly = transaction(
+        f, Seq(f.confirmed(0), f.confirmed(1)), HIGH_FEE,
+        dataInputs = Seq(f.confirmed(2), f.confirmed(3))
+      )
+      val emptyPool = f.emptyPool
+      emptyPool.inputsRemainAvailable(
+        confirmedOnly, emptyPool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 1L,
+        nowNanos = stoppedClock, maxBoxReferences = 4
+      ) shouldBe ErgoMemPool.Available
+      emptyPool.inputsRemainAvailable(
+        confirmedOnly, emptyPool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 1L,
+        nowNanos = stoppedClock, maxBoxReferences = 3
+      ) shouldBe ErgoMemPool.BudgetExceeded
+
+      val repeated = transaction(
+        f, Seq(f.confirmed(0), f.confirmed(1)), HIGH_FEE,
+        dataInputs = Seq(f.confirmed(0), f.confirmed(1))
+      )
+      emptyPool.inputsRemainAvailable(
+        repeated, emptyPool.pool, f.state,
+        maxProducerExpansions = 0, maxScanNanos = 1L,
+        nowNanos = stoppedClock, maxBoxReferences = 3
+      ) shouldBe ErgoMemPool.BudgetExceeded
+
+      val provider = transaction(f, Seq(f.confirmed(0), f.confirmed(1)), LOW_FEE)
+      val pool = admit(f, emptyPool, provider)
+      val dependent = transaction(f, Seq(provider.outputs.head), HIGH_FEE)
+      pool.inputsRemainAvailable(
+        dependent, pool.pool, f.state,
+        maxProducerExpansions = 1, maxScanNanos = 1L,
+        nowNanos = stoppedClock, maxBoxReferences = 3
+      ) shouldBe ErgoMemPool.Available
+      pool.inputsRemainAvailable(
+        dependent, pool.pool, f.state,
+        maxProducerExpansions = 1, maxScanNanos = 1L,
+        nowNanos = stoppedClock, maxBoxReferences = 2
+      ) shouldBe ErgoMemPool.BudgetExceeded
+    }
+  }
+
   it should "decline when the ancestry deadline expires during initial enqueue" in {
     withFixture() { f =>
       val confirmedOnly = transaction(

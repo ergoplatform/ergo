@@ -252,20 +252,29 @@ class CandidateGenerator(
 
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
-      // Inject node pk if it is not externally set (in Autolykos 2)
-      val solution =
+      // Inject the selected candidate's pk if it is not externally set (in Autolykos 2).
+      def solutionFor(candidate: Candidate): AutolykosSolution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          AutolykosSolution(
+            candidate.externalVersion.pk.value,
+            preSolution.w,
+            preSolution.n,
+            preSolution.d
+          )
         } else {
           preSolution
         }
+
+      def complete(candidate: Candidate): ErgoFullBlock =
+        completeBlock(candidate.candidateBlock, solutionFor(candidate))
+
       val result: StatusReply[Unit] = {
         val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
+          .map(complete)
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
           .getOrElse {
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
+            complete(state.cachedPreviousCandidate.get)
           }
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
@@ -281,7 +290,7 @@ class CandidateGenerator(
             )
         }
       }
-      log.info(s"Processed solution $solution with the result $result")
+      log.info(s"Processed solution $preSolution with the result $result")
       sender() ! result
 
     case _: AutolykosSolution =>

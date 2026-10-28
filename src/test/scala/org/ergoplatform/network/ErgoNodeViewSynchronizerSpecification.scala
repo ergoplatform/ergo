@@ -33,7 +33,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, S
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
-import scorex.crypto.authds.ADKey
+import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
 import org.scalatest.propspec.AnyPropSpec
@@ -403,6 +403,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       eventually {
         deliveryTracker.status(olderChain.last.id, Header.modifierTypeId, Seq.empty) shouldBe Received
       }
+    }
+  }
+
+  property("NodeViewSynchronizer: empty Modifiers reply is not delivery progress, requested section still counts as not delivered") {
+    withFixture { ctx =>
+      import ctx._
+      deliveryTracker.reset()
+      val typeId = ADProofs.modifierTypeId
+      val id: ModifierId = bytesToId(Array.fill(32)(7: Byte))
+      deliveryTracker.setRequested(typeId, id, peer)(_ => Cancellable.alreadyCancelled)
+      Thread.sleep(20)
+      // what an older node sends for a section above its message limit: type id + count 0
+      val zeroCount = Array[Byte](typeId, 0: Byte)
+      synchronizer ! Message(ModifiersSpec, Left(zeroCount), Some(peer))
+      synchronizer ! CheckDelivery(peer, typeId, id)
+      val messages = ncProbe.receiveWhile(max = 3.seconds, idle = 1.second) { case m => m }
+      messages.collect { case PenalizePeer(_, p) => p }.toSet shouldBe Set(PenaltyType.NonDeliveryPenalty)
     }
   }
 
@@ -1326,6 +1343,36 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         case Message(_, Right(md: ModifiersData), _) => md
       }.flatMap(md => md.modifiers.keys.map(md.typeId -> _))
       served should contain allElementsOf announced
+    }
+  }
+
+  property("NodeViewSynchronizer: a modifier too big for a Modifiers message is not sent, the next one still is") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      var wus = WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)
+      (0 until 3).foreach { _ =>
+        val block = statefulyValidFullBlock(wus)
+        wus = wus.applyModifier(block, None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      // ModifiersSpec.serialize would write this section alone as a message with 0 modifiers
+      val tooBig = ADProofs(newBlock.header.id, SerializedAdProof @@ Array.fill(ModifiersSpec.maxMsgSizeWithReserve)(1: Byte))
+      ModifiersSpec.singleModifierFits(tooBig.bytes.length) shouldBe false
+      val fits = ADProofs(newBlock.header.id, SerializedAdProof @@ Array.fill(100)(2: Byte))
+
+      // served from mined-block memory, as in the tests below
+      synchronizerMockRef ! NewBlockMined(newBlock.header, Seq(tooBig, fits))
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+
+      // the oversized section first: the old code sent it anyway, as a message with 0 modifiers
+      synchronizerMockRef ! Message(RequestModifierSpec,
+        Left(RequestModifierSpec.toBytes(InvData(ADProofs.modifierTypeId, Seq(tooBig.id, fits.id)))),
+        Some(peer))
+      val served = pchProbe.receiveWhile(3.seconds) { case m => m }.collect {
+        case Message(_, Right(md: ModifiersData), _) => md
+      }
+      served.map(_.modifiers.keys.toSeq) shouldBe Seq(Seq(fits.id))
     }
   }
 

@@ -1,7 +1,7 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
-import akka.http.scaladsl.server.Route
+import akka.http.scaladsl.server.{Directives, Route}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.testkit.TestProbe
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -16,7 +16,10 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.core.api.http.ApiRejectionHandler
 import scorex.util.ModifierId
+
+import scala.concurrent.duration.DurationInt
 
 class BlocksApiRouteSpec
   extends AnyFlatSpec
@@ -31,6 +34,10 @@ class BlocksApiRouteSpec
   val prefix = "/blocks"
 
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, settings).route
+  val handledRoute: Route =
+    Directives.handleRejections(ApiRejectionHandler.rejectionHandler) {
+      route
+    }
 
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String    = Algos.encode(headerIdBytes)
@@ -42,6 +49,18 @@ class BlocksApiRouteSpec
         .headerIdsAt(0, 50)
         .map(Algos.encode)
         .asJson shouldEqual responseAs[Json]
+    }
+  }
+
+  it should "return method not allowed for PUT /blocks" in {
+    Get(prefix) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
+    Put(prefix) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.MethodNotAllowed
+      val allow = response.headers.find(_.is("allow")).map(_.value()).getOrElse("")
+      allow should include ("GET")
+      allow should include ("POST")
     }
   }
 
@@ -71,6 +90,35 @@ class BlocksApiRouteSpec
       probe.expectMsg(LocallyGeneratedModifier(block.header))
     } finally {
       system.eventStream.unsubscribe(probe.ref)
+    }
+  }
+
+  it should "not submit a valid block at an unknown sub-path" in {
+    val (st, bh)             = createUtxoState(settings)
+    val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
+    val blockJson: UniversalEntity =
+      HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
+    val eventProbe = TestProbe()
+    val viewProbe  = TestProbe()
+    val handledProbeRoute: Route =
+      Directives.handleRejections(ApiRejectionHandler.rejectionHandler) {
+        BlocksApiRoute(viewProbe.ref, digestReadersRef, settings).route
+      }
+
+    system.eventStream.subscribe(eventProbe.ref, classOf[NewBlockMined])
+    try {
+      val rejectedStatus =
+        Post(prefix + "/junk/path", blockJson) ~> handledProbeRoute ~> check {
+          status
+        }
+      val announced = eventProbe.receiveOne(300.millis) != null
+      val forwarded = viewProbe.receiveOne(300.millis) != null
+      withClue(s"HTTP $rejectedStatus, announced=$announced, forwarded=$forwarded: ") {
+        (announced, forwarded) shouldBe ((false, false))
+      }
+      rejectedStatus.intValue() / 100 shouldBe 4
+    } finally {
+      system.eventStream.unsubscribe(eventProbe.ref)
     }
   }
 
@@ -139,6 +187,13 @@ class BlocksApiRouteSpec
         )
 
       responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+    }
+  }
+
+  it should "not report a wrong method for an unknown sub-path" in {
+    Get(prefix + "/junk/path") ~> handledRoute ~> check {
+      status.intValue() / 100 shouldBe 4
+      status should not be StatusCodes.MethodNotAllowed
     }
   }
 

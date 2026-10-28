@@ -17,6 +17,31 @@ REPORT_NAME = re.compile(r"hs_err_pid[0-9]+\.log\Z")
 CLASS_DECL = re.compile(r"^\s*(?:(?:final|abstract|case)\s+)*class\s+([A-Za-z][A-Za-z0-9_]*)\b", re.M)
 
 
+def current_java_operation(text):
+    """Read only the first Java frame in an unambiguous current-thread section."""
+    currents = list(re.finditer(r"^Current thread \([^\n]*\):[^\n]*$", text, re.M))
+    if len(currents) != 1:
+        return None
+    tail = text[currents[0].end():]
+    boundary = re.search(r"^(?:---------------|Other [Tt]hreads?\b|VM Arguments:|Environment Variables:)", tail, re.M)
+    if boundary:
+        tail = tail[:boundary.start()]
+    sections = list(re.finditer(r"^Java frames:[^\n]*\n", tail, re.M))
+    if len(sections) != 1:
+        return None
+    for line in tail[sections[0].end():].splitlines():
+        if not re.match(r"^[JjVvC]\s", line):
+            break
+        if re.match(r"^[Jj]\s", line):
+            match = re.match(
+                r"^(?:j\s+|J\s+[0-9]{1,10}%?\s+(?:(?:c1|c2)\s+)?)"
+                r"org\.fusesource\.leveldbjni\.internal\.NativeDB\$DBJNI\.(delete|Get)(?:\(|\s|$)",
+                line,
+            )
+            return {"delete": "NativeDB.delete", "Get": "NativeDB.Get"}.get(match[1]) if match else None
+    return None
+
+
 def is_link(path):
     return path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
 
@@ -71,8 +96,13 @@ def parse_report(text, classes):
     frame = re.search(r"^# Problematic frame:\s*\n([^\n]*)", header, re.M)
     if frame and re.search(r"\blibleveldbjni[^]\s]*", frame[1]):
         result["native_component"] = "leveldbjni"
-        if re.search(r"\bJava_org_fusesource_leveldbjni_internal_NativeDB_00024DBJNI_delete(?:\+|$)", frame[1]):
-            result["native_operation"] = "NativeDB.delete"
+        direct = re.search(r"\bJava_org_fusesource_leveldbjni_internal_NativeDB_00024DBJNI_", frame[1])
+        if direct:
+            method = re.match(r"(delete|Get)(?:\+|$)", frame[1][direct.end():])
+            if method:
+                result["native_operation"] = {"delete": "NativeDB.delete", "Get": "NativeDB.Get"}[method[1]]
+        else:
+            result["native_operation"] = current_java_operation(text)
     current = re.search(r'^Current thread \([^\n]*\):[^\n]*"([^"\n]*)"', text, re.M)
     if current:
         suite = re.search(r"ScalaTest-running-([A-Za-z][A-Za-z0-9_]*)\Z", current[1])

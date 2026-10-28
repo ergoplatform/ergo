@@ -87,6 +87,63 @@ class CrashSummaryTest(unittest.TestCase):
         self.assertIsNone(result["suite_hint"])
         self.assertIsNone(result["group_hint"])
 
+    def test_leveldb_cpp_frame_uses_first_java_frame_only(self):
+        cpp = REPORT.replace("Java_org_fusesource_leveldbjni_internal_NativeDB_00024DBJNI_delete+0xb",
+                             "leveldb::PosixEnv::UnlockFile+0xb")
+        for prefix, method, expected in (("j  ", "delete", "NativeDB.delete"),
+                                          ("J  123 ", "Get", "NativeDB.Get"),
+                                          ("J  123% c1 ", "delete", "NativeDB.delete"),
+                                          ("J  123 c2 ", "Get", "NativeDB.Get")):
+            with self.subTest(prefix=prefix, method=method):
+                text = cpp.replace("\nVM Arguments:",
+                    "\nNative frames: (C=native code)\nC  [libleveldbjni.so] PRIVATE_SENTINEL\n\n"
+                    "Java frames: (J=compiled Java code, j=interpreted)\n"
+                    f"{prefix}org.fusesource.leveldbjni.internal.NativeDB$DBJNI.{method}(J)V+0\n"
+                    "j  PRIVATE_SENTINEL.method()V+0\n\nVM Arguments:")
+                result = summary.parse_report(text, set())
+                self.assertEqual(result["native_operation"], expected)
+                self.assertNotIn("PRIVATE_SENTINEL", json.dumps(result))
+
+    def test_fallback_rejects_decoys_and_ambiguous_sections(self):
+        cpp = REPORT.replace("Java_org_fusesource_leveldbjni_internal_NativeDB_00024DBJNI_delete+0xb",
+                             "leveldb::MemTable::KeyComparator+0xb")
+        good = "j  org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n"
+        cases = [
+            "j  example.Decoy.run()V+0\n" + good,
+            "j  org.fusesource.leveldbjni.internal.NativeDB$DBJNI.GetMore(J)V+0\n",
+            "j  example.org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n",
+            "j  org.fusesource.leveldbjni.internal.NativeDB$DBJNI.other(J)V+0\n" + good,
+            "J  123 c2 example.Decoy.run()V+0\n" + good,
+            "J  123 c3 org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n",
+            "J  12345678901 c1 org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n",
+            "j  123 c1 org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n",
+            "J  org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n",
+        ]
+        for frames in cases:
+            with self.subTest(frames=frames):
+                text = cpp.replace("\nVM Arguments:", "\nJava frames:\n" + frames + "\nVM Arguments:")
+                self.assertIsNone(summary.parse_report(text, set())["native_operation"])
+        other = cpp + "\nOther thread: worker\nJava frames:\n" + good
+        self.assertIsNone(summary.parse_report(other, set())["native_operation"])
+        duplicate = cpp.replace("\nVM Arguments:", "\nJava frames:\n" + good + "\nJava frames:\n" + good + "\nVM Arguments:")
+        self.assertIsNone(summary.parse_report(duplicate, set())["native_operation"])
+        valid = cpp.replace("\nVM Arguments:", "\nJava frames:\n" + good + "\nVM Arguments:")
+        self.assertIsNone(summary.parse_report(valid.replace("libleveldbjni", "libother"), set())["native_operation"])
+        two_threads = valid.replace("\nVM Arguments:", "\nCurrent thread (0x02): JavaThread \"other\"\n\nVM Arguments:")
+        self.assertIsNone(summary.parse_report(two_threads, set())["native_operation"])
+
+    def test_direct_symbol_precedes_java_fallback(self):
+        text = REPORT.replace("\nVM Arguments:", "\nJava frames:\n"
+                              "j  org.fusesource.leveldbjni.internal.NativeDB$DBJNI.Get(J)V+0\n\nVM Arguments:")
+        self.assertEqual(summary.parse_report(text, set())["native_operation"], "NativeDB.delete")
+        direct_get = text.replace("DBJNI_delete+0xb", "DBJNI_Get+0xb").replace(
+            "$DBJNI.Get(J)V+0", "$DBJNI.delete(J)V+0")
+        self.assertEqual(summary.parse_report(direct_get, set())["native_operation"], "NativeDB.Get")
+        unknown = direct_get.replace("DBJNI_Get+0xb", "DBJNI_PRIVATE_SENTINEL+0xb")
+        result = summary.parse_report(unknown, set())
+        self.assertIsNone(result["native_operation"])
+        self.assertNotIn("PRIVATE_SENTINEL", json.dumps(result))
+
     def test_file_and_total_byte_limits(self):
         self.report()
         with patch.object(summary, "MAX_REPORT_BYTES", 10):

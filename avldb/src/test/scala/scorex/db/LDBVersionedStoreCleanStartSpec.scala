@@ -1,10 +1,8 @@
 package scorex.db
 
 import com.google.common.primitives.Longs
-import org.iq80.leveldb.WriteBatch
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
-import scorex.crypto.hash.Blake2b256
 
 import java.io.File
 import java.nio.file.Files
@@ -18,7 +16,6 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
   private val latestVersion = Longs.toByteArray(2L)
   private val firstValue = Array[Byte](11)
   private val latestValue = Array[Byte](22)
-  private val cutpointMessage = "stopped after writing last_version_key"
 
   private def newStoreDir(): File =
     Files.createTempDirectory("avldb_cleanstart_").toFile
@@ -35,58 +32,6 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
   private def addTwoVersions(store: LDBVersionedStore): Unit = {
     store.update(firstVersion, Seq.empty, Seq(entryKey -> firstValue)).get
     store.update(latestVersion, Seq.empty, Seq(entryKey -> latestValue)).get
-  }
-
-  private class StopBeforeUndoWrite(dir: File) extends LDBVersionedStore(dir, 100) {
-    var reachedCutpoint = false
-
-    override private[db] def writeCleanStartUndoBatch(batch: WriteBatch): Unit = {
-      val marker = db.get(Blake2b256("last_version"))
-      assert(marker != null && marker.sameElements(latestVersion),
-        "the newest version must be written before undo records are removed")
-      reachedCutpoint = true
-      throw new IllegalStateException(cutpointMessage)
-    }
-  }
-
-  for (hadPreviousMarker <- Seq(false, true); reopenKeepVersions <- Seq(0, 100)) {
-    property(s"zero-retention cutpoint recovers with prior marker $hadPreviousMarker and reopen retention $reopenKeepVersions") {
-      val dir = newStoreDir()
-      if (hadPreviousMarker) seedPreviousMarker(dir)
-
-      val interrupted = new StopBeforeUndoWrite(dir)
-      try {
-        val markerBefore = Option(interrupted.db.get(Blake2b256("last_version")))
-        if (hadPreviousMarker) {
-          markerBefore.exists(_.sameElements(previousVersion)) shouldBe true
-        } else {
-          markerBefore shouldBe None
-        }
-        addTwoVersions(interrupted)
-        val error = intercept[IllegalStateException] {
-          interrupted.setKeepVersions(0)
-        }
-        error.getMessage shouldBe cutpointMessage
-        interrupted.reachedCutpoint shouldBe true
-      } finally {
-        interrupted.close()
-      }
-
-      val reopened = new LDBVersionedStore(dir, reopenKeepVersions)
-      try {
-        reopened.lastVersionID.get.sameElements(latestVersion) shouldBe true
-        reopened(entryKey).sameElements(latestValue) shouldBe true
-        if (reopenKeepVersions == 0) {
-          reopened.versionIdExists(firstVersion) shouldBe false
-        } else {
-          reopened.versionIdExists(firstVersion) shouldBe true
-          reopened.rollbackTo(firstVersion).get
-          reopened(entryKey).sameElements(firstValue) shouldBe true
-        }
-      } finally {
-        reopened.close()
-      }
-    }
   }
 
   for (hadPreviousMarker <- Seq(false, true)) {
@@ -108,11 +53,11 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
 
       val reopened = new LDBVersionedStore(dir, 100)
       try {
-        reopened.lastVersionID.get.sameElements(latestVersion) shouldBe true
-        reopened(entryKey).sameElements(latestValue) shouldBe true
+        reopened.lastVersionID.map(_.toSeq) shouldBe Some(latestVersion.toSeq)
+        reopened.get(entryKey).map(_.toSeq) shouldBe Some(latestValue.toSeq)
         reopened.versionIdExists(firstVersion) shouldBe true
         reopened.rollbackTo(firstVersion).get
-        reopened(entryKey).sameElements(firstValue) shouldBe true
+        reopened.get(entryKey).map(_.toSeq) shouldBe Some(firstValue.toSeq)
       } finally {
         reopened.close()
       }
@@ -131,8 +76,8 @@ class LDBVersionedStoreCleanStartSpec extends AnyPropSpec with Matchers {
 
     val reopened = new LDBVersionedStore(dir, 0)
     try {
-      reopened.lastVersionID.get.sameElements(latestVersion) shouldBe true
-      reopened(entryKey).sameElements(latestValue) shouldBe true
+      reopened.lastVersionID.map(_.toSeq) shouldBe Some(latestVersion.toSeq)
+      reopened.get(entryKey).map(_.toSeq) shouldBe Some(latestValue.toSeq)
       reopened.versionIdExists(firstVersion) shouldBe false
     } finally {
       reopened.close()

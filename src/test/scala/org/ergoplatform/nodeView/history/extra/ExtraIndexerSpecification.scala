@@ -58,7 +58,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   case class GetLoadedState()
   case class FailNextRollbackRemoval(probe: ActorRef)
   case class PauseBufferedCatchUpAt(height: Int, saveLimit: Int, probe: ActorRef)
-  case class ConfigureWriteFailure(phase: String, probe: ActorRef)
+  case class ConfigureWriteFailure(phase: String, probe: ActorRef, observeAttempts: Boolean = false)
+  case class GetCheckpointWriteAttempts()
+  case class CheckpointWriteAttempt(objectIds: Vector[ModifierId], rentIds: Vector[ModifierId])
   case class AllowWrites()
   case class ReopenCheckpoint()
   case class CheckpointSettings()
@@ -1495,6 +1497,58 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     ExtraIndexer.getIndex(ExtraIndexer.RollbackToKey, _history).getInt shouldBe HEIGHT - 1
     _history.historyStorage.invalidateExtraCache(Seq(spentInputId))
     history.typedExtraIndexById[IndexedErgoBox](spentInputId).exists(_.isSpent) shouldBe false
+  }
+
+  property("keeps a rent-enabled checkpoint batch stable across failed writes and successful retry") {
+    val probe = TestProbe()(system)
+    probe.send(indexer, CreateDB(6))
+    probe.send(indexer, GetLoadedState())
+    probe.expectMsgType[IndexerState].indexedHeight shouldBe 0
+    probe.send(indexer, Index())
+    org.ergoplatform.utils.untilTimeout(20.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    }
+    probe.send(indexer, ConfigureWriteFailure("forward", probe.ref, observeAttempts = true))
+    probe.expectMsg("configured")
+    probe.send(indexer, ExtendDB(7))
+    probe.send(indexer, GetLoadedState())
+    probe.expectMsgType[IndexerState].indexedHeight shouldBe 6
+    val next = fullChainHeaderAt(7)
+    probe.send(indexer, RemoteBlockApplied(next, fullChainTransactionsAt(7).txs.map(_.id)))
+    probe.expectMsgType[Seq[ModifierId]]
+    probe.send(indexer, Index())
+    probe.send(indexer, Index())
+    probe.send(indexer, GetCheckpointWriteAttempts())
+    val failed = probe.expectMsgType[Vector[CheckpointWriteAttempt]]
+    failed.size should be >= 3
+    failed.head.rentIds should not be empty
+    failed.foreach { attempt =>
+      attempt.objectIds shouldBe failed.head.objectIds
+      attempt.objectIds.distinct.size shouldBe attempt.objectIds.size
+      attempt.rentIds shouldBe failed.head.rentIds
+    }
+    IndexerState.fromHistory(_history).indexedHeight shouldBe 6
+    probe.send(indexer, AllowWrites())
+    probe.expectMsg("writes-allowed")
+    probe.send(indexer, Index())
+    org.ergoplatform.utils.untilTimeout(20.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 7
+    }
+    probe.send(indexer, GetCheckpointWriteAttempts())
+    val completed = probe.expectMsgType[Vector[CheckpointWriteAttempt]]
+    completed.size should be > failed.size
+    completed.last.objectIds shouldBe failed.head.objectIds
+    completed.last.rentIds shouldBe failed.head.rentIds
+    val persistedRentIds = history.storageRentBoxesAtOrBefore(Int.MaxValue, Int.MaxValue).map(_.id).toSet
+    completed.last.rentIds.foreach(id => persistedRentIds should contain(id))
+    val (_, _, _, txCount, boxCount) = manualIndex(7)
+    IndexerState.fromHistory(_history).globalTxIndex shouldBe txCount
+    IndexerState.fromHistory(_history).globalBoxIndex shouldBe boxCount
+    // A late `done` signal from the catch-up above must not wake `createAndIndex` in
+    // the next test. So wait for a reply that comes after Reset() is handled.
+    probe.send(indexer, Reset())
+    probe.send(indexer, CheckpointSettings())
+    probe.expectMsgType[ErgoSettings]
   }
 
   property("blocks every indexing entry while a segmented checkpoint write is pending") {

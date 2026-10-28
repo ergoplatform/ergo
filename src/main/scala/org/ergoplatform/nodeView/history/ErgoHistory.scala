@@ -12,7 +12,7 @@ import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
   IndexedHeightKey, NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey}
-import org.ergoplatform.nodeView.history.extra.{IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
 import org.ergoplatform.settings.{Algos, ErgoSettings}
@@ -22,6 +22,7 @@ import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
 import scala.annotation.{nowarn, tailrec}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -146,12 +147,35 @@ trait ErgoHistory
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
+            // The per-height rows are also the source for bestHeaderIdAtHeight and V2 sync.
+            // Only the divergent suffix needs rewriting; the first matching row is the
+            // common ancestor of the old and newly selected best header chains.
+            val selectedHeaderRows = newBestHeaderOpt.toSeq.flatMap { tip =>
+              val rows = ArrayBuffer.empty[(ByteArrayWrapper, Array[Byte])]
+              var current = Option(tip)
+              var reachedCommonAncestor = false
+              while (current.nonEmpty && !reachedCommonAncestor) {
+                val h = current.get
+                val ids = headerIdsAtHeight(h.height)
+                if (ids.headOption.contains(h.id)) {
+                  reachedCommonAncestor = true
+                } else {
+                  rows += (heightIdsKey(h.height) ->
+                    (h.id +: ids.filterNot(_ == h.id)).flatMap(idToBytes).toArray)
+                  current = typedModifierById[Header](h.parentId)
+                }
+              }
+              rows
+            }
 
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
               historyStorage.insert(
-                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
-                BlockSection.emptyArray
+                (validityRow.toSeq ++
+                  newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)) ++
+                  selectedHeaderRows).toArray,
+                BlockSection.emptyArray,
+                if (newBestHeaderOpt.isEmpty) Array(BestHeaderKey) else Array.empty[ByteArrayWrapper]
               ).map { _ =>
                 this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }
@@ -161,8 +185,9 @@ trait ErgoHistory
                 .flatMap(getFullBlock)
                 .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 
-              val genesisInvalidated = invalidatedChain.lengthCompare(1) == 0
-              val branchPointHeader = if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
+              // A snapshot floor may leave no valid full ancestor even when several full blocks are retained.
+              val noRetainedFullAncestor = invalidatedIds.contains(invalidatedChain.head.id)
+              val branchPointHeader = if (noRetainedFullAncestor) PreGenesisHeader else invalidatedChain.head.header
 
               val validHeadersChain =
                 continuationHeaderChains(branchPointHeader,
@@ -176,11 +201,19 @@ trait ErgoHistory
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
+              // Keep the pre-genesis pointer after invalidating a stored full genesis.
+              // An elided full-block prefix has no retained full ancestor.
+              val preservePreGenesisBestFull = invalidatedChain.head.header.isGenesis
+              val newBestFullOpt = validHeadersChain.lastOption
+                .filterNot(h => h.id == PreGenesisHeader.id && !preservePreGenesisBestFull)
+              val changedLinks = newBestFullOpt.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
-              val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
-                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
+              val toInsert = validityRow ++ changedLinks ++ chainStatusRow ++ selectedHeaderRows
+              val linksToRemove =
+                (if (newBestFullOpt.isEmpty) Seq(BestFullBlockKey) else Seq.empty) ++
+                  (if (newBestHeaderOpt.isEmpty) Seq(BestHeaderKey) else Seq.empty)
+              historyStorage.insert(toInsert, BlockSection.emptyArray, linksToRemove.toArray).map { _ =>
+                val toRemove = if (noRetainedFullAncestor) invalidatedChain else invalidatedChain.tail
                 this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
               }
             }
@@ -360,6 +393,14 @@ object ErgoHistory extends ScorexLogging {
 
       def storedBytes(key: Array[Byte]): Option[Array[Byte]] =
         readPreflight(db.modifierBytesById(bytesToId(key)))
+      def storedIndex(key: ByteArrayWrapper): Option[Array[Byte]] =
+        readPreflight(db.getIndex(key))
+      def storedModifier(id: ModifierId): Option[BlockSection] =
+        readPreflight(db.modifierById(id))
+      def storedExtraIndex(id: ModifierId): Option[ExtraIndex] =
+        readPreflight(db.getExtraIndex(id))
+      def inBestFullChain(id: ModifierId): Boolean =
+        readPreflight(FullBlockProcessor.isInBestFullChain(db, id))
       def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
         .filter(_.length == Integer.BYTES)
         .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
@@ -390,8 +431,8 @@ object ErgoHistory extends ScorexLogging {
         // Unknown validity is accepted: the indexer does not gate on semantic validity, so a
         // checkpoint over a not-yet-marked header is legitimate. An explicitly Invalid
         // checkpoint header still forces a rebuild - the indexed chain was invalidated.
-        val isInvalid = readPreflight(db.getIndex(validityKey)).exists(_.sameElements(Array(0.toByte)))
-        if (!isInvalid && readPreflight(FullBlockProcessor.isInBestFullChain(db, id))) readPreflight(db.modifierById(id)).collect {
+        val isInvalid = storedIndex(validityKey).exists(_.sameElements(Array(0.toByte)))
+        if (!isInvalid && inBestFullChain(id)) storedModifier(id).collect {
           case header: Header if header.height == indexedHeight && header.id == id => header
         } else None
       }
@@ -399,7 +440,7 @@ object ErgoHistory extends ScorexLogging {
         if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
           false
         } else {
-          readPreflight(db.modifierById(header.transactionsId)).collect {
+          storedModifier(header.transactionsId).collect {
             case transactions: BlockTransactions if transactions.headerId == header.id =>
               val lastTx = transactions.txs.last
               val lastTxIndex = globalTxIndex - 1
@@ -410,7 +451,7 @@ object ErgoHistory extends ScorexLogging {
               } else {
                 val inputNums = lastTx.inputs.map { input =>
                   val inputId = bytesToId(input.boxId)
-                  readPreflight(db.getExtraIndex(inputId)).collect {
+                  storedExtraIndex(inputId).collect {
                     case box: IndexedErgoBox
                       if box.id == inputId && box.spendingTxIdOpt.contains(lastTx.id) &&
                         box.spendingHeightOpt.contains(header.height) => box.globalIndex
@@ -418,11 +459,11 @@ object ErgoHistory extends ScorexLogging {
                 }
                 if (inputNums.forall(_.isDefined)) Some(inputNums.flatten.toArray) else None
               }
-              val numericTxMatches = readPreflight(db.getExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex)))).exists {
+              val numericTxMatches = storedExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex))).exists {
                 case NumericTxIndex(index, id) => index == lastTxIndex && id == lastTx.id
                 case _ => false
               }
-              val indexedTxMatches = readPreflight(db.getExtraIndex(lastTx.id)).exists {
+              val indexedTxMatches = storedExtraIndex(lastTx.id).exists {
                 case tx: IndexedErgoTransaction =>
                   tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
                     tx.blockId == header.id &&
@@ -433,11 +474,11 @@ object ErgoHistory extends ScorexLogging {
               }
               val outputRowsMatch = expectedOutputNums.zip(lastTx.outputs).forall { case (boxIndex, output) =>
                 val boxId = bytesToId(output.id)
-                val numericBoxMatches = readPreflight(db.getExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex)))).exists {
+                val numericBoxMatches = storedExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex))).exists {
                   case NumericBoxIndex(index, id) => index == boxIndex && id == boxId
                   case _ => false
                 }
-                val indexedBoxMatches = readPreflight(db.getExtraIndex(boxId)).exists {
+                val indexedBoxMatches = storedExtraIndex(boxId).exists {
                   case box: IndexedErgoBox =>
                     box.globalIndex == boxIndex && box.inclusionHeight == header.height && box.id == boxId &&
                       box.spendingTxIdOpt.isEmpty && box.spendingHeightOpt.isEmpty && box.spendingProofOpt.isEmpty

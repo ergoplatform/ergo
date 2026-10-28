@@ -83,7 +83,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val walletPassChars = walletPass.getData()
 
       await(wallet.restoreWallet(walletPass, mnemonic, Some(mnemonicPass),
-        usePre1627KeyDerivation = false)).isFailure shouldBe true
+        usePre1627KeyDerivation = false)).result.isFailure shouldBe true
       assertErased(mnemonicChars)
       assertErased(mnemonicPassChars)
       assertErased(walletPassChars)
@@ -93,7 +93,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val initPassChars = initPass.getData()
       val initMnemonicPassChars = initMnemonicPass.getData()
 
-      await(wallet.initWallet(initPass, Some(initMnemonicPass))).isFailure shouldBe true
+      await(wallet.initWallet(initPass, Some(initMnemonicPass))).result.isFailure shouldBe true
       assertErased(initPassChars)
       assertErased(initMnemonicPassChars)
     }
@@ -107,7 +107,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val walletPassChars = walletPass.getData()
 
       await(wallet.getWalletStatus).initialized shouldBe false
-      await(wallet.restoreWallet(walletPass, mnemonic, usePre1627KeyDerivation = false)).isSuccess shouldBe true
+      await(wallet.restoreWallet(walletPass, mnemonic, usePre1627KeyDerivation = false)).result.isSuccess shouldBe true
       assertErased(mnemonicChars)
 
       implicit val patienceConfig: PatienceConfig = PatienceConfig(10.seconds, 100.millis)
@@ -130,7 +130,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       await(wallet.getWalletStatus).initialized shouldBe false
       val result = await(wallet.restoreWallet(walletPass, mnemonic, Some(mnemonicPass),
         usePre1627KeyDerivation = false))
-      result.failed.get.getMessage should include("pruning")
+      result.result.failed.get.getMessage should include("pruning")
       assertErased(mnemonicChars)
       assertErased(mnemonicPassChars)
       assertErased(walletPassChars)
@@ -180,7 +180,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val mnemonicPassChars = mnemonicPass.getData()
 
       await(wallet.getWalletStatus).initialized shouldBe false
-      val generatedMnemonic = await(wallet.initWallet(walletPass, Some(mnemonicPass))).get
+      val generatedMnemonic = await(wallet.initWallet(walletPass, Some(mnemonicPass))).result.get
       try {
         generatedMnemonic.getData().exists(_ != ' ') shouldBe true
         assertErased(mnemonicPassChars)
@@ -202,7 +202,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       val initMnemonicPassChars = initMnemonicPass.getData()
       probe.send(actor, ErgoWalletActorMessages.InitWallet(initPass, Some(initMnemonicPass)))
       probe.expectMsgPF(5.seconds) {
-        case Failure(ex: IOException) if ex.getMessage == "synthetic init failure" =>
+        case ErgoWalletActorMessages.InitWalletResponse(Failure(ex: IOException)) if ex.getMessage == "synthetic init failure" =>
           assertErased(initPassChars)
           assertErased(initMnemonicPassChars)
       }
@@ -225,7 +225,7 @@ class WalletRequestSecretErasureSpec extends ErgoCorePropertyTest with WalletTes
       probe.send(actor, ErgoWalletActorMessages.RestoreWallet(
         mnemonic, Some(restoreMnemonicPass), restorePass, usePre1627KeyDerivation = false))
       probe.expectMsgPF(5.seconds) {
-        case Failure(ex: IOException) if ex.getMessage == "synthetic restore failure" =>
+        case ErgoWalletActorMessages.RestoreWalletResponse(Failure(ex: IOException)) if ex.getMessage == "synthetic restore failure" =>
           assertErased(mnemonicChars)
           assertErased(restorePassChars)
           assertErased(restoreMnemonicPassChars)

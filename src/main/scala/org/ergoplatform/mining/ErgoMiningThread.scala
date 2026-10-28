@@ -2,7 +2,7 @@ package org.ergoplatform.mining
 
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import akka.pattern.StatusReply
-import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
+import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate, SolutionAck}
 import org.ergoplatform.settings.ErgoSettings
 import scorex.util.ScorexLogging
 
@@ -61,7 +61,7 @@ class ErgoMiningThread(
       }
     case StatusReply.Error(ex) =>
       log.error(s"Accepting solution or preparing candidate did not succeed", ex)
-    case StatusReply.Success(()) =>
+    case StatusReply.Success(SolutionAck) =>
       log.info(s"Solution accepted")
       context.become(mining(nonce, candidateBlock, solvedBlocksCount + 1))
     case MineCmd =>

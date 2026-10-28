@@ -59,6 +59,9 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
       _cachedDownloadPlan.map(_.latestUpdateTime).getOrElse(0L) - _cachedDownloadPlan.map(_.createdTime).getOrElse(0L)
     }
     log.info(s"UTXO set downloading and application time: ${utxoPhaseTime / 1000.0} s.")
+    // Keep the manifest, plan and chunks available if persisting the floor fails.
+    writeMinimalFullBlockHeight(height + 1)
+
     // remove downloaded utxo set snapshots chunks
     val ts0 = System.currentTimeMillis()
     _cachedDownloadPlan.foreach { plan =>
@@ -71,9 +74,6 @@ trait UtxoSetSnapshotProcessor extends MinimalFullBlockHeightFunctions with Scor
     _cachedDownloadPlan = None
     val ts = System.currentTimeMillis()
     log.info(s"Imported UTXO set snapshots chunks removed in ${ts - ts0} ms")
-
-    // set height of first full block to be downloaded
-    writeMinimalFullBlockHeight(height + 1)
   }
 
   private def updateUtxoSetSnashotDownloadPlan(plan: UtxoSetSnapshotDownloadPlan): Unit = {

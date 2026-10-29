@@ -346,7 +346,9 @@ trait ErgoWalletSupport extends ScorexLogging {
             ))
           }
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(finalOutputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+          prepareUnsignedTransaction(
+            finalOutputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt
+          ) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

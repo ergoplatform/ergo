@@ -329,7 +329,9 @@ class ErgoWalletServiceSpec
             val wState = initialState(store, versionedStore).copy(
               offChainRegistry = OffChainRegistry.empty.copy(offChainBoxes = tracked)
             )
-            val encodedBoxes = if (explicitInputs) boxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box))) else Seq.empty
+            val encodedBoxes = if (explicitInputs) {
+              boxes.map(box => Base16.encode(ErgoBoxSerializer.toBytes(box)))
+            } else Seq.empty
             val dataBox = testBox(1000000L, TrueTree, 10)
             val payment = PaymentRequest(pks.head, 2000000L, Array.empty, Map.empty)
             val issue = AssetIssueRequest(pks.head, Some(8000000L), 7L, "mint-name", "mint-description", 4,

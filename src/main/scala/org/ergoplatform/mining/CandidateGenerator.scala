@@ -180,7 +180,12 @@ class CandidateGenerator(
       // the block was applied and before this event has already put the cached candidate on the new block
       val solvedBlockAfter = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
       val stateWithAppliedTxs =
-        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet), solvedBlock = solvedBlockAfter)
+        state.copy(
+          lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet),
+          cachedPreviousCandidate = state.cachedPreviousCandidate.filter(
+            _.candidateBlock.parentOpt.exists(_.id == header.id)),
+          solvedBlock = solvedBlockAfter
+        )
       if (needNewCandidate(state.cachedCandidate, header)) {
         context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
@@ -207,7 +212,15 @@ class CandidateGenerator(
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       val effectiveMinerPk = optPk.getOrElse(minerPk)
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
+      if (
+        !forced &&
+        cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk) &&
+        !hasCandidateExpired(
+          state.cachedCandidate,
+          state.solvedBlock,
+          candidateGenInterval
+        )
+      ) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -250,6 +263,10 @@ class CandidateGenerator(
         }
       }
 
+    // completeBlock serializes the nonce before PoW validation can reject it.
+    case solution: AutolykosSolution if solution.n.length != 8 =>
+      sender() ! StatusReply.error("Invalid solution nonce length: expected 8 bytes")
+
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
       // Inject the selected candidate's pk if it is not externally set (in Autolykos 2).
@@ -268,27 +285,38 @@ class CandidateGenerator(
       def complete(candidate: Candidate): ErgoFullBlock =
         completeBlock(candidate.candidateBlock, solutionFor(candidate))
 
-      val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
-          .map(complete)
-          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
-            log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            complete(state.cachedPreviousCandidate.get)
-          }
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
-          case Success(_) =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
+      val currentBlock = complete(state.cachedCandidate.get)
+      val validatedCandidate: Either[Throwable, (ErgoFullBlock, Try[Unit])] =
+        ergoSettings.chainSettings.powScheme.validate(currentBlock.header) match {
+          case success @ Success(_) => Right(currentBlock -> success)
           case Failure(exception) =>
-            log.warn(s"Removing candidates due to invalid block", exception)
-            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
-            )
+            state.cachedPreviousCandidate.map { candidate =>
+              log.info(s"Using previous candidate as a solution: $candidate")
+              val previousBlock = complete(candidate)
+              previousBlock -> ergoSettings.chainSettings.powScheme.validate(previousBlock.header)
+            }.toRight(exception)
         }
+      val result: StatusReply[Unit] = validatedCandidate match {
+        case Right((newBlock, validation)) =>
+          log.info(s"New block mined, header: ${newBlock.header}")
+          validation match {
+            case Success(_) =>
+              sendToNodeView(newBlock)
+              context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
+              StatusReply.success(())
+            case Failure(exception) =>
+              log.warn(s"Removing candidates due to invalid block", exception)
+              context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+              StatusReply.error(
+                new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+              )
+          }
+        case Left(exception) =>
+          // Keep the current candidate available for a later solution.
+          StatusReply.error(new Exception(
+            s"Invalid solution for current candidate and no previous candidate available: ${exception.getMessage}",
+            exception
+          ))
       }
       log.info(s"Processed solution $preSolution with the result $result")
       sender() ! result

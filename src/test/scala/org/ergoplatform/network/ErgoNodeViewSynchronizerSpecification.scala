@@ -417,12 +417,21 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val controlProbe = TestProbe("RotatingDownloadBudgetControlProbe")
       val fetched = fetchedBlockSections(localChain.take(2).headers)
       val expectedTypes = fetched.keys.toSeq.sortBy(_.toInt & 0xff)
+      expectedTypes shouldBe Seq(BlockTransactions.modifierTypeId, ADProofs.modifierTypeId, Extension.modifierTypeId)
+      val headerIds = localChain.headers.take(expectedTypes.size).map(_.id)
+      headerIds.size shouldBe expectedTypes.size
 
       controlProbe.send(synchronizerMockRef, ChangedHistory(history))
       controlProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
-      val requestedTypes = expectedTypes.map { _ =>
+      val requestedTypes = expectedTypes.zip(headerIds).map { case (_, headerId) =>
         controlProbe.send(synchronizerMockRef, RequestDownloadForTest(1, Seq(peer), fetched))
-        requestedModifiers(ncProbe, expectedMessages = 1).head.typeId
+        val sectionType = requestedModifiers(ncProbe, expectedMessages = 1).head.typeId
+        controlProbe.send(synchronizerMockRef,
+          RequestDownloadForTest(1, Seq(peer), Map(Header.modifierTypeId -> Seq(headerId))))
+        val headerRequest = requestedModifiers(ncProbe, expectedMessages = 1).head
+        headerRequest.typeId shouldBe Header.modifierTypeId
+        headerRequest.ids shouldBe Seq(headerId)
+        sectionType
       }
 
       requestedTypes shouldBe expectedTypes

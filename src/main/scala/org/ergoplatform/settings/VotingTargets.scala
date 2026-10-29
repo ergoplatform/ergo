@@ -28,6 +28,8 @@ object VotingTargets {
   def fromConfig(config: Config): VotingTargets = {
     val votingObject = config.getObject(s"$configPath.voting")
     val toDisable = config.getConfig(s"$configPath.voting").as[Array[Int]](s"rulesToDisable")
+    require(toDisable.forall(id => id >= 0 && id <= Short.MaxValue),
+      s"$configPath.voting.rulesToDisable must contain rule IDs in range 0..${Short.MaxValue}")
 
     val parameterTargets = votingObject
       .keySet()

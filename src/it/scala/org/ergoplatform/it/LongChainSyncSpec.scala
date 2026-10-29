@@ -11,7 +11,8 @@ class LongChainSyncSpec extends AnyFlatSpec with IntegrationSuite {
 
   val chainLength = 300
 
-  val minerConfig: Config = shortInternalMinerPollingInterval
+  // A block every 100 ms: the spec has a single miner, so no forks can form
+  val minerConfig: Config = internalMinerPollingIntervalConfig(100)
     .withFallback(nodeSeedConfigs.head)
     .withFallback(allowLocalConfig)
 

@@ -118,7 +118,10 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
           // If we verify transactions, we don't need to send this header to state.
           // If we don't and this is the best header, we should send this header to state to update state root hash
           val toProcess = if (nodeSettings.verifyTransactions || !(bestHeaderId == h.id)) Seq.empty else Seq(h)
-          Success(ProgressInfo(None, Seq.empty, toProcess, toDownload(h)))
+          // Headers of a NiPoPoW proof are checked for full blocks downloading once the whole proof is applied
+          // (see PopowProcessor.applyPopowProof), as the proof prefix is sparse
+          val toDownloadIds = if (nipopowMode) Seq.empty else toDownload(h)
+          Success(ProgressInfo(None, Seq.empty, toProcess, toDownloadIds))
         case None =>
           Failure(CriticalSystemException("History should always have best header on header application"))
       }
@@ -239,15 +242,16 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     .map(BigInt.apply)
 
   /**
-    * Get main chain header id
+    * Get the selected best-chain header id, if this height is within the selected tip.
     *
-    * Optimized version of headerIdsAtHeight(height).headOption
+    * Within that range this is an optimized version of headerIdsAtHeight(height).headOption.
+    * The raw index may retain headers above the selected tip after invalidation.
     *
     * @param height - height to get header id at
     * @return - header id or None
     */
   def bestHeaderIdAtHeight(height: Int): Option[ModifierId] = {
-    historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
+    if (height > headersHeight) None else historyStorage.getIndex(heightIdsKey(height: Int)).map { bs =>
       // in 99% cases bs.length == 32 (no orphaned headers)
       if (bs.length == 32) {
         bytesToId(bs)
@@ -262,14 +266,15 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   }
 
   /**
-    * @note this method implementation should be changed along with `bestHeaderIdAtHeight`
+    * @note Keep the stored row encoding and order compatible with `bestHeaderIdAtHeight`.
+    *       This raw reader does not apply that method's selected-tip height bound.
     *
     * @param height - block height
-    * @return ids of headers on chosen height.
-    *         Seq.empty we don't have any headers on this height (e.g. it is too big or we bootstrap in PoPoW regime)
-    *         single id if no forks on this height
-    *         multiple ids if there are forks at chosen height.
-    *         First id is always from the best headers chain.
+    * @return locally stored header ids at this height, including off-chain headers.
+    *         Seq.empty if no row is stored (e.g. the height is too large or during PoPoW bootstrap);
+    *         one id if the row has no forks, or multiple ids if it has forks.
+    *         At or below the selected tip, the first id is the selected best-chain header.
+    *         A retained row above the selected tip has no selected-chain header.
     */
   def headerIdsAtHeight(height: Int): Seq[ModifierId] =
     historyStorage.getIndex(heightIdsKey(height: Int))
@@ -315,7 +320,8 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
     */
   @tailrec
   protected final def loopHeightDown(height: Int, p: ModifierId => Boolean): Option[Header] = {
-    headerIdsAtHeight(height).find(id => p(id)).flatMap(id => typedModifierById[Header](id)) match {
+    headerIdsAtHeight(height).iterator.filter(p)
+      .flatMap(id => typedModifierById[Header](id)).take(1).toList.headOption match {
       case Some(header) => Some(header)
       case None if height > 0 => loopHeightDown(height - 1, p)
       case None => None
@@ -421,7 +427,9 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
         .validate(hdrHeight, header.height == parent.height + 1, InvalidModifier(s"${header.height} vs ${parent.height}", header.id, header.modifierTypeId))
         .validateNoFailure(hdrPoW, powScheme.validate(header), header.id, header.modifierTypeId)
         .validateEquals(hdrRequiredDifficulty, header.requiredDifficulty, requiredDifficultyAfter(parent), header.id, header.modifierTypeId)
-        .validate(hdrTooOld, heightOf(header.parentId).exists(h => fullBlockHeight - h < nodeSettings.keepVersions), InvalidModifier(heightOf(header.parentId).toString, header.id, header.modifierTypeId))
+        // the parent's own height, not the height index: headers are validated while a parent may be half-written
+        // (HistoryStorage.insert stores the object before its indexes), and a missing index is not a too-old parent
+        .validate(hdrTooOld, fullBlockHeight - parent.height < nodeSettings.keepVersions, InvalidModifier(parent.height.toString, header.id, header.modifierTypeId))
         .validateSemantics(hdrParentSemantics, isSemanticallyValid(header.parentId), InvalidModifier(s"Parent semantics broken", header.id, header.modifierTypeId))
         .validate(hdrFutureTimestamp, header.timestamp - time() <= MaxTimeDrift, InvalidModifier(s"${header.timestamp} vs ${time()}", header.id, header.modifierTypeId))
         .validateNot(alreadyApplied, historyStorage.contains(header.id), InvalidModifier(s"${header.id} already applied", header.id, header.modifierTypeId))

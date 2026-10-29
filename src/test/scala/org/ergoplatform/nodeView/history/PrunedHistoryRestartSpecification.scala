@@ -11,13 +11,16 @@ class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.HistoryTestHelpers._
   import org.ergoplatform.utils.generators.ChainGenerator._
 
-  // A pruned digest history on its own settings, so that a test can close it and read it again, as a restart does
-  private def prunedHistorySettings(votingLength: Int): ErgoSettings = initSettings.copy(
+  // A pruned digest history on its own settings, so that a test can close it and read it again, as a restart does;
+  // with `utxoBootstrap`, the UTXO state history of a node bootstrapped from a UTXO set snapshot
+  private def prunedHistorySettings(votingLength: Int, utxoBootstrap: Boolean): ErgoSettings = initSettings.copy(
     directory = createTempDir.getAbsolutePath,
     chainSettings = initSettings.chainSettings.copy(epochLength = 100000000, useLastEpochs = 10,
       voting = initSettings.chainSettings.voting.copy(votingLength = votingLength)),
     nodeSettings = initSettings.nodeSettings.copy(
-      stateType = StateType.Digest, verifyTransactions = true, blocksToKeep = BlocksToKeep, extraIndex = false))
+      stateType = if (utxoBootstrap) StateType.Utxo else StateType.Digest, verifyTransactions = true,
+      blocksToKeep = BlocksToKeep, extraIndex = false,
+      utxoSettings = initSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = utxoBootstrap)))
 
   // Applies heights 1..`applied` and stores headers up to 29, runs `beforeRestart`, closes the history and reads it
   // again (the headers-synced flag is not stored, so it starts false), appends header 30 (fresh: it sets the flag; the
@@ -25,9 +28,10 @@ class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest {
   // rounded down to a voting epoch start) and the pruning from `prunedFrom` up.
   private def checkContinueAfterRestart(prunedFrom: Int,
                                         applied: Int = 5,
-                                        votingLength: Int = initSettings.chainSettings.voting.votingLength)
+                                        votingLength: Int = initSettings.chainSettings.voting.votingLength,
+                                        utxoBootstrap: Boolean = false)
                                        (beforeRestart: ErgoHistory => Unit): Unit = {
-    val settings = prunedHistorySettings(votingLength)
+    val settings = prunedHistorySettings(votingLength, utxoBootstrap)
     var history = ErgoHistory.readOrGenerate(settings)(null)
     history.writeMinimalFullBlockHeight(GenesisHeight)
     history.isHeadersChainSyncedVar = true
@@ -73,6 +77,13 @@ class PrunedHistoryRestartSpecification extends ErgoCorePropertyTest {
     // the earlier latch writes 20 rounded down to the voting epoch start 16; the floor is lowered to 13, the next block
     // rounds it down to 8 (below the best full block, 12), and it ends at 16 with 8..15 pruned
     checkContinueAfterRestart(prunedFrom = 8, applied = 12, votingLength = 8)(_.writeMinimalFullBlockHeight(16))
+  }
+
+  property("continue from the best full block after a restart, when an earlier start stored a floor above it, " +
+    "on a node bootstrapped from a UTXO set snapshot") {
+    // the stored floor counts as an applied snapshot; the node has a best full block, so the floor is still lowered
+    checkContinueAfterRestart(prunedFrom = 6, utxoBootstrap = true)(
+      _.writeMinimalFullBlockHeight(30 - BlocksToKeep + 1))
   }
 
 }

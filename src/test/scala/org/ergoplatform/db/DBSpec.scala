@@ -1,6 +1,7 @@
 package org.ergoplatform.db
 
 import akka.util.ByteString
+import java.io.File
 import org.ergoplatform.settings.Algos
 import org.ergoplatform.wallet.utils.TestFileUtils
 import org.iq80.leveldb.{DB, Options}
@@ -15,6 +16,10 @@ trait DBSpec extends TestFileUtils {
 
   implicit class KeyValueOps(xs: Seq[(Array[Byte], Array[Byte])]) {
     def toBs: Seq[(ByteString, ByteString)] = xs.map(x => ByteString(x._1) -> ByteString(x._2))
+  }
+
+  implicit class ArrayPairsOps(xs: Array[(Array[Byte], Array[Byte])]) {
+    def toBs: Seq[(ByteString, ByteString)] = xs.toSeq.toBs
   }
 
   protected def byteString(s: String): Array[Byte] = s.getBytes("UTF-8")
@@ -35,8 +40,8 @@ trait DBSpec extends TestFileUtils {
   protected def withStore[T](body: LDBKVStore => T): T =
     withDb { db: DB => body(new LDBKVStore(db)) }
 
-  protected def withVersionedStore[T](keepVersions: Int)(body: LDBVersionedStore => T): T = {
-    val db = new LDBVersionedStore(createTempDir, keepVersions)
+  protected def withVersionedStore[T](keepVersions: Int, dir: File = createTempDir)(body: LDBVersionedStore => T): T = {
+    val db = new LDBVersionedStore(dir, keepVersions)
     try body(db) finally db.close()
   }
 

@@ -3,10 +3,12 @@ package org.ergoplatform.network.message
 import java.nio.ByteOrder
 import akka.util.ByteString
 import org.ergoplatform.network.message.MessageConstants.MaxMessageSize
+import org.ergoplatform.network.message.MessageSerializer.UnknownMessageCodeException
 import scorex.core.network.{ConnectedPeer, MaliciousBehaviorException}
 import scorex.crypto.hash.Blake2b256
 
 import scala.util.Try
+import scala.util.control.NoStackTrace
 
 class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
 
@@ -64,8 +66,6 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
             s"Wrong magic bytes, expected ${magicBytes.mkString}, got ${magic.mkString} in : ${byteString.utf8String}"
           )
         }
-        val spec = specsMap
-          .getOrElse(msgCode, throw new Error(s"No message handler found for $msgCode"))
         val msgData = if (length > 0) {
           val checksum = it.getBytes(ChecksumLength)
           val data     = it.getBytes(length)
@@ -82,9 +82,17 @@ class MessageSerializer(specs: Seq[MessageSpec[_]], magicBytes: Array[Byte]) {
           Array.empty[Byte]
         }
 
+        val messageLength = HeaderLength + (if (length > 0) ChecksumLength + length else 0)
+        val spec = specsMap.getOrElse(msgCode, throw UnknownMessageCodeException(msgCode, messageLength))
         Some(Message(spec, Left(msgData), sourceOpt))
       }
     }
   }
 
+}
+
+object MessageSerializer {
+  /** A complete, valid envelope that this node cannot decode. Its bytes can be skipped safely. */
+  final case class UnknownMessageCodeException(messageCode: Byte, messageLength: Int)
+    extends Exception(s"No message handler found for $messageCode") with NoStackTrace
 }

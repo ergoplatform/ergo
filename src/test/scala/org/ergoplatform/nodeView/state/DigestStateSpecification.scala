@@ -20,6 +20,40 @@ class DigestStateSpecification extends ErgoCorePropertyTest {
   private val emptyVersion: VersionTag = bytesToVersion(Array.fill(32)(0: Byte))
   private val emptyAdDigest: ADDigest = ADDigest @@ Array.fill(32)(0: Byte)
 
+  property("recover a valid checkpoint and reopen it") {
+    val (us, bh) = createUtxoState(settings)
+    try {
+      val block = validFullBlock(parentOpt = None, us, bh)
+      val checkpoint = block.header
+      val checkpointContext = us.stateContext.appendFullBlock(block).get
+      val dir = createTempDir
+
+      def checkCheckpoint(state: DigestState): Unit = {
+        state.version shouldEqual checkpoint.id
+        state.rootDigest shouldEqual checkpoint.stateRoot
+        state.stateContext.lastHeaderOpt.map(_.id) shouldEqual Some(checkpoint.id)
+        state.stateContext.bytes shouldEqual checkpointContext.bytes
+      }
+
+      val recovered = DigestState.recover(
+        idToVersion(checkpoint.id), checkpoint.stateRoot, checkpointContext, dir, settings).get
+      try {
+        checkCheckpoint(recovered)
+      } finally {
+        recovered.close()
+      }
+
+      val reopened = DigestState.create(None, None, dir, settings)
+      try {
+        checkCheckpoint(reopened)
+      } finally {
+        reopened.close()
+      }
+    } finally {
+      us.closeStorage()
+    }
+  }
+
   property("reopen") {
     forAll(boxesHolderGen) { bh =>
       val us = createUtxoState(bh, parameters)

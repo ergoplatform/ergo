@@ -12,7 +12,7 @@ import scorex.db.{LDBKVStore, LDBVersionedStore}
 import scorex.util.ScorexLogging
 
 import scala.collection.mutable
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 /**
   * Persistent versioned authenticated AVL+ tree implementation on top of versioned LevelDB storage
@@ -40,16 +40,18 @@ class VersionedLDBAVLStorage(store: LDBVersionedStore)
     }
   }
 
-  override def rollback(version: ADDigest): Try[(ProverNodes[DigestType], Int)] = Try {
-    if (!this.version.contains(version)) { // do not rollback to self
+  override def rollback(version: ADDigest): Try[(ProverNodes[DigestType], Int)] = {
+    (if (!this.version.contains(version)) { // do not rollback to self
       log.info(s"Doing rollback from ${this.version.map(Base16.encode)} to ${Base16.encode(version)}:")
       store.rollbackTo(version)
-    }
-  }.flatMap(_ => restorePrunedRootNode())
-    .recoverWith { case e =>
-      log.warn(s"Failed to recover tree for digest ${Base16.encode(version)}:", e)
-      Failure(e)
-    }
+    } else {
+      Success(())
+    }).flatMap(_ => restorePrunedRootNode())
+      .recoverWith { case e =>
+        log.warn(s"Failed to roll back to digest ${Base16.encode(version)}:", e)
+        Failure(e)
+      }
+  }
 
   override def version: Option[ADDigest] = store.lastVersionID.map(d => ADDigest @@ d)
 

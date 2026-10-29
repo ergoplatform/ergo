@@ -38,6 +38,14 @@ case class ChainSettings(protocolVersion: Byte,
   val genesisStateDigest: ADDigest = Base16.decode(genesisStateDigestHex)
     .fold(_ => throw new Error(s"Failed to parse genesisStateDigestHex = $genesisStateDigestHex"), ADDigest @@ _)
 
+  // The configured genesis id is compared as a string with header ids, which are 64 lower-case hex characters,
+  // so any other value would make every genesis header fail the check.
+  genesisId.foreach { id =>
+    if (!id.matches("[0-9a-f]{64}")) {
+      throw new Error(s"Malformed genesisId = '$id': expected a block id, 64 lower-case hex characters")
+    }
+  }
+
   val emissionRules: EmissionRules = new EmissionRules(monetary)
 
   val addressEncoder = new ErgoAddressEncoder(addressPrefix)

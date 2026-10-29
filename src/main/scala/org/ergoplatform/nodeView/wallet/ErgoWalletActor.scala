@@ -22,7 +22,7 @@ import org.ergoplatform.utils.ScorexEncoding
 import scorex.util.ScorexLogging
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 class ErgoWalletActor(settings: ErgoSettings,
                       parameters: Parameters,
@@ -32,6 +32,8 @@ class ErgoWalletActor(settings: ErgoSettings,
   extends Actor with Stash with ScorexLogging with ScorexEncoding {
 
   private val ergoAddressEncoder: ErgoAddressEncoder = settings.addressEncoder
+  private val alreadyInitializedMessage =
+    "Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."
 
   override val supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(maxNrOfRetries = 5, withinTimeRange = 1.minute) {
@@ -86,7 +88,11 @@ class ErgoWalletActor(settings: ErgoSettings,
   private def loadedWallet(state: ErgoWalletState): Receive = {
     // Init wallet (w. mnemonic generation) if secret is not set yet
     case InitWallet(walletPass, mnemonicPassOpt) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt) match {
+      val initialized =
+        try {
+          Try(ergoWalletService.initWallet(state, settings, walletPass, mnemonicPassOpt)).flatten
+        } finally mnemonicPassOpt.foreach(_.erase())
+      initialized match {
         case Success((mnemonic, newState)) =>
           log.info("Wallet is initialized")
           context.become(loadedWallet(newState))
@@ -101,7 +107,23 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     // Restore wallet with mnemonic if secret is not set yet
     case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) if !state.secretIsSet(settings.walletSettings.testMnemonic) =>
-      ergoWalletService.restoreWallet(state, settings, mnemonic, mnemonicPassOpt, walletPass, usePre1627KeyDerivation) match {
+      val restored =
+        try {
+          Try(
+            ergoWalletService.restoreWallet(
+              state,
+              settings,
+              mnemonic,
+              mnemonicPassOpt,
+              walletPass,
+              usePre1627KeyDerivation
+            )
+          ).flatten
+        } finally {
+          mnemonic.erase()
+          mnemonicPassOpt.foreach(_.erase())
+        }
+      restored match {
         case Success(newState) =>
           log.info("Wallet is restored")
           context.become(loadedWallet(newState))
@@ -115,8 +137,16 @@ class ErgoWalletActor(settings: ErgoSettings,
       }
 
     // branch for key already being set
-    case _: RestoreWallet | _: InitWallet =>
-      sender() ! Failure(new Exception("Wallet is already initialized or testMnemonic is set. Clear current secret to re-init it."))
+    case RestoreWallet(mnemonic, mnemonicPassOpt, walletPass, _) =>
+      mnemonic.erase()
+      mnemonicPassOpt.foreach(_.erase())
+      walletPass.erase()
+      sender() ! Failure(new Exception(alreadyInitializedMessage))
+
+    case InitWallet(walletPass, mnemonicPassOpt) =>
+      walletPass.erase()
+      mnemonicPassOpt.foreach(_.erase())
+      sender() ! Failure(new Exception(alreadyInitializedMessage))
 
     /* READERS */
     case ReadBalances(chainStatus) =>
@@ -236,7 +266,7 @@ class ErgoWalletActor(settings: ErgoSettings,
     case ScanInThePast(blockHeight, rescan) =>
       val nextBlockHeight = state.expectedNextBlockHeight(blockHeight, settings.nodeSettings.isFullBlocksPruned)
       if (nextBlockHeight == blockHeight || rescan) {
-        val newState =
+        val (newState, scanFailed) =
           historyReader.bestFullBlockAt(blockHeight) match {
             case Some(block) =>
               val operation = if (rescan) "rescanning" else "scanning"
@@ -245,19 +275,22 @@ class ErgoWalletActor(settings: ErgoSettings,
                 case Failure(ex) =>
                   val errorMsg = s"Block ${block.id} $operation at height $blockHeight failed : ${ex.getMessage}"
                   log.error(errorMsg, ex)
-                  state.copy(error = Some(errorMsg))
+                  (state.copy(error = Some(errorMsg)), true)
                 case Success(updatedState) =>
-                  updatedState
+                  (updatedState, false)
               }
             case None =>
-              state // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
+              (state, false) // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
         }
-        context.become(loadedWallet(newState))
-        if (blockHeight < newState.fullHeight) {
-          self ! ScanInThePast(blockHeight + 1, rescan)
-        } else if (rescan) {
-          log.info(s"Rescanning finished at height $blockHeight")
-          context.become(loadedWallet(newState.copy(rescanInProgress = false)))
+        val nextState = if (scanFailed && rescan) newState.copy(rescanInProgress = false) else newState
+        context.become(loadedWallet(nextState))
+        if (!scanFailed) {
+          if (blockHeight < nextState.fullHeight) {
+            self ! ScanInThePast(blockHeight + 1, rescan)
+          } else if (rescan) {
+            log.info(s"Rescanning finished at height $blockHeight")
+            context.become(loadedWallet(nextState.copy(rescanInProgress = false)))
+          }
         }
       }
 
@@ -304,24 +337,30 @@ class ErgoWalletActor(settings: ErgoSettings,
 
     /* WALLET COMMANDS */
     case CheckSeed(mnemonic, passOpt) =>
-      state.secretStorageOpt match {
-        case Some(secretStorage) =>
-          val checkResult = secretStorage.checkSeed(mnemonic, passOpt)
-          sender() ! checkResult
-        case None =>
-          sender() ! Failure(new Exception("Wallet not initialized"))
+      val reply: Any = try {
+        state.secretStorageOpt match {
+          case Some(secretStorage) =>
+            secretStorage.checkSeed(mnemonic, passOpt)
+          case None =>
+            Failure(new Exception("Wallet not initialized"))
+        }
+      } finally {
+        mnemonic.erase()
+        passOpt.foreach(_.erase())
       }
+      sender() ! reply
 
     case UnlockWallet(walletPass) =>
       log.info("Unlocking wallet")
-      ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation) match {
+      val unlocked = try {
+        ergoWalletService.unlockWallet(state, walletPass, settings.walletSettings.usePreEip3Derivation)
+      } finally walletPass.erase()
+      unlocked match {
         case Success(newState) =>
           log.info("Wallet successfully unlocked")
-          walletPass.erase()
           context.become(loadedWallet(newState))
           sender() ! Success(())
         case f@Failure(t) =>
-          walletPass.erase()
           log.warn("Wallet unlock failed with: ", t)
           sender() ! f
       }

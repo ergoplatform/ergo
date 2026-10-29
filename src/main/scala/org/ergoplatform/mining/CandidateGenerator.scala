@@ -180,7 +180,12 @@ class CandidateGenerator(
       // the block was applied and before this event has already put the cached candidate on the new block
       val solvedBlockAfter = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
       val stateWithAppliedTxs =
-        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet), solvedBlock = solvedBlockAfter)
+        state.copy(
+          lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet),
+          cachedPreviousCandidate = state.cachedPreviousCandidate.filter(
+            _.candidateBlock.parentOpt.exists(_.id == header.id)),
+          solvedBlock = solvedBlockAfter
+        )
       if (needNewCandidate(state.cachedCandidate, header)) {
         context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
@@ -207,7 +212,15 @@ class CandidateGenerator(
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       val effectiveMinerPk = optPk.getOrElse(minerPk)
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
+      if (
+        !forced &&
+        cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk) &&
+        !hasCandidateExpired(
+          state.cachedCandidate,
+          state.solvedBlock,
+          candidateGenInterval
+        )
+      ) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -269,25 +282,30 @@ class CandidateGenerator(
         completeBlock(candidate.candidateBlock, solutionFor(candidate))
 
       val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
+        val currentBlock = state.cachedCandidate
           .map(complete)
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
+        val previousBlock = if (currentBlock.isEmpty) state.cachedPreviousCandidate.map { previous =>
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            complete(state.cachedPreviousCandidate.get)
-          }
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
-          case Success(_) =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
-          case Failure(exception) =>
-            log.warn(s"Removing candidates due to invalid block", exception)
-            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
-            )
+            complete(previous)
+          } else None
+        currentBlock.orElse(previousBlock) match {
+          case Some(newBlock) =>
+            log.info(s"New block mined, header: ${newBlock.header}")
+            ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
+              case Success(_) =>
+                sendToNodeView(newBlock)
+                context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
+                StatusReply.success(())
+              case Failure(exception) =>
+                log.warn(s"Removing candidates due to invalid block", exception)
+                context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+                StatusReply.error(
+                  new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+                )
+            }
+          case None =>
+            StatusReply.error("Solution does not match the current candidate")
         }
       }
       log.info(s"Processed solution $preSolution with the result $result")

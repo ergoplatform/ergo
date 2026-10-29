@@ -6,6 +6,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.settings.Algos
 import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, bytesToId, idToBytes}
@@ -24,9 +25,8 @@ trait FullBlockProcessor extends HeadersProcessor {
 
   private var nonBestChainsCache = FullBlockProcessor.emptyCache
 
-  def isInBestFullChain(id: ModifierId): Boolean = historyStorage.getIndex(chainStatusKey(id))
-    .map(ByteArrayWrapper.apply)
-    .contains(ByteArrayWrapper(FullBlockProcessor.BestChainMarker))
+  def isInBestFullChain(id: ModifierId): Boolean =
+    FullBlockProcessor.isInBestFullChain(historyStorage, id)
 
   /**
     * Id of header that contains transactions and proofs
@@ -59,9 +59,10 @@ trait FullBlockProcessor extends HeadersProcessor {
       nonBestBlock
 
   private def isValidFirstFullBlock(header: Header): Boolean = {
+    // Invalidating genesis persists the pre-genesis sentinel, which is not a stored full block.
     isHeadersChainSynced &&
       header.height == minimalFullBlockHeight &&
-      bestFullBlockIdOpt.isEmpty
+      bestFullBlockIdOpt.forall(id => id == Header.GenesisParentId && header.isGenesis)
   }
 
   private def processValidFirstBlock: BlockProcessing = {
@@ -106,10 +107,11 @@ trait FullBlockProcessor extends HeadersProcessor {
         if (nonBestChainsCache.nonEmpty) nonBestChainsCache = nonBestChainsCache.dropUntil(minForkRootHeight)
 
         if (nodeSettings.isFullBlocksPruned) {
-          val lastKept = updateBestFullBlock(fullBlock.header)
-          val bestHeight: Int = newBestBlockHeader.height
-          val diff = bestHeight - prevBest.header.height
-          pruneBlockDataAt(((lastKept - diff) until lastKept).filter(_ >= 0))
+          val prevMinHeight = minimalFullBlockHeight
+          // Use the received block, not the new best one: from the new best block,
+          // a step that fills a gap could prune blocks the state has not applied yet.
+          val newMinHeight = updateBestFullBlock(fullBlock.header)
+          pruneBlockDataAt(prevMinHeight until newMinHeight)
         }
         ProgressInfo(branchPoint, toRemove, toApply, Seq.empty)
       }
@@ -287,5 +289,13 @@ object FullBlockProcessor {
 
   def chainStatusKey(id: ModifierId): ByteArrayWrapper =
     ByteArrayWrapper(Algos.hash("main_chain".getBytes(CharsetName) ++ idToBytes(id)))
+
+  private[history] def isInBestFullChain(
+    historyStorage: HistoryStorage,
+    id: ModifierId
+  ): Boolean =
+    historyStorage.getIndex(chainStatusKey(id))
+      .map(ByteArrayWrapper.apply)
+      .contains(ByteArrayWrapper(BestChainMarker))
 
 }

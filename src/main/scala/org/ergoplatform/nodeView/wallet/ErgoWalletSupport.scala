@@ -336,7 +336,6 @@ trait ErgoWalletSupport extends ScorexLogging {
         val selectionOpt = boxSelector.select(inputBoxes.iterator, targetBalance, targetAssetsWithBurn)
         val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
-          // Mint identity must match the first input of the final unsigned transaction.
           val finalOutputs = assetIssueBox.fold(outputs) { issueBox =>
             outputs.updated(assetIssueIndex, new ErgoBoxCandidate(
               issueBox.value,
@@ -347,7 +346,9 @@ trait ErgoWalletSupport extends ScorexLogging {
             ))
           }
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(finalOutputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+          prepareUnsignedTransaction(
+            finalOutputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt
+          ) -> selectionResult.inputBoxes
         } match {
           case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
           case Left(e) => Failure(

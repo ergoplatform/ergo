@@ -46,24 +46,30 @@ object HistoryTestHelpers extends FileUtils {
                       useLastEpochs: Int = 10,
                       initialDiffOpt: Option[BigInt] = None,
                       genesisIdOpt: Option[ModifierId] = None,
-                      utxoBootstrap: Boolean = false): ErgoHistory = {
+                      utxoBootstrap: Boolean = false,
+                      keepVersions: Int = 200,
+                      votingLength: Option[Int] = None): ErgoHistory = {
 
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
     val nodeSettings: NodeConfigurationSettings = NodeConfigurationSettings(stateType, verifyTransactions, blocksToKeep,
       UtxoSettings(utxoBootstrap, 0, 2), NipopowSettings(false, 1), mining = false, txCostLimit, txSizeLimit, blockCandidateGenerationInterval = 20.seconds,
       useExternalMiner = false, internalMinersCount = 1, internalMinerPollingInterval = 1.second, miningPubKeyHex = None,
-      offlineGeneration = false, 200, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
+      offlineGeneration = false, keepVersions, 5.minutes, 100000, 1.minute, mempoolSorting = SortingOption.FeePerByte,
       rebroadcastCount = 200, 1000000, 100, adProofsSuffixLength = 112*1024, extraIndex = false
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
-    val chainSettings = initialDiffOpt match {
+    val defaultChainSettings = initialDiffOpt match {
       case Some(diff) =>
         val diffHex = Base16.encode(diff.toByteArray)
         settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, initialDifficultyHex = diffHex, genesisId = genesisIdOpt)
       case _ =>
         settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, genesisId = genesisIdOpt)
+    }
+    val chainSettings = votingLength.fold(defaultChainSettings) { length =>
+      val voting = defaultChainSettings.voting.copy(votingLength = length)
+      defaultChainSettings.copy(voting = voting)
     }
 
     val dir = createTempDir

@@ -1,11 +1,11 @@
 package org.ergoplatform.nodeView.wallet.scanning
 
 import io.circe.parser._
-import org.ergoplatform.ErgoBox.R1
+import org.ergoplatform.ErgoBox.{AdditionalRegisters, R0, R1, R4}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.serialization.JsonCodecsWrapper
 import org.ergoplatform.{ErgoTreePredef, P2PKAddress}
-import sigma.ast.{ByteArrayConstant, ErgoTree}
+import sigma.ast.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant, ShortConstant}
 import sigmastate.eval.Extensions.ArrayByteOps
 import sigmastate.helpers.TestingHelpers._
 
@@ -57,6 +57,103 @@ class ScanningPredicateSpecification extends ErgoCorePropertyTest {
       //then change random byte
       val scriptBytesModified = mutateRandomByte(mpBytes)
       EqualsScanningPredicate(R1, scriptBytesModified).filter(box) shouldBe false
+    }
+  }
+
+  property("equals - short register matches") {
+    forAll(ergoAddressGen) { address =>
+      Seq(Short.MinValue, 0.toShort, 42.toShort, Short.MaxValue).foreach { value =>
+        val registers: AdditionalRegisters = Map(R4 -> ShortConstant(value))
+        val box = testBox(1, address.script, 0, Seq.empty, registers)
+
+        withClue(s"value = $value: ") {
+          EqualsScanningPredicate(R4, ShortConstant(value)).filter(box) shouldBe true
+        }
+      }
+    }
+  }
+
+  property("equals - short predicate rejects int register") {
+    forAll(ergoAddressGen) { address =>
+      val box = testBox(1, address.script, 0, Seq.empty, Map(R4 -> IntConstant(42)))
+      val predicate = EqualsScanningPredicate(R4, ShortConstant(42.toShort))
+
+      predicate.filter(box) shouldBe false
+    }
+  }
+
+  property("equals - short rejects different or absent register") {
+    forAll(ergoAddressGen) { address =>
+      val registers: AdditionalRegisters = Map(R4 -> ShortConstant(43.toShort))
+      val different = testBox(1, address.script, 0, Seq.empty, registers)
+      val absent = testBox(1, address.script, 0)
+      val predicate = EqualsScanningPredicate(R4, ShortConstant(42.toShort))
+
+      predicate.filter(different) shouldBe false
+      predicate.filter(absent) shouldBe false
+    }
+  }
+
+  property("equals - short survives scan request and persistence") {
+    forAll(ergoAddressGen) { address =>
+      val registers: AdditionalRegisters = Map(R4 -> ShortConstant(42.toShort))
+      val box = testBox(1, address.script, 0, Seq.empty, registers)
+      val predicate = EqualsScanningPredicate(R4, ShortConstant(42.toShort))
+      val request = ScanRequest("short-r4", predicate, None, None)
+      val json = ScanJsonCodecs.scanReqEncoder(request)
+      val decoded = ScanJsonCodecs.scanReqDecoder.decodeJson(json).toOption.get
+      val persisted = ScanningPredicateSerializer.parseBytes(
+        ScanningPredicateSerializer.toBytes(decoded.trackingRule)
+      )
+      val wrongType = testBox(1, address.script, 0, Seq.empty,
+        Map(R4 -> IntConstant(42)))
+
+      persisted.filter(box) shouldBe true
+      persisted.filter(wrongType) shouldBe false
+    }
+  }
+
+  property("equals - long register matches") {
+    forAll(ergoAddressGen) { address =>
+      Seq(Long.MinValue, 0L, 42L, Int.MaxValue.toLong + 1L, Long.MaxValue)
+        .foreach { value =>
+          val registers: AdditionalRegisters = Map(R4 -> LongConstant(value))
+          val box = testBox(1, address.script, 0, Seq.empty, registers)
+
+          withClue(s"value = $value: ") {
+            EqualsScanningPredicate(R4, LongConstant(value)).filter(box) shouldBe true
+          }
+        }
+    }
+  }
+
+  property("equals - long predicate rejects int register") {
+    forAll(ergoAddressGen) { address =>
+      val box = testBox(1, address.script, 0, Seq.empty, Map(R4 -> IntConstant(42)))
+
+      EqualsScanningPredicate(R4, LongConstant(42L)).filter(box) shouldBe false
+    }
+  }
+
+  property("equals - long rejects different or absent register") {
+    forAll(ergoAddressGen) { address =>
+      val registers: AdditionalRegisters = Map(R4 -> LongConstant(43L))
+      val different = testBox(1, address.script, 0, Seq.empty, registers)
+      val absent = testBox(1, address.script, 0)
+      val predicate = EqualsScanningPredicate(R4, LongConstant(42L))
+
+      predicate.filter(different) shouldBe false
+      predicate.filter(absent) shouldBe false
+    }
+  }
+
+  property("equals - mandatory value register") {
+    forAll(ergoAddressGen) { address =>
+      val box = testBox(42, address.script, 0)
+
+      EqualsScanningPredicate(R0, LongConstant(42L)).filter(box) shouldBe true
+      EqualsScanningPredicate(R0, LongConstant(43L)).filter(box) shouldBe false
+      EqualsScanningPredicate(R0, IntConstant(42)).filter(box) shouldBe false
     }
   }
 

@@ -101,7 +101,11 @@ case class Header(override val version: Header.Version,
   /**
     * Checks that modifier m corresponds to this header
     */
-  def isCorrespondingModifier(m: BlockSection): Boolean = sectionIds.exists(_._2 == m.id)
+  def isCorrespondingModifier(m: BlockSection): Boolean =
+    sectionIds.exists(_._2 == m.id) && (m match {
+      case txs: BlockTransactions => txs.blockVersion == version
+      case _ => true
+    })
 
   /**
     * Estimate that this header is recent enough to possibly be the best header

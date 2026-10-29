@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFr
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
-import org.ergoplatform.nodeView.state.{StateType, UtxoState}
+import org.ergoplatform.nodeView.state.{StateType, UtxoState, UtxoStateReader}
 import org.ergoplatform.sanity.ErgoSanity._
 import org.ergoplatform.settings.Constants.TrueTree
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader, UtxoSettings}
@@ -62,6 +62,10 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
   import org.ergoplatform.utils.generators.ChainGenerator._
   import org.ergoplatform.utils.HistoryTestHelpers._
+
+  private case class RequestDownloadForTest(maxModifiers: Int,
+                                            peers: Seq[ConnectedPeer],
+                                            fetched: Map[NetworkObjectTypeId.Value, Seq[ModifierId]])
 
   // ToDo: factor this out of here and NVHTests?
   private def withFixture(testCode: SynchronizerFixture => Any): Unit = {
@@ -115,7 +119,18 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     syncInfoSpec,
     settings,
     syncTracker,
-    deliveryTracker)(ec)
+    deliveryTracker)(ec) {
+
+    override def initialized(hr: ErgoHistory,
+                             mp: ErgoMemPool,
+                             usr: Option[UtxoStateReader],
+                             blockAppliedTxsCache: FixedSizeApproximateCacheQueue): PartialFunction[Any, Unit] = ({
+      case RequestDownloadForTest(maxModifiers, peers, fetched) =>
+        requestDownload(maxModifiers, minModifiersPerBucket = 1, maxModifiersPerBucket = 12)(Some(peers)) { _ =>
+          fetched
+        }
+    }: PartialFunction[Any, Unit]) orElse super.initialized(hr, mp, usr, blockAppliedTxsCache)
+  }
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(2.seconds, 100.millis)
   val history = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
@@ -332,6 +347,146 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
           invData.typeId == typeId && invData.ids.contains(id)
         }
       case _ => false
+    }
+  }
+
+  private def fetchedBlockSections(headers: Seq[Header]): Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = {
+    headers
+      .flatMap(_.sectionIds)
+      .foldLeft(Map.empty[NetworkObjectTypeId.Value, Seq[ModifierId]]) {
+        case (sections, (typeId, modifierId)) =>
+          sections.updated(typeId, sections.getOrElse(typeId, Seq.empty) :+ modifierId)
+      }
+  }
+
+  private def requestedModifiers(probe: TestProbe, expectedMessages: Int): Seq[InvData] = {
+    val requests = probe.receiveN(expectedMessages, 3.seconds).map {
+      case message: SendToNetwork if message.message.spec.messageCode == RequestModifierSpec.messageCode =>
+        message.message.data.get.asInstanceOf[InvData]
+      case message =>
+        fail(s"Expected a modifier request, got $message")
+    }
+    probe.expectNoMessage(200.millis)
+    requests
+  }
+
+  property("NodeViewSynchronizer: modifier download budget should be shared across types") {
+    withFixture2 { ctx =>
+      import ctx._
+      val controlProbe = TestProbe("DownloadBudgetControlProbe")
+      val fetched = fetchedBlockSections(localChain.take(2).headers)
+      fetched.size shouldBe 3
+      fetched.values.foreach(_.size shouldBe 2)
+
+      controlProbe.send(synchronizerMockRef, ChangedHistory(history))
+      controlProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
+      controlProbe.send(synchronizerMockRef, RequestDownloadForTest(2, Seq(peer), fetched))
+
+      val requests = requestedModifiers(ncProbe, expectedMessages = 2)
+      requests.flatMap(_.ids).size shouldBe 2
+    }
+  }
+
+  property("NodeViewSynchronizer: modifier download budget should be shared fairly") {
+    withFixture2 { ctx =>
+      import ctx._
+      val controlProbe = TestProbe("FairDownloadBudgetControlProbe")
+      val fetched = fetchedBlockSections(localChain.take(2).headers)
+
+      controlProbe.send(synchronizerMockRef, ChangedHistory(history))
+      controlProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
+      controlProbe.send(synchronizerMockRef, RequestDownloadForTest(4, Seq(peer), fetched))
+
+      val requests = requestedModifiers(ncProbe, expectedMessages = 3)
+      val requestedByType = requests.map(request => request.typeId -> request.ids).toMap
+      val requestCounts = requestedByType.values.map(_.size).toSeq
+      val firstType = fetched.keys.minBy(_.toInt & 0xff)
+      requests.flatMap(_.ids).size shouldBe 4
+      requestedByType.keySet shouldBe fetched.keySet
+      requestCounts.max - requestCounts.min should be <= 1
+      requestedByType(firstType) shouldBe fetched(firstType).take(2)
+      requestedByType.foreach { case (typeId, modifierIds) =>
+        modifierIds shouldBe fetched(typeId).take(modifierIds.size)
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: one-slot modifier budget should rotate across calls") {
+    withFixture2 { ctx =>
+      import ctx._
+      val controlProbe = TestProbe("RotatingDownloadBudgetControlProbe")
+      val fetched = fetchedBlockSections(localChain.take(2).headers)
+      val expectedTypes = fetched.keys.toSeq.sortBy(_.toInt & 0xff)
+      expectedTypes shouldBe Seq(BlockTransactions.modifierTypeId, ADProofs.modifierTypeId, Extension.modifierTypeId)
+      val headerIds = localChain.headers.take(expectedTypes.size).map(_.id)
+      headerIds.size shouldBe expectedTypes.size
+
+      controlProbe.send(synchronizerMockRef, ChangedHistory(history))
+      controlProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
+      val requestedTypes = expectedTypes.zip(headerIds).map { case (_, headerId) =>
+        controlProbe.send(synchronizerMockRef, RequestDownloadForTest(1, Seq(peer), fetched))
+        val sectionType = requestedModifiers(ncProbe, expectedMessages = 1).head.typeId
+        controlProbe.send(synchronizerMockRef,
+          RequestDownloadForTest(1, Seq(peer), Map(Header.modifierTypeId -> Seq(headerId))))
+        val headerRequest = requestedModifiers(ncProbe, expectedMessages = 1).head
+        headerRequest.typeId shouldBe Header.modifierTypeId
+        headerRequest.ids shouldBe Seq(headerId)
+        sectionType
+      }
+
+      requestedTypes shouldBe expectedTypes
+    }
+  }
+
+  property("NodeViewSynchronizer: snapshot-info sentinel should bypass the modifier cap") {
+    withFixture2 { ctx =>
+      import ctx._
+      val controlProbe = TestProbe("SnapshotSentinelControlProbe")
+      val secondPeerHandler = TestProbe("SnapshotSentinelSecondPeerHandler")
+      var secondConnectionId = connectionIdGen.sample.get
+      while (secondConnectionId.remoteAddress == peer.connectionId.remoteAddress) {
+        secondConnectionId = connectionIdGen.sample.get
+      }
+      val secondPeer = ConnectedPeer(
+        secondConnectionId,
+        secondPeerHandler.ref,
+        Some(PeerInfo(defaultPeerSpec.copy(nodeName = "snapshot-sentinel-peer"), System.currentTimeMillis()))
+      )
+
+      syncTracker.updateStatus(peer, org.ergoplatform.consensus.Unknown, None)
+      syncTracker.updateStatus(secondPeer, org.ergoplatform.consensus.Unknown, None)
+      controlProbe.send(synchronizerMockRef, ChangedHistory(history))
+      controlProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
+      controlProbe.send(
+        synchronizerMockRef,
+        RequestDownloadForTest(1, Seq(peer, secondPeer), Map(SnapshotsInfoTypeId.value -> Seq.empty))
+      )
+
+      ncProbe.fishForMessage(3.seconds) {
+        case message: SendToNetwork => message.message.spec.messageCode == GetSnapshotsInfoSpec.messageCode
+        case _ => false
+      }
+    }
+  }
+
+  property("NodeViewSynchronizer: modifier download cap should preserve single-type ordering and zero budget") {
+    withFixture2 { ctx =>
+      import ctx._
+      val controlProbe = TestProbe("SingleTypeDownloadBudgetControlProbe")
+      val allSections = fetchedBlockSections(localChain.take(3).headers)
+      val (typeId, modifierIds) = allSections.head
+      val fetched = Map(typeId -> modifierIds)
+
+      controlProbe.send(synchronizerMockRef, ChangedHistory(history))
+      controlProbe.send(synchronizerMockRef, ChangedMempool(ErgoMemPool.empty(settings)))
+      controlProbe.send(synchronizerMockRef, RequestDownloadForTest(0, Seq(peer), fetched))
+      ncProbe.expectNoMessage(200.millis)
+
+      controlProbe.send(synchronizerMockRef, RequestDownloadForTest(2, Seq(peer), fetched))
+      val requests = requestedModifiers(ncProbe, expectedMessages = 1)
+      requests should have size 1
+      requests.head.typeId shouldBe typeId
+      requests.head.ids shouldBe modifierIds.take(2)
     }
   }
 

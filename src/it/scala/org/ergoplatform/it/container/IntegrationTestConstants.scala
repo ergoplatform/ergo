@@ -37,11 +37,6 @@ trait IntegrationTestConstants {
     previousNode map { node => knownPeersConfig(Seq(node.nodeInfo)) }
   }
 
-  // still dials the peers kept in the node's peer database, see `noConnectionsConfig`
-  def isolatedPeersConfig: ExtraConfig = { (_, _) =>
-    Some(knownPeersConfig(Seq.empty))
-  }
-
   // An empty `knownPeers` does not stop a node from dialing the peers in its peer
   // database. With no connection slots a node neither dials nor accepts a peer.
   def noConnectionsConfig: ExtraConfig = { (_, _) =>
@@ -74,6 +69,12 @@ trait IntegrationTestConstants {
     """.stripMargin
   )
 
+  def getPeersIntervalConfig(millis: Int): Config = ConfigFactory.parseString(
+    s"""
+       |scorex.network.getPeersInterval=${millis}ms
+    """.stripMargin
+  )
+
   def blockIntervalConfig(millis: Int): Config = ConfigFactory.parseString(
     s"""
        |ergo.chain.blockInterval=${millis}ms
@@ -83,6 +84,12 @@ trait IntegrationTestConstants {
   def keepVersionsConfig(keepVersions: Int): Config = ConfigFactory.parseString(
     s"""
        |ergo.node.keepVersions=$keepVersions
+    """.stripMargin
+  )
+
+  def headerChainDiffConfig(headerChainDiff: Int): Config = ConfigFactory.parseString(
+    s"""
+       |ergo.node.headerChainDiff=$headerChainDiff
     """.stripMargin
   )
 

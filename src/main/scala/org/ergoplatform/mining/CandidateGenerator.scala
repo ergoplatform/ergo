@@ -176,18 +176,25 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
+      // the solved block is cleared whether or not a new candidate is needed: a candidate request processed after
+      // the block was applied and before this event has already put the cached candidate on the new block
+      val solvedBlockAfter = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
       val stateWithAppliedTxs =
         state.copy(
           lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet),
           cachedPreviousCandidate = state.cachedPreviousCandidate.filter(
             _.candidateBlock.parentOpt.exists(_.id == header.id)),
-          // A forced candidate may already point at this block when its notification arrives.
-          solvedBlock = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
+          solvedBlock = solvedBlockAfter
         )
       if (needNewCandidate(state.cachedCandidate, header)) {
         context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
+        if (solvedBlockAfter.isEmpty) state.solvedBlock.foreach { released =>
+          log.info(
+            s"Candidate already on applied block ${header.id}, released solved block ${released.id}"
+          )
+        }
         context.become(initialized(stateWithAppliedTxs))
       }
 
@@ -258,20 +265,29 @@ class CandidateGenerator(
 
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
-      // Inject node pk if it is not externally set (in Autolykos 2)
-      val solution =
+      // Inject the selected candidate's pk if it is not externally set (in Autolykos 2).
+      def solutionFor(candidate: Candidate): AutolykosSolution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          AutolykosSolution(
+            candidate.externalVersion.pk.value,
+            preSolution.w,
+            preSolution.n,
+            preSolution.d
+          )
         } else {
           preSolution
         }
+
+      def complete(candidate: Candidate): ErgoFullBlock =
+        completeBlock(candidate.candidateBlock, solutionFor(candidate))
+
       val result: StatusReply[Unit] = {
         val currentBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
+          .map(complete)
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
         val previousBlock = if (currentBlock.isEmpty) state.cachedPreviousCandidate.map { previous =>
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(previous.candidateBlock, solution)
+            complete(previous)
           } else None
         currentBlock.orElse(previousBlock) match {
           case Some(newBlock) =>
@@ -292,7 +308,7 @@ class CandidateGenerator(
             StatusReply.error("Solution does not match the current candidate")
         }
       }
-      log.info(s"Processed solution $solution with the result $result")
+      log.info(s"Processed solution $preSolution with the result $result")
       sender() ! result
 
     case _: AutolykosSolution =>
@@ -435,9 +451,13 @@ object CandidateGenerator extends ScorexLogging {
     val miningTimes =
       timestamps.sorted
         .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
+        .collect { case IndexedSeq(prev, next) => next - prev }
         .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    if (miningTimes.nonEmpty) {
+      Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    } else {
+      Duration.Zero
+    }
   }
 
   /** Get average count of transactions per block */

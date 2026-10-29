@@ -428,7 +428,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
       generator.tell(validBlock.header.powSolution, replyProbe.ref)
       replyProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-      announcementProbe.expectMsg(NewBlockMined(validBlock.header))
+      announcementProbe.expectMsg(NewBlockMined(validBlock.header, validBlock.blockSections))
       viewHolderProbe.expectMsg(LocallyGeneratedModifier(validBlock.header))
       validBlock.mandatoryBlockSections.foreach { section =>
         viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))
@@ -489,7 +489,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       generator.tell(block.header.powSolution, replyProbe.ref)
       replyProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
       powScheme.callsFor(block.header) - callsBefore shouldBe 2
-      announcementProbe.expectMsg(NewBlockMined(block.header))
+      announcementProbe.expectMsg(NewBlockMined(block.header, block.blockSections))
       viewHolderProbe.expectMsg(LocallyGeneratedModifier(block.header))
       block.mandatoryBlockSections.foreach { section =>
         viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))
@@ -566,7 +566,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         (regenerated eq currentCandidate) shouldBe false
       } else {
         testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
-        announcementProbe.expectMsg(NewBlockMined(previousBlock.header))
+        announcementProbe.expectMsg(NewBlockMined(previousBlock.header, previousBlock.blockSections))
         viewHolderProbe.expectMsg(LocallyGeneratedModifier(previousBlock.header))
         previousBlock.mandatoryBlockSections.foreach { section =>
           viewHolderProbe.expectMsg(LocallyGeneratedModifier(section))

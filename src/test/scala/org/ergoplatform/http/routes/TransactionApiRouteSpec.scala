@@ -430,6 +430,9 @@ class TransactionApiRouteSpec extends AnyFlatSpec
     Get(prefix + s"/poolHistogram?bins=0") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
     }
+    Get(prefix + "/poolHistogram?bins=1001") ~> route ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
     Get(prefix + s"/poolHistogram?maxtime=-1") ~> route ~> check {
       status shouldBe StatusCodes.BadRequest
     }
@@ -457,6 +460,9 @@ class TransactionApiRouteSpec extends AnyFlatSpec
       bins.size shouldBe 3
       bins.take(2).foreach(_.hcursor.get[Int]("nTxns") shouldBe Right(0))
       bins.last.hcursor.get[Int]("nTxns") shouldBe Right(memPool.size)
+    }
+    Get(prefix + "/poolHistogram?bins=1000&maxtime=0") ~> route ~> check {
+      status shouldBe StatusCodes.OK
     }
   }
 

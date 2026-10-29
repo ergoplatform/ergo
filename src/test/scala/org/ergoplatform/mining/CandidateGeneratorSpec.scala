@@ -772,6 +772,122 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "use the candidate key for a v2 solution without pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings60)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        defaultSettings60
+      )
+
+    val customMiner =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("external_v2_miner".getBytes()))
+    val customPk = customMiner.publicImage
+    customPk should not be defaultMinerSecret.publicImage
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(customPk)),
+      replyProbe.ref
+    )
+    val candidate = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    candidate.externalVersion.pk shouldBe customPk
+
+    val minedBlock = defaultSettings60.chainSettings.powScheme
+      .proveCandidate(candidate.candidateBlock, customMiner.w, 0, 1000)
+      .get
+    val solutionWithoutPk =
+      minedBlock.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+    candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
+
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
+      case LocallyGeneratedModifier(header: Header) => header
+    }
+    submittedHeader.powSolution.pk shouldBe customPk.value
+
+    system.terminate()
+  }
+
+  it should "use the previous candidate key for a v2 solution without pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val acceptedHeaderId = new java.util.concurrent.atomic.AtomicReference[Option[String]](None)
+    val basePow = defaultSettings60.chainSettings.powScheme
+    val gatedPow = new DefaultFakePowScheme(basePow.k, basePow.n) {
+      override def validate(header: Header): Try[Unit] =
+        if (acceptedHeaderId.get().forall(_ == header.id.toString)) scala.util.Success(())
+        else Failure(new IllegalArgumentException("Not the previous candidate header"))
+    }
+    val settings = defaultSettings60.copy(
+      chainSettings = defaultSettings60.chainSettings.copy(powScheme = gatedPow)
+    )
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+    val candidateGenerator: ActorRef = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    val previousMiner =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("external_previous_v2_miner".getBytes()))
+    val previousPk = previousMiner.publicImage
+    previousPk should not be defaultMinerSecret.publicImage
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(previousPk)),
+      replyProbe.ref
+    )
+    val previous = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    previous.externalVersion.pk shouldBe previousPk
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false),
+      replyProbe.ref
+    )
+    val current = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    current.externalVersion.pk shouldBe defaultMinerSecret.publicImage
+
+    val minedPrevious = gatedPow.proveCandidate(previous.candidateBlock, previousMiner.w, 0, 1000).get
+    val solutionWithoutPk = minedPrevious.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+    val expectedPrevious = CandidateGenerator.completeBlock(
+      previous.candidateBlock,
+      minedPrevious.header.powSolution
+    )
+    val currentAttempt = CandidateGenerator.completeBlock(
+      current.candidateBlock,
+      solutionWithoutPk.copy(pk = current.externalVersion.pk.value)
+    )
+    currentAttempt.id should not be expectedPrevious.id
+    acceptedHeaderId.set(Some(expectedPrevious.id.toString))
+    candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
+
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
+      case LocallyGeneratedModifier(header: Header) => header
+    }
+    submittedHeader.id shouldBe expectedPrevious.header.id
+    submittedHeader.powSolution.pk shouldBe previousPk.value
+
+    system.terminate()
+  }
+
   it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
@@ -1580,16 +1696,17 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   }
 
   /**
-    * A candidate generator on a fresh chain of its own, for the two solved-block cases below.
+    * A candidate generator on a fresh chain of its own for the solved-block cases below.
     */
-  private class SolvedBlockFixture(directorySuffix: String)
+  private class SolvedBlockFixture(directorySuffix: String,
+                                   baseSettings: ErgoSettings = defaultSettings)
     extends TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
-    val settings: ErgoSettings = defaultSettings.copy(
+    val settings: ErgoSettings = baseSettings.copy(
       directory =
-        s"${defaultSettings.directory}-$directorySuffix-${System.currentTimeMillis()}"
+        s"${baseSettings.directory}-$directorySuffix-${System.currentTimeMillis()}"
     )
     val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
     val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
@@ -1620,6 +1737,41 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         .proveCandidate(c.candidateBlock, secret.w, 0, 1000)
         .get
   }
+
+  it should "apply a v2 solution without pk using the selected candidate key" in
+    new SolvedBlockFixture("v2-keyless-apply", defaultSettings60) {
+      try {
+        val selected = candidate(Some(otherPk))
+        selected.externalVersion.pk shouldBe otherPk
+        val solved = solve(selected, otherMiner)
+        val solutionWithoutPk = solved.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+
+        var acknowledged = false
+        var applied = false
+        candidateGenerator.tell(solutionWithoutPk, testProbe.ref)
+        testProbe.fishForMessage(newBlockDelay) {
+          case StatusReply.Success(()) =>
+            acknowledged = true
+            acknowledged && applied
+          case FullBlockApplied(header) if header.id == solved.id =>
+            header.powSolution.pk shouldBe otherPk.value
+            applied = true
+            acknowledged && applied
+          case StatusReply.Error(e) =>
+            fail(s"keyless solution rejected: ${e.getMessage}")
+          case _ => false
+        }
+        acknowledged shouldBe true
+        applied shouldBe true
+
+        val readersProbe = new TestProbe(system)
+        readersProbe.awaitAssert({
+          readersProbe.send(readersHolderRef, GetReaders)
+          val readers = readersProbe.expectMsgType[Readers](candidateGenDelay)
+          readers.h.bestFullBlockIdOpt shouldBe Some(solved.id)
+        }, newBlockDelay, 100.millis)
+      } finally system.terminate()
+    }
 
   it should "clear the solved block on its FullBlockApplied when the candidate was already regenerated on it" in
     new SolvedBlockFixture("solved-clear") {

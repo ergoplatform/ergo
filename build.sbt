@@ -39,7 +39,7 @@ lazy val commonSettings = Seq(
 
 publishArtifact in (Compile, packageDoc) := false
 
-val circeVersion = "0.14.15"
+val circeVersion = "0.14.16"
 val akkaVersion = "2.6.10"
 val akkaHttpVersion = "10.2.4"
 
@@ -171,13 +171,30 @@ inConfig(Linux)(
   )
 )
 
-// Number of integration test groups, which all run at once (see concurrentRestrictions)
-val itTestGroups = 3
+// Number of fixed test groups for unit tests and for integration tests. The groups of one
+// configuration all run at once (see concurrentRestrictions).
+val testGroups = 3
+
+// Packs suites into `count` fixed test groups: longest first, each into the group with
+// the least time so far.
+def packTestGroups(
+  count: Int,
+  tests: Seq[TestDefinition],
+  secondsOf: TestDefinition => Int
+): Vector[Seq[TestDefinition]] =
+  tests
+    .sortBy(t => (-secondsOf(t), t.name))
+    .foldLeft(Vector.fill(count)((0, Seq.empty[TestDefinition]))) { (gs, t) =>
+      val i             = gs.indexOf(gs.minBy(_._1))
+      val (time, group) = gs(i)
+      gs.updated(i, (time + secondsOf(t), group :+ t))
+    }
+    .map(_._2)
 
 Defaults.itSettings
 configs(IntegrationTest extend Test)
 inConfig(IntegrationTest)(Seq(
-  // Run integration suites in parallel, in itTestGroups fixed groups. Each group is forked
+  // Run integration suites in parallel, in testGroups fixed groups. Each group is forked
   // into its own JVM and runs its suites in sequence. sbt starts forked groups in a random
   // order. With one group per suite, a long suite could start last and set the job time.
   // The groups are packed by each suite's time on a GitHub-hosted runner, in seconds. A
@@ -202,15 +219,9 @@ inConfig(IntegrationTest)(Seq(
       "StallWatchSpec"              -> 1
     )
     def secondsOf(t: TestDefinition): Int = seconds.getOrElse(t.name.split('.').last, 30)
-    // Longest suite first, each into the group with the least time so far
-    val empty  = Vector.fill(itTestGroups)((0, Vector.empty[TestDefinition]))
-    val sorted = definedTests.value.sortBy(t => (-secondsOf(t), t.name))
-    val groups = sorted.foldLeft(empty) { (gs, t) =>
-      val i             = gs.indexOf(gs.minBy(_._1))
-      val (time, tests) = gs(i)
-      gs.updated(i, (time + secondsOf(t), tests :+ t))
-    }
-    groups.map(_._2).filter(_.nonEmpty).zipWithIndex.map {
+
+    val groups = packTestGroups(testGroups, definedTests.value, secondsOf)
+    groups.filter(_.nonEmpty).zipWithIndex.map {
       case (tests, i) =>
         Tests.Group(name = s"group-$i", tests = tests, runPolicy = Tests.SubProcess(opts))
     }
@@ -223,12 +234,13 @@ inConfig(IntegrationTest)(Seq(
 // concurrentRestrictions already contains Tags.limit(Tags.ForkedTestGroup, 1);
 // simply += adds a second, looser rule and the strictest wins, so the
 // parallelism would be a no-op.  We replace the default rule by
-// keeping the other defaults and setting ForkedTestGroup to itTestGroups.
+// keeping the other defaults and setting ForkedTestGroup to testGroups. The limit
+// applies to the unit test groups and to the integration test groups.
 // Three integration suites start at most ~11 node containers of 1 GB each,
 // which fits the 16 GB of a GitHub-hosted runner.
 Global / concurrentRestrictions := Seq(
   Tags.limitAll(math.max(1, java.lang.Runtime.getRuntime.availableProcessors())),
-  Tags.limit(Tags.ForkedTestGroup, itTestGroups),
+  Tags.limit(Tags.ForkedTestGroup, testGroups),
   Tags.exclusiveGroup(Tags.Clean)
 )
 
@@ -258,6 +270,54 @@ ThisBuild / scapegoatVersion := "1.3.11"
 scapegoatDisabledInspections := Seq("FinalModifierOnCaseClass")
 
 Test / testOptions := Seq(Tests.Filter(s => !s.endsWith("Bench")))
+
+// Run the unit suites in testGroups fixed groups, packed like the integration suites. The
+// times are seconds on a GitHub-hosted runner. A suite that is not listed counts as 1 s.
+// The keys are full names, because two suites are called DeliveryTrackerSpec.
+// Each group but the first gets its own default data directory, so that two JVMs never
+// open the same database there. ErgoSettingsSpecification checks the default directory,
+// so its group comes first.
+Test / parallelExecution := true
+Test / testGrouping := {
+  val forkOpts = (Test / forkOptions).value
+  val base     = baseDirectory.value
+  val seconds = Map(
+    "org.ergoplatform.network.ErgoNodeViewSynchronizerSpecification"            -> 124,
+    "org.ergoplatform.nodeView.viewholder.ErgoNodeViewHolderSpec"               -> 109,
+    "org.ergoplatform.mining.CandidateGeneratorSpec"                            -> 51,
+    "org.ergoplatform.mining.ErgoMinerSpec"                                     -> 42,
+    "org.ergoplatform.nodeView.history.extra.ExtraIndexerSpecification"         -> 38,
+    "org.ergoplatform.nodeView.history.extra.ExtraIndexerAppliedBlocksSpec"     -> 24,
+    "org.ergoplatform.settings.ErgoSettingsSpecification"                       -> 23,
+    "org.ergoplatform.network.DeliveryTrackerSpec"                              -> 22,
+    "org.ergoplatform.nodeView.state.UtxoStateSpecification"                    -> 21,
+    "org.ergoplatform.nodeView.viewholder.PrunedNodeViewHolderSpec"             -> 15,
+    "org.ergoplatform.nodeView.history.UtxoBootstrapNoNipopowSyncSpecification" -> 15,
+    "org.ergoplatform.nodeView.history.extra.RestoreStateFailureWitnessSpec"    -> 14,
+    "org.ergoplatform.nodeView.history.PopowProcessorSpecification"             -> 11,
+    "org.ergoplatform.nodeView.state.ErgoStateSpecification"                    -> 11,
+    "org.ergoplatform.mining.CandidateGeneratorStorageRentSpec"                 -> 8,
+    "org.ergoplatform.nodeView.state.DigestStateSpecification"                  -> 7,
+    "org.ergoplatform.nodeView.history.extra.ExtraIndexerReorgAddressTxsSpec"   -> 6,
+    "org.ergoplatform.modifiers.mempool.ErgoNodeTransactionSpec"                -> 6,
+    "org.ergoplatform.mining.CandidateGeneratorPropSpec"                        -> 5,
+    "org.ergoplatform.modifiers.history.PoPowAlgosWithDBSpec"                   -> 4
+  )
+  def secondsOf(t: TestDefinition): Int = seconds.getOrElse(t.name, 1)
+
+  val defaultDirSuite = "org.ergoplatform.settings.ErgoSettingsSpecification"
+  val packed          = packTestGroups(testGroups, (Test / definedTests).value, secondsOf)
+  val groups          = packed.sortBy(group => !group.exists(_.name == defaultDirSuite))
+  groups.zipWithIndex.collect {
+    case (tests, i) if tests.nonEmpty =>
+      val dataDir = base / ".ergo_test" / s"group-$i" / "data"
+      val jvmOptions =
+        if (i == 0) forkOpts.runJVMOptions
+        else forkOpts.runJVMOptions :+ s"-Dergo.directory=$dataDir"
+      val policy = Tests.SubProcess(forkOpts.withRunJVMOptions(jvmOptions))
+      Tests.Group(name = s"group-$i", tests = tests, runPolicy = policy)
+  }
+}
 
 lazy val avldb = (project in file("avldb"))
   .disablePlugins(ScapegoatSbtPlugin) // not compatible with crossScalaVersions

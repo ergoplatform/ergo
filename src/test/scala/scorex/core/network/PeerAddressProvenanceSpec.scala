@@ -17,6 +17,7 @@ import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{
 }
 import org.ergoplatform.network.peer.{
   LocalAddressPeerFeature,
+  PeerDatabaseTestCleanup,
   PeerInfo,
   PeerManagerRef,
   SessionIdPeerFeature
@@ -27,6 +28,7 @@ import org.ergoplatform.utils.ErgoNodeTestConstants.{defaultPeerSpec, settings}
 import scorex.core.app.ScorexContext
 import scorex.testkit.utils.AkkaFixture
 
+import java.io.File
 import java.net.InetSocketAddress
 import java.nio.file.Files
 import scala.concurrent.Await
@@ -147,7 +149,11 @@ class PeerAddressProvenanceSpec extends ErgoCorePropertyTest {
                          (test: Fixture => Unit): Unit = {
     val fixture = new Fixture(knownPeers, allowLocal)
     try test(fixture)
-    finally Await.result(fixture.system.terminate(), Duration.Inf)
+    finally {
+      Await.result(fixture.system.terminate(), 20.seconds)
+      PeerDatabaseTestCleanup.closeOwned(new File(fixture.isolatedSettings.directory, "peers"))
+      deleteRecursive(new File(fixture.isolatedSettings.directory))
+    }
   }
 
   property("an inbound claim cannot replace a verified peer or redirect a later dial") {

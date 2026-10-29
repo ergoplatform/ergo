@@ -10,6 +10,7 @@ import org.ergoplatform.network.message.{GetPeersSpec, Message, PeersSpec}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.peer.{
   LocalAddressPeerFeature,
+  PeerDatabaseTestCleanup,
   PeerInfo,
   PeerInfoSerializer,
   PeerManagerRef
@@ -48,6 +49,12 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
                         persistedPeers: Seq[PeerInfo] = Seq.empty) extends AkkaFixture {
     implicit val ec = system.dispatcher
     implicit val actorSystem: ActorSystem = system
+
+    def close(): Unit = {
+      Await.result(system.terminate(), 20.seconds)
+      PeerDatabaseTestCleanup.closeOwned(new File(config.directory, "peers"))
+      deleteRecursive(directory)
+    }
 
     val directory: File = createTempDir
     val config = settings.copy(
@@ -214,10 +221,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         verified.connectionType shouldBe Some(Outgoing)
         verified.peerSpec.address shouldBe Some(candidateAddress)
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a matching LAN address is a candidate only when local dialing is allowed") {
@@ -241,10 +245,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
           stored(chosen).connectionType shouldBe None
           stored(chosen).peerSpec.localAddressOpt shouldBe None
         }
-      } finally {
-        Await.result(f.system.terminate(), Duration.Inf)
-        deleteRecursive(f.directory)
-      }
+      } finally f.close()
     }
   }
 
@@ -257,10 +258,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       f.awaitPeers { peers =>
         peers.keySet should not contain ulaClaim
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("an allowed IPv6 unique local link sends a usable declared address on the handshake wire") {
@@ -271,10 +269,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       val ownHandshake = f.incomingWithLocal(remote, localBind, defaultPeerSpec.copy(declaredAddress = Some(remote)))
       ownHandshake.peerSpec.declaredAddress shouldBe Some(localBind)
       ownHandshake.peerSpec.localAddressOpt shouldBe None
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a pending dial does not turn an inbound socket into a verified outbound endpoint") {
@@ -305,10 +300,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       f.system.stop(inbound.remote.handlerRef)
       f.lifecycle.expectNoMessage(200.millis)
       f.connectedPeers.map(_.handlerRef) should contain(outbound.remote.handlerRef)
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("closing an inbound socket leaves an unrelated pending dial active") {
@@ -326,10 +318,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       f.awaitPeers { peers =>
         peers(claimed).lastHandshake should be > 0L
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a dynamic listener port distinguishes an inbound socket from its pending dial") {
@@ -350,10 +339,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       f.awaitPeers { peers =>
         peers(claimed).lastHandshake should be > 0L
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a dynamic IPv4 listener advertises its actual port in the local-address feature") {
@@ -366,10 +352,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       f.tcpManager.send(f.controller, Tcp.Bound(actualBind))
       val ownHandshake = f.incomingWithLocal(remote, local, defaultPeerSpec.copy(declaredAddress = Some(remote)))
       ownHandshake.peerSpec.localAddressOpt shouldBe Some(local)
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("an outbound IPv6 unique local link advertises its bound listening endpoint") {
@@ -387,10 +370,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       f.awaitPeers { peers =>
         peers(remote).connectionType shouldBe Some(Outgoing)
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a declared endpoint is dialed directly despite a claimed local shortcut") {
@@ -409,10 +389,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
 
       f.controller ! ConnectTo(peer)
       f.tcpManager.expectMsgType[Tcp.Connect].remoteAddress shouldBe declared
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a UPnP mapping cannot redirect a declared endpoint") {
@@ -431,10 +408,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
     try {
       f.controller ! ConnectTo(PeerInfo.fromAddress(declared))
       f.tcpManager.expectMsgType[Tcp.Connect].remoteAddress shouldBe declared
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a WAN relay contributes its public endpoint without its private shortcut") {
@@ -464,10 +438,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       }
       f.controller ! ConnectTo(f.allPeers(public))
       f.tcpManager.expectMsgType[Tcp.Connect].remoteAddress shouldBe public
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a LAN relay contributes a matching local-only endpoint as an unverified candidate") {
@@ -496,10 +467,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       }
       f.controller ! ConnectTo(f.allPeers(candidate))
       f.tcpManager.expectMsgType[Tcp.Connect].remoteAddress shouldBe candidate
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("an opted-in private relay contributes a different private host only as an unverified dial candidate") {
@@ -560,10 +528,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
           verified.connectionType shouldBe Some(Outgoing)
           verified.peerSpec.declaredAddress shouldBe Some(candidate)
         }
-      } finally {
-        Await.result(f.system.terminate(), Duration.Inf)
-        deleteRecursive(f.directory)
-      }
+      } finally f.close()
     }
   }
 
@@ -590,10 +555,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         peers.keySet shouldBe (before + marker)
         peers.keySet should not contain rejected
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a private relay cannot contribute a private target when local dialing is disabled") {
@@ -619,10 +581,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         peers.keySet shouldBe (before + marker)
         peers.keySet should not contain rejected
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a LAN relay cannot redirect discovery to loopback or link-local targets") {
@@ -657,10 +616,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         peers.keySet shouldBe (before + marker)
         rejected.foreach(address => peers.keySet should not contain address)
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("private gossip is shared only with an outgoing LAN recipient") {
@@ -699,10 +655,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
       gossipTo(privatePeer.remote) should contain(privateEndpoint)
       gossipTo(wanPeer.remote) should not contain privateEndpoint
       gossipTo(inboundPeer.remote) should not contain privateEndpoint
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("a configured LAN endpoint is recovered from a nonempty migrated store and dialed exactly") {
@@ -736,10 +689,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         peers(configuredLan).connectionType shouldBe Some(Outgoing)
         peers(configuredLan).lastHandshake should be > 0L
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("the manager accepts only fully verified outbound peer records") {
@@ -774,10 +724,7 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         writer.send(f.peerManager, GetAllPeers)
         writer.expectMsgType[Map[InetSocketAddress, PeerInfo]] shouldBe validSnapshot
       }
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 
   property("GetPeers falls back to a stale public endpoint when a recent LAN peer is ineligible") {
@@ -840,9 +787,6 @@ class PeerEndpointProvenanceSpec extends ErgoCorePropertyTest with DBSpec {
         defaultPeerSpec.copy(declaredAddress = Some(recentLan))
       ).remote
       gossipTo(lanRecipient) should contain(recentLan)
-    } finally {
-      Await.result(f.system.terminate(), Duration.Inf)
-      deleteRecursive(f.directory)
-    }
+    } finally f.close()
   }
 }

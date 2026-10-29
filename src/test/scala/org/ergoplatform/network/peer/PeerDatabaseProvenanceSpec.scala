@@ -6,14 +6,15 @@ import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{
   SeenPeers
 }
 import org.ergoplatform.utils.ErgoCorePropertyTest
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.core.network.{Incoming, Outgoing}
-import scorex.db.LDBFactory
+import scorex.db.{LDBFactory, StoreRegistry}
 
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import java.net.InetSocketAddress
 import java.nio.file.Files
 
-class PeerDatabaseProvenanceSpec extends ErgoCorePropertyTest {
+class PeerDatabaseProvenanceSpec extends ErgoCorePropertyTest with FileUtils {
 
   import org.ergoplatform.utils.ErgoNodeTestConstants.{defaultPeerSpec, settings}
 
@@ -63,7 +64,11 @@ class PeerDatabaseProvenanceSpec extends ErgoCorePropertyTest {
       }
     } finally store.close()
 
-    val loaded = new PeerDatabase(dbSettings).knownPeers
+    val loaded = try new PeerDatabase(dbSettings).knownPeers
+    finally {
+      PeerDatabaseTestCleanup.closeOwned(peerDir.toFile)
+      deleteRecursive(dataDir.toFile)
+    }
 
     loaded(incomingAddress) shouldBe PeerInfo.fromAddress(incomingAddress)
     loaded(outgoingAddress) shouldBe PeerInfo.fromAddress(outgoingAddress)
@@ -78,6 +83,33 @@ class PeerDatabaseProvenanceSpec extends ErgoCorePropertyTest {
     SeenPeers(10).choose(loaded, Seq.empty, null) shouldBe empty
     val dialCandidate = RandomPeerExcluding(Seq.empty).choose(loaded, Seq.empty, null)
     dialCandidate.flatMap(_.peerSpec.address).exists(loaded.contains) shouldBe true
+  }
+
+  property("fixture cleanup closes only its owned peer database") {
+    val ownedDir = Files.createTempDirectory("owned-peer-database")
+    val foreignDir = Files.createTempDirectory("foreign-peer-database")
+    val ownedPath = ownedDir.resolve("peers").toFile
+    val foreignPath = foreignDir.resolve("peers").toFile
+    try {
+      LDBFactory.createKvDb(ownedPath.getPath)
+      val foreign = LDBFactory.createKvDb(foreignPath.getPath)
+      foreign.insert(Array[Byte](1), Array[Byte](2)).get
+
+      PeerDatabaseTestCleanup.closeOwned(ownedPath)
+      val registry = LDBFactory.factory.asInstanceOf[StoreRegistry]
+      val readLock = registry.lock.readLock()
+      readLock.lock()
+      try {
+        registry.map.contains(ownedPath) shouldBe false
+        registry.map.contains(foreignPath) shouldBe true
+      } finally readLock.unlock()
+      foreign.get(Array[Byte](1)).map(_.toSeq) shouldBe Some(Seq[Byte](2))
+    } finally {
+      try PeerDatabaseTestCleanup.closeOwned(ownedPath)
+      finally PeerDatabaseTestCleanup.closeOwned(foreignPath)
+      deleteRecursive(ownedDir.toFile)
+      deleteRecursive(foreignDir.toFile)
+    }
   }
 
   private def legacyPeer(declaredAddress: Option[InetSocketAddress],

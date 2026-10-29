@@ -506,6 +506,22 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     pool.getRecommendedFee(expectedWaitTimeMinutes = 0, txSize = 1024) shouldBe minimalFee
   }
 
+  it should "limit fee estimation to available histogram bins for large waits" in {
+    val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
+    val minimalFee = feeSettings.nodeSettings.minimalFeeAmount
+    val now = System.currentTimeMillis()
+    val lastBin = MemPoolStatistics.nHistogramBins - 1
+    val histogram = List.fill(lastBin)(FeeHistogramBin(0, 0)) :+ FeeHistogramBin(1, minimalFee * 2)
+    val stats = MemPoolStatistics(now, takenTxns = 1, snapTime = now, histogram = histogram)
+    val pool = new ErgoMemPool(OrderedTxPool.empty(feeSettings), stats, SortingOption.FeePerByte)(feeSettings)
+
+    pool.getRecommendedFee(lastBin - 1, 1024) shouldBe minimalFee
+    Seq(lastBin, 2000, Int.MaxValue).foreach { waitTime =>
+      pool.getRecommendedFee(waitTime, 1024) shouldBe minimalFee * 2
+    }
+    ErgoMemPool.empty(feeSettings).getRecommendedFee(Int.MaxValue, 1024) shouldBe minimalFee
+  }
+
   it should "not let idle uptime dominate expected wait time" in {
     val feeSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(minimalFeeAmount = 1000000L))
     val minimalFee = feeSettings.nodeSettings.minimalFeeAmount

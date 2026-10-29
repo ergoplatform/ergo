@@ -33,6 +33,7 @@ import scala.util.{Failure, Success, Try}
 import scorex.crypto.authds.avltree.batch.PersistentBatchAVLProver
 import scorex.crypto.hash.Digest32
 import scorex.db.LDBVersionedStore
+import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.util.ModifierId
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, TimeUnit}
@@ -61,6 +62,57 @@ class MempoolCleanupSpec extends AnyFlatSpec with Matchers with NodeViewTestOps 
       val completed = probe.expectMsgType[CleanupDone](3.seconds)
       completed.jobId shouldBe nextJob
       completed.result.isSuccess shouldBe true
+    } finally {
+      Await.result(system.terminate(), 10.seconds)
+      state.closeStorage()
+    }
+  }
+
+  it should "skip rebroadcast after a failed cleanup without queued work and broadcast after the next success" in {
+    implicit val system: ActorSystem = ActorSystem()
+    val holder = TestProbe()
+    val network = TestProbe()
+    val completions = TestProbe()
+    val randomReads = TestProbe()
+    val (state, boxes) = createUtxoState(settings)
+    try {
+      val tx = UnconfirmedTransaction(validTransactionFromBoxes(boxes.boxes.values.toIndexedSeq.take(1)), None)
+      tx.transaction.inputIds.forall(id => state.boxById(id).isDefined) shouldBe true
+      val auditSettings = settings.copy(nodeSettings = settings.nodeSettings.copy(
+        mempoolCleanupDuration = 1.day,
+        rebroadcastCount = 1
+      ))
+      val auditor = TestActorRef(new MempoolAuditor(holder.ref, network.ref, auditSettings) {
+        override def aroundReceive(receive: Receive, message: Any): Unit = {
+          super.aroundReceive(receive, message)
+          message match {
+            case done: CleanupDone => completions.ref ! done
+            case _ =>
+          }
+        }
+      })
+      def pool(fails: Boolean): FakeMempool = new FakeMempool(Seq(tx)) {
+        override def getAllPrioritized: Seq[UnconfirmedTransaction] = {
+          if (fails) throw new IllegalStateException("bounded no-pending cleanup failure")
+          super.getAllPrioritized
+        }
+        override def random(limit: Int): Iterable[UnconfirmedTransaction] = {
+          randomReads.ref ! "random"
+          super.random(limit)
+        }
+      }
+      holder.send(auditor, RecheckMempool(state, pool(fails = true), UUID.randomUUID()))
+      val failed = completions.expectMsgType[CleanupDone](3.seconds)
+      failed.result.failed.get.getMessage shouldBe "bounded no-pending cleanup failure"
+      holder.expectNoMessage(100.millis)
+      network.expectNoMessage(100.millis)
+      randomReads.expectNoMessage(100.millis)
+
+      holder.send(auditor, RecheckMempool(state, pool(fails = false), UUID.randomUUID()))
+      completions.expectMsgType[CleanupDone](3.seconds).result.isSuccess shouldBe true
+      holder.expectMsgType[RecheckedTransactions]
+      randomReads.expectMsg("random")
+      network.expectMsgType[SendToNetwork]
     } finally {
       Await.result(system.terminate(), 10.seconds)
       state.closeStorage()

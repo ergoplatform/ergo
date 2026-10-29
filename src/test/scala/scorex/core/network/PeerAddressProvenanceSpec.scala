@@ -25,6 +25,7 @@ import org.ergoplatform.network.peer.{
 import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.{defaultPeerSpec, settings}
+import org.ergoplatform.wallet.utils.FileUtils
 import scorex.core.app.ScorexContext
 import scorex.testkit.utils.AkkaFixture
 
@@ -34,7 +35,7 @@ import java.nio.file.Files
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class PeerAddressProvenanceSpec extends ErgoCorePropertyTest {
+class PeerAddressProvenanceSpec extends ErgoCorePropertyTest with FileUtils {
 
   private val advertisedAddress = new InetSocketAddress("198.51.100.20", 9030)
   private val alternateAddress = new InetSocketAddress("203.0.113.21", 9030)

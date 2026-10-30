@@ -2,7 +2,7 @@ package org.ergoplatform.serialization
 
 import io.circe.syntax._
 import io.circe.{ACursor, Json}
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{DataInput, ErgoBox, UnsignedInput}
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
@@ -16,7 +16,6 @@ import cats.syntax.either._
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
-import sigma.data.{DataInput, UnsignedInput}
 import sigmastate.interpreter.SecretProven
 
 import scala.util.Try

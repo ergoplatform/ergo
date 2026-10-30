@@ -11,6 +11,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{ChainIsStuck, ChainProgress}
+import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.history.extra.ExtraIndex
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{RentIndexEnabledKey, SchemaVersionKey}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
@@ -96,6 +97,14 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
       objects.get(id)
     }
     override def contains(id: ModifierId): Boolean = objects.contains(id)
+    override def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
+                        objectsToInsert: Array[BlockSection],
+                        indexesToRemove: Array[ByteArrayWrapper]): Try[Unit] = {
+      indexesToRemove.foreach(indexes.remove)
+      indexesToInsert.foreach { case (key, value) => indexes += key -> value }
+      objectsToInsert.foreach(section => objects += section.id -> section)
+      Success(())
+    }
     override def remove(keys: Array[ByteArrayWrapper], ids: Array[ModifierId]): Try[Unit] = {
       removals += ((keys.toSeq, ids.toSeq))
       if (removals.size == throwAt) throw failure
@@ -340,6 +349,8 @@ class HistoryRepairSpec extends ErgoCorePropertyTest {
     loaded.bestFullBlockOpt.map(_.id) shouldBe Some(f.tip.id)
     loaded.headerIdsAtHeight(f.tip.height + 1) shouldBe empty
     f.db.closed shouldBe false
+    // The fixture prunes (blocksToKeep = 1000) and stores no floor, so the start records genesis as the pruned height
+    loaded.readPrunedBelowHeight() shouldBe Some(GenesisHeight)
   }
 
   property("best full block repair returns a storage read failure") {

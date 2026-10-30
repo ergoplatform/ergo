@@ -161,13 +161,44 @@ class NonVerifyADHistorySpecification extends ErgoCorePropertyTest {
     val currentSummary = ErgoSyncInfoV2(Seq(sideTail.last, sideTail(18)))
     currentSummary.lastHeaders.map(_.height) shouldBe Seq(44, 28)
     leader.compareV2(currentSummary) shouldBe Unknown
-    leader.continuationIdsV2(currentSummary, 100) shouldBe empty
+    // no header of the summary is on the selected chain, so the answer starts at genesis, not after sideTail(18)
+    leader.continuationIdsV2(currentSummary, 100).head._2 shouldBe common.head.id
 
     val advertised = ErgoSyncInfoV2(currentSummary.lastHeaders :+ common.head)
     leader.compareV2(advertised) shouldBe Fork
     val continuation = leader.continuationIdsV2(advertised, 100)
     continuation.head._2 shouldBe common.headers(1).id
     continuation.last._2 shouldBe selectedTail.last.id
+  }
+
+  // A leader on a 30-header common chain extended to 140, and a follower on its own 40-header fork from height 30: the
+  // follower's full V2 locator (heights 70 and 54; no header at 70 - 128) holds no header of the leader's chain
+  private def leaderAndForkedFollower(): (ErgoHistory, ErgoHistory, HeaderChain) = {
+    val emptyLeader = genHistory()
+    val common = genHeaderChain(30, emptyLeader, diffBitsOpt = None, useRealTs = false)
+    val leaderOnCommon = applyHeaderChain(emptyLeader, common)
+    val followerOnCommon = applyHeaderChain(genHistory(), common)
+    val leaderTail = genHeaderChain(110, Some(common.last), leaderOnCommon.difficultyCalculator,
+      diffBitsOpt = None, useRealTs = false).tail
+    val followerTail = genHeaderChain(40, Some(common.last), leaderOnCommon.difficultyCalculator,
+      extensionHash = Algos.hash(Array[Byte](1)), diffBitsOpt = None, useRealTs = false).tail
+    (applyHeaderChain(leaderOnCommon, leaderTail), applyHeaderChain(followerOnCommon, followerTail), leaderTail)
+  }
+
+  property("V2 continuation reaches a peer whose own fork is more than 16 headers long, tip at height 128 or lower") {
+    val (leader, follower, leaderTail) = leaderAndForkedFollower()
+    val locator = follower.syncInfoV2(full = true)
+    locator.lastHeaders.map(_.height) shouldBe Seq(70, 54)
+    leader.compareV2(locator) shouldBe Younger
+
+    val continuation = leader.continuationIdsV2(locator, 100)
+    continuation.map(_._2) should contain (leaderTail.headers.head.id)
+  }
+
+  property("V2 continuation stays empty when no locator is on the chain and the answer could not reach the fork") {
+    val (leader, follower, _) = leaderAndForkedFollower()
+    // 20 headers from genesis end below the fork at height 30
+    leader.continuationIdsV2(follower.syncInfoV2(full = true), 20) shouldBe empty
   }
 
   property("continuationIds() for empty ErgoSyncInfo should contain ids of all headers") {

@@ -24,7 +24,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
                     val inputs: TreeMap[BoxId, WeightedTxId])
                    (implicit settings: ErgoSettings) extends ScorexLogging {
 
-  import OrderedTxPool.weighted
+  import OrderedTxPool.{saturatingAdd, saturatingSubtract, weighted}
 
   /**
     * When a transaction has a parent in the mempool, we update its weight, weight of parent's parents etc.
@@ -144,7 +144,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
+        ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), depth = 0, subtract = true)
       case Some(_) =>
         if (orderedTransactions.valuesIterator.exists(_.id == tx.id)) {
           new OrderedTxPool(
@@ -187,7 +187,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
           inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
+        ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), depth = 0, subtract = true)
       case Some(_) =>
         if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
           new OrderedTxPool(
@@ -252,7 +252,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
   private def updateFamily(tx: ErgoTransaction,
                            weight: Long,
                            startTime: Long,
-                           depth: Int): OrderedTxPool = {
+                           depth: Int,
+                           subtract: Boolean = false): OrderedTxPool = {
     val now = System.currentTimeMillis()
     val timeDiff = now - startTime
     if (depth > MaxParentScanDepth || timeDiff > MaxParentScanTime) {
@@ -267,7 +268,9 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
         pool.currentTransaction(snapshotWtx.id) match {
           case Some((wtx, ut)) =>
             val parent = ut.transaction
-            val newWtx = WeightedTxId(wtx.id, wtx.weight + weight, wtx.feePerFactor, wtx.created)
+            val updatedWeight =
+              if (subtract) saturatingSubtract(wtx.weight, weight) else saturatingAdd(wtx.weight, weight)
+            val newWtx = WeightedTxId(wtx.id, updatedWeight, wtx.feePerFactor, wtx.created)
             val newPool = new OrderedTxPool(
               pool.withoutTransaction(parent.id).updated(newWtx, ut),
               pool.transactionsRegistry.updated(parent.id, newWtx),
@@ -275,7 +278,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
               parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
               parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
             )
-            newPool.updateFamily(parent, weight, startTime, depth + 1)
+            newPool.updateFamily(parent, weight, startTime, depth + 1, subtract)
           case None =>
             pool
         }
@@ -285,6 +288,71 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
 }
 
 object OrderedTxPool {
+  private[mempool] val WeightPrecisionFactor: Long = 1024L
+
+  private[mempool] def saturatingAdd(left: Long, right: Long): Long = {
+    if (right > 0 && left > Long.MaxValue - right) {
+      Long.MaxValue
+    } else if (right < 0 && left < Long.MinValue - right) {
+      Long.MinValue
+    } else {
+      left + right
+    }
+  }
+
+  private[mempool] def saturatingSubtract(left: Long, right: Long): Long = {
+    if (right > 0 && left < Long.MinValue + right) {
+      Long.MinValue
+    } else if (right < 0 && left > Long.MaxValue + right) {
+      Long.MaxValue
+    } else {
+      left - right
+    }
+  }
+
+  private[mempool] def saturatedAverage(values: Iterable[Long]): Long = {
+    if (values.isEmpty) {
+      0L
+    } else {
+      val sum = values.foldLeft(BigInt(0)) { case (acc, value) => acc + BigInt(value) }
+      val avg = sum / values.size
+      if (avg > Long.MaxValue) {
+        Long.MaxValue
+      } else if (avg < Long.MinValue) {
+        Long.MinValue
+      } else {
+        avg.toLong
+      }
+    }
+  }
+
+  private[mempool] def scaledFeePerFactor(fee: Long, feeFactor: Int): Long = {
+    require(feeFactor > 0, s"Mempool fee factor should be positive: $feeFactor")
+    scaledValue(fee, WeightPrecisionFactor, feeFactor)
+  }
+
+  private[mempool] def feeForFactor(feePerFactor: Long, feeFactor: Int): Long = {
+    require(feeFactor > 0, s"Mempool fee factor should be positive: $feeFactor")
+    scaledValue(feePerFactor, feeFactor, WeightPrecisionFactor)
+  }
+
+  private def scaledValue(value: Long, multiplier: Long, divisor: Long): Long = {
+    if (value <= 0 || multiplier <= 0) {
+      0L
+    } else {
+      val quotient = value / divisor
+      val remainder = value % divisor
+      val maxQuotient = Long.MaxValue / multiplier
+
+      if (quotient > maxQuotient) {
+        Long.MaxValue
+      } else {
+        val scaledQuotient = quotient * multiplier
+        val scaledRemainder = remainder * multiplier / divisor
+        saturatingAdd(scaledQuotient, scaledRemainder)
+      }
+    }
+  }
 
   /**
     * Weighted transaction id
@@ -304,7 +372,12 @@ object OrderedTxPool {
     override def hashCode(): Int = id.hashCode()
   }
 
-  private implicit val ordWeight: Ordering[WeightedTxId] = Ordering[(Long, ModifierId)].on(x => (-x.weight, x.id))
+  private implicit val ordWeight: Ordering[WeightedTxId] = new Ordering[WeightedTxId] {
+    override def compare(left: WeightedTxId, right: WeightedTxId): Int = {
+      val byWeight = java.lang.Long.compare(right.weight, left.weight)
+      if (byWeight != 0) byWeight else implicitly[Ordering[ModifierId]].compare(left.id, right.id)
+    }
+  }
   private implicit val ordBoxId: Ordering[BoxId] = Ordering[String].on(b => Algos.encode(b))
 
   def empty(settings: ErgoSettings): OrderedTxPool = {
@@ -335,10 +408,10 @@ object OrderedTxPool {
     val fee = tx.outputs
       .filter(b => java.util.Arrays.equals(b.propositionBytes, ms.feePropositionBytes))
       .map(_.value)
-      .sum
+      .foldLeft(0L)(saturatingAdd)
 
     // We multiply by 1024 for better precision
-    val feePerFactor = fee * 1024 / feeFactor
+    val feePerFactor = scaledFeePerFactor(fee, feeFactor)
     // Weight is equal to feePerFactor here, however, it can be modified later when children transactions will arrive
     WeightedTxId(tx.id, feePerFactor, feePerFactor, System.currentTimeMillis())
   }

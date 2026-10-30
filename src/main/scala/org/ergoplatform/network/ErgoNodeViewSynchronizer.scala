@@ -1435,7 +1435,11 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
               val newPeerCandidates: Seq[ConnectedPeer] = if (modifierTypeId == Header.modifierTypeId) {
                 getPeersForDownloadingHeaders(peer).toSeq
               } else {
-                getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+                // the peer that did not deliver may not have the section, so it is asked again only when it is the
+                // only download peer
+                val blockPeers = getPeersForDownloadingBlocks.map(_.toSeq).getOrElse(Seq(peer))
+                val otherPeers = blockPeers.filterNot(_ == peer)
+                if (otherPeers.nonEmpty) otherPeers else blockPeers
               }
               val newPeer = if (newPeerCandidates.isEmpty) {
                 if (checksDone > FallbackToEqualPeerThreshold) {

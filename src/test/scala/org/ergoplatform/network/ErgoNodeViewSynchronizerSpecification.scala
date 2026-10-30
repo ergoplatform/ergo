@@ -32,7 +32,7 @@ import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer, SendToPeers}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
@@ -1031,6 +1031,65 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         val status = deliveryTracker.status(modifierId, Header.modifierTypeId, Seq.empty)
         status should (be(Unknown) or be(Requested))
       }
+    }
+  }
+
+  private def downloadPeer(handler: ActorRef): ConnectedPeer = ConnectedPeer(
+    connectionIdGen.sample.get,
+    handler,
+    Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+      StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))), System.currentTimeMillis()))
+  )
+
+  /**
+    * Block sections are retried, after a missed delivery, from the download peers other than the one that missed it,
+    * if there are any. Over 20 sections with two download peers, a choice that may return the peer that missed picks
+    * it about 10 times.
+    */
+  property("NodeViewSynchronizer: checkDelivery asks another download peer for a block section not delivered on time") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val missedPeer = downloadPeer(pchProbe.ref)
+      val otherPeer = downloadPeer(pchProbe.ref)
+      otherPeer.connectionId.remoteAddress should not be missedPeer.connectionId.remoteAddress
+      syncTracker.updateStatus(missedPeer, org.ergoplatform.consensus.Equal, Some(10))
+      syncTracker.updateStatus(otherPeer, org.ergoplatform.consensus.Equal, Some(10))
+
+      val typeId = BlockTransactions.modifierTypeId
+      val retriedFrom = (1 to 20).map { i =>
+        val id = bytesToId(Array.fill(32)(i.toByte))
+        deliveryTracker.setRequested(typeId, id, missedPeer)(_ => Cancellable.alreadyCancelled)
+        synchronizerMockRef ! CheckDelivery(missedPeer, typeId, id)
+        val to = ncProbe.fishForSpecificMessage(3.seconds) {
+          case SendToNetwork(msg, SendToPeer(to)) if msg.spec.messageCode == RequestModifierSpec.messageCode => to
+        }
+        // the synchronizer records the retry in the tracker, which is not thread-safe, after sending it; wait for
+        // that record (at the chosen peer, one check; this thread's own record has none) before the next section
+        eventually {
+          deliveryTracker.getRequestedInfo(typeId, id).map(ri => (ri.peer, ri.checks)) shouldBe Some((to, 1))
+        }
+        to
+      }
+      retriedFrom.count(_ == missedPeer) shouldBe 0
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery asks the same peer again for a block section when it is the only download peer") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val onlyPeer = downloadPeer(pchProbe.ref)
+      syncTracker.updateStatus(onlyPeer, org.ergoplatform.consensus.Equal, Some(10))
+
+      val typeId = BlockTransactions.modifierTypeId
+      val id = bytesToId(Array.fill(32)(1: Byte))
+      deliveryTracker.setRequested(typeId, id, onlyPeer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(onlyPeer, typeId, id)
+      val retriedFrom = ncProbe.fishForSpecificMessage(3.seconds) {
+        case SendToNetwork(msg, SendToPeer(to)) if msg.spec.messageCode == RequestModifierSpec.messageCode => to
+      }
+      retriedFrom shouldBe onlyPeer
     }
   }
 

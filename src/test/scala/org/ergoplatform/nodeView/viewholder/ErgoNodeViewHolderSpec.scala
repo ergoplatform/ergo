@@ -1135,7 +1135,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
             val wrapped = new UtxoState(prover, original.version, original.store, settings) {
               override def rollbackTo(version: VersionTag): Try[UtxoState] = {
                 val result = super.rollbackTo(version)
-                resultProbe.ref ! result
+                resultProbe.ref.tell(result, self)
                 result
               }
             }

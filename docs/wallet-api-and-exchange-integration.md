@@ -1219,14 +1219,48 @@ Recommended exchange confirmation thresholds (~2 minutes per block on Ergo Autol
 
 ### 8.6 Chain Reorganization (Rollback) Detection & Reconciliation
 
-Proof-of-Work chains occasionally experience short 1–3 block reorganizations (and Ergo nodes support rollbacks up to `ergo.node.keepVersions = 200` blocks). The node's internal `WalletRegistry` automatically rolls back and re-applies wallet state during a fork switch, so your external database must stay synchronized:
+Confirmation depth is an exchange risk threshold, **not finality**: even a deposit already marked
+`CREDITED` can disappear from the selected chain. The node's internal `WalletRegistry.rollback`
+reverts node-owned wallet state; it does **not** reverse the exchange's external customer ledger.
+The configured `keepVersions` bounds retained node rollback versions, not possible PoW fork depth.
 
-1. **Persist Processed Block Headers**: Maintain a table `processed_blocks(height INT PRIMARY KEY, header_id VARCHAR(64) NOT NULL, parent_id VARCHAR(64) NOT NULL)`.
-2. **Detect Rollbacks Before Scanning New Heights**:
-   For the highest stored `localTip` in `processed_blocks`, fetch `GET /blocks/at/{localTip}` (returns `["<canonicalHeaderId>"]`) and `GET /blocks/{headerId}/header` (returns `parentId`, `height`, `timestamp`):
-   - If the node's canonical `headerId` at `localTip` differs from `processed_blocks[localTip].header_id` (or `fullHeight < localTip`), walk backward `h = localTip, localTip - 1, ...` until `GET /blocks/at/{h}` matches `processed_blocks[h].header_id` (the fork common ancestor `forkHeight`).
-   - Mark any `PENDING` (uncredited) deposit records with `inclusion_height > forkHeight` as `ORPHANED_REORG` (if a transaction remains valid, miners almost always re-include it in the winning branch with the exact same `boxId` at a new `inclusionHeight`, where your height scanner will pick it back up cleanly).
-   - Choosing confirmation thresholds `>= 20` blocks ensures normal PoW micro-forks resolve long before any deposit transitions from `PENDING` to `CREDITED`.
+1. **Persist inclusion identity and audit history**: Store each processed block's height, header ID
+   and parent ID, and each deposit's inclusion header ID as well as height and `boxId`. A unique
+   `boxId` prevents duplicate output credits; it cannot itself remove an orphaned ledger credit.
+2. **Do not mistake a raw height row for a chain snapshot**: `GET /blocks/at/{height}` returns
+   locally stored header IDs, including forks. At or below the selected best-header tip, its first
+   ID is the selected best-chain header. A retained row above that tip has **no** selected-chain
+   header, even when the returned array is nonempty. A previously read `fullHeight` can become
+   stale between HTTP calls, so a single height bound plus `ids[0]` is insufficient.
+3. **Anchor and stage the scan**: Capture `/info`'s `(fullHeight, bestFullHeaderId)` after readiness
+   checks, then follow headers by their immutable IDs and verify heights and parent continuity.
+   Fetch transaction sections by those same header IDs and verify the returned `headerId`.
+   Determine the common ancestor with stored processed blocks. Stage candidate changes without
+   changing balances. Re-read readiness and the exact anchor immediately before committing the
+   staged changes under the exchange's serialized ledger/withdrawal lock. On missing blocks,
+   discontinuity, a shorter tip, changed anchor or other drift, hold scanning/withdrawals and retry
+   against a new anchor; do not commit a mixture of responses from different branches.
+4. **Reconcile both pending and credited orphaned deposits**:
+   - `PENDING` above the common ancestor becomes `ORPHANED_REORG`; it has no customer credit to reverse.
+   - `CREDITED` above it becomes `CREDITED_REORG_HOLD`. Atomically place the affected customer/asset
+     balance and outgoing withdrawals on hold and enqueue operator reconciliation. Preserve the
+     original credit and audit trail. The operator must reconcile the orphaned credit using a
+     linked, idempotent compensating ledger entry, or validate its canonical re-inclusion before
+     releasing a hold. Never silently delete the credit, assume the user has not spent it, or
+     replay a second credit. If funds have already left, record the deficit and escalate under
+     the exchange's loss/recovery policy rather than treating the account as settled.
+   - Re-inclusion of the same `boxId` may refresh an uncredited orphan's inclusion identity.
+     A credited/reconciliation-held record must remain held until reconciliation; automatic
+     pending upserts and ordinary maturity crediting must not reset it or create a second credit.
+5. **Keep checking after commit**: HTTP reads and an external DB transaction cannot form an atomic
+   node snapshot. The pre-commit anchor check narrows the race but does not eliminate later reorgs.
+   Revalidate the ledger's chain anchor before releasing withdrawals and on every polling cycle;
+   reconcile any later drift using the same pending/credited policy. If the common ancestor is
+   outside retained exchange history, hold the exchange for operator recovery instead of guessing.
+
+The outline below deliberately retries even on harmless tip advancement. A production implementation
+can instead prove its captured anchor remains an ancestor of the new selected full tip, but must
+retain continuity, maturity and orphan-credit checks.
 
 ### 8.7 Withdrawal Batching, Concurrency Control & UTXO Management
 
@@ -1252,70 +1286,109 @@ Proof-of-Work chains occasionally experience short 1–3 block reorganizations (
 ### 8.8 Reference Integration Pseudocode
 
 ```python
-# Authoritative Exchange Deposit & Withdrawal Loop Outline (Python-style pseudocode)
+# Reference outline only: DB methods below are exchange-implemented contracts, not node APIs.
+# Persist amounts as integers and serialize this loop with withdrawal ledger admission.
 
-MIN_CONFIRMATIONS_NUM = 19  # 19 confirmationsNum == 20 mined blocks deep
+MIN_CONFIRMATIONS_NUM = 19  # 20 mined blocks deep is a risk threshold, NOT finality
 
-def check_node_ready(api) -> int:
+class RetryScan(Exception):
+    pass
+
+
+class NodeReadError(Exception):
+    pass  # api.get adapter maps HTTP errors/timeouts/invalid responses to this exception
+
+
+def check_node_ready(api):
     info = api.get("/info")
     status = api.get("/wallet/status")
-    assert info["stateType"] == "utxo" and info["fullHeight"] is not None
-    assert info["peersCount"] >= 3
-    assert info["fullHeight"] == info["headersHeight"]
-    assert info["maxPeerHeight"] is not None and (info["maxPeerHeight"] - info["fullHeight"]) <= 1
-    assert status["isInitialized"] and status["walletHeight"] == info["fullHeight"]
-    assert status["error"] == ""
-    return info["fullHeight"]
+    if not (info["stateType"] == "utxo" and info["fullHeight"] is not None
+            and info["peersCount"] >= 3
+            and info["fullHeight"] == info["headersHeight"]
+            and info["bestFullHeaderId"] is not None
+            and info["bestFullHeaderId"] == info["bestHeaderId"]
+            and info["maxPeerHeight"] is not None
+            and info["maxPeerHeight"] - info["fullHeight"] <= 1
+            and status["isInitialized"] and status["walletHeight"] == info["fullHeight"]
+            and status["error"] == ""):
+        raise RetryScan("node/wallet not ready")
+    return (info["fullHeight"], info["bestFullHeaderId"])
+
+
+def stage_selected_chain(api, anchor, floor):
+    height, header_id = anchor
+    if height < floor:
+        raise RetryScan("tip below exchange scan history")
+    staged = {}
+    # For clarity, walk the retained interval. Production can use verified checkpoints/batches.
+    while height >= floor:
+        header = api.get(f"/blocks/{header_id}/header")
+        if header["id"] != header_id or header["height"] != height:
+            raise RetryScan("header identity/height mismatch")
+        section = api.get(f"/blocks/{header_id}/transactions")
+        if section["headerId"] != header_id:
+            raise RetryScan("transaction section belongs to another header")
+        staged[height] = (header, section["transactions"])
+        header_id, height = header["parentId"], height - 1
+    return staged
+
 
 def sync_blocks_and_deposits(api, db):
-    full_height = check_node_ready(api)
+    try:
+        anchor = check_node_ready(api)
+        floor = db.get_retained_history_floor()  # verified checkpoint or deployment height
+        staged = stage_selected_chain(api, anchor, floor)
+        with db.serialized_ledger_transaction():
+            # No pending-state, customer-credit or processed-tip writes before this check.
+            if check_node_ready(api) != anchor:
+                raise RetryScan("selected full-tip anchor changed during scan")
+            local_tip = db.get_max_processed_height()
+            fork_height = local_tip
+            while fork_height is not None:
+                row = staged.get(fork_height)
+                if row is not None and row[0]["id"] == db.get_header_id(fork_height):
+                    break
+                fork_height -= 1
+                if fork_height < floor:
+                    raise RetryScan("no common ancestor inside retained history")
+            if local_tip is not None and fork_height != local_tip:
+                # Atomic contract from 8.6: orphan PENDING, hold CREDITED + withdrawals,
+                # retain audit/credit history; never erase or automatically re-credit a hold.
+                db.reconcile_orphaned_deposits_above(fork_height)
+                db.delete_processed_blocks_above(fork_height)
+            start = floor if fork_height is None else fork_height + 1
+            for h in range(start, anchor[0] + 1):
+                header, txs = staged[h]
+                for tx in txs:
+                    if db.is_own_outgoing_tx(tx["id"]):
+                        continue
+                    for out in tx["outputs"]:
+                        # Full block outputs carry ergoTree; match registered deposit scripts.
+                        user_id = db.find_user_by_deposit_ergo_tree(out["ergoTree"])
+                        if user_id is None:
+                            continue
+                        db.upsert_uncredited_deposit(
+                            box_id=out["boxId"], tx_id=tx["id"], user_id=user_id,
+                            nano_erg=out["value"],
+                            assets=[a for a in out["assets"] if db.is_whitelisted_token(a["tokenId"])],
+                            inclusion_height=h, inclusion_header_id=header["id"],
+                        )  # MUST preserve CREDITED / CREDITED_REORG_HOLD; refresh ORPHANED_REORG only
+                db.save_processed_block(height=h, header_id=header["id"], parent_id=header["parentId"])
+            cutoff = anchor[0] - MIN_CONFIRMATIONS_NUM
+            for dep in db.get_pending_deposits_up_to_height(cutoff):
+                if dep.inclusion_header_id != staged[dep.inclusion_height][0]["id"]:
+                    raise RetryScan("pending deposit is not on the staged chain")
+                db.credit_user_ledger_idempotent(dep)
+            db.save_ledger_chain_anchor(anchor)
+    except (RetryScan, NodeReadError, KeyError):
+        # Roll back all staged DB changes. A failed HTTP read must use the same hold/retry path.
+        db.hold_scanning_and_withdrawals_for_retry()
 
-    # 1. Reorg check against stored block headers
-    local_tip = db.get_max_processed_height()
-    while local_tip is not None and local_tip > 0:
-        canonical_ids = api.get(f"/blocks/at/{local_tip}")
-        canonical_id = canonical_ids[0] if canonical_ids else None
-        if local_tip <= full_height and canonical_id == db.get_header_id(local_tip):
-            break
-        db.mark_deposits_orphaned_at_height(local_tip)
-        db.delete_processed_block(local_tip)
-        local_tip -= 1
-
-    # 2. Scan new heights sequentially using height-range queries
-    start_height = (local_tip + 1) if local_tip is not None else db.get_deployment_height()
-    for h in range(start_height, full_height + 1):
-        header_id = api.get(f"/blocks/at/{h}")[0]
-        header = api.get(f"/blocks/{header_id}/header")
-        txs = api.get(f"/wallet/transactions?minInclusionHeight={h}&maxInclusionHeight={h}")
-
-        for tx in txs:
-            if db.is_own_outgoing_tx(tx["id"]):
-                continue
-            for out in tx["outputs"]:
-                user_id = db.find_user_by_deposit_address(out["address"])
-                if user_id is None:
-                    continue  # e.g. dedicated changeAddress m/44'/429'/0'/0/0
-                # Upsert idempotently by globally unique out["boxId"]
-                db.upsert_pending_deposit(
-                    box_id=out["boxId"],
-                    tx_id=tx["id"],
-                    user_id=user_id,
-                    nano_erg=out["value"],
-                    assets=[a for a in out["assets"] if db.is_whitelisted_token(a["tokenId"])],
-                    inclusion_height=h,
-                )
-
-        db.save_processed_block(height=h, header_id=header_id, parent_id=header["parentId"])
-
-    # 3. Credit pending deposits that have reached MIN_CONFIRMATIONS_NUM
-    # confirmationsNum = full_height - inclusion_height
-    mature_cutoff_height = full_height - MIN_CONFIRMATIONS_NUM
-    for dep in db.get_pending_deposits_up_to_height(mature_cutoff_height):
-        db.credit_user_ledger_idempotent(dep)
 
 def execute_withdrawal_batch(api, db):
     check_node_ready(api)
-    batch = db.claim_next_pending_withdrawal_batch(max_items=40)
+    db.require_reconciled_chain_anchor(api)  # caller holds the serialized ledger/withdrawal lock
+    batch = db.claim_next_pending_withdrawal_batch(max_items=40)  # MUST exclude held accounts/assets
     if not batch:
         return
 
@@ -1391,7 +1464,7 @@ def execute_withdrawal_batch(api, db):
 | `POST` | `/scan/stopTracking` | **Yes** | Stop tracking `{"scanId": N, "boxId": "..."}`. |
 | `GET` | `/mining/rewardAddress` | **Yes** | Node's 720-block timelocked P2S mining reward address. |
 | `GET` | `/mining/rewardPublicKey` | **Yes** | Node's 33-byte hex mining reward public key. |
-| `GET` | `/info` | No | Node sync status (`fullHeight`, `headersHeight`, `maxPeerHeight`, `stateType`, `parameters`). |
+| `GET` | `/info` | No | Node sync status and chain anchor (`fullHeight`, `bestFullHeaderId`, `bestHeaderId`, `headersHeight`, `maxPeerHeight`, `stateType`, `parameters`). |
 | `POST` | `/utils/address` | No | Validate Base58 Ergo address for current network (`isValid`). |
 | `POST` | `/utils/hash/blake2b` | No | Compute Blake2b-256 hex digest of a JSON string (for `apiKeyHash`). |
 | `GET` | `/utxo/byIdBinary/{boxId}` | No | Fetch confirmed UTXO serialized `bytes` hex for offline signing `inputsRaw`. |
@@ -1400,5 +1473,6 @@ def execute_withdrawal_batch(api, db):
 | `POST` | `/transactions/check` | No | Validate signed `ErgoTransaction` JSON without broadcasting. |
 | `POST` | `/transactions` | No | Validate and broadcast signed `ErgoTransaction` JSON; returns `"<txId>"`. |
 | `HEAD` | `/transactions/unconfirmed/{txId}` | No | Check if `txId` is present in mempool (`200` vs `404`). |
-| `GET` | `/blocks/at/{height}` | No | Canonical `headerId` array at block `height` (for reorg detection). |
-| `GET` | `/blocks/{headerId}/header` | No | Block header metadata (`parentId`, `height`, `timestamp`). |
+| `GET` | `/blocks/at/{height}` | No | Locally stored header IDs, including forks. First is selected only at/below the current best-header tip; retained rows above it are not canonical. Not an atomic chain snapshot. |
+| `GET` | `/blocks/{headerId}/transactions` | No | Transaction section for that header ID; verify returned `headerId` before staging outputs. |
+| `GET` | `/blocks/{headerId}/header` | No | Header metadata by ID (`id`, `parentId`, `height`, `timestamp`); verify parent continuity from a captured full-tip anchor. |

@@ -2,7 +2,7 @@ package org.ergoplatform.serialization
 
 import io.circe.syntax._
 import io.circe.{ACursor, Json}
-import org.ergoplatform.ErgoBox
+import org.ergoplatform.{DataInput, ErgoBox, UnsignedInput}
 import org.ergoplatform.ErgoBox.{AdditionalRegisters, NonMandatoryRegisterId}
 import org.ergoplatform.http.api.ApiCodecs
 import org.ergoplatform.http.api.ApiEncoderOption.HideDetails.implicitValue
@@ -13,6 +13,8 @@ import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import cats.syntax.either._
+import scorex.crypto.authds.{ADDigest, ADKey}
+import scorex.crypto.hash.Digest32
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
 import sigmastate.interpreter.SecretProven
 
@@ -81,6 +83,55 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       decoded.isSuccess shouldBe true
       decoded.get.isLeft shouldBe true
       decoded.get.left.get.message.toLowerCase should include ("hex")
+    }
+  }
+
+  property("fixed-size byte JSON decoders should reject non-canonical lengths and invalid hex") {
+    Seq(0, 31, 33).foreach { size =>
+      val json = ("00" * size).asJson
+      json.as[ADKey].isLeft shouldBe true
+      json.as[Digest32].isLeft shouldBe true
+    }
+
+    Seq(0, 32, 34).foreach { size =>
+      ("00" * size).asJson.as[ADDigest].isLeft shouldBe true
+    }
+
+    Seq("zz", "0").foreach { value =>
+      val json = value.asJson
+      json.as[ADKey].isLeft shouldBe true
+      json.as[ADDigest].isLeft shouldBe true
+      json.as[Digest32].isLeft shouldBe true
+    }
+  }
+
+  property("fixed-size byte JSON decoders should preserve canonical bytes") {
+    val digest = ("01" * 32).asJson
+    val stateDigest = ("02" * 33).asJson
+
+    digest.as[ADKey].map(_.toSeq) shouldBe Right(Seq.fill(32)(1.toByte))
+    stateDigest.as[ADDigest].map(_.toSeq) shouldBe Right(Seq.fill(33)(2.toByte))
+    digest.as[Digest32].map(_.toSeq) shouldBe Right(Seq.fill(32)(1.toByte))
+  }
+
+  property("inherited input JSON decoders should enforce box id length") {
+    Seq(31, 32, 33).foreach { size =>
+      val json = Json.obj("boxId" -> ("01" * size).asJson, "extension" -> Json.obj())
+      json.as[DataInput].isRight shouldBe (size == 32)
+      json.as[UnsignedInput].isRight shouldBe (size == 32)
+    }
+  }
+
+  property("invalid dht secret group element bytes should fail decoding without throwing") {
+    forAll(dhtSecretWithPublicImageGen) { case (secret, _) =>
+      val valid = DhtSecretKey(secret).asJson
+      valid.as[DhtSecretKey].isRight shouldBe true
+      Seq("g", "h", "u", "v").foreach { field =>
+        val json = valid.mapObject(_.add(field, "00".asJson))
+        val decoded = Try(json.as[DhtSecretKey])
+        decoded.isSuccess shouldBe true
+        decoded.get.isLeft shouldBe true
+      }
     }
   }
 

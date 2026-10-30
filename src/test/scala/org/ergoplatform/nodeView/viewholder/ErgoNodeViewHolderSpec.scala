@@ -694,6 +694,74 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+  private def preparedSnapshotFloorAfterFreshHeader(blocksToKeep: Int): Unit = {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    val snapshotSettings = protoSettings.copy(
+      chainSettings = protoSettings.chainSettings.copy(
+        voting = protoSettings.chainSettings.voting.copy(votingLength = 2),
+        makeSnapshotEvery = 2),
+      nodeSettings = protoSettings.nodeSettings.copy(
+        blocksToKeep = blocksToKeep,
+        extraIndex = false,
+        utxoSettings = protoSettings.nodeSettings.utxoSettings.copy(utxoBootstrap = true)))
+
+    new NodeViewFixture(snapshotSettings, parameters).apply { fixture =>
+      import fixture._
+
+      val (sourceState, boxHolder) = createUtxoState(settings)
+      val snapshotBlock = validFullBlock(None, sourceState, boxHolder)
+      snapshotBlock.height shouldBe 1
+      applyHeader(snapshotBlock.header).get
+      val control = getHistory.difficultyCalculator
+      val child = nextHeader(Some(snapshotBlock.header), control,
+        tsOpt = Some(snapshotBlock.header.timestamp + 1), diffBitsOpt = None, useRealTs = true)
+      val third = nextHeader(Some(child), control,
+        tsOpt = Some(child.timestamp + 1), diffBitsOpt = None, useRealTs = true)
+      val fresh = nextHeader(Some(third), control,
+        tsOpt = Some(third.timestamp + 1), diffBitsOpt = None, useRealTs = true)
+      Seq(child, third).foreach(h => applyHeader(h).get)
+      getHistory.onUtxoSnapshotApplied(snapshotBlock.height)
+      getHistory.minimalFullBlockHeight shouldBe 2
+      getHistory.bestFullBlockOpt shouldBe None
+      stopNodeViewHolder()
+
+      val stateDir = new File(s"${nodeViewDir.getAbsolutePath}/state")
+      fixture.deleteRecursive(stateDir)
+      stateDir.mkdirs() shouldBe true
+      val persistedGenesis = ErgoState.generateGenesisUtxoState(stateDir, settings, Some(parameters))._1
+      val persistedSnapshot = persistedGenesis.applyModifier(snapshotBlock, None)(_ => ()).get
+      persistedSnapshot.closeStorage()
+
+      startNodeViewHolder()
+      getCurrentState.version shouldBe idToVersion(snapshotBlock.id)
+      getRootHash shouldBe Algos.encode(snapshotBlock.header.stateRoot)
+      getHistory.bestFullBlockOpt shouldBe None
+      getHistory.isUtxoSnapshotApplied shouldBe true
+      getHistory.minimalFullBlockHeight shouldBe 2
+      getHistory.isHeadersChainSynced shouldBe false
+      applyHeader(fresh).get
+      getHistory.isHeadersChainSynced shouldBe true
+      withClue("snapshot floor after a fresh later-epoch header: ") {
+        getHistory.minimalFullBlockHeight shouldBe 2
+      }
+      val requested = getHistory.nextModifiersToDownload(1, (_, id) => !getHistory.contains(id))
+        .values.flatten.toSeq
+      val childSections = getHistory.requiredModifiersForHeader(child).map(_._2)
+      childSections should not be empty
+      requested should contain allElementsOf childSections
+      sourceState.closeStorage()
+    }
+  }
+
+  property("preserve a prepared snapshot floor after restart with all blocks retained") {
+    preparedSnapshotFloorAfterFreshHeader(-1)
+  }
+
+  property("preserve a prepared snapshot floor after restart with finite retention") {
+    preparedSnapshotFloorAfterFreshHeader(1)
+  }
+
   property("preserve a prepared UTXO snapshot state across restart") {
     val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
       .toSettings

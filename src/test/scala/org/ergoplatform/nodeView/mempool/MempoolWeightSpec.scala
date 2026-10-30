@@ -204,9 +204,10 @@ class MempoolWeightSpec extends AnyFlatSpec
   // Exercise process/RBF policy without claiming UTXO, script or node validation.
   private final class PolicyOnlyState extends ErgoState[PolicyOnlyState] {
     private def unsupported: Nothing = throw new UnsupportedOperationException("No state operations in this fixture")
+    private def unsupportedStore: LDBVersionedStore = unsupported
     override def rootDigest: ADDigest = unsupported
     override def version: VersionTag = unsupported
-    override lazy val store: LDBVersionedStore = unsupported
+    override lazy val store: LDBVersionedStore = unsupportedStore
     override protected def ergoSettings: ErgoSettings = rbfSettings
     override def applyModifier(mod: BlockSection, estimatedTip: Option[Int])
                               (generate: LocallyGeneratedModifier => Unit): Try[PolicyOnlyState] = unsupported

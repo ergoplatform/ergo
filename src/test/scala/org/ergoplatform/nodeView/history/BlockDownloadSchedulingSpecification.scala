@@ -30,6 +30,9 @@ class BlockDownloadSchedulingSpecification extends ErgoCorePropertyTest {
   private val oldChain = (21 to 60).foldLeft(bestChain.take(20)) { (chain, height) =>
     chain :+ template.copy(height = height, parentId = chain.last.id, timestamp = template.timestamp + 1)
   }
+  private val deepFork = (21 to 251).foldLeft(bestChain.take(20)) { (chain, height) =>
+    chain :+ template.copy(height = height, parentId = chain.last.id, timestamp = template.timestamp + 2)
+  }
 
   private class SchedulingReader(fullHeader: Header,
                                  retainedVersions: Int = 50,
@@ -48,7 +51,7 @@ class BlockDownloadSchedulingSpecification extends ErgoCorePropertyTest {
     override protected def validate(m: NonHeaderBlockSection): Try[Unit] =
       fail("Scheduling snapshots do not validate sections")
 
-    private val headersById = (bestChain ++ oldChain :+ maximumHeightHeader).map(h => h.id -> h).toMap
+    private val headersById = (bestChain ++ oldChain ++ deepFork :+ maximumHeightHeader).map(h => h.id -> h).toMap
     var traversals: Vector[(Int, ModifierId)] = Vector.empty
     var heightLookups: Vector[Int] = Vector.empty
     override def bestFullBlockOpt: Option[ErgoFullBlock] = Some(ErgoFullBlock(fullHeader,
@@ -153,6 +156,39 @@ class BlockDownloadSchedulingSpecification extends ErgoCorePropertyTest {
   property("near-tip scheduling retains its existing lookback without walking history") {
     val reader = new SchedulingReader(oldChain.last, tipHeight = 100)
     reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, 1 to 300)
+    reader.traversals shouldBe empty
+  }
+
+  property("a deep fork is scheduled across the 128-block near-tip threshold") {
+    Seq(171, 172, 251).foreach { height =>
+      val reader = new SchedulingReader(deepFork(height - 1), retainedVersions = height - 20)
+      reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, 21 to 300)
+      reader.traversals shouldBe Vector((height - 19) -> deepFork(height - 1).id)
+    }
+  }
+
+  property("near-tip ancestor scheduling respects the minimal full block height") {
+    Seq(30, 200).foreach { minimumHeight =>
+      val reader = new SchedulingReader(deepFork.last, retainedVersions = 231, minimumHeight = minimumHeight)
+      reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, minimumHeight to 300)
+      if (minimumHeight >= 151) reader.traversals shouldBe empty
+    }
+  }
+
+  property("near-tip scheduling falls back when the common ancestor is beyond retained history") {
+    val reader = new SchedulingReader(deepFork.last, retainedVersions = 230)
+    reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, 151 to 300)
+    reader.traversals shouldBe Vector(231 -> deepFork.last.id)
+  }
+
+  property("near-tip scheduling falls back when an intermediate parent is missing") {
+    val reader = new SchedulingReader(deepFork.last, retainedVersions = 231, missingHeader = Some(deepFork(199).id))
+    reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, 151 to 300)
+  }
+
+  property("near-tip scheduling preserves its fast path on the selected chain") {
+    val reader = new SchedulingReader(bestChain(250))
+    reader.nextModifiersToDownload(1000, acceptAll) shouldBe expected(reader, 151 to 300)
     reader.traversals shouldBe empty
   }
 }

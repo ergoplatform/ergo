@@ -1,13 +1,13 @@
 package org.ergoplatform.nodeView.viewholder
 
-import akka.actor.CoordinatedShutdown
+import akka.actor.{CoordinatedShutdown, Props}
 import akka.testkit.TestProbe
 import ch.qos.logback.classic.{Level, Logger}
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import java.io.File
 import org.ergoplatform.ErgoApp.InternalShutdown
-import org.ergoplatform.core.idToVersion
+import org.ergoplatform.core.{VersionTag, idToVersion}
 import org.ergoplatform.ErgoBoxCandidate
 import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 import org.ergoplatform.modifiers.{ErgoFullBlock, SnapshotsInfoTypeId}
@@ -34,10 +34,15 @@ import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.ProcessingOutcome.Acce
 import org.ergoplatform.wallet.utils.FileUtils
 import org.slf4j.LoggerFactory
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
+import scorex.crypto.authds.ADDigest
+import scorex.crypto.authds.avltree.batch.{BatchAVLProver, PersistentBatchAVLProver, ProverNodes, VersionedLDBAVLStorage}
+import scorex.crypto.hash.Digest32
+import org.ergoplatform.settings.Algos.HF
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps with FileUtils {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -1106,6 +1111,86 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
     }
   }
 
+
+  property("stop without installing a state when rollback recovers a mismatched prover") {
+    val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)
+      .toSettings
+    new NodeViewFixture(protoSettings, parameters).apply { fixture =>
+      import fixture._
+
+      stopNodeViewHolder()
+      val installMismatch = "install recovered-height mismatch"
+      val resultProbe = new TestProbe(actorSystem)
+      nodeViewHolderRef = actorSystem.actorOf(Props(new UtxoNodeViewHolder(settings) {
+        override def receive: Receive = ({
+          case `installMismatch` =>
+            val original = minimalState()
+            val prover = new PersistentBatchAVLProver[Digest32, HF] {
+              override var avlProver: BatchAVLProver[Digest32, HF] = original.persistentProver.avlProver
+              override val storage: VersionedLDBAVLStorage = new VersionedLDBAVLStorage(original.store) {
+                override def rollback(version: ADDigest): Try[(ProverNodes[Digest32], Int)] =
+                  super.rollback(version).map { case (root, height) => root -> (height + 1) }
+              }
+            }
+            val wrapped = new UtxoState(prover, original.version, original.store, settings) {
+              override def rollbackTo(version: VersionTag): Try[UtxoState] = {
+                val result = super.rollbackTo(version)
+                resultProbe.ref.tell(result, self)
+                result
+              }
+            }
+            updateNodeView(updatedState = Some(wrapped))
+            sender().tell(wrapped, self)
+        }: Receive) orElse super.receive
+      }))
+
+      val (us, bh) = createUtxoState(settings)
+      val genesis = validFullBlock(parentOpt = None, us, bh)
+      val sourceAtGenesis = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
+      val first = validFullBlock(Some(genesis), sourceAtGenesis, genesis.header.timestamp + 1)
+      val alternative = validFullBlock(Some(genesis), sourceAtGenesis, genesis.header.timestamp + 2)
+      val sourceAtAlternative = sourceAtGenesis.applyModifier(alternative)(_ => ()).get
+      val next = validFullBlock(Some(alternative), sourceAtAlternative)
+      val sourceAtNext = sourceAtAlternative.applyModifier(next)(_ => ()).get
+      val last = validFullBlock(Some(next), sourceAtNext)
+      us.closeStorage()
+
+      applyBlock(genesis) shouldBe 'success
+      applyBlock(first) shouldBe 'success
+      applyHeader(alternative.header) shouldBe 'success
+      applyHeader(next.header) shouldBe 'success
+      applyHeader(last.header) shouldBe 'success
+      applyPayload(alternative) shouldBe 'success
+      getCurrentState.version shouldBe idToVersion(first.id)
+      getCurrentState.rollbackVersions.toSeq should contain(idToVersion(genesis.id))
+
+      nodeViewHolderRef ! installMismatch
+      val installed = expectMsgType[UtxoState]
+      installed.rootDigest shouldEqual first.header.stateRoot
+      val rollbackProbe = new TestProbe(actorSystem)
+      val changesProbe = new TestProbe(actorSystem)
+      val deathProbe = new TestProbe(actorSystem)
+      actorSystem.eventStream.subscribe(rollbackProbe.ref, RollbackFailed.getClass)
+      actorSystem.eventStream.subscribe(changesProbe.ref, classOf[ChangedState])
+      actorSystem.eventStream.subscribe(changesProbe.ref, classOf[FullBlockApplied])
+      deathProbe.watch(nodeViewHolderRef)
+
+      nodeViewHolderRef ! ModifiersFromRemote(next.blockSections ++ last.blockSections)
+
+      val result = resultProbe.expectMsgType[Try[UtxoState]]
+      result.isFailure shouldBe true
+      result.failed.get shouldBe a[IllegalArgumentException]
+      result.failed.get.getMessage should include("Unexpected root digest after rollback")
+      rollbackProbe.expectMsg(RollbackFailed)
+      deathProbe.expectTerminated(nodeViewHolderRef)
+      CoordinatedShutdown(actorSystem).shutdownReason() shouldBe Some(InternalShutdown)
+      // The real prover installed the storage result before UtxoState rejected its height.
+      installed.rootDigest.dropRight(1) shouldEqual genesis.header.stateRoot.dropRight(1)
+      installed.rootDigest.last should not be genesis.header.stateRoot.last
+      installed.version shouldBe idToVersion(first.id)
+      changesProbe.expectNoMessage()
+    }
+  }
 
   property("shut down the node cleanly when state rollback fails during a chain switch") {
     val protoSettings = NodeViewTestConfig(StateType.Utxo, verifyTransactions = true, popowBootstrap = false)

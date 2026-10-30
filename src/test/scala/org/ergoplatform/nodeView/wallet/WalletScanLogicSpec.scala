@@ -4,13 +4,16 @@ import org.ergoplatform.utils.{ErgoCorePropertyTest, WalletTestOps}
 import WalletScanLogic.{extractWalletOutputs, scanBlockTransactions}
 import org.ergoplatform.db.DBSpec
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
-import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry}
-import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletRegistry, WalletStorage}
+import org.ergoplatform.nodeView.wallet.scanning.{EqualsScanningPredicate, ScanRequest, ScanSerializer, ScanWalletInteraction}
 import org.ergoplatform.wallet.Constants
 import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
 import org.scalacheck.Gen
-import sigma.ast.{ByteArrayConstant, ErgoTree}
+import org.iq80.leveldb.Options
+import scorex.db.{LDBFactory, LDBKVStore}
+import sigma.Colls
+import sigma.ast.{ByteArrayConstant, ErgoTree, IntConstant, LongConstant}
 import org.ergoplatform.settings.Constants.{FalseTree, TrueTree}
 
 import scala.util.Random
@@ -279,6 +282,52 @@ class WalletScanLogicSpec extends ErgoCorePropertyTest with DBSpec with WalletTe
     boxes.size shouldBe 1
     boxes.head.scans.size shouldBe 2
     boxes.head.scans shouldBe Set(scanId, Constants.PaymentsScanId)
+  }
+
+  property("persisted Long equality scan classifies future outputs after reopen") {
+    val directory = createTempDir
+    val options = new Options().createIfMissing(true)
+    val marker = ByteArrayConstant(Array[Byte](7, 6, 5))
+    val longRequest = ScanRequest("Long R4", EqualsScanningPredicate(ErgoBox.R4, LongConstant(42L)),
+      Some(ScanWalletInteraction.Off), None)
+    val byteRequest = ScanRequest("Byte R4", EqualsScanningPredicate(ErgoBox.R4, marker),
+      Some(ScanWalletInteraction.Off), None)
+
+    try {
+      val original = new WalletStorage(new LDBKVStore(LDBFactory.factory.open(directory, options)), s)
+      val (longScan, byteScan) = try {
+        original.addScan(longRequest).get -> original.addScan(byteRequest).get
+      } finally original.close()
+
+      val reopened = new WalletStorage(new LDBKVStore(LDBFactory.factory.open(directory, options)), s)
+      try {
+        val scansById = reopened.allScans.map(scan => scan.scanId -> scan).toMap
+        scansById.keySet shouldBe Set(longScan.scanId, byteScan.scanId)
+        ScanSerializer.toBytes(scansById(longScan.scanId)).toSeq shouldBe ScanSerializer.toBytes(longScan).toSeq
+        ScanSerializer.toBytes(scansById(byteScan.scanId)).toSeq shouldBe ScanSerializer.toBytes(byteScan).toSeq
+
+        val walletVars = WalletVars(reopened, s)
+        walletVars.stateCacheOpt shouldBe None
+        walletVars.externalScans.map(_.scanId).toSet shouldBe Set(longScan.scanId, byteScan.scanId)
+
+        val outputs = IndexedSeq(
+          new ErgoBoxCandidate(1001L, TrueTree, 1, Colls.emptyColl,
+            Map(ErgoBox.R4 -> LongConstant(42L))),
+          new ErgoBoxCandidate(1002L, TrueTree, 1, Colls.emptyColl,
+            Map(ErgoBox.R4 -> IntConstant(42))),
+          new ErgoBoxCandidate(1003L, TrueTree, 1, Colls.emptyColl,
+            Map(ErgoBox.R4 -> marker))
+        )
+        val tx = new ErgoTransaction(fakeInputs, IndexedSeq.empty, outputs)
+        val found = extractWalletOutputs(tx, Some(1), walletVars, None)
+
+        found.find(_.value == 1003L).map(_.scans) shouldBe Some(Set(byteScan.scanId))
+        withClue("PERSISTED_LONG_SCAN_AFTER_REOPEN: ") {
+          found.map(_.value).toSet shouldBe Set(1001L, 1003L)
+          found.find(_.value == 1001L).map(_.scans) shouldBe Some(Set(longScan.scanId))
+        }
+      } finally reopened.close()
+    } finally deleteRecursive(directory)
   }
 
 }

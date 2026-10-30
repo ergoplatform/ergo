@@ -47,6 +47,10 @@ ergo {
 }
 ```
 
+UTXO set snapshot bootstrap requires `node.stateType = "utxo"`. Combining
+`node.stateType = "digest"` with `node.utxo.utxoBootstrap = true` is rejected.
+Digest nodes can use NiPoPoW bootstrap without a UTXO set snapshot.
+
 * The UTXO set snapshot bootstrapping can be further optimized by combining it with NiPoPoW (Non-Interactive Proofs of Proof-of-Work). This method allows for syncing the headers-chain in logarithmic time, as opposed to the linear time required by the standard SPV sync for headers. For more details, refer to the [NiPoPoW paper](https://eprint.iacr.org/2017/963.pdf).
 ```
 
@@ -64,6 +68,7 @@ ergo{
 ergo {
    ...
    node.stateType = "digest"
+   node.utxo.utxoBootstrap = false
    node.blocksToKeep = 2160 # store and process last three days only
    node.nipopow.nipopowBootstrap = true   # compatible with NiPoPoWs 
    ...

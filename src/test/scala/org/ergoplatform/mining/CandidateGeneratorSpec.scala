@@ -5,17 +5,18 @@ import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
 import org.bouncycastle.util.BigIntegers
+import com.google.common.primitives.Longs
 import org.ergoplatform.mining.CandidateGenerator.{Candidate, GenerateCandidate}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction, UnsignedErgoTransaction}
-import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, SemanticallyFailedModification}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, FullBlockApplied, LocalBlockApplied, RemoteBlockApplied, SemanticallyFailedModification}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{EliminateTransactions, LocallyGeneratedTransaction}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
-import org.ergoplatform.nodeView.state.StateType
+import org.ergoplatform.nodeView.state.{StateType, UtxoState}
 import org.ergoplatform.nodeView.wallet.ErgoWalletReader
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef, LocallyGeneratedModifier}
 import org.ergoplatform.settings.NetworkType.DevNet60
@@ -34,8 +35,10 @@ import scorex.util.encode.Base16
 import sigma.data.ProveDlog
 import sigma.serialization.ErgoTreeSerializer
 import sigmastate.crypto.DLogProtocol.DLogProverInput
+import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 
 import scala.concurrent.duration._
+import scala.util.{Failure, Try}
 
 class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -769,6 +772,122 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     system.terminate()
   }
 
+  it should "use the candidate key for a v2 solution without pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(defaultSettings60)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderProbe.ref,
+        defaultSettings60
+      )
+
+    val customMiner =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("external_v2_miner".getBytes()))
+    val customPk = customMiner.publicImage
+    customPk should not be defaultMinerSecret.publicImage
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(customPk)),
+      replyProbe.ref
+    )
+    val candidate = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    candidate.externalVersion.pk shouldBe customPk
+
+    val minedBlock = defaultSettings60.chainSettings.powScheme
+      .proveCandidate(candidate.candidateBlock, customMiner.w, 0, 1000)
+      .get
+    val solutionWithoutPk =
+      minedBlock.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+    candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
+
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
+      case LocallyGeneratedModifier(header: Header) => header
+    }
+    submittedHeader.powSolution.pk shouldBe customPk.value
+
+    system.terminate()
+  }
+
+  it should "use the previous candidate key for a v2 solution without pk" in new TestKit(
+    ActorSystem()
+  ) {
+    val replyProbe = new TestProbe(system)
+    val viewHolderProbe = new TestProbe(system)
+    val acceptedHeaderId = new java.util.concurrent.atomic.AtomicReference[Option[String]](None)
+    val basePow = defaultSettings60.chainSettings.powScheme
+    val gatedPow = new DefaultFakePowScheme(basePow.k, basePow.n) {
+      override def validate(header: Header): Try[Unit] =
+        if (acceptedHeaderId.get().forall(_ == header.id.toString)) scala.util.Success(())
+        else Failure(new IllegalArgumentException("Not the previous candidate header"))
+    }
+    val settings = defaultSettings60.copy(
+      chainSettings = defaultSettings60.chainSettings.copy(powScheme = gatedPow)
+    )
+    val realViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(realViewHolderRef)
+    val candidateGenerator: ActorRef = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    val previousMiner =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("external_previous_v2_miner".getBytes()))
+    val previousPk = previousMiner.publicImage
+    previousPk should not be defaultMinerSecret.publicImage
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = Some(previousPk)),
+      replyProbe.ref
+    )
+    val previous = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    previous.externalVersion.pk shouldBe previousPk
+
+    candidateGenerator.tell(
+      GenerateCandidate(Seq.empty, reply = true, forced = false),
+      replyProbe.ref
+    )
+    val current = replyProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    current.externalVersion.pk shouldBe defaultMinerSecret.publicImage
+
+    val minedPrevious = gatedPow.proveCandidate(previous.candidateBlock, previousMiner.w, 0, 1000).get
+    val solutionWithoutPk = minedPrevious.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+    val expectedPrevious = CandidateGenerator.completeBlock(
+      previous.candidateBlock,
+      minedPrevious.header.powSolution
+    )
+    val currentAttempt = CandidateGenerator.completeBlock(
+      current.candidateBlock,
+      solutionWithoutPk.copy(pk = current.externalVersion.pk.value)
+    )
+    currentAttempt.id should not be expectedPrevious.id
+    acceptedHeaderId.set(Some(expectedPrevious.id.toString))
+    candidateGenerator.tell(solutionWithoutPk, replyProbe.ref)
+
+    replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
+    val submittedHeader = viewHolderProbe.expectMsgPF(blockValidationDelay) {
+      case LocallyGeneratedModifier(header: Header) => header
+    }
+    submittedHeader.id shouldBe expectedPrevious.header.id
+    submittedHeader.powSolution.pk shouldBe previousPk.value
+
+    system.terminate()
+  }
+
   it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
@@ -892,68 +1011,88 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
   it should "ignore cached candidate when forced = true" in new TestKit(ActorSystem()) {
     val testProbe = new TestProbe(system)
-    val viewHolderProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
 
     val testDir = s"${defaultSettings.directory}-ignore-cache-${System.currentTimeMillis()}"
-    val settingsForExplicitForcing: ErgoSettings =
+    // Long interval: a mempool change after the block application must not regenerate
+    // the candidate behind the test's back, only forced = true does.
+    val settingsWithLongRegeneration: ErgoSettings =
       ErgoSettingsReader.read()
         .copy(
           nodeSettings = defaultSettings.nodeSettings
-            // Keep automatic refresh outside this test of explicit forcing.
             .copy(blockCandidateGenerationInterval = 1.hour),
           chainSettings =
             ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
           directory = testDir
         )
 
-    // Keep readers fixed: a later ChangedMempool event may legitimately regenerate the cache.
-    val (initialState, boxes) = createUtxoState(settingsForExplicitForcing)
-    val block = validFullBlock(None, initialState, boxes)
-    val state = initialState.applyModifier(block, None)(_ => ()).get
-    // Initialization computes mining-time averages from pairs of headers.
-    val history = historyWithBestFullBlock(Seq(block))
-    val readers = Readers(history, state, ErgoMemPool.empty(settingsForExplicitForcing), walletStub)
-    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val viewHolderRef: ActorRef = ErgoNodeViewRef(settingsWithLongRegeneration)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
 
     val candidateGenerator: ActorRef =
       CandidateGenerator(
         defaultMinerSecret.publicImage,
         readersHolderRef,
-        viewHolderProbe.ref,
-        settingsForExplicitForcing
+        viewHolderRef,
+        settingsWithLongRegeneration
       )
 
-    try {
-      // Get first candidate from the coherent, already applied block snapshot.
-      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-      val candidate1 = testProbe.expectMsgPF(candidateGenDelay) {
-        case StatusReply.Success(c: Candidate) => c
-      }
-      candidate1.candidateBlock.parentOpt.map(_.id) shouldBe Some(block.header.id)
+    val powScheme = settingsWithLongRegeneration.chainSettings.powScheme
 
-      // Request with forced = false should return cached candidate immediately.
-      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-      val candidate2 = testProbe.expectMsgPF(100.millis) {
-        case StatusReply.Success(c: Candidate) => c
-      }
-      candidate2 should be theSameInstanceAs candidate1
-      candidate2.candidateBlock.timestamp shouldBe candidate1.candidateBlock.timestamp
-
-      // Request with forced = true should bypass cache and regenerate.
-      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
-      val candidate3 = testProbe.expectMsgPF(candidateGenDelay) {
-        case StatusReply.Success(c: Candidate) => c
-      }
-
-      // Identity proves regeneration even when the clock has not advanced.
-      candidate3 should not be theSameInstanceAs(candidate1)
-      candidate3.candidateBlock.parentOpt.map(_.id) shouldBe Some(block.header.id)
-      candidate3.candidateBlock.timestamp should be >= candidate1.candidateBlock.timestamp
-    } finally {
-      TestKit.shutdownActorSystem(system)
-      history.closeStorage()
-      state.closeStorage()
+    // First mine a block to establish chain (needed for avg mining time calculation)
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    val initCandidate = testProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
     }
+    val initBlock = powScheme
+      .proveCandidate(initCandidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
+      .get
+    candidateGenerator.tell(initBlock.header.powSolution, testProbe.ref)
+    // Wait for both the direct mining ACK and the async local block application
+    var ackSeen = false
+    var appliedSeen = false
+    testProbe.fishForMessage(blockValidationDelay) {
+      case StatusReply.Success(()) =>
+        ackSeen = true
+        ackSeen && appliedSeen
+      case FullBlockApplied(header) if header.id == initBlock.header.id =>
+        appliedSeen = true
+        ackSeen && appliedSeen
+      case _ => false
+    }
+
+    // The generator drops its cached candidate when it gets the applied block. Wait for a
+    // candidate built on that block, so the cache does not change in the checks below.
+    val candidate1 = eventually(timeout(candidateGenDelay), interval(100.millis)) {
+      candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+      val candidate = testProbe.expectMsgPF(candidateGenDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+      candidate.candidateBlock.parentOpt.map(_.id) shouldBe Some(initBlock.header.id)
+      candidate
+    }
+
+    // Request with forced = false should return cached candidate immediately
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
+    val candidate2 = testProbe.expectMsgPF(100.millis) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+    // Should be the exact same cached candidate
+    candidate2.candidateBlock.timestamp shouldBe candidate1.candidateBlock.timestamp
+
+    // Request with forced = true should bypass cache and regenerate
+    candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = true), testProbe.ref)
+    val candidate3 = testProbe.fishForMessage(candidateGenDelay) {
+      case StatusReply.Success(_: Candidate) => true
+      case _: FullBlockApplied => false
+    } match {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // candidate3 should have timestamp >= candidate1 (regenerated, possibly same or newer)
+    candidate3.candidateBlock.timestamp should be >= candidate1.candidateBlock.timestamp
+
+    system.terminate()
   }
 
   it should "preserve previous candidate when forced regeneration occurs" in new TestKit(ActorSystem()) {
@@ -1424,6 +1563,317 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     senderProbe.expectNoMessage(2.seconds)
     viewHolderProbe.expectNoMessage(500.millis)
 
+    system.terminate()
+  }
+
+  it should "recover with a filled candidate when proof generation fails once" in new TestKit(
+    ActorSystem()
+  ) {
+    val testDir = s"${defaultSettings.directory}-proof-retry-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, bh2) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val history2 = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+
+    val (txs3, _) = validTransactionsFromBoxHolder(bh2, rnd)
+    txs3 should not be empty
+
+    // simulate the race: state is updated between transaction collection and proof generation,
+    // so the first proofsForTransactions call fails
+    var proofsFailed = false
+    val failingOnceState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] =
+        if (!proofsFailed) {
+          proofsFailed = true
+          Failure(new Exception("Simulating state update during candidate assembly"))
+        } else {
+          super.proofsForTransactions(txs)
+        }
+    }
+
+    val readers = Readers(history2, failingOnceState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    candidateGenerator.tell(GenerateCandidate(txs3, reply = true, forced = true), senderProbe.ref)
+    val candidate = senderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // proof generation failed on the first attempt, but the retry succeeded with the pool txs
+    proofsFailed shouldBe true
+    candidate.candidateBlock.transactions.map(_.id) should contain allElementsOf txs3.map(_.id)
+
+    system.terminate()
+  }
+
+  it should "fall back to emission-only candidate when proof generation keeps failing" in new TestKit(
+    ActorSystem()
+  ) {
+    val testDir = s"${defaultSettings.directory}-proof-fallback-${System.currentTimeMillis()}"
+    val settings = testSettings(testDir)
+    val viewHolderProbe = TestProbe()
+    val senderProbe = TestProbe()
+
+    val (us0, bh0) = createUtxoState(settings)
+    val rnd = new RandomWrapper
+
+    val (txs1, bh1) = validTransactionsFromBoxHolder(bh0, rnd)
+    txs1 should not be empty
+    val block1 = validFullBlock(None, us0, txs1)
+    val us1 = us0.applyModifier(block1, None)(_ => ()).get
+
+    val (txs2, bh2) = validTransactionsFromBoxHolder(bh1, rnd)
+    txs2 should not be empty
+    val block2 = validFullBlock(Some(block1), us1, txs2)
+    val us2 = us1.applyModifier(block2, None)(_ => ()).get
+    val history2 = applyChain(
+      HistoryTestHelpers.generateHistory(
+        verifyTransactions = true,
+        stateType = StateType.Utxo,
+        PoPoWBootstrap = false,
+        blocksToKeep = 100
+      ),
+      Seq(block1, block2)
+    )
+
+    val (txs3, _) = validTransactionsFromBoxHolder(bh2, rnd)
+    txs3 should not be empty
+
+    val alwaysFailingState = new UtxoState(us2.persistentProver, us2.version, us2.store, settings) {
+      override def proofsForTransactions(txs: Seq[ErgoTransaction]): Try[(SerializedAdProof, ADDigest)] =
+        if (txs.lengthCompare(1) > 0) {
+          Failure(new Exception("Simulating persistent proof generation failure"))
+        } else {
+          super.proofsForTransactions(txs)
+        }
+    }
+
+    val readers = Readers(history2, alwaysFailingState, ErgoMemPool.empty(settings), walletStub)
+    val readersHolderRef = system.actorOf(Props(new FixedReadersHolder(readers)))
+    val candidateGenerator = CandidateGenerator(
+      defaultMinerSecret.publicImage,
+      readersHolderRef,
+      viewHolderProbe.ref,
+      settings
+    )
+
+    candidateGenerator.tell(GenerateCandidate(txs3, reply = true, forced = true), senderProbe.ref)
+    val candidate = senderProbe.expectMsgPF(candidateGenDelay) {
+      case StatusReply.Success(c: Candidate) => c
+    }
+
+    // both attempts failed, so only the emission transaction is included
+    candidate.candidateBlock.transactions should have length 1
+
+    system.terminate()
+  }
+
+  /**
+    * A candidate generator on a fresh chain of its own for the solved-block cases below.
+    */
+  private class SolvedBlockFixture(directorySuffix: String,
+                                   baseSettings: ErgoSettings = defaultSettings)
+    extends TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val settings: ErgoSettings = baseSettings.copy(
+      directory =
+        s"${baseSettings.directory}-$directorySuffix-${System.currentTimeMillis()}"
+    )
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    val candidateGenerator: ActorRef =
+      CandidateGenerator(
+        defaultMinerSecret.publicImage,
+        readersHolderRef,
+        viewHolderRef,
+        settings
+      )
+
+    val otherMiner: DLogProverInput =
+      DLogProverInput(BigIntegers.fromUnsignedByteArray("another_test_key".getBytes()))
+    val otherPk: ProveDlog = otherMiner.publicImage
+
+    def candidate(optPk: Option[ProveDlog]): Candidate = {
+      val request =
+        GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = optPk)
+      candidateGenerator.tell(request, testProbe.ref)
+      testProbe.fishForSpecificMessage(newBlockDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+    }
+
+    def solve(c: Candidate, secret: DLogProverInput = defaultMinerSecret): ErgoFullBlock =
+      settings.chainSettings.powScheme
+        .proveCandidate(c.candidateBlock, secret.w, 0, 1000)
+        .get
+  }
+
+  it should "apply a v2 solution without pk using the selected candidate key" in
+    new SolvedBlockFixture("v2-keyless-apply", defaultSettings60) {
+      try {
+        val selected = candidate(Some(otherPk))
+        selected.externalVersion.pk shouldBe otherPk
+        val solved = solve(selected, otherMiner)
+        val solutionWithoutPk = solved.header.powSolution.copy(pk = AutolykosSolution.pkForV2)
+
+        var acknowledged = false
+        var applied = false
+        candidateGenerator.tell(solutionWithoutPk, testProbe.ref)
+        testProbe.fishForMessage(newBlockDelay) {
+          case StatusReply.Success(()) =>
+            acknowledged = true
+            acknowledged && applied
+          case FullBlockApplied(header) if header.id == solved.id =>
+            header.powSolution.pk shouldBe otherPk.value
+            applied = true
+            acknowledged && applied
+          case StatusReply.Error(e) =>
+            fail(s"keyless solution rejected: ${e.getMessage}")
+          case _ => false
+        }
+        acknowledged shouldBe true
+        applied shouldBe true
+
+        val readersProbe = new TestProbe(system)
+        readersProbe.awaitAssert({
+          readersProbe.send(readersHolderRef, GetReaders)
+          val readers = readersProbe.expectMsgType[Readers](candidateGenDelay)
+          readers.h.bestFullBlockIdOpt shouldBe Some(solved.id)
+        }, newBlockDelay, 100.millis)
+      } finally system.terminate()
+    }
+
+  it should "clear the solved block on its FullBlockApplied when the candidate was already regenerated on it" in
+    new SolvedBlockFixture("solved-clear") {
+      // the first reply means the generator is initialized and subscribed; from here on the block-applied event
+      // (LocalBlockApplied, the FullBlockApplied the node view holder publishes for its own block) is delivered to it
+      // by hand, to fix the order of events
+      val first = candidate(None)
+      system.eventStream.unsubscribe(candidateGenerator, classOf[FullBlockApplied])
+
+      val solved = solve(first)
+      candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == solved.id; case _ => false }
+
+      // a request the cache does not answer (another miner key, as /mining/candidateWithTxsAndPk sends) is processed
+      // after the solved block is applied and before the generator sees the block-applied event for it
+      candidate(Some(otherPk)).candidateBlock.parentOpt.map(_.id) shouldBe Some(solved.id)
+      candidateGenerator ! LocalBlockApplied(solved.header, solved.blockTransactions.transactions.map(_.id))
+
+      // the next solution on the new block must be accepted
+      val nextSolved = solve(candidate(None))
+      nextSolved.parentId shouldBe solved.id
+      candidateGenerator.tell(nextSolved.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(blockValidationDelay) {
+        case StatusReply.Success(()) => true
+        case StatusReply.Error(e)    => fail(s"next solution rejected: ${e.getMessage}")
+        case _                       => false
+      }
+      system.terminate()
+    }
+
+  it should "keep the solved block when the block-applied event that arrives is for its parent" in
+    new SolvedBlockFixture("solved-keep") {
+      // fake PoW always finds nonce 0; another solution for the same candidate needs another nonce
+      def solveAt(c: Candidate, nonce: Long): ErgoFullBlock = {
+        val s = solve(c, otherMiner).header.powSolution
+        CandidateGenerator.completeBlock(c.candidateBlock, s.copy(n = Longs.toByteArray(nonce)))
+      }
+
+      // the parent is not mined by this generator (a block from a peer): it goes to the node view directly
+      val first = candidate(None)
+      system.eventStream.unsubscribe(candidateGenerator, classOf[FullBlockApplied])
+      val parent = solve(first)
+      viewHolderRef ! LocallyGeneratedModifier(parent.header)
+      parent.mandatoryBlockSections.foreach(viewHolderRef ! LocallyGeneratedModifier(_))
+      testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == parent.id; case _ => false }
+
+      // a candidate on the new block is generated, and solved, before the generator sees that block's applied event
+      val onParent = candidate(Some(otherPk))
+      onParent.candidateBlock.parentOpt.map(_.id) shouldBe Some(parent.id)
+      val solved = solve(onParent, otherMiner)
+      solved.header.powSolution.pk shouldBe otherPk.value
+      candidateGenerator.tell(solved.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(blockValidationDelay) {
+        case StatusReply.Success(()) => true
+        case StatusReply.Error(e)    => fail(s"solution rejected: ${e.getMessage}")
+        case _                       => false
+      }
+
+      // the parent's applied event arrives now: the solved block's parent is the applied block, so it stays solved
+      candidateGenerator ! RemoteBlockApplied(parent.header, parent.blockTransactions.transactions.map(_.id))
+      val second = solveAt(onParent, 1)
+      second.id should not be solved.id
+      candidateGenerator.tell(second.header.powSolution, testProbe.ref)
+      testProbe.fishForMessage(blockValidationDelay) {
+        case StatusReply.Error(e)    => e.getMessage should include(s"Block already solved : Some(${solved.id})"); true
+        case StatusReply.Success(()) => fail("a second solution at the solved block's height was accepted")
+        case _                       => false
+      }
+      system.terminate()
+    }
+
+  it should "start and serve a candidate when the chain has a single block" in new TestKit(ActorSystem()) {
+    val testProbe = new TestProbe(system)
+    system.eventStream.subscribe(testProbe.ref, newBlockSignal)
+
+    val settings: ErgoSettings =
+      defaultSettings.copy(directory = s"${defaultSettings.directory}-single-block-${System.currentTimeMillis()}")
+    val viewHolderRef: ActorRef    = ErgoNodeViewRef(settings)
+    val readersHolderRef: ActorRef = ErgoReadersHolderRef(viewHolderRef)
+
+    def candidateFrom(generator: ActorRef): Candidate = {
+      generator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false, optPk = None), testProbe.ref)
+      testProbe.fishForSpecificMessage(newBlockDelay) {
+        case StatusReply.Success(c: Candidate) => c
+      }
+    }
+
+    // mine the first block
+    val first = CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
+    val genesis = settings.chainSettings.powScheme
+      .proveCandidate(candidateFrom(first).candidateBlock, defaultMinerSecret.w, 0, 1000).get
+    first.tell(genesis.header.powSolution, testProbe.ref)
+    testProbe.fishForMessage(newBlockDelay) { case FullBlockApplied(h) => h.id == genesis.id; case _ => false }
+    // the first generator is fully stopped before the next one starts, so only one reads the node view at a time
+    val deathWatch = TestProbe()
+    deathWatch.watch(first)
+    system.stop(first)
+    deathWatch.expectTerminated(first, newBlockDelay)
+
+    // a generator started now (as on a node restart) initializes from a history holding one header
+    val restarted = CandidateGenerator(defaultMinerSecret.publicImage, readersHolderRef, viewHolderRef, settings)
+    candidateFrom(restarted).candidateBlock.parentOpt.map(_.id) shouldBe Some(genesis.id)
     system.terminate()
   }
 

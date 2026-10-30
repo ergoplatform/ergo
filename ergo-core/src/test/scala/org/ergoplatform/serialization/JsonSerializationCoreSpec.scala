@@ -16,6 +16,7 @@ import cats.syntax.either._
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
+import sigma.data.{DataInput, UnsignedInput}
 import sigmastate.interpreter.SecretProven
 
 import scala.util.Try
@@ -87,13 +88,13 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
   }
 
   property("fixed-size byte JSON decoders should reject non-canonical lengths and invalid hex") {
-    Seq(31, 33).foreach { size =>
+    Seq(0, 31, 33).foreach { size =>
       val json = ("00" * size).asJson
       json.as[ADKey].isLeft shouldBe true
       json.as[Digest32].isLeft shouldBe true
     }
 
-    Seq(32, 34).foreach { size =>
+    Seq(0, 32, 34).foreach { size =>
       ("00" * size).asJson.as[ADDigest].isLeft shouldBe true
     }
 
@@ -105,27 +106,34 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
     }
   }
 
-  property("fixed-size byte JSON decoders should accept canonical lengths") {
-    val digest = ("00" * 32).asJson
-    val stateDigest = ("00" * 33).asJson
+  property("fixed-size byte JSON decoders should preserve canonical bytes") {
+    val digest = ("01" * 32).asJson
+    val stateDigest = ("02" * 33).asJson
 
-    digest.as[ADKey].isRight shouldBe true
-    stateDigest.as[ADDigest].isRight shouldBe true
-    digest.as[Digest32].isRight shouldBe true
+    digest.as[ADKey].map(_.toSeq) shouldBe Right(Seq.fill(32)(1.toByte))
+    stateDigest.as[ADDigest].map(_.toSeq) shouldBe Right(Seq.fill(33)(2.toByte))
+    digest.as[Digest32].map(_.toSeq) shouldBe Right(Seq.fill(32)(1.toByte))
+  }
+
+  property("inherited input JSON decoders should enforce box id length") {
+    Seq(31, 32, 33).foreach { size =>
+      val json = Json.obj("boxId" -> ("01" * size).asJson, "extension" -> Json.obj())
+      json.as[DataInput].isRight shouldBe (size == 32)
+      json.as[UnsignedInput].isRight shouldBe (size == 32)
+    }
   }
 
   property("invalid dht secret group element bytes should fail decoding without throwing") {
-    val json = Json.obj(
-      "secret" -> "01".asJson,
-      "g" -> "00".asJson,
-      "h" -> "00".asJson,
-      "u" -> "00".asJson,
-      "v" -> "00".asJson
-    )
-
-    val decoded = Try(json.as[DhtSecretKey])
-    decoded.isSuccess shouldBe true
-    decoded.get.isLeft shouldBe true
+    forAll(dhtSecretWithPublicImageGen) { case (secret, _) =>
+      val valid = DhtSecretKey(secret).asJson
+      valid.as[DhtSecretKey].isRight shouldBe true
+      Seq("g", "h", "u", "v").foreach { field =>
+        val json = valid.mapObject(_.add(field, "00".asJson))
+        val decoded = Try(json.as[DhtSecretKey])
+        decoded.isSuccess shouldBe true
+        decoded.get.isLeft shouldBe true
+      }
+    }
   }
 
   private def checkTrackedBox(c: ACursor, b: TrackedBox)(implicit opts: Detalization) = {

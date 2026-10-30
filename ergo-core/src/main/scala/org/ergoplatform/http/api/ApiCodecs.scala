@@ -40,7 +40,8 @@ import scala.util.{Failure, Success, Try}
 
 trait ApiCodecs extends JsonCodecs {
 
-  private def fixedSizeBytesDecoder[T](typeName: String, expectedSize: Int)(wrap: Array[Byte] => T): Decoder[T] =
+  private def fixedSizeBytesDecoder[T](typeName: String, expectedSize: Int)
+                                     (wrap: Array[Byte] => T): Decoder[T] =
     Decoder.instance { cursor =>
       cursor.as[String].flatMap { str =>
         Algos.decode(str) match {

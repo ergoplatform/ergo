@@ -3,7 +3,7 @@ package org.ergoplatform.wallet.boxes
 import org.ergoplatform.sdk.wallet.TokensMap
 import org.ergoplatform.wallet.boxes.BoxSelector.{BoxSelectionError, BoxSelectionResult}
 import org.ergoplatform.{ErgoBoxAssets, ErgoBoxAssetsHolder}
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 import sigma.data.SigmaConstants.MaxBoxSize
 
 
@@ -42,6 +42,18 @@ trait BoxSelector extends ScorexLogging {
     targetAssets: TokensMap
   ): Either[BoxSelectionError, BoxSelectionResult[T]] =
     select(inputBoxes, _ => true, targetBalance, targetAssets)
+
+  /** Select with a policy for retaining surplus tokens in change. Target assets are
+    * still required in full, independently of this policy. Implementations must
+    * apply it to change sizing as well as the final selected inputs. Selectors
+    * without policy support fail explicitly rather than silently retaining tokens.
+    */
+  def select[T <: ErgoBoxAssets](inputBoxes: Iterator[T],
+                                filterFn: T => Boolean,
+                                targetBalance: Long,
+                                targetAssets: TokensMap,
+                                keepChangeToken: ModifierId => Boolean): Either[BoxSelectionError, BoxSelectionResult[T]] =
+    Left(BoxSelector.UnsupportedChangeTokenPolicy())
 
   /**
     * Helper method to get total amount of re-emission tokens stored in input `boxes`.
@@ -105,6 +117,10 @@ object BoxSelector {
 
   trait BoxSelectionError {
     def message: String
+  }
+
+  final case class UnsupportedChangeTokenPolicy() extends BoxSelectionError {
+    val message: String = "This box selector does not support a change token policy"
   }
 
 }

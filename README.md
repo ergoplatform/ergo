@@ -108,6 +108,10 @@ Using IntelliJ IDEA be sure to set Build Tools / sbt -> `sbt shell` / `use for` 
 
 Ergo is an open-source project and we welcome contributions from developers and testers! Join the discussion over [Ergo Discord](https://discord.gg/kj7s7nb) in #development channel, or Telegram: https://t.me/ErgoDevelopers. Please also check out our [Contributing documentation](https://docs.ergoplatform.com/contribute/).
 
+## Wallet API and Exchange Integration
+
+For operating the node's built-in HD wallet REST API (`/wallet/*`), external application scans (`/scan/*`), mining reward withdrawals, and production exchange/custodian integration, refer to the [Wallet REST API and Exchange Integration Guide](docs/wallet-api-and-exchange-integration.md).
+
 ## Frequently Asked Questions
 
 For common queries, please refer to our [Frequently Asked Questions](FAQ.md) page.

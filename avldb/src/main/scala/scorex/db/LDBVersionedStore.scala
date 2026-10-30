@@ -10,6 +10,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import scorex.crypto.hash.Blake2b256
 import scorex.db.LDBVersionedStore.SnapshotReadInterface
 import scorex.util.ScorexLogging
+import scorex.util.encode.Base16
 
 import scala.util.{Failure, Success, Try}
 
@@ -51,6 +52,18 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
   //default write options, no sync!
   private val writeOptions = new WriteOptions()
+
+  // With keepVersions = 0 no undo records are kept, so a store opened with 0 drops the ones an earlier run with
+  // keepVersions > 0 left, as setKeepVersions(0) does. Otherwise they would still name the last version on the
+  // next open, while updates with keepVersions = 0 move only last_version_key (#1631). Runs only while undo
+  // records exist, so once. Keep it after writeOptions: cleanStart writes with it. The log keeps the
+  // last_version_key it replaces: in a store an earlier release updated this way, that value is the right one.
+  if (keepVersions == 0 && lsn > 0) {
+    val lastVersionKey = Option(db.get(last_version_key)).map(Base16.encode).getOrElse("none")
+    log.info(s"$dir opened with keepVersions = 0 over undo records of ${versions.size} version(s): removing them, " +
+      s"last_version_key $lastVersionKey set to ${Base16.encode(versions.last)}")
+    cleanStart(0)
+  }
 
   private def createDB(dir: File, storeName: String): DB = {
     val op = new Options()

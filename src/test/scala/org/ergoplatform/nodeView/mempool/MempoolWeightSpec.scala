@@ -108,6 +108,7 @@ class MempoolWeightSpec extends AnyFlatSpec
       (Long.MaxValue, 1),
       (Long.MaxValue, 1024),
       (Long.MaxValue, 2048),
+      ((Long.MaxValue / 1025L) * 1024L + 1023L, 1025),
       (Long.MaxValue, Int.MaxValue),
       (Int.MaxValue.toLong - 1, Int.MaxValue),
       (1023L, Int.MaxValue)

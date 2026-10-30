@@ -17,16 +17,18 @@ import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.Eliminate
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
+import org.ergoplatform.nodeView.history.extra.{ExtraIndexer, NumericBoxIndex}
 import org.ergoplatform.nodeView.history.{ErgoHistoryReader, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, StateType, UtxoStateReader}
-import org.ergoplatform.settings.{ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
+import org.ergoplatform.settings.{Constants, ErgoSettings, ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.sdk.wallet.Constants.MaxAssetsPerBox
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import scorex.crypto.authds.{ADDigest, ADKey, SerializedAdProof}
 import scorex.crypto.hash.Digest32
 import scorex.util.encode.Base16
-import scorex.util.{ModifierId, ScorexLogging}
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 import sigma.ast.syntax.ErgoBoxRType
 import sigma.Extensions.ArrayOps
 import sigma.crypto.CryptoFacade
@@ -36,6 +38,7 @@ import sigma.validation.ReplacedRule
 import sigma.{Coll, Colls}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
 
@@ -73,7 +76,7 @@ class CandidateGenerator(
     // and skips broadcast since the block was already announced.
     // TODO: Consider switching to direct actor message for lower latency
     //       instead of event bus publish.
-    context.system.eventStream.publish(NewBlockMined(newBlock.header))
+    context.system.eventStream.publish(NewBlockMined(newBlock.header, newBlock.blockSections))
 
     viewHolderRef ! LocallyGeneratedModifier(newBlock.header)
     val sectionsToApply = if (ergoSettings.nodeSettings.stateType == StateType.Digest) {
@@ -173,15 +176,20 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
+      // the solved block is cleared whether or not a new candidate is needed: a candidate request processed after
+      // the block was applied and before this event has already put the cached candidate on the new block
+      val solvedBlockAfter = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
       val stateWithAppliedTxs =
-        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet))
+        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet), solvedBlock = solvedBlockAfter)
       if (needNewCandidate(state.cachedCandidate, header)) {
-        if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
-        else
-          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+        context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
+        if (solvedBlockAfter.isEmpty) state.solvedBlock.foreach { released =>
+          log.info(
+            s"Candidate already on applied block ${header.id}, released solved block ${released.id}"
+          )
+        }
         context.become(initialized(stateWithAppliedTxs))
       }
 
@@ -244,20 +252,29 @@ class CandidateGenerator(
 
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
-      // Inject node pk if it is not externally set (in Autolykos 2)
-      val solution =
+      // Inject the selected candidate's pk if it is not externally set (in Autolykos 2).
+      def solutionFor(candidate: Candidate): AutolykosSolution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          AutolykosSolution(
+            candidate.externalVersion.pk.value,
+            preSolution.w,
+            preSolution.n,
+            preSolution.d
+          )
         } else {
           preSolution
         }
+
+      def complete(candidate: Candidate): ErgoFullBlock =
+        completeBlock(candidate.candidateBlock, solutionFor(candidate))
+
       val result: StatusReply[Unit] = {
         val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
+          .map(complete)
           .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
           .getOrElse {
             log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
+            complete(state.cachedPreviousCandidate.get)
           }
         log.info(s"New block mined, header: ${newBlock.header}")
         ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
@@ -273,7 +290,7 @@ class CandidateGenerator(
             )
         }
       }
-      log.info(s"Processed solution $solution with the result $result")
+      log.info(s"Processed solution $preSolution with the result $result")
       sender() ! result
 
     case _: AutolykosSolution =>
@@ -286,6 +303,11 @@ class CandidateGenerator(
 }
 
 object CandidateGenerator extends ScorexLogging {
+
+  /**
+    * Memoized extra-index sync flag for the storage-rent in [[createCandidate]]
+    */
+  private var extraIndexSynced: Boolean = false
 
   /**
     * Holder for both candidate block and data for external miners derived from it
@@ -411,9 +433,13 @@ object CandidateGenerator extends ScorexLogging {
     val miningTimes =
       timestamps.sorted
         .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
+        .collect { case IndexedSeq(prev, next) => next - prev }
         .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    if (miningTimes.nonEmpty) {
+      Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    } else {
+      Duration.Zero
+    }
   }
 
   /** Get average count of transactions per block */
@@ -423,7 +449,6 @@ object CandidateGenerator extends ScorexLogging {
   /** Helper which is checking that inputs of the transaction are not spent */
   private def inputsNotSpent(tx: ErgoTransaction, s: UtxoStateReader): Boolean =
     tx.inputs.forall(inp => s.boxById(inp.boxId).isDefined)
-
   /**
     * Checks that the best full block in the history corresponds to the state.
     * Evaluated via live history storage reads, so re-checking it after candidate assembly
@@ -676,6 +701,67 @@ object CandidateGenerator extends ScorexLogging {
 
       val emissionTxs = emissionTxOpt.toSeq
 
+      // storage-rent self-claim: sweep rent-eligible boxes directly into the candidate,
+      // bypassing the mempool (goes into the block right after the prioritized transactions)
+      val rentClaimTxs: Seq[ErgoTransaction] = {
+        // Collect rent only when the extra index is (almost) in sync with the chain: against
+        // a lagging index a temporarily unresolvable box would be mistaken for permanently
+        // unclaimable and evicted below. One block of lag is tolerated, as the indexer may
+        // simply not have processed the chain tip yet. The check is memoized: once synced,
+        // the indexer tracks the chain continuously and the database is not read again.
+        if (!extraIndexSynced) {
+          val indexedHeight = ExtraIndexer.getIndex(ExtraIndexer.IndexedHeightKey, history).getInt
+          val fullHeight = history.fullBlockHeight
+          extraIndexSynced = indexedHeight == fullHeight || indexedHeight + 1 == fullHeight
+          if (!extraIndexSynced) {
+            log.debug(s"Skipping storage-rent collection: extra index at $indexedHeight, chain at $fullHeight")
+          }
+        }
+        if (ergoSettings.nodeSettings.storageRentCollection && extraIndexSynced) {
+          val upcomingHeight = upcomingContext.currentHeight
+          val threshold = upcomingHeight - Constants.StoragePeriod
+          if (threshold > 0) {
+            // rent entries carry no payload, so resolve the box through the box-number
+            // index; entries whose box row is gone resolve to nothing and are skipped.
+            // The scan window is wider than the claim cap: the builder stops at
+            // MaxClaims CLAIMED boxes, so junk rows do not starve later claimable ones -
+            // and permanently unclaimable boxes are evicted from the index below, so the
+            // window advances across candidates.
+            val scanned = history.storageRentBoxesAtOrBefore(threshold, 4 * StorageRentClaimBuilder.MaxClaims)
+              .toSeq
+              .flatMap(entry => NumericBoxIndex.getBoxByNumber(history, entry.globalIndex))
+              .flatMap(iEb => state.boxById(ADKey @@ idToBytes(iEb.id)))
+            val params = upcomingContext.currentParameters
+            val reemissionTokenIdOpt =
+              Option(ergoSettings.chainSettings.reemission.reemissionTokenId).filter(_.nonEmpty)
+            val permanentlySkipped = mutable.ArrayBuffer.empty[ModifierId]
+            val claimTxs = StorageRentClaimBuilder.buildClaim(
+              scanned,
+              upcomingHeight,
+              params,
+              minerPk,
+              reemissionTokenIdOpt,
+              ergoSettings.nodeSettings.storageRentTokenWhitelist.map(id => ModifierId @@ id).toSet,
+              b => permanentlySkipped += bytesToId(b.id)
+            ).toSeq
+            if (permanentlySkipped.nonEmpty) {
+              log.warn(s"Removing ${permanentlySkipped.length} storage-rent eligibility entries " +
+                s"for permanently unclaimable boxes: $permanentlySkipped")
+              history.removeStorageRentBoxes(permanentlySkipped.toSeq)
+            }
+            claimTxs
+          } else {
+            Seq.empty
+          }
+        } else {
+          Seq.empty
+        }
+      }
+
+      if (rentClaimTxs.nonEmpty) {
+        log.debug(s"Storage-rent claim transactions injected into the candidate: ${rentClaimTxs.map(_.id)}")
+      }
+
       // todo: remove in 5.0
       // we allow for some gap, to avoid possible problems when different interpreter version can estimate cost
       // differently due to bugs in AOT costing
@@ -687,14 +773,31 @@ object CandidateGenerator extends ScorexLogging {
         500000
       }
 
-      val (txs, toEliminate) = collectTxs(
-        minerPk,
-        state.stateContext.currentParameters.maxBlockCost - safeGap,
-        state.stateContext.currentParameters.maxBlockSize,
-        state,
-        upcomingContext,
-        emissionTxs ++ prioritizedTransactions ++ poolTxs.map(_.transaction)
-      )
+      // A storage-rent claim rejected during candidate assembly gets its input boxes dropped
+      // from the storage-rent index, so a broken eligibility entry is not retried in every
+      // candidate. Removal is idempotent, so a claim re-rejected by the retry pass below is
+      // handled by the same code without any extra bookkeeping.
+      def collectPoolTxs: (Seq[ErgoTransaction], Seq[ModifierId]) = {
+        val res = collectTxs(
+          minerPk,
+          state.stateContext.currentParameters.maxBlockCost - safeGap,
+          state.stateContext.currentParameters.maxBlockSize,
+          state,
+          upcomingContext,
+          emissionTxs ++ prioritizedTransactions ++ rentClaimTxs ++ poolTxs.map(_.transaction)
+        )
+        val rejectedRentClaimTxIds = res._2.filter(id => rentClaimTxs.exists(_.id == id))
+        if (rejectedRentClaimTxIds.nonEmpty) {
+          val boxIds = rentClaimTxs.filter(tx => rejectedRentClaimTxIds.contains(tx.id))
+            .flatMap(tx => tx.inputs.map(in => bytesToId(in.boxId)))
+          log.warn(s"Storage-rent claim transactions $rejectedRentClaimTxIds rejected during candidate assembly, " +
+            s"removing their ${boxIds.length} input boxes from the storage-rent index")
+          history.removeStorageRentBoxes(boxIds)
+        }
+        res
+      }
+
+      val (txs, toEliminate) = collectPoolTxs
 
       val eliminateTransactions = EliminateTransactions(toEliminate)
 
@@ -712,63 +815,57 @@ object CandidateGenerator extends ScorexLogging {
         )
       }
 
+      def mkCandidate(blockTxs: Seq[ErgoTransaction],
+                      adProof: SerializedAdProof,
+                      adDigest: ADDigest,
+                      eliminate: EliminateTransactions): (Candidate, EliminateTransactions) = {
+        val candidate = CandidateBlock(
+          bestHeaderOpt, version, nBits, adDigest,
+          adProof, blockTxs, timestamp, extensionCandidate, votes
+        )
+        val ext = deriveWorkMessage(candidate)
+        log.info(
+          s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
+          s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
+        )
+        Candidate(candidate, ext, prioritizedTransactions) -> eliminate
+      }
+
       state.proofsForTransactions(txs) match {
         case Success((adProof, adDigest)) =>
-          val candidate = CandidateBlock(
-            bestHeaderOpt,
-            version,
-            nBits,
-            adDigest,
-            adProof,
-            txs,
-            timestamp,
-            extensionCandidate,
-            votes
-          )
-          val ext = deriveWorkMessage(candidate)
-          log.info(
-            s"Got candidate block at height ${ErgoHistoryUtils.heightOf(candidate.parentOpt) + 1}" +
-            s" with ${candidate.transactions.size} transactions, msg ${Base16.encode(ext.msg)}"
-          )
-          Success(
-            Candidate(candidate, ext, prioritizedTransactions) -> eliminateTransactions
-          )
+          Success(mkCandidate(txs, adProof, adDigest, eliminateTransactions))
         case Failure(t: Throwable) =>
-          // We can not produce a block for some reason, so print out an error
-          // and collect only emission transaction if it exists.
-          // We consider that emission transaction is always valid.
-          emissionTxOpt match {
-            case Some(emissionTx) =>
-              log.error(
-                "Failed to produce proofs for transactions, but emission box is found: ",
-                t
+          // A likely reason of the failure is a state update (new block applied) between
+          // collectTxs and proofsForTransactions. Re-collect transactions against the current
+          // state and retry once before falling back to an emission-only candidate.
+          val (retryTxs, retryToEliminate) = collectPoolTxs
+          // The first pass may have rejected transactions against a transient state.
+          // Keep only the classifications from the latest collection attempt.
+          log.error("Retrying candidate generation after failed proofs")
+          val retryEliminate = EliminateTransactions(retryToEliminate)
+          state.proofsForTransactions(retryTxs) match {
+            case Success((adProof, adDigest)) =>
+              log.warn(
+                s"Proof generation failed once (${t.getMessage}), " +
+                s"recovered on retry with ${retryTxs.size} transactions"
               )
-              val fallbackTxs = Seq(emissionTx)
-              state.proofsForTransactions(fallbackTxs).map {
-                case (adProof, adDigest) =>
-                  val candidate = CandidateBlock(
-                    bestHeaderOpt,
-                    version,
-                    nBits,
-                    adDigest,
-                    adProof,
-                    fallbackTxs,
-                    timestamp,
-                    extensionCandidate,
-                    votes
-                  )
-                  Candidate(
-                    candidate,
-                    deriveWorkMessage(candidate),
-                    prioritizedTransactions
-                  ) -> eliminateTransactions
+              Success(mkCandidate(retryTxs, adProof, adDigest, retryEliminate))
+            case Failure(ex: Throwable) =>
+              // We can not produce a block for some reason, so print out an error
+              // and collect only emission transaction if it exists.
+              // We consider that emission transaction is always valid.
+              emissionTxOpt match {
+                case Some(emissionTx) =>
+                  log.error("Failed to produce proofs for transactions, but emission box is found: ", ex)
+                  state.proofsForTransactions(Seq(emissionTx)).map {
+                    case (adProof, adDigest) =>
+                      // Both collections produced failed proofs; their rejections may be stale.
+                      mkCandidate(Seq(emissionTx), adProof, adDigest, EliminateTransactions(Seq.empty))
+                  }
+                case None =>
+                  log.error("Failed to produce proofs for transactions and no emission box available: ", ex)
+                  Failure(ex)
               }
-            case None =>
-              log.error(
-                "Failed to produce proofs for transactions and no emission box available: ",
-                t
-              )
-              Failure(t)
           }
       }
     }.flatten

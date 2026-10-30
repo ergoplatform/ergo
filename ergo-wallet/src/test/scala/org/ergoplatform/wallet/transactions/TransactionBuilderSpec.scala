@@ -117,18 +117,21 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   }
 
   property("reject output and fee total overflow") {
-    val inputBox = box(Long.MaxValue)
+    val inputBox = box(minBoxValue)
     val outBox = boxCandidate(Long.MaxValue)
-    val res = transaction(inputBox, outBox, fee = Some(1L))
+    // An unchecked total wraps to -2; the later difference stays in range.
+    val res = transaction(inputBox, outBox, fee = Some(Long.MaxValue))
 
     res.isFailure shouldBe true
     res.failed.get shouldBe a[ArithmeticException]
   }
 
   property("reject input total overflow") {
+    // An unchecked sum wraps to zero, so later subtraction cannot mask this guard.
     val inputBoxes = IndexedSeq(
       testBox(Long.MaxValue, TrueTree, currentHeight, boxIndex = 0),
-      testBox(1L, TrueTree, currentHeight, boxIndex = 1)
+      testBox(Long.MaxValue, TrueTree, currentHeight, boxIndex = 1),
+      testBox(2L, TrueTree, currentHeight, boxIndex = 2)
     )
     val outBox = boxCandidate(minBoxValue)
     val changeAddress = P2PKAddress(rootSecret.privateInput.publicImage)

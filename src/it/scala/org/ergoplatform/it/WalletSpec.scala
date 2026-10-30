@@ -74,8 +74,8 @@ class WalletSpec
       recoverToExceptionIf[UnexpectedStatusCodeException] {
         node.postJson("/wallet/init", Json.obj("pass" -> "foo".asJson))
       }.map { ex =>
-        ex.response.getStatusCode shouldBe 400
-        ex.response.getResponseBody should include("Wallet is already initialized")
+        ex.statusCode shouldBe 400
+        ex.responseBody should include("Wallet is already initialized")
       }
     }
   }
@@ -93,8 +93,8 @@ class WalletSpec
           )
         )
       }.map { ex =>
-        ex.response.getStatusCode shouldBe 400
-        ex.response.getResponseBody should include("Wallet is already initialized")
+        ex.statusCode shouldBe 400
+        ex.responseBody should include("Wallet is already initialized")
       }
     }
   }

@@ -1140,7 +1140,7 @@ class ErgoNodeViewHolderSpec extends ErgoCorePropertyTest with NodeViewTestOps w
               }
             }
             updateNodeView(updatedState = Some(wrapped))
-            sender() ! wrapped
+            sender().tell(wrapped, self)
         }: Receive) orElse super.receive
       }))
 

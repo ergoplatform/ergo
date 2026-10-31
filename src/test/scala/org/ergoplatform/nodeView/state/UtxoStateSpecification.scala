@@ -645,6 +645,50 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
     us.closeStorage()
   }
 
+  property("proofsForTransactions() does not modify UTXO set tree - extensive test") {
+    val numBlocks = 50
+    var (us, bh) = createUtxoState(settings)
+    var height: Int = GenesisHeight
+    var processedBlocks = 0
+    try {
+      (0 until numBlocks).foreach { blockNum =>
+        val (txs, newBh) = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height + blockNum)))
+        // Never count an empty iteration as an immutability check. Keep the entire generated
+        // batch so the box holder describes exactly the transactions subsequently applied.
+        txs should not be empty
+        val rootBefore = us.rootDigest.clone()
+        val (proofBytes, digest) = us.proofsForTransactions(txs).get
+        us.rootDigest.sameElements(rootBefore) shouldBe true
+        val (repeatBytes, repeatDigest) = us.proofsForTransactions(txs).get
+        repeatBytes.sameElements(proofBytes) shouldBe true
+        repeatDigest.sameElements(digest) shouldBe true
+        us.rootDigest.sameElements(rootBefore) shouldBe true
+
+        val header = defaultHeaderGen.sample.value.copy(
+          stateRoot = digest,
+          ADProofsRoot = ADProofs.proofDigest(proofBytes),
+          height = height,
+          parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId)
+        )
+        val block = ErgoFullBlock(
+          header,
+          BlockTransactions(header.id, Header.InitialVersion, txs),
+          genExtension(header, us.stateContext),
+          Some(ADProofs(header.id, proofBytes))
+        )
+        us = us.applyModifier(block, None)(_ => ()).get
+        us.rootDigest.sameElements(digest) shouldBe true
+        us.rootDigest.sameElements(rootBefore) shouldBe false
+        bh = newBh
+        height += 1
+        processedBlocks += 1
+      }
+      processedBlocks shouldBe numBlocks
+    } finally {
+      us.closeStorage()
+    }
+  }
+
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {
     nipopowAlgos.interlinksToExtension(nipopowAlgos.updateInterlinks(sc.lastHeaderOpt, sc.lastExtensionOpt)).toExtension(header.id)
   }

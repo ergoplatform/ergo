@@ -8,7 +8,6 @@ import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
-import sigma.Colls
 import sigma.interpreter.ProverResult
 import sigmastate.eval.Extensions._
 import sigmastate.helpers.TestingHelpers.testBox
@@ -328,11 +327,8 @@ class SegmentSpec extends ErgoCorePropertyTest {
     updated.txSegmentCount shouldBe 1
 
     val reader = historyReaderFromStore(mutable.Map.empty)
-    val probe = new IndexedToken(tokenId, boxes = ArrayBuffer(2L, 9L, -4L)) {
-      def runRollback(txTarget: Long, boxTarget: Long): Seq[ModifierId] =
-        rollbackState(txTarget, boxTarget, reader)(2).toSeq
-    }
-    probe.runRollback(txTarget = 10L, boxTarget = 5L) shouldBe empty
+    val probe = IndexedToken(tokenId, boxes = ArrayBuffer(2L, 9L, -4L))
+    probe.rollbackState(txTarget = 10L, boxTarget = 5L, reader)(2) shouldBe empty
     probe.boxes.toSeq shouldBe Seq(2L, -4L)
   }
 

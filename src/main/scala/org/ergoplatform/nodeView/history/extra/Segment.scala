@@ -320,7 +320,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
    * @param history   - history handle to update segment(s) in database
    * @return modifier ids to remove
    */
-  protected def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
+  protected[extra] def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
                              (implicit segmentTreshold: Int): ArrayBuffer[ModifierId] = {
 
     val noTxsToRollback = txCount == 0 || (txs.nonEmpty && !txs.exists(_ > txTarget))

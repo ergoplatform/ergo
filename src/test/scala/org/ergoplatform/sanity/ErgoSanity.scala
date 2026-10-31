@@ -39,6 +39,24 @@ trait ErgoSanity[ST <: ErgoState[ST]] extends NodeViewSynchronizerTests[ST]
   import org.ergoplatform.utils.generators.ErgoNodeGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
+  private var storageCleanup = List.empty[() => Unit]
+
+  protected def trackedStorage[A](resource: A)(close: A => Unit): A = {
+    storageCleanup ::= (() => close(resource))
+    resource
+  }
+
+  override protected def withFixture(test: NoArgTest): org.scalatest.Outcome = {
+    // Synchronizer tests terminate their ActorSystem before returning here.
+    // Generated states and histories otherwise keep native LevelDB handles open
+    // across properties, including both stores owned by WrappedDigestState.
+    try super.withFixture(test) finally {
+      val closing = storageCleanup.map(close => scala.util.Try(close()))
+      storageCleanup = Nil
+      closing.foreach(_.get)
+    }
+  }
+
   override val memPool: MPool = ErgoMemPool.empty(settings)
 
   //Generators

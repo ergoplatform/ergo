@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{GetAllPeers, GetBlacklistedPeers}
 import org.ergoplatform.network.{Handshake, PeerSpec, Version}
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedTransaction
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedTransaction, ResetBlockchainTo}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryUtils}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -130,6 +130,10 @@ trait Stubs extends ErgoTestHelpers with TestFileUtils {
     def receive: Receive = {
       case LocallyGeneratedTransaction(utx) =>
         sender() ! new ProcessingOutcome.Accepted(utx, System.currentTimeMillis())
+      case ResetBlockchainTo(height) =>
+        sender() ! history.resetToHeight(height).map { h =>
+          s"Blockchain successfully reset to height ${h.headersHeight}. All block sections and validity indices cleaned to ensure proper revalidation."
+        }
       case _ =>
     }
   }

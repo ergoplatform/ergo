@@ -18,15 +18,10 @@ class VotingTargetsSpec extends ErgoCorePropertyTest {
 
     targets.desiredUpdate.rulesToDisable shouldBe expected
     targets.targets shouldBe Map(Parameters.StorageFeeFactorIncrease -> 1000000)
-    ErgoValidationSettingsUpdateSerializer.toBytes(targets.desiredUpdate).nonEmpty shouldBe true
-  }
-
-  property("rulesToDisable retains existing known-rule serialization roundtrips") {
-    val update = VotingTargets.fromConfig(config(Seq(215, 409, 215))).desiredUpdate
-    val bytes = ErgoValidationSettingsUpdateSerializer.toBytes(update)
+    val bytes = ErgoValidationSettingsUpdateSerializer.toBytes(targets.desiredUpdate)
     val restored = ErgoValidationSettingsUpdateSerializer.parseBytes(bytes)
 
-    restored.rulesToDisable shouldBe Seq[Short](215, 409, 215)
+    restored.rulesToDisable shouldBe expected
     restored.statusUpdates shouldBe empty
   }
 
@@ -43,6 +38,15 @@ class VotingTargetsSpec extends ErgoCorePropertyTest {
 
       error.getMessage should include("ergo.voting.rulesToDisable")
       error.getMessage should include("0..32767")
+      error.getMessage should include(id.toString)
     }
+  }
+
+  property("rulesToDisable reports all invalid IDs in a mixed list") {
+    val error = intercept[IllegalArgumentException] {
+      VotingTargets.fromConfig(config(Seq(215, 32768, -1, 32768)))
+    }
+
+    error.getMessage should include("invalid ID(s): -1, 32768")
   }
 }

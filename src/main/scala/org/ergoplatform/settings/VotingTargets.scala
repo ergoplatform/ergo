@@ -28,8 +28,13 @@ object VotingTargets {
   def fromConfig(config: Config): VotingTargets = {
     val votingObject = config.getObject(s"$configPath.voting")
     val toDisable = config.getConfig(s"$configPath.voting").as[Array[Int]](s"rulesToDisable")
-    require(toDisable.forall(id => id >= 0 && id <= Short.MaxValue),
-      s"$configPath.voting.rulesToDisable must contain rule IDs in range 0..${Short.MaxValue}")
+    val invalidIds = toDisable
+      .filterNot(id => id >= 0 && id <= Short.MaxValue)
+      .distinct
+      .sorted
+    require(invalidIds.isEmpty,
+      s"$configPath.voting.rulesToDisable must contain rule IDs in range " +
+        s"0..${Short.MaxValue}; invalid ID(s): ${invalidIds.mkString(", ")}")
 
     val parameterTargets = votingObject
       .keySet()

@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.history.storage
 
 import com.github.benmanes.caffeine.cache.Caffeine
+import org.ergoplatform.CriticalSystemException
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
 import org.ergoplatform.modifiers.history.HistoryModifierSerializer
 import org.ergoplatform.modifiers.history.header.Header
@@ -25,19 +26,21 @@ import scala.jdk.CollectionConverters.asScalaIteratorConverter
 /**
   * Storage for Ergo history
   *
-  * @param indexStore     - Additional key-value storage for indexes, required by History for efficient work.
-  *                       contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
-  * @param objectsStore   - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
-  * @param extraStore     - key-value store, where key is id of Index and value is it's bytes
-  * @param config         - cache configs
-  * @param journalPathOpt - optional undo-journal path used to ensure crash-safe cross-store atomicity
-  *                       between objectsStore and indexStore
+  * @param indexStore         - Additional key-value storage for indexes, required by History for efficient work.
+  *                           contains links to bestHeader, bestFullBlock, heights and scores for different blocks, etc.
+  * @param objectsStore       - key-value store, where key is id of ErgoPersistentModifier and value is it's bytes
+  * @param extraStore         - key-value store, where key is id of Index and value is it's bytes
+  * @param config             - cache configs
+  * @param journalPathOpt     - optional undo-journal path used to ensure cross-store atomicity
+  *                           between objectsStore and indexStore across restarts
+  * @param commitMarkerWriter - channel hook that clears the active journal marker on batch completion
   */
-class HistoryStorage(indexStore: LDBKVStore,
-                     objectsStore: LDBKVStore,
-                     extraStore: LDBKVStore,
-                     config: CacheSettings,
-                     journalPathOpt: Option[Path])
+class HistoryStorage private[storage](indexStore: LDBKVStore,
+                                      objectsStore: LDBKVStore,
+                                      extraStore: LDBKVStore,
+                                      config: CacheSettings,
+                                      journalPathOpt: Option[Path],
+                                      commitMarkerWriter: FileChannel => Unit)
   extends ScorexLogging
     with AutoCloseable
     with ScorexEncoding {
@@ -45,8 +48,15 @@ class HistoryStorage(indexStore: LDBKVStore,
   def this(indexStore: LDBKVStore,
            objectsStore: LDBKVStore,
            extraStore: LDBKVStore,
+           config: CacheSettings,
+           journalPathOpt: Option[Path]) =
+    this(indexStore, objectsStore, extraStore, config, journalPathOpt, HistoryStorage.defaultCommitMarkerWriter)
+
+  def this(indexStore: LDBKVStore,
+           objectsStore: LDBKVStore,
+           extraStore: LDBKVStore,
            config: CacheSettings) =
-    this(indexStore, objectsStore, extraStore, config, None)
+    this(indexStore, objectsStore, extraStore, config, None, HistoryStorage.defaultCommitMarkerWriter)
 
   private lazy val headersCache =
     Caffeine.newBuilder()
@@ -71,7 +81,56 @@ class HistoryStorage(indexStore: LDBKVStore,
   private val historyLock = new ReentrantReadWriteLock()
   private val extraCacheLock = new ReentrantReadWriteLock()
   private val pendingJournalOpt: Option[HistoryStorage.PendingBatchJournal] =
-    journalPathOpt.map(new HistoryStorage.PendingBatchJournal(_))
+    journalPathOpt.map(new HistoryStorage.PendingBatchJournal(_, commitMarkerWriter))
+  @volatile private var unavailableOpt: Option[CriticalSystemException] = None
+
+  private def ensureAvailable(): Unit =
+    unavailableOpt.foreach(throw _)
+
+  private def quarantine(message: String,
+                         primary: Throwable,
+                         secondaryOpt: Option[Throwable] = None): CriticalSystemException = {
+    unavailableOpt match {
+      case Some(existing) =>
+        if ((primary ne null) && (primary ne existing) && (primary ne existing.getCause) && !existing.getSuppressed.contains(primary)) {
+          existing.addSuppressed(primary)
+        }
+        secondaryOpt.foreach { sec =>
+          if ((sec ne null) && (sec ne existing) && (sec ne primary) && (sec ne existing.getCause) && !existing.getSuppressed.contains(sec)) {
+            existing.addSuppressed(sec)
+          }
+        }
+        existing
+
+      case None =>
+        val primaryDesc =
+          if (primary ne null) s"${primary.getClass.getSimpleName}: ${primary.getMessage}"
+          else "unknown"
+        val detail = secondaryOpt match {
+          case Some(sec) if sec ne null =>
+            s"$message (primary: $primaryDesc; secondary: ${sec.getClass.getSimpleName}: ${sec.getMessage})"
+          case _ =>
+            s"$message (cause: $primaryDesc)"
+        }
+        val err = CriticalSystemException(detail)
+        if ((primary ne null) && (primary ne err)) {
+          err.initCause(primary)
+        }
+        secondaryOpt.foreach { sec =>
+          if ((sec ne null) && (sec ne err) && (sec ne primary)) {
+            err.addSuppressed(sec)
+          }
+        }
+        unavailableOpt = Some(err)
+        err
+    }
+  }
+
+  private def clearPendingJournal(): Try[Unit] =
+    pendingJournalOpt match {
+      case Some(journal) => journal.clearCommitted()
+      case None => Success(())
+    }
 
   private def withHistoryReadLock[A](body: => A): A = {
     historyLock.readLock().lock()
@@ -116,21 +175,8 @@ class HistoryStorage(indexStore: LDBKVStore,
     blockSectionsCache.invalidate(id)
   }
 
-  private def snapshotCachedObjectEntries(objectsToInsert: Array[BlockSection],
-                                          objectKeys: Array[Array[Byte]]): Array[(Array[Byte], Option[Array[Byte]])] = {
-    val seen = mutable.HashSet.empty[ByteArrayWrapper]
-    val entries = mutable.ArrayBuffer.empty[(Array[Byte], Option[Array[Byte]])]
-    cfor(0)(_ < objectsToInsert.length, _ + 1) { i =>
-      val key = objectKeys(i)
-      if (seen.add(ByteArrayWrapper(key))) {
-        val priorBytesOpt = lookupModifier(objectsToInsert(i).id).flatMap(m => Try(HistoryModifierSerializer.toBytes(m)).toOption)
-        entries += ((key, priorBytesOpt))
-      }
-    }
-    entries.toArray
-  }
-
   def modifierBytesById(id: ModifierId): Option[Array[Byte]] = withHistoryReadLock {
+    ensureAvailable()
     objectsStore.get(idToBytes(id)).map(_.tail).orElse(extraStore.get(idToBytes(id))) // removing modifier type byte with .tail (only in objectsStore)
   }
 
@@ -138,10 +184,12 @@ class HistoryStorage(indexStore: LDBKVStore,
     * @return bytes and type of a network object stored in the database with identifier `id`
     */
   def modifierTypeAndBytesById(id: ModifierId): Option[(NetworkObjectTypeId.Value, Array[Byte])] = withHistoryReadLock {
+    ensureAvailable()
     objectsStore.get(idToBytes(id)).map(bs => (NetworkObjectTypeId.fromByte(bs.head), bs.tail)) // first byte is type id, tail is modifier bytes
   }
 
   def modifierById(id: ModifierId): Option[BlockSection] = withHistoryReadLock {
+    ensureAvailable()
     lookupModifier(id) orElse objectsStore.get(idToBytes(id)).flatMap { bytes =>
       HistoryModifierSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
@@ -156,6 +204,7 @@ class HistoryStorage(indexStore: LDBKVStore,
   }
 
   def getExtraIndex(id: ModifierId): Option[ExtraIndex] = withExtraCacheReadLock {
+    ensureAvailable()
     Option(extraCache.getIfPresent(id)) orElse extraStore.get(idToBytes(id)).flatMap { bytes =>
       ExtraIndexSerializer.parseBytesTry(bytes) match {
         case Success(pm) =>
@@ -172,6 +221,7 @@ class HistoryStorage(indexStore: LDBKVStore,
   }
 
   def getIndex(id: ByteArrayWrapper): Option[Array[Byte]] = withHistoryReadLock {
+    ensureAvailable()
     Option(indexCache.getIfPresent(id)).orElse {
       indexStore.get(id.data).map { value =>
         indexCache.put(id, value)
@@ -187,6 +237,7 @@ class HistoryStorage(indexStore: LDBKVStore,
     * located and is left in place.
     */
   def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit = {
+    ensureAvailable()
     val keys = boxIds.flatMap { boxId =>
       getExtraIndex(boxId) match {
         case Some(iEb: IndexedErgoBox) => Some(StorageRentBox(iEb).id)
@@ -204,6 +255,7 @@ class HistoryStorage(indexStore: LDBKVStore,
     * Returns an empty array when the extra index is disabled or does not cover the height.
     */
   def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] = {
+    ensureAvailable()
     val start = StorageRentBox.key(0, 0L)
     extraStore.scanFrom(
       start,
@@ -228,10 +280,12 @@ class HistoryStorage(indexStore: LDBKVStore,
     * @return object with `id` if it is in the objects database
     */
   def get(id: ModifierId): Option[Array[Byte]] = withHistoryReadLock {
+    ensureAvailable()
     val idBytes = idToBytes(id)
     objectsStore.get(idBytes).orElse(extraStore.get(idBytes))
   }
   def get(id: Array[Byte]): Option[Array[Byte]] = withHistoryReadLock {
+    ensureAvailable()
     objectsStore.get(id).orElse(extraStore.get(id))
   }
 
@@ -244,112 +298,221 @@ class HistoryStorage(indexStore: LDBKVStore,
   def insert(indexesToInsert: Array[(ByteArrayWrapper, Array[Byte])],
              objectsToInsert: Array[BlockSection],
              indexesToRemove: Array[ByteArrayWrapper] = Array.empty): Try[Unit] = {
-    Try {
-      val objectKeys = new Array[Array[Byte]](objectsToInsert.length)
-      val objectValues = new Array[Array[Byte]](objectsToInsert.length)
-      cfor(0)(_ < objectsToInsert.length, _ + 1) { i =>
-        val mod = objectsToInsert(i)
-        objectKeys(i) = mod.serializedId
-        objectValues(i) = HistoryModifierSerializer.toBytes(mod)
-      }
-      (objectKeys, objectValues)
-    }.flatMap { case (objectKeys, objectValues) =>
-      withHistoryWriteLock {
-        val hasObjects = objectsToInsert.nonEmpty
-        val hasIndexes = indexesToInsert.nonEmpty || indexesToRemove.nonEmpty
-        val isPairedWrite = hasObjects && hasIndexes
-
-        val snapshotAndStage: Try[Array[(Array[Byte], Option[Array[Byte]])]] =
-          if (!isPairedWrite) {
-            Success(Array.empty)
-          } else {
-            pendingJournalOpt match {
-              case Some(journal) =>
-                Try {
-                  val objUndo = HistoryStorage.snapshotObjectStoreEntries(objectsStore, objectKeys)
-                  val idxUndo = HistoryStorage.snapshotIndexStoreEntries(indexStore, indexesToInsert, indexesToRemove)
-                  (objUndo, idxUndo)
-                }.flatMap { case (objUndo, idxUndo) =>
-                  journal.stage(HistoryStorage.UndoRecord(objUndo, idxUndo)).map(_ => objUndo)
-                }
+    unavailableOpt match {
+      case Some(err) => Failure(err)
+      case None =>
+        Try {
+          val objectKeys = new Array[Array[Byte]](objectsToInsert.length)
+          val objectValues = new Array[Array[Byte]](objectsToInsert.length)
+          cfor(0)(_ < objectsToInsert.length, _ + 1) { i =>
+            val mod = objectsToInsert(i)
+            objectKeys(i) = mod.serializedId
+            objectValues(i) = HistoryModifierSerializer.toBytes(mod)
+          }
+          (objectKeys, objectValues)
+        }.flatMap { case (objectKeys, objectValues) =>
+          withHistoryWriteLock {
+            unavailableOpt match {
+              case Some(err) => Failure(err)
               case None =>
-                Success(snapshotCachedObjectEntries(objectsToInsert, objectKeys))
+                val hasObjects = objectsToInsert.nonEmpty
+                val hasIndexes = indexesToInsert.nonEmpty || indexesToRemove.nonEmpty
+                val isPairedWrite = hasObjects && hasIndexes
+
+                val snapshotAndStage: Try[Array[(Array[Byte], Option[Array[Byte]])]] =
+                  if (!isPairedWrite) {
+                    Success(Array.empty)
+                  } else {
+                    pendingJournalOpt match {
+                      case Some(journal) =>
+                        Try {
+                          val objUndo = HistoryStorage.snapshotObjectStoreEntries(objectsStore, objectKeys)
+                          val idxUndo = HistoryStorage.snapshotIndexStoreEntries(indexStore, indexesToInsert, indexesToRemove)
+                          (objUndo, idxUndo)
+                        }.flatMap { case (objUndo, idxUndo) =>
+                          journal.stage(HistoryStorage.UndoRecord(objUndo, idxUndo)) match {
+                            case Success(_) =>
+                              Success(objUndo)
+                            case Failure(stageErr) =>
+                              if (journal.hasActivePendingRecord) {
+                                journal.clearCommitted() match {
+                                  case Success(_) =>
+                                    Failure(stageErr)
+                                  case Failure(clearErr) =>
+                                    Failure(quarantine(
+                                      "HistoryStorage failed to clear partially staged batch journal during insert; reopen storage to recover",
+                                      stageErr,
+                                      Some(clearErr)
+                                    ))
+                                }
+                              } else {
+                                Failure(stageErr)
+                              }
+                          }
+                        }
+                      case None =>
+                        Try(HistoryStorage.snapshotObjectStoreEntries(objectsStore, objectKeys))
+                    }
+                  }
+
+                snapshotAndStage.flatMap { objectUndoEntries =>
+                  var batchInFlight = isPairedWrite
+                  try {
+                    val objectsWrite: Try[Unit] =
+                      if (hasObjects) Try(objectsStore.insert(objectKeys, objectValues)).flatten
+                      else Success(())
+
+                    objectsWrite match {
+                      case Failure(objErr) =>
+                        val clearRes = if (isPairedWrite) clearPendingJournal() else Success(())
+                        clearRes match {
+                          case Success(_) =>
+                            batchInFlight = false
+                            Failure(objErr)
+                          case Failure(clearErr) =>
+                            log.error(
+                              "Failed to clear staged history batch journal after objectsStore write failure; " +
+                                "quarantining storage instance for startup recovery",
+                              clearErr
+                            )
+                            val qErr = quarantine(
+                              "HistoryStorage failed to clear staged batch journal after objectsStore write error; reopen storage to recover",
+                              objErr,
+                              Some(clearErr)
+                            )
+                            batchInFlight = false
+                            Failure(qErr)
+                        }
+
+                      case Success(_) =>
+                        if (!hasIndexes) {
+                          cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i)) }
+                          batchInFlight = false
+                          Success(())
+                        } else {
+                          val insertedKeys = indexesToInsert.map(_._1.data)
+                          val insertedValues = indexesToInsert.map(_._2)
+                          val indexesWrite = Try {
+                            if (indexesToRemove.nonEmpty) {
+                              indexStore.update(insertedKeys, insertedValues, indexesToRemove.map(_.data))
+                            } else {
+                              indexStore.insert(insertedKeys, insertedValues)
+                            }
+                          }.flatten
+
+                          indexesWrite match {
+                            case Success(_) =>
+                              val clearRes = if (isPairedWrite) clearPendingJournal() else Success(())
+                              clearRes match {
+                                case Success(_) =>
+                                  cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i)) }
+                                  cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
+                                    indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
+                                  }
+                                  cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
+                                    indexCache.invalidate(indexesToRemove(i))
+                                  }
+                                  batchInFlight = false
+                                  Success(())
+
+                                case Failure(commitErr) =>
+                                  cfor(0)(_ < objectsToInsert.length, _ + 1) { i =>
+                                    invalidateHistoryModifierCaches(objectsToInsert(i).id)
+                                  }
+                                  cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
+                                    indexCache.invalidate(indexesToInsert(i)._1)
+                                  }
+                                  cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
+                                    indexCache.invalidate(indexesToRemove(i))
+                                  }
+                                  log.error(
+                                    "Failed to finalize history batch commit marker after insert; " +
+                                      "quarantining storage instance and retaining pending batch journal for startup recovery",
+                                    commitErr
+                                  )
+                                  val qErr = quarantine(
+                                    "HistoryStorage failed to finalize commit marker after insert; reopen storage to recover",
+                                    commitErr
+                                  )
+                                  batchInFlight = false
+                                  Failure(qErr)
+                              }
+
+                            case Failure(idxErr) =>
+                              val rollbackRes =
+                                if (hasObjects) Try(HistoryStorage.applyUndoEntries(objectsStore, objectUndoEntries)).flatten
+                                else Success(())
+                              cfor(0)(_ < objectsToInsert.length, _ + 1) { i =>
+                                invalidateHistoryModifierCaches(objectsToInsert(i).id)
+                              }
+                              cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
+                                indexCache.invalidate(indexesToInsert(i)._1)
+                              }
+                              cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
+                                indexCache.invalidate(indexesToRemove(i))
+                              }
+                              rollbackRes match {
+                                case Success(_) =>
+                                  val clearRes = if (isPairedWrite) clearPendingJournal() else Success(())
+                                  clearRes match {
+                                    case Success(_) =>
+                                      batchInFlight = false
+                                      Failure(idxErr)
+                                    case Failure(clearErr) =>
+                                      log.error(
+                                        "Failed to clear pending history batch journal after objectsStore rollback; " +
+                                          "quarantining storage instance for startup recovery",
+                                        clearErr
+                                      )
+                                      val qErr = quarantine(
+                                        "HistoryStorage failed to clear batch journal after insert rollback; reopen storage to recover",
+                                        idxErr,
+                                        Some(clearErr)
+                                      )
+                                      batchInFlight = false
+                                      Failure(qErr)
+                                  }
+
+                                case Failure(rbErr) =>
+                                  log.error(
+                                    "Failed to roll back objectsStore after indexStore write failure; " +
+                                      "quarantining storage instance and retaining pending batch journal for startup recovery",
+                                    rbErr
+                                  )
+                                  val qErr = quarantine(
+                                    "HistoryStorage compensation failed after indexStore write error; reopen storage to recover",
+                                    idxErr,
+                                    Some(rbErr)
+                                  )
+                                  batchInFlight = false
+                                  Failure(qErr)
+                              }
+                          }
+                        }
+                    }
+                  } catch {
+                    case t: Throwable =>
+                      if (batchInFlight && unavailableOpt.isEmpty) {
+                        quarantine(
+                          "HistoryStorage interrupted during paired insert batch; reopen storage to recover",
+                          t
+                        )
+                      }
+                      throw t
+                  }
+                }
             }
           }
-
-        snapshotAndStage.flatMap { objectUndoEntries =>
-          val objectsWrite: Try[Unit] =
-            if (hasObjects) Try(objectsStore.insert(objectKeys, objectValues)).flatten
-            else Success(())
-
-          objectsWrite match {
-            case Failure(objErr) =>
-              pendingJournalOpt.foreach(_.clearCommitted())
-              Failure(objErr)
-
-            case Success(_) =>
-              if (!hasIndexes) {
-                cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i)) }
-                Success(())
-              } else {
-                val insertedKeys = indexesToInsert.map(_._1.data)
-                val insertedValues = indexesToInsert.map(_._2)
-                val indexesWrite = Try {
-                  if (indexesToRemove.nonEmpty) {
-                    indexStore.update(insertedKeys, insertedValues, indexesToRemove.map(_.data))
-                  } else {
-                    indexStore.insert(insertedKeys, insertedValues)
-                  }
-                }.flatten
-
-                indexesWrite match {
-                  case Success(_) =>
-                    pendingJournalOpt.foreach(_.clearCommitted())
-                    cfor(0)(_ < objectsToInsert.length, _ + 1) { i => cacheModifier(objectsToInsert(i)) }
-                    cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
-                      indexCache.put(indexesToInsert(i)._1, indexesToInsert(i)._2)
-                    }
-                    cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
-                      indexCache.invalidate(indexesToRemove(i))
-                    }
-                    Success(())
-
-                  case Failure(idxErr) =>
-                    val rollbackRes =
-                      if (hasObjects) Try(HistoryStorage.applyUndoEntries(objectsStore, objectUndoEntries)).flatten
-                      else Success(())
-                    cfor(0)(_ < objectsToInsert.length, _ + 1) { i =>
-                      invalidateHistoryModifierCaches(objectsToInsert(i).id)
-                    }
-                    cfor(0)(_ < indexesToInsert.length, _ + 1) { i =>
-                      indexCache.invalidate(indexesToInsert(i)._1)
-                    }
-                    cfor(0)(_ < indexesToRemove.length, _ + 1) { i =>
-                      indexCache.invalidate(indexesToRemove(i))
-                    }
-                    rollbackRes match {
-                      case Success(_) =>
-                        pendingJournalOpt.foreach(_.clearCommitted())
-                      case Failure(rbErr) =>
-                        log.error(
-                          "Failed to roll back objectsStore after indexStore write failure; " +
-                            "retaining pending batch journal for startup recovery",
-                          rbErr
-                        )
-                    }
-                    Failure(idxErr)
-                }
-              }
-          }
         }
-      }
     }
   }
 
   def insertExtra(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                   objectsToInsert: Array[ExtraIndex]): Unit = {
-    insertExtraTry(indexesToInsert, objectsToInsert).failed.foreach { error =>
-      log.error("Failed to insert extra indexes", error)
+    ensureAvailable()
+    insertExtraTry(indexesToInsert, objectsToInsert).failed.foreach {
+      case cse: CriticalSystemException => throw cse
+      case error => log.error("Failed to insert extra indexes", error)
     }
   }
 
@@ -369,35 +532,55 @@ class HistoryStorage(indexStore: LDBKVStore,
   def insertExtraTry(indexesToInsert: Array[(Array[Byte], Array[Byte])],
                      objectsToInsert: Array[ExtraIndex],
                      indexesToRemove: Array[ModifierId]): Try[Unit] = {
-    val objectIds = objectsToInsert.iterator.flatMap(obj => Try(obj.id).toOption).toArray
-    Try {
-      val keys = objectsToInsert.map(_.serializedId) ++ indexesToInsert.map(_._1)
-      val values = objectsToInsert.map(ExtraIndexSerializer.toBytes) ++ indexesToInsert.map(_._2)
-      keys -> values
-    }.flatMap { case (keys, values) =>
-      withExtraCacheWriteLock {
-        extraStore.update(keys, values, indexesToRemove.map(idToBytes)).map { _ =>
-          objectIds.foreach(extraCache.invalidate)
-          cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+    unavailableOpt match {
+      case Some(err) => Failure(err)
+      case None =>
+        val objectIds = objectsToInsert.iterator.flatMap(obj => Try(obj.id).toOption).toArray
+        Try {
+          val keys = objectsToInsert.map(_.serializedId) ++ indexesToInsert.map(_._1)
+          val values = objectsToInsert.map(ExtraIndexSerializer.toBytes) ++ indexesToInsert.map(_._2)
+          keys -> values
+        }.flatMap { case (keys, values) =>
+          withExtraCacheWriteLock {
+            unavailableOpt match {
+              case Some(err) => Failure(err)
+              case None =>
+                extraStore.update(keys, values, indexesToRemove.map(idToBytes)).map { _ =>
+                  objectIds.foreach(extraCache.invalidate)
+                  cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+                }
+            }
+          }
+        }.recoverWith { case error =>
+          if (unavailableOpt.isEmpty) {
+            invalidateExtraCache(objectIds)
+          }
+          Failure(error)
         }
-      }
-    }.recoverWith { case error =>
-      invalidateExtraCache(objectIds)
-      Failure(error)
     }
   }
 
   def removeExtra(indexesToRemove: Array[ModifierId]) : Unit = {
-    removeExtraTry(indexesToRemove).failed.foreach { error =>
-      log.error("Failed to remove extra indexes", error)
+    ensureAvailable()
+    removeExtraTry(indexesToRemove).failed.foreach {
+      case cse: CriticalSystemException => throw cse
+      case error => log.error("Failed to remove extra indexes", error)
     }
   }
 
   def removeExtraTry(indexesToRemove: Array[ModifierId]): Try[Unit] = {
-    withExtraCacheWriteLock {
-      extraStore.remove(indexesToRemove.map(idToBytes)).map { _ =>
-        cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
-      }
+    unavailableOpt match {
+      case Some(err) => Failure(err)
+      case None =>
+        withExtraCacheWriteLock {
+          unavailableOpt match {
+            case Some(err) => Failure(err)
+            case None =>
+              extraStore.remove(indexesToRemove.map(idToBytes)).map { _ =>
+                cfor(0)(_ < indexesToRemove.length, _ + 1) { i => removeModifier(indexesToRemove(i)) }
+              }
+          }
+        }
     }
   }
 
@@ -410,11 +593,21 @@ class HistoryStorage(indexStore: LDBKVStore,
     * @return - Success if insertion was successful, Failure otherwise
     */
   def insert(objectIdToInsert: Array[Byte],
-             objectToInsert: Array[Byte]): Try[Unit] = withHistoryWriteLock {
-    objectsStore.insert(objectIdToInsert, objectToInsert).map { _ =>
-      if (objectIdToInsert.length == 32) {
-        invalidateHistoryModifierCaches(bytesToId(objectIdToInsert))
-      }
+             objectToInsert: Array[Byte]): Try[Unit] = {
+    unavailableOpt match {
+      case Some(err) => Failure(err)
+      case None =>
+        withHistoryWriteLock {
+          unavailableOpt match {
+            case Some(err) => Failure(err)
+            case None =>
+              objectsStore.insert(objectIdToInsert, objectToInsert).map { _ =>
+                if (objectIdToInsert.length == 32) {
+                  invalidateHistoryModifierCaches(bytesToId(objectIdToInsert))
+                }
+              }
+          }
+        }
     }
   }
 
@@ -426,57 +619,175 @@ class HistoryStorage(indexStore: LDBKVStore,
     * @return
     */
   def remove(indicesToRemove: Array[ByteArrayWrapper],
-             idsToRemove: Array[ModifierId]): Try[Unit] = withHistoryWriteLock {
-    val hasObjects = idsToRemove.nonEmpty
-    val hasIndexes = indicesToRemove.nonEmpty
-    pendingJournalOpt match {
-      case Some(journal) if hasObjects && hasIndexes =>
-        val objectKeys = idsToRemove.map(idToBytes)
-        val stageAndSnapshot = Try {
-          val objectUndo = HistoryStorage.snapshotObjectStoreEntries(objectsStore, objectKeys)
-          val indexUndo = HistoryStorage.snapshotIndexStoreEntries(indexStore, Array.empty, indicesToRemove)
-          (objectUndo, indexUndo)
-        }.flatMap { case (objectUndo, indexUndo) =>
-          journal.stage(HistoryStorage.UndoRecord(objectUndo, indexUndo)).map(_ => objectUndo)
-        }
+             idsToRemove: Array[ModifierId]): Try[Unit] = {
+    unavailableOpt match {
+      case Some(err) => Failure(err)
+      case None =>
+        withHistoryWriteLock {
+          unavailableOpt match {
+            case Some(err) => Failure(err)
+            case None =>
+              val hasObjects = idsToRemove.nonEmpty
+              val hasIndexes = indicesToRemove.nonEmpty
+              val isPairedRemove = hasObjects && hasIndexes
+              val objectKeys = if (hasObjects) idsToRemove.map(idToBytes) else Array.empty[Array[Byte]]
 
-        stageAndSnapshot.flatMap { objectUndo =>
-          Try(objectsStore.remove(objectKeys)).flatten match {
-            case Failure(objErr) =>
-              journal.clearCommitted()
-              Failure(objErr)
-            case Success(_) =>
-              Try(indexStore.remove(indicesToRemove.map(_.data))).flatten match {
-                case Success(_) =>
-                  journal.clearCommitted()
-                  cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
-                  cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i)) }
-                  Success(())
-                case Failure(idxErr) =>
-                  val rollbackRes = Try(HistoryStorage.applyUndoEntries(objectsStore, objectUndo)).flatten
-                  cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
-                  cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i)) }
-                  rollbackRes match {
-                    case Success(_) =>
-                      journal.clearCommitted()
-                    case Failure(rbErr) =>
-                      log.error(
-                        "Failed to roll back objectsStore after indexStore remove failure; " +
-                          "retaining pending batch journal for startup recovery",
-                        rbErr
-                      )
+              val snapshotAndStage: Try[Array[(Array[Byte], Option[Array[Byte]])]] =
+                if (!isPairedRemove) {
+                  Success(Array.empty)
+                } else {
+                  pendingJournalOpt match {
+                    case Some(journal) =>
+                      Try {
+                        val objectUndo = HistoryStorage.snapshotObjectStoreEntries(objectsStore, objectKeys)
+                        val indexUndo = HistoryStorage.snapshotIndexStoreEntries(indexStore, Array.empty, indicesToRemove)
+                        (objectUndo, indexUndo)
+                      }.flatMap { case (objectUndo, indexUndo) =>
+                        journal.stage(HistoryStorage.UndoRecord(objectUndo, indexUndo)) match {
+                          case Success(_) =>
+                            Success(objectUndo)
+                          case Failure(stageErr) =>
+                            if (journal.hasActivePendingRecord) {
+                              journal.clearCommitted() match {
+                                case Success(_) =>
+                                  Failure(stageErr)
+                                case Failure(clearErr) =>
+                                  Failure(quarantine(
+                                    "HistoryStorage failed to clear partially staged batch journal during remove; reopen storage to recover",
+                                    stageErr,
+                                    Some(clearErr)
+                                  ))
+                              }
+                            } else {
+                              Failure(stageErr)
+                            }
+                        }
+                      }
+                    case None =>
+                      Try(HistoryStorage.snapshotObjectStoreEntries(objectsStore, objectKeys))
                   }
-                  Failure(idxErr)
-              }
-          }
-        }
+                }
 
-      case _ =>
-        objectsStore.remove(idsToRemove.map(idToBytes)).flatMap { _ =>
-          cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
-          indexStore.remove(indicesToRemove.map(_.data)).map { _ =>
-            cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i)) }
-            ()
+              snapshotAndStage.flatMap { objectUndo =>
+                var batchInFlight = isPairedRemove
+                try {
+                  val objectsRemove: Try[Unit] =
+                    if (hasObjects) Try(objectsStore.remove(objectKeys)).flatten
+                    else Success(())
+
+                  objectsRemove match {
+                    case Failure(objErr) =>
+                      val clearRes = if (isPairedRemove) clearPendingJournal() else Success(())
+                      clearRes match {
+                        case Success(_) =>
+                          batchInFlight = false
+                          Failure(objErr)
+                        case Failure(clearErr) =>
+                          log.error(
+                            "Failed to clear staged history batch journal after objectsStore remove failure; " +
+                              "quarantining storage instance for startup recovery",
+                            clearErr
+                          )
+                          val qErr = quarantine(
+                            "HistoryStorage failed to clear staged batch journal after objectsStore remove error; reopen storage to recover",
+                            objErr,
+                            Some(clearErr)
+                          )
+                          batchInFlight = false
+                          Failure(qErr)
+                      }
+
+                    case Success(_) =>
+                      if (!hasIndexes) {
+                        cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
+                        batchInFlight = false
+                        Success(())
+                      } else {
+                        val indexesRemove: Try[Unit] =
+                          Try(indexStore.remove(indicesToRemove.map(_.data))).flatten
+
+                        indexesRemove match {
+                          case Success(_) =>
+                            val clearRes = if (isPairedRemove) clearPendingJournal() else Success(())
+                            clearRes match {
+                              case Success(_) =>
+                                cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
+                                cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i)) }
+                                batchInFlight = false
+                                Success(())
+
+                              case Failure(commitErr) =>
+                                cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
+                                cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i)) }
+                                log.error(
+                                  "Failed to finalize history batch commit marker after remove; " +
+                                    "quarantining storage instance and retaining pending batch journal for startup recovery",
+                                  commitErr
+                                )
+                                val qErr = quarantine(
+                                  "HistoryStorage failed to finalize commit marker after remove; reopen storage to recover",
+                                  commitErr
+                                )
+                                batchInFlight = false
+                                Failure(qErr)
+                            }
+
+                          case Failure(idxErr) =>
+                            val rollbackRes =
+                              if (hasObjects) Try(HistoryStorage.applyUndoEntries(objectsStore, objectUndo)).flatten
+                              else Success(())
+                            cfor(0)(_ < idsToRemove.length, _ + 1) { i => removeModifier(idsToRemove(i)) }
+                            cfor(0)(_ < indicesToRemove.length, _ + 1) { i => indexCache.invalidate(indicesToRemove(i)) }
+                            rollbackRes match {
+                              case Success(_) =>
+                                val clearRes = if (isPairedRemove) clearPendingJournal() else Success(())
+                                clearRes match {
+                                  case Success(_) =>
+                                    batchInFlight = false
+                                    Failure(idxErr)
+                                  case Failure(clearErr) =>
+                                    log.error(
+                                      "Failed to clear pending history batch journal after objectsStore remove rollback; " +
+                                        "quarantining storage instance for startup recovery",
+                                      clearErr
+                                    )
+                                    val qErr = quarantine(
+                                      "HistoryStorage failed to clear batch journal after remove rollback; reopen storage to recover",
+                                      idxErr,
+                                      Some(clearErr)
+                                    )
+                                    batchInFlight = false
+                                    Failure(qErr)
+                                }
+
+                              case Failure(rbErr) =>
+                                log.error(
+                                  "Failed to roll back objectsStore after indexStore remove failure; " +
+                                    "quarantining storage instance and retaining pending batch journal for startup recovery",
+                                  rbErr
+                                )
+                                val qErr = quarantine(
+                                  "HistoryStorage compensation failed after indexStore remove error; reopen storage to recover",
+                                  idxErr,
+                                  Some(rbErr)
+                                )
+                                batchInFlight = false
+                                Failure(qErr)
+                            }
+                        }
+                      }
+                  }
+                } catch {
+                  case t: Throwable =>
+                    if (batchInFlight && unavailableOpt.isEmpty) {
+                      quarantine(
+                        "HistoryStorage interrupted during paired remove batch; reopen storage to recover",
+                        t
+                      )
+                    }
+                    throw t
+                }
+              }
           }
         }
     }
@@ -484,10 +795,7 @@ class HistoryStorage(indexStore: LDBKVStore,
 
   override def close(): Unit = withHistoryWriteLock {
     log.warn("Closing history storage...")
-    pendingJournalOpt.foreach(_.close())
-    extraStore.close()
-    indexStore.close()
-    objectsStore.close()
+    HistoryStorage.closeAll(pendingJournalOpt.toSeq ++ Seq[AutoCloseable](extraStore, indexStore, objectsStore))
   }
 
   /**
@@ -503,13 +811,23 @@ class HistoryStorage(indexStore: LDBKVStore,
     * Delete the extra index database and reopen it, preserving deletion failures.
     */
   def deleteExtraDBTry(ergoSettings: ErgoSettings): Try[HistoryStorage] = {
-    log.warn("Removing extra index database after an invalid checkpoint.")
-    val root = new File(s"${ergoSettings.directory}/history/extra")
-    Try(close()).flatMap { _ =>
-      HistoryStorage.deleteRecursively(root.toPath, Files.delete)
-    }.map { _ =>
-      log.info(s"Deleted ${root.toString}")
-      HistoryStorage.apply(ergoSettings)
+    unavailableOpt match {
+      case Some(err) => Failure(err)
+      case None =>
+        withHistoryWriteLock {
+          unavailableOpt match {
+            case Some(err) => Failure(err)
+            case None =>
+              log.warn("Removing extra index database after an invalid checkpoint.")
+              val root = new File(s"${ergoSettings.directory}/history/extra")
+              Try(close()).flatMap { _ =>
+                HistoryStorage.deleteRecursively(root.toPath, Files.delete)
+              }.map { _ =>
+                log.info(s"Deleted ${root.toString}")
+                HistoryStorage.apply(ergoSettings)
+              }
+          }
+        }
     }
   }
 
@@ -525,6 +843,44 @@ object HistoryStorage extends ScorexLogging {
     objectEntries: Array[(Array[Byte], Option[Array[Byte]])],
     indexEntries: Array[(Array[Byte], Option[Array[Byte]])]
   )
+
+  private[storage] def writeAllToChannel(ch: FileChannel, buf: ByteBuffer, startPos: Long): Unit = {
+    var pos = startPos
+    while (buf.hasRemaining) {
+      val written = ch.write(buf, pos)
+      if (written < 0) throw new IOException("Unexpected negative byte count writing history journal")
+      pos += written
+    }
+  }
+
+  private[storage] val defaultCommitMarkerWriter: FileChannel => Unit = { ch =>
+    writeAllToChannel(ch, ByteBuffer.wrap(Array[Byte](0.toByte)), 5L)
+    ch.force(false)
+  }
+
+  private[storage] def closeAll(resources: Seq[AutoCloseable], priorError: Option[Throwable] = None): Unit = {
+    var firstError: Option[Throwable] = priorError
+    resources.foreach { res =>
+      if (res ne null) {
+        try {
+          res.close()
+        } catch {
+          case t: Throwable =>
+            firstError match {
+              case Some(primary) =>
+                if ((primary ne t) && !primary.getSuppressed.contains(t)) {
+                  primary.addSuppressed(t)
+                }
+              case None =>
+                firstError = Some(t)
+            }
+        }
+      }
+    }
+    if (priorError.isEmpty) {
+      firstError.foreach(throw _)
+    }
+  }
 
   private[storage] def snapshotObjectStoreEntries(objectsStore: LDBKVStore,
                                                   objectKeys: Array[Array[Byte]]): Array[(Array[Byte], Option[Array[Byte]])] = {
@@ -666,9 +1022,14 @@ object HistoryStorage extends ScorexLogging {
     crc.getValue.toInt
   }
 
-  private[storage] final class PendingBatchJournal(val path: Path) extends AutoCloseable {
+  private[storage] final class PendingBatchJournal(
+    val path: Path,
+    commitMarkerWriter: FileChannel => Unit = defaultCommitMarkerWriter
+  ) extends AutoCloseable {
     private var channelOpt: Option[FileChannel] = None
     private var hasActiveRecord: Boolean = false
+
+    private[storage] def hasActivePendingRecord: Boolean = hasActiveRecord
 
     private def ensureOpen(): FileChannel = channelOpt match {
       case Some(ch) if ch.isOpen => ch
@@ -684,57 +1045,44 @@ object HistoryStorage extends ScorexLogging {
         ch
     }
 
-    private def writeAll(ch: FileChannel, buf: ByteBuffer, startPos: Long): Unit = {
-      var pos = startPos
-      while (buf.hasRemaining) {
-        val written = ch.write(buf, pos)
-        if (written < 0) throw new IOException("Unexpected negative byte count writing history journal")
-        pos += written
-      }
-    }
-
-    def stage(record: UndoRecord): Try[Unit] = Try {
-      val ch = ensureOpen()
-      val payload = encodePayload(record)
-      val payloadLen = payload.length
-      val crc = computeCrc32(JournalVersion, payloadLen, payload)
-
+    def stage(record: UndoRecord): Try[Unit] = {
       if (hasActiveRecord) {
-        writeAll(ch, ByteBuffer.wrap(Array[Byte](0.toByte)), 5L)
-        ch.force(false)
-        hasActiveRecord = false
-      }
-
-      val bodyBytes = new Array[Byte](8 + payloadLen)
-      val bodyBuf = ByteBuffer.wrap(bodyBytes)
-      bodyBuf.putInt(payloadLen)
-      bodyBuf.putInt(crc)
-      bodyBuf.put(payload)
-      writeAll(ch, ByteBuffer.wrap(bodyBytes), 6L)
-      ch.force(false)
-
-      val headerBytes = new Array[Byte](6)
-      val headerBuf = ByteBuffer.wrap(headerBytes)
-      headerBuf.putInt(JournalMagic)
-      headerBuf.put(JournalVersion)
-      headerBuf.put(1.toByte)
-      writeAll(ch, ByteBuffer.wrap(headerBytes), 0L)
-      ch.force(false)
-      hasActiveRecord = true
-    }
-
-    def clearCommitted(): Unit = {
-      if (hasActiveRecord) {
+        Failure(new IllegalStateException(s"Refusing to overwrite active pending history batch journal record at $path"))
+      } else {
         Try {
-          channelOpt.foreach { ch =>
-            if (ch.isOpen) {
-              writeAll(ch, ByteBuffer.wrap(Array[Byte](0.toByte)), 5L)
-              ch.force(false)
-            }
-          }
+          val ch = ensureOpen()
+          val payload = encodePayload(record)
+          val payloadLen = payload.length
+          val crc = computeCrc32(JournalVersion, payloadLen, payload)
+
+          val bodyBytes = new Array[Byte](8 + payloadLen)
+          val bodyBuf = ByteBuffer.wrap(bodyBytes)
+          bodyBuf.putInt(payloadLen)
+          bodyBuf.putInt(crc)
+          bodyBuf.put(payload)
+          writeAllToChannel(ch, ByteBuffer.wrap(bodyBytes), 6L)
+          ch.force(false)
+
+          val headerBytes = new Array[Byte](6)
+          val headerBuf = ByteBuffer.wrap(headerBytes)
+          headerBuf.putInt(JournalMagic)
+          headerBuf.put(JournalVersion)
+          headerBuf.put(1.toByte)
+          hasActiveRecord = true
+          writeAllToChannel(ch, ByteBuffer.wrap(headerBytes), 0L)
+          ch.force(false)
+        }
+      }
+    }
+
+    def clearCommitted(): Try[Unit] = {
+      if (!hasActiveRecord) {
+        Success(())
+      } else {
+        Try {
+          val ch = ensureOpen()
+          commitMarkerWriter(ch)
           hasActiveRecord = false
-        }.failed.foreach { err =>
-          log.warn(s"Failed to mark pending history batch journal committed at $path", err)
         }
       }
     }
@@ -804,18 +1152,19 @@ object HistoryStorage extends ScorexLogging {
   }
 
   def apply(ergoSettings: ErgoSettings): HistoryStorage = {
-    val indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
-    val objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
-    val extraStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/extra")
-    val journalPath = Paths.get(ergoSettings.directory, "history", PendingJournalFileName)
+    var indexStore: LDBKVStore = null
+    var objectsStore: LDBKVStore = null
+    var extraStore: LDBKVStore = null
     try {
+      indexStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/index")
+      objectsStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/objects")
+      extraStore = LDBFactory.createKvDb(s"${ergoSettings.directory}/history/extra")
+      val journalPath = Paths.get(ergoSettings.directory, "history", PendingJournalFileName)
       recoverPendingJournal(journalPath, objectsStore, indexStore).get
       new HistoryStorage(indexStore, objectsStore, extraStore, ergoSettings.cacheSettings, Some(journalPath))
     } catch {
       case t: Throwable =>
-        Try(extraStore.close())
-        Try(indexStore.close())
-        Try(objectsStore.close())
+        closeAll(Seq(extraStore, indexStore, objectsStore), Some(t))
         throw t
     }
   }

@@ -320,7 +320,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           nodeSettings = defaultSettings.nodeSettings
             .copy(blockCandidateGenerationInterval = 1.millis),
           chainSettings =
-            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
+            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
+          directory = s"${defaultSettings.directory}-regenerate-periodically-${System.currentTimeMillis()}"
         )
 
     val viewHolderRef: ActorRef =
@@ -408,7 +409,8 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
           nodeSettings = defaultSettings.nodeSettings
             .copy(blockCandidateGenerationInterval = 1.millis),
           chainSettings =
-            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds)
+            ErgoSettingsReader.read().chainSettings.copy(blockInterval = 1.seconds),
+          directory = s"${defaultSettings.directory}-previous-candidate-${System.currentTimeMillis()}"
         )
 
     val viewHolderRef: ActorRef =

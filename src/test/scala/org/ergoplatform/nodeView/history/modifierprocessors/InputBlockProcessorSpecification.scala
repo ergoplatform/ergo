@@ -3166,6 +3166,30 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.getInputBlock(ib1.id) shouldBe None
   }
 
+  property("prune should remove ordering-block transactions behind the best chain") {
+    val bh = BoxHolder(Seq(eb1, eb2))
+    val us = UtxoState.fromBoxHolder(bh, None, createTempDir, settings, parameters)
+    val txs = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(1)), 201)._1
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    val c1 = genChain(2, h, stateOpt = Some(us))
+    applyChain(h, c1)
+
+    val oldOrderingId = c1.head.id
+    val bestOrderingId = c1.last.id
+
+    h.saveOrderingBlockTransactions(oldOrderingId, txs)
+    h.saveOrderingBlockTransactions(bestOrderingId, txs)
+
+    h.getOrderingBlockTransactions(oldOrderingId) shouldBe Some(txs)
+    h.getOrderingBlockTransactions(bestOrderingId) shouldBe Some(txs)
+
+    invokePrune(h)
+
+    h.getOrderingBlockTransactions(oldOrderingId) shouldBe None
+    h.getOrderingBlockTransactions(bestOrderingId) shouldBe Some(txs)
+  }
+
   property("prune should drop old input-block records and clean the disconnected waitlist") {
     val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1, eb2)), None, createTempDir, settings, parameters)
     val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,

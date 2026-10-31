@@ -19,21 +19,14 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
   val map = new mutable.HashMap[File, RegisteredDB]
 
   /**
-    * Decorator of LevelDB DB class which overrides close() methods and unlinks database from registry on close.
-    * So if database was not explicitly closed, then next attempt to open database with the same path will
-    * return existed instance instead of creating new one.
+    * Decorator that forwards close at most once and unlinks only its own registry entry
+    * after that attempt. A failed close is rethrown and still unlinks the entry, as before.
+    * An open database is reused until its close attempt completes.
     */
   case class RegisteredDB(impl: DB, path: File) extends DB {
 
     // Guarded by the registry lock, shared with open for this path.
     private var closeAttempted = false
-    private var closeFailure: Option[Throwable] = None
-
-    private[StoreRegistry] def requireUsable(): Unit = {
-      if (closeAttempted) {
-        throw new IllegalStateException("Database close was attempted; restart before reopening", closeFailure.orNull)
-      }
-    }
 
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
 
@@ -76,14 +69,9 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
           closeAttempted = true
           try {
             impl.close()
+          } finally {
             if (map.get(path).exists(_ eq this)) map.remove(path)
-          } catch {
-            case failure: Throwable =>
-              closeFailure = Some(failure)
-              throw failure
           }
-        } else {
-          closeFailure.foreach(throw _)
         }
       } finally {
         lock.writeLock().unlock()
@@ -94,15 +82,7 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
   private def add(file: File, create: => DB): DB = {
     lock.writeLock().lock()
     try {
-      map.get(file) match {
-        case Some(registered) =>
-          registered.requireUsable()
-          registered
-        case None =>
-          val registered = RegisteredDB(create, file)
-          map += file -> registered
-          registered
-      }
+      map.getOrElseUpdate(file, RegisteredDB(create, file))
     } finally {
       lock.writeLock().unlock()
     }

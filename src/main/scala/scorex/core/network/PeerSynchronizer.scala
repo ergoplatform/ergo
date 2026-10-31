@@ -5,7 +5,7 @@ import akka.actor.{Actor, ActorInitializationException, ActorKilledException, Ac
 import akka.pattern.ask
 import akka.util.Timeout
 import org.ergoplatform.network.PeerSpec
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{MessageProcessed, PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSpec, PeersSpec}
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import org.ergoplatform.network.peer.PeerManager.ReceivableMessages.{AddPeerIfEmpty, SeenPeers}
@@ -13,7 +13,7 @@ import org.ergoplatform.settings.NetworkSettings
 import scorex.util.ScorexLogging
 import shapeless.syntax.typeable._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 /**
@@ -40,12 +40,20 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
 
   private val peersSpec = new PeersSpec(settings.maxPeerSpecObjects)
 
+  private var asyncHandling: Option[Future[Unit]] = None
+
+  private def ackMessageProcessed(replyTo: ActorRef, source: ConnectedPeer, messageLength: Int): Unit = {
+    if (replyTo != ActorRef.noSender && replyTo != self) {
+      replyTo ! MessageProcessed(source, messageLength)
+    }
+  }
+
   private val msgHandlers: PartialFunction[(MessageSpec[_], _, ConnectedPeer), Unit] = {
     case (_: PeersSpec, peers: Seq[PeerSpec]@unchecked, _) if peers.cast[Seq[PeerSpec]].isDefined =>
       addNewPeers(peers)
 
     case (spec, _, remote) if spec.messageCode == GetPeersSpec.messageCode =>
-      gossipPeers(remote)
+      asyncHandling = Some(gossipPeers(remote))
   }
 
   override def preStart: Unit = {
@@ -59,7 +67,22 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
   override def receive: Receive = {
 
     // data received from a remote peer
-    case Message(spec, Left(msgBytes), Some(source)) => parseAndHandle(msgHandlers, spec, msgBytes, source)
+    case msg@Message(spec, Left(msgBytes), Some(source)) =>
+      val replyTo = sender()
+      val msgLen = msg.messageLength
+      asyncHandling = None
+      try {
+        parseAndHandle(msgHandlers, spec, msgBytes, source)
+      } finally {
+        val pendingOpt = asyncHandling
+        asyncHandling = None
+        pendingOpt match {
+          case Some(fut) =>
+            fut.onComplete(_ => ackMessageProcessed(replyTo, source, msgLen))
+          case None =>
+            ackMessageProcessed(replyTo, source, msgLen)
+        }
+      }
 
     // fall-through method for reporting unhandled messages
     case nonsense: Any => log.warn(s"PeerSynchronizer: got unexpected input $nonsense from ${sender()}")
@@ -83,7 +106,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
     *
     * @param remote the remote peer to be informed of our local peers
     */
-  private def gossipPeers(remote: ConnectedPeer): Unit = {
+  private def gossipPeers(remote: ConnectedPeer): Future[Unit] = {
     implicit val timeout: Timeout = Timeout(settings.syncTimeout.getOrElse(5.seconds))
 
     // we send less peer that can be accepted, starting from 5.0.8
@@ -96,7 +119,7 @@ class PeerSynchronizer(val networkControllerRef: ActorRef,
 
     (peerManager ? SeenPeers(peersToSend))
       .mapTo[Seq[PeerInfo]]
-      .foreach { peers =>
+      .map { peers =>
         val msg = Message(peersSpec, Right(peers.map(_.peerSpec)), None)
         networkControllerRef ! SendToNetwork(msg, SendToPeer(remote))
       }

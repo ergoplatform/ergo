@@ -29,7 +29,8 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
 
   private def withHandler(
     messageSpecs: Seq[MessageSpec[_]],
-    localPort: Int
+    localPort: Int,
+    direction: ConnectionDirection = Incoming
   )(test: ConnectedHandler => Unit): Unit = {
     val fixture = new AkkaFixture
     try {
@@ -41,7 +42,7 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
       val remoteAddress = new InetSocketAddress("127.0.0.1", localPort + 1)
       val description = ConnectionDescription(
         connection.ref,
-        ConnectionId(remoteAddress, localAddress, Incoming),
+        ConnectionId(remoteAddress, localAddress, direction),
         Some(localAddress),
         Seq.empty
       )
@@ -64,9 +65,10 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
 
   private def withConnectedHandler(
     messageSpecs: Seq[MessageSpec[_]],
-    localPort: Int
+    localPort: Int,
+    direction: ConnectionDirection = Incoming
   )(test: ConnectedHandler => Unit): Unit =
-    withHandler(messageSpecs, localPort) { fixture =>
+    withHandler(messageSpecs, localPort, direction) { fixture =>
       val handshake = HandshakeSerializer.toBytes(
         Handshake(defaultPeerSpec, System.currentTimeMillis())
       )
@@ -335,6 +337,87 @@ class PeerConnectionHandlerSpecification extends ErgoCorePropertyTest {
 
       fixture.connection.expectMsg(Tcp.Abort)
       fixture.watcher.expectNoMessage(200.millis)
+    }
+  }
+
+  property("suspend incoming TCP reads at MaxInFlightIncomingMessages and resume once InboundMessageProcessed frees credit") {
+    val specs: Seq[MessageSpec[_]] = Seq(GetPeersSpec)
+    withConnectedHandler(specs, localPort = 9243, direction = Incoming) { fixture =>
+      val serializer = new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+      val frame = serializer.serialize(Message(GetPeersSpec, Right(()), None))
+      val totalFrames = PeerConnectionHandler.MaxInFlightIncomingMessages + 2
+      val burst = (1 to totalFrames).foldLeft(ByteString.empty)((acc, _) => acc ++ frame)
+
+      fixture.connection.send(fixture.handler, Tcp.Received(burst))
+
+      (1 to PeerConnectionHandler.MaxInFlightIncomingMessages).foreach { _ =>
+        fixture.watcher.expectMsgType[Message[_]].spec shouldBe GetPeersSpec
+      }
+      // Frames beyond MaxInFlightIncomingMessages stay buffered while TCP reads are suspended.
+      fixture.watcher.expectNoMessage(150.millis)
+      fixture.connection.expectMsg(Tcp.SuspendReading)
+      fixture.connection.expectNoMessage(150.millis)
+
+      // Releasing 1 credit drains 1 buffered frame, keeping in-flight at MaxInFlightIncomingMessages (still suspended).
+      fixture.handler ! PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(frame.length)
+      fixture.watcher.expectMsgType[Message[_]].spec shouldBe GetPeersSpec
+      fixture.connection.expectNoMessage(150.millis)
+
+      // Releasing 2 more credits drains the final buffered frame and brings in-flight below the limit -> ResumeReading.
+      fixture.handler ! PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(frame.length)
+      fixture.watcher.expectMsgType[Message[_]].spec shouldBe GetPeersSpec
+      fixture.connection.expectNoMessage(150.millis)
+
+      fixture.handler ! PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(frame.length)
+      fixture.connection.expectMsg(Tcp.ResumeReading)
+    }
+  }
+
+  property("suspend incoming TCP reads when in-flight bytes reach MaxInFlightIncomingBytes below message count limit") {
+    val specs: Seq[MessageSpec[_]] = Seq(UtxoSnapshotChunkSpec, GetPeersSpec)
+    withConnectedHandler(specs, localPort = 9253, direction = Incoming) { fixture =>
+      val serializer = new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+      val maxChunkFrame = serializer.serialize(
+        Message(UtxoSnapshotChunkSpec, Right(Array.fill[Byte](3999996)(1)), None)
+      )
+      // 5 * 4,000,013 = 20,000,065 >= MaxInFlightIncomingBytes (16,388,621), while 5 < MaxInFlightIncomingMessages (16)
+      val chunksToExceedBytes = 5
+      (chunksToExceedBytes.toLong * maxChunkFrame.length) should be >= PeerConnectionHandler.MaxInFlightIncomingBytes
+      chunksToExceedBytes should be < PeerConnectionHandler.MaxInFlightIncomingMessages
+      val trailingFrame = serializer.serialize(Message(GetPeersSpec, Right(()), None))
+      val payload = (1 to chunksToExceedBytes).foldLeft(ByteString.empty)((acc, _) => acc ++ maxChunkFrame) ++ trailingFrame
+
+      fixture.connection.send(fixture.handler, Tcp.Received(payload))
+
+      (1 to chunksToExceedBytes).foreach { _ =>
+        fixture.watcher.expectMsgType[Message[_]].spec shouldBe UtxoSnapshotChunkSpec
+      }
+      fixture.watcher.expectNoMessage(150.millis)
+      fixture.connection.expectMsg(Tcp.SuspendReading)
+
+      fixture.handler ! PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(maxChunkFrame.length)
+      fixture.watcher.expectMsgType[Message[_]].spec shouldBe GetPeersSpec
+      fixture.connection.expectMsg(Tcp.ResumeReading)
+    }
+  }
+
+  property("withhold ResumeReading on backpressured Outgoing connection and resume once InboundMessageProcessed frees credit") {
+    val specs: Seq[MessageSpec[_]] = Seq(GetPeersSpec)
+    withConnectedHandler(specs, localPort = 9263, direction = Outgoing) { fixture =>
+      val serializer = new MessageSerializer(specs, settings.scorexSettings.network.magicBytes)
+      val frame = serializer.serialize(Message(GetPeersSpec, Right(()), None))
+      val burst = (1 to PeerConnectionHandler.MaxInFlightIncomingMessages).foldLeft(ByteString.empty)((acc, _) => acc ++ frame)
+
+      fixture.connection.send(fixture.handler, Tcp.Received(burst))
+
+      (1 to PeerConnectionHandler.MaxInFlightIncomingMessages).foreach { _ =>
+        fixture.watcher.expectMsgType[Message[_]].spec shouldBe GetPeersSpec
+      }
+      // Outgoing connections run in Akka TCP pullMode=true, so withholding ResumeReading pauses OP_READ.
+      fixture.connection.expectNoMessage(150.millis)
+
+      fixture.handler ! PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(frame.length)
+      fixture.connection.expectMsg(Tcp.ResumeReading)
     }
   }
 }

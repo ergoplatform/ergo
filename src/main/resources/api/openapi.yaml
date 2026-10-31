@@ -1547,8 +1547,7 @@ components:
       description: >
         PoW solution submitted for the selected mining candidate. Autolykos V2
         submissions may omit pk, w and d. When pk is omitted, the node uses the
-        selected candidate's miner key. A decoded request still undergoes PoW
-        validation before the block can be applied.
+        selected candidate's miner key.
       type: object
       required:
         - n

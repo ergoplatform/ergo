@@ -35,7 +35,7 @@ class NetworkController(ergoSettings: ErgoSettings,
                        )(implicit ec: ExecutionContext) extends Actor with ScorexLogging {
 
   import NetworkController.ReceivableMessages._
-  import PeerConnectionHandler.ReceivableMessages.CloseConnection
+  import PeerConnectionHandler.ReceivableMessages.{CloseConnection, InboundMessageProcessed}
   import akka.actor.SupervisorStrategy._
 
   override val supervisorStrategy: OneForOneStrategy = OneForOneStrategy(
@@ -57,6 +57,10 @@ class NetworkController(ergoSettings: ErgoSettings,
   // capabilities of our node
   private val modePeerFeature = ModePeerFeature(ergoSettings.nodeSettings)
   private val messageHandlers = messageHandlersPartial(self)
+  private val watchedMessageHandlers: Set[ActorRef] = messageHandlers.values.toSet
+  watchedMessageHandlers.foreach(context.watch)
+
+  private var inFlightByHandler = Map.empty[ActorRef, Map[ActorRef, Vector[Int]]]
 
   private implicit val timeout: Timeout = Timeout(networkSettings.controllerTimeout.getOrElse(5.seconds))
   private lazy val bindAddress = networkSettings.bindAddress
@@ -119,12 +123,65 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private def time(): Time = System.currentTimeMillis()
 
+  private def recordInFlight(handler: ActorRef, peerHandlerRef: ActorRef, messageLength: Int): Unit = {
+    if (peerHandlerRef != ActorRef.noSender) {
+      val byPeer = inFlightByHandler.getOrElse(handler, Map.empty)
+      val lengths = byPeer.getOrElse(peerHandlerRef, Vector.empty) :+ messageLength
+      inFlightByHandler = inFlightByHandler.updated(handler, byPeer.updated(peerHandlerRef, lengths))
+    }
+  }
+
+  private def completeInFlight(handler: ActorRef, peerHandlerRef: ActorRef, messageLength: Int): Unit = {
+    inFlightByHandler.get(handler).foreach { byPeer =>
+      byPeer.get(peerHandlerRef).foreach { lengths =>
+        val idx = lengths.indexOf(messageLength)
+        val remainingLengths =
+          if (idx >= 0) lengths.patch(idx, Nil, 1)
+          else if (lengths.nonEmpty) lengths.tail
+          else Vector.empty
+        val updatedByPeer =
+          if (remainingLengths.isEmpty) byPeer - peerHandlerRef
+          else byPeer.updated(peerHandlerRef, remainingLengths)
+        inFlightByHandler =
+          if (updatedByPeer.isEmpty) inFlightByHandler - handler
+          else inFlightByHandler.updated(handler, updatedByPeer)
+      }
+    }
+    if (peerHandlerRef != ActorRef.noSender) {
+      peerHandlerRef ! InboundMessageProcessed(messageLength)
+    }
+  }
+
+  private def clearInFlightForTerminatedRef(ref: ActorRef): Boolean = {
+    val wasWatchedHandler = watchedMessageHandlers.contains(ref) || inFlightByHandler.contains(ref)
+    inFlightByHandler.get(ref).foreach { byPeer =>
+      byPeer.foreach { case (peerHandlerRef, lengths) =>
+        if (peerHandlerRef != ActorRef.noSender) {
+          lengths.foreach(len => peerHandlerRef ! InboundMessageProcessed(len))
+        }
+      }
+    }
+    val withoutHandler = inFlightByHandler - ref
+    inFlightByHandler = withoutHandler.flatMap { case (handler, byPeer) =>
+      val updatedByPeer = byPeer - ref
+      if (updatedByPeer.isEmpty) None else Some(handler -> updatedByPeer)
+    }
+    wasWatchedHandler
+  }
+
   private def businessLogic: Receive = {
     // a message coming in from another peer
     case msg@Message(spec, _, Some(remote)) =>
+      val peerHandlerRef = if (sender() != ActorRef.noSender) sender() else remote.handlerRef
       messageHandlers.get(spec.messageCode) match {
-        case Some(handler) => handler ! msg // forward the message to the appropriate handler for processing
-        case None => log.error(s"No handlers found for message $remote: " + spec.messageCode)
+        case Some(handler) =>
+          recordInFlight(handler, peerHandlerRef, msg.messageLength)
+          handler ! msg // forward the message to the appropriate handler for processing
+        case None =>
+          log.error(s"No handlers found for message $remote: " + spec.messageCode)
+          if (peerHandlerRef != ActorRef.noSender) {
+            peerHandlerRef ! InboundMessageProcessed(msg.messageLength)
+          }
       }
 
       // Update last seen message timestamps with the message timestamp
@@ -144,6 +201,9 @@ class NetworkController(ergoSettings: ErgoSettings,
 
         case None => log.warn("Connection not found for a message got from: " + remoteAddress)
       }
+
+    case MessageProcessed(remote, messageLength) =>
+      completeInFlight(sender(), remote.handlerRef, messageLength)
 
     case SendToNetwork(message, sendingStrategy) =>
       filterConnections(sendingStrategy, message.spec.protocolVersion).foreach { connectedPeer =>
@@ -245,6 +305,10 @@ class NetworkController(ergoSettings: ErgoSettings,
     case Terminated(ref) =>
       val wasPending = pendingIncomingConnections.contains(ref)
       pendingIncomingConnections -= ref
+      val wasMessageHandler = clearInFlightForTerminatedRef(ref)
+      if (wasMessageHandler) {
+        log.warn(s"Message handler $ref terminated, released in-flight peer message credits")
+      }
       connectionForHandler(ref) match {
         case Some(connectedPeer) =>
           log.info(s"Terminating connection to $connectedPeer")
@@ -252,7 +316,7 @@ class NetworkController(ergoSettings: ErgoSettings,
           connections -= remoteAddress
           unconfirmedConnections -= remoteAddress
           context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
-        case None if !wasPending =>
+        case None if !wasPending && !wasMessageHandler =>
           log.warn(s"No connection found for $ref during termination")
         case None => ()
       }
@@ -611,6 +675,11 @@ object NetworkController {
       * Get p2p network status
       */
     case object GetPeersStatus
+
+    /**
+      * Sent by a registered message handler once an inbound peer message has been handled
+      */
+    final case class MessageProcessed(peer: ConnectedPeer, messageLength: Int) extends DeadLetterSuppression
 
   }
 

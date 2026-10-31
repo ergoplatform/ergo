@@ -1,7 +1,7 @@
 package org.ergoplatform.nodeView
 
 import akka.actor.SupervisorStrategy.Escalate
-import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, DeadLetterSuppression, OneForOneStrategy, Props}
 import org.ergoplatform.{CriticalSystemException, ErgoApp}
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.core._
@@ -357,6 +357,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
     */
   protected def processRemoteModifiers: Receive = {
     case ModifiersFromRemote(mods: Seq[BlockSection]@unchecked) =>
+      val replyTo = sender()
       @tailrec
       def applyFromCacheLoop(cache: ErgoModifiersCache): Unit = {
         val at0 = System.currentTimeMillis()
@@ -371,7 +372,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         }
       }
 
-      mods.headOption match {
+      try {
+        mods.headOption match {
         case Some(h) if h.isInstanceOf[Header] => // modifiers are always of the same type
           val sorted = mods.sortBy(_.asInstanceOf[Header].height)
 
@@ -437,6 +439,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           log.debug(s"Cache size after: ${modifiersCache.size}")
         case None =>
           log.debug("None path in processRemoteModifiers")
+      }
+      } finally {
+        if (replyTo != ActorRef.noSender && replyTo != self) {
+          replyTo ! ModifiersFromRemoteProcessed
+        }
       }
   }
 
@@ -818,8 +825,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
 
   protected def processLocallyGeneratedModifiers: Receive = {
     case lm: LocallyGeneratedModifier =>
-      log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
-      pmodModify(lm.pmod, local = true)
+      val replyTo = sender()
+      try {
+        log.info(s"Got locally generated modifier ${lm.pmod.encodedId} of type ${lm.pmod.modifierTypeId}")
+        pmodModify(lm.pmod, local = true)
+      } finally {
+        if (replyTo != ActorRef.noSender && replyTo != self) {
+          replyTo ! LocallyGeneratedModifierProcessed(lm.pmod.id)
+        }
+      }
   }
 
   protected def getCurrentInfo: Receive = {
@@ -890,6 +904,12 @@ object ErgoNodeViewHolder {
 
     // Modifiers received from the remote peer with new elements in it
     case class ModifiersFromRemote(modifiers: Iterable[BlockSection])
+
+    // Sent to the caller once a `ModifiersFromRemote` batch has been processed
+    case object ModifiersFromRemoteProcessed extends DeadLetterSuppression
+
+    // Sent to the caller once a `LocallyGeneratedModifier` has been processed
+    case class LocallyGeneratedModifierProcessed(modifierId: ModifierId) extends DeadLetterSuppression
 
 
     /**

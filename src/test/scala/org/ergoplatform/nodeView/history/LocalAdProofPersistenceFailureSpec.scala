@@ -13,7 +13,10 @@ import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{
   SyntacticallyFailedModification,
   SyntacticallySuccessfulModifier
 }
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{
+  GetDataFromCurrentView,
+  LocallyGeneratedModifierProcessed
+}
 import org.ergoplatform.nodeView.{LocallyGeneratedModifier, UtxoNodeViewHolder}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockSectionProcessor
@@ -86,6 +89,9 @@ class LocalAdProofPersistenceFailureSpec extends ErgoCorePropertyTest with TestF
             .exists(_._1 == ADProofs.modifierTypeId)
         })
 
+        queries.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(block.header.id))
+        queries.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(block.blockTransactions.id))
+        queries.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(block.extension.id))
         val servable = queries.expectMsgPF(5.seconds) {
           case present: java.lang.Boolean => present.booleanValue()
         }
@@ -159,6 +165,9 @@ class LocalAdProofPersistenceFailureSpec extends ErgoCorePropertyTest with TestF
             .exists(_._1 == ADProofs.modifierTypeId)
         })
 
+        queries.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(block.header.id))
+        queries.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(block.blockTransactions.id))
+        queries.expectMsg(5.seconds, LocallyGeneratedModifierProcessed(block.extension.id))
         val servable = queries.expectMsgPF(5.seconds) {
           case present: java.lang.Boolean => present.booleanValue()
         }

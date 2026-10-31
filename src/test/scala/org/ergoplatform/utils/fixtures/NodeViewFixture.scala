@@ -3,6 +3,7 @@ package org.ergoplatform.utils.fixtures
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
 import org.ergoplatform.mining.emission.EmissionRules
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{LocallyGeneratedModifierProcessed, ModifiersFromRemoteProcessed}
 import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.NodeViewTestContext
@@ -25,6 +26,11 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
   val emission: EmissionRules = new EmissionRules(settings.chainSettings.monetary)
   @volatile var nodeViewHolderRef: ActorRef = ErgoNodeViewRef(settings)
   val testProbe = new TestProbe(actorSystem)
+  // `testProbe` doubles as `defaultSender` and `eventStream` subscriber in fixture tests;
+  // direct modifier-processing acks are verified via dedicated caller probes.
+  testProbe.ignoreMsg {
+    case ModifiersFromRemoteProcessed | _: LocallyGeneratedModifierProcessed => true
+  }
 
   /** This sender should be imported to make TestProbe work! */
   implicit val defaultSender: ActorRef = testProbe.testActor

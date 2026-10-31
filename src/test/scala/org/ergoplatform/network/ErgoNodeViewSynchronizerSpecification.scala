@@ -14,7 +14,12 @@ import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{
+  GetDataFromCurrentView,
+  GetNodeViewChanges,
+  ModifiersFromRemote,
+  ModifiersFromRemoteProcessed
+}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader, ErgoSyncInfoMessageSpec, ErgoSyncInfoV2}
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
@@ -29,7 +34,7 @@ import org.scalacheck.Gen
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
 import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
-import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
+import scorex.core.network.NetworkController.ReceivableMessages.{MessageProcessed, PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
 import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
@@ -2506,6 +2511,151 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // the first is accepted at a low cost, the relay is still within its budget: the second is processed now
       synchronizerRef ! SuccessfulTransaction(first.head.withCost(1000))
       txsForwardedToMempool().map(_.id) shouldBe Seq(second)
+    }
+  }
+
+  property("NodeViewSynchronizer: defer MessageProcessed until ModifiersFromRemoteProcessed and ack immediately otherwise") {
+    val fixture = new AkkaFixture {}
+    try {
+      implicit val system: ActorSystem = fixture.system
+      implicit val ec: ExecutionContextExecutor = system.dispatcher
+      val ncProbe = TestProbe("NCProbe")
+      val vhProbe = TestProbe("VHProbe")
+      val pchProbe = TestProbe("PCHProbe")
+      val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val tracker = DeliveryTracker.empty(settings)
+
+      val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+      val headers = genHeaderChain(5, h, diffBitsOpt = None, useRealTs = false)
+      applyHeaderChain(h, headers.take(4))
+      val nextHeader = headers.last
+      val mp = ErgoMemPool.empty(settings)
+
+      val syncRef = TestActorRef(new SynchronizerMock(
+        ncProbe.ref,
+        vhProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        tracker
+      ))
+      vhProbe.expectMsgType[GetNodeViewChanges]
+      syncRef ! ChangedHistory(h)
+      syncRef ! ChangedMempool(mp)
+
+      val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+      val remotePeer = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(peerInfo))
+
+      // 1. InvSpec dispatches no ModifiersFromRemote -> acknowledged immediately to sender (ncProbe).
+      val invBytes = InvSpec.toBytes(InvData(Header.modifierTypeId, Seq(nextHeader.id)))
+      val invMsg = Message(InvSpec, Left(invBytes), Some(remotePeer))
+      ncProbe.send(syncRef, invMsg)
+      val seenMsgs = Seq(ncProbe.expectMsgType[ Any ](3.seconds), ncProbe.expectMsgType[ Any ](3.seconds))
+      seenMsgs should contain(MessageProcessed(remotePeer, invMsg.messageLength))
+
+      // 2. Requested ModifiersSpec dispatches ModifiersFromRemote -> MessageProcessed is held until VH replies.
+      val modData = ModifiersData(Header.modifierTypeId, Map(nextHeader.id -> nextHeader.bytes))
+      val modMsg = Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(remotePeer))
+      ncProbe.send(syncRef, modMsg)
+
+      val vhBatch = vhProbe.expectMsgType[ModifiersFromRemote]
+      vhBatch.modifiers.map(_.id) shouldBe Seq(nextHeader.id)
+      syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe 1
+
+      // Drain any outgoing sync SendToNetwork, verifying MessageProcessed has NOT been emitted yet.
+      val earlyAcks = ncProbe.receiveWhile(250.millis) {
+        case stn: SendToNetwork => stn
+        case ack: MessageProcessed => ack
+      }.collect { case ack: MessageProcessed => ack }
+      earlyAcks shouldBe empty
+
+      // Once ErgoNodeViewHolder finishes processing and replies ModifiersFromRemoteProcessed, MessageProcessed is released.
+      vhProbe.send(syncRef, ModifiersFromRemoteProcessed)
+      ncProbe.expectMsg(MessageProcessed(remotePeer, modMsg.messageLength))
+      syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe 0
+    } finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
+    }
+  }
+
+  property("NodeViewSynchronizer: throttle proactive downloads at MaxInFlightViewHolderBatches and resume on ModifiersFromRemoteProcessed") {
+    val fixture = new AkkaFixture {}
+    try {
+      implicit val system: ActorSystem = fixture.system
+      implicit val ec: ExecutionContextExecutor = system.dispatcher
+      val ncProbe = TestProbe("NCProbe")
+      val vhProbe = TestProbe("VHProbe")
+      val pchProbe = TestProbe("PCHProbe")
+      val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+      val tracker = DeliveryTracker.empty(settings)
+
+      val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
+      val totalHeaders = ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches + 2
+      val headers = genHeaderChain(totalHeaders, h, diffBitsOpt = None, useRealTs = false)
+      val firstBatchHeaders = headers.headers.take(ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches)
+      val targetHeaderForSections = headers.headers(ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches)
+      val mp = ErgoMemPool.empty(settings)
+
+      val syncRef = TestActorRef(new SynchronizerMock(
+        ncProbe.ref,
+        vhProbe.ref,
+        ErgoSyncInfoMessageSpec,
+        settings,
+        syncTracker,
+        tracker
+      ))
+      vhProbe.expectMsgType[GetNodeViewChanges]
+      syncRef ! ChangedHistory(h)
+      syncRef ! ChangedMempool(mp)
+
+      val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+      val remotePeer = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(peerInfo))
+      syncTracker.updateStatus(remotePeer, status = org.ergoplatform.consensus.Older, height = Some(totalHeaders))
+
+      // Saturate in-flight ModifiersFromRemote batches up to MaxInFlightViewHolderBatches without VH acks.
+      firstBatchHeaders.foreach { hdr =>
+        tracker.setRequested(Header.modifierTypeId, hdr.id, remotePeer)(_ => Cancellable.alreadyCancelled)
+        val modData = ModifiersData(Header.modifierTypeId, Map(hdr.id -> hdr.bytes))
+        val modMsg = Message(ModifiersSpec, Left(ModifiersSpec.toBytes(modData)), Some(remotePeer))
+        ncProbe.send(syncRef, modMsg)
+        vhProbe.expectMsgType[ModifiersFromRemote]
+      }
+      syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches
+
+      // Append a synced header to history so history.nextModifiersToDownload has block sections ready to download.
+      firstBatchHeaders.foreach(hdr => h.append(hdr).get)
+      h.append(targetHeaderForSections).get
+      // Drain prior SendToNetwork sync messages before asserting throttling.
+      ncProbe.receiveWhile(200.millis) { case m => m }
+
+      // Proactive download triggers must NOT issue RequestModifierSpec while view holder is backpressured.
+      Thread.sleep(60)
+      syncRef ! CheckModifiersToDownload
+      syncRef ! ErgoNodeViewHolder.DownloadRequest(
+        Map(BlockTransactions.modifierTypeId -> Seq(targetHeaderForSections.transactionsId))
+      )
+      syncRef ! BlockSectionsProcessingCacheUpdate(0, 0, Header.modifierTypeId -> Seq.empty)
+
+      val requestsWhileBackpressured = ncProbe.receiveWhile(300.millis) {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode => stn
+        case other => other
+      }.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode => stn
+      }
+      requestsWhileBackpressured shouldBe empty
+
+      // Once a ModifiersFromRemoteProcessed arrives, in-flight drops below MaxInFlightViewHolderBatches and downloads resume.
+      Thread.sleep(60)
+      vhProbe.send(syncRef, ModifiersFromRemoteProcessed)
+      syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe (ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches - 1)
+
+      ncProbe.fishForMessage(3.seconds) {
+        case _: MessageProcessed => false
+        case _: SendToNetwork => true
+        case _ => false
+      }
+    } finally {
+      Await.result(fixture.system.terminate(), Duration.Inf)
     }
   }
 

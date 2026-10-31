@@ -1,16 +1,25 @@
 package org.ergoplatform.nodeView.history.extra
 
+import org.ergoplatform.ErgoBox.TokenId
+import org.ergoplatform.http.api.SortDirection.{ASC, DESC}
+import org.ergoplatform.nodeView.history.extra.SegmentSerializer.boxSegmentId
+import org.ergoplatform.nodeView.mempool.ErgoMemPool
+import org.ergoplatform.settings.{Constants, ErgoSettings}
 import org.ergoplatform.utils.ErgoCorePropertyTest
-import scorex.util.ModifierId
+import scorex.util.{ModifierId, bytesToId}
 import scorex.util.encode.Base16
+import sigma.Colls
+import sigma.interpreter.ProverResult
+import sigmastate.eval.Extensions._
+import sigmastate.helpers.TestingHelpers.testBox
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import org.ergoplatform.consensus.ProgressInfo
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.settings.ErgoSettings
 import scorex.util
 
 import scala.util.Try
@@ -209,6 +218,122 @@ class SegmentSpec extends ErgoCorePropertyTest {
 
     val full2 = b1 ++ b2 ++ b3 ++ b4 ++ b5 ++ b6 ++ b7 ++ b8 ++ b9 ++ b10 ++ b11 ++ b12 ++ b13 ++ b14 ++ b15 ++ b16 ++ b17 ++ b18 ++ b19
     full2.reverse.sameElements(full2.sorted) shouldBe true
+  }
+
+  private def historyReaderFromStore(entries: mutable.Map[ModifierId, ExtraIndex]): ErgoHistoryReader =
+    new ErgoHistoryReader {
+      override protected[history] val historyStorage: HistoryStorage = new HistoryStorage(null, null, null, null) {
+        override def getExtraIndex(id: ModifierId): Option[ExtraIndex] = entries.get(id)
+      }
+      override protected val settings: ErgoSettings = null
+      override protected def requireProofs: Boolean = ???
+      override protected def process(m: NonHeaderBlockSection): Try[ProgressInfo[BlockSection]] = ???
+      override protected def validate(m: NonHeaderBlockSection): Try[Unit] = ???
+      override val powScheme: AutolykosPowScheme = null
+    }
+
+  property("retrieveUtxos returns globalBoxIndex 0 when unspent and excludes it once spent") {
+    import org.ergoplatform.utils.ErgoNodeTestConstants.settings
+
+    val tokenBytes = Array.fill(32)(7.toByte)
+    val tokenId = bytesToId(tokenBytes)
+    val tokensSeq = Seq[(TokenId, Long)](tokenBytes.toTokenId -> 50L)
+
+    val iEb0 = new IndexedErgoBox(1, None, None, None, testBox(1000000L, Constants.TrueTree, 1, tokensSeq, Map.empty), 0L)
+    val iEb1 = new IndexedErgoBox(2, None, None, None, testBox(2000000L, Constants.TrueTree, 2, tokensSeq, Map.empty), 1L)
+    val iEb2 = new IndexedErgoBox(3, None, None, None, testBox(3000000L, Constants.TrueTree, 3, tokensSeq, Map.empty), 2L)
+
+    val token = IndexedToken(tokenId, Some(iEb0.id), Some(150L), Some("T0"), Some("desc"), Some(0), ArrayBuffer(2L))
+    token.boxSegmentCount = 1
+    val seg0 = token.factory(boxSegmentId(token.id, 0))
+    seg0.boxes ++= Seq(0L, 1L)
+
+    val store = mutable.Map[ModifierId, ExtraIndex](
+      iEb0.id -> iEb0,
+      iEb1.id -> iEb1,
+      iEb2.id -> iEb2,
+      NumericBoxIndex(0L, iEb0.id).id -> NumericBoxIndex(0L, iEb0.id),
+      NumericBoxIndex(1L, iEb1.id).id -> NumericBoxIndex(1L, iEb1.id),
+      NumericBoxIndex(2L, iEb2.id).id -> NumericBoxIndex(2L, iEb2.id),
+      token.id -> token,
+      seg0.id -> seg0
+    )
+    val reader = historyReaderFromStore(store)
+    val mempool = ErgoMemPool.empty(settings)
+
+    // Unspent box 0L must be returned in both ASC and DESC orders.
+    token.retrieveUtxos(reader, mempool, 0, 10, ASC, unconfirmed = false, Set.empty).map(_.id) shouldBe
+      Seq(iEb0.id, iEb1.id, iEb2.id)
+    token.retrieveUtxos(reader, mempool, 0, 10, DESC, unconfirmed = false, Set.empty).map(_.id) shouldBe
+      Seq(iEb2.id, iEb1.id, iEb0.id)
+
+    // Mark box 0L as spent (-0L == 0L, so box.isSpent must exclude it).
+    iEb0.asSpent(bytesToId(Array.fill(32)(9.toByte)), 4, ProverResult.empty)
+    token.modBox(0L, reader, spend = true)
+
+    token.retrieveUtxos(reader, mempool, 0, 10, ASC, unconfirmed = false, Set.empty).map(_.id) shouldBe
+      Seq(iEb1.id, iEb2.id)
+    token.retrieveUtxos(reader, mempool, 0, 10, DESC, unconfirmed = false, Set.empty).map(_.id) shouldBe
+      Seq(iEb2.id, iEb1.id)
+  }
+
+  property("directional modBox is idempotent and does not mutate unrelated buffered segments on missing boxes") {
+    val tokenId = bytesToId(Array.fill(32)(15.toByte))
+    val token = IndexedToken(tokenId, boxes = ArrayBuffer(10L, 12L))
+    token.boxSegmentCount = 2
+
+    val seg0 = token.factory(boxSegmentId(token.id, 0))
+    seg0.boxes ++= Seq(1L, 3L)
+    val seg1 = token.factory(boxSegmentId(token.id, 1))
+    seg1.boxes ++= Seq(5L, 7L)
+
+    val store = mutable.Map[ModifierId, ExtraIndex](
+      seg0.id -> seg0,
+      seg1.id -> seg1
+    )
+    val reader = historyReaderFromStore(store)
+
+    // Spending twice keeps entry negative rather than toggling back to positive.
+    token.modBox(3L, reader, spend = true)
+    seg0.boxes.toSeq shouldBe Seq(1L, -3L)
+    token.modBox(3L, reader, spend = true)
+    seg0.boxes.toSeq shouldBe Seq(1L, -3L)
+
+    // Unspending twice keeps entry positive rather than toggling back to negative.
+    token.modBox(3L, reader, spend = false)
+    seg0.boxes.toSeq shouldBe Seq(1L, 3L)
+    token.modBox(3L, reader, spend = false)
+    seg0.boxes.toSeq shouldBe Seq(1L, 3L)
+
+    // Searching for a box absent from all segments (or when a segment is missing) must not corrupt buffer or hang.
+    token.modBox(9L, reader, spend = true)
+    seg0.boxes.toSeq shouldBe Seq(1L, 3L)
+    seg1.boxes.toSeq shouldBe Seq(5L, 7L)
+
+    store.remove(seg1.id)
+    token.buffer.clear()
+    token.modBox(6L, reader, spend = true)
+    seg0.boxes.toSeq shouldBe Seq(1L, 3L)
+  }
+
+  property("IndexedToken.addEmissionAmount preserves segment counts and Segment.rollbackState preserves out-of-order boxes <= boxTarget") {
+    val tokenId = bytesToId(Array.fill(32)(33.toByte))
+    val token = IndexedToken(tokenId, amount = Some(100L), boxes = ArrayBuffer(2L, 9L, -4L))
+    token.boxSegmentCount = 3
+    token.txSegmentCount = 1
+
+    val updated = token.addEmissionAmount(25L)
+    updated.amount shouldBe Some(125L)
+    updated.boxSegmentCount shouldBe 3
+    updated.txSegmentCount shouldBe 1
+
+    val reader = historyReaderFromStore(mutable.Map.empty)
+    val probe = new IndexedToken(tokenId, boxes = ArrayBuffer(2L, 9L, -4L)) {
+      def runRollback(txTarget: Long, boxTarget: Long): Seq[ModifierId] =
+        rollbackState(txTarget, boxTarget, reader)(2).toSeq
+    }
+    probe.runRollback(txTarget = 10L, boxTarget = 5L) shouldBe empty
+    probe.boxes.toSeq shouldBe Seq(2L, -4L)
   }
 
 }

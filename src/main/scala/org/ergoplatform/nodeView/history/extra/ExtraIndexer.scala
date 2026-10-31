@@ -199,6 +199,11 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
   private val inputTokens: mutable.HashMap[Seq[Byte], Long] = mutable.HashMap.empty[Seq[Byte], Long]
 
   /**
+    * Tokens minted in the current transaction, cleared before every transaction
+    */
+  private val mintedInTx: mutable.HashSet[ModifierId] = mutable.HashSet.empty[ModifierId]
+
+  /**
     * Holds upcoming blocks to be indexed, and when empty, it is filled back from multiple threads
     */
   private val blockCache: concurrent.Map[Int, BlockTransactions] = new ConcurrentHashMap[Int, BlockTransactions]().asScala
@@ -266,12 +271,12 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       iEb.box.additionalTokens.toArray.map(x => x._1.toArray.toSeq -> x._2).foreach { case (k, v) =>
         inputTokens.put(k, inputTokens.getOrElse(k, 0L) + v)
       }
-    // A spend recorded by another transaction is never overwritten: the block doing the
-    // overwrite can still be rejected by the state, and rolling it back would otherwise
-    // erase the original spend record.
-    def alreadySpentElsewhere(iEb: IndexedErgoBox): Boolean = iEb.spendingTxIdOpt.exists(_ != txId)
+    // Never spend a box that is already marked spent (including duplicate inputs within the same
+    // unvalidated transaction): the block doing the duplicate spend can still be rejected by the
+    // state, and spending twice would corrupt balances/segment signs or erase the original spend.
+    def alreadySpent(iEb: IndexedErgoBox): Boolean = iEb.spendingTxIdOpt.isDefined
     boxes.get(id) match {
-      case Some(box) if !alreadySpentElsewhere(box) =>
+      case Some(box) if !alreadySpent(box) =>
         recordTokens(box.asSpent(txId, height, spendingProof))
         true
       case Some(box) =>
@@ -279,7 +284,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         false
       case None =>
         history.typedExtraIndexById[IndexedErgoBox](id) match { // box not found in last saveLimit modifiers
-          case Some(x) if !alreadySpentElsewhere(x) => // box found in DB, update
+          case Some(x) if !alreadySpent(x) => // box found in DB, update
             recordTokens(x.asSpent(txId, height, spendingProof))
             boxes.put(id, x)
             true
@@ -478,6 +483,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       val outputs: Array[Long] = Array.ofDim[Long](tx.outputs.length)
 
       inputTokens.clear()
+      mintedInTx.clear()
 
       //process transaction inputs
       if (height > 1) { //only after 1st block (skip genesis box)
@@ -500,6 +506,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       }
 
       //process transaction outputs
+      val firstInputBoxIdOpt: Option[Array[Byte]] = tx.inputs.headOption.map(_.boxId)
       cfor(0)(_ < tx.outputs.size, _ + 1) { i =>
         val iEb: IndexedErgoBox = new IndexedErgoBox(height, None, None, None, tx.outputs(i), newState.globalBoxIndex)
         boxes.put(iEb.id, iEb) // box by id
@@ -520,16 +527,22 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
 
         // check if box is creating new tokens, if yes record them
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { j =>
-          val idMatch = java.util.Arrays.equals(iEb.box.additionalTokens(j)._1.toArray, tx.inputs.head.boxId)
-          if (idMatch && !inputTokens.contains(iEb.box.additionalTokens(j)._1.toArray.toSeq)) {
+          val tokenIdBytes = iEb.box.additionalTokens(j)._1.toArray
+          val tokenId = iEb.box.additionalTokens(j)._1.toModifierId
+          val idMatch = firstInputBoxIdOpt.exists(firstId => java.util.Arrays.equals(tokenIdBytes, firstId))
+          if (idMatch && !inputTokens.contains(tokenIdBytes.toSeq)) {
             val token = IndexedToken.fromBox(iEb, j)
-            tokens.get(token.tokenId) match {
-              case Some(t) => // same new token created in multiple boxes -> add amounts
-                tokens.put(token.tokenId, t.addEmissionAmount(token.amount.get))
-              case None => tokens.put(token.tokenId, token) // new token
+            if (mintedInTx.contains(tokenId)) {
+              // same new token created across multiple output boxes in this transaction -> add amounts
+              tokens.get(tokenId).foreach { t =>
+                tokens.put(tokenId, t.addEmissionAmount(token.amount.getOrElse(0L)))
+              }
+            } else if (!tokens.contains(tokenId) && history.typedExtraIndexById[IndexedToken](token.id).isEmpty) {
+              tokens.put(tokenId, token) // genuinely new token
+              mintedInTx += tokenId
             }
           }
-          findAndUpdateToken(iEb.box.additionalTokens(j)._1.toModifierId, Right(iEb))
+          findAndUpdateToken(tokenId, Right(iEb))
         }
 
         newState = newState.incrementBoxIndex
@@ -579,7 +592,7 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
         // undo only spendings recorded by this transaction: inputs the index never resolved
         // are stored as 0, and a rejected block can also reference boxes spent by other,
         // valid transactions - unspending those would resurrect boxes this block never spent
-        tx.inputNums.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
+        tx.inputNums.distinct.flatMap(NumericBoxIndex.getBoxByNumber(history, _))
           .filter(_.spendingTxIdOpt.contains(tx.id))
           .foreach { iEb => // undo spendings
 
@@ -588,20 +601,21 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           iEb.spendingProofOpt = None
 
           val address = history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).get.addBox(iEb, record = false)
-          address.findAndModBox(iEb.globalIndex, history)
+          address.modBox(iEb.globalIndex, history, spend = false)
           // the address may have no output removed below: drop the rolled-back transaction numbers here, boxes stay
           toRemove ++= address.rollback(txTarget, Long.MaxValue, _history)
 
           val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
-          template.findAndModBox(iEb.globalIndex, history)
+          template.modBox(iEb.globalIndex, history, spend = false)
 
           val rentRow: Array[ExtraIndex] =
             if (rentIndexEnabled) Array[ExtraIndex](StorageRentBox(iEb)) else Array.empty
           historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](iEb, address, template) ++ rentRow ++ address.buffer.values ++ template.buffer.values).get
 
           cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-            history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
-              token.findAndModBox(iEb.globalIndex, history)
+            val tokenRecordId = uniqueId(iEb.box.additionalTokens(i)._1.toModifierId)
+            history.typedExtraIndexById[IndexedToken](tokenRecordId).foreach { token =>
+              token.modBox(iEb.globalIndex, history, spend = false)
               historyStorage.insertExtraTry(Array.empty, Array[ExtraIndex](token) ++ token.buffer.values).get
             }
           }
@@ -613,16 +627,16 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
       newState = newState.incrementTxIndex
 
       // remove all box indexes, tokens and address balances
+      val rolledBackTokens: mutable.HashSet[ModifierId] = mutable.HashSet.empty[ModifierId]
       newState = newState.decrementBoxIndex
       while (newState.globalBoxIndex > boxTarget) {
         val iEb: IndexedErgoBox = NumericBoxIndex.getBoxByNumber(history, newState.globalBoxIndex).get
         cfor(0)(_ < iEb.box.additionalTokens.length, _ + 1) { i =>
-          history.typedExtraIndexById[IndexedToken](IndexedToken.fromBox(iEb, i).id).map { token =>
-            if (token.boxId.get == iEb.id) { // token created, delete
-              toRemove += token.id
-              log.info(s"Removing token ${token.tokenId} created in box ${iEb.id} at height ${iEb.inclusionHeight}")
-            } else // no token created, update
+          val tokenRecordId = uniqueId(iEb.box.additionalTokens(i)._1.toModifierId)
+          if (rolledBackTokens.add(tokenRecordId)) {
+            history.typedExtraIndexById[IndexedToken](tokenRecordId).foreach { token =>
               toRemove ++= token.rollback(txTarget, boxTarget, _history)
+            }
           }
         }
         history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(iEb.box.ergoTree)).map { address =>

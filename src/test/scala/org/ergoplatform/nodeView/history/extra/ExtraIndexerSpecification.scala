@@ -214,7 +214,10 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     segmentables.foreach { segmentable =>
       history.typedExtraIndexById[T](segmentable._1) match {
         case Some(obj: T) =>
-          if (isChild) { // this is a segment
+          if (!isChild) { // this is the parent object
+            // check properties of object
+            if (!check((obj, segmentable._2)))
+              errors += 1
             // check tx segments
             val txSegments: ID_LL = mutable.HashMap.empty[ModifierId, (Long, Long)]
             txSegments ++= (0 until obj.txSegmentCount).map(n => obj.factory(txSegmentId(obj.id, n)).id).map(Tuple2(_, (0L, 0L)))
@@ -223,10 +226,6 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
             val boxSegments: ID_LL = mutable.HashMap.empty[ModifierId, (Long, Long)]
             boxSegments ++= (0 until obj.boxSegmentCount).map(n => obj.factory(boxSegmentId(obj.id, n)).id).map(Tuple2(_, (0L, 0L)))
             checkSegmentables(boxSegments, isChild = true, check) shouldBe 0
-          } else { // this is the parent object
-            // check properties of object
-            if (!check((obj, segmentable._2)))
-              errors += 1
           }
           // check boxes in memory
           obj.boxes.foreach { boxNum =>
@@ -1976,6 +1975,130 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     stateAfterLateRollback.indexedHeight shouldBe HEIGHT + 1
     stateAfterLateRollback.indexedHeaderId shouldBe Some(replacementChild.id)
     IndexerState.fromHistory(_history) shouldBe stateAfterLateRollback
+    indexer ! Reset()
+  }
+
+  property("rollback of an indexed then rejected block re-minting an existing token, spending duplicate inputs, or omitting inputs preserves tokens and unspent boxes") {
+    import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
+    import org.ergoplatform.ErgoBox.{R4, R5, R6, TokenId}
+    import org.ergoplatform.modifiers.mempool.ErgoTransaction
+    import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
+    import scorex.crypto.authds.ADKey
+    import sigma.Colls
+    import sigma.ast.{ByteArrayConstant, EvaluatedValue, SType}
+    import sigma.interpreter.ProverResult
+    import sigmastate.eval.Extensions._
+
+    createAndIndex(HEIGHT)
+    val tipBefore = fullChainHeaderAt(HEIGHT)
+    val (addresses, templates, indexedTokens, txsIndexed, boxesIndexed) = manualIndex(HEIGHT)
+    val mempool = ErgoMemPool.empty(settings)
+
+    val allTxsWithHeight = (2 to HEIGHT).flatMap(h => fullChainTransactionsAt(h).txs.map(tx => (tx, h)))
+    val targetToken: IndexedToken = indexedTokens.keysIterator
+      .flatMap(id => history.typedExtraIndexById[IndexedToken](id))
+      .find { tok =>
+        val utxos = tok.retrieveUtxos(history, mempool, 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
+        val hasMintTx = allTxsWithHeight.exists { case (tx, _) =>
+          tx.inputs.nonEmpty && bytesToId(tx.inputs.head.boxId) == tok.tokenId
+        }
+        utxos.nonEmpty && hasMintTx
+      }
+      .get
+
+    val originalBoxId = targetToken.boxId
+    val originalAmount = targetToken.amount
+    val originalName = targetToken.name
+    val originalDescription = targetToken.description
+    val originalDecimals = targetToken.decimals
+    val originalBoxCount = targetToken.boxCount
+    val originalUtxosAsc = targetToken
+      .retrieveUtxos(history, mempool, 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
+    val originalUtxoIdsAsc = originalUtxosAsc.map(_.id)
+    val liveTokenBox = originalUtxosAsc.head
+
+    val mintInputBytes: Array[Byte] = allTxsWithHeight
+      .collectFirst {
+        case (tx, _) if tx.inputs.nonEmpty && bytesToId(tx.inputs.head.boxId) == targetToken.tokenId =>
+          tx.inputs.head.boxId
+      }
+      .get
+
+    val tokenColl = Colls.fromArray(Array[(TokenId, Long)](mintInputBytes.toTokenId -> 777777L))
+    val forged = ChainGenerator.forgeUnvalidatedBlockWithTxs(_history) { height =>
+      val remintRegs = Map[ErgoBox.NonMandatoryRegisterId, EvaluatedValue[_ <: SType]](
+        R4 -> ByteArrayConstant("hijacked-name".getBytes("UTF-8")),
+        R5 -> ByteArrayConstant("hijacked-desc".getBytes("UTF-8")),
+        R6 -> ByteArrayConstant("9".getBytes("UTF-8"))
+      )
+      val remintTx = ErgoTransaction(
+        IndexedSeq(Input(ADKey @@ mintInputBytes, ProverResult.empty)),
+        IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(ChainGenerator.MinTxAmount, ChainGenerator.selfAddressScript, height, tokenColl, remintRegs))
+      )
+      val liveInput = Input(liveTokenBox.box.id, ProverResult.empty)
+      val dupInputTx = ErgoTransaction(
+        IndexedSeq(liveInput, liveInput),
+        IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(liveTokenBox.box.value, liveTokenBox.box.ergoTree, height, liveTokenBox.box.additionalTokens))
+      )
+      val inputlessTx = ErgoTransaction(
+        IndexedSeq.empty,
+        IndexedSeq.empty,
+        IndexedSeq(new ErgoBoxCandidate(ChainGenerator.MinTxAmount, ChainGenerator.selfAddressScript, height, tokenColl))
+      )
+      Seq(remintTx, dupInputTx, inputlessTx)
+    }
+
+    _history.fullBlockHeight shouldBe HEIGHT + 1
+    _history.isSemanticallyValid(forged.header.id) shouldBe ModifierSemanticValidity.Unknown
+
+    indexer ! SetCaughtUp(false)
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      IndexerState.fromHistory(_history).indexedHeight shouldBe HEIGHT + 1
+    }
+
+    val duringCatchUp = history.typedExtraIndexById[IndexedToken](uniqueId(targetToken.tokenId)).get
+    duringCatchUp.boxId shouldBe originalBoxId
+    duringCatchUp.amount shouldBe originalAmount
+    duringCatchUp.name shouldBe originalName
+
+    _history.reportModifierIsInvalid(
+      forged.header,
+      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
+        org.ergoplatform.utils.ScorexEncoder.default)
+    ).get
+    _history.fullBlockHeight shouldBe HEIGHT
+
+    indexer ! Index()
+    org.ergoplatform.utils.untilTimeout(10.seconds, 50.millis) {
+      val state = IndexerState.fromHistory(_history)
+      state.indexedHeight shouldBe HEIGHT
+      state.indexedHeaderId shouldBe Some(tipBefore.id)
+    }
+
+    val restoredTokenOpt = history.typedExtraIndexById[IndexedToken](uniqueId(targetToken.tokenId))
+    restoredTokenOpt.isDefined shouldBe true
+    val restoredToken = restoredTokenOpt.get
+    restoredToken.boxId shouldBe originalBoxId
+    restoredToken.amount shouldBe originalAmount
+    restoredToken.name shouldBe originalName
+    restoredToken.description shouldBe originalDescription
+    restoredToken.decimals shouldBe originalDecimals
+    restoredToken.boxCount shouldBe originalBoxCount
+    restoredToken
+      .retrieveUtxos(history, mempool, 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
+      .map(_.id) shouldBe originalUtxoIdsAsc
+
+    val state = IndexerState.fromHistory(_history)
+    state.globalTxIndex shouldBe txsIndexed
+    state.globalBoxIndex shouldBe boxesIndexed
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
     indexer ! Reset()
   }
 }

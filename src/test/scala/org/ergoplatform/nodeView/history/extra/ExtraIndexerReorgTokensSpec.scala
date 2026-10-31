@@ -90,14 +90,7 @@ class ExtraIndexerReorgTokensSpec extends ErgoCorePropertyTest with NodeViewTest
     )
     (tokenId, tx)
   }
-
-  private final case class ExpectedTokenState(
-    tokenId: ModifierId,
-    mintBoxId: ModifierId,
-    emissionAmount: Long,
-    allBoxNumbersWithSign: Seq[Long],
-    unspentBoxIdsAsc: Seq[ModifierId]
-  )
+  import ExtraIndexerReorgTokensSpec.ExpectedTokenState
 
   /** Replays the applied `chain` from height 1 to compute ground-truth token expectations. */
   private def expectedTokens(chain: Seq[ErgoFullBlock]): Map[ModifierId, ExpectedTokenState] = {
@@ -394,4 +387,14 @@ class ExtraIndexerReorgTokensSpec extends ErgoCorePropertyTest with NodeViewTest
     }
   }
 
+}
+
+object ExtraIndexerReorgTokensSpec {
+  private final case class ExpectedTokenState(
+    tokenId: ModifierId,
+    mintBoxId: ModifierId,
+    emissionAmount: Long,
+    allBoxNumbersWithSign: Seq[Long],
+    unspentBoxIdsAsc: Seq[ModifierId]
+  )
 }

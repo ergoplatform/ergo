@@ -1,20 +1,17 @@
 package org.ergoplatform.nodeView.history.storage
 
 import org.ergoplatform.modifiers.BlockSection
-import org.ergoplatform.modifiers.history.ADProofs
+import org.ergoplatform.modifiers.history.{ADProofs, HistoryModifierSerializer}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
-import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox}
-import org.ergoplatform.settings.Algos
 import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox, StorageRentBox}
 import org.ergoplatform.settings.{Algos, Constants}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
-import scorex.db.ByteArrayWrapper
+import scorex.crypto.authds.SerializedAdProof
+import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
 import scorex.util.{ModifierId, bytesToId, idToBytes}
 import sigmastate.helpers.TestingHelpers.testBox
-import scorex.db.{ByteArrayWrapper, LDBFactory, LDBKVStore}
-import scorex.util.{ModifierId, idToBytes}
 
 import java.io.IOException
 import java.nio.file.Files
@@ -22,7 +19,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 import org.iq80.leveldb.Options
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 class HistoryStorageSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -265,6 +262,309 @@ class HistoryStorageSpec extends ErgoCorePropertyTest {
     } finally {
       resumeOldRead.countDown()
       concurrentStorage.close()
+    }
+  }
+
+  property("paired insert rolls back objectsStore and avoids cache pollution when indexStore write fails") {
+    val root = Files.createTempDirectory("history-atomic-insert-rollback")
+    val options = new Options().createIfMissing(true)
+    val rawIndexDb = LDBFactory.factory.open(root.resolve("index").toFile, options)
+    val indexFailure = new IOException("injected index batch write failure")
+    var failIndexWrite = false
+    val indexStore = new LDBKVStore(rawIndexDb) {
+      override def update(keys: Array[Array[Byte]], values: Array[Array[Byte]], remove: Array[Array[Byte]]): Try[Unit] = {
+        if (failIndexWrite) Failure(indexFailure) else super.update(keys, values, remove)
+      }
+    }
+    val objectsStore = LDBFactory.createKvDb(root.resolve("objects").toString)
+    val extraStore = LDBFactory.createKvDb(root.resolve("extra").toString)
+    val journalPath = root.resolve(HistoryStorage.PendingJournalFileName)
+    val storage = new HistoryStorage(indexStore, objectsStore, extraStore, settings.cacheSettings, Some(journalPath))
+
+    try {
+      val header = defaultHeaderGen.sample.get
+      val priorProof = ADProofs(bytesToId(Array.fill(32)(11.toByte)), SerializedAdProof @@ Array[Byte](1, 2, 3))
+      val overwrittenTarget = ADProofs(bytesToId(Array.fill(32)(12.toByte)), SerializedAdProof @@ Array[Byte](9, 8, 7))
+      val existingKey = ByteArrayWrapper(Algos.hash("existing-idx".getBytes(CharsetName)))
+      val removableKey = ByteArrayWrapper(Algos.hash("removable-idx".getBytes(CharsetName)))
+      val newKey = ByteArrayWrapper(Algos.hash("new-idx".getBytes(CharsetName)))
+
+      // Seed baseline state: overwrittenTarget's key initially holds priorProof's bytes, plus two index entries.
+      storage.insert(overwrittenTarget.serializedId, HistoryModifierSerializer.toBytes(priorProof)).get
+      storage.insert(
+        Array(existingKey -> Array[Byte](10), removableKey -> Array[Byte](20)),
+        Array.empty[BlockSection]
+      ).get
+      storage.modifierById(overwrittenTarget.id) shouldBe Some(priorProof)
+      storage.getIndex(existingKey).map(_.toSeq) shouldBe Some(Seq[Byte](10))
+      storage.getIndex(removableKey).map(_.toSeq) shouldBe Some(Seq[Byte](20))
+
+      failIndexWrite = true
+      val failedRes = storage.insert(
+        Array(existingKey -> Array[Byte](99), newKey -> Array[Byte](42)),
+        Array[BlockSection](overwrittenTarget, header),
+        Array(removableKey)
+      )
+      failedRes.failed.get shouldBe indexFailure
+
+      // Neither new nor overwritten objects may remain committed or cached.
+      storage.contains(header.id) shouldBe false
+      storage.modifierById(header.id) shouldBe None
+      objectsStore.get(header.serializedId) shouldBe None
+      storage.modifierById(overwrittenTarget.id) shouldBe Some(priorProof)
+      objectsStore.get(overwrittenTarget.serializedId).map(_.toSeq) shouldBe
+        Some(HistoryModifierSerializer.toBytes(priorProof).toSeq)
+
+      // Indexes remain at their pre-batch values.
+      storage.getIndex(existingKey).map(_.toSeq) shouldBe Some(Seq[Byte](10))
+      storage.getIndex(removableKey).map(_.toSeq) shouldBe Some(Seq[Byte](20))
+      storage.getIndex(newKey) shouldBe None
+
+      // Subsequent normal write succeeds cleanly.
+      failIndexWrite = false
+      storage.insert(
+        Array(existingKey -> Array[Byte](99), newKey -> Array[Byte](42)),
+        Array[BlockSection](overwrittenTarget, header),
+        Array(removableKey)
+      ) shouldBe Success(())
+      storage.contains(header.id) shouldBe true
+      storage.modifierById(header.id) shouldBe Some(header)
+      storage.modifierById(overwrittenTarget.id) shouldBe Some(overwrittenTarget)
+      storage.getIndex(existingKey).map(_.toSeq) shouldBe Some(Seq[Byte](99))
+      storage.getIndex(newKey).map(_.toSeq) shouldBe Some(Seq[Byte](42))
+      storage.getIndex(removableKey) shouldBe None
+    } finally {
+      storage.close()
+    }
+    Files.exists(journalPath) shouldBe false
+  }
+
+  property("modifier serialization failure aborts paired insert before touching stores or caches") {
+    val root = Files.createTempDirectory("history-serialization-abort")
+    val storageSettings = settings.copy(directory = root.toString)
+    val storage = HistoryStorage(storageSettings)
+    try {
+      val validHeader = defaultHeaderGen.sample.get
+      val malformedProof = ADProofs(bytesToId(Array.fill(32)(7.toByte)), null)
+      val indexKey = ByteArrayWrapper(Algos.hash("serialization-abort-idx".getBytes(CharsetName)))
+
+      val res = storage.insert(
+        Array(indexKey -> Array[Byte](1, 2)),
+        Array[BlockSection](validHeader, malformedProof)
+      )
+      res.isFailure shouldBe true
+      storage.contains(validHeader.id) shouldBe false
+      storage.modifierById(validHeader.id) shouldBe None
+      storage.getIndex(indexKey) shouldBe None
+    } finally {
+      storage.close()
+    }
+  }
+
+  property("journaled paired remove restores objectsStore when indexStore remove fails") {
+    val root = Files.createTempDirectory("history-atomic-remove-rollback")
+    val options = new Options().createIfMissing(true)
+    val rawIndexDb = LDBFactory.factory.open(root.resolve("index").toFile, options)
+    val removeError = new IOException("injected index remove failure")
+    var failIndexRemove = false
+    val indexStore = new LDBKVStore(rawIndexDb) {
+      override def remove(keys: Array[Array[Byte]]): Try[Unit] = {
+        if (failIndexRemove) Failure(removeError) else super.remove(keys)
+      }
+    }
+    val objectsStore = LDBFactory.createKvDb(root.resolve("objects").toString)
+    val extraStore = LDBFactory.createKvDb(root.resolve("extra").toString)
+    val journalPath = root.resolve(HistoryStorage.PendingJournalFileName)
+    val storage = new HistoryStorage(indexStore, objectsStore, extraStore, settings.cacheSettings, Some(journalPath))
+
+    try {
+      val header = defaultHeaderGen.sample.get
+      val indexKey = ByteArrayWrapper(Algos.hash("remove-rollback-idx".getBytes(CharsetName)))
+      storage.insert(Array(indexKey -> Array[Byte](7)), Array[BlockSection](header)) shouldBe Success(())
+      storage.contains(header.id) shouldBe true
+
+      failIndexRemove = true
+      storage.remove(Array(indexKey), Array(header.id)) shouldBe Failure(removeError)
+
+      storage.contains(header.id) shouldBe true
+      storage.modifierById(header.id) shouldBe Some(header)
+      storage.getIndex(indexKey).map(_.toSeq) shouldBe Some(Seq[Byte](7))
+
+      failIndexRemove = false
+      storage.remove(Array(indexKey), Array(header.id)) shouldBe Success(())
+      storage.contains(header.id) shouldBe false
+      storage.modifierById(header.id) shouldBe None
+      storage.getIndex(indexKey) shouldBe None
+    } finally {
+      storage.close()
+    }
+  }
+
+  property("startup journal recovery repairs interrupted paired insert and remove batches across restart") {
+    val root = Files.createTempDirectory("history-crash-journal-recovery")
+    val storageSettings = settings.copy(directory = root.toString)
+    val historyDir = root.resolve("history")
+    val journalPath = historyDir.resolve(HistoryStorage.PendingJournalFileName)
+
+    val baselineProof = ADProofs(bytesToId(Array.fill(32)(21.toByte)), SerializedAdProof @@ Array[Byte](3, 4, 5))
+    val overwriteTarget = ADProofs(bytesToId(Array.fill(32)(22.toByte)), SerializedAdProof @@ Array[Byte](6, 7, 8))
+    val crashedHeader = defaultHeaderGen.sample.get
+    val baseIdx = ByteArrayWrapper(Algos.hash("crash-base-idx".getBytes(CharsetName)))
+    val crashedIdx = ByteArrayWrapper(Algos.hash("crash-new-idx".getBytes(CharsetName)))
+
+    // Step 1: establish clean committed baseline.
+    val initial = HistoryStorage(storageSettings)
+    initial.insert(overwriteTarget.serializedId, HistoryModifierSerializer.toBytes(baselineProof)).get
+    initial.insert(Array(baseIdx -> Array[Byte](11)), Array.empty[BlockSection]).get
+    initial.close()
+
+    // Step 2: simulate crash right after objectsStore.insert commits to LevelDB before indexStore updates
+    // (both indexStore write and in-process objectsStore rollback fail due to abrupt termination).
+    val options = new Options().createIfMissing(true)
+    val rawIdx1 = LDBFactory.factory.open(historyDir.resolve("index").toFile, options)
+    val rawObj1 = LDBFactory.factory.open(historyDir.resolve("objects").toFile, options)
+    val extra1 = LDBFactory.createKvDb(historyDir.resolve("extra").toString)
+    var blockObjectRollback = false
+    val crashingIndexStore = new LDBKVStore(rawIdx1) {
+      override def update(keys: Array[Array[Byte]], values: Array[Array[Byte]], remove: Array[Array[Byte]]): Try[Unit] = {
+        blockObjectRollback = true
+        Failure(new IOException("simulated process crash before indexStore write"))
+      }
+    }
+    val crashingObjectsStore = new LDBKVStore(rawObj1) {
+      override def update(keys: Array[Array[Byte]], values: Array[Array[Byte]], remove: Array[Array[Byte]]): Try[Unit] = {
+        if (blockObjectRollback) Failure(new IOException("simulated process crash before rollback"))
+        else super.update(keys, values, remove)
+      }
+    }
+    val crashingStorage = new HistoryStorage(
+      crashingIndexStore,
+      crashingObjectsStore,
+      extra1,
+      storageSettings.cacheSettings,
+      Some(journalPath)
+    )
+    crashingStorage.insert(
+      Array(baseIdx -> Array[Byte](88), crashedIdx -> Array[Byte](99)),
+      Array[BlockSection](overwriteTarget, crashedHeader)
+    ).isFailure shouldBe true
+
+    // Confirm raw LevelDB state is genuinely torn before startup recovery runs, and journal was retained.
+    Option(rawObj1.get(crashedHeader.serializedId)).isDefined shouldBe true
+    Option(rawIdx1.get(crashedIdx.data)) shouldBe None
+    crashingStorage.close()
+    Files.exists(journalPath) shouldBe true
+
+    // Step 3: reopen via HistoryStorage(storageSettings) and verify automatic journal recovery.
+    val recovered = HistoryStorage(storageSettings)
+    try {
+      Files.exists(journalPath) shouldBe false
+      recovered.contains(crashedHeader.id) shouldBe false
+      recovered.modifierById(crashedHeader.id) shouldBe None
+      recovered.modifierById(overwriteTarget.id) shouldBe Some(baselineProof)
+      recovered.getIndex(baseIdx).map(_.toSeq) shouldBe Some(Seq[Byte](11))
+      recovered.getIndex(crashedIdx) shouldBe None
+    } finally {
+      recovered.close()
+    }
+
+    // Step 4: simulate an interrupted paired remove where objectsStore removed overwriteTarget before crash.
+    val rawIdx2 = LDBFactory.factory.open(historyDir.resolve("index").toFile, options)
+    val rawObj2 = LDBFactory.factory.open(historyDir.resolve("objects").toFile, options)
+    val extra2 = LDBFactory.createKvDb(historyDir.resolve("extra").toString)
+    var blockRemoveRollback = false
+    val crashingRemoveIdx = new LDBKVStore(rawIdx2) {
+      override def remove(keys: Array[Array[Byte]]): Try[Unit] = {
+        blockRemoveRollback = true
+        Failure(new IOException("simulated crash during indexStore remove"))
+      }
+    }
+    val crashingRemoveObj = new LDBKVStore(rawObj2) {
+      override def insert(keys: Array[Array[Byte]], values: Array[Array[Byte]]): Try[Unit] = {
+        if (blockRemoveRollback) Failure(new IOException("simulated crash before remove rollback"))
+        else super.insert(keys, values)
+      }
+    }
+    val crashingRemoveStorage = new HistoryStorage(
+      crashingRemoveIdx,
+      crashingRemoveObj,
+      extra2,
+      storageSettings.cacheSettings,
+      Some(journalPath)
+    )
+    crashingRemoveStorage.remove(Array(baseIdx), Array(overwriteTarget.id)).isFailure shouldBe true
+    Option(rawObj2.get(overwriteTarget.serializedId)) shouldBe None
+    Option(rawIdx2.get(baseIdx.data)).isDefined shouldBe true
+    crashingRemoveStorage.close()
+    Files.exists(journalPath) shouldBe true
+
+    val recoveredAfterRemove = HistoryStorage(storageSettings)
+    try {
+      Files.exists(journalPath) shouldBe false
+      recoveredAfterRemove.contains(overwriteTarget.id) shouldBe true
+      recoveredAfterRemove.modifierById(overwriteTarget.id) shouldBe Some(baselineProof)
+      recoveredAfterRemove.getIndex(baseIdx).map(_.toSeq) shouldBe Some(Seq[Byte](11))
+    } finally {
+      recoveredAfterRemove.close()
+    }
+  }
+
+  property("concurrent readers cannot observe objectsStore committed ahead of indexStore during paired insert") {
+    implicit val executionContext: ExecutionContext = ExecutionContext.global
+    val root = Files.createTempDirectory("history-concurrent-atomic-visibility")
+    val options = new Options().createIfMissing(true)
+    val objectsWritten = new CountDownLatch(1)
+    val allowIndexWrite = new CountDownLatch(1)
+    val readerStarted = new CountDownLatch(1)
+    @volatile var pauseOnIndexInsert = false
+
+    val rawIndexDb = LDBFactory.factory.open(root.resolve("index").toFile, options)
+    val indexStore = new LDBKVStore(rawIndexDb) {
+      override def update(keys: Array[Array[Byte]], values: Array[Array[Byte]], remove: Array[Array[Byte]]): Try[Unit] = {
+        if (pauseOnIndexInsert) {
+          pauseOnIndexInsert = false
+          objectsWritten.countDown()
+          require(allowIndexWrite.await(5, TimeUnit.SECONDS), "timed out waiting to finish indexStore write")
+        }
+        super.update(keys, values, remove)
+      }
+    }
+    val objectsStore = LDBFactory.createKvDb(root.resolve("objects").toString)
+    val extraStore = LDBFactory.createKvDb(root.resolve("extra").toString)
+    val storage = new HistoryStorage(
+      indexStore,
+      objectsStore,
+      extraStore,
+      settings.cacheSettings,
+      Some(root.resolve(HistoryStorage.PendingJournalFileName))
+    )
+
+    try {
+      val header = defaultHeaderGen.sample.get
+      val idxKey = ByteArrayWrapper(Algos.hash("atomic-visibility-idx".getBytes(CharsetName)))
+      pauseOnIndexInsert = true
+
+      val writer = Future {
+        storage.insert(Array(idxKey -> Array[Byte](1)), Array[BlockSection](header)).get
+      }
+      objectsWritten.await(5, TimeUnit.SECONDS) shouldBe true
+
+      val reader = Future {
+        readerStarted.countDown()
+        val hasMod = storage.contains(header.id)
+        val hasIdx = storage.getIndex(idxKey).isDefined
+        (hasMod, hasIdx)
+      }
+      readerStarted.await(5, TimeUnit.SECONDS) shouldBe true
+      Thread.sleep(50)
+      reader.isCompleted shouldBe false
+
+      allowIndexWrite.countDown()
+      Await.result(writer, 5.seconds)
+      Await.result(reader, 5.seconds) shouldBe ((true, true))
+    } finally {
+      allowIndexWrite.countDown()
+      storage.close()
     }
   }
 

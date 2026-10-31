@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy, Terminated}
+import akka.actor.{Actor, ActorRef, Cancellable, DeadLetterSuppression, Props, SupervisorStrategy, Terminated}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
@@ -35,7 +35,12 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   extends Actor with ScorexLogging {
 
   import PeerConnectionHandler.ReceivableMessages._
-  import PeerConnectionHandler.{MaxBufferedOutboundBytes, MaxBufferedOutboundMessages}
+  import PeerConnectionHandler.{
+    MaxBufferedOutboundBytes,
+    MaxBufferedOutboundMessages,
+    MaxInFlightIncomingBytes,
+    MaxInFlightIncomingMessages
+  }
 
   private val networkSettings = scorexSettings.network
   private val connection = connectionDescription.connection
@@ -62,6 +67,30 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
   private var outMessagesBufferBytes: Long = 0L
 
   private var outMessagesCounter: Long = 0
+
+  private var inFlightIncomingMessages: Int = 0
+
+  private var inFlightIncomingBytes: Long = 0L
+
+  private var readingSuspended: Boolean = false
+
+  private def isInboundBackpressured: Boolean =
+    inFlightIncomingMessages >= MaxInFlightIncomingMessages ||
+      inFlightIncomingBytes >= MaxInFlightIncomingBytes
+
+  private def resumeOrSuspendReading(): Unit = {
+    if (isInboundBackpressured) {
+      if (!readingSuspended) {
+        readingSuspended = true
+        if (direction.isIncoming) {
+          connection ! SuspendReading
+        }
+      }
+    } else {
+      readingSuspended = false
+      connection ! ResumeReading
+    }
+  }
 
   override def preStart: Unit = {
     context watch connection
@@ -91,7 +120,6 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
       networkControllerRef ! Handshaked(peerInfo)
       handshakeTimeoutCancellableOpt.map(_.cancel())
-      connection ! ResumeReading
       context become workingCycleWriting
     } orElse handshakeTimeout orElse closeCommands
   }
@@ -127,6 +155,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
           } else {
             handler(handshake)
             processRemoteBuffer()
+            resumeOrSuspendReading()
           }
 
         case Failure(t) if candidate.length >= HandshakeSerializer.maxHandshakeSize =>
@@ -236,33 +265,38 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
   @tailrec
   private def processRemoteBuffer(): Unit = {
-    messageSerializer.deserialize(chunksBuffer, selfPeer) match {
-      case Success(Some(message)) =>
-        log.debug("Received message " + message.spec + " from " + connectionId)
-        networkControllerRef ! message
-        chunksBuffer = chunksBuffer.drop(message.messageLength)
-        processRemoteBuffer()
-      case Success(None) =>
-      case Failure(UnknownMessageCodeException(code, messageLength)) =>
-        if (!loggedUnknownMessageCodes.contains(code)) {
-          val peerVersion = selfPeer.flatMap(_.peerInfo).map(_.peerSpec.protocolVersion.toString).getOrElse("unknown")
-          log.info(s"Skipping unsupported message code $code from $connectionId, protocol version $peerVersion")
-          loggedUnknownMessageCodes += code
-        }
-        chunksBuffer = chunksBuffer.drop(messageLength)
-        processRemoteBuffer()
-      case Failure(e) =>
-        e match {
-          //peer is doing bad things, ban it
-          case MaliciousBehaviorException(msg) =>
-            log.warn(s"Banning peer for malicious behaviour($msg): ${connectionId.toString}")
-            //peer will be added to the blacklist and the network controller will send CloseConnection
-            networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
-          //non-malicious corruptions
-          case _ =>
-            log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}, closing connection")
-            self ! CloseConnection
-        }
+    if (!isInboundBackpressured) {
+      messageSerializer.deserialize(chunksBuffer, selfPeer) match {
+        case Success(Some(message)) =>
+          log.debug("Received message " + message.spec + " from " + connectionId)
+          inFlightIncomingMessages += 1
+          inFlightIncomingBytes += message.messageLength
+          networkControllerRef ! message
+          chunksBuffer = chunksBuffer.drop(message.messageLength)
+          processRemoteBuffer()
+        case Success(None) =>
+        case Failure(UnknownMessageCodeException(code, messageLength)) =>
+          if (!loggedUnknownMessageCodes.contains(code)) {
+            val peerVersion = selfPeer.flatMap(_.peerInfo).map(_.peerSpec.protocolVersion.toString).getOrElse("unknown")
+            log.info(s"Skipping unsupported message code $code from $connectionId, protocol version $peerVersion")
+            loggedUnknownMessageCodes += code
+          }
+          chunksBuffer = chunksBuffer.drop(messageLength)
+          processRemoteBuffer()
+        case Failure(e) =>
+          chunksBuffer = CompactByteString.empty
+          e match {
+            //peer is doing bad things, ban it
+            case MaliciousBehaviorException(msg) =>
+              log.warn(s"Banning peer for malicious behaviour($msg): ${connectionId.toString}")
+              //peer will be added to the blacklist and the network controller will send CloseConnection
+              networkControllerRef ! PenalizePeer(connectionId.remoteAddress, PenaltyType.PermanentPenalty)
+            //non-malicious corruptions
+            case _ =>
+              log.info(s"Corrupted data from ${connectionId.toString}: ${e.getMessage}, closing connection")
+              self ! CloseConnection
+          }
+      }
     }
   }
 
@@ -270,7 +304,20 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
     case Received(data) =>
       chunksBuffer ++= data
       processRemoteBuffer()
-      connection ! ResumeReading
+      resumeOrSuspendReading()
+
+    case InboundMessageProcessed(bytes) =>
+      if (inFlightIncomingMessages > 0) {
+        inFlightIncomingMessages -= 1
+      }
+      inFlightIncomingBytes = math.max(0L, inFlightIncomingBytes - math.max(0, bytes).toLong)
+      if (chunksBuffer.nonEmpty && !isInboundBackpressured) {
+        processRemoteBuffer()
+      }
+      if (readingSuspended && !isInboundBackpressured) {
+        readingSuspended = false
+        connection ! ResumeReading
+      }
   }
 
   private def reportStrangeInput: Receive = {
@@ -335,6 +382,12 @@ object PeerConnectionHandler {
   // Independently bound collection overhead from small messages.
   private[network] val MaxBufferedOutboundMessages: Int = 64
 
+  // Bound in-flight deserialized incoming messages awaiting downstream confirmation
+  // before resuming TCP reads, matching outbound per-peer memory bounds.
+  private[network] val MaxInFlightIncomingBytes: Long = MaxBufferedOutboundBytes
+
+  private[network] val MaxInFlightIncomingMessages: Int = 16
+
   object ReceivableMessages {
     
     case object HandshakeTimeout
@@ -342,6 +395,8 @@ object PeerConnectionHandler {
     case object CloseConnection
 
     final case class Ack(id: Long) extends Tcp.Event
+
+    final case class InboundMessageProcessed(bytes: Int) extends DeadLetterSuppression
 
   }
 

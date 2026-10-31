@@ -13,7 +13,10 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderWithoutPow}
 import org.ergoplatform.modifiers.history.popow.NipopowAlgos
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
-import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.EliminateTransactions
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.{
+  EliminateTransactions,
+  LocallyGeneratedModifierProcessed
+}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetReaders, Readers}
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.Height
@@ -139,6 +142,7 @@ class CandidateGenerator(
       context.system.eventStream.subscribe(self, classOf[SyntacticallyFailedModification])
     case Readers(_, _, _, _) =>
       log.error("Invalid readers state, mining is possible in UTXO mode only")
+    case _: LocallyGeneratedModifierProcessed =>
     case m =>
       // retry until initialized
       context.system.scheduler
@@ -166,6 +170,7 @@ class CandidateGenerator(
       }
     case _: NodeViewChange =>
     // Just ignore all other NodeView Changes
+    case _: LocallyGeneratedModifierProcessed =>
 
     /*
      * When new block is applied, either one mined by us or received from peers isn't equal to our candidate's parent,

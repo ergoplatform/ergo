@@ -62,7 +62,7 @@ class OrderedTxPoolSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers {
     val beforeD = Seq(a, b, c).foldLeft(ErgoMemPool.empty(settings)) {
       case (pool, tx) => pool.put(UnconfirmedTransaction(tx, None))
     }
-    val uniqueParentKeys = d.inputs.flatMap(input => beforeD.pool.outputs.get(input.boxId)).toSet
+    val uniqueParentKeys = d.inputs.flatMap(input => beforeD.pool.outputs.get(input.boxId)).flatMap(beforeD.pool.transactionsRegistry.get).toSet
     val parentOrder = uniqueParentKeys
       .flatMap { wtx =>
         beforeD.pool.orderedTransactions.get(wtx).map(unconfirmed => wtx -> unconfirmed)
@@ -103,17 +103,17 @@ class OrderedTxPoolSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers {
     pool.inputs.keySet shouldBe expectedInputIds
     pool.orderedTransactions.foreach { case (key, unconfirmed) =>
       unconfirmed.transaction.outputs.foreach { output =>
-        pool.outputs.get(output.id) shouldBe Some(key)
+        pool.outputs.get(output.id) shouldBe Some(key.id)
       }
       unconfirmed.transaction.inputs.foreach { input =>
-        pool.inputs.get(input.boxId) shouldBe Some(key)
+        pool.inputs.get(input.boxId) shouldBe Some(key.id)
       }
     }
-    pool.outputs.valuesIterator.foreach { key =>
-      pool.orderedTransactions.contains(key) shouldBe true
+    pool.outputs.valuesIterator.foreach { id =>
+      pool.transactionsRegistry.contains(id) shouldBe true
     }
-    pool.inputs.valuesIterator.foreach { key =>
-      pool.orderedTransactions.contains(key) shouldBe true
+    pool.inputs.valuesIterator.foreach { id =>
+      pool.transactionsRegistry.contains(id) shouldBe true
     }
   }
 
@@ -127,7 +127,8 @@ class OrderedTxPoolSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers {
       pool.transactionsRegistry,
       pool.invalidatedTxIds,
       pool.outputs,
-      pool.inputs
+      pool.inputs,
+      pool.family
     )(settings)
   }
 
@@ -137,7 +138,8 @@ class OrderedTxPoolSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers {
       pool.transactionsRegistry - tx.id,
       pool.invalidatedTxIds,
       pool.outputs,
-      pool.inputs
+      pool.inputs,
+      pool.family
     )(settings)
   }
 

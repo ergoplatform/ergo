@@ -245,8 +245,12 @@ class MempoolWeightSpec extends AnyFlatSpec
       entries.foldLeft(empty.orderedTransactions) { case (pool, (key, tx)) => pool.updated(key, tx) },
       entries.foldLeft(empty.transactionsRegistry) { case (registry, (key, tx)) => registry.updated(tx.id, key) },
       empty.invalidatedTxIds,
-      entries.foldLeft(empty.outputs) { case (outputs, (key, tx)) => outputs ++ tx.transaction.outputs.map(_.id -> key) },
-      entries.foldLeft(empty.inputs) { case (inputs, (key, tx)) => inputs ++ tx.transaction.inputs.map(_.boxId -> key) }
+      entries.foldLeft(empty.outputs) { case (outputs, (_, tx)) => outputs ++ tx.transaction.outputs.map(_.id -> tx.id) },
+      entries.foldLeft(empty.inputs) { case (inputs, (_, tx)) => inputs ++ tx.transaction.inputs.map(_.boxId -> tx.id) },
+      TxFamilyGraph.empty
+        .addTx(grandparent.id, Set.empty)
+        .addTx(parent.id, Set(grandparent.id))
+        .addTx(child.id, Set(parent.id))
     )(rbfSettings)
   }
 

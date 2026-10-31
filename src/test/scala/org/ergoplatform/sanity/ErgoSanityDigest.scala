@@ -36,12 +36,16 @@ class ErgoSanityDigest extends ErgoSanity[DIGEST_ST]
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
 
   override val historyGen: Gen[HT] =
-    generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1)
+    Gen.const(()).map { _ =>
+      trackedStorage(generateHistory(verifyTransactions = true, StateType.Digest, PoPoWBootstrap = false, -1))(
+        _.closeStorage())
+    }
 
   override val stateGen: Gen[WrappedDigestState] = {
-    boxesHolderGen.map(WrappedUtxoState(_, createTempDir, parameters, settings)).map { wus =>
+    boxesHolderGen.map { boxes =>
+      val wus = trackedStorage(WrappedUtxoState(boxes, createTempDir, parameters, settings))(_.closeStorage())
       val digestState = DigestState.create(Some(wus.version), Some(wus.rootDigest), createTempDir, settings)
-      new WrappedDigestState(digestState, wus, settings)
+      trackedStorage(new WrappedDigestState(digestState, wus, settings))(_.closeStorage())
     }
   }
 

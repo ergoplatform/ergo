@@ -834,4 +834,119 @@ class ErgoWalletServiceSpec
       }
     }
   }
+  property("orderByDependency and collectWithDescendants handle dataInput chains") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val wState = initialState(store, versionedStore)
+        val (_, parentTx) = walletBoxAndSpendingTx(wState.registry)
+        val independentInputBox = testBox(500000000L, TrueTree, 100)
+
+        val dataChildTx = ErgoTransaction(
+          IndexedSeq(Input(independentInputBox.id, emptyProverResult)),
+          IndexedSeq(DataInput(parentTx.outputs.head.id)),
+          IndexedSeq(new ErgoBoxCandidate(independentInputBox.value, TrueTree, creationHeight = 100))
+        )
+        val grandChildTx = ErgoTransaction(
+          IndexedSeq(Input(dataChildTx.outputs.head.id, emptyProverResult)),
+          IndexedSeq(new ErgoBoxCandidate(dataChildTx.outputs.head.value, TrueTree, creationHeight = 100))
+        )
+
+        ErgoWalletActor.orderByDependency(Seq(grandChildTx, dataChildTx, parentTx)).map(_.id) shouldBe
+          Seq(parentTx.id, dataChildTx.id, grandChildTx.id)
+        ErgoWalletActor.collectWithDescendants(
+          Seq(grandChildTx, dataChildTx, parentTx),
+          Set(parentTx.id)
+        ) shouldBe Set(parentTx.id, dataChildTx.id, grandChildTx.id)
+      }
+    }
+  }
+
+  property("block scan removes conflicted pending transactions and descendants while retaining children of confirmed parents") {
+    withVersionedStore(2) { versionedStore =>
+      withStore { store =>
+        val actorSystem = akka.actor.ActorSystem("pending-conflict-scan-" + java.util.UUID.randomUUID().toString)
+        try {
+          val initial = initialState(store, versionedStore)
+          val boxConfirmed = testBox(1000000000L, pks.head.script, 0)
+          val boxConflicted = testBox(2000000000L, pks.head.script, 0)
+          val boxUnrelated = testBox(3000000000L, pks.head.script, 0)
+          Set(boxConfirmed.id, boxConflicted.id, boxUnrelated.id).map(Base16.encode).size shouldBe 3
+
+          val confirmedParent = ErgoTransaction(
+            IndexedSeq(Input(boxConfirmed.id, emptyProverResult)),
+            IndexedSeq(new ErgoBoxCandidate(boxConfirmed.value, pks.head.script, creationHeight = 0))
+          )
+          val childOfConfirmed = ErgoTransaction(
+            IndexedSeq(Input(confirmedParent.outputs.head.id, emptyProverResult)),
+            IndexedSeq(new ErgoBoxCandidate(confirmedParent.outputs.head.value, TrueTree, creationHeight = 0))
+          )
+
+          val conflictedParent = ErgoTransaction(
+            IndexedSeq(Input(boxConflicted.id, emptyProverResult)),
+            IndexedSeq(new ErgoBoxCandidate(boxConflicted.value, pks.head.script, creationHeight = 0))
+          )
+          val childOfConflicted = ErgoTransaction(
+            IndexedSeq(Input(conflictedParent.outputs.head.id, emptyProverResult)),
+            IndexedSeq(new ErgoBoxCandidate(conflictedParent.outputs.head.value, TrueTree, creationHeight = 0))
+          )
+          val competingOnChainSpend = ErgoTransaction(
+            IndexedSeq(Input(boxConflicted.id, emptyProverResult)),
+            IndexedSeq(new ErgoBoxCandidate(boxConflicted.value, TrueTree, creationHeight = 1))
+          )
+
+          val unrelatedPending = ErgoTransaction(
+            IndexedSeq(Input(boxUnrelated.id, emptyProverResult)),
+            IndexedSeq(new ErgoBoxCandidate(boxUnrelated.value, TrueTree, creationHeight = 0))
+          )
+
+          Seq(confirmedParent, childOfConfirmed, conflictedParent, childOfConflicted, unrelatedPending).foreach { tx =>
+            initial.storage.addUnconfirmedTransaction(tx, seenAtHeight = 0).get
+          }
+
+          val header = defaultHeaderGen.sample.get.copy(height = 1)
+          val block = org.ergoplatform.modifiers.ErgoFullBlock(
+            header,
+            org.ergoplatform.modifiers.history.BlockTransactions(
+              header.id,
+              header.version,
+              Seq(confirmedParent, competingOnChainSpend)
+            ),
+            org.ergoplatform.modifiers.history.extension.Extension(header.id, Seq.empty),
+            None
+          )
+
+          val service = new ErgoWalletServiceImpl(settings) {
+            override def readWallet(state: ErgoWalletState, mnemonic: Option[SecretString],
+                keys: Option[Int], secretSettings: org.ergoplatform.wallet.settings.SecretStorageSettings): ErgoWalletState = state
+            override def restoreOffChainState(state: ErgoWalletState): ErgoWalletState = state
+            override def scanBlockUpdate(state: ErgoWalletState,
+                b: org.ergoplatform.modifiers.ErgoFullBlock,
+                dustLimit: Option[Long]): scala.util.Try[ErgoWalletState] = Success(state)
+          }
+
+          val ref = actorSystem.actorOf(akka.actor.Props(new ErgoWalletActor(
+            settings, parameters, service, null, null) {
+            override def preStart(): Unit = self ! ErgoWalletActorMessages.ReadWallet(initial)
+          }))
+          val probe = akka.testkit.TestProbe()(actorSystem)
+          probe.send(ref, ErgoWalletActorMessages.GetWalletStatus)
+          probe.expectMsgType[ErgoWalletActorMessages.WalletStatus](scala.concurrent.duration.Duration(10, "seconds"))
+
+          probe.send(ref, ErgoWalletActorMessages.ScanOnChain(block))
+          probe.send(ref, ErgoWalletActorMessages.ReadUnconfirmedTransactions)
+          val surviving = probe.expectMsgType[Seq[ErgoTransaction]](scala.concurrent.duration.Duration(10, "seconds"))
+
+          surviving.map(_.id).toSet shouldBe Set(childOfConfirmed.id, unrelatedPending.id)
+          initial.storage.unconfirmedTransactionHeights.keySet shouldBe Set(childOfConfirmed.id, unrelatedPending.id)
+
+          probe.watch(ref)
+          actorSystem.stop(ref)
+          probe.expectTerminated(ref)
+        } finally {
+          scala.concurrent.Await.result(actorSystem.terminate(), scala.concurrent.duration.Duration(15, "seconds"))
+        }
+      }
+    }
+  }
 }
+

@@ -832,11 +832,15 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx) match {
         case _: ProcessingOutcome.Accepted =>
           log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} is back in the memory pool")
+        case d: ProcessingOutcome.Declined if d.reason == ProcessingOutcome.DeclineReason.AlreadyInPool =>
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} is already in the memory pool, " +
+            "keeping persisted wallet record")
+        case outcome if outcome.retainPersistedWalletTx =>
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} could not be restored " +
+            s"into the memory pool yet ($outcome), keeping persisted wallet record")
         case outcome =>
-          // the transaction can not be brought back, e.g. it got on the blockchain while the node
-          // was down, or a conflicting one did. There is no point in keeping it for the next restart
-          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} was not accepted back " +
-            s"into the memory pool ($outcome), forgetting it")
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} was permanently rejected " +
+            s"on restore ($outcome), forgetting persisted wallet record")
           vault().forgetUnconfirmedTransactions(Seq(unconfirmedTx.id))
       }
     case RecheckedTransactions(unconfirmedTxs) =>

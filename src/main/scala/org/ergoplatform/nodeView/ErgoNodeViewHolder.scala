@@ -30,6 +30,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -99,10 +100,33 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
         Escalate
     }
 
+  override def preStart(): Unit = {
+    super.preStart()
+    restoreUnconfirmedWalletTransactions()
+  }
+
   override def postStop(): Unit = {
     log.warn("Stopping ErgoNodeViewHolder")
     history().closeStorage()
     minimalState().closeStorage()
+  }
+
+  /**
+    * The memory pool is not persisted, so a restart drops every transaction which was waiting in it.
+    * The wallet does keep its own unconfirmed transactions, so ask it for them and put them back,
+    * instead of waiting for peers to gossip them again - which they may never do.
+    */
+  private def restoreUnconfirmedWalletTransactions(): Unit = {
+    implicit val ec: ExecutionContext = context.dispatcher
+    vault().unconfirmedTransactionsToRestore.onComplete {
+      case Success(txs) if txs.nonEmpty =>
+        log.info(s"Putting ${txs.size} unconfirmed wallet transaction(s) back into the memory pool")
+        txs.foreach(tx => self ! RestoredTransaction(UnconfirmedTransaction(tx, None)))
+      case Success(_) =>
+        log.debug("No unconfirmed wallet transactions to restore")
+      case Failure(t) =>
+        log.warn("Could not read unconfirmed wallet transactions to restore: ", t)
+    }
   }
 
   /**
@@ -804,6 +828,21 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
+    case RestoredTransaction(unconfirmedTx) =>
+      txModify(unconfirmedTx) match {
+        case _: ProcessingOutcome.Accepted =>
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} is back in the memory pool")
+        case d: ProcessingOutcome.Declined if d.reason == ProcessingOutcome.DeclineReason.AlreadyInPool =>
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} is already in the memory pool, " +
+            "keeping persisted wallet record")
+        case outcome if outcome.retainPersistedWalletTx =>
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} could not be restored " +
+            s"into the memory pool yet ($outcome), keeping persisted wallet record")
+        case outcome =>
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} was permanently rejected " +
+            s"on restore ($outcome), forgetting persisted wallet record")
+          vault().forgetUnconfirmedTransactions(Seq(unconfirmedTx.id))
+      }
     case RecheckedTransactions(unconfirmedTxs) =>
       val updatedPool = memoryPool().put(unconfirmedTxs)
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -901,6 +940,12 @@ object ErgoNodeViewHolder {
       * Wrapper for transaction coming from P2P network
       */
     case class TransactionFromRemote(unconfirmedTx: UnconfirmedTransaction)
+
+    /**
+      * Wrapper for a wallet transaction which was unconfirmed when the node was stopped and is being
+      * put back into the memory pool now
+      */
+    case class RestoredTransaction(unconfirmedTx: UnconfirmedTransaction)
 
     /**
       * Wrapper for transactions which sit in mempool for long enough time, so `CleanWorker` is re-checking their

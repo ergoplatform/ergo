@@ -264,14 +264,22 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       val hasEviction = proposedPool.size <= pool.size
       if (proposedPool.get(tx.id).isEmpty) {
         val exc = new Exception("Transaction not retained after mempool update")
-        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+        this -> new ProcessingOutcome.Declined(
+          exc,
+          validationStartTime,
+          ProcessingOutcome.DeclineReason.PoolCapacity
+        )
       } else {
         val availability = if (hasEviction) {
           utxoState.map(utxo => inputsRemainAvailable(tx, proposedPool, utxo)).getOrElse(Available)
         } else Available
         ErgoMemPool.availabilityDeclineReason(availability) match {
           case Some(reason) =>
-            this -> new ProcessingOutcome.Declined(new Exception(reason), validationStartTime)
+            this -> new ProcessingOutcome.Declined(
+              new Exception(reason),
+              validationStartTime,
+              ProcessingOutcome.DeclineReason.PoolCapacity
+            )
           case None =>
             new ErgoMemPool(proposedPool, stats, sortingOption) ->
               new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
@@ -300,7 +308,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       if (pool.size == poolSizeLimit &&
         weighted(tx, feeF).weight <= pool.orderedTransactions.lastKey.weight) {
         val exc = new Exception("Transaction pays less than any other in the pool being full")
-        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+        this -> new ProcessingOutcome.Declined(
+          exc,
+          validationStartTime,
+          ProcessingOutcome.DeclineReason.PoolCapacity
+        )
       } else {
         acceptProposedPool(pool.put(unconfirmedTransaction, feeF))
       }
@@ -379,7 +391,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                   // helper runs `updateStatsOnRemoval`, which resets statistics for a transaction
                   // that was never in the pool - which is exactly the case here.
                   return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
-                    new ProcessingOutcome.Declined(exc, validationStartTime))
+                    new ProcessingOutcome.Declined(
+                      exc,
+                      validationStartTime,
+                      ProcessingOutcome.DeclineReason.MempoolPolicy
+                    ))
                 }
 
                 if (nodeSettings.rejectStorageRentTxs && containsStorageRentClaim(tx)) {
@@ -389,7 +405,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                   // Rebuilt directly, rather than via `this.invalidate`, for the same reason
                   // as the re-emission prefilter above.
                   return (new ErgoMemPool(pool.invalidate(unconfirmedTx), stats, sortingOption),
-                    new ProcessingOutcome.Declined(exc, validationStartTime))
+                    new ProcessingOutcome.Declined(
+                      exc,
+                      validationStartTime,
+                      ProcessingOutcome.DeclineReason.MempoolPolicy
+                    ))
                 }
 
                 // added in 6.0 to check now versioned serializers
@@ -413,7 +433,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 }
               } else {
                 val exc = new Exception("not all utxos in place yet")
-                this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+                this -> new ProcessingOutcome.Declined(
+                  exc,
+                  validationStartTime,
+                  ProcessingOutcome.DeclineReason.MissingInputs
+                )
               }
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
@@ -421,21 +445,28 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
               acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime, None)
           }
         } else {
-          val msg = if (this.contains(tx.id)) {
-            s"Pool can not accept transaction ${tx.id}, it is already in the mempool"
+          val (msg, declineReason) = if (this.contains(tx.id)) {
+            (s"Pool can not accept transaction ${tx.id}, it is already in the mempool",
+              ProcessingOutcome.DeclineReason.AlreadyInPool)
           } else if (pool.size == settings.nodeSettings.mempoolCapacity) {
-            s"Pool can not accept transaction ${tx.id}, the mempool is full"
+            (s"Pool can not accept transaction ${tx.id}, the mempool is full",
+              ProcessingOutcome.DeclineReason.PoolCapacity)
           } else {
-            s"Pool can not accept transaction ${tx.id}"
+            (s"Pool can not accept transaction ${tx.id}",
+              ProcessingOutcome.DeclineReason.PoolCapacity)
           }
           val exc = new Exception(msg)
-          this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+          this -> new ProcessingOutcome.Declined(exc, validationStartTime, declineReason)
         }
       } else {
         val exc = new Exception(s"Min fee not met: ${minFee.toDouble / CoinsInOneErgo} ergs required, " +
           s"${fee.toDouble / CoinsInOneErgo} ergs given")
 
-        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+        this -> new ProcessingOutcome.Declined(
+          exc,
+          validationStartTime,
+          ProcessingOutcome.DeclineReason.MinFeeNotMet
+        )
       }
     }
   }

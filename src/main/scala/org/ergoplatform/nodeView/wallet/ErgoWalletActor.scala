@@ -4,12 +4,15 @@ import akka.actor.SupervisorStrategy.{Restart, Stop}
 import akka.actor._
 import akka.pattern.StatusReply
 import org.ergoplatform.ErgoBox._
+import org.ergoplatform.modifiers.ErgoFullBlock
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{ChangedMempool, ChangedState}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoStateReader
 import org.ergoplatform.nodeView.wallet.ErgoWalletService.ChangeAddressValidationException
 import org.ergoplatform.nodeView.wallet.ErgoWalletServiceUtils.DeriveNextKeyResult
+import org.ergoplatform.nodeView.wallet.persistence.{OffChainRegistry, WalletStorage}
 import org.ergoplatform.sdk.wallet.secrets.DerivationPath
 import org.ergoplatform.settings._
 import org.ergoplatform.wallet.Constants.ScanId
@@ -19,7 +22,9 @@ import org.ergoplatform._
 import org.ergoplatform.core.VersionTag
 import org.ergoplatform.sdk.SecretString
 import org.ergoplatform.utils.ScorexEncoding
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging, bytesToId}
+
+import scala.annotation.tailrec
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
@@ -79,7 +84,8 @@ class ErgoWalletActor(settings: ErgoSettings,
       val ws = settings.walletSettings
       // Try to read wallet from json file or test mnemonic provided in a config file
       val newState = ergoWalletService.readWallet(state, ws.testMnemonic.map(SecretString.create(_)), ws.testKeysQty, ws.secretStorage)
-      context.become(loadedWallet(newState))
+      pruneObsoleteUnconfirmedTransactions(newState)
+      context.become(loadedWallet(ergoWalletService.restoreOffChainState(newState)))
       unstashAll()
     case _ => // stashing all messages until wallet is setup
       stash()
@@ -254,13 +260,33 @@ class ErgoWalletActor(settings: ErgoSettings,
     /* SCAN COMMANDS */
     //scan mempool transaction
     case ScanOffChain(tx) =>
-      val dustLimit = settings.walletSettings.dustLimit
-      val newWalletBoxes = WalletScanLogic.extractWalletOutputs(tx, None, state.walletVars, dustLimit)
-      val inputs = WalletScanLogic.extractInputBoxes(tx)
-      val newState = state.copy(offChainRegistry =
-        state.offChainRegistry.updateOnTransaction(newWalletBoxes, inputs, state.walletVars.externalScans)
-      )
+      val (newState, walletAffected) = ergoWalletService.scanOffChainUpdate(state, tx)
+      if (walletAffected) {
+        // the transaction is kept until it gets on the blockchain, so that a restart in the meantime
+        // does not make the wallet consider its inputs spendable again
+        state.storage.addUnconfirmedTransaction(tx, state.fullHeight) match {
+          case Success(_) =>
+          case Failure(t) => log.error(s"Could not store unconfirmed transaction ${tx.id}: ", t)
+        }
+      }
       context.become(loadedWallet(newState))
+
+    case ReadUnconfirmedTransactions =>
+      sender() ! unconfirmedTransactionsToRestore(state)
+
+    case ForgetUnconfirmedTransactions(ids) =>
+      if (state.storage.unconfirmedTransactionHeights.nonEmpty && ids.nonEmpty) {
+        val storedTxs = state.storage.readUnconfirmedTransactions().map(_._1)
+        val storedIds = storedTxs.map(_.id).toSet
+        val confirmedInRegistry = ids.filter(id => state.registry.getTx(id).isDefined).toSet
+        val unconfirmedToForget = ids.toSet -- confirmedInRegistry
+        val cascaded = confirmedInRegistry ++
+          ErgoWalletActor.collectWithDescendants(storedTxs, unconfirmedToForget)
+        val existingToForget = cascaded.intersect(storedIds).toSeq
+        if (existingToForget.nonEmpty && forgetUnconfirmedTransactions(state, existingToForget)) {
+          context.become(loadedWallet(refreshOffChainState(state)))
+        }
+      }
 
     // rescan=true means we serve a user request for rescan from arbitrary height
     case ScanInThePast(blockHeight, rescan) =>
@@ -277,7 +303,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                   log.error(errorMsg, ex)
                   (state.copy(error = Some(errorMsg)), true)
                 case Success(updatedState) =>
-                  (updatedState, false)
+                  (forgetConfirmedAndExpired(updatedState, block, refreshOffChain = !rescan), false)
               }
             case None =>
               (state, false) // We may do not have a block if, for example, the blockchain is pruned. This is okay, just skip it.
@@ -289,7 +315,12 @@ class ErgoWalletActor(settings: ErgoSettings,
             self ! ScanInThePast(blockHeight + 1, rescan)
           } else if (rescan) {
             log.info(s"Rescanning finished at height $blockHeight")
-            context.become(loadedWallet(nextState.copy(rescanInProgress = false)))
+            val refreshedState = if (nextState.storage.unconfirmedTransactionHeights.nonEmpty) {
+              refreshOffChainState(nextState)
+            } else {
+              nextState
+            }
+            context.become(loadedWallet(refreshedState.copy(rescanInProgress = false)))
           }
         }
       }
@@ -307,7 +338,7 @@ class ErgoWalletActor(settings: ErgoSettings,
                 log.error(errorMsg, ex)
                 state.copy(error = Some(errorMsg))
               case Success(updatedState) =>
-                updatedState
+                forgetConfirmedAndExpired(updatedState, newBlock, refreshOffChain = true)
             }
           context.become(loadedWallet(newState))
         } else if (nextBlockHeight < newBlock.height) {
@@ -532,6 +563,128 @@ class ErgoWalletActor(settings: ErgoSettings,
     sender() ! txsToSend
   }
 
+  private def refreshOffChainState(state: ErgoWalletState): ErgoWalletState =
+    ergoWalletService.restoreOffChainState(state.copy(offChainRegistry = OffChainRegistry.init(state.registry)))
+
+  /**
+    * Stored unconfirmed transactions worth putting back into the memory pool. Transactions already
+    * confirmed or conflicted on-chain according to [[WalletRegistry]], or left unconfirmed past
+    * [[WalletStorage.UnconfirmedTxLifetimeInBlocks]], are pruned instead of re-submitted.
+    */
+  private def unconfirmedTransactionsToRestore(state: ErgoWalletState): Seq[ErgoTransaction] =
+    ErgoWalletActor.orderByDependency(pruneObsoleteUnconfirmedTransactions(state))
+
+  private def pruneObsoleteUnconfirmedTransactions(state: ErgoWalletState): Seq[ErgoTransaction] = {
+    if (state.storage.unconfirmedTransactionHeights.isEmpty) {
+      Seq.empty
+    } else {
+      val storedWithHeights = state.storage.readUnconfirmedTransactions()
+      val storedTxs = storedWithHeights.map(_._1)
+
+      val confirmed = storedTxs.iterator
+        .filter { tx =>
+          state.registry.getTx(tx.id).isDefined ||
+            tx.inputs.exists(in => state.registry.getBox(in.boxId).exists(_.spendingTxIdOpt.contains(tx.id)))
+        }
+        .map(_.id)
+        .toSet
+
+      val conflictedInRegistry = storedTxs.iterator
+        .filterNot(tx => confirmed.contains(tx.id))
+        .filter { tx =>
+          val inputSpentByOther = tx.inputs.exists { in =>
+            state.registry.getBox(in.boxId).exists { tb =>
+              tb.spendingHeightOpt.isDefined && !tb.spendingTxIdOpt.contains(tx.id)
+            }
+          }
+          val dataInputSpent = tx.dataInputs.exists { di =>
+            state.registry.getBox(di.boxId).exists(_.spendingHeightOpt.isDefined)
+          }
+          inputSpentByOther || dataInputSpent
+        }
+        .map(_.id)
+        .toSet
+
+      val expired = storedWithHeights.iterator
+        .collect {
+          case (tx, seenAt)
+            if !confirmed.contains(tx.id) &&
+              state.fullHeight - seenAt > WalletStorage.UnconfirmedTxLifetimeInBlocks => tx.id
+        }
+        .toSet
+
+      val deadUnconfirmed = ErgoWalletActor.collectWithDescendants(storedTxs, conflictedInRegistry ++ expired)
+      val toForgetSet = confirmed ++ deadUnconfirmed
+      if (toForgetSet.nonEmpty) {
+        forgetUnconfirmedTransactions(state, toForgetSet.toSeq)
+      }
+      storedTxs.filterNot(tx => toForgetSet.contains(tx.id))
+    }
+  }
+
+  /**
+    * Drop stored unconfirmed transactions confirmed in `block`, conflicted when `block` spent one
+    * of their inputs or data inputs via a different transaction, or left unconfirmed for longer
+    * than [[WalletStorage.UnconfirmedTxLifetimeInBlocks]] blocks (along with stored unconfirmed
+    * descendants of conflicted or expired transactions).
+    */
+  private def forgetConfirmedAndExpired(state: ErgoWalletState,
+                                        block: ErgoFullBlock,
+                                        refreshOffChain: Boolean): ErgoWalletState = {
+    val seenAtHeights = state.storage.unconfirmedTransactionHeights
+    if (seenAtHeights.isEmpty) {
+      state
+    } else {
+      val storedWithHeights = state.storage.readUnconfirmedTransactions()
+      val storedTxs = storedWithHeights.map(_._1)
+      val blockTxIds = block.transactions.iterator.map(_.id).toSet
+      val confirmed = blockTxIds.intersect(seenAtHeights.keySet)
+      val blockSpentBoxIds = block.transactions.iterator
+        .flatMap(_.inputs.iterator.map(in => bytesToId(in.boxId)))
+        .toSet
+
+      val directlyConflicted = storedTxs.iterator
+        .filterNot(tx => confirmed.contains(tx.id))
+        .filter { tx =>
+          (tx.inputs.iterator.map(_.boxId) ++ tx.dataInputs.iterator.map(_.boxId))
+            .exists(boxId => blockSpentBoxIds.contains(bytesToId(boxId)))
+        }
+        .map(_.id)
+        .toSet
+
+      val expired = seenAtHeights.collect {
+        case (id, seenAt)
+          if !confirmed.contains(id) &&
+            block.height - seenAt > WalletStorage.UnconfirmedTxLifetimeInBlocks => id
+      }.toSet
+
+      if (expired.nonEmpty) {
+        log.warn(s"Wallet gave up on ${expired.size} transaction(s) still unconfirmed at height ${block.height}")
+      }
+
+      val conflictedWithDescendants = ErgoWalletActor.collectWithDescendants(storedTxs, directlyConflicted)
+      if (conflictedWithDescendants.nonEmpty) {
+        log.info(s"Wallet dropping ${conflictedWithDescendants.size} unconfirmed transaction(s) conflicted on-chain at height ${block.height}")
+      }
+      val deadUnconfirmed = ErgoWalletActor.collectWithDescendants(storedTxs, conflictedWithDescendants ++ expired)
+
+      val toForget = (confirmed ++ deadUnconfirmed).toSeq
+      if (toForget.nonEmpty) {
+        forgetUnconfirmedTransactions(state, toForget)
+      }
+      if (refreshOffChain) refreshOffChainState(state) else state
+    }
+  }
+
+  private def forgetUnconfirmedTransactions(state: ErgoWalletState, ids: Seq[ModifierId]): Boolean = {
+    state.storage.removeUnconfirmedTransactions(ids) match {
+      case Success(_) => true
+      case Failure(t) =>
+        log.error("Could not forget unconfirmed transactions: ", t)
+        false
+    }
+  }
+
   override def receive: Receive = emptyWallet
 
   private def wrapLegalExc[T](e: Throwable): Failure[T] =
@@ -545,6 +698,74 @@ class ErgoWalletActor(settings: ErgoSettings,
 }
 
 object ErgoWalletActor extends ScorexLogging {
+
+  /**
+    * Order transactions so that a transaction spending or referencing (via `inputs` or
+    * `dataInputs`) an output of another one comes after it.
+    *
+    * Unconfirmed transactions do form such chains, and both consumers of this ordering need it: the
+    * off-chain registry only nets a spending out if it has seen the box being spent already, and the
+    * memory pool refuses or invalidates a transaction whose inputs or data inputs it does not know yet.
+    *
+    * Transactions with no producer among `txs` keep their relative order. A cycle is impossible
+    * between valid transactions, but should one be given, its members are appended unordered rather
+    * than dropped.
+    */
+  def orderByDependency(txs: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+    val producerOf: Map[ModifierId, ModifierId] =
+      txs.flatMap(tx => tx.outputs.map(out => bytesToId(out.id) -> tx.id)).toMap
+
+    @tailrec
+    def loop(remaining: Seq[ErgoTransaction],
+             ordered: Set[ModifierId],
+             acc: Seq[ErgoTransaction]): Seq[ErgoTransaction] = {
+      if (remaining.isEmpty) {
+        acc
+      } else {
+        val (ready, blocked) = remaining.partition { tx =>
+          (tx.inputs.iterator.map(_.boxId) ++ tx.dataInputs.iterator.map(_.boxId)).forall { boxId =>
+            producerOf.get(bytesToId(boxId)).forall(ordered.contains)
+          }
+        }
+        if (ready.isEmpty) {
+          acc ++ blocked
+        } else {
+          loop(blocked, ordered ++ ready.map(_.id), acc ++ ready)
+        }
+      }
+    }
+
+    loop(txs, Set.empty, Seq.empty)
+  }
+
+  /**
+    * Expand `rootIds` to include any transaction in `txs` that directly or transitively spends or
+    * references (via `inputs` or `dataInputs`) an output produced by a transaction in the set.
+    */
+  def collectWithDescendants(txs: Seq[ErgoTransaction], rootIds: Set[ModifierId]): Set[ModifierId] = {
+    if (rootIds.isEmpty || txs.isEmpty) {
+      rootIds
+    } else {
+      val producerOf: Map[ModifierId, ModifierId] =
+        txs.flatMap(tx => tx.outputs.map(out => bytesToId(out.id) -> tx.id)).toMap
+
+      @tailrec
+      def loop(acc: Set[ModifierId]): Set[ModifierId] = {
+        val expanded = txs.foldLeft(acc) { case (set, tx) =>
+          if (set.contains(tx.id)) {
+            set
+          } else {
+            val dependsOnDead = (tx.inputs.iterator.map(_.boxId) ++ tx.dataInputs.iterator.map(_.boxId))
+              .exists(boxId => producerOf.get(bytesToId(boxId)).exists(set.contains))
+            if (dependsOnDead) set + tx.id else set
+          }
+        }
+        if (expanded.size == acc.size) acc else loop(expanded)
+      }
+
+      loop(rootIds)
+    }
+  }
 
   /** Start actor and register its proper closing into coordinated shutdown */
   def apply(settings: ErgoSettings,

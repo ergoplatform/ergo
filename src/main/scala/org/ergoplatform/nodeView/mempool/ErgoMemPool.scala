@@ -122,11 +122,11 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
 
     val poolWithoutTx = removeTx(this, tx)
-    val doubleSpentTransactionIds = tx.inputs.flatMap(i =>
+    val doubleSpentTransactionIds: Set[ModifierId] = tx.inputs.flatMap(i =>
       poolWithoutTx.pool.inputs.get(i.boxId)
     ).toSet
     val doubleSpentTransactions = doubleSpentTransactionIds.flatMap { txId =>
-      poolWithoutTx.pool.orderedTransactions.get(txId)
+      poolWithoutTx.pool.transactionsRegistry.get(txId).flatMap(poolWithoutTx.pool.orderedTransactions.get)
     }
     doubleSpentTransactions.foldLeft(poolWithoutTx) { case (pool, tx) =>
       removeTx(pool, tx.transaction)
@@ -231,8 +231,8 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       if (!withinDeadline) return BudgetExceeded
       val boxId = pending.dequeue()
       proposedPool.outputs.get(boxId) match {
-        case Some(producerKey) =>
-          proposedPool.orderedTransactions.get(producerKey) match {
+        case Some(producerId) =>
+          proposedPool.get(producerId) match {
             case Some(producer) if producer.id != tx.id =>
               if (visitedProducers.add(producer.id)) {
                 if (visitedProducers.size > maxProducerExpansions) return BudgetExceeded
@@ -279,21 +279,23 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       }
     }
 
-    val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
+    val doubleSpendingTxIds: Set[ModifierId] = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
     }.toSet
 
     val feeF = feeFactor(unconfirmedTransaction)
 
-    if (doubleSpendingWtxs.nonEmpty) {
+    if (doubleSpendingTxIds.nonEmpty) {
       val ownWtx = weighted(tx, feeF)
+      val doubleSpendingWtxs: Set[WeightedTxId] =
+        doubleSpendingTxIds.flatMap(id => pool.transactionsRegistry.get(id))
       val doubleSpendingTotalWeight = doubleSpendingWtxs.map(_.weight).sum / doubleSpendingWtxs.size
       if (ownWtx.weight > doubleSpendingTotalWeight) {
-        val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
+        val doubleSpendingTxs = doubleSpendingWtxs.flatMap(wtx => pool.orderedTransactions.get(wtx)).toSeq
         val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
         acceptProposedPool(p)
       } else {
-        this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id), validationStartTime)
+        this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingTxIds, validationStartTime)
       }
     } else {
       val poolSizeLimit = nodeSettings.mempoolCapacity

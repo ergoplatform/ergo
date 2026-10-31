@@ -238,15 +238,20 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     * between a block being written to history (best-full-chain marker set) and the state
     * rejecting it.
     */
-  def forgeUnvalidatedBlock(history: ErgoHistory, inputBoxIds: Seq[Array[Byte]]): ErgoFullBlock = {
+  def forgeUnvalidatedBlock(history: ErgoHistory, inputBoxIds: Seq[Array[Byte]]): ErgoFullBlock =
+    forgeUnvalidatedBlockWithTxs(history) { height =>
+      inputBoxIds.map { boxId =>
+        ErgoTransaction(
+          IndexedSeq(Input(ADKey @@ boxId, ProverResult.empty)),
+          IndexedSeq.empty,
+          IndexedSeq(new ErgoBoxCandidate(MinTxAmount, selfAddressScript, height)))
+      }
+    }
+
+  def forgeUnvalidatedBlockWithTxs(history: ErgoHistory)(buildTxs: Height => Seq[ErgoTransaction]): ErgoFullBlock = {
     val parent = history.bestFullBlockOpt.get.header
     val height = parent.height + 1
-    val txs = inputBoxIds.map { boxId =>
-      ErgoTransaction(
-        IndexedSeq(Input(ADKey @@ boxId, ProverResult.empty)),
-        IndexedSeq.empty,
-        IndexedSeq(new ErgoBoxCandidate(MinTxAmount, selfAddressScript, height)))
-    }
+    val txs = buildTxs(height)
     val nBits = DifficultySerializer.encodeCompactBits(history.requiredDifficultyAfter(parent))
     val interlinks = history.typedModifierById[Extension](parent.extensionId)
       .flatMap(ext => NipopowAlgos.unpackInterlinks(ext.fields).toOption)

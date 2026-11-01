@@ -403,10 +403,18 @@ class ErgoWalletServiceSpec
     withVersionedStore(2) { versionedStore =>
       withStore { store =>
         val walletState = initialState(store, versionedStore)
-        val walletService = new ErgoWalletServiceImpl(settings)
+        // initWallet recreates stores by settings.directory, not the temporary input store.
+        // Keep this test away from the live WalletFixture and other suites' derived keys.
+        val directory = new java.io.File("target/test-data",
+          "wallet-lock-" + java.util.UUID.randomUUID()).getAbsolutePath
+        val isolatedSettings = settings.copy(directory = directory,
+          walletSettings = settings.walletSettings.copy(secretStorage =
+            settings.walletSettings.secretStorage.copy(secretDir = directory + "/keystore")))
+        val walletService = new ErgoWalletServiceImpl(isolatedSettings)
         val pass = Random.nextString(10)
-        val initializedState = walletService.initWallet(walletState, settings, SecretString.create(pass), Option.empty).get._2
+        val initializedState = walletService.initWallet(walletState, isolatedSettings, SecretString.create(pass), Option.empty).get._2
 
+        try {
         // Wallet unlocked after init, so we're locking it
         val initLockedWalletState = walletService.lockWallet(initializedState)
         initLockedWalletState.secretStorageOpt.get.isLocked shouldBe true
@@ -425,6 +433,10 @@ class ErgoWalletServiceSpec
         finalUnlockedState.secretStorageOpt.get.isLocked shouldBe false
         finalUnlockedState.storage.readAllKeys().size shouldBe 1
         finalUnlockedState.walletVars.proverOpt shouldNot be(empty)
+        } finally {
+          initializedState.storage.close()
+          initializedState.registry.close()
+        }
       }
     }
   }

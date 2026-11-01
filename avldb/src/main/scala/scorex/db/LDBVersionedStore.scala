@@ -323,6 +323,10 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
         for (lsn <- fromLsn until tillLsn) {
           batch.delete(encodeLSN(lsn))
         }
+        if (count == 0) {
+          // Preserve the newest version across a stop between writes to the two databases.
+          db.put(last_version_key, versions.last, new WriteOptions().sync(true))
+        }
         undo.write(batch, writeOptions)
       } finally {
         batch.close()
@@ -330,9 +334,6 @@ class LDBVersionedStore(protected val dir: File, val initialKeepVersions: Int)
 
       versions.remove(0, deteriorated)
       versionLsn.remove(0, deteriorated)
-      if (count == 0) {
-        db.put(last_version_key, versions(0))
-      }
     }
   }
 

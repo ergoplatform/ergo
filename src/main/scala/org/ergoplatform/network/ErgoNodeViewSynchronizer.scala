@@ -77,14 +77,12 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   private var syncInfoV2CacheByHeadersHeight: Option[(Int, ErgoSyncInfoV2)] = Option.empty
 
-  private var lastRequestedDownloadTypeId: Option[NetworkObjectTypeId.Value] = None
-
   private val networkSettings: NetworkSettings = settings.scorexSettings.network
 
   protected val deliveryTimeout: FiniteDuration = networkSettings.deliveryTimeout
 
-  private val minModifiersPerBucket = 8 // minimum of persistent modifiers (excl. headers) to download by single peer
-  private val maxModifiersPerBucket = 12 // maximum of persistent modifiers (excl. headers) to download by single peer
+  private val minModifiersPerBucket = 8 // target minimum persistent IDs per peer/type bucket (excl. headers)
+  private val maxModifiersPerBucket = 12 // target maximum persistent IDs per peer/type bucket (excl. headers)
 
   private val minHeadersPerBucket = 50 // minimum of headers to download by single peer
   private val maxHeadersPerBucket = 400 // maximum of headers to download by single peer
@@ -718,54 +716,16 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       }
   }
 
-  private def limitFetchedModifiers(fetched: Map[NetworkObjectTypeId.Value, Seq[ModifierId]],
-                                    limit: Int,
-                                    afterTypeId: Option[NetworkObjectTypeId.Value])
-  : (Map[NetworkObjectTypeId.Value, Seq[ModifierId]], Option[NetworkObjectTypeId.Value]) = {
-    @tailrec
-    def takeRound(remaining: Vector[(NetworkObjectTypeId.Value, Seq[ModifierId])],
-                  slotsLeft: Int,
-                  selected: Map[NetworkObjectTypeId.Value, Vector[ModifierId]],
-                  lastSelectedTypeId: Option[NetworkObjectTypeId.Value])
-    : (Map[NetworkObjectTypeId.Value, Seq[ModifierId]], Option[NetworkObjectTypeId.Value]) = {
-      if (slotsLeft <= 0 || remaining.isEmpty) {
-        selected.map { case (typeId, modifierIds) => typeId -> modifierIds } -> lastSelectedTypeId
-      } else {
-        val roundSize = Math.min(slotsLeft, remaining.size)
-        val (round, untouched) = remaining.splitAt(roundSize)
-        val updatedSelected = round.foldLeft(selected) { case (acc, (typeId, modifierIds)) =>
-          acc.updated(typeId, acc.getOrElse(typeId, Vector.empty) :+ modifierIds.head)
-        }
-        val nextRound = round.flatMap { case (typeId, modifierIds) =>
-          val tail = modifierIds.tail
-          if (tail.nonEmpty) Some(typeId -> tail) else None
-        } ++ untouched
-        takeRound(nextRound, slotsLeft - roundSize, updatedSelected, round.lastOption.map(_._1))
-      }
-    }
-
-    val sortedCandidates = fetched.toVector
-      .filter(_._2.nonEmpty)
-      .sortBy { case (typeId, _) => typeId.toInt & 0xff }
-    val candidates = afterTypeId.flatMap { previousTypeId =>
-      val previousId = previousTypeId.toInt & 0xff
-      sortedCandidates.indexWhere { case (typeId, _) => (typeId.toInt & 0xff) > previousId } match {
-        case -1 => None
-        case nextTypeIndex => Some(sortedCandidates.drop(nextTypeIndex) ++ sortedCandidates.take(nextTypeIndex))
-      }
-    }.getOrElse(sortedCandidates)
-    takeRound(candidates, limit, Map.empty, None)
-  }
-
   /**
-    * Modifier download method that is given min/max constraints for modifiers to download from peers.
-    * It sends requests for modifiers to given peers in optimally sized batches.
+    * Passes a requested count to `fetchMax`, then distributes each returned modifier type
+    * across peer/type buckets. Bounded producers treat the count as per-type; this method
+    * does not enforce a per-type or aggregate cap on returned IDs.
     *
-    * @param maxModifiers          maximum modifiers to download
-    * @param minModifiersPerBucket minimum modifiers to download per bucket
-    * @param maxModifiersPerBucket maximum modifiers to download per bucket
+    * @param maxModifiers          requested count before the peer-count/bucket-target limit
+    * @param minModifiersPerBucket target minimum IDs per peer/type bucket
+    * @param maxModifiersPerBucket target maximum IDs per peer/type bucket
     * @param getPeersOpt           optionally get peers to download from, all peers have the same PeerSyncState
-    * @param fetchMax              function that fetches modifiers, it is passed how many of them tops
+    * @param fetchMax              returns IDs by type; may use the requested count as a per-type bound
     */
   protected def requestDownload(maxModifiers: Int, minModifiersPerBucket: Int, maxModifiersPerBucket: Int)
                                (getPeersOpt: => Option[Iterable[ConnectedPeer]])
@@ -774,7 +734,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
       case Some(peers) if peers.nonEmpty =>
         val peersCount = peers.size
         val maxElementsToFetch = Math.min(maxModifiers, peersCount * maxModifiersPerBucket)
-        val fetched: Map[NetworkObjectTypeId.Value, Seq[ModifierId]] = if (maxElementsToFetch <= 0) {
+        val fetched = if (maxElementsToFetch <= 0) {
           Map.empty
         } else {
           fetchMax(maxElementsToFetch)
@@ -784,14 +744,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
           // to start downloading UTXO set snapshots
           requestSnapshotsInfo()
         } else {
-          val hasNonHeaderCandidates = fetched.keys.exists(_ != Header.modifierTypeId)
-          val rotateAfter = if (hasNonHeaderCandidates) lastRequestedDownloadTypeId else None
-          val (limitedFetched, lastSelectedTypeId) =
-            limitFetchedModifiers(fetched, maxElementsToFetch, rotateAfter)
-          if (hasNonHeaderCandidates) {
-            lastSelectedTypeId.foreach(typeId => lastRequestedDownloadTypeId = Some(typeId))
-          }
-          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, limitedFetched)
+          val modifiersByBucket = ElementPartitioner.distribute(peers, minModifiersPerBucket, fetched)
           // collect and log useful downloading progress information, don't worry it does not run frequently
           modifiersByBucket.headOption.foreach { _ =>
             modifiersByBucket
@@ -801,7 +754,7 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
                 s"Downloading from peers : type[$modType] of ${batchSizes.size} batches each of ~ size: ${batchSizes.take(2).max}"
               }.foreach(log.info(_))
           }
-          // bucket represents a peer and a modifierType as we cannot send mixed types to a peer
+          // Each bucket pairs one peer with one modifier type; distribution runs per type.
           modifiersByBucket.foreach { case ((peer, modifierTypeId), modifierIds) =>
             requestBlockSection(modifierTypeId, modifierIds, peer)
           }

@@ -116,6 +116,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check JVM crash summary filtering
+        run: python3 -B -m unittest discover -s .github/scripts -p 'test_jvm_crash_summary.py'
+
       - name: Setup Java and Scala
         uses: coursier/setup-action@v3
         with:
@@ -135,7 +138,22 @@ jobs:
           key: ${{ runner.os }}-sbt-cache-v4-${{ hashFiles('**/*.sbt') }}-${{ hashFiles('project/build.properties') }}
 
       - name: Runs node tests
+        id: node_tests
         run: sbt -Denv=test clean ++${{ matrix.scala }} test
+
+      - name: Summarize retained JVM crash reports
+        id: crash_summary
+        if: failure() && steps.node_tests.outcome == 'failure'
+        run: python3 -B .github/scripts/jvm_crash_summary.py --root . --output target/jvm-crash-summary.json
+
+      - name: Upload filtered JVM crash summary
+        if: failure() && steps.crash_summary.outcome == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: node-jvm-crash-summary
+          path: target/jvm-crash-summary.json
+          if-no-files-found: error
+          retention-days: 7
 
   test_it:
      name: Run it node tests

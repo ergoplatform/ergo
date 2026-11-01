@@ -869,7 +869,7 @@ components:
         - digest
       properties:
         digest:
-          $ref: '#/components/schemas/Digest32'
+          $ref: '#/components/schemas/ADDigest'
         treeFlags:
           type: integer
           format: int32

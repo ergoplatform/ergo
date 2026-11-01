@@ -1,6 +1,7 @@
 package org.ergoplatform.http.routes
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.server.Directives.handleRejections
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
@@ -13,6 +14,7 @@ import org.ergoplatform.http.api.ScriptApiRoute
 import org.ergoplatform.settings.Constants.TrueTree
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import scorex.core.api.http.ApiRejectionHandler
 import scorex.util.encode.Base16
 import sigma.ast.SByte
 import sigma.ast.syntax.CollectionConstant
@@ -72,6 +74,24 @@ class ScriptApiRouteSpec extends AnyFlatSpec
     }
     val json = io.circe.parser.parse(req)
     Post(prefix + suffix, json) ~> route ~> check(assertion(responseAs[Json]))
+  }
+
+  it should "reject invalid AVL digest hex without returning a stack trace" in {
+    val stream = ClassLoader.getSystemClassLoader.getResourceAsStream("execute-script.json")
+    val request = io.circe.parser.parse(scala.io.Source.fromInputStream(stream).getLines().mkString("\n")).right.get
+    val context = request.hcursor.downField("context").focus.get
+    val root = context.hcursor.downField("lastBlockUtxoRoot").focus.get
+    val badRoot = root.mapObject(_.add("digest", "zz".asJson))
+    val badContext = context.mapObject(_.add("lastBlockUtxoRoot", badRoot))
+    val badRequest = request.mapObject(_.add("context", badContext))
+    val handledRoute = handleRejections(ApiRejectionHandler.rejectionHandler) { route }
+
+    Post(prefix + "/executeWithContext", badRequest) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+      val detail = responseAs[Json].hcursor.downField("detail").as[String].right.get
+      detail should include ("The request content was malformed:")
+      detail should not include ("\tat ")
+    }
   }
 
   it should "generate valid P2SAddress form source" in {

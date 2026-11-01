@@ -17,6 +17,7 @@ import scorex.db.LDBFactory
 
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import scala.collection.mutable
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Try}
@@ -57,6 +58,9 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
       test._history = _history
       sender ! IndexerState.fromHistory(_history)
     case test.CheckpointSettings() => sender ! dbSettings
+    case test.PauseCaughtUpSignal(probe, release) =>
+      caughtUpSignalPause = Some(probe -> release)
+      probe ! "signal-pause-configured"
   }
 
   override protected def loaded(state: IndexerState): Receive = ({
@@ -69,6 +73,11 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
 
   override def caughtUpHook(height: Int = 0): Unit = {
     if(height > 0 && height < chainHeight) return
+    caughtUpSignalPause.foreach { case (probe, release) =>
+      caughtUpSignalPause = None
+      probe ! "signal-paused"
+      require(release.await(15, TimeUnit.SECONDS), "Held catch-up signal was not released")
+    }
     test.lock.lock()
     test.done.signal()
     test.lock.unlock()
@@ -108,6 +117,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
 
   private var dir: File = _
   private var stateOpt: Option[UtxoState] = None
+  private var caughtUpSignalPause: Option[(ActorRef, CountDownLatch)] = None
   private var deferredHeaderHeightOpt: Option[Int] = None
   private var deferredTransactionsHeightOpt: Option[Int] = None
   private var unavailableHeaderObserver: Option[(Int, ActorRef)] = None
@@ -266,6 +276,7 @@ class ExtraIndexerTestActor(test: ExtraIndexerSpecification,
   def reset(): Unit = {
     resetTransientState()
     stateOpt = None
+    caughtUpSignalPause = None
     // a later test may already use the history of another fixture actor
     if (test._history eq _history) test._history = null
     general.clear()

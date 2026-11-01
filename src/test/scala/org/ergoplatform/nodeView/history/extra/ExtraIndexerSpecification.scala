@@ -31,7 +31,7 @@ import scorex.db.ByteArrayWrapper
 import spire.implicits.cfor
 
 import java.util.concurrent.locks.{Condition, ReentrantLock}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Callable, CountDownLatch, FutureTask, TimeUnit}
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import scala.collection.mutable
@@ -64,6 +64,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
   case class AllowWrites()
   case class ReopenCheckpoint()
   case class CheckpointSettings()
+  case class PauseCaughtUpSignal(probe: ActorRef, release: CountDownLatch)
 
   type ID_LL = mutable.HashMap[ModifierId,(Long,Long)]
 
@@ -135,6 +136,15 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       target ! CreateDB(height)
       target ! Index()
     }
+
+  private def resetAndAwait(target: ActorRef = indexer,
+                            requestQueued: () => Unit = () => ()): Unit = {
+    val probe = TestProbe()(system)
+    probe.send(target, Reset())
+    probe.send(target, CheckpointSettings())
+    requestQueued()
+    probe.expectMsgType[ErgoSettings](10.seconds)
+  }
 
   // After a failed test, reset the shared indexer and wait until it has handled the
   // reset. Otherwise the next test's `CreateDB` would extend the old chain, and an
@@ -1929,7 +1939,9 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       state.indexedHeight shouldBe HEIGHT + 1
       state.caughtUp shouldBe true
     }
-    indexer ! Reset()
+    // Persisted state may be visible before caughtUpHook signals `done`. Drain that
+    // producer and acknowledge Reset before the next test waits on the same condition.
+    resetAndAwait()
   }
 
   property("recovers a reloaded checkpoint without waiting for block or rollback events") {
@@ -1977,5 +1989,51 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     stateAfterLateRollback.indexedHeaderId shouldBe Some(replacementChild.id)
     IndexerState.fromHistory(_history) shouldBe stateAfterLateRollback
     indexer ! Reset()
+  }
+
+  property("waits for a held catch-up signal before completing the reset boundary") {
+    createAndIndex(2)
+    val originalHistory = _history
+    val hookProbe = TestProbe()(system)
+    val completed = TestProbe()(system)
+    val release = new CountDownLatch(1)
+    val queued = new CountDownLatch(1)
+    val task = new FutureTask[Unit](new Callable[Unit] {
+      override def call(): Unit = {
+        resetAndAwait(indexer, () => queued.countDown())
+        completed.ref ! "reset-completed"
+      }
+    })
+    val worker = new Thread(task, "extra-indexer-reset-boundary")
+    worker.setDaemon(true)
+
+    try {
+      hookProbe.send(indexer, PauseCaughtUpSignal(hookProbe.ref, release))
+      hookProbe.expectMsg("signal-pause-configured")
+      indexer ! Index()
+      hookProbe.expectMsg("signal-paused")
+
+      // The old boundary returns while this actor still holds the previous signal.
+      indexer ! Reset()
+      (_history eq originalHistory) shouldBe true
+
+      worker.start()
+      assert(queued.await(10, TimeUnit.SECONDS), "Reset barrier requests were not queued")
+      completed.expectNoMessage(200.millis)
+
+      release.countDown()
+      task.get(10, TimeUnit.SECONDS)
+      completed.expectMsg("reset-completed")
+      _history shouldBe null
+
+      createAndIndex(2)
+      (_history eq originalHistory) shouldBe false
+      IndexerState.fromHistory(_history).indexedHeight shouldBe 2
+      resetAndAwait()
+    } finally {
+      release.countDown()
+      worker.join(15000)
+      worker.isAlive shouldBe false
+    }
   }
 }

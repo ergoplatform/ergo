@@ -69,7 +69,11 @@ final class PeerDatabase(settings: ErgoSettings) extends ScorexLogging {
     for ((addr, peer) <- persistentStore.getAll) {
       val address  = deserialize(addr).asInstanceOf[InetSocketAddress]
       val peerInfo = PeerInfoSerializer.parseBytes(peer)
-      peers += address -> peerInfo
+      if (peerInfo.peerSpec.declaredAddress.contains(address)) {
+        // Stored metadata is not bound to the historic transport, so require a
+        // fresh handshake.
+        peers += address -> PeerInfo.fromAddress(address)
+      }
     }
     peers
   }

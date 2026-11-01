@@ -22,15 +22,17 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
   private val peerDatabase = new PeerDatabase(settings)
 
   if (peerDatabase.isEmpty) {
-    // fill database with peers from config file if empty
     log.info("No peers in database, seeding peers database with nodes from config")
-    settings.scorexSettings.network.knownPeers.foreach { address =>
-      if (!isSelf(address)) {
-        peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
-      }
-    }
   } else {
     log.info(s"${peerDatabase.knownPeers.size} peers read from the database")
+  }
+
+  // Migration may drop an ambiguous legacy LAN row while other rows remain.
+  // Explicitly configured endpoints remain a recovery path in a nonempty store.
+  settings.scorexSettings.network.knownPeers.foreach { address =>
+    if (peerDatabase.get(address).isEmpty && !isSelf(address) && !isLocal(address)) {
+      peerDatabase.addOrUpdateKnownPeer(PeerInfo.fromAddress(address))
+    }
   }
 
   override def receive: Receive = peersManagement orElse apiInterface orElse {
@@ -48,9 +50,13 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
         sender() ! ConnectionConfirmed(connectionId, handlerRef)
       }
 
-    case AddOrUpdatePeer(peerInfo) =>
-      // We have connected to a peer and got his peerInfo from him
-      if (!isSelf(peerInfo.peerSpec) && !peerInfo.peerSpec.address.exists(isLocal(_))) {
+    case AddVerifiedOutboundPeer(peerInfo, dialedAddress) =>
+      // The controller supplies the accepted outbound endpoint, stripped of
+      // claimed local shortcuts. Discovery never refreshes an existing row.
+      if (peerInfo.connectionType.exists(_.isOutgoing) && peerInfo.lastHandshake > 0L &&
+          peerInfo.peerSpec.declaredAddress.contains(dialedAddress) &&
+          peerInfo.peerSpec.localAddressOpt.isEmpty &&
+          !isSelf(dialedAddress) && !isLocal(dialedAddress)) {
         peerDatabase.addOrUpdateKnownPeer(peerInfo)
       }
 
@@ -64,8 +70,10 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 
     case AddPeerIfEmpty(peerSpec) =>
       // We have received peer data from other peers. It might be modified and should not affect existing data if any
-      if (peerSpec.address.forall(a => peerDatabase.get(a).isEmpty) && !isSelf(peerSpec) && !peerSpec.address.exists(isLocal(_))) {
-        val peerInfo: PeerInfo = PeerInfo(peerSpec, 0, None)
+      val candidateSpec = peerSpec.copy(features = peerSpec.features.filterNot(_.isInstanceOf[LocalAddressPeerFeature]))
+      if (candidateSpec.declaredAddress.exists(a => peerDatabase.get(a).isEmpty) &&
+          !isSelf(candidateSpec) && !candidateSpec.declaredAddress.exists(isLocal(_))) {
+        val peerInfo: PeerInfo = PeerInfo(candidateSpec, 0, None)
         log.info(s"New discovered peer: $peerInfo")
         peerDatabase.addOrUpdateKnownPeer(peerInfo)
       }
@@ -119,7 +127,7 @@ object PeerManager {
     case class Blacklisted(remote: InetSocketAddress)
 
     // peerListOperations messages
-    case class AddOrUpdatePeer(data: PeerInfo)
+    case class AddVerifiedOutboundPeer(data: PeerInfo, dialedAddress: InetSocketAddress)
 
     case class AddPeerIfEmpty(data: PeerSpec)
 
@@ -139,7 +147,7 @@ object PeerManager {
       *
       * Used in peer propagation: peers chosen are recommended to a peer asking our node about more peers.
       */
-    case class SeenPeers(howMany: Int) extends GetPeers[Seq[PeerInfo]] with ScorexLogging {
+    case class SeenPeers(howMany: Int, allowLocal: Boolean = false) extends GetPeers[Seq[PeerInfo]] with ScorexLogging {
 
       val limit: Long = 3 * 60 * 60 * 1000 // 3h
 
@@ -148,7 +156,13 @@ object PeerManager {
                           sc: ScorexContext): Seq[PeerInfo] = {
         val nonBlacklisted = knownPeers.values.toSeq
           .filter { p =>
-            (p.connectionType.isDefined || p.lastHandshake > 0) &&
+            p.connectionType.exists(_.isOutgoing) && p.lastHandshake > 0 &&
+              p.peerSpec.declaredAddress.exists { address =>
+                Option(address.getAddress).exists { ip =>
+                  !ip.isAnyLocalAddress && !ip.isMulticastAddress &&
+                    (allowLocal || !NetworkUtils.isLocalIp(ip))
+                }
+              } &&
               !blacklistedPeers.exists(ip => p.peerSpec.declaredAddress.exists(_.getAddress == ip))
           }
 

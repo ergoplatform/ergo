@@ -1073,24 +1073,26 @@ components:
         - $ref: '#/components/schemas/ScanningPredicate'
         - type: object
         - required:
-            - bytes
+            - value
         - properties:
             register:
               type: string
-            bytes:
+            value:
               type: string
+              description: Hex-encoded serialized Ergo constant used by the predicate.
 
     EqualsPredicate:
       allOf:
         - $ref: '#/components/schemas/ScanningPredicate'
         - type: object
         - required:
-            - bytes
+            - value
         - properties:
             register:
               type: string
-            bytes:
+            value:
               type: string
+              description: Hex-encoded serialized Ergo constant used by the predicate.
 
     ContainsAssetPredicate:
       allOf:

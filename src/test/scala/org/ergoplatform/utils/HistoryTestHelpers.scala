@@ -47,7 +47,8 @@ object HistoryTestHelpers extends FileUtils {
                       initialDiffOpt: Option[BigInt] = None,
                       genesisIdOpt: Option[ModifierId] = None,
                       utxoBootstrap: Boolean = false,
-                      keepVersions: Int = 200): ErgoHistory = {
+                      keepVersions: Int = 200,
+                      votingLength: Option[Int] = None): ErgoHistory = {
 
     val txCostLimit     = initSettings.nodeSettings.maxTransactionCost
     val txSizeLimit     = initSettings.nodeSettings.maxTransactionSize
@@ -59,12 +60,16 @@ object HistoryTestHelpers extends FileUtils {
 )
     val scorexSettings: ScorexSettings = null
     val walletSettings: WalletSettings = null
-    val chainSettings = initialDiffOpt match {
+    val defaultChainSettings = initialDiffOpt match {
       case Some(diff) =>
         val diffHex = Base16.encode(diff.toByteArray)
         settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, initialDifficultyHex = diffHex, genesisId = genesisIdOpt)
       case _ =>
         settings.chainSettings.copy(epochLength = epochLength, useLastEpochs = useLastEpochs, genesisId = genesisIdOpt)
+    }
+    val chainSettings = votingLength.fold(defaultChainSettings) { length =>
+      val voting = defaultChainSettings.voting.copy(votingLength = length)
+      defaultChainSettings.copy(voting = voting)
     }
 
     val dir = createTempDir

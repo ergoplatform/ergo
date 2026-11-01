@@ -152,6 +152,7 @@ object ErgoWalletActorMessages {
 
   /**
    * Initialize wallet with given wallet pass and optional mnemonic pass (according to BIP-32)
+   * Supplied SecretString values must be distinct instances.
    *
    * @param walletPass
    * @param mnemonicPassOpt
@@ -160,6 +161,7 @@ object ErgoWalletActorMessages {
 
   /**
    * Restore wallet with mnemonic, optional mnemonic password and (mandatory) wallet encryption password
+   * Supplied SecretString values must be pairwise distinct instances.
    *
    * @param mnemonic
    * @param mnemonicPassOpt

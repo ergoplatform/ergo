@@ -9,6 +9,7 @@ import org.ergoplatform.utils.NodeViewTestContext
 import org.ergoplatform.wallet.utils.TestFileUtils
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 /** This uses TestProbe to receive messages from actor.
   * To make TestProbe work `defaultSender` implicit should be imported
@@ -34,9 +35,16 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
     nodeViewHolderRef = ErgoNodeViewRef(settings)
   }
 
+  /** Returns once the holder has stopped. Its postStop closes history and state,
+    * so a restart or a test can open the same directory.
+    */
   def stopNodeViewHolder(): Unit = {
-    actorSystem.stop(nodeViewHolderRef)
-    Thread.sleep(2000)
+    val holder  = nodeViewHolderRef
+    val watcher = new TestProbe(actorSystem)
+    watcher.watch(holder)
+    actorSystem.stop(holder)
+    watcher.expectTerminated(holder, 30.seconds)
+    actorSystem.stop(watcher.ref)
   }
 
   /** Restarts nodeViewHolder and applies config override */
@@ -46,11 +54,12 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
     startNodeViewHolder()
   }
 
-  def stop(): Unit = {
-    stopNodeViewHolder()
-    actorSystem.stop(testProbe.testActor)
-    actorSystem.terminate()
-  }
+  def stop(): Unit =
+    try stopNodeViewHolder()
+    finally {
+      actorSystem.stop(testProbe.testActor)
+      actorSystem.terminate()
+    }
 }
 
 object NodeViewFixture {

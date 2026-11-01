@@ -179,6 +179,34 @@ class VotingSpecification extends ErgoCorePropertyTest {
     esc41.currentParameters.storageFeeFactor shouldBe (kInit - Parameters.StorageFeeFactorStep)
   }
 
+  // Epoch length is 4 blocks here, so the quorum (3 votes) is gathered before the last block of the epoch
+  property("simple voting - quorum gathered before the end of the epoch") {
+    val kInit = 1000000
+    val longEpochSettings = chainSettings.copy(voting = votingSettings.copy(votingLength = 4))
+
+    val p: Parameters = Parameters(4, Map(StorageFeeFactorIncrease -> kInit, BlockVersion -> 0), proposedUpdate)
+    val vr: VotingData = VotingData.empty
+    val esc = new ErgoStateContext(Seq(), None, ADDigest @@ Array.fill(33)(0: Byte), p, validationSettingsNoIl, vr)(longEpochSettings)
+    val votes = Array(StorageFeeFactorIncrease, NoParameter, NoParameter)
+    val h = defaultHeaderGen.sample.get.copy(height = 4, votes = votes, version = 0: Byte)
+    val esc4 = process(esc, p, h).get
+    val esc5 = process(esc4, p, h.copy(height = 5)).get
+    val esc6 = process(esc5, p, h.copy(height = 6)).get
+    esc6.votingData.epochVotes.find(_._1 == StorageFeeFactorIncrease).get._2 shouldBe 3
+
+    //quorum gathered, but the epoch is not finished @ height == 7 - no parameter change
+    esc6.simplifiedUpcoming().currentParameters.storageFeeFactor shouldBe kInit
+    val esc7 = process(esc6, p, h.copy(height = 7)).get
+    esc7.currentParameters.storageFeeFactor shouldBe kInit
+
+    //new epoch is starting @ height == 8 - parameter change
+    val he = h.copy(height = 8, votes = Array.fill(3)(NoParameter))
+    val p8 = Parameters(8, Map(StorageFeeFactorIncrease -> (kInit + Parameters.StorageFeeFactorStep), BlockVersion -> 0), proposedUpdate)
+    esc7.simplifiedUpcoming().currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
+    val esc8 = process(esc7, p8, he).get
+    esc8.currentParameters.storageFeeFactor shouldBe (kInit + Parameters.StorageFeeFactorStep)
+  }
+
   /**
     * A test which is ensuring that approved soft-fork activates properly.
     * For the test, we have:
@@ -211,7 +239,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
     // voting for the fork @ height == 3
     val h3 = h2.copy(height = 3)
 
-    val expectedParameters3 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 1, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters3 = expectedParameters2
     val esc3 = process(esc2, expectedParameters3, h3).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
     esc3.currentParameters.proposedUpdate shouldBe proposedUpdate
@@ -230,7 +258,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     // voting for the fork @ height == 5
     val h5 = h4.copy(height = 5)
-    val expectedParameters5 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters5 = expectedParameters4
     val esc5 = process(esc4, expectedParameters5, h5).get
     checkValidationSettings(esc5.validationSettings, emptyVSUpdate)
 
@@ -313,7 +341,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     // voting for the fork @ height == 3
     val h3 = h2.copy(height = 3)
-    val expectedParameters3 = Parameters(2, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 1, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters3 = expectedParameters2
     val esc3 = process(esc2, expectedParameters3, h3).get
     esc3.currentParameters.softForkStartingHeight.get shouldBe 2
 
@@ -326,7 +354,7 @@ class VotingSpecification extends ErgoCorePropertyTest {
 
     // no vote for the fork @ height == 5, so only soft-fork proposal has gathered 75% only
     val h5 = h4.copy(height = 5, votes = emptyVotes)
-    val expectedParameters5 = Parameters(4, Map(SoftForkStartingHeight -> 2, SoftForkVotesCollected -> 3, BlockVersion -> 0), proposedUpdate)
+    val expectedParameters5 = expectedParameters4
     val esc5 = process(esc4, expectedParameters5, h5).get
 
     // first epoch after the voting done, data should still be in the block

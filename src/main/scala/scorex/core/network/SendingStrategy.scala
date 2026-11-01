@@ -3,6 +3,7 @@ package scorex.core.network
 import scala.util.Random
 
 trait SendingStrategy {
+  /** Fixed-target strategies may ignore peers; callers must validate each choice. */
   def choose(peers: Seq[ConnectedPeer]): Seq[ConnectedPeer]
 }
 

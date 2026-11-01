@@ -3,13 +3,17 @@ package scorex.core.network
 import akka.actor.ActorRef
 import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestProbe}
+import akka.util.ByteString
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.DisconnectedPeer
+import org.ergoplatform.network.{Handshake, HandshakeSerializer, Version}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
+import org.ergoplatform.network.message.{GetPeersSpec, Message, MessageSpec}
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.scalacheck.Gen
 import scorex.core.app.ScorexContext
 import scorex.testkit.utils.AkkaFixture
+import scorex.util.serialization.{Reader, Writer}
 
 import java.net.InetSocketAddress
 import scala.concurrent.Await
@@ -199,6 +203,97 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
   // ============================================================================
   // EXAMPLE-BASED ACTOR TESTS
   // ============================================================================
+
+  property("targeted network sends reach only the current handshaked handler") {
+    withFixture { f =>
+      implicit val system = f.system
+      import NetworkController.ReceivableMessages.{GetConnectedPeers, SendToNetwork}
+
+      val (controller, peerManager, _) = f.createController(maxConnections = 30)
+      val address = new InetSocketAddress("192.0.2.90", 9090)
+      val connection = f.establishIncomingConnectionWithHandler(controller, peerManager, address)
+      val handshake = Handshake(
+        defaultPeerSpec.copy(declaredAddress = Some(address)),
+        System.currentTimeMillis()
+      )
+      connection.connectionProbe.send(connection.handlerRef,
+        Tcp.Received(ByteString(HandshakeSerializer.toBytes(handshake))))
+      connection.connectionProbe.expectMsg(Tcp.ResumeReading)
+      peerManager.expectMsgType[AddOrUpdatePeer]
+
+      val observer = TestProbe()
+      observer.send(controller, GetConnectedPeers)
+      val current = observer.expectMsgPF(1.second) {
+        case peers: Iterable[_] => peers.collectFirst { case peer: ConnectedPeer => peer }.get
+      }
+      val message = Message(GetPeersSpec, Right(()), None)
+
+      controller ! SendToNetwork(message, SendToPeer(current))
+      connection.connectionProbe.expectMsgType[Tcp.Write]
+
+      val retiredHandler = TestProbe("RetiredHandler")
+      val stale = current.copy(handlerRef = retiredHandler.ref)
+      controller ! SendToNetwork(message, SendToPeer(stale))
+      retiredHandler.expectNoMessage(200.millis)
+      connection.connectionProbe.expectNoMessage(200.millis)
+
+      controller ! SendToNetwork(message, SendToPeers(Seq(stale, current)))
+      connection.connectionProbe.expectMsgType[Tcp.Write]
+      retiredHandler.expectNoMessage(200.millis)
+    }
+  }
+
+  property("targeted actor sends drop peers below the message protocol version") {
+    withFixture { f =>
+      implicit val system = f.system
+      import NetworkController.ReceivableMessages.{GetConnectedPeers, SendToNetwork}
+
+      val (controller, peerManager, _) = f.createController(maxConnections = 30)
+      val olderAddress = new InetSocketAddress("192.0.2.91", 9091)
+      val eligibleAddress = new InetSocketAddress("192.0.2.92", 9092)
+      val olderConnection = f.establishIncomingConnectionWithHandler(controller, peerManager, olderAddress)
+      val eligibleConnection = f.establishIncomingConnectionWithHandler(controller, peerManager, eligibleAddress)
+
+      Seq((olderConnection, olderAddress, Version(6, 0, 9)),
+        (eligibleConnection, eligibleAddress, Version(6, 5, 0))).foreach {
+        case (connection, address, version) =>
+          val handshake = Handshake(
+            defaultPeerSpec.copy(protocolVersion = version, declaredAddress = Some(address)),
+            System.currentTimeMillis()
+          )
+          connection.connectionProbe.send(connection.handlerRef,
+            Tcp.Received(ByteString(HandshakeSerializer.toBytes(handshake))))
+          connection.connectionProbe.expectMsg(Tcp.ResumeReading)
+          peerManager.expectMsgType[AddOrUpdatePeer]
+      }
+
+      val observer = TestProbe()
+      observer.send(controller, GetConnectedPeers)
+      val connected = observer.expectMsgPF(1.second) {
+        case peers: Iterable[_] => peers.collect { case peer: ConnectedPeer => peer }.toSeq
+      }
+      val older = connected.find(_.connectionId.remoteAddress == olderAddress).get
+      val eligible = connected.find(_.connectionId.remoteAddress == eligibleAddress).get
+
+      // Exercise the actor's version gate even though the current GetPeers spec has no higher threshold.
+      val highVersionSpec = new MessageSpec[Unit] {
+        override val protocolVersion: Version = Version(6, 5, 0)
+        override val messageCode: MessageCode = GetPeersSpec.messageCode
+        override val messageName: String = "High-version GetPeers test message"
+        override def serialize(obj: Unit, w: Writer): Unit = GetPeersSpec.serialize(obj, w)
+        override def parse(r: Reader): Unit = GetPeersSpec.parse(r)
+      }
+      val message = Message(highVersionSpec, Right(()), None)
+
+      controller ! SendToNetwork(message, SendToPeer(older))
+      olderConnection.connectionProbe.expectNoMessage(200.millis)
+      eligibleConnection.connectionProbe.expectNoMessage(200.millis)
+
+      controller ! SendToNetwork(message, SendToPeer(eligible))
+      eligibleConnection.connectionProbe.expectMsgType[Tcp.Write]
+      olderConnection.connectionProbe.expectNoMessage(200.millis)
+    }
+  }
 
   property("incoming connection should be accepted when below limit") {
     withFixture { f =>

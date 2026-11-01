@@ -74,7 +74,7 @@ trait HeadersProcessor extends ToDownloadProcessor with PopowProcessor with Scor
   override def writeMinimalFullBlockHeight(height: Height): Unit = {
     historyStorage.insert(
       indexesToInsert = Array(MinFullBlockHeightKey -> Ints.toByteArray(height)),
-      objectsToInsert = BlockSection.emptyArray)
+      objectsToInsert = BlockSection.emptyArray).get
   }
 
   override def readMinimalFullBlockHeight(): Height = {

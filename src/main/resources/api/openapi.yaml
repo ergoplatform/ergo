@@ -1,7 +1,7 @@
 openapi: "3.0.2"
 
 info:
-  version: "6.0.9"
+  version: "6.0.10"
   title: Ergo Node API
   description: API docs for Ergo Node. Models are shared between all Ergo products
   contact:
@@ -2809,6 +2809,10 @@ paths:
   /blocks/at/{blockHeight}:
     get:
       summary: Get header ids at the given height
+      description: >-
+        Returns locally stored header ids, including forks. A retained raw row above
+        the selected best-header height may still be returned after invalidation;
+        its first id is not a selected-chain header.
       operationId: getFullBlockAt
       tags:
         - blocks

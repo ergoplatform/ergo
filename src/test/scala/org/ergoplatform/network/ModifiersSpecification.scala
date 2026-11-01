@@ -3,9 +3,11 @@ package org.ergoplatform.network
 import java.nio.ByteBuffer
 
 import com.google.common.primitives.Ints
+import org.ergoplatform.modifiers.ProofsTypeId
 import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.network.message.{Message, MessageSerializer, ModifiersData, ModifiersSpec}
+import scorex.util.bytesToId
 import scorex.util.encode.Base16
 
 /**
@@ -74,6 +76,26 @@ class ModifiersSpecification extends ErgoCorePropertyTest {
     val headerBytes = getBytes(bb, headerLength)
 
     headerBytes.toIndexedSeq shouldBe header.bytes.toIndexedSeq
+  }
+
+  property("a zero-count Modifiers message parses as empty, not as malformed") {
+    // what a node writes for a modifier above its message limit: type id + count 0
+    val zeroCount = Array[Byte](ProofsTypeId.value, 0: Byte)
+    ModifiersSpec.parseBytesTry(zeroCount).get.modifiers shouldBe empty
+  }
+
+  property("singleModifierFits agrees with the serializer at the size limit") {
+    val id = bytesToId(Array.fill(32)(1: Byte))
+    // 5 header bytes + 32 id bytes + 4 length bytes, as estimated by serialize
+    val maxFitting = ModifiersSpec.maxMsgSizeWithReserve - 5 - 32 - 4
+
+    ModifiersSpec.singleModifierFits(maxFitting) shouldBe true
+    val fits = ModifiersData(ProofsTypeId.value, Map(id -> Array.fill(maxFitting)(2: Byte)))
+    ModifiersSpec.parseBytes(ModifiersSpec.toBytes(fits)).modifiers.size shouldBe 1
+
+    ModifiersSpec.singleModifierFits(maxFitting + 1) shouldBe false
+    val tooBig = ModifiersData(ProofsTypeId.value, Map(id -> Array.fill(maxFitting + 1)(2: Byte)))
+    ModifiersSpec.parseBytes(ModifiersSpec.toBytes(tooBig)).modifiers shouldBe empty // written with count 0
   }
 
 }

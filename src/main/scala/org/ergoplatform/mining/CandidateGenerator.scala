@@ -176,15 +176,20 @@ class CandidateGenerator(
       log.info(
         s"Preparing new candidate on getting new block at ${header.height}"
       )
+      // the solved block is cleared whether or not a new candidate is needed: a candidate request processed after
+      // the block was applied and before this event has already put the cached candidate on the new block
+      val solvedBlockAfter = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
       val stateWithAppliedTxs =
-        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet))
+        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet), solvedBlock = solvedBlockAfter)
       if (needNewCandidate(state.cachedCandidate, header)) {
-        if (needNewSolution(state.solvedBlock, header.id))
-          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None, solvedBlock = None)))
-        else
-          context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+        context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
       } else {
+        if (solvedBlockAfter.isEmpty) state.solvedBlock.foreach { released =>
+          log.info(
+            s"Candidate already on applied block ${header.id}, released solved block ${released.id}"
+          )
+        }
         context.become(initialized(stateWithAppliedTxs))
       }
 
@@ -245,38 +250,62 @@ class CandidateGenerator(
         }
       }
 
+    // completeBlock serializes the nonce before PoW validation can reject it.
+    case solution: AutolykosSolution if solution.n.length != 8 =>
+      sender() ! StatusReply.error("Invalid solution nonce length: expected 8 bytes")
+
     case preSolution: AutolykosSolution
         if state.solvedBlock.isEmpty && state.cachedCandidate.nonEmpty =>
-      // Inject node pk if it is not externally set (in Autolykos 2)
-      val solution =
+      // Inject the selected candidate's pk if it is not externally set (in Autolykos 2).
+      def solutionFor(candidate: Candidate): AutolykosSolution =
         if (CryptoFacade.isInfinityPoint(preSolution.pk)) {
-          AutolykosSolution(minerPk.value, preSolution.w, preSolution.n, preSolution.d)
+          AutolykosSolution(
+            candidate.externalVersion.pk.value,
+            preSolution.w,
+            preSolution.n,
+            preSolution.d
+          )
         } else {
           preSolution
         }
-      val result: StatusReply[Unit] = {
-        val newBlock = state.cachedCandidate
-          .map(candidate => completeBlock(candidate.candidateBlock, solution))
-          .filter(block => ergoSettings.chainSettings.powScheme.validate(block.header).isSuccess)
-          .getOrElse {
-            log.info(s"Using previous candidate as a solution: " + state.cachedPreviousCandidate)
-            completeBlock(state.cachedPreviousCandidate.get.candidateBlock, solution)
-          }
-        log.info(s"New block mined, header: ${newBlock.header}")
-        ergoSettings.chainSettings.powScheme.validate(newBlock.header) match {
-          case Success(_) =>
-            sendToNodeView(newBlock)
-            context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
-            StatusReply.success(())
+
+      def complete(candidate: Candidate): ErgoFullBlock =
+        completeBlock(candidate.candidateBlock, solutionFor(candidate))
+
+      val currentBlock = complete(state.cachedCandidate.get)
+      val validatedCandidate: Either[Throwable, (ErgoFullBlock, Try[Unit])] =
+        ergoSettings.chainSettings.powScheme.validate(currentBlock.header) match {
+          case success @ Success(_) => Right(currentBlock -> success)
           case Failure(exception) =>
-            log.warn(s"Removing candidates due to invalid block", exception)
-            context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
-            StatusReply.error(
-              new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
-            )
+            state.cachedPreviousCandidate.map { candidate =>
+              log.info(s"Using previous candidate as a solution: $candidate")
+              val previousBlock = complete(candidate)
+              previousBlock -> ergoSettings.chainSettings.powScheme.validate(previousBlock.header)
+            }.toRight(exception)
         }
+      val result: StatusReply[Unit] = validatedCandidate match {
+        case Right((newBlock, validation)) =>
+          log.info(s"New block mined, header: ${newBlock.header}")
+          validation match {
+            case Success(_) =>
+              sendToNodeView(newBlock)
+              context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
+              StatusReply.success(())
+            case Failure(exception) =>
+              log.warn(s"Removing candidates due to invalid block", exception)
+              context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+              StatusReply.error(
+                new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
+              )
+          }
+        case Left(exception) =>
+          // Keep the current candidate available for a later solution.
+          StatusReply.error(new Exception(
+            s"Invalid solution for current candidate and no previous candidate available: ${exception.getMessage}",
+            exception
+          ))
       }
-      log.info(s"Processed solution $solution with the result $result")
+      log.info(s"Processed solution $preSolution with the result $result")
       sender() ! result
 
     case _: AutolykosSolution =>
@@ -419,9 +448,13 @@ object CandidateGenerator extends ScorexLogging {
     val miningTimes =
       timestamps.sorted
         .sliding(2, 1)
-        .map { case IndexedSeq(prev, next) => next - prev }
+        .collect { case IndexedSeq(prev, next) => next - prev }
         .toVector
-    Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    if (miningTimes.nonEmpty) {
+      Math.round(miningTimes.sum / miningTimes.length.toDouble).millis
+    } else {
+      Duration.Zero
+    }
   }
 
   /** Get average count of transactions per block */

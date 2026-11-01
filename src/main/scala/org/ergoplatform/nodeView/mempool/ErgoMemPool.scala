@@ -6,9 +6,10 @@ import org.ergoplatform.mining.emission.EmissionRules
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer, UnconfirmedTransaction}
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState}
-import org.ergoplatform.settings.{Constants, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
+import org.ergoplatform.settings.{Algos, Constants, ErgoSettings, MonetarySettings, NodeConfigurationSettings}
 import scorex.util.{ModifierId, ScorexLogging, bytesToId}
 import OrderedTxPool.weighted
+import ErgoMemPool.{Available, BudgetExceeded, InputAvailability, Missing, UnresolvedProducer}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils._
 import sigma.VersionContext
@@ -189,12 +190,94 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
     }
   }
 
+  /**
+    * A replacement may remove a transaction which supplied one of its own inputs.
+    * Follow surviving unconfirmed producers and check only outputs whose old pool
+    * producer disappears. Other inputs were already present before this mutation.
+    */
+  private val MaxAncestryProducerExpansions = 500
+  private val MaxAncestryBoxReferences = 4096
+  private val MaxAncestryScanNanos = 500L * 1000L * 1000L
+
+  private[mempool] def inputsRemainAvailable(
+    tx: ErgoTransaction,
+    proposedPool: OrderedTxPool,
+    utxo: UtxoState,
+    maxProducerExpansions: Int = MaxAncestryProducerExpansions,
+    maxScanNanos: Long = MaxAncestryScanNanos,
+    nowNanos: () => Long = () => System.nanoTime(),
+    maxBoxReferences: Int = MaxAncestryBoxReferences
+  ): InputAvailability = {
+    val scanStartNanos = nowNanos()
+    val pending = mutable.Queue.empty[BoxId]
+    var enqueuedBoxReferences = 0
+    def withinDeadline: Boolean = nowNanos() - scanStartNanos < maxScanNanos
+    def enqueueBeforeDeadline(boxes: Iterator[BoxId]): Boolean = {
+      while (boxes.hasNext) {
+        // Count every reference, including repeats, before growing the pending queue.
+        if (!withinDeadline || enqueuedBoxReferences >= maxBoxReferences) return false
+        pending.enqueue(boxes.next())
+        enqueuedBoxReferences += 1
+      }
+      true
+    }
+    if (!enqueueBeforeDeadline(tx.inputs.iterator.map(_.boxId))) return BudgetExceeded
+    if (!enqueueBeforeDeadline(tx.dataInputs.iterator.map(_.boxId))) return BudgetExceeded
+    val visitedProducers = mutable.Set.empty[ModifierId]
+
+    while (pending.nonEmpty) {
+      // Abort rather than accept a partially checked ancestry. UTXO-only leaves
+      // use the time budget at enqueue and dequeue, but not the producer count.
+      if (!withinDeadline) return BudgetExceeded
+      val boxId = pending.dequeue()
+      proposedPool.outputs.get(boxId) match {
+        case Some(producerKey) =>
+          proposedPool.orderedTransactions.get(producerKey) match {
+            case Some(producer) if producer.id != tx.id =>
+              if (visitedProducers.add(producer.id)) {
+                if (visitedProducers.size > maxProducerExpansions) return BudgetExceeded
+                if (!enqueueBeforeDeadline(producer.transaction.inputs.iterator.map(_.boxId))) return BudgetExceeded
+                if (!enqueueBeforeDeadline(producer.transaction.dataInputs.iterator.map(_.boxId))) return BudgetExceeded
+              }
+            case _ => return UnresolvedProducer
+          }
+        case None =>
+          // Holder recheck can put a just-confirmed producer back in this pool
+          // (ErgoNodeViewHolder, #2517). Its box is lost only if UTXO also lacks it.
+          if (pool.outputs.contains(boxId) && utxo.boxById(boxId).isEmpty) return Missing(boxId)
+      }
+    }
+    Available
+  }
+
   // Check if transaction is double-spending inputs spent in the mempool.
   // If so, the new transacting is replacing older ones if it has bigger weight (fee/byte) than them on average.
   // Otherwise, the new transaction being rejected.
   private def acceptIfNoDoubleSpend(unconfirmedTransaction: UnconfirmedTransaction,
-                                    validationStartTime: Long): (ErgoMemPool, ProcessingOutcome) = {
+                                    validationStartTime: Long,
+                                    utxoState: Option[UtxoState]): (ErgoMemPool, ProcessingOutcome) = {
     val tx = unconfirmedTransaction.transaction
+
+    def acceptProposedPool(proposedPool: OrderedTxPool): (ErgoMemPool, ProcessingOutcome) = {
+      // put() can evict a capacity victim in addition to explicit double-spend losers.
+      // Only an eviction can remove a dependency already available during validation.
+      val hasEviction = proposedPool.size <= pool.size
+      if (proposedPool.get(tx.id).isEmpty) {
+        val exc = new Exception("Transaction not retained after mempool update")
+        this -> new ProcessingOutcome.Declined(exc, validationStartTime)
+      } else {
+        val availability = if (hasEviction) {
+          utxoState.map(utxo => inputsRemainAvailable(tx, proposedPool, utxo)).getOrElse(Available)
+        } else Available
+        ErgoMemPool.availabilityDeclineReason(availability) match {
+          case Some(reason) =>
+            this -> new ProcessingOutcome.Declined(new Exception(reason), validationStartTime)
+          case None =>
+            new ErgoMemPool(proposedPool, stats, sortingOption) ->
+              new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        }
+      }
+    }
 
     val doubleSpendingWtxs = tx.inputs.flatMap { inp =>
       pool.inputs.get(inp.boxId)
@@ -208,8 +291,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
       if (ownWtx.weight > doubleSpendingTotalWeight) {
         val doubleSpendingTxs = doubleSpendingWtxs.map(wtx => pool.orderedTransactions(wtx)).toSeq
         val p = pool.remove(doubleSpendingTxs).put(unconfirmedTransaction, feeF)
-        val updPool = new ErgoMemPool(p, stats, sortingOption)
-        updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        acceptProposedPool(p)
       } else {
         this -> new ProcessingOutcome.DoubleSpendingLoser(doubleSpendingWtxs.map(_.id), validationStartTime)
       }
@@ -220,8 +302,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
         val exc = new Exception("Transaction pays less than any other in the pool being full")
         this -> new ProcessingOutcome.Declined(exc, validationStartTime)
       } else {
-        val updPool = new ErgoMemPool(pool.put(unconfirmedTransaction, feeF), stats, sortingOption)
-        updPool -> new ProcessingOutcome.Accepted(unconfirmedTransaction, validationStartTime)
+        acceptProposedPool(pool.put(unconfirmedTransaction, feeF))
       }
     }
   }
@@ -326,7 +407,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
                 val validationContext = utxo.stateContext.simplifiedUpcoming()
                 utxoWithPool.validateWithCost(tx, validationContext, costLimit, None) match {
                   case Success(cost) =>
-                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime)
+                    acceptIfNoDoubleSpend(unconfirmedTx.withCost(cost), validationStartTime, Some(utxo))
                   case Failure(ex) =>
                     this.invalidate(unconfirmedTx) -> new ProcessingOutcome.Invalidated(ex, validationStartTime)
                 }
@@ -337,7 +418,7 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
             case _ =>
               // Accept transaction in case of "digest" state. Transactions are not downloaded in this mode from other
               // peers though, so such transactions can come from the local wallet only.
-              acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime)
+              acceptIfNoDoubleSpend(unconfirmedTx, validationStartTime, None)
           }
         } else {
           val msg = if (this.contains(tx.id)) {
@@ -422,6 +503,23 @@ class ErgoMemPool private[mempool](private[mempool] val pool: OrderedTxPool,
 }
 
 object ErgoMemPool extends ScorexLogging {
+  private[mempool] sealed trait InputAvailability
+  private[mempool] case object Available extends InputAvailability
+  private[mempool] final case class Missing(boxId: BoxId) extends InputAvailability
+  private[mempool] case object UnresolvedProducer extends InputAvailability
+  private[mempool] case object BudgetExceeded extends InputAvailability
+
+  private[mempool] def availabilityDeclineReason(result: InputAvailability): Option[String] = result match {
+    case Available => None
+    case Missing(boxId) =>
+      Some("Transaction input box " + Algos.encode(boxId) +
+        " was available at validation, but its unconfirmed producer would be evicted")
+    case UnresolvedProducer =>
+      Some("Transaction input producer could not be resolved after mempool update")
+    case BudgetExceeded =>
+      Some("Transaction input ancestry check exceeded mempool admission budget")
+  }
+
   /**
    * Create empty mempool
    *

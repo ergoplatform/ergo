@@ -364,7 +364,8 @@ trait ErgoHistoryReader
       }
     }
 
-    loop(heightOf(header.id), Seq(Seq(header)))
+    val startHeight = if (header.id == PreGenesisHeader.id) Some(EmptyHistoryHeight) else heightOf(header.id)
+    loop(startHeight, Seq(Seq(header)))
   }
 
   /**

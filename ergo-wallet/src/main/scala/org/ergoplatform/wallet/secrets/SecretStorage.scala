@@ -45,8 +45,8 @@ trait SecretStorage {
 
   /**
     * Checks the seed can be decrypted, provided mnemonic with optional mnemonic password.
-    * @param mnemonic - SecretString mnemonic string to be erased after use.
-    * @param mnemonicPassOpt - optional SecretString mnemonic password to be erased after use.
+    * @param mnemonic - caller-owned SecretString mnemonic; the caller ensures erasure after use.
+    * @param mnemonicPassOpt - optional caller-owned SecretString password; the caller ensures erasure after use, although toSeed may erase it earlier.
     */
   def checkSeed(mnemonic: SecretString, mnemonicPassOpt: Option[SecretString]): Boolean
 

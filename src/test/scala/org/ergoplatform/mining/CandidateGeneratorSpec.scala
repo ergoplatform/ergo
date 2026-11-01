@@ -26,6 +26,7 @@ import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genHeaderCh
 import org.ergoplatform.utils.{HistoryTestHelpers, RandomWrapper}
 import org.ergoplatform.validation.MalformedModifierError
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import sigma.ast.ErgoTree
@@ -39,7 +40,16 @@ import scorex.crypto.authds.{ADDigest, SerializedAdProof}
 import scala.concurrent.duration._
 import scala.util.{Failure, Try}
 
-class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually {
+class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelpers with Eventually
+  with BeforeAndAfterEach {
+
+  private var caseDirectory: String = _
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    caseDirectory = new java.io.File("target/test-data",
+      "candidate-" + java.util.UUID.randomUUID()).getAbsolutePath
+  }
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
@@ -50,7 +60,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
   private val candidateGenDelay: FiniteDuration    = 3.seconds
   private val blockValidationDelay: FiniteDuration = 2.seconds
 
-  val defaultSettings: ErgoSettings = {
+  def defaultSettings: ErgoSettings = {
     val empty = ErgoSettingsReader.read()
     val nodeSettings = empty.nodeSettings.copy(
       mining                       = true,
@@ -60,10 +70,10 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       verifyTransactions           = true
     )
     val chainSettings = empty.chainSettings.copy(blockInterval = 1.seconds)
-    empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
+    empty.copy(directory = caseDirectory, nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  private val defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
+  private def defaultSettings60 = defaultSettings.copy(networkType = DevNet60, directory = defaultSettings.directory + "60")
 
   it should "provider candidate to internal miner and verify and apply his solution" in new TestKit(
     ActorSystem()
@@ -86,7 +96,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // after applying solution from miner
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
     testProbe.expectMsgClass(newBlockDelay, newBlockSignal)
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "recover when locally mined block is invalidated by node view holder" in new TestKit(
@@ -150,7 +160,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
     replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "recover when locally mined block is invalidated by full block id" in new TestKit(
@@ -214,7 +224,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidateGenerator.tell(newBlock.header.powSolution, replyProbe.ref)
     replyProbe.expectMsg(blockValidationDelay, StatusReply.Success(()))
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "let multiple miners compete" in new TestKit(ActorSystem()) {
@@ -255,7 +265,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       testProbe.expectMsgClass(50.millis, classOf[ErgoMiningThread.SolvedBlocksCount])
 
     List(m1Count, m2Count, m3Count).map(_.count).sum should be >= 3
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "cache candidate until newly mined block is applied" in new TestKit(
@@ -304,7 +314,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
         true
     }
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "regenerate candidate periodically" in new TestKit(
@@ -394,7 +404,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
             )
         }
     }
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "accept solution for previous candidate after regeneration" in new TestKit(ActorSystem()) {
@@ -404,6 +414,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     val settingsWithShortRegeneration: ErgoSettings =
       ErgoSettingsReader.read()
         .copy(
+          directory = defaultSettings.directory,
           nodeSettings = defaultSettings.nodeSettings
             .copy(blockCandidateGenerationInterval = 1.millis),
           chainSettings =
@@ -505,7 +516,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
             true
         }
     }
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "pool transactions should be removed from pool when block is mined" in new TestKit(
@@ -610,7 +621,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       .filter(_.blockTransactions.transactions.map(_.id).contains(tx.id))
     val txs: Seq[ErgoTransaction] = blocks.flatMap(_.blockTransactions.transactions)
     txs should have length 2 // 1 reward and one regular tx, no fee collection tx
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "6.0 pool transactions should be added to 6.0 block" in new TestKit(
@@ -728,7 +739,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     txs should have length 3 // 1 rewards and two regular txs, no fee collection
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "use custom miner public key when provided via optPk" in new TestKit(ActorSystem()) {
@@ -768,7 +779,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate.candidateBlock should not be null
     candidate.externalVersion.pk shouldBe customPk
     
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "use default minerPk when optPk is None" in new TestKit(ActorSystem()) {
@@ -800,7 +811,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate.candidateBlock should not be null
     candidate.externalVersion.pk shouldBe defaultMinerSecret.publicImage
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "generate different candidates for different optPk values" in new TestKit(ActorSystem()) {
@@ -850,7 +861,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate2.externalVersion.pk shouldBe customPk
     candidate1.externalVersion.pk should not be candidate2.externalVersion.pk
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "handle optPk with empty transactions" in new TestKit(ActorSystem()) {
@@ -889,7 +900,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     candidate should not be null
     candidate.txsToInclude shouldBe empty
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "ignore cached candidate when forced = true" in new TestKit(ActorSystem()) {
@@ -975,7 +986,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // candidate3 should have timestamp >= candidate1 (regenerated, possibly same or newer)
     candidate3.candidateBlock.timestamp should be >= candidate1.candidateBlock.timestamp
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "preserve previous candidate when forced regeneration occurs" in new TestKit(ActorSystem()) {
@@ -1058,7 +1069,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Success(()) =>
     }
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "handle multiple consecutive forced regenerations correctly" in new TestKit(ActorSystem()) {
@@ -1154,7 +1165,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case _ => false
     }
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "return cached candidate immediately when forced = false" in new TestKit(ActorSystem()) {
@@ -1195,7 +1206,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // Should be very fast since all are cached (no regeneration)
     elapsed should be < 500L
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "accept solution for previous candidate after forced regeneration triggered by mempool" in new TestKit(ActorSystem()) {
@@ -1299,7 +1310,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case _ => false
     }
 
-    system.terminate()
+    await(system.terminate())
   }
 
   private class FixedReadersHolder(readers: Readers) extends Actor {
@@ -1404,7 +1415,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }.flatMap(_.ids)
     eliminatedIds should not contain tx.id
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "discard candidate when history and state are out of sync" in new TestKit(
@@ -1446,7 +1457,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     senderProbe.expectNoMessage(2.seconds)
     viewHolderProbe.expectNoMessage(500.millis)
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "recover with a filled candidate when proof generation fails once" in new TestKit(
@@ -1513,7 +1524,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     proofsFailed shouldBe true
     candidate.candidateBlock.transactions.map(_.id) should contain allElementsOf txs3.map(_.id)
 
-    system.terminate()
+    await(system.terminate())
   }
 
   it should "fall back to emission-only candidate when proof generation keeps failing" in new TestKit(
@@ -1575,7 +1586,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     // both attempts failed, so only the emission transaction is included
     candidate.candidateBlock.transactions should have length 1
 
-    system.terminate()
+    await(system.terminate())
   }
 
 }

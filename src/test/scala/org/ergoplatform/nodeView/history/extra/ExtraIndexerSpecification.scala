@@ -1978,7 +1978,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     indexer ! Reset()
   }
 
-  property("rollback of an indexed then rejected block re-minting an existing token, spending duplicate inputs, or omitting inputs preserves tokens and unspent boxes") {
+  private def checkMalformedTokenRollback(scenarios: Seq[String]): Unit = {
     import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, Input}
     import org.ergoplatform.ErgoBox.{R4, R5, R6, TokenId}
     import org.ergoplatform.modifiers.mempool.ErgoTransaction
@@ -2047,7 +2047,12 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
         IndexedSeq.empty,
         IndexedSeq(new ErgoBoxCandidate(ChainGenerator.MinTxAmount, ChainGenerator.selfAddressScript, height, tokenColl))
       )
-      Seq(remintTx, dupInputTx, inputlessTx)
+      val transactions = Map(
+        "remint" -> remintTx,
+        "duplicate-input" -> dupInputTx,
+        "inputless" -> inputlessTx
+      )
+      scenarios.map(transactions)
     }
 
     _history.fullBlockHeight shouldBe HEIGHT + 1
@@ -2099,6 +2104,38 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     checkTokens(indexedTokens) shouldBe 0
     checkRentIndex()
     checkRentIndexAgainstChain(HEIGHT)
+
+    // Reopen the actual stores, clearing transient buffers and the extra-index cache.
+    // Passing startup preflight must preserve this checkpoint rather than mask a
+    // rollback error by rebuilding it from height zero.
+    val probe = TestProbe()(system)
+    probe.send(indexer, ReopenCheckpoint())
+    probe.expectMsg(state)
+    val reopenedToken = history.typedExtraIndexById[IndexedToken](uniqueId(targetToken.tokenId)).get
+    reopenedToken.boxId shouldBe originalBoxId
+    reopenedToken.amount shouldBe originalAmount
+    reopenedToken.name shouldBe originalName
+    reopenedToken.description shouldBe originalDescription
+    reopenedToken.decimals shouldBe originalDecimals
+    reopenedToken.boxCount shouldBe originalBoxCount
+    reopenedToken
+      .retrieveUtxos(history, mempool, 0, 1000, SortDirection.ASC, unconfirmed = false, Set.empty)
+      .map(_.id) shouldBe originalUtxoIdsAsc
+    checkAddresses(addresses) shouldBe 0
+    checkTemplates(templates) shouldBe 0
+    checkTokens(indexedTokens) shouldBe 0
+    checkRentIndex()
+    checkRentIndexAgainstChain(HEIGHT)
     indexer ! Reset()
+  }
+
+  Seq("remint", "duplicate-input", "inputless").foreach { scenario =>
+    property(s"isolated $scenario rollback preserves token data after reopening storage") {
+      checkMalformedTokenRollback(Seq(scenario))
+    }
+  }
+
+  property("combined malformed token rollback preserves token data after reopening storage") {
+    checkMalformedTokenRollback(Seq("remint", "duplicate-input", "inputless"))
   }
 }

@@ -315,14 +315,7 @@ object OrderedTxPool {
       0L
     } else {
       val sum = values.foldLeft(BigInt(0)) { case (acc, value) => acc + BigInt(value) }
-      val avg = sum / values.size
-      if (avg > Long.MaxValue) {
-        Long.MaxValue
-      } else if (avg < Long.MinValue) {
-        Long.MinValue
-      } else {
-        avg.toLong
-      }
+      (sum / values.size).toLong
     }
   }
 
@@ -332,7 +325,6 @@ object OrderedTxPool {
   }
 
   private[mempool] def feeForFactor(feePerFactor: Long, feeFactor: Int): Long = {
-    require(feeFactor > 0, s"Mempool fee factor should be positive: $feeFactor")
     scaledValue(feePerFactor, feeFactor, WeightPrecisionFactor)
   }
 

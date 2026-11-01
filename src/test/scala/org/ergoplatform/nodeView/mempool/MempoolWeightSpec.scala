@@ -119,7 +119,7 @@ class MempoolWeightSpec extends AnyFlatSpec
     }
     Seq(0, -1).foreach { factor =>
       intercept[IllegalArgumentException](scaledFeePerFactor(1L, factor))
-      intercept[IllegalArgumentException](feeForFactor(1L, factor))
+      feeForFactor(1L, factor) shouldBe 0L
     }
   }
 
@@ -129,12 +129,12 @@ class MempoolWeightSpec extends AnyFlatSpec
       IndexedSeq.fill(2)(new ErgoBoxCandidate(Long.MaxValue, feeProp, creationHeight = 0))
     ), None).withCost(validationCost)
     val (parentPool, parentOutcome) = ErgoMemPool.empty(rbfSettings).process(multiFee, policyState)
-    parentOutcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    parentOutcome shouldBe a[ProcessingOutcome.Accepted]
     parentPool.pool.transactionsRegistry(multiFee.id).weight shouldBe Long.MaxValue
 
     val child = childOf(multiFee)
     val (familyPool, childOutcome) = parentPool.process(child, policyState)
-    childOutcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    childOutcome shouldBe a[ProcessingOutcome.Accepted]
     familyPool.getAll.map(_.id).toSet shouldBe Set(multiFee.id, child.id)
     familyPool.pool.transactionsRegistry(multiFee.id).weight shouldBe Long.MaxValue
 
@@ -147,6 +147,7 @@ class MempoolWeightSpec extends AnyFlatSpec
     )
     val feePool = new ErgoMemPool(OrderedTxPool.empty(rbfSettings), statistics, SortingOption.FeePerCycle)(rbfSettings)
     feePool.getRecommendedFee(expectedWaitTimeMinutes = 1, txSize = 2048) shouldBe Long.MaxValue
+    feePool.getRecommendedFee(expectedWaitTimeMinutes = 1, txSize = 0) shouldBe rbfSettings.nodeSettings.minimalFeeAmount
 
     val small = feeTransaction(Seq(6.toByte), 1L)
     val orderedSmall = OrderedTxPool.empty(rbfSettings).put(small, validationCost)
@@ -257,7 +258,7 @@ class MempoolWeightSpec extends AnyFlatSpec
     conflicts.map(_.id).distinct.size shouldBe 3
     val before = (conflicts :+ sentinel).foldLeft(ErgoMemPool.empty(rbfSettings)) { case (pool, tx) =>
       val (next, outcome) = pool.process(tx, policyState)
-      outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+      outcome shouldBe a[ProcessingOutcome.Accepted]
       next
     }
     before.size shouldBe 4
@@ -276,7 +277,7 @@ class MempoolWeightSpec extends AnyFlatSpec
 
     val (after, outcome) = before.process(candidate, policyState)
 
-    outcome.isInstanceOf[ProcessingOutcome.Accepted] shouldBe true
+    outcome shouldBe a[ProcessingOutcome.Accepted]
     after.getAll.map(_.id).toSet shouldBe Set(candidate.id, sentinel.id)
     before.getAll.map(_.id).toSet shouldBe (conflicts :+ sentinel).map(_.id).toSet
   }
@@ -289,7 +290,7 @@ class MempoolWeightSpec extends AnyFlatSpec
 
     val (after, outcome) = before.process(candidate, policyState)
 
-    outcome.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
+    outcome shouldBe a[ProcessingOutcome.DoubleSpendingLoser]
     after.getAll.map(_.id).toSet shouldBe (conflicts :+ sentinel).map(_.id).toSet
     after.contains(candidate.id) shouldBe false
   }

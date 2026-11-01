@@ -499,7 +499,7 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
     }
   }
 
-  it should "reject both invalid candidates after validating each once" in new TestKit(
+  it should "keep both candidates when a solution fails for both" in new TestKit(
     ActorSystem()
   ) {
     val testProbe = new TestProbe(system)
@@ -555,16 +555,23 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
       case StatusReply.Error(error) =>
         error.getMessage shouldBe "Invalid block mined: Rejected by test PoW scheme"
     }
+    countingPowScheme.callsFor(currentBlockWithPreviousSolution.header) - currentHeaderCallsBefore shouldBe 1
+    countingPowScheme.callsFor(previousBlock.header) - previousHeaderCallsBefore shouldBe 1
     viewHolderProbe.expectNoMessage(100.millis)
     announcementProbe.expectNoMessage(100.millis)
     candidateGenerator.tell(GenerateCandidate(Seq.empty, reply = true, forced = false), testProbe.ref)
-    val regenerated = testProbe.expectMsgPF(candidateGenDelay) {
+    val cached = testProbe.expectMsgPF(candidateGenDelay) {
       case StatusReply.Success(candidate: Candidate) => candidate
     }
-    (regenerated eq currentCandidate) shouldBe false
+    cached should be theSameInstanceAs currentCandidate
 
-    countingPowScheme.callsFor(currentBlockWithPreviousSolution.header) - currentHeaderCallsBefore shouldBe 1
-    countingPowScheme.callsFor(previousBlock.header) - previousHeaderCallsBefore shouldBe 1
+    // The previous candidate is still cached, so its solution now passes.
+    countingPowScheme.allow(previousBlock.header)
+    candidateGenerator.tell(previousBlock.header.powSolution, testProbe.ref)
+    testProbe.expectMsg(blockValidationDelay, StatusReply.success(()))
+    announcementProbe.expectMsg(
+      NewBlockMined(previousBlock.header, previousBlock.blockSections)
+    )
     system.terminate()
   }
 

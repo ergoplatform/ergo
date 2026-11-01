@@ -292,8 +292,8 @@ class CandidateGenerator(
               context.become(initialized(state.copy(solvedBlock = Some(newBlock))))
               StatusReply.success(())
             case Failure(exception) =>
-              log.warn(s"Removing candidates due to invalid block", exception)
-              context.become(initialized(state.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
+              // A failed solution says nothing about the candidates, so keep them.
+              log.warn("Solution is invalid for both candidates", exception)
               StatusReply.error(
                 new Exception(s"Invalid block mined: ${exception.getMessage}", exception)
               )

@@ -1,5 +1,6 @@
 package org.ergoplatform.nodeView.state
 
+import org.ergoplatform.settings.Algos
 import org.ergoplatform.settings.Algos.HF
 import org.ergoplatform.utils.ErgoCorePropertyTest
 import org.ergoplatform.utils.ErgoNodeTestConstants.settings
@@ -45,6 +46,8 @@ class UtxoStateRollbackSpecification extends ErgoCorePropertyTest {
         result.isFailure shouldBe true
         result.failed.get shouldBe a[IllegalArgumentException]
         result.failed.get.getMessage should include("digest")
+        result.failed.get.getMessage should include(s"expected=${Algos.encoder.encode(expected)}")
+        result.failed.get.getMessage should include(s"actual=${Algos.encoder.encode(prover.digest)}")
       } finally original.closeStorage()
     }
   }

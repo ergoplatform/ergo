@@ -55,7 +55,12 @@ class UtxoState(override val persistentProver: PersistentBatchAVLProver[Digest32
       case Some(hash) =>
         val rootHash: ADDigest = ADDigest @@ hash
         val rollbackResult = p.rollback(rootHash).map { _ =>
-          require(p.digest.sameElements(rootHash), "Unexpected root digest after rollback")
+          val actualRoot = p.digest
+          require(
+            actualRoot.sameElements(rootHash),
+            s"Unexpected root digest after rollback: expected=${Algos.encoder.encode(rootHash)}, " +
+              s"actual=${Algos.encoder.encode(actualRoot)}"
+          )
           new UtxoState(p, version, store, ergoSettings)
         }
         rollbackResult

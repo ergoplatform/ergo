@@ -42,18 +42,9 @@ trait ApiCodecs extends JsonCodecs {
 
   private def fixedSizeBytesDecoder[T](typeName: String, expectedSize: Int)
                                      (wrap: Array[Byte] => T): Decoder[T] =
-    Decoder.instance { cursor =>
-      cursor.as[String].flatMap { str =>
-        Algos.decode(str) match {
-          case Success(bytes) if bytes.length == expectedSize =>
-            Right(wrap(bytes))
-          case Success(_) =>
-            Left(DecodingFailure(s"$typeName should be $expectedSize bytes", cursor.history))
-          case Failure(e) =>
-            Left(DecodingFailure.fromThrowable(e, cursor.history))
-        }
-      }
-    }
+    arrayBytesDecoder
+      .ensure(_.length == expectedSize, s"$typeName should be $expectedSize bytes")
+      .map(wrap)
 
   override implicit val adKeyDecoder: Decoder[ADKey] =
     fixedSizeBytesDecoder("ADKey", Constants.ModifierIdSize)(ADKey @@ _)

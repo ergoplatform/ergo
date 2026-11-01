@@ -16,6 +16,7 @@ import cats.syntax.either._
 import scorex.crypto.authds.{ADDigest, ADKey}
 import scorex.crypto.hash.Digest32
 import sigma.ast.{ErgoTree, EvaluatedValue, SType}
+import sigma.data.AvlTreeData
 import sigmastate.interpreter.SecretProven
 
 import scala.util.Try
@@ -99,9 +100,28 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
 
     Seq("zz", "0").foreach { value =>
       val json = value.asJson
-      json.as[ADKey].isLeft shouldBe true
-      json.as[ADDigest].isLeft shouldBe true
-      json.as[Digest32].isLeft shouldBe true
+      val failures = Seq(
+        json.as[ADKey].left.get,
+        json.as[ADDigest].left.get,
+        json.as[Digest32].left.get
+      )
+      failures.foreach { failure =>
+        failure.message should not include ("\n")
+        failure.message should not include ("\tat ")
+      }
+    }
+  }
+
+  property("AVL tree JSON should use a 33-byte authenticated digest") {
+    val valid = Json.obj(
+      "digest" -> ("11" * 33).asJson,
+      "treeFlags" -> Json.fromInt(7),
+      "keyLength" -> Json.fromInt(32),
+      "valueLength" -> Json.Null
+    )
+    valid.as[AvlTreeData].map(_.digest.length) shouldBe Right(33)
+    Seq(32, 34).foreach { size =>
+      valid.mapObject(_.add("digest", ("11" * size).asJson)).as[AvlTreeData].isLeft shouldBe true
     }
   }
 
@@ -128,9 +148,7 @@ class JsonSerializationCoreSpec extends ErgoCorePropertyTest
       valid.as[DhtSecretKey].isRight shouldBe true
       Seq("g", "h", "u", "v").foreach { field =>
         val json = valid.mapObject(_.add(field, "00".asJson))
-        val decoded = Try(json.as[DhtSecretKey])
-        decoded.isSuccess shouldBe true
-        decoded.get.isLeft shouldBe true
+        json.as[DhtSecretKey].isLeft shouldBe true
       }
     }
   }

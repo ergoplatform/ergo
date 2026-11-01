@@ -291,8 +291,17 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
   }
 
   // Note: txBoxPropositionSize cannot be triggered independently - a proposition over MaxPropositionBytes
-  // also makes the whole box exceed MaxBoxSize, so txBoxSize fires first. Likewise txInputsSum: inputs
-  // that overflow Long are already rejected by the `changeAmt >= 0` check before the stateful pass.
+  // also makes the whole box exceed MaxBoxSize, so txBoxSize fires first.
+
+  property("rejects inputs whose value sum overflows (txInputsSum)") {
+    // the unchecked input sum wraps and `changeAmt` wraps back to a positive value, so the box selector
+    // takes both boxes and only txInputsSum stops the build
+    val inputs = IndexedSeq(box(1000000000L), box(Long.MaxValue))
+    val outBox = boxCandidate(2000000000L)
+    val res    = buildTx(inputs, IndexedSeq(outBox))
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txInputsSum"))
+  }
 
   property("rejects transaction where ERGs are not preserved (txErgPreservation)") {
     val inputBox = box(minBoxValue * 2)

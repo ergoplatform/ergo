@@ -257,8 +257,8 @@ object TransactionBuilder {
     require(outputs.forall(_.propositionBytes.length <= MaxPropositionBytes.value),
       s"output proposition size must be <= ${MaxPropositionBytes.value} bytes (txBoxPropositionSize)")
 
-    // txInputsSum: input value sum must not overflow. Defensive: the `changeAmt >= 0` check in
-    // buildUnsignedTx already rejects inputs that overflow before we get here.
+    // txInputsSum: input value sum must not overflow. The `changeAmt >= 0` check in buildUnsignedTx
+    // does not cover it: an overflowing input sum can wrap so that `changeAmt` stays non-negative.
     val inputSumTry = Try(inputs.map(_.value).reduce(java7.compat.Math.addExact(_, _)))
     require(inputSumTry.isSuccess, s"sum of input values should not exceed ${Long.MaxValue} (txInputsSum)")
 

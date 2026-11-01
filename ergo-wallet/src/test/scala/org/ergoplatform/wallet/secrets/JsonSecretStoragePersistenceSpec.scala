@@ -63,6 +63,22 @@ class JsonSecretStoragePersistenceSpec extends AnyPropSpec with Matchers with Fi
     reopened.lock()
   }
 
+  property("unlock returns a failure if the discovered secret file disappears") {
+    val dir = createTempDir
+    val settings = SecretStorageSettings(dir.getAbsolutePath, encryption)
+    val storage = JsonSecretStorage.init(Array.fill[Byte](32)(1),
+      SecretString.create(candidatePassword), false)(settings)
+    val discovered = JsonSecretStorage.readFile(settings).get
+    Files.delete(storage.secretFile.toPath)
+
+    val result = discovered.unlock(SecretString.create(candidatePassword))
+    val error = result.failed.get
+    error shouldBe a[IOException]
+    error.getCause shouldBe a[IOException]
+    error.getMessage.contains(storage.secretFile.getAbsolutePath) shouldBe false
+    discovered.isLocked shouldBe true
+  }
+
   property("wallet discovery preserves a sole legacy filename alongside staging files") {
     val dir = createTempDir
     val legacy = Files.write(dir.toPath.resolve("legacy-wallet"), encryptedWalletBytes(1))

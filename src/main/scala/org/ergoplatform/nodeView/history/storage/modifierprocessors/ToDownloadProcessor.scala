@@ -160,32 +160,28 @@ trait ToDownloadProcessor
 
   /**
     * Mark headers chain as synced when a fresh header arrives (from the network's perspective,
-    * the chain is at the tip then). When `updateBestBlock` is true the best full block pointer
-    * is persisted as well, which advances minimalFullBlockHeight; callers in the UTXO snapshot
-    * bootstrap path must not do that (see above).
-    * A node that can continue from its best full block (e.g. after a restart) keeps minimalFullBlockHeight,
-    * which then moves as blocks are applied: a height computed from this header could be above the best
-    * full block, and the blocks the node needs next would be rejected as too old. If such a height is
-    * already stored (by an earlier version), it is lowered to the height after the best full block.
-    * The node continues from its best full block only when a header is stored at the next height: after a NiPoPoW
-    * bootstrap a full block can sit inside the proof's headers gap (for example the genesis block, with no header at
-    * height 2), and then the height is computed from this header as before.
+    * the chain is at the tip then). When `updateBestBlock` is true, minimalFullBlockHeight is set as well, by the
+    * first case below that applies; callers in the UTXO snapshot bootstrap path must not do that (see above).
     */
   private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
     if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
-      // A restored snapshot has no full block yet; keep its first download height until one is applied.
-      val keepSnapshotFloor = updateBestBlock && nodeSettings.utxoSettings.utxoBootstrap &&
-        isUtxoSnapshotApplied && bestFullBlockOpt.isEmpty
-      if (updateBestBlock && !keepSnapshotFloor) {
-        bestFullBlockOpt.filter(fb => headerIdsAtHeight(fb.height + 1).nonEmpty) match {
-          case Some(fb) =>
+      if (updateBestBlock) {
+        bestFullBlockOpt match {
+          // a restored UTXO set snapshot has no full block yet: keep its first download height until one is applied
+          case None if nodeSettings.utxoSettings.utxoBootstrap && isUtxoSnapshotApplied =>
+            setHeadersChainSynced()
+          // after a restart, continue from the best full block (a height computed from this header could be above
+          // it, and the blocks the node needs next would be rejected as too old); a stored height above it is lowered
+          case Some(fb) if headerIdsAtHeight(fb.height + 1).nonEmpty =>
             if (minimalFullBlockHeight > fb.height + 1) {
               log.warn(s"Stored minimal full block height $minimalFullBlockHeight is above the best full block " +
                 s"${fb.header.encodedId} at height ${fb.height}, lowering it to ${fb.height + 1}")
               writeMinimalFullBlockHeight(fb.height + 1)
             }
             setHeadersChainSynced()
-          case None =>
+          // no full block yet, or one inside a NiPoPoW proof's headers gap (e.g. genesis, with no header at height 2):
+          // compute the height from this header
+          case _ =>
             val lowestHeight = lowestApplicableHeight(header)
             updateBestFullBlock(header, lowestHeight)
             if (lowestHeight > GenesisHeight) warnIfBestFullBlockBelowGap(header)

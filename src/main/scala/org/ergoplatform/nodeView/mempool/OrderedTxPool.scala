@@ -14,14 +14,16 @@ import scala.collection.immutable.TreeMap
   * @param orderedTransactions  - collection containing transactions ordered by `tx.weight`
   * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting transaction by its `id`
   * @param invalidatedTxIds     - invalidated transaction ids in bloom filters
-  * @param outputs              - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its output box
-  * @param inputs               - mapping `box.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting a transaction by its input box id
+  * @param outputs              - mapping `box.id` -> producing `tx.id`; current weight is resolved via `transactionsRegistry`
+  * @param inputs               - mapping `box.id` -> spending `tx.id`; current weight is resolved via `transactionsRegistry`
+  * @param family               - explicit parent/child dependency graph between mempool transactions, used by `updateFamily`
   */
 class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
                     val transactionsRegistry: TreeMap[ModifierId, WeightedTxId],
                     val invalidatedTxIds: ApproximateCacheLike[String],
-                    val outputs: TreeMap[BoxId, WeightedTxId],
-                    val inputs: TreeMap[BoxId, WeightedTxId])
+                    val outputs: TreeMap[BoxId, ModifierId],
+                    val inputs: TreeMap[BoxId, ModifierId],
+                    val family: TxFamilyGraph = TxFamilyGraph.empty)
                    (implicit settings: ErgoSettings) extends ScorexLogging {
 
   import OrderedTxPool.weighted
@@ -105,18 +107,21 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
           withoutTransaction(tx.id).updated(currentWtx, unconfirmedTx),
           transactionsRegistry.updated(tx.id, currentWtx),
           invalidatedTxIds,
-          outputs ++ tx.outputs.map(_.id -> currentWtx),
-          inputs ++ tx.inputs.map(_.boxId -> currentWtx)
+          outputs ++ tx.outputs.map(_.id -> tx.id),
+          inputs ++ tx.inputs.map(_.boxId -> tx.id),
+          family
         )
       case None =>
         val wtx = weighted(tx, feeFactor)
+        val parentIds = tx.inputs.flatMap(in => outputs.get(in.boxId)).toSet
         new OrderedTxPool(
           withoutTransaction(tx.id).updated(wtx, unconfirmedTx),
           transactionsRegistry.updated(wtx.id, wtx),
           invalidatedTxIds,
-          outputs ++ tx.outputs.map(_.id -> wtx),
-          inputs ++ tx.inputs.map(_.boxId -> wtx)
-        ).updateFamily(tx, wtx.weight, System.currentTimeMillis(), 0)
+          outputs ++ tx.outputs.map(_.id -> tx.id),
+          inputs ++ tx.inputs.map(_.boxId -> tx.id),
+          family.addTx(tx.id, parentIds)
+        ).updateFamily(tx, parentIds, wtx.weight, System.currentTimeMillis(), 0)
     }
     if (newPool.orderedTransactions.size > mempoolCapacity) {
       val victim = newPool.orderedTransactions.last._2
@@ -138,13 +143,15 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
   def remove(tx: ErgoTransaction): OrderedTxPool = {
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) if orderedTransactions.contains(wtx) =>
+        val parentIds = family.parentsOf(tx.id)
         new OrderedTxPool(
           withoutTransaction(tx.id),
           transactionsRegistry - tx.id,
           invalidatedTxIds,
           outputs -- tx.outputs.map(_.id),
-          inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
+          inputs -- tx.inputs.map(_.boxId),
+          family.removeTx(tx.id)
+        ).updateFamily(tx, parentIds, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case Some(_) =>
         if (orderedTransactions.valuesIterator.exists(_.id == tx.id)) {
           new OrderedTxPool(
@@ -152,7 +159,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
             transactionsRegistry - tx.id,
             invalidatedTxIds,
             outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
+            inputs -- tx.inputs.map(_.boxId),
+            family.removeTx(tx.id)
           )
         } else {
           this
@@ -164,7 +172,8 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
             transactionsRegistry,
             invalidatedTxIds,
             outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
+            inputs -- tx.inputs.map(_.boxId),
+            family.removeTx(tx.id)
           )
         } else {
           this
@@ -181,13 +190,15 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     val tx = unconfirmedTx.transaction
     transactionsRegistry.get(tx.id) match {
       case Some(wtx) if orderedTransactions.contains(wtx) =>
+        val parentIds = family.parentsOf(tx.id)
         new OrderedTxPool(
           withoutTransaction(tx.id),
           transactionsRegistry - tx.id,
           invalidatedTxIds.put(tx.id),
           outputs -- tx.outputs.map(_.id),
-          inputs -- tx.inputs.map(_.boxId)
-        ).updateFamily(tx, -wtx.weight, System.currentTimeMillis(), depth = 0)
+          inputs -- tx.inputs.map(_.boxId),
+          family.removeTx(tx.id)
+        ).updateFamily(tx, parentIds, -wtx.weight, System.currentTimeMillis(), depth = 0)
       case Some(_) =>
         if (orderedTransactions.valuesIterator.exists(utx => utx.id == tx.id)) {
           new OrderedTxPool(
@@ -195,10 +206,11 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
             transactionsRegistry - tx.id,
             invalidatedTxIds.put(tx.id),
             outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
+            inputs -- tx.inputs.map(_.boxId),
+            family.removeTx(tx.id)
           )
         } else {
-          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
+          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs, family)
         }
       case None =>
         if (hasUnregisteredTransaction(tx.id)) {
@@ -207,10 +219,11 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
             transactionsRegistry,
             invalidatedTxIds.put(tx.id),
             outputs -- tx.outputs.map(_.id),
-            inputs -- tx.inputs.map(_.boxId)
+            inputs -- tx.inputs.map(_.boxId),
+            family.removeTx(tx.id)
           )
         } else {
-          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs)
+          new OrderedTxPool(orderedTransactions, transactionsRegistry, invalidatedTxIds.put(tx.id), outputs, inputs, family)
         }
     }
   }
@@ -250,6 +263,7 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
     * @return
     */
   private def updateFamily(tx: ErgoTransaction,
+                           parentIds: Set[ModifierId],
                            weight: Long,
                            startTime: Long,
                            depth: Int): OrderedTxPool = {
@@ -260,8 +274,9 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       this
     } else {
 
-      val uniqueTxIds: Set[WeightedTxId] = tx.inputs.flatMap(input => this.outputs.get(input.boxId)).toSet
-      val parentTxs = uniqueTxIds.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
+      val parentWtxs: Set[WeightedTxId] =
+        parentIds.flatMap(pid => this.transactionsRegistry.get(pid))
+      val parentTxs = parentWtxs.flatMap(wtx => this.orderedTransactions.get(wtx).map(ut => wtx -> ut))
 
       parentTxs.foldLeft(this) { case (pool, (snapshotWtx, _)) =>
         pool.currentTransaction(snapshotWtx.id) match {
@@ -272,10 +287,11 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
               pool.withoutTransaction(parent.id).updated(newWtx, ut),
               pool.transactionsRegistry.updated(parent.id, newWtx),
               pool.invalidatedTxIds,
-              parent.outputs.foldLeft(pool.outputs)((newOutputs, box) => newOutputs.updated(box.id, newWtx)),
-              parent.inputs.foldLeft(pool.inputs)((newInputs, inp) => newInputs.updated(inp.boxId, newWtx))
+              pool.outputs,
+              pool.inputs,
+              pool.family
             )
-            newPool.updateFamily(parent, weight, startTime, depth + 1)
+            newPool.updateFamily(parent, pool.family.parentsOf(parent.id), weight, startTime, depth + 1)
           case None =>
             pool
         }
@@ -315,8 +331,9 @@ object OrderedTxPool {
       TreeMap.empty[WeightedTxId, UnconfirmedTransaction],
       TreeMap.empty[ModifierId, WeightedTxId],
       ExpiringApproximateCache.empty(frontCacheSize, frontCacheExpiration),
-      TreeMap.empty[BoxId, WeightedTxId],
-      TreeMap.empty[BoxId, WeightedTxId])(settings)
+      TreeMap.empty[BoxId, ModifierId],
+      TreeMap.empty[BoxId, ModifierId],
+      TxFamilyGraph.empty)(settings)
   }
 
   def weighted(unconfirmedTx: UnconfirmedTransaction, feeFactor: Int)(implicit ms: MonetarySettings): WeightedTxId = {

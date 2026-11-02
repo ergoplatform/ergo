@@ -81,12 +81,12 @@ class ExtraIndexerTemplateKeySpec extends ErgoCorePropertyTest with NodeViewTest
       val templateKey = hashTreeTemplate(tree)
       templateKey shouldBe hashTreeTemplate(tree) // deterministic
       templateKey should not be hashErgoTree(tree) // the defect: these were equal on the base
-      // the derivation: the address key hashed again with a suffix, as tokens separate their key
-      templateKey shouldBe bytesToId(Algos.hash(hashErgoTree(tree) + "template"))
+      // the derivation: one hash of the tree bytes with a suffix, as tokens separate their key
+      templateKey shouldBe bytesToId(Algos.hash(tree.bytesHex + "template"))
     }
-    templateKey.toString shouldBe "b26e420014c341c78e4f3441df9cf5a18311a31d996b7aa8017336c7330cbcca"
-    hashTreeTemplate(treeFromBytes("1804016f0000")).toString shouldBe "843ab2d9a89c2b37857f0ecb7d0be635c0722815c1dd08fbf5ce94a6fa580c07"
-    hashTreeTemplate(treeFromBytes("180401700000")).toString shouldBe "f19853ac3cdad1df6c01b2c49fa30db01fd33b21941e3045ee55b9e78f776b8b"
+    templateKey.toString shouldBe "794c8955932584c0aa93331b5be77d09f8a8a5fc92dac4a019b597273f959412"
+    hashTreeTemplate(treeFromBytes("1804016f0000")).toString shouldBe "13ac1709f2c66cb6c87f192104842aee3f1d0c59cf8750f081ecb0959a9dbd68"
+    hashTreeTemplate(treeFromBytes("180401700000")).toString shouldBe "3393ef897aed1ff7ee8c5c6e743cc3630237801e765f399056fd7bcb6aaa7fb3"
   }
 
   /** A real node view holder and the production indexer, as in `ExtraIndexerAppliedBlocksSpec`. */

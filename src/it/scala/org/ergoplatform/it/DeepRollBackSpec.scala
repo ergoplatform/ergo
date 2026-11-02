@@ -180,20 +180,27 @@ class DeepRollBackSpec extends AnyFreeSpec with IntegrationSuite {
       Async.await(observeNodes("initial shared chain", minerAGen, minerBGen))
 
       // nodeB's miner starts in isolation only if its headers are fewer than 6 above its
-      // full blocks; 3 leaves room for the headers nodeB still gets while nodeA stops, so
-      // `sharedHeight` is only a lower bound of nodeB's fork base
-      val lastSharedInfo = Async.await(
+      // full blocks. A margin read while nodeA still mines (about 5 blocks/s) can be overrun
+      // by one inv batch before nodeA stops, so nodeA is restarted without its miner first and
+      // the margin is read once nodeB has nodeA's blocks. nodeB may still hold a header nodeA
+      // announced but did not store before it stopped, so `sharedHeight` is a lower bound of
+      // nodeB's fork base
+      docker.stopNode(minerAGen.containerId)
+      val minerANonGen: Node = docker.startDevNetNode(minerAConfigNonGen,
+        specialVolumeOpt = Some((localVolumeA, remoteVolumeA))).get
+      // after a restart /info reports no full block until the chain is loaded
+      val sharedHeight = Async.await(minerANonGen.waitForHeight(sharedChainLength))
+      Async.await(
         minerBGen.waitForProgress[NodeInfo, Int](
-          "nodeB's headers less than 3 ahead of its full blocks",
+          s"nodeB's full blocks at nodeA's height $sharedHeight, headers less than 3 ahead",
           _.info,
-          headersAheadOfFullBlocks(_) < 3,
+          i => i.bestBlockHeightOpt.exists(_ >= sharedHeight) && headersAheadOfFullBlocks(i) < 3,
           100.millis
-        )(_.bestBlockHeightOpt, i => s"headers ahead: ${headersAheadOfFullBlocks(i)}")
+        )(_.bestBlockHeightOpt, i => s"full blocks ${i.bestBlockHeightOpt}, headers ahead: ${headersAheadOfFullBlocks(i)}")
       )
-      val sharedHeight = lastSharedInfo.bestBlockHeightOpt.value
 
       // 2. Stop all nodes
-      docker.stopNode(minerAGen.containerId)
+      docker.stopNode(minerANonGen.containerId)
       docker.stopNode(minerBGen.containerId)
       // `noConnectionsConfig` blocks every connection; removing the peer databases as
       // well is a second guard

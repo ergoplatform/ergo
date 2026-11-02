@@ -368,4 +368,38 @@ class ExtraIndexerTemplateKeySpec extends ErgoCorePropertyTest with NodeViewTest
       node.templateRecord shouldBe None
     }
   }
+
+  property("an index written under an earlier fallback key: a chain switch which undoes a spend of such a box restores it and starts a new template record") {
+    withNode(checkpointedSettings) { node =>
+      val (box, spare) = node.firstPayment()
+      val number = node.boxRecord(box).get.globalIndex
+      // the template record as a pre-release 6.0.9 build wrote it: under the double-hash key, which
+      // lists the box, and nothing under the current template key
+      val oldKey = bytesToId(Algos.hash(hashErgoTree(unparsedTree) + "template"))
+      oldKey should not be templateKey
+      val storage = node.history.historyStorage
+      storage.removeExtra(Array(templateKey))
+      storage.insertExtraTry(Array.empty, Array[ExtraIndex](IndexedContractTemplate(oldKey, ArrayBuffer(number)))).get
+      def oldRecord: Option[List[Long]] = node.history.typedExtraIndexById[IndexedContractTemplate](oldKey).map(_.boxes.toList)
+      node.templateRecord shouldBe None
+      oldRecord shouldBe Some(List(number))
+
+      val spend = move(box, Constants.TrueTree)
+      val abandoned = validFullBlock(Some(node.chain.last), node.tipState, Seq(spend))
+      // switchAwayFrom waits until the better branch is indexed: the indexer survived the rollback
+      node.switchAwayFrom(abandoned, spare) {
+        node.boxRecord(box).flatMap(_.spendingTxIdOpt) shouldBe Some(spend.id)
+        node.addressRecord.map(_.boxes.toList) shouldBe Some(List(-number))
+        node.templateRecord shouldBe None // the spend found no record under the current key
+      }
+
+      node.state.boxById(box.id).isDefined shouldBe true
+      node.boxRecord(box).flatMap(_.spendingTxIdOpt) shouldBe None
+      node.addressRecord.map(_.boxes.toList) shouldBe Some(List(number))
+      node.addressRecord.flatMap(_.balanceInfo).map(_.nanoErgs) shouldBe Some(box.value)
+      node.templateRecord.map(_.boxes.toList) shouldBe Some(List(number))
+      node.templateRecord.get.retrieveBoxes(node.history, 0, 10).map(_.id).toList shouldBe List(bytesToId(box.id))
+      oldRecord shouldBe Some(List(number))
+    }
+  }
 }

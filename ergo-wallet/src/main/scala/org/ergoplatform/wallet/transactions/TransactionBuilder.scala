@@ -190,8 +190,8 @@ object TransactionBuilder {
 
   // Fixed-size, zero-filled stand-in for the (yet unknown) transaction id. Attaching it to an output
   // candidate yields the same serialized length the node measures on the final box - including the
-  // 34-byte tx-id+index reference accounted for by BoxUtils.minimalErgoAmount and the box-size rule.
-  // The id value does not affect the length.
+  // tx reference (32-byte tx id plus the VLQ-encoded output index) accounted for by
+  // BoxUtils.minimalErgoAmount and the box-size rule. The id value does not affect the length.
   private val mockTxId: ModifierId = bytesToId(Array.fill(32)(0.toByte))
 
   // Per-output checks from ErgoTransaction.validateStateful that depend only on a single output and the
@@ -199,8 +199,10 @@ object TransactionBuilder {
   private def validateStatefulOutputs(outputs: Seq[ErgoBoxCandidate], currentHeight: Int): Unit = {
     require(outputs.forall(_.additionalTokens.forall(_._2 > 0)),
       "all token amounts in outputs must be positive (txPositiveAssets)")
-    require(outputs.forall(_.creationHeight <= currentHeight),
-      s"output creationHeight must be <= currentHeight=$currentHeight (txFuture)")
+    // txFuture: the node checks against the height of the block that includes the transaction, one
+    // above the best height that callers pass as currentHeight
+    require(outputs.forall(_.creationHeight <= currentHeight + 1),
+      s"output creationHeight must be <= currentHeight + 1 = ${currentHeight + 1} (txFuture)")
     require(outputs.forall(_.creationHeight >= 0),
       "output creationHeight must be >= 0 (txNegHeight)")
   }
@@ -212,8 +214,8 @@ object TransactionBuilder {
     * Not implemented here, as they require full node state: `txBoxesToSpend`/`txDataBoxes` (in the wallet
     * inputs are the boxes and data inputs are not resolved), `txScriptValidation` (the tx is unsigned, so
     * there are no proofs and no interpreter), the EIP-27 `txReemission` rule (needs chain settings - note
-    * the pay-to-reemission *output* is still added by buildUnsignedTx) and the block-cost rule (needs the
-    * cost model).
+    * the pay-to-reemission *output* is still added by buildUnsignedTx), `txRentDistinctOutputs` (needs the
+    * storage-rent context and its activation height) and the block-cost rule (needs the cost model).
     *
     * @param minValuePerByte - storage-rent price used by the dust rule (network parameter or default)
     * @param blockVersion    - protocol block version, gating the monotonic-height rule
@@ -223,9 +225,9 @@ object TransactionBuilder {
                                      currentHeight: Int,
                                      minValuePerByte: Int,
                                      blockVersion: Byte): Unit = {
-    // txAssetsInOneBox: <= 255 tokens per box and per-token sums must not overflow. The per-box token
-    // count is already capped at construction (ErgoBoxCandidate stores it as an unsigned byte), so this
-    // mainly guards against a per-token sum overflowing across outputs. Checked first, as the node does.
+    // txAssetsInOneBox: <= 255 tokens per box and per-token sums must not overflow. ErgoBoxCandidate does
+    // not cap the token count (only its serializer needs it to fit in a byte), so an output with more
+    // tokens reaches this check. Checked first, as the node does.
     require(ErgoBoxAssetExtractor.extractAssets(outputs).isSuccess,
       s"each output must have <= ${ErgoBoxAssetExtractor.MaxAssetsPerBox} tokens and per-token sums must not overflow (txAssetsInOneBox)")
 
@@ -281,13 +283,48 @@ object TransactionBuilder {
       "output token amount exceeds input amount and is not the single minted token (txAssetsPreservation)")
   }
 
+  /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change,
+    * with no network parameters and no pay-to-reemission script. See the full overload below for the
+    * parameters. This signature stays so that callers compiled against earlier versions (such as appkit
+    * 6.0.x) still link; Scala allows default arguments on one overload only, so they stay here.
+    */
+  def buildUnsignedTx(
+    inputs: IndexedSeq[ErgoBox],
+    dataInputs: IndexedSeq[DataInput],
+    outputCandidates: Seq[ErgoBoxCandidate],
+    currentHeight: Int,
+    createFeeOutput: Option[Long],
+    changeAddress: ErgoAddress,
+    minChangeValue: Long,
+    minerRewardDelay: Int,
+    burnTokens: TokensMap = Map.empty,
+    boxSelector: BoxSelector = new DefaultBoxSelector(None)
+  ): Try[UnsignedErgoLikeTransaction] =
+    buildUnsignedTx(
+      inputs,
+      dataInputs,
+      outputCandidates,
+      currentHeight,
+      createFeeOutput,
+      changeAddress,
+      minChangeValue,
+      minerRewardDelay,
+      burnTokens,
+      boxSelector,
+      parameters            = None,
+      payToReemissionScript = None
+    )
+
   /** Creates unsigned transaction from given inputs and outputs adding outputs with miner's fee and change
     * Runs required checks ensuring that resulted transaction will be successfully validated by a node.
+    * All arguments are required here: the default arguments live on the shorter overload above.
     *
     * @param inputs           - input boxes
     * @param dataInputs       - data inputs
     * @param outputCandidates - output candidate boxes
-    * @param currentHeight    - current height (used in miner's fee box and change box)
+    * @param currentHeight    - current (best) blockchain height, used in miner's fee box and change box.
+    *                           Outputs may be created up to one block above it, as the node validates
+    *                           against the height of the next block.
     * @param createFeeOutput  - optional fee amount to put in a new miner's fee box, which will be
     *                           created by this method. If None, then feeOut is not created.
     * @param changeAddress    - address where to send change from the input boxes
@@ -313,10 +350,10 @@ object TransactionBuilder {
     changeAddress: ErgoAddress,
     minChangeValue: Long,
     minerRewardDelay: Int,
-    burnTokens: TokensMap = Map.empty,
-    boxSelector: BoxSelector = new DefaultBoxSelector(None),
-    parameters: Option[BlockchainParameters] = None,
-    payToReemissionScript: Option[ErgoTree] = None
+    burnTokens: TokensMap,
+    boxSelector: BoxSelector,
+    parameters: Option[BlockchainParameters],
+    payToReemissionScript: Option[ErgoTree]
   ): Try[UnsignedErgoLikeTransaction] = Try {
 
     validateStatelessChecks(inputs, dataInputs, outputCandidates)
@@ -356,7 +393,13 @@ object TransactionBuilder {
     }
     // although we're only interested in change boxes, make sure selection contains exact inputs
     assert(selection.inputBoxes == inputs, s"unexpected selected boxes, expected: $inputs, got ${selection.inputBoxes}")
-    val changeBoxes = selection.changeBoxes
+    // EIP-27: reemission tokens are burnt, so change never keeps them (the node wallet does the same)
+    val reemissionTokenIdOpt = boxSelector.reemissionDataOpt.map(_.reemissionTokenId)
+    val changeBoxes = selection.changeBoxes.map { cb =>
+      ErgoBoxAssetsHolder(cb.value, cb.tokens.filter {
+        case (id, _) => !reemissionTokenIdOpt.contains(id)
+      })
+    }
     val changeBoxesHaveTokens = changeBoxes.exists(_.tokens.nonEmpty)
 
     // EIP-27: if the selector carved out a pay-to-reemission output, send the reemitted ERGs to the
@@ -368,18 +411,19 @@ object TransactionBuilder {
       new ErgoBoxCandidate(eip27Assets.value, p2r, currentHeight)
     }
 
-    // small change is folded into the miner's fee, but never when a reemission output is present: the
-    // change bookkeeping below excludes the reemitted amount, so folding it would break ERG preservation.
-    val changeGoesToFee = changeAmt < minChangeValue && !changeBoxesHaveTokens && reemissionOutOpt.isEmpty
+    // the selector's change leaves out the ERGs that go to the pay-to-reemission output, so only the
+    // rest is change; small change is folded into the miner's fee
+    val changeValue     = changeAmt - reemissionOutOpt.map(_.value).getOrElse(0L)
+    val changeGoesToFee = changeValue < minChangeValue && !changeBoxesHaveTokens
 
-    require(!changeGoesToFee || (changeAmt == 0 || createFeeOutput.isDefined),
-      s"""When change=$changeAmt < minChangeValue=$minChangeValue it is added to miner's fee,
+    require(!changeGoesToFee || (changeValue == 0 || createFeeOutput.isDefined),
+      s"""When change=$changeValue < minChangeValue=$minChangeValue it is added to miner's fee,
         |in this case createFeeOutput should be defined
         |""".stripMargin)
 
     val feeOutOpt = createFeeOutput.map { fee =>
-      // if computed changeAmt is too small give it to miner as tips
-      val actualFee = if (changeGoesToFee) fee + changeAmt else fee
+      // if computed change is too small give it to miner as tips
+      val actualFee = if (changeGoesToFee) fee + changeValue else fee
       new ErgoBoxCandidate(
         actualFee,
         ErgoTreePredef.feeProposition(minerRewardDelay),

@@ -99,6 +99,7 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
       changeAddress = P2PKAddress(rootSecret.privateInput.publicImage),
       minChangeValue = minChangeValue,
       minerRewardDelay = minerRewardDelay,
+      burnTokens = Map.empty,
       boxSelector = boxSelector,
       parameters = parameters,
       payToReemissionScript = payToReemissionScript
@@ -231,6 +232,15 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txFuture"))
   }
 
+  property("accepts output created one block above the current height (txFuture)") {
+    // the node validates a transaction against the height of the next block
+    val inputBox = testBox(minBoxValue * 2, TrueTree, 5)
+    val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, 6)
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), height = 5)
+
+    res shouldBe a[Success[_]]
+  }
+
   property("rejects output with negative creation height (txNegHeight)") {
     val inputBox = testBox(minBoxValue * 2, TrueTree, 0)
     val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, -1)
@@ -263,9 +273,15 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txPositiveAssets"))
   }
 
-  // Note: txAssetsInOneBox's per-box token-count limit (<= 255) is enforced by ErgoBoxCandidate
-  // construction itself (the count is an unsigned byte), so a violating output cannot be built to test
-  // here; the check in buildUnsignedTx remains as a faithful guard against cross-output sum overflow.
+  property("rejects an output with more than 255 tokens (txAssetsInOneBox)") {
+    // ErgoBoxCandidate does not cap the token count: 255 tokens from the input plus 1 minted token
+    val tokens   = (1 to 255).map(i => stringToId(s"token $i").toTokenId -> 1L)
+    val inputBox = box(minBoxValue * 3, tokens)
+    val outBox   = boxCandidate(minBoxValue, tokens :+ (inputBox.id.toTokenId -> 1L))
+    val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox))
+
+    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txAssetsInOneBox"))
+  }
 
   property("rejects dust output below the min value per byte (txDust)") {
     val inputBox = box(1L)
@@ -273,6 +289,29 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     val res      = buildTx(IndexedSeq(inputBox), IndexedSeq(outBox), fee = None)
 
     assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txDust"))
+  }
+
+  property("accepts an output at the dust threshold, not one below (txDust)") {
+    // a 100-byte register keeps the threshold and the probe value in the same VLQ length, so the box
+    // size does not depend on which of them the box holds
+    def out(value: Long) =
+      new ErgoBoxCandidate(
+        value,
+        TrueTree,
+        currentHeight,
+        Array.empty[(TokenId, Long)].toColl,
+        Map(ErgoBox.R4 -> ByteArrayConstant(Array.fill(100)(1.toByte)))
+      )
+    def build(v: Long) = buildTx(IndexedSeq(box(v)), IndexedSeq(out(v)), fee = None)
+
+    val size      = out(100000L).toBox(stringToId("tx"), 0.toShort).bytes.length
+    val threshold = size.toLong * BoxSelector.MinValuePerByteDefault
+
+    build(threshold) shouldBe a[Success[_]]
+    assertExceptionThrown(
+      build(threshold - 1).getOrThrow,
+      t => t.getMessage.contains("txDust")
+    )
   }
 
   property("rejects oversized output box (txBoxSize)") {
@@ -300,7 +339,11 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     val outBox = boxCandidate(2000000000L)
     val res    = buildTx(inputs, IndexedSeq(outBox))
 
-    assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txInputsSum"))
+    // with #2377, an exact input sum before box selection throws an ArithmeticException first
+    assertExceptionThrown(
+      res.getOrThrow,
+      t => t.isInstanceOf[ArithmeticException] || t.getMessage.contains("txInputsSum")
+    )
   }
 
   property("rejects transaction where ERGs are not preserved (txErgPreservation)") {
@@ -350,6 +393,51 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("payToReemissionScript"))
   }
 
+  property("burns reemission tokens rather than keeping them in change (EIP-27)") {
+    // the real selector, as the node wallet uses it
+    val reemissionTokenId = stringToId("reemission token")
+    val selector = new DefaultBoxSelector(
+      Some(ReemissionData(stringToId("reemission nft"), reemissionTokenId))
+    )
+    // the input holds minBoxValue reemission tokens, so minBoxValue nanoErg go to the reemission contract
+    val inputBox         = box(minBoxValue * 4, Seq(reemissionTokenId.toTokenId -> minBoxValue))
+    val outBox           = boxCandidate(minBoxValue)
+    val reemissionScript = ErgoTreePredef.feeProposition(minerRewardDelay) // distinct from out/change scripts
+    val res = buildTxWith(
+      IndexedSeq(inputBox),
+      IndexedSeq(outBox),
+      fee                   = None,
+      boxSelector           = selector,
+      payToReemissionScript = Some(reemissionScript)
+    )
+
+    val outputs = res.get.outputCandidates
+    outputs.filter(_.ergoTree == reemissionScript).map(_.value) shouldBe Seq(minBoxValue)
+    val outputTokenIds = outputs.flatMap(_.additionalTokens.toArray.map(_._1))
+    outputTokenIds should not contain reemissionTokenId.toTokenId
+  }
+
+  property("folds small change into the fee when a reemission output is present (EIP-27)") {
+    // after the pay-to-reemission output only 1000 nanoErg of change remain, too little for a box
+    val inputBox         = box(minBoxValue * 3 + 1000)
+    val outBox           = boxCandidate(minBoxValue)
+    val reemissionScript = ErgoTreePredef.feeProposition(minerRewardDelay + 1) // distinct from the fee script
+    val selector = new StubBoxSelector(
+      changeBoxes     = Seq(ErgoBoxAssetsHolder(1000L)),
+      payToReemission = Some(ErgoBoxAssetsHolder(minBoxValue))
+    )
+    val res = buildTxWith(
+      IndexedSeq(inputBox),
+      IndexedSeq(outBox),
+      boxSelector           = selector,
+      payToReemissionScript = Some(reemissionScript)
+    )
+
+    // the user output, the fee with the change added, and the pay-to-reemission output
+    val values = res.get.outputCandidates.map(_.value)
+    values shouldBe Seq(minBoxValue, minBoxValue + 1000, minBoxValue)
+  }
+
   property("uses minValuePerByte from supplied parameters (txDust)") {
     // a box fine at the default per-byte price becomes dust under a much higher price
     val inputBox = box(minBoxValue * 2)
@@ -361,13 +449,14 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     assertExceptionThrown(res.getOrThrow, t => t.getMessage.contains("txDust"))
   }
 
-  property("relaxes monotonic-height for a pre-hardening block version (txMonotonicHeight)") {
-    // same shape as the rejecting test above, but a pre-hardening block version disables the rule
+  property("relaxes monotonic-height up to the hardening block version (txMonotonicHeight)") {
+    // same shape as the rejecting test above; version 2 is the last one without the rule, and the
+    // default version 3 enforces it
     val inputBox = testBox(minBoxValue * 2, TrueTree, 100)
     val outBox   = new ErgoBoxCandidate(minBoxValue, TrueTree, 50)
     val res = buildTxWith(
       IndexedSeq(inputBox), IndexedSeq(outBox), height = 100, fee = None,
-      parameters = Some(params(blockVersionV = 1.toByte)))
+      parameters = Some(params(blockVersionV = 2.toByte)))
 
     res shouldBe a[Success[_]]
   }

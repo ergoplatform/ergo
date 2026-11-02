@@ -104,6 +104,18 @@ class TransactionBuilderSpec extends WalletTestHelpers with Matchers {
     TransactionBuilder.collTokensToMap(out2.additionalTokens) shouldBe remainingTokens
   }
 
+  property("token quantities are aggregated by id") {
+    val tokens = Array(tid1.toTokenId -> 2L, tid2.toTokenId -> 5L, tid1.toTokenId -> 3L)
+    TransactionBuilder.collTokensToMap(tokens.toColl) shouldBe Map(tid1 -> 5L, tid2 -> 5L)
+    TransactionBuilder.collTokensToMap(tokens.reverse.toColl) shouldBe Map(tid1 -> 5L, tid2 -> 5L)
+    TransactionBuilder.collTokensToMap(Array.empty[(TokenId, Long)].toColl) shouldBe Map.empty
+  }
+
+  property("token quantity aggregation uses checked addition") {
+    val tokens = Array(tid1.toTokenId -> Long.MaxValue, tid1.toTokenId -> 1L)
+    an[ArithmeticException] should be thrownBy TransactionBuilder.collTokensToMap(tokens.toColl)
+  }
+
   property("no fees") {
     val inputBox = box(minBoxValue)
     val tokenId  = inputBox.id.toTokenId

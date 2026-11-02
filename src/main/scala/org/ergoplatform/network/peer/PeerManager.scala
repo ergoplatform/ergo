@@ -9,6 +9,7 @@ import scorex.core.network._
 import scorex.core.utils.NetworkUtils
 import scorex.util.ScorexLogging
 
+import scala.concurrent.duration._
 import scala.util.Random
 
 /**
@@ -18,6 +19,7 @@ import scala.util.Random
 class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends Actor with ScorexLogging {
 
   import PeerManager.ReceivableMessages._
+  import PeerManager.removeAfterFailedDial
 
   private val peerDatabase = new PeerDatabase(settings)
 
@@ -75,8 +77,15 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
       peerDatabase.remove(address)
 
     case DialFailed(address) =>
-      log.info(s"$address removed from peers database after a failed dial")
-      peerDatabase.remove(address)
+      peerDatabase.get(address).foreach { peerInfo =>
+        val configured = settings.scorexSettings.network.knownPeers.contains(address)
+        if (removeAfterFailedDial(peerInfo, configured, System.currentTimeMillis())) {
+          log.info(s"$address removed from peers database after a failed dial")
+          peerDatabase.remove(address)
+        } else {
+          log.info(s"$address kept in peers database after a failed dial (last handshake at ${peerInfo.lastHandshake})")
+        }
+      }
 
     case get: GetPeers[_] =>
       sender() ! get.choose(peerDatabase.knownPeers, peerDatabase.blacklistedPeers, scorexContext)
@@ -109,6 +118,21 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
 }
 
 object PeerManager {
+
+  /**
+    * How long after its last handshake a peer is kept while dials to it fail
+    */
+  val MaxTimeSinceHandshake: Long = 3.days.toMillis
+
+  /**
+    * Whether a failed dial removes a peer from the database: once its last handshake is more than
+    * `MaxTimeSinceHandshake` old, so a peer that is restarting keeps its entry. A peer this node never completed a
+    * handshake with (learned from other peers) has `lastHandshake` 0 and is removed at once. A peer from the config
+    * file is kept: config file peers are seeded only into an empty database. `lastHandshake` is set at each handshake
+    * and stored.
+    */
+  def removeAfterFailedDial(peerInfo: PeerInfo, configured: Boolean, now: Long): Boolean =
+    !configured && now - peerInfo.lastHandshake > MaxTimeSinceHandshake
 
   object ReceivableMessages {
 

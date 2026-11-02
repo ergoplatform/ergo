@@ -1303,11 +1303,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  // the ids in the first ModifiersData sent to the peer that contains `marker`
-  private def servedWith(pchProbe: TestProbe, marker: ModifierId): Seq[ModifierId] =
+  // the ids in the next ModifiersData sent to the peer
+  private def nextServed(pchProbe: TestProbe): Seq[ModifierId] =
     pchProbe.fishForSpecificMessage(10.seconds) {
-      case Message(_, Right(served: ModifiersData), _) if served.modifiers.contains(marker) => served.modifiers.keys.toSeq
+      case Message(_, Right(served: ModifiersData), _) => served.modifiers.keys.toSeq
     }
+
+  private def request(ctx: Synchronizer2Fixture, typeId: org.ergoplatform.modifiers.NetworkObjectTypeId.Value,
+                      id: ModifierId): Unit =
+    ctx.synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, Seq(id)))),
+      Some(ctx.peer))
 
   /**
     * A peer that asks for a block the node has just announced must get it, also before the node view holder has
@@ -1376,6 +1381,29 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: a second mined block replaces the first one in memory") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val wus = (0 until 3).foldLeft(WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)) {
+        (w, _) => w.applyModifier(statefulyValidFullBlock(w), None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val next = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      // the node's own miner has at most one mined, unapplied block (CandidateGenerator takes a solution only while
+      // none is pending), so one is kept
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      synchronizerMockRef ! NewBlockMined(next.header, next.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+
+      // requests are answered in order, as in the tests below
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
+      request(ctx, Header.modifierTypeId, next.header.id)
+      nextServed(pchProbe) shouldBe Seq(next.header.id)
+    }
+  }
+
   property("NodeViewSynchronizer: a newly mined block is no longer served from memory once applied") {
     withFixture2 { ctx =>
       import ctx._
@@ -1394,15 +1422,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // is still answered can only come from the in-memory copy
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
-      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
-      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      // a request that finds nothing sends nothing, and requests are answered in order: the first reply is the answer
+      // to a later request for a block mined next, so nothing was sent for this one (exact, not a time window)
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.header.id)
-      served should contain(marker.header.id)
-      served should not contain newBlock.header.id
+      request(ctx, Header.modifierTypeId, marker.header.id)
+      nextServed(pchProbe) shouldBe Seq(marker.header.id)
     }
   }
 
@@ -1423,15 +1448,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
-      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
-      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      // a request that finds nothing sends nothing, and requests are answered in order: the first reply is the answer
+      // to a later request for a block mined next, so nothing was sent for this one (exact, not a time window)
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.header.id)
-      served should contain(marker.header.id)
-      served should not contain newBlock.header.id
+      request(ctx, Header.modifierTypeId, marker.header.id)
+      nextServed(pchProbe) shouldBe Seq(marker.header.id)
     }
   }
 
@@ -1445,7 +1467,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1454,21 +1475,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // copy. Its sections are not held yet
       synchronizerMockRef ! SyntacticallySuccessfulModifier(Header.modifierTypeId, newBlock.header.id)
 
-      // each request goes together with the second mined, still unapplied block, as in the tests above
-      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val servedHeaders = servedWith(pchProbe, marker.header.id)
-      servedHeaders should contain(marker.header.id)
-      servedHeaders should not contain newBlock.header.id
-
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(BlockTransactions.modifierTypeId,
-          Seq(newBlock.blockTransactions.id, marker.blockTransactions.id)))),
-        Some(peer))
-      val servedTransactions = servedWith(pchProbe, marker.blockTransactions.id)
-      servedTransactions should contain(newBlock.blockTransactions.id)
+      // requests are answered in order, as in the tests above: the first reply is the one to the later request for the
+      // block's transactions, which are still served from memory, so nothing was sent for the header
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
+      request(ctx, BlockTransactions.modifierTypeId, newBlock.blockTransactions.id)
+      nextServed(pchProbe) shouldBe Seq(newBlock.blockTransactions.id)
     }
   }
 
@@ -1491,14 +1502,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
-      // the rest of the block goes too; requested together with the second mined, still unapplied block
+      // the rest of the block goes too; requests are answered in order, as in the tests above
+      request(ctx, Extension.modifierTypeId, newBlock.extension.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Extension.modifierTypeId, Seq(newBlock.extension.id, marker.extension.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.extension.id)
-      served should contain(marker.extension.id)
-      served should not contain newBlock.extension.id
+      request(ctx, Extension.modifierTypeId, marker.extension.id)
+      nextServed(pchProbe) shouldBe Seq(marker.extension.id)
     }
   }
 

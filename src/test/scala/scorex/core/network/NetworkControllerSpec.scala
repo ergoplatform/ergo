@@ -128,6 +128,19 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       handler
     }
 
+    // An incoming connection from `remoteAddress` that completes its handshake (the controller then has a message from
+    // the network within the last connection timeout)
+    def handshakeIncoming(
+      controller: TestActorRef[NetworkController],
+      peerManagerProbe: TestProbe,
+      remoteAddress: InetSocketAddress
+    ): Unit = {
+      val connection = establishIncomingConnectionWithHandler(controller, peerManagerProbe, remoteAddress)
+      val peerInfo = PeerInfo(defaultPeerSpec.copy(declaredAddress = Some(remoteAddress)), System.currentTimeMillis())
+      controller.tell(NetworkController.ReceivableMessages.Handshaked(peerInfo), connection.handlerRef)
+      peerManagerProbe.expectMsgType[AddOrUpdatePeer]
+    }
+
     def establishOutgoingConnection(
       controller: TestActorRef[NetworkController],
       peerManagerProbe: TestProbe,
@@ -566,6 +579,26 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
       val outgoingAddress = new InetSocketAddress("8.8.8.8", 8001)
       f.establishOutgoingConnection(controller, peerManagerProbe, tcpManagerProbe, outgoingAddress)
+    }
+  }
+
+  property("a failed dial while other peers talk is reported to the peer manager, which decides whether to remove the peer") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30)
+      f.handshakeIncoming(controller, peerManager, new InetSocketAddress("203.0.113.40", 9040))
+      val dialled = new InetSocketAddress("203.0.113.41", 9041)
+
+      controller ! Tcp.CommandFailed(Tcp.Connect(dialled))
+      peerManager.expectMsg(DialFailed(dialled))
+    }
+  }
+
+  property("a failed dial while no peer has talked for the connection window is not reported") {
+    withFixture { f =>
+      val (controller, peerManager, _) = f.createController(maxConnections = 30)
+
+      controller ! Tcp.CommandFailed(Tcp.Connect(new InetSocketAddress("203.0.113.42", 9042)))
+      peerManager.expectNoMessage(500.millis)
     }
   }
 }

@@ -1,6 +1,6 @@
 package org.ergoplatform.mining
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorRef
 import akka.pattern.{StatusReply, ask}
 import akka.testkit.{TestKit, TestProbe}
 import akka.util.Timeout
@@ -18,7 +18,7 @@ import org.ergoplatform.nodeView.state._
 import org.ergoplatform.nodeView.wallet._
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{ErgoTestHelpers, TestActorSystems}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
 import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import org.scalatest.concurrent.Eventually
@@ -32,7 +32,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
+class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually with TestActorSystems {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.generators.ValidBlocksGenerators._
@@ -60,7 +60,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     empty.copy(nodeSettings = nodeSettings, chainSettings = chainSettings)
   }
 
-  it should "not include too costly transactions" in new TestKit(ActorSystem()) {
+  it should "not include too costly transactions" in new TestKit(testSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -136,7 +136,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     costlyTx.outputs.foreach(o => state2.boxById(o.id) shouldBe None)
   }
 
-  it should "not freeze while mempool is full" in new TestKit(ActorSystem()) {
+  it should "not freeze while mempool is full" in new TestKit(testSystem()) {
     // generate amount of transactions, twice more than can fit in one block
     val desiredSize: Int = Math.ceil((parameters.maxBlockCost / ErgoInterpreter.interpreterInitCost) * 1.2).toInt
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -213,7 +213,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     }
   }
 
-  it should "include only one transaction from 2 spending the same box" in new TestKit(ActorSystem()) {
+  it should "include only one transaction from 2 spending the same box" in new TestKit(testSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
@@ -290,7 +290,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     system.terminate()
   }
 
-  it should "prepare external candidate" in new TestKit(ActorSystem()) {
+  it should "prepare external candidate" in new TestKit(testSystem()) {
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)
 
     val nodeViewHolderRef: ActorRef = ErgoNodeViewRef(ergoSettings)
@@ -311,7 +311,7 @@ class ErgoMinerSpec extends AnyFlatSpec with ErgoTestHelpers with Eventually {
     system.terminate()
   }
 
-  it should "include mandatory transactions" in new TestKit(ActorSystem()) {
+  it should "include mandatory transactions" in new TestKit(testSystem()) {
     val testProbe = new TestProbe(system)
     system.eventStream.subscribe(testProbe.ref, newBlockSignal)
     val ergoSettings: ErgoSettings = defaultSettings.copy(directory = createTempDir.getAbsolutePath)

@@ -288,7 +288,7 @@ trait ErgoHistoryReader
     */
   def continuationIdsV2(syncV2: ErgoSyncInfoV2, size: Int): ModifierIds = {
     // up to `size` headers from genesis
-    def fromGenesis: ModifierIds = {
+    lazy val fromGenesis: ModifierIds = {
       val heightTo = Math.min(headersHeight, size + EmptyHistoryHeight)
       (GenesisHeight to heightTo)
         .flatMap(height => bestHeaderIdAtHeight(height))

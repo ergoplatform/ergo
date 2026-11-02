@@ -160,7 +160,8 @@ class ErgoNodeViewSynchronizer(networkControllerRef: ActorRef,
 
   // Header and sections of the last block this node mined, while it is not applied yet: a mined block is announced
   // before the node view holder applies it, so a peer's request can arrive before history has it. One is enough:
-  // CandidateGenerator takes a new solution only while no mined block is pending
+  // CandidateGenerator takes a new solution only while no mined block is pending; a block posted through
+  // `POST /blocks` before history holds the last one replaces it here
   private val MinedBlocksToServe = 1
   private var minedToServe: Vector[MinedBlock] = Vector.empty
 

@@ -1392,7 +1392,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       val next = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
 
       // the node's own miner has at most one mined, unapplied block (CandidateGenerator takes a solution only while
-      // none is pending), so one is kept
+      // none is pending), so one is kept; a block posted through `POST /blocks` replaces it the same way
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       synchronizerMockRef ! NewBlockMined(next.header, next.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }

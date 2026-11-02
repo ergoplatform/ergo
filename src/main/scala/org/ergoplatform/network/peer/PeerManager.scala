@@ -74,6 +74,10 @@ class PeerManager(settings: ErgoSettings, scorexContext: ScorexContext) extends 
       log.info(s"$address removed from peers database")
       peerDatabase.remove(address)
 
+    case DialFailed(address) =>
+      log.info(s"$address removed from peers database after a failed dial")
+      peerDatabase.remove(address)
+
     case get: GetPeers[_] =>
       sender() ! get.choose(peerDatabase.knownPeers, peerDatabase.blacklistedPeers, scorexContext)
   }
@@ -124,6 +128,11 @@ object PeerManager {
     case class AddPeerIfEmpty(data: PeerSpec)
 
     case class RemovePeer(address: InetSocketAddress)
+
+    /**
+      * A dial to `address` failed while other peers were talking (so this node's own connectivity is not lost)
+      */
+    case class DialFailed(address: InetSocketAddress)
 
     /**
       * Message to get peers from known peers map filtered by `choose` function

@@ -235,11 +235,11 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
 
       // If a message received from p2p within connection timeout,
-      // connectivity is not lost thus we're removing the peer
+      // connectivity is not lost thus the failure counts against the peer: the peer manager decides whether to remove it
       // we add multiplier 6 to remove more dead peers (and still not dropping a lot when connectivity lost)
       val noNetworkMessagesFor = time() - lastIncomingMessageTime
       if (noNetworkMessagesFor < networkSettings.connectionTimeout.toMillis * 6) {
-        peerManagerRef ! RemovePeer(c.remoteAddress)
+        peerManagerRef ! DialFailed(c.remoteAddress)
       }
 
     case Terminated(ref) =>

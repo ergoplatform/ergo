@@ -1,6 +1,7 @@
 package org.ergoplatform.nodeView.mempool
 
 import org.ergoplatform.nodeView.mempool.OrderedTxPool.WeightedTxId
+import org.ergoplatform.nodeView.mempool.OrderedTxPool.saturatingAdd
 
 object HistogramStats {
 
@@ -10,7 +11,7 @@ object HistogramStats {
     for (wtx <- wtxs) {
       val waitTime = currTime - wtx.created
       val bin = if (waitTime < maxWaitTimeMsec) (waitTime/interval).toInt else nBins
-      histogram.update(bin, FeeHistogramBin(histogram(bin).nTxns + 1, histogram(bin).totalFee + wtx.feePerFactor))
+      histogram.update(bin, FeeHistogramBin(histogram(bin).nTxns + 1, saturatingAdd(histogram(bin).totalFee, wtx.feePerFactor)))
     }
     histogram
   }

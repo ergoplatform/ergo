@@ -19,23 +19,23 @@ class MemPoolStatisticsSpec extends AnyFlatSpec with Matchers {
 
     val empty = MemPoolStatistics(start, 0L, start)
     val beforeFirst = empty.add(start + 1000L, removed(1))
-    snapshot(beforeFirst).shouldBe((1L, 0L, start, start))
+    snapshot(beforeFirst) shouldBe ((1L, 0L, start, start))
 
     val atBoundary = beforeFirst.add(start + interval, removed(2))
-    snapshot(atBoundary).shouldBe((2L, 0L, start, start))
+    snapshot(atBoundary) shouldBe ((2L, 0L, start, start))
 
     val first = atBoundary.add(start + interval + 1L, removed(3))
-    snapshot(first).shouldBe((3L, 3L, start, start + interval + 1L))
+    snapshot(first) shouldBe ((3L, 3L, start, start + interval + 1L))
 
     val withinWindow = first.add(start + interval + 2L, removed(4))
-    snapshot(withinWindow).shouldBe((4L, 3L, start, start + interval + 1L))
+    snapshot(withinWindow) shouldBe ((4L, 3L, start, start + interval + 1L))
 
     val second = withinWindow.add(start + 2L * interval + 2L, removed(5))
-    snapshot(second).shouldBe((2L, 2L, start + interval + 1L,
+    snapshot(second) shouldBe ((2L, 2L, start + interval + 1L,
       start + 2L * interval + 2L))
 
     val third = second.add(start + 3L * interval + 3L, removed(6))
-    snapshot(third).shouldBe((1L, 1L, start + 2L * interval + 2L,
+    snapshot(third) shouldBe ((1L, 1L, start + 2L * interval + 2L,
       start + 3L * interval + 3L))
   }
 }

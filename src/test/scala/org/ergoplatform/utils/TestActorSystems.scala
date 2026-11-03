@@ -23,7 +23,7 @@ trait TestActorSystems extends TestSuite {
     system
   }
 
-  abstract override def withFixture(test: NoArgTest): Outcome =
+  abstract override protected def withFixture(test: NoArgTest): Outcome =
     try super.withFixture(test)
     finally {
       val systems = testSystems.synchronized {

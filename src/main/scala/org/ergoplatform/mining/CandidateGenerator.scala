@@ -427,10 +427,10 @@ object CandidateGenerator extends ScorexLogging {
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
   }
 
-  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
-    * interval so they switch to it.
-    * If blockCandidateGenerationInterval elapsed since last block generation,
-    * then new tx in mempool is a reasonable trigger of candidate regeneration
+  /** An unchanged mempool does not stop a cached candidate from expiring.
+    * A non-forced request refreshes it after blockCandidateGenerationInterval.
+    * A failed refresh reports an error or retries; it never serves the expired cache.
+    * A solved block awaiting application suppresses expiry.
     */
   def hasCandidateExpired(
     cachedCandidate: Option[Candidate],

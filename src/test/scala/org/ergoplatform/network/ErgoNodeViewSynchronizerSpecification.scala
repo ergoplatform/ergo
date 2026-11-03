@@ -1062,7 +1062,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         deliveryTracker.setRequested(typeId, id, missedPeer)(_ => Cancellable.alreadyCancelled)
         synchronizerMockRef ! CheckDelivery(missedPeer, typeId, id)
         val to = ncProbe.fishForSpecificMessage(3.seconds) {
-          case SendToNetwork(msg, SendToPeer(to)) if msg.spec.messageCode == RequestModifierSpec.messageCode => to
+          case SendToNetwork(msg, SendToPeer(p)) if msg.spec.messageCode == RequestModifierSpec.messageCode => p
         }
         // the synchronizer records the retry in the tracker, which is not thread-safe, after sending it; wait for
         // that record (at the chosen peer, one check; this thread's own record has none) before the next section

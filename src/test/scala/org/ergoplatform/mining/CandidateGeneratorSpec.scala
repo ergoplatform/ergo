@@ -2127,7 +2127,6 @@ class CandidateGeneratorSpec extends AnyFlatSpec with Matchers with ErgoTestHelp
 
     new SolvedBlockFixture("stale-parent-solution", checkedSettings) {
       try {
-        implicit val actorSystem: ActorSystem = system
         val first = candidate(None)
         system.eventStream.unsubscribe(candidateGenerator, newBlockSignal) shouldBe true
         val applied = solve(first)

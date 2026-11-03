@@ -40,7 +40,8 @@ class ScanApiRouteSpec extends AnyFlatSpec
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val protectedSettings: ErgoSettings = ApiTestAuth.settingsWithApiKey(ergoSettings)
   val route: Route = ScanApiRoute(utxoReadersRef, protectedSettings).route
-  val sealedRoute: Route = Route.seal(route)
+  val authenticatedRoute: Route = ApiTestAuth.withApiKey(route)
+  val authenticatedSealedRoute: Route = Route.seal(authenticatedRoute)
 
   private val predicate0 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(0: Byte, 1: Byte)))
   private val predicate1 = ContainsScanningPredicate(ErgoBox.R4, ByteArrayConstant(Array(1: Byte, 1: Byte)))
@@ -50,7 +51,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
   it should "register a scan" in {
     Post(prefix + "/register", appRequest.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ScanIdWrapper]) shouldBe 'success
     }
@@ -61,7 +62,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     // first, register an app
     Post(prefix + "/register", appRequest.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[ScanIdWrapper])
       response shouldBe 'success
@@ -70,14 +71,14 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     // then remove it
     Post(prefix + "/deregister", scanId.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ScanIdWrapper]) shouldBe 'success
     }
 
     // second time it should be not successful
     Post(prefix + "/deregister", scanId.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
@@ -85,21 +86,20 @@ class ScanApiRouteSpec extends AnyFlatSpec
   it should "list registered scans" in {
     // register two apps
     Post(prefix + "/register", appRequest.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[ScanIdWrapper])
       response shouldBe 'success
     }
 
     Post(prefix + "/register", appRequest2.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[ScanIdWrapper])
       response shouldBe 'success
     }
 
-    Get(prefix + "/listAll") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/listAll") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[Seq[Scan]])
       response shouldBe 'success
@@ -112,12 +112,12 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
   it should "reject scan ids outside Short range" in {
     Get(prefix + "/unspentBoxes/70000") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> sealedRoute ~> check {
+      authenticatedSealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
 
     Get(prefix + "/spentBoxes/70000") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> sealedRoute ~> check {
+      authenticatedSealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
@@ -128,8 +128,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -152,8 +151,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     val suffix = s"/unspentBoxes/101?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -177,8 +175,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
       s"/unspentBoxes/101?minConfirmations=$confirmations&minInclusionHeight=$inclusionHeight" +
       s"&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -192,8 +189,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -211,8 +207,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     val suffix = s"/spentBoxes/101?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -236,8 +231,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     val suffix = s"/spentBoxes/101?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -264,8 +258,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
       s"/spentBoxes/101?minConfirmations=$confirmations&minInclusionHeight=$inclusionHeight" +
       s"&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = Try(responseAs[List[Json]])
       response shouldBe 'success
@@ -279,8 +272,7 @@ class ScanApiRouteSpec extends AnyFlatSpec
 
     val suffix = s"/unspentBoxes/101?minConfirmations=$minConfirmations&maxInclusionHeight=$maxInclusionHeight"
 
-    Get(prefix + suffix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + suffix) ~> authenticatedRoute ~> check {
       rejection shouldEqual ValidationRejection("maxInclusionHeight cannot be specified when we consider unconfirmed")
     }
   }
@@ -289,21 +281,21 @@ class ScanApiRouteSpec extends AnyFlatSpec
     val scanIdBoxId = ScanIdBoxId(ScanId @@ (51: Short), ADKey @@ Random.randomBytes(32))
 
     Post(prefix + "/stopTracking", scanIdBoxId.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
   it should "generate scan for p2s rule" in {
     Post(prefix + "/p2sRule", "Ms7smJmdbakqfwNo") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val res = responseAs[Json]
       res.hcursor.downField("scanId").as[Int].toOption.isDefined shouldBe true
     }
 
     Post(prefix + "/p2sRule", "s7smJmdbakqfwNo") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }

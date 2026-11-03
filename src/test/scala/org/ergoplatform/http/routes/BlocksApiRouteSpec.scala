@@ -32,6 +32,7 @@ class BlocksApiRouteSpec
 
   val protectedSettings = ApiTestAuth.settingsWithApiKey(settings)
   val route: Route = BlocksApiRoute(nodeViewRef, digestReadersRef, protectedSettings).route
+  val authenticatedRoute: Route = ApiTestAuth.withApiKey(route)
 
   val headerIdBytes: ModifierId = history.lastHeaders(1).headers.head.id
   val headerIdString: String    = Algos.encode(headerIdBytes)
@@ -51,8 +52,7 @@ class BlocksApiRouteSpec
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
     val blockJson: UniversalEntity =
       HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
-    Post(prefix, blockJson) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Post(prefix, blockJson) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }
@@ -64,11 +64,11 @@ class BlocksApiRouteSpec
       HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
     // one probe is both the view holder and the event subscriber, so its queue shows the order the route sent them in
     val probe = TestProbe()
+    val authenticatedProbeRoute = ApiTestAuth.withApiKey(
+      BlocksApiRoute(probe.ref, digestReadersRef, protectedSettings).route)
     system.eventStream.subscribe(probe.ref, classOf[NewBlockMined])
     try {
-      Post(prefix, blockJson) ~>
-        addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-        BlocksApiRoute(probe.ref, digestReadersRef, protectedSettings).route ~> check {
+      Post(prefix, blockJson) ~> authenticatedProbeRoute ~> check {
         status shouldBe StatusCodes.OK
       }
       probe.expectMsgType[NewBlockMined].header.id shouldBe block.header.id

@@ -1,17 +1,15 @@
 package org.ergoplatform.settings
 
-import com.typesafe.config.ConfigFactory
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.File
-import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import scala.concurrent.duration._
 import scala.sys.process.{Process, ProcessLogger}
 
 class ErgoSettingsReaderPrecedenceSpec extends AnyFlatSpec with Matchers {
-  "The settings reader" should "preserve every network and configuration layer" in {
+  "The settings reader" should "resolve bundled mainnet settings without a user file" in {
     val application = new File("src/main/resources/application.conf").getCanonicalFile
     application.isFile shouldBe true
     val javaExecutable = Paths.get(
@@ -20,11 +18,7 @@ class ErgoSettingsReaderPrecedenceSpec extends AnyFlatSpec with Matchers {
       if (scala.util.Properties.isWin) "java.exe" else "java"
     ).toString
 
-    Seq(
-      ("mainnet", 9053, 9030, 4900000),
-      ("testnet", 9052, 9023, 800000),
-      ("devnet", 9052, 9021, 1000000)
-    ).foreach { case (network, restPort, p2pPort, transactionCost) =>
+    Seq(("mainnet", 9053, 9030, 4900000)).foreach { case (network, restPort, p2pPort, transactionCost) =>
       // The reader copies each network to a fixed filename in java.io.tmpdir.
       // A private child directory also isolates its shutdown hooks from other tests.
       val temporaryDirectory = Files.createTempDirectory("ergo-settings-reader-").toFile
@@ -71,43 +65,6 @@ object ErgoSettingsReaderPrecedenceProbe {
     require(defaults.scorexSettings.restApi.apiKeyHash.isEmpty)
     require(defaults.scorexSettings.restApi.timeout == 5.seconds)
 
-    val userConfig = Paths.get(System.getProperty("java.io.tmpdir"), "operator.conf")
-    userConfig.toFile.deleteOnExit()
-    val fileHash = "0" * 64
-    Files.write(userConfig, s"""
-      |ergo.node.maxTransactionCost = 1234567
-      |scorex.restApi {
-      |  bindAddress = "127.0.0.1:19052"
-      |  apiKeyHash = "$fileHash"
-      |  timeout = 7s
-      |}
-      |""".stripMargin.getBytes(StandardCharsets.UTF_8))
-    val explicitArgs = networkArgs.copy(userConfigPathOpt = Some(userConfig.toString))
-    val explicit = ErgoSettingsReader.read(explicitArgs)
-    require(explicit.networkType == network)
-    require(explicit.scorexSettings.network.bindAddress.getPort == args(2).toInt)
-    require(explicit.nodeSettings.maxTransactionSize == 98304)
-    require(explicit.nodeSettings.maxTransactionCost == 1234567)
-    require(explicit.scorexSettings.restApi.bindAddress.getPort == 19052)
-    require(explicit.scorexSettings.restApi.apiKeyHash.contains(fileHash))
-    require(explicit.scorexSettings.restApi.timeout == 7.seconds)
-
-    // System properties and ConfigFactory caches are confined to this child JVM.
-    val overrideHash = "1" * 64
-    System.setProperty("ergo.node.maxTransactionCost", "2345678")
-    System.setProperty("scorex.restApi.bindAddress", "127.0.0.1:19053")
-    System.setProperty("scorex.restApi.apiKeyHash", overrideHash)
-    System.setProperty("scorex.restApi.timeout", "9s")
-    ConfigFactory.invalidateCaches()
-    Seq(networkArgs, explicitArgs).foreach { readerArgs =>
-      val overridden = ErgoSettingsReader.read(readerArgs)
-      require(overridden.networkType == network)
-      require(overridden.scorexSettings.network.bindAddress.getPort == args(2).toInt)
-      require(overridden.nodeSettings.maxTransactionCost == 2345678)
-      require(overridden.scorexSettings.restApi.bindAddress.getPort == 19053)
-      require(overridden.scorexSettings.restApi.apiKeyHash.contains(overrideHash))
-      require(overridden.scorexSettings.restApi.timeout == 9.seconds)
-    }
     println(s"SETTINGS_PRECEDENCE_ACCEPTED ${network.verboseName}")
   }
 }

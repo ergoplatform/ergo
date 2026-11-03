@@ -4,23 +4,28 @@ The bundled REST API now binds to `127.0.0.1` (port `9053` on mainnet,
 `9052` otherwise). Protected routes return HTTP 403 until the operator configures
 an API key hash. Public routes remain accessible on the configured interface.
 
-A node can now start with `scorex.restApi.apiKeyHash = null`, leaving protected
+A node can now start without `scorex.restApi.apiKeyHash`, leaving protected
 routes disabled. An omitted key inherits the same default. Empty or malformed
-hashes cannot authenticate a request. The former bundled `hello` credential is
-rejected even if its hash remains in an existing configuration.
+hashes cannot authenticate a request. If an existing configuration still holds
+the former bundled `hello` hash, startup warns and protected routes remain
+disabled until it is replaced.
 
 ## Configure authenticated access
 
 Choose a unique, high-entropy API key. Set `scorex.restApi.apiKeyHash` to its
 64-character, lowercase hexadecimal Blake2b256 hash in the operator's node
-configuration. Send the original key in the `api_key` request header. Store the
-key securely and do not reuse credentials from examples or integration tests.
+configuration. To generate the hash, submit the new key as a JSON string to the
+public `POST /utils/hash/blake2b` endpoint on the local node, then copy its
+hexadecimal response into `scorex.restApi.apiKeyHash`. Send the original key in
+the `api_key` request header. Store the key securely and do not reuse
+credentials from examples or integration tests.
 
 Wallet, scan, node administration, block submission and other routes that
 already require authentication now enforce this configuration requirement.
 Existing clients with a correctly configured, non-default key keep working.
-Clients that relied on `null` or `hello` must configure a new key before using
-protected routes. P2P networking and consensus rules are unchanged.
+Clients that relied on the former bundled `hello` credential must configure a
+new key before using protected routes. P2P networking and consensus rules are
+unchanged.
 
 ## Configure remote or container access
 

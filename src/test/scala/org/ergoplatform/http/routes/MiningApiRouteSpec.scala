@@ -34,6 +34,7 @@ class MiningApiRouteSpec
 
   val settingsWithAuth: ErgoSettings = ApiTestAuth.settingsWithApiKey(localSetting)
   val routeWithAuth: Route = MiningApiRoute(minerRef, settingsWithAuth).route
+  val authenticatedRoute: Route = ApiTestAuth.withApiKey(routeWithAuth)
 
   val solution = AutolykosSolution(genECPoint.sample.get, genECPoint.sample.get, Array.fill(32)(9: Byte), BigInt(0))
 
@@ -66,7 +67,7 @@ class MiningApiRouteSpec
     val request = MiningRequest(Seq.empty, validPkHex)
 
     Post(prefix + "/candidateWithTxsAndPk", request.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> routeWithAuth ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[Json]) shouldBe 'success
     }

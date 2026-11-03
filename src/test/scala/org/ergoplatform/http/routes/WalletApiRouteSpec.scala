@@ -55,12 +55,16 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Args(userConfigPathOpt = Some("src/test/resources/application.conf"), networkTypeOpt = None))
   val protectedSettings: ErgoSettings = ApiTestAuth.settingsWithApiKey(settings)
   val route: Route = WalletApiRoute(digestReadersRef, nodeViewRef, protectedSettings).route
+  val authenticatedRoute: Route = ApiTestAuth.withApiKey(route)
   val sealedRoute: Route = Route.seal(route)
+  val authenticatedSealedRoute: Route = Route.seal(authenticatedRoute)
   val noConfigRoute: Route = Route.seal(WalletApiRoute(digestReadersRef, nodeViewRef, settings).route)
   val failingNodeViewRef = system.actorOf(NodeViewStub.failingProps())
   val failingRoute: Route = WalletApiRoute(digestReadersRef, failingNodeViewRef, protectedSettings).route
+  val authenticatedFailingRoute: Route = ApiTestAuth.withApiKey(failingRoute)
 
   val utxoRoute: Route = WalletApiRoute(utxoReadersRef, nodeViewRef, protectedSettings).route
+  val authenticatedUtxoRoute: Route = ApiTestAuth.withApiKey(utxoRoute)
 
   implicit val paymentRequestEncoder: PaymentRequestEncoder = new PaymentRequestEncoder(ergoSettings)
   implicit val assetIssueRequestEncoder: AssetIssueRequestEncoder = new AssetIssueRequestEncoder(ergoSettings)
@@ -106,15 +110,14 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "generate arbitrary transaction" in {
     Post(prefix + "/transaction/generate", requestsHolder.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       Try(responseAs[ErgoTransaction]) shouldBe 'success
     }
   }
 
   it should "get balances" in {
-    Get(prefix + "/balances") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/balances") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val json = responseAs[Json]
       log.info(s"Received balances: $json")
@@ -125,7 +128,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "get unconfirmed balances" in {
     Get(prefix + "/balances/withUnconfirmed") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val json = responseAs[Json]
       log.info(s"Received total confirmed with unconfirmed balances: $json")
@@ -136,7 +139,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "generate & send arbitrary transaction" in {
     Post(prefix + "/transaction/send", requestsHolder.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }
@@ -144,7 +147,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "fail when sent transaction is invalid" in {
     Post(prefix + "/transaction/send", requestsHolder.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> failingRoute ~> check {
+      authenticatedFailingRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
@@ -152,12 +155,12 @@ class WalletApiRouteSpec extends AnyFlatSpec
   it should "sign a transaction" in {
     val digest = Random.nextBoolean()
     val (tsr, r) = if (digest) {
-      (ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get, route)
+      (ErgoNodeTransactionGenerators.transactionSigningRequestGen(true).sample.get, authenticatedRoute)
     } else {
-      (ErgoNodeTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get, utxoRoute)
+      (ErgoNodeTransactionGenerators.transactionSigningRequestGen(utxoState).sample.get, authenticatedUtxoRoute)
     }
     Post(prefix + "/transaction/sign", tsr.asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> r ~> check {
+      r ~> check {
       status shouldBe StatusCodes.OK
       responseAs[ErgoTransaction].id shouldBe tsr.unsignedTx.id
     }
@@ -165,7 +168,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "generate & send payment transaction" in {
     Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[String] should not be empty
     }
@@ -173,21 +176,20 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "fail when payment is invalid" in {
     Post(prefix + "/payment/send", Seq(paymentRequest).asJson) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> failingRoute ~> check {
+      authenticatedFailingRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
 
   it should "return addresses" in {
-    Get(prefix + "/addresses") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/addresses") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
   it should "initialize wallet" in {
     Post(prefix + "/init", Json.obj("pass" -> "1234".asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("mnemonic").as[String] shouldEqual Right(WalletActorStub.mnemonic)
     }
@@ -196,19 +198,19 @@ class WalletApiRouteSpec extends AnyFlatSpec
   it should "restore wallet" in {
     Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson,
       "usePre1627KeyDerivation" -> false.asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~>
+      authenticatedRoute ~>
       check(status shouldBe StatusCodes.OK)
   }
 
   it should "not restore wallet without key derivation method specified" in {
     Post(prefix + "/restore", Json.obj("pass" -> "1234".asJson, "mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~>
+      authenticatedRoute ~>
       check(rejection shouldBe a[MissingQueryParamRejection])
   }
 
   it should "unlock wallet" in {
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }
@@ -221,8 +223,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
     failures.foreach { failure =>
       Post(prefix + "/updateChangeAddress", changeAddressBody) ~>
-        addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-        changeAddressRoute(Left(failure)) ~> check {
+        ApiTestAuth.withApiKey(changeAddressRoute(Left(failure))) ~> check {
           status shouldBe StatusCodes.BadRequest
           val detail = responseAs[Json].hcursor.downField("detail").as[String]
           detail shouldBe Right(failure.getMessage)
@@ -232,65 +233,60 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "keep unexpected change address failures as internal errors" in {
     Post(prefix + "/updateChangeAddress", changeAddressBody) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      changeAddressRoute(Left(new RuntimeException("storage failure"))) ~> check {
+      ApiTestAuth.withApiKey(changeAddressRoute(Left(new RuntimeException("storage failure")))) ~> check {
         status shouldBe StatusCodes.InternalServerError
       }
   }
 
   it should "accept a valid change address update" in {
     Post(prefix + "/updateChangeAddress", changeAddressBody) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      changeAddressRoute(Right(())) ~> check {
+      ApiTestAuth.withApiKey(changeAddressRoute(Right(()))) ~> check {
         status shouldBe StatusCodes.OK
       }
   }
 
   it should "check wallet" in {
     Post(prefix + "/check", Json.obj("mnemonic" -> WalletActorStub.mnemonic.asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("matched").as[Boolean] shouldBe Right(true)
     }
   }
 
   it should "lock wallet" in {
-    Get(prefix + "/lock") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/lock") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
   it should "rescan wallet post" in {
-    Post(prefix + "/rescan") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Post(prefix + "/rescan") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
   }
 
   it should "rescan wallet post with fromHeight" in {
     Post(prefix + "/rescan", Json.obj("fromHeight" -> 0.asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
     }
 
     Post(prefix + "/rescan", Json.obj("fromHeight" -> (-1).asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       rejection shouldEqual ValidationRejection("fromHeight field must be >= 0", None)
     }
   }
 
   it should "derive new key according to a provided path" in {
     Post(prefix + "/deriveKey", Json.obj("derivationPath" -> "m/1/2".asJson)) ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(WalletActorStub.address.toString)
     }
   }
 
   it should "derive next key" in {
-    Get(prefix + "/deriveNextKey") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/deriveNextKey") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       responseAs[Json].hcursor.downField("derivationPath").as[String] shouldEqual Right(WalletActorStub.path.encoded)
       responseAs[Json].hcursor.downField("address").as[String] shouldEqual Right(WalletActorStub.address.toString)
@@ -298,8 +294,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "return wallet boxes" in {
-    Get(prefix + "/boxes") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/boxes") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 3
@@ -310,8 +305,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
     val minConfirmations = 15
     val minInclusionHeight = 20
     val postfix = s"/boxes?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
-    Get(prefix + postfix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + postfix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 2
@@ -324,8 +318,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
     val maxConfirmations = 15
     val maxInclusionHeight = 20
     val postfix = s"/boxes?maxConfirmations=$maxConfirmations&maxInclusionHeight=$maxInclusionHeight"
-    Get(prefix + postfix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + postfix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 1
@@ -338,8 +331,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
     val confirmations = 15
     val inclusionHeight = 20
     val postfix = s"/boxes?$confirmations&minInclusionHeight=$inclusionHeight&maxConfirmations=$confirmations&maxInclusionHeight=$inclusionHeight"
-    Get(prefix + postfix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + postfix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.isEmpty shouldBe true
@@ -352,8 +344,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
     val postfix = s"/boxes/unspent?minConfirmations=$minConfirmations&minInclusionHeight=$minInclusionHeight"
 
-    Get(prefix + postfix) ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + postfix) ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 1
@@ -361,8 +352,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
       response.head.hcursor.downField("inclusionHeight").as[Int].forall(_ >= minInclusionHeight) shouldBe true
     }
 
-    Get(prefix + "/boxes/unspent") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/boxes/unspent") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       response.size shouldBe 2
@@ -370,8 +360,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
   }
 
   it should "return wallet transactions" in {
-    Get(prefix + "/transactions") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/transactions") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[List[Json]]
       val walletTxs = WalletActorStub.walletTxs.filter { awtx =>
@@ -385,7 +374,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "return wallet transactions by scanId" in {
     Get(prefix + "/transactionsByScanId/1") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       import AugWalletTransaction._
       status shouldBe StatusCodes.OK
       val response = responseAs[List[AugWalletTransaction]]
@@ -398,7 +387,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "return wallet transactions by scanId including unconfirmed txs" in {
     Get(prefix + "/transactionsByScanId/1?includeUnconfirmed=true") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> route ~> check {
+      authenticatedRoute ~> check {
       import AugWalletTransaction._
       status shouldBe StatusCodes.OK
       val response = responseAs[List[AugWalletTransaction]]
@@ -412,19 +401,18 @@ class WalletApiRouteSpec extends AnyFlatSpec
 
   it should "reject invalid transactionsByScanId values" in {
     Get(prefix + "/transactionsByScanId/not-a-number") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> sealedRoute ~> check {
+      authenticatedSealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
 
     Get(prefix + "/transactionsByScanId/32768") ~>
-      addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~> sealedRoute ~> check {
+      authenticatedSealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }
 
   it should "get lock status" in {
-    Get(prefix + "/status") ~> addHeader(ApiTestAuth.ApiKeyHeaderName, ApiTestAuth.ApiKey) ~>
-      route ~> check {
+    Get(prefix + "/status") ~> authenticatedRoute ~> check {
       status shouldBe StatusCodes.OK
       val response = responseAs[Json]
       response.hcursor.downField("isUnlocked").as[Boolean] shouldBe Right(true)

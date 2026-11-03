@@ -129,7 +129,8 @@ class Docker(
     networkType: NetworkType,
     nodeSpecificConfig: Config,
     extraConfig: ExtraConfig,
-    specialVolumeOpt: Option[(String, String)] = None
+    specialVolumeOpt: Option[(String, String)] = None,
+    omitApiKeyHashProperty: Boolean = false
   ) = {
     val initialSettings    = buildErgoSettings(networkType, nodeSpecificConfig)
     val configuredNodeName = initialSettings.scorexSettings.network.nodeName
@@ -142,7 +143,8 @@ class Docker(
       enrichNodeConfig(networkType, nodeSpecificConfig, extraConfig)
     val settings: ErgoSettings = buildErgoSettings(networkType, nodeConfig)
     val containerBuilder: CreateContainerCmd =
-      buildPeerContainerCmd(networkType, nodeConfig, settings, ip, specialVolumeOpt)
+      buildPeerContainerCmd(networkType, nodeConfig, settings, ip, specialVolumeOpt,
+        omitApiKeyHashProperty)
     val containerName = networkName + "-" + configuredNodeName + "-" + uuidShort
 
     Try {
@@ -206,6 +208,14 @@ class Docker(
   ): Try[Node] =
     startNode(DevNet, nodeSpecificConfig, extraConfig, specialVolumeOpt)
 
+  def startDevNetNodeWithoutApiKey(
+    nodeSpecificConfig: Config,
+    extraConfig: ExtraConfig,
+    configMount: (String, String)
+  ): Try[Node] =
+    startNode(DevNet, nodeSpecificConfig, extraConfig, Some(configMount),
+      omitApiKeyHashProperty = true)
+
   def startTestNetNode(
     nodeSpecificConfig: Config,
     extraConfig: ExtraConfig                   = noExtraConfig,
@@ -253,7 +263,8 @@ class Docker(
     nodeConfig: Config,
     settings: ErgoSettings,
     ip: String,
-    specialVolumeOpt: Option[(String, String)]
+    specialVolumeOpt: Option[(String, String)],
+    omitApiKeyHashProperty: Boolean
   ) = {
     val restApiPort = settings.scorexSettings.restApi.bindAddress.getPort
     val networkPort = settings.scorexSettings.network.bindAddress.getPort
@@ -279,7 +290,14 @@ class Docker(
       .withPortBindings(portBindings.asJava)
       .withMemory(memoryLimit)
 
-    val configCommandLine = renderProperties(asProperties(nodeConfig))
+    val properties = asProperties(nodeConfig)
+    if (omitApiKeyHashProperty) {
+      val key = "scorex.restApi.apiKeyHash"
+      require(nodeConfig.hasPathOrNull(key) && nodeConfig.getIsNull(key),
+        s"$key must be null for this test node")
+      properties.remove(key)
+    }
+    val configCommandLine = renderProperties(properties)
 
     val networkTypeCmdOption = networkType match {
       case MainNet => "--mainnet"
@@ -543,6 +561,24 @@ class Docker(
       new String(out.toByteArray, StandardCharsets.UTF_8)
     } catch {
       case NonFatal(e) => s"<log unavailable: $e>"
+    } finally {
+      callback.close()
+    }
+  }
+
+  def containerLogContains(containerId: String, marker: String): Boolean = {
+    val out = new ByteArrayOutputStream()
+    val callback = new ResultCallback.Adapter[Frame] {
+      override def onNext(frame: Frame): Unit = out.write(frame.getPayload)
+    }
+    try {
+      val completed = client
+        .logContainerCmd(containerId)
+        .withStdOut(true)
+        .withStdErr(true)
+        .exec(callback)
+        .awaitCompletion(10, TimeUnit.SECONDS)
+      completed && new String(out.toByteArray, StandardCharsets.UTF_8).contains(marker)
     } finally {
       callback.close()
     }

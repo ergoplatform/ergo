@@ -30,7 +30,8 @@ case class MemPoolStatistics(startMeasurement: Long,
     val (newTakenTx, newMeasurement, newSnapTxs, newSnapTime) =
       if (currTime - snapTime > MemPoolStatistics.measurementIntervalMsec) {
         if (snapTakenTxns != 0) {
-          (curTakenTx - snapTakenTxns, snapTime, curTakenTx, currTime)
+          val retained = curTakenTx - snapTakenTxns
+          (retained, snapTime, retained, currTime)
         } else {
           (curTakenTx, startMeasurement, curTakenTx, currTime)
         }

@@ -2578,7 +2578,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  property("NodeViewSynchronizer: throttle proactive downloads at MaxInFlightViewHolderBatches and resume on ModifiersFromRemoteProcessed") {
+  property("NodeViewSynchronizer: accept a 33rd requested batch but resume downloads only below the throttle threshold") {
     val fixture = new AkkaFixture {}
     try {
       implicit val system: ActorSystem = fixture.system
@@ -2608,7 +2608,10 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       syncRef ! ChangedHistory(h)
       syncRef ! ChangedMempool(mp)
 
-      val peerInfo = PeerInfo(defaultPeerSpec, System.currentTimeMillis())
+      val fullPeerSpec = defaultPeerSpec.copy(features = Seq(
+        ModePeerFeature(StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept)
+      ))
+      val peerInfo = PeerInfo(fullPeerSpec, System.currentTimeMillis())
       val remotePeer = ConnectedPeer(connectionIdGen.sample.get, pchProbe.ref, Some(peerInfo))
       syncTracker.updateStatus(remotePeer, status = org.ergoplatform.consensus.Older, height = Some(totalHeaders))
 
@@ -2622,11 +2625,22 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches
 
+      // The threshold stops future requests, not valid deliveries already requested from peers.
+      tracker.setRequested(Header.modifierTypeId, targetHeaderForSections.id, remotePeer)(_ => Cancellable.alreadyCancelled)
+      val extraData = ModifiersData(Header.modifierTypeId, Map(targetHeaderForSections.id -> targetHeaderForSections.bytes))
+      ncProbe.send(syncRef, Message(ModifiersSpec, Left(ModifiersSpec.toBytes(extraData)), Some(remotePeer)))
+      vhProbe.expectMsgType[ModifiersFromRemote].modifiers.map(_.id).toSeq shouldBe Seq(targetHeaderForSections.id)
+      syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe (ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches + 1)
+
       // Append a synced header to history so history.nextModifiersToDownload has block sections ready to download.
       firstBatchHeaders.foreach(hdr => h.append(hdr).get)
       h.append(targetHeaderForSections).get
+      // Synthetic old timestamps do not mark header sync complete automatically.
+      h.setHeadersChainSynced()
+      h.isHeadersChainSynced shouldBe true
       // Drain prior SendToNetwork sync messages before asserting throttling.
-      ncProbe.receiveWhile(200.millis) { case m => m }
+      val priorMessages = ncProbe.receiveWhile(200.millis) { case m => m }
+      priorMessages.collect { case ack: MessageProcessed => ack } shouldBe empty
 
       // Proactive download triggers must NOT issue RequestModifierSpec while view holder is backpressured.
       Thread.sleep(60)
@@ -2644,14 +2658,23 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       }
       requestsWhileBackpressured shouldBe empty
 
-      // Once a ModifiersFromRemoteProcessed arrives, in-flight drops below MaxInFlightViewHolderBatches and downloads resume.
+      // Acknowledging batch 33 -> 32 releases one peer credit but must not resume downloads yet.
+      vhProbe.send(syncRef, ModifiersFromRemoteProcessed)
+      syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches
+      val atThreshold = ncProbe.receiveWhile(300.millis) { case m => m }
+      atThreshold.collect { case ack: MessageProcessed => ack }.size shouldBe 1
+      atThreshold.collect {
+        case stn: SendToNetwork if stn.message.spec.messageCode == RequestModifierSpec.messageCode => stn
+      } shouldBe empty
+
+      // A second acknowledgement drops 32 -> 31 and permits new download requests.
       Thread.sleep(60)
       vhProbe.send(syncRef, ModifiersFromRemoteProcessed)
       syncRef.underlyingActor.inFlightViewHolderBatchesCount shouldBe (ErgoNodeViewSynchronizer.MaxInFlightViewHolderBatches - 1)
 
       ncProbe.fishForMessage(3.seconds) {
         case _: MessageProcessed => false
-        case _: SendToNetwork => true
+        case stn: SendToNetwork => stn.message.spec.messageCode == RequestModifierSpec.messageCode
         case _ => false
       }
     } finally {

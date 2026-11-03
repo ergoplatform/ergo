@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
@@ -1309,7 +1309,7 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       case Message(_, Right(served: ModifiersData), _) => served.modifiers.keys.toSeq
     }
 
-  private def request(ctx: Synchronizer2Fixture, typeId: org.ergoplatform.modifiers.NetworkObjectTypeId.Value,
+  private def request(ctx: Synchronizer2Fixture, typeId: NetworkObjectTypeId.Value,
                       id: ModifierId): Unit =
     ctx.synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, Seq(id)))),
       Some(ctx.peer))

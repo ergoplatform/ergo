@@ -1,10 +1,10 @@
 package org.ergoplatform.utils
 
 import akka.actor.ActorSystem
+import akka.testkit.TestKit
 import org.scalatest.{Outcome, TestSuite}
 
 import scala.collection.mutable
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -31,9 +31,9 @@ trait TestActorSystems extends TestSuite {
         testSystems.clear()
         all
       }
-      // every system is asked to stop before any is awaited, and a slow or failed shutdown is not thrown from here,
-      // so it neither replaces the test's own outcome nor keeps the other systems running
+      // every system is asked to stop before any is awaited; a stop over 30 s is reported (TestKit prints the system's
+      // actor tree) and not thrown, so it neither replaces the test's own outcome nor keeps the other systems running
       systems.foreach(_.terminate())
-      systems.foreach(system => Try(Await.ready(system.whenTerminated, 30.seconds)))
+      systems.foreach(system => Try(TestKit.shutdownActorSystem(system, 30.seconds)))
     }
 }

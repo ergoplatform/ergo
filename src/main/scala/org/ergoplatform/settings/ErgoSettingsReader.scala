@@ -138,12 +138,13 @@ object ErgoSettingsReader extends ScorexLogging
       x => log.info(s"Running in ${x.verboseName} network mode"))
 
     (networkConfigFileOpt, userConfigFileOpt) match {
-      // if no user config is supplied, the library will handle overrides/application/reference automatically
+      // Network defaults take precedence over application and reference defaults.
       case (Some(networkConfigFile), None) =>
         log.warn("NO CONFIGURATION FILE WAS PROVIDED. STARTING WITH DEFAULT SETTINGS!")
         ConfigFactory
           .defaultOverrides()
           .withFallback(ConfigFactory.parseFile(networkConfigFile))
+          .withFallback(ConfigFactory.defaultApplication())
           .withFallback(ConfigFactory.defaultReference())
           .resolve()
       // application config needs to be resolved wrt both system properties *and* user-supplied config.

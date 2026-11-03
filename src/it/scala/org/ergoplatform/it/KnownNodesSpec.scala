@@ -9,8 +9,12 @@ import scala.concurrent.duration._
 
 class KnownNodesSpec extends AnyFlatSpec with IntegrationSuite {
 
+  // Ask for peers every 5 s, not every 2 min. node01 and node03 learn about each other
+  // only from node02's answers to GetPeers. A node's first GetPeers (+2 s) reaches
+  // nobody, because its first connection comes at +5 s.
   val nodeConfigs: List[Config] = nodeSeedConfigs.take(3)
     .map(conf => nonGeneratingPeerConfig
+      .withFallback(getPeersIntervalConfig(5000))
       .withFallback(conf)
       .withFallback(allowLocalConfig)
     )

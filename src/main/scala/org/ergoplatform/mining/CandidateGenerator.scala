@@ -180,7 +180,12 @@ class CandidateGenerator(
       // the block was applied and before this event has already put the cached candidate on the new block
       val solvedBlockAfter = if (needNewSolution(state.solvedBlock, header.id)) None else state.solvedBlock
       val stateWithAppliedTxs =
-        state.copy(lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet), solvedBlock = solvedBlockAfter)
+        state.copy(
+          lastAppliedBlockTxs = Some(header.id -> applied.txIds.toSet),
+          cachedPreviousCandidate = state.cachedPreviousCandidate.filter(
+            _.candidateBlock.parentOpt.exists(_.id == header.id)),
+          solvedBlock = solvedBlockAfter
+        )
       if (needNewCandidate(state.cachedCandidate, header)) {
         context.become(initialized(stateWithAppliedTxs.copy(cachedCandidate = None, cachedPreviousCandidate = None)))
         self ! GenerateCandidate(txsToInclude = Seq.empty, reply = false, forced = false)
@@ -207,7 +212,15 @@ class CandidateGenerator(
     case gen @ GenerateCandidate(txsToInclude, reply, forced, optPk) =>
       val senderOpt = if (reply) Some(sender()) else None
       val effectiveMinerPk = optPk.getOrElse(minerPk)
-      if (!forced && cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk)) {
+      if (
+        !forced &&
+        cachedFor(state.cachedCandidate, txsToInclude, effectiveMinerPk) &&
+        !hasCandidateExpired(
+          state.cachedCandidate,
+          state.solvedBlock,
+          candidateGenInterval
+        )
+      ) {
         senderOpt.foreach(_ ! StatusReply.success(state.cachedCandidate.get))
       } else {
         val start = System.currentTimeMillis()
@@ -414,10 +427,10 @@ object CandidateGenerator extends ScorexLogging {
     solvedBlock.nonEmpty && !solvedBlock.map(_.parentId).contains(bestFullBlockId)
   }
 
-  /** Regenerate candidate to let new transactions in, miners are polling for candidate in ~ 100ms
-    * interval so they switch to it.
-    * If blockCandidateGenerationInterval elapsed since last block generation,
-    * then new tx in mempool is a reasonable trigger of candidate regeneration
+  /** An unchanged mempool does not stop a cached candidate from expiring.
+    * A non-forced request refreshes it after blockCandidateGenerationInterval.
+    * A failed refresh reports an error or retries; it never serves the expired cache.
+    * A solved block awaiting application suppresses expiry.
     */
   def hasCandidateExpired(
     cachedCandidate: Option[Candidate],

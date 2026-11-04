@@ -233,6 +233,7 @@ trait ErgoWalletSupport extends ScorexLogging {
   }
 
   protected def prepareUnsignedTransaction(payTo: Seq[ErgoBoxCandidate],
+                                           fullHeight: Int,
                                            walletHeight: Int,
                                            selectionResult: BoxSelectionResult[TrackedBox],
                                            dataInputBoxes: IndexedSeq[ErgoBox],
@@ -258,10 +259,19 @@ trait ErgoWalletSupport extends ScorexLogging {
         new ErgoBoxCandidate(changeBox.value, ErgoTree.fromProposition(changeAddressOpt.get), walletHeight, assets.toColl)
     }
     val inputBoxes = selectionResult.inputBoxes.toIndexedSeq
+    val outputCandidates = payTo ++ changeBoxCandidates
+    val outputHeight = inputBoxes.foldLeft(math.max(fullHeight, walletHeight)) {
+      (height, input) => math.max(height, input.box.creationHeight)
+    }
+    val adjustedOutputs = outputCandidates.map { candidate =>
+      if (candidate.creationHeight == outputHeight) candidate
+      else new ErgoBoxCandidate(candidate.value, candidate.ergoTree, outputHeight,
+        candidate.additionalTokens, candidate.additionalRegisters)
+    }
     new UnsignedErgoTransaction(
       inputBoxes.map(tx => new UnsignedInput(tx.box.id)),
       dataInputs,
-      (payTo ++ changeBoxCandidates).toIndexedSeq
+      adjustedOutputs.toIndexedSeq
     )
   }
 
@@ -340,9 +350,20 @@ trait ErgoWalletSupport extends ScorexLogging {
         val dataInputs = ErgoWalletServiceUtils.stringsToBoxes(dataInputsRaw).toIndexedSeq
         selectionOpt.map { selectionResult =>
           val changeAddressOpt: Option[ProveDlog] = state.getChangeAddress(addressEncoder).map(_.pubkey)
-          prepareUnsignedTransaction(outputs, state.getWalletHeight, selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
+          prepareUnsignedTransaction(outputs, state.fullHeight, state.getWalletHeight,
+            selectionResult, dataInputs, changeAddressOpt) -> selectionResult.inputBoxes
         } match {
-          case Right((txTry, inputs)) => txTry.map(tx => (tx, inputs.map(_.box).toIndexedSeq, dataInputs))
+          case Right((txTry, inputs)) => txTry.map { tx =>
+            val upcoming = state.stateContext.simplifiedUpcoming()
+            val heightsValid = tx.outputCandidates.forall(
+              _.creationHeight <= upcoming.currentHeight)
+            require(heightsValid, "Output creation height exceeds next block height")
+            val amountsValid = tx.outputs.forall { box =>
+              box.value >= BoxUtils.minimalErgoAmount(box, upcoming.currentParameters)
+            }
+            require(amountsValid, "Minimal ERG value not met")
+            (tx, inputs.map(_.box).toIndexedSeq, dataInputs)
+          }
           case Left(e) => Failure(
             new Exception(s"Failed to find boxes to assemble a transaction for $outputs, \nreason: $e")
           )

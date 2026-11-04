@@ -1,6 +1,6 @@
 package scorex.core.network
 
-import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy}
+import akka.actor.{Actor, ActorRef, Cancellable, Props, SupervisorStrategy, Terminated}
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
@@ -166,6 +166,9 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
     closeCommands orElse reportStrangeInput
 
   private def closeCommands: Receive = {
+    case Terminated(ref) if ref == connection =>
+      context.stop(self)
+
     case CloseConnection =>
       log.info(s"Enforced to abort communication with: " + connectionId)
       pushAllWithNoAck()

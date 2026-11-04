@@ -26,7 +26,7 @@ public class ErgoUnsafeProver {
      * @return signed transaction
      */
     public ErgoLikeTransaction prove(UnsignedErgoLikeTransaction unsignedTx, Map<String, DLogProtocol.DLogProverInput> sks) {
-        // This method of JavaConverters is supported across Scala 2.11-2.13
+        // This method of JavaConverters is supported across Scala 2.12-2.13
         return org.ergoplatform.wallet.interpreter.ErgoUnsafeProver.prove(
                 unsignedTx,
                 JavaConverters.mapAsScalaMapConverter(sks).asScala());

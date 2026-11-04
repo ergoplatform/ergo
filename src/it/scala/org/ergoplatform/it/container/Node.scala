@@ -1,6 +1,7 @@
 package org.ergoplatform.it.container
 
 import org.asynchttpclient._
+import org.ergoplatform.it.api.NodeApi.WaitPolicy
 import org.ergoplatform.it.api.{NetworkNodeApi, NodeApi}
 import org.ergoplatform.settings.ErgoSettings
 import org.slf4j.{Logger, LoggerFactory}
@@ -9,7 +10,11 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 
-class Node(val settings: ErgoSettings, val nodeInfo: NodeInfo, override val client: AsyncHttpClient)
+class Node(val settings: ErgoSettings,
+           val nodeInfo: NodeInfo,
+           override val client: AsyncHttpClient,
+           override protected val waitPolicy: WaitPolicy = WaitPolicy.Unbounded,
+           containerProbe: () => Option[String] = () => None)
           (implicit override val ec: ExecutionContext) extends NodeApi with NetworkNodeApi {
 // todo after addresses will added
 //  val privateKey: String = config.getString("private-key")
@@ -30,5 +35,8 @@ class Node(val settings: ErgoSettings, val nodeInfo: NodeInfo, override val clie
     if (restAddress == "localhost") nodeInfo.hostRestApiPort else nodeInfo.containerApiPort
   override val networkPort: Int = nodeInfo.hostNetworkPort
   override val blockDelay: FiniteDuration = settings.chainSettings.blockInterval
+
+  override def nodeLabel: String = s"$nodeName (${containerId.take(12)})"
+  override protected def containerProblem(): Option[String] = containerProbe()
 
 }

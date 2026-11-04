@@ -1,9 +1,65 @@
 package org.ergoplatform.db
 
+import java.lang.reflect.{InvocationHandler, Method, Proxy}
+import java.util.AbstractMap.SimpleImmutableEntry
+import java.util.concurrent.atomic.AtomicInteger
+import org.iq80.leveldb.{DB, DBIterator}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.propspec.AnyPropSpec
+import scorex.db.LDBKVStore
 
 class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
+
+  private type TrackedStore = (LDBKVStore, AtomicInteger, IllegalStateException)
+
+  private def trackedRangeStore(failOn: String = ""): TrackedStore = {
+    val keys = Vector('A'.toByte, 'B'.toByte, 'C'.toByte)
+    val closes = new AtomicInteger()
+    val failure = new IllegalStateException("injected iterator failure")
+    var cursor = 0
+
+    val iterator = Proxy.newProxyInstance(
+      classOf[DBIterator].getClassLoader,
+      Array[Class[_]](classOf[DBIterator]),
+      new InvocationHandler {
+        override def invoke(proxy: AnyRef, method: Method, args: Array[AnyRef]): AnyRef =
+          method.getName match {
+            case "seek" =>
+              if (failOn == "seek") throw failure
+              cursor = keys.indexWhere(_ >= args(0).asInstanceOf[Array[Byte]].head)
+              if (cursor < 0) cursor = keys.size
+              null
+            case "hasNext" => java.lang.Boolean.valueOf(cursor < keys.size)
+            case "next" =>
+              if (failOn == "next" && cursor == 1) throw failure
+              val key = keys(cursor)
+              cursor += 1
+              new SimpleImmutableEntry[Array[Byte], Array[Byte]](
+                Array(key), Array.emptyByteArray)
+            case "close" =>
+              closes.incrementAndGet()
+              null
+            case other =>
+              throw new UnsupportedOperationException(s"Unexpected iterator call: $other")
+          }
+      }
+    ).asInstanceOf[DBIterator]
+
+    val db = Proxy.newProxyInstance(
+      classOf[DB].getClassLoader,
+      Array[Class[_]](classOf[DB]),
+      new InvocationHandler {
+        override def invoke(proxy: AnyRef, method: Method, args: Array[AnyRef]): AnyRef =
+          if (method.getName == "iterator" && (args == null || args.isEmpty)) iterator
+          else {
+            val call = method.getName
+            throw new UnsupportedOperationException(s"Unexpected DB call: $call")
+          }
+      }
+    ).asInstanceOf[DB]
+
+    (new LDBKVStore(db), closes, failure)
+  }
 
   property("put/get/getAll/delete") {
     withStore { store =>
@@ -173,6 +229,34 @@ class LDBKVStoreSpec extends AnyPropSpec with Matchers with DBSpec {
 
       store.lastKeyInRange(Array(10: Byte), Array(11: Byte)).isDefined shouldBe false
     }
+  }
+
+  property("lastKeyInRange closes its iterator on every completed or failed traversal") {
+    val (all, allCloses, _) = trackedRangeStore()
+    val lastAll = all.lastKeyInRange(byteString("A"), byteString("Z"))
+    lastAll.map(_.head) shouldBe Some('C'.toByte)
+    allCloses.get shouldBe 1
+
+    val (bounded, boundedCloses, _) = trackedRangeStore()
+    val lastBounded = bounded.lastKeyInRange(byteString("A"), byteString("B"))
+    lastBounded.map(_.head) shouldBe Some('B'.toByte)
+    boundedCloses.get shouldBe 1
+
+    val (empty, emptyCloses, _) = trackedRangeStore()
+    empty.lastKeyInRange(byteString("Z"), byteString("Z")) shouldBe None
+    emptyCloses.get shouldBe 1
+
+    val (nextFails, nextCloses, nextFailure) = trackedRangeStore(failOn = "next")
+    intercept[IllegalStateException] {
+      nextFails.lastKeyInRange(byteString("A"), byteString("Z"))
+    } shouldBe nextFailure
+    nextCloses.get shouldBe 1
+
+    val (seekFails, seekCloses, seekFailure) = trackedRangeStore(failOn = "seek")
+    intercept[IllegalStateException] {
+      seekFails.lastKeyInRange(byteString("A"), byteString("Z"))
+    } shouldBe seekFailure
+    seekCloses.get shouldBe 1
   }
 
 }

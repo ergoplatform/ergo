@@ -16,32 +16,28 @@ object Constants {
   /** Scan which is checking mining rewards */
   val MiningScanId: ScanId = ScanId @@ 9L
 
-  /**
-    * Non-negative scan IDs within the legacy `Short` range (`0 .. Short.MaxValue`)
-    * use the legacy 2-byte encoding so existing wallet databases remain compatible.
-    * Scan IDs outside `0 .. Short.MaxValue` are prefixed with `Short.MinValue` (`0x8000`)
-    * followed by their 8-byte `Long` representation.
-    */
+  // Legacy putShort and putInt both use signed ZigZag VLQ. An Int outside
+  // the Short range is an unambiguous escape, even for wrapped legacy IDs.
+  private val LongScanIdMarker: Int = Short.MaxValue.toInt + 1
+
   @inline def isLegacyShortScanId(scanId: Long): Boolean =
-    scanId >= 0L && scanId <= Short.MaxValue
+    scanId >= Short.MinValue && scanId <= Short.MaxValue
 
   def putScanId(w: Writer, scanId: ScanId): Unit = {
     if (isLegacyShortScanId(scanId)) {
       w.putShort(scanId.toShort)
     } else {
-      w.putShort(Short.MinValue)
+      w.putInt(LongScanIdMarker)
       w.putLong(scanId)
     }
   }
 
   def getScanId(r: Reader): ScanId = {
-    val first = r.getShort()
-    val id = if (first == Short.MinValue) {
-      r.getLong()
-    } else {
-      first.toLong
+    val first = r.getInt()
+    if (first == LongScanIdMarker) ScanId @@ r.getLong()
+    else {
+      require(isLegacyShortScanId(first.toLong), s"Invalid scan id prefix: $first")
+      ScanId @@ first.toLong
     }
-    ScanId @@ id
   }
-
 }

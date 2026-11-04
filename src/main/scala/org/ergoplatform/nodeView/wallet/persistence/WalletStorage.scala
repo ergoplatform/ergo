@@ -145,7 +145,13 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @return scan or error (e.g. if scan identifier space is exhausted)
     */
   def addScan(scanReq: ScanRequest): Try[Scan] = {
-    val id = ScanId @@ (lastUsedScanId + 1)
+    val last = lastUsedScanId
+    if (last == Long.MaxValue) return scala.util.Failure(new IllegalStateException("Scan identifier space exhausted"))
+    val next = if (last < PaymentsScanId ||
+      (last < Short.MaxValue && store.get(scanPrefixKey(last + 1)).isDefined)) {
+      Short.MaxValue.toLong + 1
+    } else last + 1
+    val id = ScanId @@ next
     scanReq.toScan(id).flatMap { app =>
       store.insert(
         Array(scanPrefixKey(id), lastUsedScanIdKey),
@@ -174,7 +180,8 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     * @return scans stored in the database
     */
   def allScans: Seq[Scan] = {
-    store.getRange(SmallestPossibleScanId, BiggestPossibleScanId)
+    (store.getRange(SmallestPossibleScanId, BiggestPossibleScanId) ++
+      store.getRange(FirstLongScanKey, LastLongScanKey))
       .map { case (_, v) => ScanSerializer.parseBytes(v) }
   }
 
@@ -187,11 +194,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     def oldScanId: Option[Long] =
       store.lastKeyInRange(SmallestPossibleScanId, BiggestPossibleScanId)
         .map { bs =>
-          if (bs.length >= 12) {
-            Longs.fromByteArray(bs.takeRight(8))
-          } else {
-            Shorts.fromByteArray(bs.takeRight(2)).toLong
-          }
+          Shorts.fromByteArray(bs.takeRight(2)).toLong
         }
 
     store.get(lastUsedScanIdKey)
@@ -231,18 +234,22 @@ object WalletStorage {
   val PublicKeyPrefixByte: Byte = 2: Byte
 
   val ScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, ScanPrefixByte)
+  private val LongScanPrefixArray: Array[Byte] = Array(RangedKeyPrefix, 3.toByte)
   val PublicKeyPrefixArray: Array[Byte] = Array(RangedKeyPrefix, PublicKeyPrefixByte)
 
   def scanPrefixKey(scanId: Long): Array[Byte] =
     if (isLegacyShortScanId(scanId)) {
       ScanPrefixArray ++ Shorts.toByteArray(scanId.toShort)
     } else {
-      ScanPrefixArray ++ Shorts.toByteArray(Short.MinValue) ++ Longs.toByteArray(scanId)
+      LongScanPrefixArray ++ Longs.toByteArray(scanId)
     }
 
   // scans key space to iterate over all of them
   val SmallestPossibleScanId: Array[Byte] = scanPrefixKey(0L)
-  val BiggestPossibleScanId: Array[Byte] = scanPrefixKey(Long.MaxValue)
+  // Keep the legacy listing range; wrapped negative IDs remain readable by ID.
+  val BiggestPossibleScanId: Array[Byte] = scanPrefixKey(Short.MaxValue.toLong)
+  private val FirstLongScanKey: Array[Byte] = LongScanPrefixArray ++ Array.fill(8)(0.toByte)
+  private val LastLongScanKey: Array[Byte] = LongScanPrefixArray ++ Array.fill(8)(-1.toByte)
   def pubKeyPrefixKey(path: DerivationPath): Array[Byte] = PublicKeyPrefixArray ++ path.bytes
   def pubKeyPrefixKey(pk: ExtendedPublicKey): Array[Byte] = pubKeyPrefixKey(pk.path)
 

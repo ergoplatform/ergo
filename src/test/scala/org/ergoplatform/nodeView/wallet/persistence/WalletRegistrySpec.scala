@@ -3,6 +3,7 @@ package org.ergoplatform.nodeView.wallet.persistence
 import com.google.common.primitives.{Ints, Longs, Shorts}
 import org.ergoplatform.wallet.Constants.{PaymentsScanId, ScanId}
 import org.ergoplatform.db.DBSpec
+import org.ergoplatform.nodeView.wallet.WalletTransactionSerializer
 import org.ergoplatform.nodeView.wallet.WalletScanLogic.{ScanResults, SpentInputData}
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.ergoplatform.core.VersionTag
@@ -10,7 +11,9 @@ import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scorex.util.ByteArrayBuilder
 import scorex.util.encode.Base16
+import scorex.util.serialization.VLQByteBufferWriter
 
 import scala.collection.compat.immutable.ArraySeq
 import scala.util.Success
@@ -346,27 +349,66 @@ class WalletRegistrySpec
     }
   }
 
+  it should "read legacy wrapped box and transaction indexes beside Long scan indexes" in {
+    val legacy = Short.MinValue
+    val legacyScan = ScanId @@ legacy.toLong
+    val longScan = ScanId @@ (Short.MaxValue.toLong + 1)
+    val legacyBox = trackedBoxGen.sample.get.copy(
+      scans = Set(legacyScan), inclusionHeightOpt = Some(5), spendingHeightOpt = None, spendingTxIdOpt = None)
+    val longBox = trackedBoxGen.sample.get.copy(
+      scans = Set(longScan), inclusionHeightOpt = Some(5), spendingHeightOpt = None, spendingTxIdOpt = None)
+    val tx = walletTransactionGen.sample.get.copy(inclusionHeight = 5, scanIds = Seq(legacyScan))
+    val w = new VLQByteBufferWriter(new ByteArrayBuilder())
+    w.putInt(tx.inclusionHeight)
+    w.putShort(1)
+    w.putShort(legacy)
+    w.putUInt(tx.tx.bytes.length)
+    w.putBytes(tx.tx.bytes)
+    val legacyTxBytes = w.result().toBytes
+    val legacyPrefix = Shorts.toByteArray(legacy)
+    withVersionedStore(10) { store =>
+      val legacyRows = Seq(
+        ((3.toByte +: legacyPrefix) ++ legacyBox.box.id) -> legacyBox.box.id,
+        ((7.toByte +: legacyPrefix) ++ Ints.toByteArray(5) ++ legacyBox.box.id) -> legacyBox.box.id,
+        ((8.toByte +: legacyPrefix) ++ Ints.toByteArray(5) ++ tx.idBytes) -> tx.idBytes,
+        (2.toByte +: tx.idBytes) -> legacyTxBytes
+      )
+      val boxRow = WalletRegistry.putBox(emptyBag, legacyBox).toInsert.find(_._1.head == 1.toByte).get
+      WalletRegistry.putBox(emptyBag.copy(toInsert = legacyRows :+ boxRow), longBox).transact(store).get
+      val reg = new WalletRegistry(store)(ws)
+      reg.unspentBoxes(legacyScan).map(_.box.id.toSeq) shouldBe Seq(legacyBox.box.id.toSeq)
+      reg.unspentBoxes(longScan).map(_.box.id.toSeq) shouldBe Seq(longBox.box.id.toSeq)
+      reg.allUnspentBoxes().map(_.box.id.toSeq) should contain theSameElementsAs
+        Seq(legacyBox.box.id.toSeq, longBox.box.id.toSeq)
+      reg.boxesByInclusionHeight(legacyScan, 5, 5).map(_.scans) shouldBe Seq(Set(legacyScan))
+      reg.walletTxsBetween(legacyScan, 5, 5) shouldBe Seq(tx)
+      reg.walletTxsBetween(longScan, 5, 5) shouldBe empty
+      WalletTransactionSerializer.toBytes(tx) shouldBe legacyTxBytes
+    }
+  }
+
   it should "compose keys correctly" in {
     val box = trackedBoxGen.sample.get
 
     forAll { (prefix: Byte, scanId: Long, height: Int, suffix: Byte) =>
-      val scanIdBytes = if (scanId >= 0L && scanId <= Short.MaxValue) {
+      val scanIdBytes = if (scanId >= Short.MinValue && scanId <= Short.MaxValue) {
         Shorts.toByteArray(scanId.toShort)
       } else {
-        Shorts.toByteArray(Short.MinValue) ++ Longs.toByteArray(scanId)
+        Longs.toByteArray(scanId)
       }
 
-      val key1 = (prefix +: scanIdBytes) ++ Array.fill(32)(suffix)
+      val indexPrefix = if (scanIdBytes.length == 2) prefix else (prefix ^ 0x80).toByte
+      val key1 = (indexPrefix +: scanIdBytes) ++ Array.fill(32)(suffix)
       WalletRegistry.composeKey(prefix, ScanId @@ scanId, suffix) shouldBe key1
 
-      val key2 = (prefix +: scanIdBytes) ++ Ints.toByteArray(height) ++ Array.fill(32)(suffix)
+      val key2 = (indexPrefix +: scanIdBytes) ++ Ints.toByteArray(height) ++ Array.fill(32)(suffix)
       WalletRegistry.composeKey(prefix, ScanId @@ scanId, height, suffix) shouldBe key2
 
       val id = box.box.id
-      val key3 = (prefix +: scanIdBytes) ++ id
+      val key3 = (indexPrefix +: scanIdBytes) ++ id
       WalletRegistry.composeKeyWithId(prefix, ScanId @@ scanId, id) shouldBe key3
 
-      val key4 = (prefix +: scanIdBytes) ++ Ints.toByteArray(height) ++ id
+      val key4 = (indexPrefix +: scanIdBytes) ++ Ints.toByteArray(height) ++ id
       WalletRegistry.composeKeyWithHeightAndId(prefix, ScanId @@ scanId, height, id) shouldBe key4
     }
   }

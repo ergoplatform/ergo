@@ -11,6 +11,8 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
+import scorex.util.ByteArrayBuilder
+import scorex.util.serialization.VLQByteBufferWriter
 
 class WalletStorageSpec
   extends AnyFlatSpec
@@ -111,4 +113,30 @@ class WalletStorageSpec
     }
   }
 
+  it should "read wrapped Short-era scans and continue above the legacy ID range" in {
+    val req = externalScanReqGen.sample.get
+    val ids = Seq(0.toShort, Short.MaxValue, Short.MinValue, (Short.MinValue + 1).toShort)
+    def legacyIdBytes(id: Short): Array[Byte] = {
+      val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+      writer.putShort(id)
+      writer.result().toBytes
+    }
+
+    // Build keys and ID fields with the legacy encoding independently of the new helpers.
+    val scanPayload = ScanSerializer.toBytes(req.toScan(ScanId @@ 11L).get).drop(legacyIdBytes(11).length)
+    val keys = ids.map(id => ScanPrefixArray ++ Shorts.toByteArray(id))
+    val values = ids.map(id => legacyIdBytes(id) ++ scanPayload)
+    for (last <- Seq(Short.MinValue, (Short.MinValue + 1).toShort, 0.toShort)) {
+      withStore { store =>
+        store.insert((keys :+ lastUsedScanIdKey).toArray, (values :+ Shorts.toByteArray(last)).toArray).get
+        val storage = new WalletStorage(store, settings)
+        storage.allScans.map(_.scanId) shouldBe Seq(0L, Short.MaxValue.toLong)
+        ids.foreach(id => storage.getScan(id.toLong) shouldBe Some(req.toScan(ScanId @@ id.toLong).get))
+        val next = storage.addScan(req).get
+        next.scanId shouldBe Short.MaxValue.toLong + 1
+        storage.getScan(next.scanId) shouldBe Some(next)
+        storage.allScans.map(_.scanId) should contain (next.scanId)
+      }
+    }
+  }
 }

@@ -88,7 +88,8 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     * @return sequences of all the unspent boxes from the database
     */
   def allUnspentBoxes(): Seq[TrackedBox] = {
-    store.getRange(firstUnspentBoxKey, lastUnspentBoxKey)
+    (store.getRange(firstUnspentBoxKey, lastUnspentBoxKey) ++
+      store.getRange(firstLongUnspentBoxKey, lastLongUnspentBoxKey))
       .flatMap { case (_, boxId) =>
         getBox(ADKey @@ boxId)
       }
@@ -483,19 +484,23 @@ object WalletRegistry {
 
   // All the unspent boxes range, dependless on scan
   private val firstUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(0: Byte)
-  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(42)(-1: Byte)
+  private val lastUnspentBoxKey: Array[Byte] = UnspentIndexPrefix +: Array.fill(34)(-1: Byte)
+  private val firstLongUnspentBoxKey = longIndexPrefix(UnspentIndexPrefix) +: Array.fill(40)(0: Byte)
+  private val lastLongUnspentBoxKey = longIndexPrefix(UnspentIndexPrefix) +: Array.fill(40)(-1: Byte)
+
+  // Reserve the high-bit variants of the four scan index prefixes for Long keys.
+  @inline private def longIndexPrefix(prefix: Byte): Byte = (prefix ^ 0x80).toByte
 
   @inline private def scanIdKeySize(scanId: ScanId): Int =
-    if (Constants.isLegacyShortScanId(scanId)) 2 else 10
+    if (Constants.isLegacyShortScanId(scanId)) 2 else 8
 
   @inline private def putScanIdKey(buf: Array[Byte], pos: Int, scanId: ScanId): Int = {
     if (Constants.isLegacyShortScanId(scanId)) {
       putShort(buf, pos, scanId.toShort)
       pos + 2
     } else {
-      putShort(buf, pos, Short.MinValue)
-      putLong(buf, pos + 2, scanId)
-      pos + 10
+      putLong(buf, pos, scanId)
+      pos + 8
     }
   }
 
@@ -508,7 +513,7 @@ object WalletRegistry {
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, suffix: Byte): Array[Byte] = {
     val scanKeySize = scanIdKeySize(scanId)
     val res = new Array[Byte](1 + scanKeySize + 32)
-    res(0) = prefix
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
     val nextPos = putScanIdKey(res, pos = 1, scanId)
     putReplicated(res, pos = nextPos, n = 32, suffix)
     res
@@ -518,7 +523,7 @@ object WalletRegistry {
   private[persistence] final def composeKeyWithId(prefix: Byte, scanId: ScanId, suffixId: Array[Byte]): Array[Byte] = {
     val scanKeySize = scanIdKeySize(scanId)
     val res = new Array[Byte](1 + scanKeySize + suffixId.length)
-    res(0) = prefix
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
     val nextPos = putScanIdKey(res, pos = 1, scanId)
     putBytes(res, pos = nextPos, suffixId)
     res
@@ -528,7 +533,7 @@ object WalletRegistry {
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int, suffix: Byte): Array[Byte] = {
     val scanKeySize = scanIdKeySize(scanId)
     val res = new Array[Byte](1 + scanKeySize + 4 + 32)
-    res(0) = prefix
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
     val nextPos = putScanIdKey(res, pos = 1, scanId)
     putInt(res, pos = nextPos, height)
     putReplicated(res, nextPos + 4, 32, suffix)
@@ -539,7 +544,7 @@ object WalletRegistry {
   private[persistence] final def composeKey(prefix: Byte, scanId: ScanId, height: Int): Array[Byte] = {
     val scanKeySize = scanIdKeySize(scanId)
     val res = new Array[Byte](1 + scanKeySize + 4 + 32)
-    res(0) = prefix
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
     val nextPos = putScanIdKey(res, pos = 1, scanId)
     putInt(res, pos = nextPos, height)
     res
@@ -551,7 +556,7 @@ object WalletRegistry {
                                                            height: Int, suffixId: Array[Byte]): Array[Byte] = {
     val scanKeySize = scanIdKeySize(scanId)
     val res = new Array[Byte](1 + scanKeySize + 4 + suffixId.length)
-    res(0) = prefix
+    res(0) = if (scanKeySize == 2) prefix else longIndexPrefix(prefix)
     val nextPos = putScanIdKey(res, pos = 1, scanId)
     putInt(res, pos = nextPos, height)
     putBytes(res, nextPos + 4, suffixId)

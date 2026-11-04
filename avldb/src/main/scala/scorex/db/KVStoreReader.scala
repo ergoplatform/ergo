@@ -53,21 +53,25 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getWithFilter(cond: (K, V) => Boolean): Iterator[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(readableSnapshot())
-    val iter = db.iterator(ro)
+    val snapshot = readableSnapshot()
     try {
-      iter.seekToFirst()
-      val bf = mutable.ArrayBuffer.empty[(K, V)]
-      while (iter.hasNext) {
-        val next = iter.next()
-        val key = next.getKey
-        val value = next.getValue
-        if (cond(key, value)) bf += (key -> value)
+      ro.snapshot(snapshot)
+      val iter = db.iterator(ro)
+      try {
+        iter.seekToFirst()
+        val bf = mutable.ArrayBuffer.empty[(K, V)]
+        while (iter.hasNext) {
+          val next = iter.next()
+          val key = next.getKey
+          val value = next.getValue
+          if (cond(key, value)) bf += (key -> value)
+        }
+        bf.toIterator
+      } finally {
+        iter.close()
       }
-      bf.toIterator
     } finally {
-      iter.close()
-      ro.snapshot().close()
+      snapshot.close()
     }
   }
 
@@ -113,23 +117,27 @@ trait KVStoreReader extends AutoCloseable {
     */
   def getRange(start: K, end: K, limit: Int = Int.MaxValue): Array[(K, V)] = {
     val ro = new ReadOptions()
-    ro.snapshot(readableSnapshot())
-    val iter = db.iterator(ro)
+    val snapshot = readableSnapshot()
     try {
-      iter.seek(start)
-      val bf = mutable.ArrayBuffer.empty[(K, V)]
-      var elemCounter = 0
-      while (iter.hasNext && elemCounter < limit) {
-        val next = iter.next()
-        if(ByteArrayUtils.compare(next.getKey, end) <= 0) {
-          elemCounter += 1
-          bf += (next.getKey -> next.getValue)
-        } else elemCounter = limit // break
+      ro.snapshot(snapshot)
+      val iter = db.iterator(ro)
+      try {
+        iter.seek(start)
+        val bf = mutable.ArrayBuffer.empty[(K, V)]
+        var elemCounter = 0
+        while (iter.hasNext && elemCounter < limit) {
+          val next = iter.next()
+          if(ByteArrayUtils.compare(next.getKey, end) <= 0) {
+            elemCounter += 1
+            bf += (next.getKey -> next.getValue)
+          } else elemCounter = limit // break
+        }
+        bf.toArray[(K,V)]
+      } finally {
+        iter.close()
       }
-      bf.toArray[(K,V)]
     } finally {
-      iter.close()
-      ro.snapshot().close()
+      snapshot.close()
     }
   }
 

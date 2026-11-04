@@ -211,21 +211,85 @@ trait ErgoHistory
     * @return
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = typedModifierById[Header](headerId)
-      val hRes = historyStorage.remove(
-        indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
-        idsToRemove = Array(headerId)
-      )
-    log.info(s"Result of removing header $headerId: " + hRes)
-
-    hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        val mRes = historyStorage.remove(
-          indicesToRemove = Array(validityKey(mId)),
-          idsToRemove = Array(mId)
-        )
-        log.info(s"Result of removing modifier $mId: " + mRes)
+    // Keep the header until all section removals succeed so a retry can discover their IDs.
+    typedModifierById[Header](headerId).foreach { header =>
+      requiredModifiersForHeader(header).foreach { case (_, id) =>
+        historyStorage.remove(indicesToRemove = Array(validityKey(id)), idsToRemove = Array(id)).get
       }
+    }
+    historyStorage.remove(
+      indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
+      idsToRemove = Array(headerId)
+    ).get
+  }
+
+  /**
+    * Reset blockchain history to `targetHeight` by removing all headers, block sections,
+    * height indexes, chain status markers, and validity markers above `targetHeight`,
+    * and updating `BestHeaderKey` and `BestFullBlockKey`.
+    */
+  def resetToHeight(targetHeight: Int): Try[ErgoHistory] = synchronized {
+    Try {
+      if (targetHeight < 0) {
+        throw new IllegalArgumentException(s"Height must be non-negative, got $targetHeight")
+      }
+      val currentHeight = headersHeight
+      if (targetHeight > currentHeight) {
+        throw new IllegalArgumentException(s"Cannot reset to height $targetHeight, higher than current height $currentHeight")
+      }
+      val targetHeaderIdOpt = if (targetHeight > 0) bestHeaderIdAtHeight(targetHeight) else headerIdsAtHeight(0).headOption
+      if (targetHeight > 0 && targetHeaderIdOpt.isEmpty) {
+        throw new IllegalArgumentException(s"No block found at height $targetHeight")
+      }
+
+      val upperBound = math.max(currentHeight, bestFullBlockOpt.map(_.height).getOrElse(0))
+      val continuationHeights = Iterator.from(math.max(upperBound, targetHeight) + 1)
+        .takeWhile(h => headerIdsAtHeight(h).nonEmpty)
+        .toSeq
+      val heightsToRemove = ((targetHeight + 1) to math.max(upperBound, targetHeight)) ++ continuationHeights
+
+      heightsToRemove.reverse.foreach { h =>
+        headerIdsAtHeight(h).foreach { headerId =>
+          historyStorage.modifierById(headerId).collect { case hdr: Header => hdr }.foreach { hdr =>
+            val sectionIds = Array(hdr.transactionsId, hdr.ADProofsId, hdr.extensionId)
+            val sectionValidityKeys = sectionIds.map(validityKey)
+            historyStorage.remove(
+              indicesToRemove = sectionValidityKeys :+ FullBlockProcessor.chainStatusKey(headerId),
+              idsToRemove = sectionIds
+            ).get
+          }
+          forgetHeader(headerId).get
+        }
+      }
+
+      if (heightsToRemove.nonEmpty) {
+        historyStorage.remove(heightsToRemove.map(heightIdsKey).toArray, Array.empty).get
+      }
+
+      targetHeaderIdOpt match {
+        case Some(targetHeaderId) =>
+          historyStorage.insert(
+            Array(
+              BestHeaderKey -> idToBytes(targetHeaderId),
+              validityKey(targetHeaderId) -> Array(1.toByte)
+            ),
+            BlockSection.emptyArray
+          ).get
+          if (typedModifierById[Header](targetHeaderId).flatMap(getFullBlock).isDefined) {
+            historyStorage.insert(
+              Array(
+                BestFullBlockKey -> idToBytes(targetHeaderId),
+                FullBlockProcessor.chainStatusKey(targetHeaderId) -> FullBlockProcessor.BestChainMarker
+              ),
+              BlockSection.emptyArray
+            ).get
+          } else if (bestFullBlockOpt.isEmpty) {
+            historyStorage.remove(Array(BestFullBlockKey), Array.empty).get
+          }
+        case None =>
+          historyStorage.remove(Array(BestHeaderKey, BestFullBlockKey), Array.empty).get
+      }
+      this
     }
   }
 

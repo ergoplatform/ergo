@@ -7,8 +7,11 @@ import org.ergoplatform.nodeView.ErgoNodeViewRef
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.utils.NodeViewTestContext
 import org.ergoplatform.wallet.utils.TestFileUtils
+import scorex.db.{LDBFactory, StoreRegistry}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration._
+import scala.util.Try
 
 /** This uses TestProbe to receive messages from actor.
   * To make TestProbe work `defaultSender` implicit should be imported
@@ -35,8 +38,13 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
   }
 
   def stopNodeViewHolder(): Unit = {
-    actorSystem.stop(nodeViewHolderRef)
-    Thread.sleep(2000)
+    if (!actorSystem.whenTerminated.isCompleted) {
+      val observer = TestProbe()(actorSystem)
+      observer.watch(nodeViewHolderRef)
+      actorSystem.stop(nodeViewHolderRef)
+      observer.expectTerminated(nodeViewHolderRef, 20.seconds)
+      actorSystem.stop(observer.ref)
+    }
   }
 
   /** Restarts nodeViewHolder and applies config override */
@@ -47,9 +55,21 @@ class NodeViewFixture(protoSettings: ErgoSettings, parameters: Parameters) exten
   }
 
   def stop(): Unit = {
-    stopNodeViewHolder()
-    actorSystem.stop(testProbe.testActor)
-    actorSystem.terminate()
+    try stopNodeViewHolder() finally {
+      Await.result(actorSystem.terminate(), 30.seconds)
+      // Wallet stores are not closed by actor shutdown. Release only this fixture's
+      // stores after all actors have terminated; other suites may still be running.
+      val registry = LDBFactory.factory.asInstanceOf[StoreRegistry]
+      registry.lock.writeLock().lock()
+      try {
+        val owned = registry.map.toVector.collect {
+          case (path, store) if path.toPath.toAbsolutePath.normalize()
+            .startsWith(nodeViewDir.toPath.toAbsolutePath.normalize()) => store
+        }
+        val closed = owned.map(store => Try(store.close()))
+        closed.foreach(_.get)
+      } finally registry.lock.writeLock().unlock()
+    }
   }
 }
 

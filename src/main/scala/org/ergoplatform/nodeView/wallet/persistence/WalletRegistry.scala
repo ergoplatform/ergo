@@ -249,6 +249,23 @@ class WalletRegistry(private val store: LDBVersionedStore)(ws: WalletSettings) e
     updateF(fetchDigest()).map(digest => putDigest(bag, digest))
 
   /**
+    * Updates wallet digest height (for example, to current chain height upon new wallet initialization
+    * so that historical blocks before initialization are not rescanned).
+    *
+    * @param height  - new wallet digest height
+    * @param blockId - id of the block at that height, if any. The update is stored as that block's version, so a
+    *                  later rollback to the block finds it and keeps this height.
+    */
+  def updateHeight(height: Int, blockId: Option[ModifierId]): Try[Unit] = {
+    updateDigest(KeyValuePairsBag.empty) { digest =>
+      Success(digest.copy(height = height))
+    }.flatMap { bag =>
+      val version = blockId.map(idToBytes).getOrElse(store.lastVersionID.getOrElse(WalletRegistry.PreGenesisStateVersion))
+      bag.transact(store, version)
+    }
+  }
+
+  /**
     *
     * Updates indexes according to data extracted from a block and performs versioned update.
     *

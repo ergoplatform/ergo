@@ -61,10 +61,10 @@ class ErgoWalletActor(settings: ErgoSettings,
 
   override def preStart(): Unit = {
     log.info("Initializing wallet actor")
+    context.system.eventStream.subscribe(self, classOf[ChangedState])
+    context.system.eventStream.subscribe(self, classOf[ChangedMempool])
     ErgoWalletState.initial(settings, parameters) match {
       case Success(state) =>
-        context.system.eventStream.subscribe(self, classOf[ChangedState])
-        context.system.eventStream.subscribe(self, classOf[ChangedMempool])
         self ! ReadWallet(state)
       case Failure(ex) =>
         log.error("Unable to initialize wallet", ex)

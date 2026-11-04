@@ -1,9 +1,13 @@
 package org.ergoplatform.http.routes
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.stream.scaladsl.Source
 import akka.testkit.TestProbe
+import akka.util.ByteString
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.Json
 import io.circe.syntax._
@@ -187,6 +191,30 @@ class BlocksApiRouteSpec
         )
 
       responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+    }
+  }
+
+  it should "read a streamed header ids body once" in {
+    val bytes = ByteString(Seq(headerIdString).asJson.noSpaces)
+    val materializations = new AtomicInteger
+    val source = Source.single(bytes).mapMaterializedValue { materialized =>
+      if (materializations.incrementAndGet() != 1) {
+        throw new IllegalStateException("request body materialized twice")
+      }
+      materialized
+    }
+    val entity: UniversalEntity =
+      HttpEntity.Default(ContentTypes.`application/json`, bytes.length.toLong, source)
+    val expected = history
+      .typedModifierById[Header](headerIdBytes)
+      .flatMap(history.getFullBlock)
+      .toSeq
+    expected.size shouldBe 1
+
+    Post(prefix + "/headerIds", entity) ~> route ~> check {
+      status shouldBe StatusCodes.OK
+      responseAs[Seq[ErgoFullBlock]] shouldEqual expected
+      materializations.get() shouldBe 1
     }
   }
 

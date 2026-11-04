@@ -26,6 +26,7 @@ import scorex.util.ScorexLogging
 import java.net.InetSocketAddress
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.{Codec, Source}
+import scala.util.control.NonFatal
 
 /**
   * Ergo reference protocol client application runnable from command line
@@ -175,7 +176,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
   private val indexerOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.extraIndex) {
-      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings))
+      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings, nodeViewHolderRef)(
+        actorSystem, ergoSettings.nodeSettings.storageRentCollection))
     } else {
       None
     }
@@ -303,7 +305,13 @@ object ErgoApp extends ScorexLogging {
 
   def main(args: Array[String]): Unit = {
     argParser.parse(args, Args()).foreach { argsParsed =>
-      new ErgoApp(argsParsed).run()
+      try {
+        new ErgoApp(argsParsed).run()
+      } catch {
+        case NonFatal(e) =>
+          log.error(s"Failed to start Ergo node: ${e.getMessage}", e)
+          forceStopApplication()
+      }
     }
   }
 

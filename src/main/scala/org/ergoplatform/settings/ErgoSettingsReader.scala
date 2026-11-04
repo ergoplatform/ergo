@@ -170,8 +170,12 @@ object ErgoSettingsReader extends ScorexLogging
   private def consistentSettings(settings: ErgoSettings,
                                  desiredNetworkTypeOpt: Option[NetworkType]): ErgoSettings = {
     val nodeSettings = settings.nodeSettings
+    val unsupportedVotingTargetIds = settings.votingTargets.targets.keySet -- VotingTargets.VoteableParameterIds
     if (nodeSettings.keepVersions < 0) {
       failWithError("nodeSettings.keepVersions should not be negative")
+    } else if (nodeSettings.stateType == Digest && nodeSettings.utxoSettings.utxoBootstrap) {
+      failWithError("UTXO snapshot bootstrap requires node.stateType = utxo; " +
+        "set node.utxo.utxoBootstrap = false for digest state")
     } else if (!nodeSettings.verifyTransactions && !nodeSettings.stateType.requireProofs) {
       failWithError("Can not use UTXO state when nodeSettings.verifyTransactions is false")
     } else if (desiredNetworkTypeOpt.exists(_ != settings.networkType)) {
@@ -188,12 +192,19 @@ object ErgoSettingsReader extends ScorexLogging
       failWithError(s"p2pUtxoSnapshots <= 0, must be 1 at least")
     } else if (settings.nodeSettings.extraIndex && settings.nodeSettings.isFullBlocksPruned) {
       failWithError(s"Extra indexes could be enabled only if there is no blockchain pruning")
+    } else if (nodeSettings.storageRentCollection && !(nodeSettings.extraIndex)) {
+      // rent collection enumerates eligible boxes via the extra index and injects claims
+      // into own block candidates, so it silently does nothing without both
+      failWithError("nodeSettings.storageRentCollection requires extraIndex = true")
     } else if (nodeSettings.nipopowSettings.nipopowBootstrap &&
       !(nodeSettings.utxoSettings.utxoBootstrap || nodeSettings.blocksToKeep >= 0)) {
       failWithError("nodeSettings.popowBootstrap can be set only if " +
         "nodeSettings.utxoBootstrap is set or nodeSettings.blocksToKeep >=0")
     } else if (nodeSettings.nipopowSettings.nipopowBootstrap && settings.chainSettings.genesisId.isEmpty) {
       failWithError("nodeSettings.popowBootstrap is set but genesisId is not")
+    } else if (nodeSettings.mining && unsupportedVotingTargetIds.nonEmpty) {
+      val badIds = unsupportedVotingTargetIds.toSeq.sorted.mkString(", ")
+      failWithError(s"Unsupported voting target parameter id(s): $badIds")
     } else {
       settings
     }

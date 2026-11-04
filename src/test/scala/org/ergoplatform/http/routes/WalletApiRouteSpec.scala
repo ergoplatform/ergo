@@ -1,15 +1,28 @@
 package org.ergoplatform.http.routes
 
+import akka.actor.{Actor, Props}
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.{Route, ValidationRejection}
 import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest}
+import akka.pattern.StatusReply
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.syntax._
 import io.circe.{Decoder, Json}
 import org.ergoplatform.http.api.{ApiCodecs, ApiExtraCodecs, ApiRequestsCodecs, WalletApiRoute}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
+import org.ergoplatform.nodeView.ErgoReadersHolder.GetReaders
+import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages.UpdateChangeAddress
+import org.ergoplatform.nodeView.wallet.ErgoWalletService.{
+  ChangeAddressNotOwned,
+  ChangeAddressValidationException,
+  WalletLockedForChangeAddress
+}
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequestEncoder, PaymentRequest, PaymentRequestEncoder, _}
-import org.ergoplatform.nodeView.wallet.{AugWalletTransaction, ErgoAddressJsonEncoder}
+import org.ergoplatform.nodeView.wallet.{
+  AugWalletTransaction,
+  ErgoAddressJsonEncoder,
+  ErgoWalletReader
+}
 import org.ergoplatform.settings.{Args, ErgoSettings, ErgoSettingsReader}
 import org.ergoplatform.utils.Stubs
 import org.ergoplatform.{ErgoAddress, Pay2SAddress}
@@ -61,6 +74,32 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Seq.empty,
     minerRewardDelay = 720
   )(settings.addressEncoder)
+
+  private val changeAddressBody = Json.obj(
+    "address" -> WalletActorStub.address.toString.asJson
+  )
+
+  private def changeAddressRoute(result: Either[Throwable, Unit]): Route = {
+    val walletActorRef = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case UpdateChangeAddress(_) =>
+          result match {
+            case Right(_) => sender() ! StatusReply.success(())
+            case Left(error) => sender() ! StatusReply.error(error)
+          }
+      }
+    }))
+    val walletReader = new ErgoWalletReader {
+      override val walletActor = walletActorRef
+    }
+    val readers = digestReaders.copy(w = walletReader)
+    val readersHolder = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case GetReaders => sender() ! readers
+      }
+    }))
+    Route.seal(WalletApiRoute(readersHolder, nodeViewRef, settings).route)
+  }
 
 
   it should "generate arbitrary transaction" in {
@@ -157,6 +196,36 @@ class WalletApiRouteSpec extends AnyFlatSpec
     Post(prefix + "/unlock", Json.obj("pass" -> "1234".asJson)) ~> route ~> check {
       status shouldBe StatusCodes.OK
     }
+  }
+
+  it should "return bad request for invalid change address updates" in {
+    val failures: Seq[ChangeAddressValidationException] = Seq(
+      new WalletLockedForChangeAddress,
+      new ChangeAddressNotOwned
+    )
+
+    failures.foreach { failure =>
+      Post(prefix + "/updateChangeAddress", changeAddressBody) ~>
+        changeAddressRoute(Left(failure)) ~> check {
+          status shouldBe StatusCodes.BadRequest
+          val detail = responseAs[Json].hcursor.downField("detail").as[String]
+          detail shouldBe Right(failure.getMessage)
+        }
+    }
+  }
+
+  it should "keep unexpected change address failures as internal errors" in {
+    Post(prefix + "/updateChangeAddress", changeAddressBody) ~>
+      changeAddressRoute(Left(new RuntimeException("storage failure"))) ~> check {
+        status shouldBe StatusCodes.InternalServerError
+      }
+  }
+
+  it should "accept a valid change address update" in {
+    Post(prefix + "/updateChangeAddress", changeAddressBody) ~>
+      changeAddressRoute(Right(())) ~> check {
+        status shouldBe StatusCodes.OK
+      }
   }
 
   it should "check wallet" in {

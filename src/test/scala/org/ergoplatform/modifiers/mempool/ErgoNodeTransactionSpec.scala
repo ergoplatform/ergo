@@ -5,7 +5,7 @@ import org.ergoplatform.nodeView.state.{ErgoStateContext, VotingData}
 import org.ergoplatform.settings._
 import org.ergoplatform.utils.{ErgoCompilerHelpers, ErgoCorePropertyTest, ErgoStateContextHelpers}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
-import org.ergoplatform.{ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
+import org.ergoplatform.{DataInput, ErgoBox, ErgoBoxCandidate, ErgoTreePredef, Input}
 import scorex.util.{ModifierId, bytesToId}
 import sigmastate.eval.Extensions._
 import org.ergoplatform.nodeView.ErgoContext
@@ -16,6 +16,9 @@ import org.ergoplatform.wallet.boxes.{ErgoBoxAssetExtractor, ErgoBoxSerializer}
 import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform.wallet.protocol.context.InputContext
 import org.scalacheck.Gen
+import sigma.util.BenchmarkUtil
+import scorex.crypto.authds.ADKey
+import scorex.crypto.hash.Blake2b256
 import scorex.util.encode.Base16
 import sigma.{Colls, VersionContext}
 import sigma.ast.ErgoTree.DefaultHeader
@@ -32,6 +35,7 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
   import org.ergoplatform.utils.ErgoCoreTestConstants._
   import org.ergoplatform.utils.ErgoNodeTestConstants._
   import org.ergoplatform.utils.generators.ErgoCoreGenerators._
+  import org.ergoplatform.utils.generators.{ErgoNodeTransactionGenerators => NodeTransactionGenerators}
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
   import org.ergoplatform.utils.generators.ErgoCoreTransactionGenerators._
 
@@ -149,6 +153,64 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
     forAll(validErgoTransactionGen) { case (from, tx) =>
       tx.statelessValidity().isSuccess shouldBe true
       tx.statefulValidity(from, emptyDataBoxes, emptyStateContext).isSuccess shouldBe true
+    }
+  }
+
+  property("more than one pair of data inputs with same box id prohibited since activation height") {
+    val activationHeight = ErgoTransaction.DataInputsUniquenessHeight
+
+    val dataBoxesGen = Gen.nonEmptyListOf(NodeTransactionGenerators.ergoBoxGenNoProp)
+      .map(_.toIndexedSeq)
+    forAll(validErgoTransactionGen, dataBoxesGen) { case ((from, tx), dataBoxes) =>
+      // fresh DataInput instances with the same content on every reference,
+      // to check content-based (not reference-based) comparison
+      def ref(b: ErgoBox): DataInput = DataInput(ADKey @@ b.id.clone())
+
+      val uniqueInputs = dataBoxes.map(ref)
+      val beforeActivationCtx = stateContext(activationHeight - 1, 1, settings)
+      val afterActivationCtx = stateContext(activationHeight, 1, settings)
+
+      // transaction with unique data inputs is valid both before and after the activation height
+      val txUnique = ErgoTransaction(tx.inputs, uniqueInputs, tx.outputCandidates)
+      txUnique.statelessValidity().isSuccess shouldBe true
+      txUnique.statefulValidity(from, dataBoxes, beforeActivationCtx).isSuccess shouldBe true
+      txUnique.statefulValidity(from, dataBoxes, afterActivationCtx).isSuccess shouldBe true
+
+      // one pair of data inputs with the same box id is allowed both before and after activation
+      val txOnePair = ErgoTransaction(tx.inputs, ref(dataBoxes.head) +: uniqueInputs, tx.outputCandidates)
+      val onePairBoxes = dataBoxes.head +: dataBoxes
+      txOnePair.statelessValidity().isSuccess shouldBe true
+      txOnePair.statefulValidity(from, onePairBoxes, beforeActivationCtx).isSuccess shouldBe true
+      txOnePair.statefulValidity(from, onePairBoxes, afterActivationCtx).isSuccess shouldBe true
+
+      // three data inputs with the same box id are still valid before the activation height ...
+      val thriceInputs = ref(dataBoxes.head) +: ref(dataBoxes.head) +: uniqueInputs
+      val thriceBoxes = dataBoxes.head +: dataBoxes.head +: dataBoxes
+      val txThrice = ErgoTransaction(tx.inputs, thriceInputs, tx.outputCandidates)
+      txThrice.statelessValidity().isSuccess shouldBe true
+      txThrice.statefulValidity(from, thriceBoxes, beforeActivationCtx).isSuccess shouldBe true
+
+      // ... but rejected by stateful validation since the activation height
+      val expectedMsg = ValidationRules.errorMessage(
+        ValidationRules.txDataInputsUnique, "", emptyModifierId, ErgoTransaction.modifierTypeId)
+      val postActivationThrice = txThrice.statefulValidity(from, thriceBoxes, afterActivationCtx)
+      postActivationThrice.isSuccess shouldBe false
+      postActivationThrice.failed.get.getMessage should include(expectedMsg.take(30))
+
+      // two pairs of data inputs with the same box ids are also rejected since activation
+      whenever(dataBoxes.size >= 2) {
+        val twoPairsInputs = ref(dataBoxes(0)) +: ref(dataBoxes(1)) +: uniqueInputs
+        val twoPairsBoxes = dataBoxes(0) +: dataBoxes(1) +: dataBoxes
+        val txTwoPairs = ErgoTransaction(tx.inputs, twoPairsInputs, tx.outputCandidates)
+        txTwoPairs.statefulValidity(from, twoPairsBoxes, beforeActivationCtx).isSuccess shouldBe true
+        val postActivationTwoPairs = txTwoPairs.statefulValidity(from, twoPairsBoxes, afterActivationCtx)
+        postActivationTwoPairs.isSuccess shouldBe false
+        postActivationTwoPairs.failed.get.getMessage should include(expectedMsg.take(30))
+      }
+
+      // duplicated ordinary inputs are still rejected by stateless validation
+      val txWithDuplicatedInputs = tx.copy(inputs = tx.inputs ++ tx.inputs)
+      txWithDuplicatedInputs.statelessValidity().isSuccess shouldBe false
     }
   }
 
@@ -324,29 +386,34 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
 
   property("transaction with too many inputs should be rejected") {
 
-    // This test used to calibrate a wall-clock budget by timing 250K Blake2b256 hashes and then
-    // assert that validation fits in it. On a loaded CI machine the calibration window and the
-    // measurement window get different shares of the CPU, so the assertions flipped at random
-    // (see issue #2095). What the node is actually protected by is the block cost limit, not the
-    // clock, so the assertions below are on cost, which is deterministic.
+    //we assume that verifier must finish verification of any script in less time than 250K hash calculations
+    // (for the Blake2b256 hash function over a single block input)
+    val Timeout: Long = {
+      val hf = Blake2b256
+
+      //just in case to heat up JVM
+      (1 to 5000000).foreach(i => hf(s"$i-$i"))
+
+      val t0 = System.currentTimeMillis()
+      (1 to 250000).foreach(i => hf(s"$i"))
+      val t = System.currentTimeMillis()
+      t - t0
+    }
 
     val gen = validErgoTransactionGenTemplate(0, 0, 2000, trueLeafGen)
     val (from, tx) = gen.sample.get
     tx.statelessValidity().isSuccess shouldBe true
 
+    //check that spam transaction is being rejected quickly
     implicit val verifier: ErgoInterpreter = ErgoInterpreter(parameters)
-
-    // with the block cost limit in force, the spam transaction is rejected, and validation is
-    // aborted as soon as the accumulated cost passes the limit
-    val validity = tx.statefulValidity(from, IndexedSeq(), emptyStateContext)
+    val (validity, time0) = BenchmarkUtil.measureTime(tx.statefulValidity(from, IndexedSeq(), emptyStateContext))
     validity.isSuccess shouldBe false
+    assert(time0 <= Timeout)
 
     val cause = validity.failed.get.getMessage
     cause should startWith(ValidationRules.errorMessage(bsBlockTransactionsCost, "", emptyModifierId, ErgoTransaction.modifierTypeId).take(30))
 
-    // with a cost limit high enough to let it through, the same transaction validates, and the cost
-    // it accumulates is far above the block limit - that gap is what makes it spam, and it does not
-    // depend on how fast the machine running the test is
+    //check that spam transaction validation with no cost limit is indeed taking too much time
     import Parameters._
     val maxCost = (Int.MaxValue - 10) / 10 // cannot use Int.MaxValue directly due to overflow when it is converted to block cost
     val ps = Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, maxCost), emptyVSUpdate)
@@ -358,15 +425,11 @@ class ErgoNodeTransactionSpec extends ErgoCorePropertyTest with ErgoCompilerHelp
         Array.fill(3)(0.toByte),
         ErgoValidationSettingsUpdate.empty,
         0.toByte)
+    val (_, time) = BenchmarkUtil.measureTime(
+      tx.statefulValidity(from, IndexedSeq(), sc)(verifier)
+    )
 
-    val blockCostLimit = emptyStateContext.currentParameters.maxBlockCost
-    val fullCost = tx.statefulValidity(from, IndexedSeq(), sc)(verifier).get
-    // the generator produces exactly `maxInputs` inputs, so this ratio is stable (~4.4x as of today)
-    fullCost.toLong should be > (blockCostLimit.toLong * 2)
-
-    // and it is rejected by any limit below its cost, one unit below included
-    val justBelow = stateContextWith(Parameters(0, DefaultParameters.updated(MaxBlockCostIncrease, fullCost - 1), emptyVSUpdate))
-    tx.statefulValidity(from, IndexedSeq(), justBelow)(ErgoInterpreter(justBelow.currentParameters)) shouldBe 'failure
+    assert(time > Timeout)
   }
 
   property("transaction cost") {

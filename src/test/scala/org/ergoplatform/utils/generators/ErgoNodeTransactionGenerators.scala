@@ -57,12 +57,13 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
 
   def ergoBoxGenForTokens(tokens: Seq[(TokenId, Long)],
                           propositionGen: Gen[ErgoTree]): Gen[ErgoBox] = {
+    // enough for validUnsignedTransactionFromBoxes to spend the box alone
     val minValue = BoxUtils.sufficientAmount(extendedParameters)
     ergoBoxGen(
-      propGen = propositionGen,
-      tokensGen = Gen.oneOf(tokens, tokens),
-      valueGenOpt = Some(validValueGen.map(value => Math.max(value, minValue))),
-      heightGen = EmptyHistoryHeight
+      propGen     = propositionGen,
+      tokensGen   = Gen.oneOf(tokens, tokens),
+      valueGenOpt = Some(validValueGen.map(Math.max(_, minValue))),
+      heightGen   = EmptyHistoryHeight
     )
   }
 

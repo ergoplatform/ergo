@@ -11,7 +11,7 @@ import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
 import org.ergoplatform.modifiers.transaction.TooHighCostError
-import org.ergoplatform.core.idToVersion
+import org.ergoplatform.core.{idToVersion, versionToBytes}
 import org.ergoplatform.nodeView.ErgoNodeViewHolder
 import org.ergoplatform.nodeView.state.wrapped.WrappedUtxoState
 import org.ergoplatform.settings.Constants.FalseTree
@@ -439,6 +439,49 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
     }
   }
 
+  property("proofsForTransactions() does not modify the UTXO set tree along a growing chain") {
+    // Chain-scale variant of the invariants above, as asked in #1614: at every height of a
+    // growing chain, generating proofs must leave the tree untouched and be repeatable, and
+    // the block built from those proofs must be applicable, landing exactly on the promised digest.
+    // The issue literally asks for 500 blocks of 500 transactions; that would take hours in CI,
+    // so the chain is kept short here - the invariants checked are the same at any scale.
+    val blocksInChain = 20
+
+    var bh = BoxHolder(Seq(genesisEmissionBox))
+    var us = createUtxoState(bh, parameters)
+    var height: Int = GenesisHeight
+
+    (0 until blocksInChain) foreach { _ =>
+      val header: Header = defaultHeaderGen.sample.value
+      val t = validTransactionsFromBoxHolder(bh, new RandomWrapper(Some(height)))
+      val txs = t._1
+      bh = t._2
+
+      val rootBefore = us.rootDigest
+      // proof generation leaves the tree at the same root
+      val (adProofBytes, adDigest) = us.proofsForTransactions(txs).get
+      us.rootDigest.sameElements(rootBefore) shouldBe true
+      // and is repeatable, still without touching the tree
+      val (adProofBytes2, adDigest2) = us.proofsForTransactions(txs).get
+      ADProofs.proofDigest(adProofBytes2) shouldBe ADProofs.proofDigest(adProofBytes)
+      adDigest2 shouldBe adDigest
+      us.rootDigest.sameElements(rootBefore) shouldBe true
+
+      val realHeader = header.copy(stateRoot = adDigest,
+        ADProofsRoot = ADProofs.proofDigest(adProofBytes),
+        height = height,
+        parentId = us.stateContext.lastHeaderOpt.map(_.id).getOrElse(Header.GenesisParentId))
+      val adProofs = ADProofs(realHeader.id, adProofBytes)
+      val bt = BlockTransactions(realHeader.id, Header.InitialVersion, txs)
+      val fb = ErgoFullBlock(realHeader, bt, genExtension(realHeader, us.stateContext), Some(adProofs))
+      // the state accepts the block built from those proofs and lands exactly on the promised root
+      us = us.applyModifier(fb, None)(_ => ()).get
+      us.rootDigest.sameElements(fb.header.stateRoot) shouldBe true
+      height = height + 1
+    }
+    us.closeStorage()
+  }
+
   property("proofsForTransactions() fails if a transaction is spending an output created by a follow-up transaction") {
     forAll(boxesHolderGen) { bh =>
       val txsFromHolder = validTransactionsFromBoxHolder(bh)._1
@@ -580,6 +623,26 @@ class UtxoStateSpecification extends ErgoCorePropertyTest with OptionValues {
       .get
 
     ErgoNodeViewHolder.extractFailedTxId(error) shouldBe Some(invalidTx.id)
+  }
+
+  property("rollbackTo() fails when target version was pruned past keepVersions") {
+    val keepOneSettings = settings.copy(
+      nodeSettings = settings.nodeSettings.copy(keepVersions = 1)
+    )
+    val (us, bh) = createUtxoState(keepOneSettings)
+    val genesis = validFullBlock(parentOpt = None, us, bh)
+    val wusAfterGenesis = WrappedUtxoState(us, bh, keepOneSettings).applyModifier(genesis)(_ => ()).get
+    val block1 = validFullBlock(Some(genesis), wusAfterGenesis)
+    val wusAfterBlock1 = wusAfterGenesis.applyModifier(block1)(_ => ()).get
+    val block2 = validFullBlock(Some(block1), wusAfterBlock1)
+    val stateAfterBlock2 = wusAfterBlock1.applyModifier(block2)(_ => ()).get
+    val genesisVersion = idToVersion(genesis.id)
+
+    stateAfterBlock2.rollbackVersions.toSeq should not contain genesisVersion
+    stateAfterBlock2.store.get(versionToBytes(genesisVersion)) shouldBe defined
+    stateAfterBlock2.rollbackTo(genesisVersion) shouldBe 'failure
+    stateAfterBlock2.rootDigest shouldEqual block2.header.stateRoot
+    us.closeStorage()
   }
 
   private def genExtension(header: Header, sc: ErgoStateContext): Extension = {

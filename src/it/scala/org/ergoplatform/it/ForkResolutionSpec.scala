@@ -3,6 +3,7 @@ package org.ergoplatform.it
 import java.io.File
 import cats.implicits._
 import com.typesafe.config.Config
+import org.ergoplatform.it.api.NodeApi.NodeInfo
 import org.ergoplatform.it.container.Docker.{ExtraConfig, noExtraConfig}
 import org.ergoplatform.it.container.{IntegrationSuite, Node}
 import org.scalatest.concurrent.Eventually
@@ -18,7 +19,11 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
 
   val nodesQty: Int = 4
 
-  val commonChainLength: Int = 5
+  // sync v2 finds a common point only through the headers 0, 16, 128 and 512 blocks
+  // below a node's tip (`ErgoHistoryReader.FullV2SyncOffsets`). An isolated follower can
+  // mine 20 blocks or more, past the 16 offset, so the common chain is at least 129
+  // blocks long: then the header 128 below a forked tip exists and is common
+  val commonChainLength: Int = 129
   val forkLength: Int = 5
   val syncLength: Int = 15
 
@@ -37,6 +42,11 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
     .map(_.withFallback(allowLocalConfig).withFallback(miningTimingConfig))
 
   val minerConfig: Config = nodeConfigs.head
+
+  // node01 mines the common chain alone, so it can poll fast, as in LongChainSyncSpec
+  val commonChainMinerConfig: Config =
+    internalMinerPollingIntervalConfig(100).withFallback(minerConfig)
+
   val onlineSyncNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
     .map(_.withFallback(nonGeneratingPeerConfig))
   val offlineMiningNodesConfig: List[Config] = nodeConfigs.slice(1, nodesQty)
@@ -64,28 +74,54 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
   }
 
   // Testing scenario:
-  // 1. Start up {nodesQty} nodes and let them mine common chain of length {initialCommonChainLength};
-  // 2. Kill all nodes when they are done, make them offline generating, clear known peers and restart them;
-  // 3. Let them mine another {forkLength} blocks offline in order to create {nodesQty} forks;
-  // 4. Kill all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
+  // 1. Start up {nodesQty} nodes and let node01 mine a common chain of
+  //    {commonChainLength} blocks;
+  // 2. Stop all nodes (a clean shutdown) when they are done, make them offline generating,
+  //    clear their peer databases and restart them with no connections allowed;
+  // 3. Let them mine offline until each has its own block {forkLength} above the followers'
+  //    headers, so that every follower has a fork;
+  // 4. Stop all nodes again and restart with `knownPeers` filled, wait another {syncLength} blocks;
   // 5. Check that nodes reached consensus on created forks;
   it should "Fork resolution after isolated mining" in {
 
     log.info(minerConfig.toString)
     onlineSyncNodesConfig.foreach(x => log.info(x.toString))
 
-    val nodes: List[Node] = startNodesWithBinds(minerConfig +: onlineSyncNodesConfig)
+    val nodes: List[Node] =
+      startNodesWithBinds(commonChainMinerConfig +: onlineSyncNodesConfig)
 
     val result = Async.async {
       val initMaxHeight = Async.await(Future.traverse(nodes)(_.fullHeight).map(_.max))
       Async.await(Future.traverse(nodes)(_.waitForHeight(initMaxHeight + commonChainLength, 100.millis)))
+      // Isolated followers can't mine while their headers are 6+ blocks ahead of full blocks
+      val followerInfos = Async.await(nodes.head.waitForProgress[Seq[NodeInfo], Int](
+        "followers' headers less than 3 ahead of their full blocks",
+        _ => Future.traverse(nodes.tail)(_.info),
+        _.forall(i => i.bestHeaderHeightOpt.getOrElse(0) - i.bestBlockHeightOpt.getOrElse(0) < 3),
+        100.millis
+      )(
+        // a follower whose block download stops keeps the minimum still
+        infos => Some(infos.map(_.bestBlockHeightOpt.getOrElse(0)).min),
+        infos => nodes.tail.zip(infos).map { case (n, i) =>
+          s"${n.nodeName} headers=${i.bestHeaderHeightOpt.getOrElse(0)} full=${i.bestBlockHeightOpt.getOrElse(0)}"
+        }.mkString(", ")
+      ))
+      // the followers know no header at forkHeight, so each of them mines its own block there
+      val forkHeight = followerInfos.map(_.bestHeaderHeightOpt.getOrElse(0)).max + forkLength
       val isolatedNodes = Async.await {
         nodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
-        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, isolatedPeersConfig))
+        Future.successful(startNodesWithBinds(minerConfig +: offlineMiningNodesConfig, noConnectionsConfig))
       }
-      val forkHeight = initMaxHeight + commonChainLength + forkLength
       Async.await(Future.traverse(isolatedNodes)(_.waitForHeight(forkHeight, 100.millis)))
+      val isolatedPeers = Async.await(Future.traverse(isolatedNodes) { node =>
+        node.connectedPeers.map(peers => node.nodeName -> peers.map(_.name))
+      })
+      isolatedPeers.filter(_._2.nonEmpty) shouldBe empty
+      // no follower has node01's block at forkHeight, so every follower has a fork to resolve
+      val isolatedIds =
+        Async.await(Future.traverse(isolatedNodes)(_.headerIdsByHeight(forkHeight).map(_.headOption)))
+      isolatedIds.tail should not contain isolatedIds.head
       val regularNodes = Async.await {
         isolatedNodes.foreach(node => docker.stopNode(node.containerId))
         clearPeerDatabases()
@@ -94,7 +130,12 @@ class ForkResolutionSpec extends AnyFlatSpec with Matchers with IntegrationSuite
       Async.await(Future.traverse(regularNodes)(_.waitForHeight(forkHeight + syncLength, 100.millis)))
       val sample = Async.await(regularNodes.head.headerIdsByHeight(forkHeight)).headOption.value
       val headers = Async.await(Future.traverse(regularNodes) { node =>
-        node.waitFor[Seq[String]](_.headerIdsByHeight(forkHeight), _.headOption.contains(sample), 100.millis)
+        node.waitForProgress[Seq[String], String](
+          s"header $sample at height $forkHeight",
+          _.headerIdsByHeight(forkHeight),
+          _.headOption.contains(sample),
+          100.millis
+        )(_.headOption, ids => s"selected ${ids.headOption.getOrElse("none")}")
       })
 
       log.debug(s"Headers at height $forkHeight: ${headers.mkString(",")}")

@@ -1,22 +1,28 @@
 package org.ergoplatform.nodeView.history
 
 import akka.actor.ActorContext
-import org.ergoplatform.consensus.ProgressInfo
+import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
 
 import java.io.File
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
 import org.ergoplatform.mining.AutolykosPowScheme
 import org.ergoplatform.modifiers.history._
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NonHeaderBlockSection}
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.StartExtraIndexer
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{IndexedHeightKey, NewestVersion, NewestVersionBytes, SchemaVersionKey, getIndex}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ErgoNodeViewModifier, NonHeaderBlockSection}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, IndexedHeaderIdKey,
+  IndexedHeightKey, NewestVersion, NewestVersionBytes, RentIndexEnabledBytes, RentIndexEnabledKey, RollbackToKey, SchemaVersionKey}
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, IndexedErgoBox, IndexedErgoTransaction, NumericBoxIndex, NumericTxIndex}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
 import org.ergoplatform.nodeView.history.storage.modifierprocessors._
-import org.ergoplatform.settings.ErgoSettings
+import org.ergoplatform.settings.{Algos, ErgoSettings}
 import org.ergoplatform.utils.LoggingUtil
 import org.ergoplatform.validation.RecoverableModifierError
-import scorex.util.{ModifierId, ScorexLogging, idToBytes}
+import scorex.db.ByteArrayWrapper
+import scorex.util.{ModifierId, ScorexLogging, bytesToId, idToBytes}
 
+import scala.annotation.{nowarn, tailrec}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -141,12 +147,35 @@ trait ErgoHistory
           case _ =>
             // Modifiers from best header and best full chain are involved, links change required
             val newBestHeaderOpt = loopHeightDown(headersHeight, id => !invalidatedIds.contains(id))
+            // The per-height rows are also the source for bestHeaderIdAtHeight and V2 sync.
+            // Only the divergent suffix needs rewriting; the first matching row is the
+            // common ancestor of the old and newly selected best header chains.
+            val selectedHeaderRows = newBestHeaderOpt.toSeq.flatMap { tip =>
+              val rows = ArrayBuffer.empty[(ByteArrayWrapper, Array[Byte])]
+              var current = Option(tip)
+              var reachedCommonAncestor = false
+              while (current.nonEmpty && !reachedCommonAncestor) {
+                val h = current.get
+                val ids = headerIdsAtHeight(h.height)
+                if (ids.headOption.contains(h.id)) {
+                  reachedCommonAncestor = true
+                } else {
+                  rows += (heightIdsKey(h.height) ->
+                    (h.id +: ids.filterNot(_ == h.id)).flatMap(idToBytes).toArray)
+                  current = typedModifierById[Header](h.parentId)
+                }
+              }
+              rows
+            }
 
             if (!bestFullIsInvalidated) {
               //Only headers chain involved
               historyStorage.insert(
-                newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toArray,
-                BlockSection.emptyArray
+                (validityRow.toSeq ++
+                  newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)) ++
+                  selectedHeaderRows).toArray,
+                BlockSection.emptyArray,
+                if (newBestHeaderOpt.isEmpty) Array(BestHeaderKey) else Array.empty[ByteArrayWrapper]
               ).map { _ =>
                 this -> ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)
               }
@@ -156,8 +185,9 @@ trait ErgoHistory
                 .flatMap(getFullBlock)
                 .ensuring(_.lengthCompare(1) >= 0, "invalidatedChain should contain at least bestFullBlock")
 
-              val genesisInvalidated = invalidatedChain.lengthCompare(1) == 0
-              val branchPointHeader = if (genesisInvalidated) PreGenesisHeader else invalidatedChain.head.header
+              // A snapshot floor may leave no valid full ancestor even when several full blocks are retained.
+              val noRetainedFullAncestor = invalidatedIds.contains(invalidatedChain.head.id)
+              val branchPointHeader = if (noRetainedFullAncestor) PreGenesisHeader else invalidatedChain.head.header
 
               val validHeadersChain =
                 continuationHeaderChains(branchPointHeader,
@@ -171,11 +201,19 @@ trait ErgoHistory
                 invalidatedHeaders.map(h =>
                   FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
 
-              val changedLinks = validHeadersChain.lastOption.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
+              // Keep the pre-genesis pointer after invalidating a stored full genesis.
+              // An elided full-block prefix has no retained full ancestor.
+              val preservePreGenesisBestFull = invalidatedChain.head.header.isGenesis
+              val newBestFullOpt = validHeadersChain.lastOption
+                .filterNot(h => h.id == PreGenesisHeader.id && !preservePreGenesisBestFull)
+              val changedLinks = newBestFullOpt.map(b => BestFullBlockKey -> idToBytes(b.id)) ++
                 newBestHeaderOpt.map(h => BestHeaderKey -> idToBytes(h.id)).toSeq
-              val toInsert = validityRow ++ changedLinks ++ chainStatusRow
-              historyStorage.insert(toInsert, BlockSection.emptyArray).map { _ =>
-                val toRemove = if (genesisInvalidated) invalidatedChain else invalidatedChain.tail
+              val toInsert = validityRow ++ changedLinks ++ chainStatusRow ++ selectedHeaderRows
+              val linksToRemove =
+                (if (newBestFullOpt.isEmpty) Seq(BestFullBlockKey) else Seq.empty) ++
+                  (if (newBestHeaderOpt.isEmpty) Seq(BestHeaderKey) else Seq.empty)
+              historyStorage.insert(toInsert, BlockSection.emptyArray, linksToRemove.toArray).map { _ =>
+                val toRemove = if (noRetainedFullAncestor) invalidatedChain else invalidatedChain.tail
                 this -> ProgressInfo(Some(branchPointHeader.id), toRemove, validChain, Seq.empty)
               }
             }
@@ -203,26 +241,76 @@ trait ErgoHistory
   /**
     * Remove header, corresponding block parts, and corresponding indexes from storage and caches
     * @param headerId - header id
-    * @return
+    * @return Success after every removal, or the first removal failure
     */
   def forgetHeader(headerId: ModifierId): Try[Unit] = Try {
-    val hOpt = typedModifierById[Header](headerId)
-      val hRes = historyStorage.remove(
+    historyStorage.modifierById(headerId).collect { case h: Header if h.id == headerId => h }
+  }.flatMap { hOpt =>
+    // Keep the header until its sections are removed so a retry can still discover their identifiers.
+    hOpt.toSeq.flatMap(_.sectionIds).foldLeft[Try[Unit]](Success(())) {
+      case (result, (_, mId)) => result.flatMap { _ =>
+        removeLogged("modifier", mId)(Array(validityKey(mId)), Array(mId))
+      }
+    }.flatMap { _ =>
+      removeLogged("header", headerId)(
         indicesToRemove = Array(validityKey(headerId), headerHeightKey(headerId), headerScoreKey(headerId)),
         idsToRemove = Array(headerId)
       )
-    log.info(s"Result of removing header $headerId: " + hRes)
-
-    hOpt.foreach { h =>
-      requiredModifiersForHeader(h).foreach { case (_, mId) =>
-        val mRes = historyStorage.remove(
-          indicesToRemove = Array(validityKey(mId)),
-          idsToRemove = Array(mId)
-        )
-        log.info(s"Result of removing modifier $mId: " + mRes)
-      }
     }
   }
+
+  // Removes the rows and logs the result; a thrown storage error counts as a Failure.
+  private def removeLogged(kind: String, id: ModifierId)(
+    indicesToRemove: Array[ByteArrayWrapper],
+    idsToRemove: Array[ModifierId]
+  ): Try[Unit] = {
+    val removal = Try(historyStorage.remove(indicesToRemove, idsToRemove)).flatten
+    removal match {
+      case Success(_) => log.info(s"Result of removing $kind $id: $removal")
+      case Failure(error) =>
+        log.error(s"Failed to remove $kind $id during history repair", error)
+    }
+    removal
+  }
+
+  /**
+    * Moves a best full block pointer that names a block this node cannot assemble to the highest ancestor it can
+    * assemble, down to `minimalFullBlockHeight`, or removes the pointer if there is none. Otherwise the block is
+    * never applied, as the pointer already names it. The skipped headers lose their best-chain marker, so that the
+    * markers still form one chain. Any section missing in any state mode starts the repair: for example the
+    * ADProofs a UTXO node stores only after the state update, missing in a history opened in digest mode (#2788),
+    * or a lost section (#2778, case 2). A pointer to a header that is not stored, such as the pre-genesis id
+    * `reportModifierIsInvalid` writes when the genesis block is invalidated, is left as it is.
+    */
+  protected[history] def repairIncompleteBestFullBlock(): Try[Unit] = Try(historyStorage.synchronized {
+    bestFullBlockIdOpt.flatMap(id => typedModifierById[Header](id)).filter(getFullBlock(_).isEmpty) match {
+      case Some(bestHeader) =>
+        val lowestHeight = minimalFullBlockHeight
+
+        @tailrec
+        def walk(headerOpt: Option[Header], skipped: List[Header]): (List[Header], Option[Header]) =
+          headerOpt match {
+            case Some(h) if h.height >= lowestHeight && getFullBlock(h).isEmpty =>
+              walk(typedModifierById[Header](h.parentId), h :: skipped)
+            case Some(h) if h.height >= lowestHeight => (skipped, Some(h))
+            case _ => (skipped, None)
+          }
+
+        val (skipped, completeOpt) = walk(typedModifierById[Header](bestHeader.parentId), List(bestHeader))
+        log.warn(s"Best full block ${bestHeader.id} cannot be assembled in ${nodeSettings.stateType} mode, " +
+          s"moving the pointer to ${completeOpt.map(h => s"${h.id} at height ${h.height}").getOrElse("none")}")
+        val markers = skipped.map(h => FullBlockProcessor.chainStatusKey(h.id) -> FullBlockProcessor.NonBestChainMarker)
+        completeOpt match {
+          case Some(header) =>
+            historyStorage.insert((BestFullBlockKey -> idToBytes(header.id)) +: markers.toArray, BlockSection.emptyArray)
+          case None =>
+            historyStorage.insert(markers.toArray, BlockSection.emptyArray)
+              .flatMap(_ => historyStorage.remove(Array(BestFullBlockKey), Array.empty[ModifierId]))
+        }
+      case None =>
+        Success(())
+    }
+  }).flatten
 
   /**
     * @return read-only copy of this history
@@ -239,38 +327,253 @@ object ErgoHistory extends ScorexLogging {
     dir
   }
 
-  // check if there is possible database corruption when there is header after
-  // recognized blockchain tip marked as invalid
-  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Boolean = history.historyStorage.synchronized {
+  // A retained alternative fork may continue above the selected full-block tip.
+  // Keep a continuation only when it has a readable, matching header and is not invalid.
+  // Success(false) means no repair was needed; Success(true) means all removals completed.
+  // Failure preserves the first error; the height index is removed only after all headers are forgotten.
+  protected[nodeView] def repairIfNeeded(history: ErgoHistory): Try[Boolean] = Try(history.historyStorage.synchronized {
     val bestHeaderHeight = history.headersHeight
     val bestFullBlockHeight = history.bestFullBlockOpt.map(_.height).getOrElse(-1)
     val afterHeaders = history.headerIdsAtHeight(bestHeaderHeight + 1)
 
-    if (bestHeaderHeight == bestFullBlockHeight && afterHeaders.nonEmpty) {
-      log.warn("Found suspicious continuation, clearing it...")
-      afterHeaders.map { hId =>
-        history.forgetHeader(hId)
+    val removableContinuations = afterHeaders.nonEmpty && afterHeaders.forall { id =>
+      history.isSemanticallyValid(id) match {
+        case ModifierSemanticValidity.Invalid => true
+        case _ => !history.historyStorage.modifierById(id).exists {
+          case header: Header => header.id == id
+          case _ => false
+        }
       }
-      history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
-      true
-    } else {
-      false
     }
-  }
+
+    if (bestHeaderHeight == bestFullBlockHeight && removableContinuations) {
+      log.warn("Found invalid or unreadable continuation, clearing it...")
+      afterHeaders.foldLeft[Try[Unit]](Success(())) { (result, hId) =>
+        result.flatMap(_ => history.forgetHeader(hId))
+      }.flatMap { _ =>
+        history.historyStorage.remove(Array(history.heightIdsKey(bestHeaderHeight + 1)), Array.empty[ModifierId])
+      }.map(_ => true)
+    } else {
+      Success(false)
+    }
+  }).flatten
 
   /**
     * @return ErgoHistory instance with new database or database read from existing folder
     */
-  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory = {
-    var db = HistoryStorage(ergoSettings)
+  def readOrGenerate(ergoSettings: ErgoSettings)(implicit context: ActorContext): ErgoHistory =
+    readOrGenerate(ergoSettings, HistoryStorage(ergoSettings))
+
+  @nowarn("cat=unused")
+  private[history] def readOrGenerate(ergoSettings: ErgoSettings,
+                                    storage: HistoryStorage)(implicit context: ActorContext): ErgoHistory = {
+    var db = storage
+
+    // The close action follows the store owned at this stage of startup.
+    def stopOnFailure[A](step: String, result: Try[A])(closeStore: => Unit): A = result match {
+      case Failure(error) =>
+        Try(closeStore).failed.foreach { closeError =>
+          if (closeError ne error) error.addSuppressed(closeError)
+        }
+        log.error(
+          s"$step failed; stop this node. Operator recovery: " +
+            "inspect the error and correct its cause (disk space, permissions, " +
+            "or open handles); keep history/index and history/objects intact, " +
+            "then restart to retry.",
+          error)
+        throw error
+      case Success(value) => value
+    }
 
     // ExtraIndexer db check
-    if(ergoSettings.nodeSettings.extraIndex) { // check db schema
-      val schemaVersion: Int = getIndex(SchemaVersionKey, db).getInt
-      if (schemaVersion != NewestVersion) {
-        if(getIndex(IndexedHeightKey, db).getInt > 0)
-          db = db.deleteExtraDB(ergoSettings) // older schema -> delete and reopen db
-        db.insertExtra(Array((SchemaVersionKey, NewestVersionBytes)), Array.empty) // update version key
+    if(ergoSettings.nodeSettings.extraIndex) { // check db schema and checkpoint provenance
+      // Only preflight reads use this guard. Rebuild operations already close their own stores.
+      def readPreflight[A](read: => A): A =
+        stopOnFailure("Extra-index preflight read", Try(read))(db.close())
+
+      def storedBytes(key: Array[Byte]): Option[Array[Byte]] =
+        readPreflight(db.modifierBytesById(bytesToId(key)))
+      def storedIndex(key: ByteArrayWrapper): Option[Array[Byte]] =
+        readPreflight(db.getIndex(key))
+      def storedModifier(id: ModifierId): Option[BlockSection] =
+        readPreflight(db.modifierById(id))
+      def storedExtraIndex(id: ModifierId): Option[ExtraIndex] =
+        readPreflight(db.getExtraIndex(id))
+      def inBestFullChain(id: ModifierId): Boolean =
+        readPreflight(FullBlockProcessor.isInBestFullChain(db, id))
+      def intValue(bytesOpt: Option[Array[Byte]]): Option[Int] = bytesOpt
+        .filter(_.length == Integer.BYTES)
+        .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getInt)
+      def longValue(bytesOpt: Option[Array[Byte]]): Option[Long] = bytesOpt
+        .filter(_.length == java.lang.Long.BYTES)
+        .map(bytes => ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).getLong)
+
+      val schemaVersionBytesOpt = storedBytes(SchemaVersionKey)
+      val indexedHeightBytesOpt = storedBytes(IndexedHeightKey)
+      val globalTxIndexBytesOpt = storedBytes(GlobalTxIndexKey)
+      val globalBoxIndexBytesOpt = storedBytes(GlobalBoxIndexKey)
+      val rollbackToBytesOpt = storedBytes(RollbackToKey)
+      val schemaVersionOpt = intValue(schemaVersionBytesOpt)
+      val indexedHeightOpt = intValue(indexedHeightBytesOpt)
+      val globalTxIndexOpt = longValue(globalTxIndexBytesOpt)
+      val globalBoxIndexOpt = longValue(globalBoxIndexBytesOpt)
+      val rollbackToOpt = intValue(rollbackToBytesOpt)
+      val indexedHeight = indexedHeightOpt.getOrElse(0)
+      val globalTxIndex = globalTxIndexOpt.getOrElse(0L)
+      val globalBoxIndex = globalBoxIndexOpt.getOrElse(0L)
+      val rollbackTo = rollbackToOpt.getOrElse(0)
+      val indexedHeaderIdBytesOpt = storedBytes(IndexedHeaderIdKey)
+      val indexedHeaderOpt = indexedHeaderIdBytesOpt
+        .filter(_.length == ErgoNodeViewModifier.ModifierIdSize)
+        .flatMap { idBytes =>
+        val id = bytesToId(idBytes)
+        val validityKey = ByteArrayWrapper(Algos.hash("validity".getBytes(StandardCharsets.UTF_8) ++ idToBytes(id)))
+        // Unknown validity is accepted: the indexer does not gate on semantic validity, so a
+        // checkpoint over a not-yet-marked header is legitimate. An explicitly Invalid
+        // checkpoint header still forces a rebuild - the indexed chain was invalidated.
+        val isInvalid = storedIndex(validityKey).exists(_.sameElements(Array(0.toByte)))
+        if (!isInvalid && inBestFullChain(id)) storedModifier(id).collect {
+          case header: Header if header.height == indexedHeight && header.id == id => header
+        } else None
+      }
+      val terminalRowsMatchCheckpoint = schemaVersionOpt.contains(NewestVersion) && indexedHeaderOpt.exists { header =>
+        if (globalTxIndex <= 0 || globalBoxIndex <= 0) {
+          false
+        } else {
+          storedModifier(header.transactionsId).collect {
+            case transactions: BlockTransactions if transactions.headerId == header.id =>
+              val lastTx = transactions.txs.last
+              val lastTxIndex = globalTxIndex - 1
+              val firstTxBoxIndex = globalBoxIndex - lastTx.outputs.size
+              val expectedOutputNums = Array.tabulate(lastTx.outputs.size)(i => firstTxBoxIndex + i)
+              val expectedInputNumsOpt = if (header.height <= 1) {
+                Some(Array.fill[Long](lastTx.inputs.size)(0L))
+              } else {
+                val inputNums = lastTx.inputs.map { input =>
+                  val inputId = bytesToId(input.boxId)
+                  storedExtraIndex(inputId).collect {
+                    case box: IndexedErgoBox
+                      if box.id == inputId && box.spendingTxIdOpt.contains(lastTx.id) &&
+                        box.spendingHeightOpt.contains(header.height) => box.globalIndex
+                  }
+                }
+                if (inputNums.forall(_.isDefined)) Some(inputNums.flatten.toArray) else None
+              }
+              val numericTxMatches = storedExtraIndex(bytesToId(NumericTxIndex.indexToBytes(lastTxIndex))).exists {
+                case NumericTxIndex(index, id) => index == lastTxIndex && id == lastTx.id
+                case _ => false
+              }
+              val indexedTxMatches = storedExtraIndex(lastTx.id).exists {
+                case tx: IndexedErgoTransaction =>
+                  tx.txid == lastTx.id && tx.globalIndex == lastTxIndex && tx.height == header.height &&
+                    tx.blockId == header.id &&
+                    tx.index == transactions.txs.size - 1 && tx.size == lastTx.size &&
+                    expectedInputNumsOpt.exists(expected => tx.inputNums.sameElements(expected)) &&
+                    tx.outputNums.sameElements(expectedOutputNums) && tx.dataInputs.sameElements(lastTx.dataInputs)
+                case _ => false
+              }
+              val outputRowsMatch = expectedOutputNums.zip(lastTx.outputs).forall { case (boxIndex, output) =>
+                val boxId = bytesToId(output.id)
+                val numericBoxMatches = storedExtraIndex(bytesToId(NumericBoxIndex.indexToBytes(boxIndex))).exists {
+                  case NumericBoxIndex(index, id) => index == boxIndex && id == boxId
+                  case _ => false
+                }
+                val indexedBoxMatches = storedExtraIndex(boxId).exists {
+                  case box: IndexedErgoBox =>
+                    box.globalIndex == boxIndex && box.inclusionHeight == header.height && box.id == boxId &&
+                      box.spendingTxIdOpt.isEmpty && box.spendingHeightOpt.isEmpty && box.spendingProofOpt.isEmpty
+                  case _ => false
+                }
+                numericBoxMatches && indexedBoxMatches
+              }
+              numericTxMatches && indexedTxMatches && outputRowsMatch
+          }.contains(true)
+        }
+      }
+      val numericValuesAreWellFormed = Seq(
+        indexedHeightBytesOpt.forall(_.length == Integer.BYTES),
+        globalTxIndexBytesOpt.forall(_.length == java.lang.Long.BYTES),
+        globalBoxIndexBytesOpt.forall(_.length == java.lang.Long.BYTES),
+        rollbackToBytesOpt.forall(_.length == Integer.BYTES)
+      ).forall(identity)
+      val valuesAreNonNegative = indexedHeight >= 0 && globalTxIndex >= 0 && globalBoxIndex >= 0 && rollbackTo >= 0
+      val emptyCheckpoint = indexedHeight == 0 && globalTxIndex == 0 && globalBoxIndex == 0 &&
+        rollbackTo == 0 && indexedHeaderIdBytesOpt.isEmpty
+      val nonEmptyCheckpoint = indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
+        .forall(_.isDefined) && rollbackTo == 0 && terminalRowsMatchCheckpoint
+      val checkpointIsValid = schemaVersionOpt.contains(NewestVersion) && numericValuesAreWellFormed &&
+        valuesAreNonNegative && (emptyCheckpoint || nonEmptyCheckpoint)
+      if (!checkpointIsValid) {
+        val failedChecks = Seq(
+          !schemaVersionOpt.contains(NewestVersion) -> "schema version",
+          !numericValuesAreWellFormed -> "counter encoding",
+          !valuesAreNonNegative -> "negative counters",
+          (rollbackTo != 0) -> "rollback marker",
+          (indexedHeight == 0 && !emptyCheckpoint) -> "empty checkpoint shape",
+          (indexedHeight > 0 && Seq(indexedHeightOpt, globalTxIndexOpt, globalBoxIndexOpt, rollbackToOpt)
+            .exists(_.isEmpty)) -> "missing checkpoint counters",
+          (indexedHeight > 0 && (globalTxIndex <= 0 || globalBoxIndex <= 0)) ->
+            "non-positive global index counters",
+          (indexedHeight > 0 && indexedHeaderOpt.isEmpty) -> "checkpoint header or validity",
+          (indexedHeight > 0 && schemaVersionOpt.contains(NewestVersion) && indexedHeaderOpt.isDefined &&
+            globalTxIndex > 0 && globalBoxIndex > 0 && !terminalRowsMatchCheckpoint) ->
+            "terminal transaction or box rows"
+        ).collect { case (true, name) => name }
+        log.warn(s"Rebuilding invalid extra index checkpoint: ${failedChecks.mkString(", ")}")
+        val freshDb = db.deleteExtraDBTry(ergoSettings).recoverWith { case error =>
+          val extraIndexPath = new File(s"${ergoSettings.directory}/history/extra").getAbsolutePath
+          log.error(
+            "Extra index rebuild failed; node startup is aborting. Operator recovery: " +
+              "1) stop every Ergo node process using this data directory; " +
+              "2) inspect the preceding exception and correct its cause, such as disk space, permissions, or open handles; " +
+              s"3) move or remove only '$extraIndexPath'; " +
+              "4) verify that directory no longer exists; 5) restart the node to retry the extra index rebuild. " +
+              "Do not remove the history/index or history/objects directories.",
+            error)
+          Failure(error)
+        }.get
+        val rentMarkerEntry: Array[(Array[Byte], Array[Byte])] =
+          if (ergoSettings.nodeSettings.storageRentCollection) {
+            Array(RentIndexEnabledKey -> RentIndexEnabledBytes)
+          } else {
+            Array.empty
+          }
+        freshDb.insertExtraTry(Array((SchemaVersionKey, NewestVersionBytes)) ++ rentMarkerEntry, Array.empty).recoverWith { case error =>
+          Try(freshDb.close()).failed.foreach(error.addSuppressed)
+          Failure(error)
+        }.get
+        db = freshDb
+      }
+
+      // Rent rows are written only while storageRentCollection is on, which the schema
+      // version can not capture (see ExtraIndexer.RentIndexEnabledKey): turning the flag
+      // on after an off period must rebuild the index (blocks indexed while off have no
+      // rent rows); turning it off just clears the marker, keeping the index intact.
+      val rentEnabledStored = storedBytes(RentIndexEnabledKey)
+        .exists(_.sameElements(RentIndexEnabledBytes))
+      if (ergoSettings.nodeSettings.storageRentCollection && !rentEnabledStored) {
+        log.warn("storageRentCollection is on but the extra index has no rent rows, rebuilding it")
+        val freshDb = db.deleteExtraDBTry(ergoSettings).recoverWith { case error =>
+          val extraIndexPath = new File(s"${ergoSettings.directory}/history/extra").getAbsolutePath
+          log.error(
+            "Extra index rebuild failed; node startup is aborting. Operator recovery: " +
+              "1) stop every Ergo node process using this data directory; " +
+              "2) inspect the preceding exception and correct its cause, such as disk space, permissions, or open handles; " +
+              s"3) move or remove only '$extraIndexPath'; " +
+              "4) verify that directory no longer exists; 5) restart the node to retry the extra index rebuild. " +
+              "Do not remove the history/index or history/objects directories.",
+            error)
+          Failure(error)
+        }.get
+        freshDb.insertExtraTry(Array(
+          (SchemaVersionKey, NewestVersionBytes),
+          (RentIndexEnabledKey, RentIndexEnabledBytes)), Array.empty).recoverWith { case error =>
+          Try(freshDb.close()).failed.foreach(error.addSuppressed)
+          Failure(error)
+        }.get
+        db = freshDb
+      } else if (!ergoSettings.nodeSettings.storageRentCollection && rentEnabledStored) {
+        db.removeExtra(Array(bytesToId(RentIndexEnabledKey)))
       }
     }
 
@@ -292,11 +595,32 @@ object ErgoHistory extends ScorexLogging {
         }
     }
 
-    repairIfNeeded(history)
+    // A failed repair closes the constructed history and stops the start-up.
+    stopOnFailure("History repair", repairIfNeeded(history))(history.closeStorage())
+    stopOnFailure("Best full block repair", history.repairIncompleteBestFullBlock())(history.closeStorage())
+
+    // If the node is restarted in the middle of UTXO set snapshot bootstrapping (headers are
+    // already persisted, but the snapshot was not applied yet), the headers chain is already
+    // complete - via a NiPoPoW proof or via ordinary header sync - so mark it synced. Otherwise
+    // the synchronizer never asks for the snapshot manifest / block sections
+    // (ErgoNodeViewSynchronizer.requestMoreModifiers) and bootstrapping can never resume.
+    // Only the in-memory flag is set; no heights are written here (isUtxoSnapshotApplied is
+    // derived from the persisted minimalFullBlockHeight, which must stay untouched until the
+    // snapshot is actually applied).
+    // The persisted best header must be fresh: a stale or partial header chain does not
+    // establish that headers sync completed (such a node transitions organically when the
+    // next fresh header arrives, see ToDownloadProcessor). A header persisted during an
+    // interrupted bootstrap is at the network tip, so recovery after a mid-bootstrap restart
+    // is unaffected.
+    stopOnFailure("UTXO bootstrap recovery", Try {
+      if (nodeSettings.utxoSettings.utxoBootstrap &&
+          history.bestHeaderOpt.exists(_.isNew(ergoSettings.chainSettings.blockInterval * nodeSettings.headerChainDiff)) &&
+          !history.isUtxoSnapshotApplied) {
+        history.setHeadersChainSynced()
+      }
+    })(history.closeStorage())
 
     log.info("History database read")
-    if(ergoSettings.nodeSettings.extraIndex) // start extra indexer, if enabled
-      context.system.eventStream.publish(StartExtraIndexer(history))
     history
   }
 

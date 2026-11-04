@@ -216,11 +216,11 @@ object Header extends ApiCodecs {
       nBits <- c.downField("nBits").as[Long]
       height <- c.downField("height").as[Int]
       version <- c.downField("version").as[Byte]
-      votes <- c.downField("votes").as[String]
+      votes <- c.downField("votes").as[Array[Byte]]
       solutions <- c.downField("powSolutions").as[AutolykosSolution]
       unparsedBytes <- c.downField("unparsedBytes").as[Option[Array[Byte]]]
     } yield Header(version, parentId, adProofsRoot, stateRoot,
-      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, Algos.decode(votes).get,
+      transactionsRoot, timestamp, nBits, height, extensionHash, solutions, votes,
       unparsedBytes.getOrElse(Array.emptyByteArray))
   }
 

@@ -99,8 +99,8 @@ Ergo addresses are Base58Check-encoded strings (using Blake2b-256 4-byte checksu
 
 | Network | Prefix Byte | P2PK (`0x01`) | P2SH (`0x02`) | P2S (`0x03`) | Default REST Port | Default P2P Port |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Mainnet** | `0x00` (`0`) | Starts with **`9`** (51 chars) | Starts with **`8`** | Variable length | `9053` | `9030` |
-| **Testnet** | `0x10` (`16`) | Starts with **`3W`** | Starts with **`2`** | Variable length | `9052` | `9020` |
+| **Mainnet** | `0x00` (`0`) | Starts with **`9`** (51 chars) | Starts with **`6`**, **`7`**, or **`8`** | Variable length | `9053` | `9030` |
+| **Testnet** | `0x10` (`16`) | Starts with **`3W`** | Starts with **`p`**, **`q`**, **`r`**, or **`s`** | Variable length | `9052` | `9023` |
 
 - **P2PK (Pay-to-Public-Key)**: Standard wallet and user deposit address encoding a compressed secp256k1 `ProveDlog` public key (`ergoTree` = `0008cd` + 33-byte compressed public key).
 - **P2S (Pay-to-Script)** / **P2SH (Pay-to-Script-Hash)**: Smart-contract addresses (such as timelocked miner reward scripts). Exchanges should allow withdrawals to valid P2PK, P2SH, and P2S addresses validated via `GET /utils/address/{address}` (note that P2S addresses have no fixed character length because they serialize the full `ErgoTree`).
@@ -195,7 +195,7 @@ ergo {
     # Default miner fee automatically attached by POST /wallet/payment/send (0.001 ERG)
     defaultTransactionFee = 1000000
 
-    # Ignore incoming dust boxes below this nanoERG threshold during block scan (mitigates UTXO dust attacks)
+    # Ignore incoming dust boxes at or below this nanoERG threshold during block scan (mitigates UTXO dust attacks)
     dustLimit = 100000
 
     # Box selector limits (ReplaceCompactCollectBoxSelector)
@@ -265,7 +265,7 @@ location / {
 stateDiagram-v2
     [*] --> Uninitialized: Fresh node (no keystore file)
     Uninitialized --> Unlocked: POST /wallet/init (auto-unlocks + derives m/44'/429'/0'/0/0)
-    Uninitialized --> Locked: POST /wallet/restore (creates keystore; remains locked)
+    Uninitialized --> Unlocked: POST /wallet/restore (creates keystore and unlocks it)
     Locked --> Unlocked: POST /wallet/unlock
     Unlocked --> Locked: GET /wallet/lock (or node restart)
 ```
@@ -302,7 +302,7 @@ Response (`200 OK`):
 
 ### 3.3 Restore an Existing Wallet (`POST /wallet/restore`)
 
-Creates the encrypted keystore from an existing BIP-39 mnemonic. After `restore`, the wallet starts in the **locked** state (`isUnlocked: false`).
+Creates the encrypted keystore from an existing BIP-39 mnemonic. Like `init`, successful restore queues an unlock with the supplied password. Check `GET /wallet/status` for `isUnlocked`.
 
 - **`usePre1627KeyDerivation`** *(boolean, **REQUIRED**)*: Must always be supplied in the JSON payload (omitting it fails request decoding).
   - Set `false` for all standard EIP-3 / modern Ergo wallets (`v4.0.105+` and `v5.x` / `v6.x`).
@@ -323,13 +323,13 @@ curl -s -X POST "http://127.0.0.1:9053/wallet/restore" \
 Response (`200 OK`):
 
 ```json
-{}
+"OK"
 ```
 
 > **Critical Operational Sequence for Wallet Recovery**:
 > `WalletScanLogic` only indexes boxes matching public keys currently tracked in `WalletStorage`. `POST /wallet/restore` derives only the master/initial key (`m/44'/429'/0'/0/0`). To recover historical balances across `N` previously generated user deposit addresses:
 > 1. Call `POST /wallet/restore` (`usePre1627KeyDerivation: false`).
-> 2. Call `POST /wallet/unlock` with `"pass"`.
+> 2. If `GET /wallet/status` shows `isUnlocked: false`, call `POST /wallet/unlock` with `"pass"`.
 > 3. Re-derive all previously issued child keys (`GET /wallet/deriveNextKey` `N` times, or `POST /wallet/deriveKey` for each path).
 > 4. Call `POST /wallet/rescan` with `{"fromHeight": 0}` and wait until `walletHeight == fullHeight` in `GET /wallet/status`.
 
@@ -370,7 +370,7 @@ curl -s -X POST "http://127.0.0.1:9053/wallet/unlock" \
   }'
 ```
 
-Response (`200 OK`): `{}` *(Returns `400 Bad Request` `"Wallet already unlocked"` if already unlocked, or `"File does not exist"` / decryption error if uninitialized or wrong password. If an outdated JVM throws `"Key of length 256 is not allowed on your JVM version"`, upgrade to a modern JDK 11/17/21 with unlimited JCE crypto policy.)*
+Response (`200 OK`): `"OK"` *(Returns `400 Bad Request` with `"Wallet already unlocked"` if already unlocked, `"Wallet not initialized"` if uninitialized, or a decryption error if the password is wrong. If an outdated JVM throws `"Key of length 256 is not allowed on your JVM version"`, upgrade to a modern JDK 11/17/21 with unlimited JCE crypto policy.)*
 
 #### Lock (`GET /wallet/lock`)
 
@@ -410,7 +410,7 @@ Response (`200 OK`):
 
 Sets the destination address for excess `ERG` and tokens returned as change in wallet-generated transactions.
 
-- **Constraints**: The wallet **must be unlocked**, and `address` **must be a valid P2PK address already derived and owned by this wallet** (`state.walletVars.trackedPubKeys` check; external addresses return `400 Bad Request` `"Address is not owned by wallet"`).
+- **Constraints**: The wallet **must be unlocked**, and `address` **must be a valid P2PK address already derived and owned by this wallet** (`state.walletVars.trackedPubKeys` check; external addresses return `400 Bad Request` `"Change address is not owned by the wallet"`).
 
 ```bash
 curl -s -X POST "http://127.0.0.1:9053/wallet/updateChangeAddress" \
@@ -436,7 +436,7 @@ curl -s -X POST "http://127.0.0.1:9053/wallet/rescan" \
   }'
 ```
 
-Response (`200 OK`): `{}` *(Returns `400 Bad Request` `"Rescan already in progress"` if another rescan is currently running. Poll `GET /wallet/status` until `walletHeight` catches up to `GET /info` -> `fullHeight`.)*
+Response (`200 OK`): `"OK"` *(Returns `400 Bad Request` `"Rescan already in progress"` if another rescan is currently running. Poll `GET /wallet/status` until `walletHeight` catches up to `GET /info` -> `fullHeight`.)*
 
 ### 3.9 Export Private Key (`POST /wallet/getPrivateKey`)
 
@@ -927,7 +927,7 @@ curl -s -X POST "http://127.0.0.1:9053/wallet/transaction/send" \
 ### 6.3 Native Token Transfers, Issuance & Burning
 
 1. **Transferring Existing Tokens**: Include `"assets": [{"tokenId": "...", "amount": ...}]` in any `PaymentRequest` (either in `/wallet/payment/send` or `RequestsHolder.requests`), ensuring `"value"` meets `minValuePerByte` (e.g. `>= 1000000` nanoERG).
-2. **Issuing (Minting) a New EIP-4 Token (`AssetIssueRequest`)**: At most **one** new token can be minted per transaction; its `tokenId` is deterministically equal to `tx.inputs[0].boxId`! `R4` (name), `R5` (description), and `R6` (decimals) are populated automatically by the node (optional `ergValue` defaults to minimum box value and `address` defaults to wallet change address if omitted):
+2. **Issuing (Minting) a New EIP-4 Token (`AssetIssueRequest`)**: At most **one** new token can be minted per transaction; its `tokenId` is deterministically equal to `tx.inputs[0].boxId`! `R4` (name), `R5` (description), and `R6` (decimals) are populated automatically by the node (optional `ergValue` defaults to minimum box value and `address` defaults to the first wallet key address if omitted):
    ```json
    {
      "requests": [
@@ -1058,10 +1058,10 @@ Ergo supports native Sigma-protocol `k`-of-`n` threshold signatures (`atLeast(k,
 ### 6.6 Fee Estimation, Validation & Mempool Inspection (`/transactions/*`)
 
 - `GET /transactions/getFee?waitTime=1&txSize=300` -> returns recommended fee in **nanoERG** (integer, e.g. `1000000`) to be mined within `waitTime` minutes for a transaction of `txSize` bytes.
-- `GET /transactions/waitTime?fee=1000000&txSize=300` -> returns estimated wait time in minutes.
+- `GET /transactions/waitTime?fee=1000000&txSize=300` -> returns estimated wait time in milliseconds.
 - `GET /transactions/poolHistogram?bins=10&maxtime=60000` -> mempool fee-weight histogram.
 - `HEAD /transactions/unconfirmed/{txId}` -> returns `200 OK` if `txId` is currently in the local mempool, `404 Not Found` otherwise.
-- `GET /transactions/unconfirmed/byTransactionId/{txId}` -> returns the mempool transaction with resolved input boxes (or `null` if absent).
+- `GET /transactions/unconfirmed/byTransactionId/{txId}` -> returns the mempool transaction with resolved input boxes (or `404 Not Found` if absent).
 - `POST /transactions/unconfirmed/byTransactionIds` -> body `["<txId1>", "<txId2>"]`, returns subset currently present in the mempool.
 
 ---
@@ -1423,7 +1423,7 @@ def execute_withdrawal_batch(api, db):
 | Method | Path | Requires Unlocked? | Summary |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/wallet/init` | No *(auto-unlocks)* | Generate new BIP-39 mnemonic, create keystore, derive `m/44'/429'/0'/0/0`. |
-| `POST` | `/wallet/restore` | No *(leaves locked)* | Restore keystore from mnemonic (`usePre1627KeyDerivation` boolean required). |
+| `POST` | `/wallet/restore` | No *(queues unlock)* | Restore keystore from mnemonic (`usePre1627KeyDerivation` boolean required). |
 | `POST` | `/wallet/check` | No | Check if mnemonic + `mnemonicPass` match the encrypted keystore. |
 | `POST` | `/wallet/unlock` | No | Decrypt master key into memory (`{"pass": "..."}`). |
 | `GET` | `/wallet/lock` | No | Clear decrypted master key & prover from memory (**HTTP `GET`**). |

@@ -590,8 +590,14 @@ trait ExtraIndexerBase extends Actor with Stash with Timers with ScorexLogging {
           // the address may have no output removed below: drop the rolled-back transaction numbers here, boxes stay
           toRemove ++= address.rollback(txTarget, Long.MaxValue, _history)
 
-          val template = history.typedExtraIndexById[IndexedContractTemplate](hashTreeTemplate(iEb.box.ergoTree)).get
-          template.findAndModBox(iEb.globalIndex, history)
+          val templateId = hashTreeTemplate(iEb.box.ergoTree)
+          // a box indexed under an earlier fallback key of an unparseable tree has no record under the current key
+          val template = history.typedExtraIndexById[IndexedContractTemplate](templateId) match {
+            case Some(existing) =>
+              existing.findAndModBox(iEb.globalIndex, history)
+              existing
+            case None => IndexedContractTemplate(templateId).addBox(iEb) // as a received box, new template
+          }
 
           val rentRow: Array[ExtraIndex] =
             if (rentIndexEnabled) Array[ExtraIndex](StorageRentBox(iEb)) else Array.empty

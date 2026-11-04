@@ -419,6 +419,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       }
   }
 
+  // Block application is ordered by the holder, but background jobs can finish in any order.
+  private var nextMempoolUpdate = 0L
+  private var nextMempoolInstall = 0L
+  private val completedMempoolUpdates = mutable.Map.empty[Long, MempoolUpdated]
+
   /**
     * Performs mempool update after a block application, transactions
     * from rolled back block are to be returned to the pool, and transactions
@@ -428,7 +433,6 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                               blocksApplied: Seq[BlockSection],
                               memPool: ErgoMemPool): ErgoMemPool = {
     val appliedTxs = blocksApplied.flatMap(extractTransactions)
-    context.system.eventStream.publish(BlockAppliedTransactions(appliedTxs.map(_.id)))
     val rolledBackTxs = blocksRemoved
       .flatMap(extractTransactions)
       .filter(tx => !appliedTxs.exists(_.id == tx.id))
@@ -541,8 +545,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     val basePool = memoryPool()
                     val toRemove = progressInfo.toRemove
                     val selfRef = self
-                    Future(updateMemPool(toRemove, blocksApplied, basePool))(context.dispatcher).foreach { updatedPool =>
-                      selfRef ! MempoolUpdated(basePool, updatedPool, toRemove, blocksApplied)
+                    val sequence = nextMempoolUpdate
+                    nextMempoolUpdate += 1
+                    Future(Try(updateMemPool(toRemove, blocksApplied, basePool)))(context.dispatcher).foreach { result =>
+                      selfRef ! MempoolUpdated(basePool, result, toRemove, blocksApplied, sequence)
                     }(context.dispatcher)
                   } else {
                     updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(memoryPool()))
@@ -691,20 +697,28 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
-    case MempoolUpdated(basePool, updatedPool, blocksRemoved, blocksApplied) =>
-      val finalPool = if (memoryPool() eq basePool) {
-        updatedPool
-      } else {
-        updateMemPool(blocksRemoved, blocksApplied, memoryPool())
+    case completed: MempoolUpdated =>
+      completedMempoolUpdates.update(completed.sequence, completed)
+      var next = completedMempoolUpdates.remove(nextMempoolInstall)
+      while (next.nonEmpty) {
+        next.foreach { update =>
+          val current = memoryPool()
+          val finalPool = update.updatedPool match {
+            case Success(pool) if current eq update.basePool => pool
+            case _ => updateMemPool(update.blocksRemoved, update.blocksApplied, current)
+          }
+          updateNodeView(updatedMempool = Some(finalPool))
+          val appliedIds = update.blocksApplied.flatMap(extractTransactions).map(_.id)
+          context.system.eventStream.publish(BlockAppliedTransactions(appliedIds))
+        }
+        nextMempoolInstall += 1
+        next = completedMempoolUpdates.remove(nextMempoolInstall)
       }
-      updateNodeView(updatedMempool = Some(finalPool))
-      // if blockchain is synced,
-      // send an order to clean mempool up from transactions possibly become invalid
-      // we can check mempool transactions only in "utxo" mode
+      // Do not recheck an intermediate pool against a later chain state.
       minimalState() match {
-        case utxoStateReader: UtxoStateReader if history().headersHeight == history().fullBlockHeight =>
-          val recheckCommand = RecheckMempool(utxoStateReader, finalPool)
-          context.system.eventStream.publish(recheckCommand)
+        case state: UtxoStateReader if nextMempoolInstall == nextMempoolUpdate &&
+          history().headersHeight == history().fullBlockHeight =>
+          context.system.eventStream.publish(RecheckMempool(state, memoryPool()))
         case _ =>
       }
     case RecheckedTransactions(unconfirmedTxs) =>
@@ -814,9 +828,10 @@ object ErgoNodeViewHolder {
     case class EliminateTransactions(ids: Seq[ModifierId])
 
     case class MempoolUpdated(basePool: ErgoMemPool,
-                              updatedPool: ErgoMemPool,
+                              updatedPool: Try[ErgoMemPool],
                               blocksRemoved: Seq[BlockSection],
-                              blocksApplied: Seq[BlockSection])
+                              blocksApplied: Seq[BlockSection],
+                              sequence: Long)
 
     case object IsChainHealthy
     sealed trait HealthCheckResult

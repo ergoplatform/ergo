@@ -37,6 +37,7 @@ import scorex.core.network.NetworkController.ReceivableMessages.SendToNetwork
 import scorex.util.ModifierId
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 class MempoolCleanupSpec extends AnyFlatSpec with Matchers with NodeViewTestOps with MempoolTestHelpers {
   import org.ergoplatform.utils.generators.ErgoNodeTransactionGenerators._
@@ -236,25 +237,47 @@ class MempoolCleanupSpec extends AnyFlatSpec with Matchers with NodeViewTestOps 
     implicit val system: ActorSystem = ActorSystem()
     val holder = TestProbe()
     val reads = TestProbe()
+    val inCompletion = new ThreadLocal[Boolean] {
+      override def initialValue(): Boolean = false
+    }
+    // Worker reads run in a Future; rebroadcast reads during CleanupDone handling.
+    def reportRead(label: String): Unit =
+      reads.ref ! ((if (inCompletion.get()) "rebroadcast" else "worker") -> label)
     val (state, _) = createUtxoState(settings)
     val release = new CountDownLatch(1)
     val failingPool = new FakeMempool(Seq.empty) {
       override def getAllPrioritized: Seq[UnconfirmedTransaction] = {
-        reads.ref ! "first"
+        reportRead("first")
         require(release.await(10, TimeUnit.SECONDS), "bounded release timeout")
         throw new IllegalStateException("bounded queued failure")
+      }
+      override def random(limit: Int): Iterable[UnconfirmedTransaction] = {
+        reads.ref ! ("random" -> "first")
+        super.random(limit)
       }
     }
     def pool(label: String): FakeMempool = new FakeMempool(Seq.empty) {
       override def getAllPrioritized: Seq[UnconfirmedTransaction] = {
-        reads.ref ! label
+        reportRead(label)
         Seq.empty
       }
+      override def random(limit: Int): Iterable[UnconfirmedTransaction] = {
+        reads.ref ! ("random" -> label)
+        super.random(limit)
+      }
     }
-    val auditor = system.actorOf(Props(new MempoolAuditor(holder.ref, holder.ref, settings)))
+    val auditor = system.actorOf(Props(new MempoolAuditor(holder.ref, holder.ref, settings) {
+      override def aroundReceive(receive: Receive, message: Any): Unit = message match {
+        case _: CleanupDone =>
+          inCompletion.set(true)
+          try super.aroundReceive(receive, message)
+          finally inCompletion.remove()
+        case _ => super.aroundReceive(receive, message)
+      }
+    }))
     try {
       holder.send(auditor, RecheckMempool(state, failingPool, UUID.randomUUID()))
-      reads.expectMsg("first")
+      reads.expectMsg("worker" -> "first")
       system.actorSelection(auditor.path / "*").tell(Identify("worker"), holder.ref)
       val worker = holder.expectMsgType[ActorIdentity].ref.get
       val request = RecheckMempool(state, pool("latest"), UUID.randomUUID())
@@ -263,13 +286,98 @@ class MempoolCleanupSpec extends AnyFlatSpec with Matchers with NodeViewTestOps 
       auditor.tell(CleanupDone(UUID.randomUUID(), Success(RecheckedTransactions(UUID.randomUUID(), Seq.empty, Seq.empty, Seq.empty))), worker)
       reads.expectNoMessage(100.millis)
       release.countDown()
-      reads.expectMsg("latest")
+      reads.expectMsg("worker" -> "latest")
       holder.expectMsgType[RecheckedTransactions].stateRevision shouldBe request.stateRevision
-      holder.send(auditor, RecheckMempool(state, pool("next"), UUID.randomUUID()))
-      reads.expectMsg("next")
-      holder.expectMsgType[RecheckedTransactions]
+      reads.expectMsg("random" -> "latest")
+      val next = RecheckMempool(state, pool("next"), UUID.randomUUID())
+      holder.send(auditor, next)
+      reads.receiveOne(reads.remainingOrDefault) match {
+        case ("rebroadcast", "latest") => reads.expectMsg("worker" -> "next")
+        case other => other shouldBe ("worker" -> "next")
+      }
+      holder.expectMsgType[RecheckedTransactions].stateRevision shouldBe next.stateRevision
     } finally {
       release.countDown()
+      Await.result(system.terminate(), 10.seconds)
+      state.closeStorage()
+    }
+  }
+
+  it should "dispatch each queued cleanup once through a later request" in {
+    implicit val system: ActorSystem = ActorSystem()
+    val holder = TestProbe()
+    val dispatches = TestProbe()
+    val (state, _) = createUtxoState(settings)
+    def request(revision: Long, randomCalls: AtomicInteger = new AtomicInteger()): RecheckMempool =
+      RecheckMempool(state, new FakeMempool(Seq.empty) {
+        override def random(limit: Int): Iterable[UnconfirmedTransaction] = {
+          randomCalls.incrementAndGet()
+          super.random(limit)
+        }
+      }, new UUID(0L, revision))
+    def resultFor(request: RecheckMempool): RecheckedTransactions =
+      RecheckedTransactions(request.stateRevision, Seq.empty, Seq.empty, Seq.empty)
+    val barrier = new Object
+    val auditor = system.actorOf(Props(new MempoolAuditor(holder.ref, holder.ref, settings) {
+      override protected def dispatchCleanup(jobId: UUID, request: RecheckMempool): Unit =
+        dispatches.ref.tell(RunCleanup(jobId, request), self)
+      override def aroundReceive(receive: Receive, message: Any): Unit =
+        if (message == barrier) dispatches.ref.tell(barrier, self)
+        else super.aroundReceive(receive, message)
+    }))
+    try {
+      val firstRandomCalls = new AtomicInteger()
+      val supersededRandomCalls = new AtomicInteger()
+      val latestRandomCalls = new AtomicInteger()
+      val first = request(1L, firstRandomCalls)
+      val superseded = request(2L, supersededRandomCalls)
+      val latest = request(3L, latestRandomCalls)
+      val next = request(4L)
+      val sentinel = request(5L)
+      dispatches.send(auditor, first)
+      val firstRun = dispatches.expectMsgType[RunCleanup]
+      firstRun.request shouldBe first
+
+      dispatches.send(auditor, superseded)
+      dispatches.send(auditor, latest)
+      val staleId = new UUID(firstRun.jobId.getMostSignificantBits,
+        firstRun.jobId.getLeastSignificantBits ^ 1L)
+      dispatches.send(auditor, CleanupDone(staleId, Success(resultFor(first))))
+      dispatches.send(auditor, barrier)
+      dispatches.expectMsg(barrier)
+      firstRandomCalls.get() shouldBe 0
+      supersededRandomCalls.get() shouldBe 0
+      latestRandomCalls.get() shouldBe 0
+      dispatches.send(auditor, CleanupDone(firstRun.jobId, Failure(new IllegalStateException("bounded first failure"))))
+      val latestRun = dispatches.expectMsgType[RunCleanup]
+      latestRun.request shouldBe latest
+      (latestRun.jobId == firstRun.jobId) shouldBe false
+      firstRandomCalls.get() shouldBe 0
+      supersededRandomCalls.get() shouldBe 0
+      latestRandomCalls.get() shouldBe 0
+
+      dispatches.send(auditor, CleanupDone(latestRun.jobId, Success(resultFor(latest))))
+      holder.expectMsgType[RecheckedTransactions].stateRevision shouldBe latest.stateRevision
+      dispatches.send(auditor, barrier)
+      dispatches.expectMsg(barrier)
+      supersededRandomCalls.get() shouldBe 0
+      latestRandomCalls.get() shouldBe 1
+      dispatches.send(auditor, next)
+      val nextRun = dispatches.expectMsgType[RunCleanup]
+      nextRun.request shouldBe next
+      (nextRun.jobId == latestRun.jobId) shouldBe false
+
+      dispatches.send(auditor, CleanupDone(nextRun.jobId, Success(resultFor(next))))
+      holder.expectMsgType[RecheckedTransactions].stateRevision shouldBe next.stateRevision
+      // Dispatches from earlier messages precede this sentinel on the same probe.
+      dispatches.send(auditor, sentinel)
+      val sentinelRun = dispatches.expectMsgType[RunCleanup]
+      sentinelRun.request shouldBe sentinel
+      (sentinelRun.jobId == nextRun.jobId) shouldBe false
+      firstRandomCalls.get() shouldBe 0
+      supersededRandomCalls.get() shouldBe 0
+      latestRandomCalls.get() shouldBe 1
+    } finally {
       Await.result(system.terminate(), 10.seconds)
       state.closeStorage()
     }

@@ -81,13 +81,16 @@ class MempoolAuditor(nodeViewHolderRef: ActorRef,
     case _: CleanupDone => // a stale completion must not release the current job
   }
 
+  protected def dispatchCleanup(jobId: UUID, request: RecheckMempool): Unit =
+    worker ! RunCleanup(jobId, request)
+
   private def initiateCleanup(request: RecheckMempool): Unit = {
     log.info("Initiating mempool cleanup")
     stateReaderOpt = Some(request.state)
     poolReaderOpt = Some(request.mempool)
     pending = None
     val jobId = UUID.randomUUID()
-    worker ! RunCleanup(jobId, request)
+    dispatchCleanup(jobId, request)
     context become working(jobId)
   }
 

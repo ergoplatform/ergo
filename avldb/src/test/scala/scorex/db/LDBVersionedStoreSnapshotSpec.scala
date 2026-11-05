@@ -162,12 +162,18 @@ class LDBVersionedStoreSnapshotSpec extends AnyPropSpec with Matchers {
       withStore { (store, calls) =>
         val sentinel = newFailure()
         val closingFailure = new java.io.IOException("snapshot close failed")
-        if (closingFails) calls.closeFailure = Some(closingFailure)
+        // A separate instance from the same factory shows whether this runtime permits suppression.
+        val suppressionReference = newFailure()
+        suppressionReference.getClass shouldBe sentinel.getClass
+        if (closingFails) {
+          suppressionReference.addSuppressed(closingFailure)
+          calls.closeFailure = Some(closingFailure)
+        }
         val thrown = intercept[Throwable] {
           store.processSnapshot(_ => throw sentinel)
         }
         thrown should be theSameInstanceAs sentinel
-        sentinel.getSuppressed.toSeq shouldBe (if (closingFails) Seq(closingFailure) else Seq.empty)
+        sentinel.getSuppressed.toSeq shouldBe suppressionReference.getSuppressed.toSeq
         calls.closes shouldBe 1
         store.lock.isWriteLocked shouldBe false
       }

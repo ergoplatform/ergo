@@ -66,7 +66,10 @@ object ValidBlocksGenerators
              rnd: RandomLike): (Seq[ErgoTransaction], Seq[ErgoBox]) = {
 
       lazy val dataBoxesToUse: IndexedSeq[ErgoBox] = {
-        Random.shuffle(dataBoxesIn ++ stateBoxesIn ++ selfBoxes).take(rnd.nextInt(10)).toIndexedSeq
+        // deduplicate boxes by id, as duplicated data inputs are prohibited
+        val uniqueCandidates = (dataBoxesIn ++ stateBoxesIn ++ selfBoxes)
+          .map(b => ByteArrayWrapper(b.id) -> b).toMap.values.toSeq
+        Random.shuffle(uniqueCandidates).take(rnd.nextInt(10)).toIndexedSeq
       }
 
       val currentSize = acc.map(_.size).sum

@@ -1,7 +1,8 @@
 package org.ergoplatform.http.api
 
 import akka.actor.{ActorRef, ActorRefFactory}
-import akka.http.scaladsl.server.{Directive, Directive1, Route, ValidationRejection}
+import akka.http.scaladsl.model.headers.RawHeader
+import akka.http.scaladsl.server.{Directive, Directive1, ExceptionHandler, Route, ValidationRejection}
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.pattern.ask
 import io.circe.Json
@@ -11,13 +12,13 @@ import org.ergoplatform.{ErgoAddress, ErgoAddressEncoder}
 import org.ergoplatform.nodeView.ErgoReadersHolder.{GetDataFromHistory, GetReaders, Readers}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.nodeView.history.extra.ExtraIndexer.ReceivableMessages.GetSegmentThreshold
-import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, getIndex}
+import org.ergoplatform.nodeView.history.extra.ExtraIndexer.{GlobalBoxIndexKey, GlobalTxIndexKey, RollbackToKey, getIndex}
 import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hashErgoTree
 import org.ergoplatform.nodeView.history.extra.IndexedTokenSerializer.uniqueId
 import org.ergoplatform.nodeView.history.extra._
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.settings.{ErgoSettings, RESTApiSettings}
-import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError}
+import org.ergoplatform.http.api.ApiError.{BadRequest, InternalError, ServiceUnavailable}
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.history.BlockTransactions
 import scorex.core.api.http.ApiResponse
@@ -58,6 +59,17 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
 
   override implicit val ergoAddressEncoder: ErgoAddressEncoder = ergoSettings.chainSettings.addressEncoder
 
+  private case object ExtraIndexRecoveryIncomplete extends RuntimeException("Extra index checkpoint recovery is incomplete")
+
+  private def recoveryUnavailable: Route =
+    respondWithHeader(RawHeader("Retry-After", "1")) {
+      ServiceUnavailable(ExtraIndexRecoveryIncomplete.getMessage)
+    }
+
+  private val recoveryExceptionHandler: ExceptionHandler = ExceptionHandler {
+    case ExtraIndexRecoveryIncomplete => recoveryUnavailable
+  }
+
   private val ergoAddress: Directive1[ErgoAddress] = entity(as[String]).flatMap(handleErgoAddress)
 
   private def handleErgoAddress(value: String): Directive1[ErgoAddress] =
@@ -66,45 +78,64 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
       case _ => reject(ValidationRejection("Wrong address format"))
     }
 
-  override val route: Route =
+  override val route: Route = handleExceptions(recoveryExceptionHandler) {
   if(ergoSettings.nodeSettings.extraIndex)
     pathPrefix("blockchain") {
       getIndexedHeightR ~
-      getTxByIdR ~
-      getTxByIndexR ~
-      getTxsByAddressR ~
-      getTxsByAddressGetRoute ~
-      getTxRangeR ~
-      getBoxByIdR ~
-      getBoxByIndexR ~
-      getBoxesByTokenIdR ~
-      getBoxesByTokenIdUnspentR ~
-      getBoxesByAddressR ~
-      getBoxesByAddressGetRoute ~
-      getBoxesByAddressUnspentR ~
-      getBoxesByAddressUnspentGetRoute ~
-      getBoxesByTemplateHashR ~
-      getBoxesByTemplateHashUnspentR ~
-      getBoxRangeR ~
-      getBoxesByErgoTreeR ~
-      getBoxesByErgoTreeUnspentR ~
-      getTokenInfoByIdR ~
-      getTokenInfoByIdsR ~
-      getAddressBalanceTotalR ~
-      getAddressBalanceTotalGetRoute ~
-      getBlockByHeaderIdR ~
-      getBlocksByHeaderIdsR
+      onSuccess(getRawHistory) { history =>
+        if (getIndex(RollbackToKey, history).getInt != 0 ||
+            !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+          recoveryUnavailable
+        } else {
+          getTxByIdR ~
+          getTxByIndexR ~
+          getTxsByAddressR ~
+          getTxsByAddressGetRoute ~
+          getTxRangeR ~
+          getBoxByIdR ~
+          getBoxByIndexR ~
+          getBoxesByTokenIdR ~
+          getBoxesByTokenIdUnspentR ~
+          getBoxesByAddressR ~
+          getBoxesByAddressGetRoute ~
+          getBoxesByAddressUnspentR ~
+          getBoxesByAddressUnspentGetRoute ~
+          getBoxesByTemplateHashR ~
+          getBoxesByTemplateHashUnspentR ~
+          getBoxRangeR ~
+          getBoxesByErgoTreeR ~
+          getBoxesByErgoTreeUnspentR ~
+          getTokenInfoByIdR ~
+          getTokenInfoByIdsR ~
+          getAddressBalanceTotalR ~
+          getAddressBalanceTotalGetRoute ~
+          getBlockByHeaderIdR ~
+          getBlocksByHeaderIdsR
+        }
+      }
     }
   else
     pathPrefix("blockchain") {
       indexerNotEnabledR
     }
+  }
 
-  private def getHistory: Future[ErgoHistoryReader] =
+  private def getRawHistory: Future[ErgoHistoryReader] =
     (readersHolder ? GetDataFromHistory[ErgoHistoryReader](r => r)).mapTo[ErgoHistoryReader]
 
+  private def checkedHistory(history: ErgoHistoryReader): ErgoHistoryReader = {
+    if (getIndex(RollbackToKey, history).getInt != 0 ||
+        !ExtraIndexer.checkpointOnSelectedFullChain(history)) {
+      throw ExtraIndexRecoveryIncomplete
+    }
+    history
+  }
+
+  private def getHistory: Future[ErgoHistoryReader] =
+    getRawHistory.map(checkedHistory)
+
   private def getHistoryWithMempool: Future[(ErgoHistoryReader,ErgoMemPoolReader)] =
-    (readersHolder ? GetReaders).mapTo[Readers].map(r => (r.h, r.m))
+    (readersHolder ? GetReaders).mapTo[Readers].map(r => (checkedHistory(r.h), r.m))
 
   private def getAddress(tree: ErgoTree)(history: ErgoHistoryReader): Option[IndexedErgoAddress] =
     history.typedExtraIndexById[IndexedErgoAddress](hashErgoTree(tree))
@@ -127,7 +158,7 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     }
 
   private def getIndexedHeightF: Future[Json] =
-    getHistory.map { history =>
+    getRawHistory.map { history =>
       Json.obj(
         "indexedHeight" -> getIndex(ExtraIndexer.IndexedHeightKey, history).getInt.asJson,
         "fullHeight" -> history.fullBlockHeight.asJson
@@ -479,11 +510,13 @@ case class BlockchainApiRoute(readersHolder: ActorRef, ergoSettings: ErgoSetting
     history.typedModifierById[Header](headerId).flatMap { header =>
 
       val blockTransactionsOpt = history.typedModifierById[BlockTransactions](header.transactionsId)
+        .filter(_.headerId == header.id)
 
       blockTransactionsOpt.flatMap { blockTransactions =>
         val resolvedTransactions = blockTransactions.txs.flatMap { tx =>
           history
             .typedExtraIndexById[IndexedErgoTransaction](tx.id)
+            .filter(_.blockId == header.id)
             .map(_.retrieveBody(history))
         }
 

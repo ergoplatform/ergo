@@ -63,6 +63,7 @@ class NetworkController(ergoSettings: ErgoSettings,
 
   private var connections = Map.empty[InetSocketAddress, ConnectedPeer]
   private var unconfirmedConnections = Set.empty[InetSocketAddress]
+  private var pendingIncomingConnections = Set.empty[ActorRef]
 
   private val mySessionIdFeature = SessionIdPeerFeature(networkSettings.magicBytes)
   /**
@@ -180,12 +181,19 @@ class NetworkController(ergoSettings: ErgoSettings,
       if (connectionDirection.isOutgoing) {
         createPeerConnectionHandler(connectionId, sender())
       } else {
-        val incomingCount = connections.values.count(_.connectionId.direction.isIncoming)
-        if (incomingCount >= incomingLimit) {
-          log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections ($incomingCount)")
+        val establishedCount = connections.values.count(_.connectionId.direction.isIncoming)
+        val pendingCount = pendingIncomingConnections.size
+        // Admission reserves a slot; confirmation transfers it to connections.
+        // Established incoming handlers + pending raw connections <= incomingLimit.
+        if (establishedCount + pendingCount >= incomingLimit) {
+          log.info(s"Incoming connection from $remoteAddress denied: too many incoming connections " +
+            s"($establishedCount established, $pendingCount pending, limit $incomingLimit)")
           sender() ! Close
         } else {
-          peerManagerRef ! ConfirmConnection(connectionId, sender())
+          val connectionRef = sender()
+          pendingIncomingConnections += connectionRef
+          context.watch(connectionRef)
+          peerManagerRef ! ConfirmConnection(connectionId, connectionRef)
         }
       }
 
@@ -194,11 +202,24 @@ class NetworkController(ergoSettings: ErgoSettings,
       sender() ! Close
 
     case ConnectionConfirmed(connectionId, handlerRef) =>
-      log.info(s"Connection confirmed to $connectionId")
-      createPeerConnectionHandler(connectionId, handlerRef)
+      if (!connectionId.direction.isIncoming || pendingIncomingConnections.contains(handlerRef)) {
+        releasePendingIncoming(handlerRef)
+        if (connectionForPeerAddress(connectionId.remoteAddress).isEmpty) {
+          log.info(s"Connection confirmed to $connectionId")
+          createPeerConnectionHandler(connectionId, handlerRef)
+        } else {
+          // Distinct raw sockets can share a remote endpoint on different local
+          // addresses. Do not replace the handler already stored for that peer.
+          handlerRef ! Close
+        }
+      } else {
+        log.info(s"Ignoring stale incoming connection confirmation from ${connectionId.remoteAddress}")
+        handlerRef ! Close
+      }
 
     case ConnectionDenied(connectionId, handlerRef) =>
       log.info(s"Incoming connection from ${connectionId.remoteAddress} denied")
+      releasePendingIncoming(handlerRef)
       handlerRef ! Close
 
     case Handshaked(connectedPeer) =>
@@ -222,6 +243,8 @@ class NetworkController(ergoSettings: ErgoSettings,
       }
 
     case Terminated(ref) =>
+      val wasPending = pendingIncomingConnections.contains(ref)
+      pendingIncomingConnections -= ref
       connectionForHandler(ref) match {
         case Some(connectedPeer) =>
           log.info(s"Terminating connection to $connectedPeer")
@@ -229,12 +252,20 @@ class NetworkController(ergoSettings: ErgoSettings,
           connections -= remoteAddress
           unconfirmedConnections -= remoteAddress
           context.system.eventStream.publish(DisconnectedPeer(connectedPeer))
-        case None =>
+        case None if !wasPending =>
           log.warn(s"No connection found for $ref during termination")
+        case None => ()
       }
 
     case _: ConnectionClosed =>
       log.info("Denied connection has been closed")
+  }
+
+  private def releasePendingIncoming(ref: ActorRef): Unit = {
+    if (pendingIncomingConnections.contains(ref)) {
+      pendingIncomingConnections -= ref
+      context.unwatch(ref)
+    }
   }
 
   //calls from API / application

@@ -175,7 +175,8 @@ class ErgoApp(args: Args) extends ScorexLogging {
   // Create an instance of ExtraIndexer actor (will start if "extraIndex = true" in config)
   private val indexerOpt: Option[ActorRef] =
     if (ergoSettings.nodeSettings.extraIndex) {
-      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings))
+      Some(ExtraIndexer(ergoSettings.chainSettings, ergoSettings.cacheSettings, nodeViewHolderRef)(
+        actorSystem, ergoSettings.nodeSettings.storageRentCollection))
     } else {
       None
     }

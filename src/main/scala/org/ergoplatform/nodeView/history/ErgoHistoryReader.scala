@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.extension.Extension
 import org.ergoplatform.modifiers.history.header.{Header, PreGenesisHeader}
 import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, NetworkObjectTypeId, NonHeaderBlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.{EmptyHistoryHeight, GenesisHeight, Height}
-import org.ergoplatform.nodeView.history.extra.ExtraIndex
+import org.ergoplatform.nodeView.history.extra.{ExtraIndex, StorageRentBox}
 import org.ergoplatform.nodeView.history.storage._
 import org.ergoplatform.nodeView.history.storage.modifierprocessors.{BlockSectionProcessor, HeadersProcessor}
 import org.ergoplatform.settings.{ErgoSettings, NipopowSettings}
@@ -116,6 +116,21 @@ trait ErgoHistoryReader
       case Some(m: T) => Some(m)
       case _ => None
     }
+
+  /**
+    * Storage-rent eligibility entries for currently-unspent boxes created at or before
+    * `creationHeight`, in ascending (creationHeight, globalIndex) order. Empty when the
+    * extra index is disabled.
+    */
+  def storageRentBoxesAtOrBefore(creationHeight: Int, limit: Int): Array[StorageRentBox] =
+    historyStorage.storageRentBoxesAtOrBefore(creationHeight, limit)
+
+  /**
+    * Remove storage-rent eligibility entries of the given boxes, e.g. when a miner self-claim
+    * transaction spending them failed validation during block assembly.
+    */
+  def removeStorageRentBoxes(boxIds: Seq[ModifierId]): Unit =
+    historyStorage.removeStorageRentBoxes(boxIds)
 
   override def contains(id: ModifierId): Boolean = historyStorage.contains(id)
 

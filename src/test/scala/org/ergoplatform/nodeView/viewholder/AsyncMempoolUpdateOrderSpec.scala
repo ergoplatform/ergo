@@ -29,6 +29,11 @@ object AsyncMempoolUpdateOrderSpec {
   case class Held(lastAppliedBlock: ModifierId)
   case class Release(lastAppliedBlock: ModifierId)
   case object Released
+  case class TakeHeld(key: ModifierId)
+  case class Captured(update: Any)
+  case class Deliver(update: Any)
+  case object RestartHolder
+  case object Restarted
 
   /** The id of the last block a pool-update message carries as applied, if it is one and it applies a block. */
   private def heldKey(msg: Any): Option[ModifierId] = msg match {
@@ -48,6 +53,11 @@ object AsyncMempoolUpdateOrderSpec {
     extends UtxoNodeViewHolder(settings) {
     private val held = mutable.Map[ModifierId, Any]()
 
+    override def postRestart(reason: Throwable): Unit = {
+      super.postRestart(reason)
+      monitor ! Restarted
+    }
+
     override def receive: Receive = {
       val base = super.receive
       val control: Receive = {
@@ -55,6 +65,11 @@ object AsyncMempoolUpdateOrderSpec {
           val key = heldKey(msg).get
           held(key) = msg
           monitor ! Held(key)
+        case RestartHolder => throw new IllegalStateException("test holder restart")
+        case TakeHeld(key) => sender() ! Captured(held.remove(key).get)
+        case Deliver(update) =>
+          base.applyOrElse(update, (_: Any) => ())
+          sender() ! Released
         case Release(key) =>
           held.remove(key).foreach(base)
           sender() ! Released
@@ -227,8 +242,34 @@ class AsyncMempoolUpdateOrderSpec extends ErgoCorePropertyTest with NodeViewTest
       d.poolIds should not contain t1.id
   }
 
+  private val restart = TestCase("ignore a completion from before a Holder restart on the same ActorRef") { fixture =>
+    import fixture._
+    val d = new Driver(fixture)
+    val (_, _, genesis, wus) = genesisAndState(fixture)
+    applyBlock(genesis) shouldBe 'success
+    d.expectHeld(genesis)
+    val holder = fixture.nodeViewHolderRef
+    d.control.send(holder, TakeHeld(genesis.id))
+    val old = d.control.expectMsgType[Captured](patience)
+    d.control.send(holder, RestartHolder)
+    d.monitor.expectMsg(patience, Restarted)
+    d.monitor.lastSender shouldBe holder
+
+    d.control.send(holder, Deliver(old.update))
+    d.control.expectMsg(patience, Released)
+    val tx = validTransactionFromBoxes(IndexedSeq(trueBoxes(wus).head))
+    d.submit(tx)
+    val block = validFullBlock(Some(genesis), wus, Seq(tx))
+    applyBlock(block) shouldBe 'success
+    d.expectHeld(block)
+    d.poolIds should contain(tx.id)
+    d.release(block)
+    d.poolIds should not contain tx.id
+  }
+
   private val cases = Seq(
     window,
+    restart,
     twoBlocks("B1,B2"),
     twoBlocks("B2,B1"),
     chainSwitch(confirmOnChain2 = false, "A1,C2"),

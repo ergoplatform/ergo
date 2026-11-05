@@ -420,6 +420,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
   }
 
   // Block application is ordered by the holder, but background jobs can finish in any order.
+  // An Akka restart can reuse the ActorRef while replacing this holder and resetting its counters.
+  private val mempoolUpdateGeneration = new Object
   private var nextMempoolUpdate = 0L
   private var nextMempoolInstall = 0L
   private val completedMempoolUpdates = mutable.Map.empty[Long, MempoolUpdated]
@@ -548,7 +550,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
                     val sequence = nextMempoolUpdate
                     nextMempoolUpdate += 1
                     Future(Try(updateMemPool(toRemove, blocksApplied, basePool)))(context.dispatcher).foreach { result =>
-                      selfRef ! MempoolUpdated(basePool, result, toRemove, blocksApplied, sequence)
+                      selfRef ! MempoolUpdated(basePool, result, toRemove, blocksApplied, sequence, mempoolUpdateGeneration)
                     }(context.dispatcher)
                   } else {
                     updateNodeView(Some(newHistory), Some(newMinState), Some(newVault), Some(memoryPool()))
@@ -697,7 +699,8 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx)
     case LocallyGeneratedTransaction(unconfirmedTx) =>
       sender() ! txModify(unconfirmedTx)
-    case completed: MempoolUpdated =>
+    case completed: MempoolUpdated if (completed.generation eq mempoolUpdateGeneration) &&
+      completed.sequence >= nextMempoolInstall =>
       completedMempoolUpdates.update(completed.sequence, completed)
       var next = completedMempoolUpdates.remove(nextMempoolInstall)
       while (next.nonEmpty) {
@@ -721,6 +724,7 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
           context.system.eventStream.publish(RecheckMempool(state, memoryPool()))
         case _ =>
       }
+    case _: MempoolUpdated => () // stale incarnation or already installed
     case RecheckedTransactions(unconfirmedTxs) =>
       val updatedPool = memoryPool().put(unconfirmedTxs)
       updateNodeView(updatedMempool = Some(updatedPool))
@@ -831,7 +835,8 @@ object ErgoNodeViewHolder {
                               updatedPool: Try[ErgoMemPool],
                               blocksRemoved: Seq[BlockSection],
                               blocksApplied: Seq[BlockSection],
-                              sequence: Long)
+                              sequence: Long,
+                              generation: AnyRef)
 
     case object IsChainHealthy
     sealed trait HealthCheckResult

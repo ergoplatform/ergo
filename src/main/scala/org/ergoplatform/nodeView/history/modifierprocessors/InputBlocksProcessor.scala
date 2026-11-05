@@ -784,7 +784,7 @@ trait InputBlocksProcessor extends ScorexLogging {
   private def prune(): Unit = {
     val bestHeight = bestBlocks._1.map(_.height).getOrElse(0)
 
-    // Phase 1: Remove input block trees for ordering blocks that are behind the best chain
+    // Phase 1: Remove input block trees and ordering block transactions for ordering blocks that are behind the best chain
     val orderingBlockIdsToRemove = inputBlockTrees.keys.filter { orderingId =>
       // Remove if the ordering block height is behind the current best height
       bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
@@ -792,6 +792,14 @@ trait InputBlocksProcessor extends ScorexLogging {
 
     orderingBlockIdsToRemove.foreach { id =>
       inputBlockTrees.remove(id)
+    }
+
+    val orderingTxBlockIdsToRemove = orderingBlockTransactions.keys.filter { orderingId =>
+      bestHeight > historyReader.heightOf(orderingId).getOrElse(0)
+    }.toSeq
+
+    orderingTxBlockIdsToRemove.foreach { id =>
+      orderingBlockTransactions.remove(id)
     }
 
     // Phase 2: Remove individual input blocks that are too far behind the best chain

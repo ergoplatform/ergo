@@ -936,7 +936,15 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     outcome4.isInstanceOf[ProcessingOutcome.DoubleSpendingLoser] shouldBe true
   }
 
-  it should "take into account dataInputs during updateFamily (unconditional CPFP)" in {
+  it should "boost a parent when referenced by one data input" in {
+    checkDataInputParentWeight(1)
+  }
+
+  it should "count two data inputs from the same parent only once (#2303)" in {
+    checkDataInputParentWeight(2)
+  }
+
+  private def checkDataInputParentWeight(outputCount: Int): Unit = {
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)
     val wus = WrappedUtxoState(us, bh, settings).applyModifier(genesis)(_ => ()).get
@@ -953,12 +961,16 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val boxB = trueBoxes(1)
 
     // Parent transaction spending boxA with low fee (100,000 nanoERG kept as fee, rest as output)
-    val txParentOut = new ErgoBoxCandidate(boxA.value - 100000L, trueTree, creationHeight = 0)
+    val outputValue = (boxA.value - 100000L) / outputCount
+    val parentOutputs = IndexedSeq.tabulate(outputCount) { index =>
+      val value = if (index == outputCount - 1) boxA.value - 100000L - index * outputValue else outputValue
+      new ErgoBoxCandidate(value, trueTree, creationHeight = 0)
+    }
     val txParentFeeOut = new ErgoBoxCandidate(100000L, feeProp, creationHeight = 0)
     val txParent = UnconfirmedTransaction(ErgoTransaction(
       IndexedSeq(new Input(boxA.id, emptyProverResult)),
       IndexedSeq.empty,
-      IndexedSeq(txParentOut, txParentFeeOut)
+      parentOutputs :+ txParentFeeOut
     ), None)
 
     // Child transaction spending independent boxB, referencing txParent's output via dataInputs, with high fee
@@ -966,7 +978,7 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     val txChildOut = new ErgoBoxCandidate(100000L, trueTree, creationHeight = 0)
     val txChild = UnconfirmedTransaction(ErgoTransaction(
       IndexedSeq(new Input(boxB.id, emptyProverResult)),
-      IndexedSeq(DataInput(txParent.transaction.outputs.head.id)),
+      txParent.transaction.outputs.take(outputCount).map(box => DataInput(box.id)),
       IndexedSeq(txChildOut, txChildFeeOut)
     ), None)
 

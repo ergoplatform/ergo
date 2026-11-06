@@ -2744,8 +2744,6 @@ class ErgoNodeViewSynchronizerSpecification
       import ctx._
       import org.ergoplatform.network.message.inputblocks.OrderingBlockAnnouncementMessageSpec
       import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.ProcessOrderingBlock
-      import org.ergoplatform.settings.Algos
-      import scorex.util.bytesToId
 
       val hist  = ErgoHistory.readOrGenerate(settings)(null)
       val chain = genChain(2, hist)
@@ -2755,13 +2753,13 @@ class ErgoNodeViewSynchronizerSpecification
         .get
 
       // Create and store a previous input block
-      val prevIbId = bytesToId(Algos.hash("prev-input-block".getBytes))
       val prevIbInfo = InputBlockAnnouncement(
         InputBlockAnnouncement.initialMessageVersion,
         chain.head.header,
         InputBlockFields.empty,
         None
       )
+      val prevIbId = prevIbInfo.id
       hist.applyInputBlock(prevIbInfo)
       hist.applyInputBlockTransactions(prevIbId, Seq.empty, wrappedState)
 

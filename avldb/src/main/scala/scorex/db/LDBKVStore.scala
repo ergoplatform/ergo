@@ -107,15 +107,19 @@ class LDBKVStore(protected val db: DB) extends KVStoreReader with ScorexLogging 
     import util.control.Breaks._
 
     val i = db.iterator()
-    var res: Option[K] = None
-    i.seek(first)
-    breakable {
-      while (i.hasNext) {
-        val key = i.next().getKey
-        if (ByteArrayUtils.compare(key, last) <= 0) res = Some(key) else break()
+    try {
+      var res: Option[K] = None
+      i.seek(first)
+      breakable {
+        while (i.hasNext) {
+          val key = i.next().getKey
+          if (ByteArrayUtils.compare(key, last) <= 0) res = Some(key) else break()
+        }
       }
+      res
+    } finally {
+      i.close()
     }
-    res
   }
 
 }

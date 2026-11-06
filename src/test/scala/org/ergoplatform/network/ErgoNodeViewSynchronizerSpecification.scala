@@ -9,7 +9,7 @@ import org.ergoplatform.modifiers.history.header.{Header, HeaderSerializer}
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionSerializer}
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnconfirmedTransaction}
 import org.ergoplatform.modifiers.history.{ADProofs, BlockTransactions}
-import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
+import org.ergoplatform.modifiers.{BlockSection, ErgoFullBlock, ManifestTypeId, NetworkObjectTypeId, SnapshotsInfoTypeId, UtxoSnapshotChunkTypeId}
 import org.ergoplatform.modifiers.history.BlockTransactionsSerializer
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages._
 import org.ergoplatform.network.ErgoNodeViewSynchronizer._
@@ -32,7 +32,7 @@ import scorex.core.network.ModifiersStatus.{Held, Received, Requested, Unknown}
 import scorex.core.network.NetworkController.ReceivableMessages.{PenalizePeer, SendToNetwork}
 import org.ergoplatform.network.message._
 import org.ergoplatform.network.peer.{PeerInfo, PenaltyType}
-import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeers}
+import scorex.core.network.{ConnectedPeer, DeliveryTracker, SendToPeer, SendToPeers}
 import scorex.crypto.authds.{ADKey, SerializedAdProof}
 import scorex.util.{ModifierId, bytesToId}
 import org.ergoplatform.serialization.ErgoSerializer
@@ -1034,6 +1034,65 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  private def downloadPeer(handler: ActorRef): ConnectedPeer = ConnectedPeer(
+    connectionIdGen.sample.get,
+    handler,
+    Some(PeerInfo(defaultPeerSpec.copy(features = Seq(ModePeerFeature(
+      StateType.Utxo, true, None, ModePeerFeature.AllBlocksKept))), System.currentTimeMillis()))
+  )
+
+  /**
+    * Block sections are retried, after a missed delivery, from the download peers other than the one that missed it,
+    * if there are any. Over 20 sections with two download peers, a choice that may return the peer that missed picks
+    * it about 10 times.
+    */
+  property("NodeViewSynchronizer: checkDelivery asks another download peer for a block section not delivered on time") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val missedPeer = downloadPeer(pchProbe.ref)
+      val otherPeer = downloadPeer(pchProbe.ref)
+      otherPeer.connectionId.remoteAddress should not be missedPeer.connectionId.remoteAddress
+      syncTracker.updateStatus(missedPeer, org.ergoplatform.consensus.Equal, Some(10))
+      syncTracker.updateStatus(otherPeer, org.ergoplatform.consensus.Equal, Some(10))
+
+      val typeId = BlockTransactions.modifierTypeId
+      val retriedFrom = (1 to 20).map { i =>
+        val id = bytesToId(Array.fill(32)(i.toByte))
+        deliveryTracker.setRequested(typeId, id, missedPeer)(_ => Cancellable.alreadyCancelled)
+        synchronizerMockRef ! CheckDelivery(missedPeer, typeId, id)
+        val to = ncProbe.fishForSpecificMessage(3.seconds) {
+          case SendToNetwork(msg, SendToPeer(p)) if msg.spec.messageCode == RequestModifierSpec.messageCode => p
+        }
+        // the synchronizer records the retry in the tracker, which is not thread-safe, after sending it; wait for
+        // that record (at the chosen peer, one check; this thread's own record has none) before the next section
+        eventually {
+          deliveryTracker.getRequestedInfo(typeId, id).map(ri => (ri.peer, ri.checks)) shouldBe Some((to, 1))
+        }
+        to
+      }
+      retriedFrom.count(_ == missedPeer) shouldBe 0
+    }
+  }
+
+  property("NodeViewSynchronizer: checkDelivery asks the same peer again for a block section when it is the only download peer") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val onlyPeer = downloadPeer(pchProbe.ref)
+      syncTracker.updateStatus(onlyPeer, org.ergoplatform.consensus.Equal, Some(10))
+
+      val typeId = BlockTransactions.modifierTypeId
+      val id = bytesToId(Array.fill(32)(1: Byte))
+      deliveryTracker.setRequested(typeId, id, onlyPeer)(_ => Cancellable.alreadyCancelled)
+      synchronizerMockRef ! CheckDelivery(onlyPeer, typeId, id)
+      val retriedFrom = ncProbe.fishForSpecificMessage(3.seconds) {
+        case SendToNetwork(msg, SendToPeer(to)) if msg.spec.messageCode == RequestModifierSpec.messageCode => to
+      }
+      retriedFrom shouldBe onlyPeer
+    }
+  }
+
   property("NodeViewSynchronizer: checkDelivery should fallback to Equal peers after many attempts") {
     withFixture2 { ctx =>
       import ctx._
@@ -1303,11 +1362,16 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
-  // the ids in the first ModifiersData sent to the peer that contains `marker`
-  private def servedWith(pchProbe: TestProbe, marker: ModifierId): Seq[ModifierId] =
+  // the ids in the next ModifiersData sent to the peer
+  private def nextServed(pchProbe: TestProbe): Seq[ModifierId] =
     pchProbe.fishForSpecificMessage(10.seconds) {
-      case Message(_, Right(served: ModifiersData), _) if served.modifiers.contains(marker) => served.modifiers.keys.toSeq
+      case Message(_, Right(served: ModifiersData), _) => served.modifiers.keys.toSeq
     }
+
+  private def request(ctx: Synchronizer2Fixture, typeId: NetworkObjectTypeId.Value,
+                      id: ModifierId): Unit =
+    ctx.synchronizerMockRef ! Message(RequestModifierSpec, Left(RequestModifierSpec.toBytes(InvData(typeId, Seq(id)))),
+      Some(ctx.peer))
 
   /**
     * A peer that asks for a block the node has just announced must get it, also before the node view holder has
@@ -1376,6 +1440,29 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  property("NodeViewSynchronizer: a second mined block replaces the first one in memory") {
+    withFixture2 { ctx =>
+      import ctx._
+
+      val wus = (0 until 3).foldLeft(WrappedUtxoState(boxesHolderGen.sample.get, createTempDir, parameters, settings)) {
+        (w, _) => w.applyModifier(statefulyValidFullBlock(w), None)(_ => ()).get
+      }
+      val newBlock = statefulyValidFullBlock(wus)
+      val next = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
+
+      // the node's own miner has at most one mined, unapplied block (CandidateGenerator takes a solution only while
+      // none is pending), so one is kept; a block posted through `POST /blocks` replaces it the same way
+      synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
+      synchronizerMockRef ! NewBlockMined(next.header, next.blockSections)
+      ncProbe.receiveWhile(2.seconds) { case m => m }
+
+      // requests are answered in order, as in the tests below
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
+      request(ctx, Header.modifierTypeId, next.header.id)
+      nextServed(pchProbe) shouldBe Seq(next.header.id)
+    }
+  }
+
   property("NodeViewSynchronizer: a newly mined block is no longer served from memory once applied") {
     withFixture2 { ctx =>
       import ctx._
@@ -1394,15 +1481,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // is still answered can only come from the in-memory copy
       synchronizerMockRef ! LocalBlockApplied(newBlock.header, newBlock.transactions.map(_.id))
 
-      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
-      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      // a request that finds nothing sends nothing, and requests are answered in order: the first reply is the answer
+      // to a later request for a block mined next, so nothing was sent for this one (exact, not a time window)
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.header.id)
-      served should contain(marker.header.id)
-      served should not contain newBlock.header.id
+      request(ctx, Header.modifierTypeId, marker.header.id)
+      nextServed(pchProbe) shouldBe Seq(marker.header.id)
     }
   }
 
@@ -1423,15 +1507,12 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
-      // requested together with a second mined, still unapplied block: the reply that serves the second one is the
-      // answer to this request, so the first one's absence from it is exact, not bounded by a time window
+      // a request that finds nothing sends nothing, and requests are answered in order: the first reply is the answer
+      // to a later request for a block mined next, so nothing was sent for this one (exact, not a time window)
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.header.id)
-      served should contain(marker.header.id)
-      served should not contain newBlock.header.id
+      request(ctx, Header.modifierTypeId, marker.header.id)
+      nextServed(pchProbe) shouldBe Seq(marker.header.id)
     }
   }
 
@@ -1445,7 +1526,6 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
         wus = wus.applyModifier(block, None)(_ => ()).get
       }
       val newBlock = statefulyValidFullBlock(wus)
-      val marker = statefulyValidFullBlock(wus.applyModifier(newBlock, None)(_ => ()).get)
 
       synchronizerMockRef ! NewBlockMined(newBlock.header, newBlock.blockSections)
       ncProbe.receiveWhile(2.seconds) { case m => m }
@@ -1454,21 +1534,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       // copy. Its sections are not held yet
       synchronizerMockRef ! SyntacticallySuccessfulModifier(Header.modifierTypeId, newBlock.header.id)
 
-      // each request goes together with the second mined, still unapplied block, as in the tests above
-      synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Header.modifierTypeId, Seq(newBlock.header.id, marker.header.id)))),
-        Some(peer))
-      val servedHeaders = servedWith(pchProbe, marker.header.id)
-      servedHeaders should contain(marker.header.id)
-      servedHeaders should not contain newBlock.header.id
-
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(BlockTransactions.modifierTypeId,
-          Seq(newBlock.blockTransactions.id, marker.blockTransactions.id)))),
-        Some(peer))
-      val servedTransactions = servedWith(pchProbe, marker.blockTransactions.id)
-      servedTransactions should contain(newBlock.blockTransactions.id)
+      // requests are answered in order, as in the tests above: the first reply is the one to the later request for the
+      // block's transactions, which are still served from memory, so nothing was sent for the header
+      request(ctx, Header.modifierTypeId, newBlock.header.id)
+      request(ctx, BlockTransactions.modifierTypeId, newBlock.blockTransactions.id)
+      nextServed(pchProbe) shouldBe Seq(newBlock.blockTransactions.id)
     }
   }
 
@@ -1491,14 +1561,11 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
       synchronizerMockRef ! SemanticallyFailedModification(
         BlockTransactions.modifierTypeId, newBlock.blockTransactions.id, new Exception("invalid"))
 
-      // the rest of the block goes too; requested together with the second mined, still unapplied block
+      // the rest of the block goes too; requests are answered in order, as in the tests above
+      request(ctx, Extension.modifierTypeId, newBlock.extension.id)
       synchronizerMockRef ! NewBlockMined(marker.header, marker.blockSections)
-      synchronizerMockRef ! Message(RequestModifierSpec,
-        Left(RequestModifierSpec.toBytes(InvData(Extension.modifierTypeId, Seq(newBlock.extension.id, marker.extension.id)))),
-        Some(peer))
-      val served = servedWith(pchProbe, marker.extension.id)
-      served should contain(marker.extension.id)
-      served should not contain newBlock.extension.id
+      request(ctx, Extension.modifierTypeId, marker.extension.id)
+      nextServed(pchProbe) shouldBe Seq(marker.extension.id)
     }
   }
 

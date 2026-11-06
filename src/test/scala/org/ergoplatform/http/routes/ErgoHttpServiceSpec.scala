@@ -1,17 +1,24 @@
 package org.ergoplatform.http.routes
 
+import akka.http.scaladsl.model.ContentTypes
+import akka.http.scaladsl.model.HttpEntity
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
 import ch.qos.logback.core.read.ListAppender
+import org.ergoplatform.http.api.BlocksApiRoute
 import org.ergoplatform.http.api.EmissionApiRoute
+import org.ergoplatform.http.api.MiningApiRoute
+import org.ergoplatform.http.api.ScanApiRoute
 import org.ergoplatform.http.{ErgoHttpService, NodePanelRoute, SwaggerRoute}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.slf4j.LoggerFactory
+import scorex.crypto.hash.Blake2b256
 
 import scala.collection.JavaConverters._
 
@@ -23,6 +30,7 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
   private val restApiSettings = settings.scorexSettings.restApi
+  private val testApiKey = "test-api-key-for-http-service-spec"
 
   private val service = ErgoHttpService(
     apiRoutes = Seq(EmissionApiRoute(settings)),
@@ -31,6 +39,27 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
   )
 
   private val route: Route = service.compositeRoute
+
+  private val settingsWithAuth = settings.copy(
+    scorexSettings = settings.scorexSettings.copy(
+      restApi = restApiSettings.copy(
+        apiKeyHash = Some(encoder.encode(Blake2b256(testApiKey)))
+      )
+    )
+  )
+
+  private val authRoute: Route = ErgoHttpService(
+    apiRoutes = Seq(
+      ScanApiRoute(utxoReadersRef, settingsWithAuth),
+      MiningApiRoute(minerRef, settingsWithAuth),
+      BlocksApiRoute(nodeViewRef, digestReadersRef, settingsWithAuth)
+    ),
+    swaggerRoute = SwaggerRoute(
+      settingsWithAuth.scorexSettings.restApi,
+      swaggerConfig = ""
+    ),
+    panelRoute = NodePanelRoute()
+  ).compositeRoute
 
   private val serviceLogger: LogbackLogger =
     LoggerFactory.getLogger(classOf[ErgoHttpService]).asInstanceOf[LogbackLogger]
@@ -107,6 +136,40 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
     }._1
 
     body shouldBe bodyWithoutLogging
+  }
+
+  it should "prefer authorization failure to sibling method rejections" in {
+    Post("/scan/register", "{}") ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+  }
+
+  private val malformedJson = HttpEntity(ContentTypes.`application/json`, "{")
+
+  it should "reject a malformed mining body before decoding when unauthenticated" in {
+    Post("/mining/candidateWithTxs", malformedJson) ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+  }
+
+  it should "reject a malformed custom-key mining body when unauthenticated" in {
+    Post("/mining/candidateWithTxsAndPk", malformedJson) ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+  }
+
+  it should "reject a malformed block body before decoding when unauthenticated" in {
+    Post("/blocks", malformedJson) ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
+  }
+
+  it should "decode a malformed mining body after valid authentication" in {
+    val request = Post("/mining/candidateWithTxs", malformedJson)
+      .addHeader(RawHeader("api_key", testApiKey))
+    request ~> authRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
   }
 
 }

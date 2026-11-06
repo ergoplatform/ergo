@@ -6,7 +6,6 @@ import org.scalatest.{Outcome, TestSuite}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.util.Try
 
 /**
   * Actor systems that end with their test. A test that creates its system with `testSystem()` gets it terminated once
@@ -34,6 +33,6 @@ trait TestActorSystems extends TestSuite {
       // every system is asked to stop before any is awaited; a stop over 30 s is reported (TestKit prints the system's
       // actor tree) and not thrown, so it neither replaces the test's own outcome nor keeps the other systems running
       systems.foreach(_.terminate())
-      systems.foreach(system => Try(TestKit.shutdownActorSystem(system, 30.seconds)))
+      systems.foreach(system => TestKit.shutdownActorSystem(system, 30.seconds))
     }
 }

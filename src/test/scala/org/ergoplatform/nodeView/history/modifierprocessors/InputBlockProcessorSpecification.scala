@@ -323,6 +323,142 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     }
   }
 
+  property("shared-root completion preserves progress in every waiting fork") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+      val siblings = (0 until 3).map { _ =>
+        InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(root.id)), None)
+      }
+      (root +: siblings).foreach(h.applyInputBlock(_) shouldBe None)
+      val chains = h.inputBlocksTree().get.forks.map(_.chain)
+      chains.size shouldBe 3
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(-1, -1, -1)
+
+      h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe (Seq(root.id) -> Seq.empty)
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe chains
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(0, 0, 0)
+      h.bestInputBlocksChain() shouldBe Seq(root.id)
+
+      h.applyInputBlockTransactions(siblings.head.id, Seq.empty, us) shouldBe
+        (Seq(siblings.head.id) -> Seq.empty)
+      h.bestInputBlocksChain() shouldBe Seq(siblings.head.id, root.id)
+    }
+  }
+
+  property("fork-switch completion preserves the selected branch and shared progress") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)
+      def childOf(parent: InputBlockAnnouncement): InputBlockAnnouncement =
+        InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(parent.id)), None)
+      val oldTip = childOf(root)
+      val shared = childOf(root)
+      val newTip = childOf(shared)
+      val sibling = childOf(shared)
+      Seq(root, oldTip, shared, newTip, sibling).foreach(h.applyInputBlock(_) shouldBe None)
+      val chains = Seq(Seq(root.id, oldTip.id), Seq(root.id, shared.id, newTip.id),
+        Seq(root.id, shared.id, sibling.id))
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe chains
+
+      h.applyInputBlockTransactions(root.id, Seq.empty, us) shouldBe (Seq(root.id) -> Seq.empty)
+      h.applyInputBlockTransactions(oldTip.id, Seq.empty, us) shouldBe (Seq(oldTip.id) -> Seq.empty)
+      h.applyInputBlockTransactions(shared.id, Seq.empty, us) shouldBe (Seq.empty -> Seq.empty)
+      h.applyInputBlockTransactions(newTip.id, Seq.empty, us) shouldBe
+        (Seq(shared.id, newTip.id) -> Seq(oldTip.id))
+
+      h.inputBlocksTree().get.forks.map(_.chain) shouldBe chains
+      h.inputBlocksTree().get.forks.map(_.processedIndex) shouldBe Seq(1, 2, 1)
+      h.bestInputBlocksChain() shouldBe Seq(newTip.id, shared.id, root.id)
+    }
+  }
+
+  property("linear cached replay preserves a multi-block shared prefix for a later fork switch") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None
+      )
+      def childOf(parent: InputBlockAnnouncement): InputBlockAnnouncement =
+        InputBlockAnnouncement(
+          1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(parent.id)), None
+        )
+      val shared = childOf(root)
+      val oldTip = childOf(shared)
+      val siblingTip = childOf(shared)
+      Seq(root, shared, oldTip, siblingTip).foreach(h.applyInputBlock(_) shouldBe None)
+
+      h.applyInputBlockTransactions(shared.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+      h.applyInputBlockTransactions(oldTip.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+      val firstReplay = h.applyInputBlockTransactions(root.id, Seq.empty, us)
+      val siblingChain = Seq(root.id, shared.id, siblingTip.id)
+      val siblingAfterReplay = h.inputBlocksTree().get.forks.find(_.chain == siblingChain).get
+
+      val siblingChild = childOf(siblingTip)
+      h.applyInputBlock(siblingChild) shouldBe None
+      h.applyInputBlockTransactions(siblingTip.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+      val (forward, rollback) =
+        h.applyInputBlockTransactions(siblingChild.id, Seq.empty, us)
+
+      forward shouldBe Seq(siblingTip.id, siblingChild.id)
+      rollback shouldBe Seq(oldTip.id)
+      firstReplay shouldBe (Seq(root.id, shared.id, oldTip.id) -> Seq.empty)
+      siblingAfterReplay.processedIndex shouldBe 1
+      siblingAfterReplay.processedBlocks.length shouldBe 2
+      h.bestInputBlocksChain() shouldBe
+        Seq(siblingChild.id, siblingTip.id, shared.id, root.id)
+    }
+  }
+
+  property("fork-switch cached replay preserves every shared completion for a third fork") {
+    withInputBlockFixture { (us, h, orderingParent, _) =>
+      val root = InputBlockAnnouncement(
+        1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None
+      )
+      def childOf(parent: InputBlockAnnouncement): InputBlockAnnouncement =
+        InputBlockAnnouncement(
+          1, nextInputHeader(h, us, orderingParent), parentOnly(idToBytes(parent.id)), None
+        )
+
+      val oldTip = childOf(root)
+      Seq(root, oldTip).foreach { ib =>
+        h.applyInputBlock(ib) shouldBe None
+        h.applyInputBlockTransactions(ib.id, Seq.empty, us) shouldBe
+          (Seq(ib.id) -> Seq.empty)
+      }
+
+      val shared1 = childOf(root)
+      val shared2 = childOf(shared1)
+      val winningTip = childOf(shared2)
+      val thirdTip = childOf(shared2)
+      Seq(shared1, shared2, winningTip, thirdTip).foreach(h.applyInputBlock(_) shouldBe None)
+      h.applyInputBlockTransactions(shared2.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+      h.applyInputBlockTransactions(shared1.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+
+      val firstSwitch = h.applyInputBlockTransactions(winningTip.id, Seq.empty, us)
+      val thirdChain = Seq(root.id, shared1.id, shared2.id, thirdTip.id)
+      val thirdAfterReplay = h.inputBlocksTree().get.forks.find(_.chain == thirdChain).get
+
+      val thirdChild = childOf(thirdTip)
+      h.applyInputBlock(thirdChild) shouldBe None
+      h.applyInputBlockTransactions(thirdTip.id, Seq.empty, us) shouldBe
+        (Seq.empty -> Seq.empty)
+      val (forward, rollback) =
+        h.applyInputBlockTransactions(thirdChild.id, Seq.empty, us)
+
+      forward shouldBe Seq(thirdTip.id, thirdChild.id)
+      rollback shouldBe Seq(winningTip.id)
+      firstSwitch shouldBe
+        (Seq(shared1.id, shared2.id, winningTip.id) -> Seq(oldTip.id))
+      thirdAfterReplay.processedIndex shouldBe 2
+      thirdAfterReplay.processedBlocks.length shouldBe 3
+      h.bestInputBlocksChain() shouldBe
+        Seq(thirdChild.id, thirdTip.id, shared2.id, shared1.id, root.id)
+    }
+  }
+
   property("create separate sibling forks for descendants of the same parent") {
     withInputBlockFixture { (us, h, orderingParent, _) =>
     val rootIb = InputBlockAnnouncement(1, nextInputHeader(h, us, orderingParent), InputBlockFields.empty, None)

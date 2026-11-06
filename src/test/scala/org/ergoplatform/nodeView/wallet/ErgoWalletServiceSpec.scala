@@ -146,14 +146,16 @@ class ErgoWalletServiceSpec
     forAll(ergoBoxCandidateGen, ergoBoxCandidateGen, validErgoTransactionGen, proveDlogGen) {
       case (outputCandidate, outputChangeCandidate, (ergoBoxes, _), proveDlog) =>
         val selectionResult = new BoxSelectionResult(inputBoxes, Seq(outputChangeCandidate), None)
-        val tx = prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option(proveDlog)).get
+        val tx = prepareUnsignedTransaction(Seq(outputCandidate), startHeight, startHeight,
+          selectionResult, ergoBoxes, Option(proveDlog)).get
         tx.inputs shouldBe inputBoxes.map(_.box.id).map(id => new UnsignedInput(id))
         tx.dataInputs shouldBe ergoBoxes.map(dataInputBox => DataInput(dataInputBox.id))
         tx.outputCandidates.size shouldBe 2
         tx.outputCandidates.map(_.value).sum shouldBe outputCandidate.value + outputChangeCandidate.value
 
         val txWithChangeBoxesButNoChangeAddress =
-          prepareUnsignedTransaction(Seq(outputCandidate), startHeight, selectionResult, ergoBoxes, Option.empty)
+          prepareUnsignedTransaction(Seq(outputCandidate), startHeight, startHeight,
+            selectionResult, ergoBoxes, Option.empty)
         txWithChangeBoxesButNoChangeAddress.isFailure shouldBe true
     }
   }

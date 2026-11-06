@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.state.StateType
 import org.ergoplatform.nodeView.{ErgoNodeViewRef, ErgoReadersHolderRef}
 import org.ergoplatform.settings.Constants
 import org.ergoplatform.settings.{ErgoSettings, ErgoSettingsReader}
-import org.ergoplatform.utils.ErgoTestHelpers
+import org.ergoplatform.utils.{ErgoTestHelpers, TestActorSystems}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -42,7 +42,7 @@ import scala.concurrent.duration._
   * [[org.ergoplatform.mining.StorageRentClaimBuilderSpec]].
   */
 class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
-  with Matchers with ErgoTestHelpers with BeforeAndAfterAll {
+  with Matchers with ErgoTestHelpers with BeforeAndAfterAll with TestActorSystems {
 
   import org.ergoplatform.utils.ErgoCoreTestConstants._
 
@@ -103,7 +103,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
   }
 
   "CandidateGenerator" should "not inject rent claims when storage rent collection is off" in
-    new TestKit(ActorSystem()) {
+    new TestKit(testSystem()) {
     val candidate = generateOneCandidate(baseSettings)
 
     // the flag is off by default, so nothing may be swept into the candidate
@@ -116,7 +116,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
   }
 
   it should "not inject rent claims while the chain is younger than the storage period" in
-    new TestKit(ActorSystem()) {
+    new TestKit(testSystem()) {
     // With the collector enabled, a chain that has not reached the storage period must
     // produce no claim. Note this is a genuine end-to-end assertion about a young chain, but
     // it does not isolate WHICH guard prevents the claim - see the scope note in this spec.
@@ -130,7 +130,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
   }
 
   it should "not change the candidate on a young chain when the collector is enabled" in
-    new TestKit(ActorSystem()) {
+    new TestKit(testSystem()) {
     // enabling the collector must not add transactions to the candidate on a young chain,
     // nor remove any: the two candidates must agree on their transaction ids
     val off = generateOneCandidate(baseSettings)
@@ -142,7 +142,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
   }
 
   it should "expose the storage rent settings read from configuration" in
-    new TestKit(ActorSystem()) {
+    new TestKit(testSystem()) {
     // the two settings the candidate generator consults must be configurable, and the
     // whitelist must be plumbed through as a set of token ids
     rentEnabledSettings.nodeSettings.storageRentCollection shouldBe true

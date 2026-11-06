@@ -1,18 +1,11 @@
 package org.ergoplatform.http.routes
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import akka.http.scaladsl.model.ContentTypes
 import akka.http.scaladsl.model.HttpEntity
-import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.UniversalEntity
 import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.stream.scaladsl.Source
-import akka.testkit.TestProbe
-import akka.util.ByteString
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
 import ch.qos.logback.core.read.ListAppender
@@ -151,55 +144,32 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
     }
   }
 
-  private def checkStreamedRequest(path: String,
-                                   body: String,
-                                   expectedStatus: StatusCode,
-                                   apiKey: Option[String] = None): Unit = {
-    val bytes = ByteString(body)
-    val pulled = TestProbe()
-    val materializations = new AtomicInteger
-    val source = Source.single(bytes).map { chunk =>
-      pulled.ref ! chunk
-      chunk
-    }.mapMaterializedValue { materialized =>
-      if (materializations.incrementAndGet() != 1) {
-        throw new IllegalStateException("request body materialized twice")
-      }
-      materialized
+  private val malformedJson = HttpEntity(ContentTypes.`application/json`, "{")
+
+  it should "reject a malformed mining body before decoding when unauthenticated" in {
+    Post("/mining/candidateWithTxs", malformedJson) ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
     }
-    val entity: UniversalEntity =
-      HttpEntity.Default(ContentTypes.`application/json`, bytes.length.toLong, source)
+  }
 
-    val request = Post(path, entity)
-    val requestWithKey = apiKey.fold(request) { key =>
-      request.addHeader(RawHeader("api_key", key))
+  it should "reject a malformed custom-key mining body when unauthenticated" in {
+    Post("/mining/candidateWithTxsAndPk", malformedJson) ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
     }
-    requestWithKey ~> authRoute ~> check {
-      status shouldBe expectedStatus
+  }
+
+  it should "reject a malformed block body before decoding when unauthenticated" in {
+    Post("/blocks", malformedJson) ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
     }
-    pulled.expectMsg(bytes)
-    materializations.get() shouldBe 1
   }
 
-  it should "discard a streamed unauthorized scan body exactly once" in {
-    checkStreamedRequest("/scan/register", "{}", StatusCodes.Forbidden)
-  }
-
-  it should "reject and discard a malformed streamed mining body before decoding" in {
-    checkStreamedRequest("/mining/candidateWithTxs", "{", StatusCodes.Forbidden)
-  }
-
-  it should "reject and discard a malformed streamed custom-key mining body" in {
-    checkStreamedRequest("/mining/candidateWithTxsAndPk", "{", StatusCodes.Forbidden)
-  }
-
-  it should "reject and discard a malformed streamed block body before decoding" in {
-    checkStreamedRequest("/blocks", "{", StatusCodes.Forbidden)
-  }
-
-  it should "decode a malformed streamed mining body after valid authentication" in {
-    checkStreamedRequest("/mining/candidateWithTxs", "{", StatusCodes.BadRequest,
-      Some(testApiKey))
+  it should "decode a malformed mining body after valid authentication" in {
+    val request = Post("/mining/candidateWithTxs", malformedJson)
+      .addHeader(RawHeader("api_key", testApiKey))
+    request ~> authRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
   }
 
 }

@@ -13,12 +13,8 @@ object ApiRejectionHandler {
     }
     .handle {
       case AuthorizationFailedRejection =>
-        Directives.extractRequest { request =>
-          Directives.extractMaterializer { implicit materializer =>
-            request.discardEntityBytes()
-            ApiError.Forbidden("The supplied authentication is not authorized to access this resource")
-          }
-        }
+        ApiError.Forbidden(
+          "The supplied authentication is not authorized to access this resource")
     }
     .handle {
       case MalformedRequestContentRejection(msg, _) =>
@@ -40,14 +36,9 @@ object ApiRejectionHandler {
     .handleAll[MethodRejection] { rejections =>
       val methods = rejections.map(_.supported)
       val names = methods.map(_.name).mkString(", ")
-      Directives.extractRequest { request =>
-        Directives.extractMaterializer { implicit materializer =>
-          request.discardEntityBytes()
-          Directives.respondWithHeader(Allow(methods)) {
-            ApiError.MethodNotAllowed(
-              s"HTTP method not allowed, supported methods: $names")
-          }
-        }
+      Directives.respondWithHeader(Allow(methods)) {
+        ApiError.MethodNotAllowed(
+          s"HTTP method not allowed, supported methods: $names")
       }
     }
     .handle { case x => ApiError.InternalError(s"Unhandled rejection: $x") }

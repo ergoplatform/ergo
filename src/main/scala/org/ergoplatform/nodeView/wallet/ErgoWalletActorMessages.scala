@@ -4,6 +4,7 @@ import org.ergoplatform.ErgoBox._
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransaction}
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils._
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.wallet.models.CollectedBoxes
 import org.ergoplatform.nodeView.wallet.requests.{ExternalSecret, TransactionGenerationRequest}
 import org.ergoplatform.nodeView.wallet.scanning.{Scan, ScanRequest}
@@ -52,6 +53,10 @@ object ErgoWalletActorMessages {
     * @param inputBlockId - id of the input block to rollback
     */
   final case class RollbackInputBlock(inputBlockId: ModifierId)
+
+  /** Rebuild selected input-block and unconfirmed wallet effects from exact snapshots. */
+  final case class ReconcileInputBlockChain(selectedInputBlockIds: Seq[ModifierId],
+                                            mempool: ErgoMemPoolReader)
 
   /**
    * Command to scan a block

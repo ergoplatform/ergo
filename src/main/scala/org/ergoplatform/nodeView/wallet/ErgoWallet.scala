@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, ActorSystem}
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.modifiers.{ErgoFullBlock, BlockSection}
 import org.ergoplatform.nodeView.history.ErgoHistoryReader
+import org.ergoplatform.nodeView.mempool.ErgoMemPoolReader
 import org.ergoplatform.nodeView.state.ErgoState
 import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
@@ -53,6 +54,12 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
 
   def rollbackInputBlock(inputBlockId: ModifierId): ErgoWallet = {
     walletActor ! RollbackInputBlock(inputBlockId)
+    this
+  }
+
+  def reconcileInputBlockChain(selectedInputBlockIds: Seq[ModifierId],
+                               mempool: ErgoMemPoolReader): ErgoWallet = {
+    walletActor ! ReconcileInputBlockChain(selectedInputBlockIds, mempool)
     this
   }
 

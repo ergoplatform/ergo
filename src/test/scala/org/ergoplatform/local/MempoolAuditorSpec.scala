@@ -141,9 +141,12 @@ class MempoolAuditorSpec extends AnyFlatSpec with NodeViewTestOps with ErgoTestH
   private def spending(inputs: Seq[ErgoBox], dataInputs: Seq[ErgoBox] = Seq.empty): ErgoTransaction =
     validTransactionFromBoxes(inputs.toIndexedSeq, dataBoxes = dataInputs.toIndexedSeq)
 
-  // a chain of `length` transactions, each spending all the outputs of the one before, starting from `inputs`
+  // a chain of `length` transactions, each spending at most two outputs of the one before, starting from `inputs`.
+  // The generator gives a transaction at least one more output than it has inputs, as far as their value allows, so
+  // spending all of them grows the chain at every step, up to hundreds of thousands of outputs, and a round over such
+  // a pool waits for a cleanup run that can outlast the test's wait
   private def chainFrom(inputs: Seq[ErgoBox], length: Int): Seq[ErgoTransaction] =
-    (1 until length).scanLeft(spending(inputs))((prev, _) => spending(prev.outputs))
+    (1 until length).scanLeft(spending(inputs))((prev, _) => spending(prev.outputs.take(2)))
 
   // runs one cleanup and rebroadcast round over `pool` and returns the announced ids in order (one `Inv` each)
   private def announcedIds(us: UtxoState, pool: Seq[ErgoTransaction], rebroadcastCount: Int): Seq[ModifierId] = {

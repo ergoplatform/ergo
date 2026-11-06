@@ -10,7 +10,7 @@ import sigma.data.ProveDlog
 /**
   * Block candidate related data for external miner to perform work
   *
-  * @param msg                            - message for external miner to work on (serialized header)
+  * @param msg                            - BLAKE2b-256 hash of the serialized block header without its PoW solution
   * @param b                              - target value for mining
   * @param h                              - height of the block (presented in V2 only)
   * @param pk                             - public key of a miner

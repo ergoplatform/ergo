@@ -223,6 +223,42 @@ class InputBlockParentBindingSpec extends AnyPropSpec with Matchers with FileUti
     }
   }
 
+  property("requested input block from a replacement handler survives an old handler's reply") {
+    withFixture(new Fixture(requestTimeout = 30.seconds)) { f =>
+      f.synchronizer ! ChangedState(f.state)
+      f.synchronizer ! ChangedHistory(f.hist)
+      f.synchronizer ! ChangedMempool(f.mempool)
+      networkMessages(f)
+
+      val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))
+      val ib = announcement(f, unknownParent, f.hist.fullBlockHeight + 1,
+        DifficultySerializer.encodeCompactBits(1))
+      val replacementHandler = TestProbe("ReplacementInputHandler")(f.system)
+      val replacementPeer = f.peer.copy(handlerRef = replacementHandler.ref)
+      replacementPeer shouldBe f.peer // ConnectedPeer.equals checks only the remote address.
+      replacementPeer.handlerRef should not be f.peer.handlerRef
+
+      val inv = InvData(InputBlockTypeId.value, Seq(ib.id))
+      f.synchronizer ! Message(InvSpec, Left(InvSpec.toBytes(inv)), Some(replacementPeer))
+      val requests = networkMessages(f).collect {
+        case SendToNetwork(msg, _) if msg.spec.messageCode == RequestModifierSpec.messageCode =>
+          msg.data.get.asInstanceOf[InvData]
+      }
+      requests should contain(inv)
+      val attempt = f.deliveryTracker.getRequestedInfo(InputBlockTypeId.value, ib.id).get
+      attempt.peer.handlerRef shouldBe replacementHandler.ref
+
+      f.synchronizer ! Message(InputBlockMessageSpec, Left(InputBlockMessageSpec.toBytes(ib)), Some(f.peer))
+      viewHolderGotInputBlock(f) shouldBe false
+      penalized(networkMessages(f)) shouldBe false
+
+      f.deliveryTracker.status(ib.id, InputBlockTypeId.value, Seq.empty) shouldBe ModifiersStatus.Requested
+      f.deliveryTracker.getRequestedInfo(InputBlockTypeId.value, ib.id)
+        .map(_.peer.handlerRef) shouldBe Some(replacementHandler.ref)
+      attempt.cancellable.isCancelled shouldBe false
+    }
+  }
+
   property("input block with unknown parent header is dropped without requesting the header") {
     withFixture { f =>
       val unknownParent = bytesToId(Array.fill(32)(0x5a.toByte))

@@ -6,7 +6,7 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
 import ch.qos.logback.core.read.ListAppender
-import org.ergoplatform.http.api.EmissionApiRoute
+import org.ergoplatform.http.api.{EmissionApiRoute, ScanApiRoute}
 import org.ergoplatform.http.{ErgoHttpService, NodePanelRoute, SwaggerRoute}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
@@ -31,6 +31,25 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
   )
 
   private val route: Route = service.compositeRoute
+
+  private val settingsWithAuth = settings.copy(
+    scorexSettings = settings.scorexSettings.copy(
+      restApi = restApiSettings.copy(
+        apiKeyHash = Some(
+          "e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10"
+        )
+      )
+    )
+  )
+
+  private val authRoute: Route = ErgoHttpService(
+    apiRoutes = Seq(ScanApiRoute(utxoReadersRef, settingsWithAuth)),
+    swaggerRoute = SwaggerRoute(
+      settingsWithAuth.scorexSettings.restApi,
+      swaggerConfig = ""
+    ),
+    panelRoute = NodePanelRoute()
+  ).compositeRoute
 
   private val serviceLogger: LogbackLogger =
     LoggerFactory.getLogger(classOf[ErgoHttpService]).asInstanceOf[LogbackLogger]
@@ -107,6 +126,12 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
     }._1
 
     body shouldBe bodyWithoutLogging
+  }
+
+  it should "prefer authorization failure to sibling method rejections" in {
+    Post("/scan/register", "{}") ~> authRoute ~> check {
+      status shouldBe StatusCodes.Forbidden
+    }
   }
 
 }

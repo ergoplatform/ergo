@@ -12,6 +12,10 @@ object ApiRejectionHandler {
       val schemes = rejections.map(_.supported).mkString(", ")
       ApiError.BadRequest(s"Uri scheme not allowed, supported schemes: $schemes")
     }
+    .handle {
+      case AuthorizationFailedRejection =>
+        ApiError.Forbidden("The supplied authentication is not authorized to access this resource")
+    }
     .handleAll[MethodRejection] { rejections =>
       val methods = rejections.map(_.supported).distinct
       val names = methods.map(_.name).mkString(", ")
@@ -24,10 +28,6 @@ object ApiRejectionHandler {
           }
         }
       }
-    }
-    .handle {
-      case AuthorizationFailedRejection =>
-        ApiError.Forbidden("The supplied authentication is not authorized to access this resource")
     }
     .handle {
       case MalformedRequestContentRejection(msg, _) =>

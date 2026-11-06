@@ -54,40 +54,46 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
    */
   def txCount(implicit segmentThreshold: Int): Long = segmentThreshold * txSegmentCount + txs.length
 
-  /**
-   * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vice versa.
-   *
-   * @param boxNum  - box number to locate
-   * @param history - database to retrieve segments from
-   */
-  private[extra] def findAndModBox(boxNum: Long, history: ErgoHistoryReader): Unit = {
+  private def updateBoxSign(current: Long, spendOpt: Option[Boolean]): Long =
+    spendOpt match {
+      case Some(true)  => -abs(current)
+      case Some(false) => abs(current)
+      case None        => -current
+    }
+
+  private def modifyBoxEntry(boxNum: Long, history: ErgoHistoryReader, spendOpt: Option[Boolean]): Unit = {
     val boxNumAbs = abs(boxNum)
     val inCurrent: Int = binarySearch(boxes, boxNumAbs)
-    if(inCurrent >= 0) { // box found in current box array
-      boxes.update(inCurrent, -boxes(inCurrent))
+    if (inCurrent >= 0) { // box found in current box array
+      boxes.update(inCurrent, updateBoxSign(boxes(inCurrent), spendOpt))
     } else { // box is in another segment, use binary search to locate
-      var segmentId: ModifierId = ModifierId @@ ""
+      var matchedSegmentOpt: Option[T] = None
       var low = 0
       var high = boxSegmentCount - 1
-      while(low <= high) {
+      while (low <= high) {
         val mid = (low + high) >>> 1
-        segmentId = factory(boxSegmentId(id, mid)).id
-        buffer.get(segmentId).orElse(history.typedExtraIndexById[T](segmentId)).foreach { segment =>
-          if (abs(segment.boxes.head) < boxNumAbs && abs(segment.boxes.last) < boxNumAbs) {
-            low = mid + 1
-          } else if (abs(segment.boxes.head) > boxNumAbs && abs(segment.boxes.last) > boxNumAbs) {
-            high = mid - 1
-          } else {
-            low = high + 1 // break
-            buffer.put(segmentId, segment)
-          }
+        val segmentId = factory(boxSegmentId(id, mid)).id
+        buffer.get(segmentId).orElse(history.typedExtraIndexById[T](segmentId)) match {
+          case Some(segment) if segment.boxes.nonEmpty =>
+            if (abs(segment.boxes.head) < boxNumAbs && abs(segment.boxes.last) < boxNumAbs) {
+              low = mid + 1
+            } else if (abs(segment.boxes.head) > boxNumAbs && abs(segment.boxes.last) > boxNumAbs) {
+              high = mid - 1
+            } else {
+              low = high + 1 // break
+              buffer.put(segmentId, segment)
+              matchedSegmentOpt = Some(segment)
+            }
+          case _ =>
+            log.error(s"Segment $mid ($segmentId) missing or empty while locating box $boxNum of parent $id")
+            low = high + 1
         }
       }
-      buffer.get(segmentId) match {
+      matchedSegmentOpt match {
         case Some(segment) =>
           val i: Int = binarySearch(segment.boxes, boxNumAbs)
           if (i >= 0) {
-            segment.boxes(i) = -segment.boxes(i)
+            segment.boxes(i) = updateBoxSign(segment.boxes(i), spendOpt)
           } else {
             log.error(s"Box $boxNum not found in predicted segment of parent: ${segment.boxes.mkString("[", ",", "]")}")
           }
@@ -96,6 +102,22 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
       }
     }
   }
+
+  /**
+   * Locate which segment the given box number is in and set its spent state idempotently
+   * (negative when `spend == true`, non-negative when `spend == false`).
+   */
+  private[extra] def modBox(boxNum: Long, history: ErgoHistoryReader, spend: Boolean): Unit =
+    modifyBoxEntry(boxNum, history, Some(spend))
+
+  /**
+   * Locate which segment the given box number is in and change its sign, meaning it spends unspent boxes and vice versa.
+   *
+   * @param boxNum  - box number to locate
+   * @param history - database to retrieve segments from
+   */
+  private[extra] def findAndModBox(boxNum: Long, history: ErgoHistoryReader): Unit =
+    modifyBoxEntry(boxNum, history, None)
 
   /**
    * Create an array of parent objects each containing [[ExtraIndexerBase.segmentThreshold]] number of transaction/box indexes.
@@ -184,7 +206,7 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
     }else { // skip all elements in memory
       off -= arr.size
     }
-    while(off > segmentTreshold && segment >= 0) { // skip segments until offset gets smaller than one segment
+    while(off >= segmentTreshold && segment >= 0) { // skip segments until offset gets smaller than one segment
       off -= segmentTreshold
       segment -= 1
     }
@@ -220,6 +242,14 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
   def retrieveBoxes(history: ErgoHistoryReader, offset: Int, limit: Int)(implicit segmentTreshold: Int): Array[IndexedErgoBox] =
     getFromSegments(history, offset, limit, boxSegmentCount, boxes, boxSegmentId, _.boxes, getBoxes)
 
+  private def unspentBoxesFromNums(nums: ArrayBuffer[Long],
+                                   history: ErgoHistoryReader,
+                                   spentBoxesIdsInMempool: Set[ModifierId]): Seq[IndexedErgoBox] =
+    nums.iterator
+      .filter(_ >= 0L)
+      .flatMap(n => NumericBoxIndex.getBoxByNumber(history, n))
+      .filterNot(box => box.isSpent || spentBoxesIdsInMempool.contains(box.id))
+      .toSeq
 
   /**
     * Overloaded retrieveUtxos for mempool filtering
@@ -244,23 +274,31 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
     val data: ArrayBuffer[IndexedErgoBox] = ArrayBuffer.empty[IndexedErgoBox]
     val confirmedBoxes: Seq[IndexedErgoBox] = sortDir match {
       case DESC =>
-        data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+        data ++= unspentBoxesFromNums(boxes, history, spentBoxesIdsInMempool)
         var segment: Int = boxSegmentCount
         while (data.length < (limit + offset) && segment > 0) {
           segment -= 1
-          history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id)) ++=: data
+          val segId = factory(boxSegmentId(id, segment)).id
+          val segBoxes = buffer.get(segId)
+            .orElse(history.typedExtraIndexById[T](segId))
+            .map(s => unspentBoxesFromNums(s.boxes, history, spentBoxesIdsInMempool))
+            .getOrElse(Seq.empty)
+          segBoxes ++=: data
         }
         data.reverse.slice(offset, offset + limit)
       case ASC =>
         var segment: Int = 0
         while (data.length < (limit + offset) && segment < boxSegmentCount) {
-          data ++= history.typedExtraIndexById[T](factory(boxSegmentId(id, segment)).id).get.boxes
-            .filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+          val segId = factory(boxSegmentId(id, segment)).id
+          val segBoxes = buffer.get(segId)
+            .orElse(history.typedExtraIndexById[T](segId))
+            .map(s => unspentBoxesFromNums(s.boxes, history, spentBoxesIdsInMempool))
+            .getOrElse(Seq.empty)
+          data ++= segBoxes
           segment += 1
         }
         if (data.length < (limit + offset))
-          data ++= boxes.filter(_ > 0).map(n => NumericBoxIndex.getBoxByNumber(history, n).get).filterNot(box => spentBoxesIdsInMempool.contains(box.id))
+          data ++= unspentBoxesFromNums(boxes, history, spentBoxesIdsInMempool)
         data.slice(offset, offset + limit)
     }
     if (unconfirmed) {
@@ -282,41 +320,51 @@ abstract class Segment[T <: Segment[_] : ClassTag](val factory: ModifierId => T,
    * @param history   - history handle to update segment(s) in database
    * @return modifier ids to remove
    */
-  protected def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
+  protected[extra] def rollbackState(txTarget: Long, boxTarget: Long, history: ErgoHistoryReader)
                              (implicit segmentTreshold: Int): ArrayBuffer[ModifierId] = {
 
-    if((txCount == 0 && boxCount == 0) || // already rolled back
-      (txs.lastOption.getOrElse[Long](0) <= txTarget &&
-        abs(boxes.lastOption.getOrElse[Long](0)) <= boxTarget)) // no rollback needed
+    val noTxsToRollback = txCount == 0 || (txs.nonEmpty && !txs.exists(_ > txTarget))
+    val noBoxesToRollback = boxCount == 0 || (boxes.nonEmpty && !boxes.exists(abs(_) > boxTarget))
+    if (noTxsToRollback && noBoxesToRollback)
       return ArrayBuffer.empty[ModifierId]
 
     val toRemove: ArrayBuffer[ModifierId] = ArrayBuffer.empty[ModifierId]
 
     // filter tx numbers
-    do {
+    var checkMoreTxs = !noTxsToRollback
+    while (checkMoreTxs) {
       val tmp = txs.filter(_ <= txTarget)
       txs.clear()
       txs ++= tmp
       if (txs.isEmpty && txSegmentCount > 0) { // entire current tx set removed, retrieving more from database if possible
         val segmentId = factory(txSegmentId(id, txSegmentCount - 1)).id
-        txs ++= history.typedExtraIndexById[T](segmentId).get.txs
+        history.typedExtraIndexById[T](segmentId).foreach(seg => txs ++= seg.txs)
         toRemove += segmentId
+        buffer.remove(segmentId)
         txSegmentCount -= 1
+        checkMoreTxs = (txs.isEmpty && txSegmentCount > 0) || txs.exists(_ > txTarget)
+      } else {
+        checkMoreTxs = false
       }
-    } while (txCount > 0 && txs.last > txTarget)
+    }
 
     // filter box numbers
-    do {
-      val tmp = boxes.takeWhile(abs(_) <= boxTarget)
+    var checkMoreBoxes = !noBoxesToRollback
+    while (checkMoreBoxes) {
+      val tmp = boxes.filter(abs(_) <= boxTarget)
       boxes.clear()
       boxes ++= tmp
       if (boxes.isEmpty && boxSegmentCount > 0) { // entire current box set removed, retrieving more from database if possible
         val segmentId = factory(boxSegmentId(id, boxSegmentCount - 1)).id
-        boxes ++= history.typedExtraIndexById[T](segmentId).get.boxes
+        history.typedExtraIndexById[T](segmentId).foreach(seg => boxes ++= seg.boxes)
         toRemove += segmentId
+        buffer.remove(segmentId)
         boxSegmentCount -= 1
+        checkMoreBoxes = (boxes.isEmpty && boxSegmentCount > 0) || boxes.exists(abs(_) > boxTarget)
+      } else {
+        checkMoreBoxes = false
       }
-    } while (boxCount > 0 && abs(boxes.last) > boxTarget)
+    }
 
     toRemove
   }

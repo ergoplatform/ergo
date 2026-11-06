@@ -38,9 +38,13 @@ case class MemPoolStatistics(startMeasurement: Long,
       } else {
         (curTakenTx, startMeasurement, snapTakenTxns, snapTime)
       }
-    val durationMinutes = ((currTime - wtx.created) / (60 * 1000)).toInt
+    val minuteMillis = 60 * 1000L
+    val durationMillis = currTime - wtx.created
     val newHist =
-      if (durationMinutes < MemPoolStatistics.nHistogramBins) {
+      // A reversed wall clock or wrapped subtraction has no trustworthy duration bin.
+      if (currTime >= wtx.created && durationMillis >= 0 &&
+          durationMillis < MemPoolStatistics.nHistogramBins.toLong * minuteMillis) {
+        val durationMinutes = (durationMillis / minuteMillis).toInt
         val (histx, hisfee) = (histogram(durationMinutes).nTxns + 1, saturatingAdd(histogram(durationMinutes).totalFee, wtx.feePerFactor))
         histogram.updated(durationMinutes, FeeHistogramBin(histx, hisfee))
       } else {

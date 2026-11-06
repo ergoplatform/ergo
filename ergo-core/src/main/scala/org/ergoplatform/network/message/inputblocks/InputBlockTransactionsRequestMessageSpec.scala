@@ -32,6 +32,9 @@ object InputBlockTransactionsRequestMessageSpec
   override def parse(r: Reader): InputBlockTransactionsRequest = {
     val inputBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val cnt          = r.getUInt().toIntExact
+    require(cnt <= InputBlockTransactionIdsMessageSpec.MaxTransactionIds,
+      s"Too many transaction ids declared: $cnt, " +
+        s"while the limit is ${InputBlockTransactionIdsMessageSpec.MaxTransactionIds}")
     // every weak id takes exactly WeakIdLength bytes, so a bigger count is not possible to fulfil
     require(cnt.toLong * ErgoTransaction.WeakIdLength <= r.remaining,
       s"Too many transaction ids declared: $cnt, while only ${r.remaining} bytes remaining")

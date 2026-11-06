@@ -451,6 +451,33 @@ class InputBlockMessageSpecsSpec extends ErgoCorePropertyTest with Serialization
     }
   }
 
+  property("InputBlockTransactionIdsData parsing accepts the max id count, rejects one above") {
+    val max = InputBlockTransactionIdsMessageSpec.MaxTransactionIds
+    max shouldBe 163886
+    val blockId = modifierIdGen.sample.get
+
+    val atLimit = inputBlockTransactionIdsMessageSpec.parseBytes(
+      payloadWithDeclaredCount(blockId, max.toLong, weakIds(max)))
+    atLimit.transactionIds.length shouldBe max
+
+    val aboveLimit = inputBlockTransactionIdsMessageSpec.parseBytesTry(
+      payloadWithDeclaredCount(blockId, max + 1L, weakIds(max + 1)))
+    rejectedByCountBound(aboveLimit) shouldBe true
+  }
+
+  property("InputBlockTransactionsRequest parsing accepts the max id count, rejects one above") {
+    val max = InputBlockTransactionIdsMessageSpec.MaxTransactionIds
+    val blockId = modifierIdGen.sample.get
+
+    val atLimit = inputBlockTransactionsRequestMessageSpec.parseBytes(
+      payloadWithDeclaredCount(blockId, max.toLong, weakIds(max)))
+    atLimit.txIds.length shouldBe max
+
+    val aboveLimit = inputBlockTransactionsRequestMessageSpec.parseBytesTry(
+      payloadWithDeclaredCount(blockId, max + 1L, weakIds(max + 1)))
+    rejectedByCountBound(aboveLimit) shouldBe true
+  }
+
   property("InputBlockTransactionIdsData with zero id count parses to empty") {
     forAll(modifierIdGen) { blockId =>
       val recovered = inputBlockTransactionIdsMessageSpec.parseBytes(

@@ -15,7 +15,7 @@ import org.ergoplatform.utils.ErgoCoreTestConstants.parameters
 import org.ergoplatform.utils.HistoryTestHelpers.generateHistory
 import org.ergoplatform.utils.generators.ChainGenerator.{applyChain, genChain}
 import org.ergoplatform.utils.generators.ValidBlocksGenerators.validTransactionsFromBoxHolder
-import scorex.crypto.authds.{ADDigest, LeafData}
+import scorex.crypto.authds.{ADDigest, ADKey, LeafData}
 import scorex.crypto.authds.merkle.BatchMerkleProof
 import scorex.crypto.hash.Digest32
 import scorex.util.{bytesToId, idToBytes}
@@ -583,6 +583,30 @@ class InputBlockProcessorSpecification extends ErgoCorePropertyTest with ErgoCom
     h.applyInputBlockTransactions(ib.id, tx1, us) shouldBe (Seq.empty -> Seq.empty)
     h.getInputBlockTransactionIds(ib.id) shouldBe None
     h.getInputBlockTransactions(ib.id) shouldBe None
+  }
+
+  property("filtered input block transactions keep block order, repeated and unknown ids are ignored") {
+    val us = UtxoState.fromBoxHolder(BoxHolder(Seq(eb1)), None, createTempDir, settings, parameters)
+    val txs = (1 to 4).map { i =>
+      val input = new Input(ADKey @@ Algos.hash(s"filtered-$i").clone(), ProverResult.empty)
+      val output = new ErgoBoxCandidate(1000L, ErgoTree.fromProposition(TrueProp), creationHeight = 0)
+      ErgoTransaction(IndexedSeq(input), IndexedSeq(output))
+    }
+
+    val h = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1,
+      epochLength = 10000, useLastEpochs = 3, initialDiffOpt = None, None)
+    applyChain(h, genChain(2, h, stateOpt = Some(us)))
+
+    val c2 = genChain(2, h, stateOpt = Some(us)).tail
+    val ib = InputBlockAnnouncement(1, c2(0).header, provedFieldsForTransactions(txs), None)
+    h.applyInputBlock(ib) shouldBe None
+    h.applyInputBlockTransactions(ib.id, txs, us)
+
+    val unknown = Array.fill(ErgoTransaction.WeakIdLength)(0.toByte)
+    val requested = Seq(txs(3).weakId, unknown, txs(1).weakId, txs(3).weakId)
+    h.getInputBlockTransactions(ib.id, requested).map(_.map(_.id)) shouldBe Some(Seq(txs(1).id, txs(3).id))
+    h.getInputBlockTransactions(ib.id, Seq.empty) shouldBe Some(Seq.empty)
+    h.getInputBlockTransactions(c2(1).id, requested) shouldBe None
   }
 
   property("apply input block with parent ordering block not available") {

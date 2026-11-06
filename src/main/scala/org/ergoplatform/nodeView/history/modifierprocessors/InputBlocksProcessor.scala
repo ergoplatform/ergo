@@ -10,6 +10,7 @@ import org.ergoplatform.settings.Algos
 import org.ergoplatform.subblocks.InputBlockAnnouncement
 import scorex.crypto.authds.LeafData
 import scorex.crypto.hash.Digest32
+import scorex.db.ByteArrayWrapper
 import scorex.util.{ModifierId, ScorexLogging}
 import spire.syntax.all.cfor
 
@@ -1147,18 +1148,19 @@ trait InputBlocksProcessor extends ScorexLogging {
                                 toFilter: Seq[ErgoTransaction.WeakId]): Option[Seq[ErgoTransaction]] = {
     // todo: cache input block transactions to avoid recalculating it on every p2p request
     inputBlockTransactions.get(sbId).map { ids =>
-      val result = new mutable.ArrayBuffer[ErgoTransaction](ids.length)
+      val txs = new mutable.ArrayBuffer[ErgoTransaction](ids.length)
       cfor(0)(_ < ids.length, _ + 1) { i =>
         val tx = transactionsCache.getIfPresent(ids(i))
         if (tx != null) {
-          if (toFilter.exists(fId => tx.weakId.sameElements(fId))) {
-            result += tx
-          }
+          txs += tx
         } else {
           log.warn(s"Transaction ${ids(i)} not found in cache for filtered request (expired or evicted)")
         }
       }
-      result
+      // both sets hold ids of this block's transactions only, so a peer can not choose their hash values
+      val blockIds = txs.iterator.map(tx => ByteArrayWrapper(tx.weakId)).toSet
+      val wanted = toFilter.iterator.map(ByteArrayWrapper(_)).filter(blockIds.contains).toSet
+      txs.filter(tx => wanted.contains(ByteArrayWrapper(tx.weakId)))
     }
   }
 

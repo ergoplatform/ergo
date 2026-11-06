@@ -2,13 +2,21 @@ package org.ergoplatform.network.message.inputblocks
 
 import org.ergoplatform.modifiers.mempool.{ErgoTransaction, ErgoTransactionSerializer}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
-import org.ergoplatform.network.message.MessageSpecInputBlocks
+import org.ergoplatform.network.message.{MessageSpecInputBlocks, ModifiersSpec}
 import org.ergoplatform.settings.Constants
 import scorex.util.{bytesToId, idToBytes}
 import scorex.util.serialization.{Reader, Writer}
 import sigma.util.Extensions.LongOps
 
 object InputBlockTransactionIdsMessageSpec extends MessageSpecInputBlocks[InputBlockTransactionIdsData] {
+  /**
+    * Max number of weak ids in one list (codes 102 and 105): the biggest payload of a `Modifiers`
+    * message, divided by the size of the smallest transaction (50 bytes).
+    * A longer list fails to parse, and the peer gets a permanent penalty, so this limit must stay
+    * above any honest list.
+    */
+  val MaxTransactionIds: Int = ModifiersSpec.maxMsgSizeWithReserve / 50
+
   /**
     * Code which identifies what message type is contained in the payload
     */
@@ -29,6 +37,8 @@ object InputBlockTransactionIdsMessageSpec extends MessageSpecInputBlocks[InputB
   override def parse(r: Reader): InputBlockTransactionIdsData = {
     val subBlockId = bytesToId(r.getBytes(Constants.ModifierIdSize))
     val txsCount = r.getUInt().toIntExact
+    require(txsCount <= MaxTransactionIds,
+      s"Too many transaction ids declared: $txsCount, while the limit is $MaxTransactionIds")
     // every weak id takes exactly WeakIdLength bytes, so a bigger count is not possible to fulfil
     require(txsCount.toLong * ErgoTransaction.WeakIdLength <= r.remaining,
       s"Too many transaction ids declared: $txsCount, while only ${r.remaining} bytes remaining")

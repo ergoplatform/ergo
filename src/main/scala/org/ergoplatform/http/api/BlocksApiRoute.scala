@@ -13,6 +13,7 @@ import org.ergoplatform.nodeView.history.ErgoHistoryReader
 import org.ergoplatform.settings.{Algos, ErgoSettings, RESTApiSettings}
 import org.ergoplatform.http.api.ApiError.BadRequest
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.NewBlockMined
+import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.LocallyGeneratedModifierProcessed
 import org.ergoplatform.nodeView.LocallyGeneratedModifier
 import scorex.core.api.http.ApiResponse
 import scorex.crypto.authds.merkle.MerkleProof
@@ -138,12 +139,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       //       instead of event bus publish.
       context.eventStream.publish(NewBlockMined(block.header, block.blockSections))
 
-      viewHolderRef ! LocallyGeneratedModifier(block.header)
-      block.blockSections.foreach {
-        viewHolderRef ! LocallyGeneratedModifier(_)
+      val modifiers = block.header +: block.blockSections
+      val processedF = Future.traverse(modifiers) { mod =>
+        (viewHolderRef ? LocallyGeneratedModifier(mod)).mapTo[LocallyGeneratedModifierProcessed]
       }
-
-      ApiResponse.OK
+      onSuccess(processedF)(_ => ApiResponse.OK)
     } else {
       BadRequest("Block is invalid")
     }

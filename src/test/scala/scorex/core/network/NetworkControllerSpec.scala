@@ -6,6 +6,7 @@ import akka.testkit.{TestActorRef, TestProbe}
 import akka.util.ByteString
 import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{DisconnectedPeer, HandshakedPeer}
 import org.ergoplatform.network.{Handshake, HandshakeSerializer}
+import org.ergoplatform.network.message.{GetPeersSpec, InvSpec, Message, PeersSpec}
 import org.ergoplatform.network.message.MessageConstants.MessageCode
 import org.ergoplatform.network.peer.PeerInfo
 import org.ergoplatform.utils.ErgoCorePropertyTest
@@ -566,6 +567,112 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
 
       val outgoingAddress = new InetSocketAddress("8.8.8.8", 8001)
       f.establishOutgoingConnection(controller, peerManagerProbe, tcpManagerProbe, outgoingAddress)
+    }
+  }
+
+  property("forward MessageProcessed as InboundMessageProcessed and immediately release credit when no handler exists") {
+    withFixture { f =>
+      implicit val system = f.system
+      implicit val ec = f.ec
+      val peerManagerProbe = TestProbe("PeerManager")
+      val tcpManagerProbe = TestProbe("TcpManager")
+      val msgHandlerProbe = TestProbe("MsgHandler")
+      val peerHandlerProbe = TestProbe("PeerHandler")
+
+      val controller = TestActorRef(new NetworkController(
+        settings,
+        peerManagerProbe.ref,
+        ScorexContext(Seq(GetPeersSpec, InvSpec), None, None),
+        tcpManagerProbe.ref,
+        _ => Map(GetPeersSpec.messageCode -> msgHandlerProbe.ref)
+      ))
+      tcpManagerProbe.expectMsgType[Tcp.Bind]
+
+      val connId = ConnectionId(
+        new InetSocketAddress("198.51.100.40", 9040),
+        settings.scorexSettings.network.bindAddress,
+        Incoming
+      )
+      val remotePeer = ConnectedPeer(connId, peerHandlerProbe.ref, None)
+
+      // Registered message code: credit stays held until handler replies with MessageProcessed.
+      val getPeersMsg = Message(GetPeersSpec, Left(Array.emptyByteArray), Some(remotePeer))
+      peerHandlerProbe.send(controller, getPeersMsg)
+      val forwarded = msgHandlerProbe.expectMsgType[Message[_]]
+      forwarded.spec shouldBe GetPeersSpec
+      msgHandlerProbe.lastSender shouldBe controller
+      peerHandlerProbe.expectNoMessage(150.millis)
+
+      msgHandlerProbe.send(
+        controller,
+        NetworkController.ReceivableMessages.MessageProcessed(remotePeer, getPeersMsg.messageLength)
+      )
+      peerHandlerProbe.expectMsg(
+        PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(getPeersMsg.messageLength)
+      )
+
+      // Unregistered message code: credit is released immediately so PeerConnectionHandler never leaks slots.
+      val unhandledMsg = Message(InvSpec, Left(Array[Byte](1, 2, 3)), Some(remotePeer))
+      peerHandlerProbe.send(controller, unhandledMsg)
+      peerHandlerProbe.expectMsg(
+        PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(unhandledMsg.messageLength)
+      )
+
+      // PeerSynchronizer also acknowledges GetPeersSpec and PeersSpec via MessageProcessed.
+      val peerSync = system.actorOf(PeerSynchronizerRef.props(controller, peerManagerProbe.ref, settings.scorexSettings.network))
+      val peersSpec = new PeersSpec(settings.scorexSettings.network.maxPeerSpecObjects)
+      val peersMsg = Message(peersSpec, Left(peersSpec.toBytes(Seq.empty)), Some(remotePeer))
+      val requesterProbe = TestProbe("Requester")
+      requesterProbe.send(peerSync, peersMsg)
+      requesterProbe.expectMsg(
+        NetworkController.ReceivableMessages.MessageProcessed(remotePeer, peersMsg.messageLength)
+      )
+
+      requesterProbe.send(peerSync, getPeersMsg)
+      peerManagerProbe.expectMsgType[SeenPeers]
+      requesterProbe.expectNoMessage(100.millis)
+      peerManagerProbe.reply(Seq.empty[PeerInfo])
+      requesterProbe.expectMsg(
+        NetworkController.ReceivableMessages.MessageProcessed(remotePeer, getPeersMsg.messageLength)
+      )
+    }
+  }
+
+  property("release in-flight peer message credits when a watched message handler terminates") {
+    withFixture { f =>
+      implicit val system = f.system
+      implicit val ec = f.ec
+      val peerManagerProbe = TestProbe("PeerManager")
+      val tcpManagerProbe = TestProbe("TcpManager")
+      val msgHandlerProbe = TestProbe("MsgHandler")
+      val peerHandlerProbe = TestProbe("PeerHandler")
+
+      val controller = TestActorRef(new NetworkController(
+        settings,
+        peerManagerProbe.ref,
+        ScorexContext(Seq(GetPeersSpec), None, None),
+        tcpManagerProbe.ref,
+        _ => Map(GetPeersSpec.messageCode -> msgHandlerProbe.ref)
+      ))
+      tcpManagerProbe.expectMsgType[Tcp.Bind]
+
+      val connId = ConnectionId(
+        new InetSocketAddress("198.51.100.41", 9041),
+        settings.scorexSettings.network.bindAddress,
+        Incoming
+      )
+      val remotePeer = ConnectedPeer(connId, peerHandlerProbe.ref, None)
+      val getPeersMsg = Message(GetPeersSpec, Left(Array.emptyByteArray), Some(remotePeer))
+
+      peerHandlerProbe.send(controller, getPeersMsg)
+      msgHandlerProbe.expectMsgType[Message[_]]
+      peerHandlerProbe.expectNoMessage(100.millis)
+
+      system.stop(msgHandlerProbe.ref)
+      peerHandlerProbe.expectMsg(
+        2.seconds,
+        PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(getPeersMsg.messageLength)
+      )
     }
   }
 }

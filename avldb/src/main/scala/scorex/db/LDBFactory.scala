@@ -19,11 +19,14 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
   val map = new mutable.HashMap[File, RegisteredDB]
 
   /**
-    * Decorator of LevelDB DB class which overrides close() methods and unlinks database from registry on close.
-    * So if database was not explicitly closed, then next attempt to open database with the same path will
-    * return existed instance instead of creating new one.
+    * Decorator that forwards close at most once and unlinks only its own registry entry
+    * after that attempt. A failed close is rethrown and still unlinks the entry, as before.
+    * An open database is reused until its close attempt completes.
     */
   case class RegisteredDB(impl: DB, path: File) extends DB {
+
+    // Guarded by the registry lock, shared with open for this path.
+    private var closeAttempted = false
 
     def get(key: Array[Byte]): Array[Byte] = impl.get(key)
 
@@ -60,8 +63,19 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     def compactRange(begin: Array[Byte], end: Array[Byte]): Unit = impl.compactRange(begin, end)
 
     override def close(): Unit = {
-      remove(path)
-      impl.close()
+      lock.writeLock().lock()
+      try {
+        if (!closeAttempted) {
+          closeAttempted = true
+          try {
+            impl.close()
+          } finally {
+            if (map.get(path).exists(_ eq this)) map.remove(path)
+          }
+        }
+      } finally {
+        lock.writeLock().unlock()
+      }
     }
   }
 
@@ -69,15 +83,6 @@ case class StoreRegistry(factory: DBFactory) extends DBFactory with ScorexLoggin
     lock.writeLock().lock()
     try {
       map.getOrElseUpdate(file, RegisteredDB(create, file))
-    } finally {
-      lock.writeLock().unlock()
-    }
-  }
-
-  private def remove(path: File): Option[RegisteredDB] = {
-    lock.writeLock().lock()
-    try {
-      map.remove(path)
     } finally {
       lock.writeLock().unlock()
     }

@@ -19,7 +19,6 @@ object ExtensionSerializer extends ErgoSerializer[Extension] {
     }
   }
 
-  @nowarn
   override def parse(r: Reader): Extension = {
     val startPosition = r.position
     val headerId = bytesToId(r.getBytes(Constants.ModifierIdSize))

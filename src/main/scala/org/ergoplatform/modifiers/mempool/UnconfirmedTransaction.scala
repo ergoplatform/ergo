@@ -19,9 +19,11 @@ class UnconfirmedTransaction(val transaction: ErgoTransaction,
                              val lastCheckedTime: Long,
                              val transactionBytes: Option[Array[Byte]],
                              val source: Option[ConnectedPeer])
-  extends ScorexLogging {
+  extends OutputsHolder with ScorexLogging {
 
   def id: ModifierId = transaction.id
+
+  def outputs = transaction.outputs
 
   /**
     * Updates cost and last checked time of unconfirmed transaction

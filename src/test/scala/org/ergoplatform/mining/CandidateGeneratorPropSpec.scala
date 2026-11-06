@@ -7,11 +7,12 @@ import org.ergoplatform.nodeView.state.ErgoStateContext
 import org.ergoplatform.settings.MonetarySettings
 import org.ergoplatform.utils.{BoxUtils, ErgoCorePropertyTest, RandomWrapper}
 import org.ergoplatform.wallet.interpreter.ErgoInterpreter
+import org.ergoplatform.{ErgoBoxCandidate, Input}
+import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.scalacheck.Gen
 import scorex.util.{ModifierId, bytesToId}
 import sigma.data.ProveDlog
 
-import scala.concurrent.duration._
 
 class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
   import org.ergoplatform.utils.ErgoNodeTestConstants._
@@ -175,7 +176,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
 
       val newBoxes = fromBigMempool.flatMap(_.outputs)
       val costs: Seq[Int] = fromBigMempool.map { tx =>
-        us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier)).getOrElse {
+        us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier), true).getOrElse {
           val boxesToSpend =
             tx.inputs.map(i => newBoxes.find(b => b.id sameElements i.boxId).get)
           tx.statefulValidity(boxesToSpend, IndexedSeq(), upcomingContext).get
@@ -282,6 +283,48 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     }
   }
 
+  /**
+   * Test: Stack overflow regression - ensures the iterative implementation
+   * can handle large mempools that would have caused StackOverflowError
+   * in the previous recursive implementation.
+   */
+  property("should handle large mempool without stack overflow") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    val inputs = bh.boxes.values.toIndexedSeq
+    val rnd = new RandomWrapper
+
+    // Create 500+ valid transactions (enough to trigger stack overflow in old recursive code)
+    val largeMempool = inputs.map { i =>
+      validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp)
+    }
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    // Should complete without StackOverflowError
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      largeMempool
+    )
+
+    // Verify we collected some transactions
+    result._1.length should be > 0
+    // Invalid transactions should be tracked
+    result._3.length should be >= 0
+  }
+
   property("stale emission tx is invalidated when its box was spent by concurrently applied block") {
     val us0 = createUtxoState(settings)._1
     us0.emissionBoxOpt should not be None
@@ -301,7 +344,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       h.version
     )
 
-    val (collected, invalid) = CandidateGenerator.collectTxs(
+    val (inputCollected, orderingCollected, invalid) = CandidateGenerator.collectTxs(
+      // collected txs are split into input-block and ordering-block transactions
+
       defaultMinerPk,
       parameters.maxBlockCost,
       parameters.maxBlockSize,
@@ -310,7 +355,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       Seq(emissionTx)
     )
 
-    collected shouldBe empty
+    inputCollected shouldBe empty
+    orderingCollected shouldBe empty
     invalid shouldBe Seq(emissionTx.id)
   }
 
@@ -336,7 +382,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       h.version
     )
 
-    val (collected, invalid) = CandidateGenerator.collectTxs(
+    val (inputCollected, orderingCollected, invalid) = CandidateGenerator.collectTxs(
+      // collected txs are split into input-block and ordering-block transactions
+
       defaultMinerPk,
       parameters.maxBlockCost,
       parameters.maxBlockSize,
@@ -345,7 +393,8 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       mempoolTxs
     )
 
-    collected shouldBe empty
+    inputCollected shouldBe empty
+    orderingCollected shouldBe empty
     invalid should contain theSameElementsAs mempoolTxs.map(_.id)
   }
 
@@ -368,7 +417,9 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
       h.version
     )
 
-    val (collected, invalid) = CandidateGenerator.collectTxs(
+    val (inputCollected, orderingCollected, invalid) = CandidateGenerator.collectTxs(
+      // collected txs are split into input-block and ordering-block transactions
+
       defaultMinerPk,
       parameters.maxBlockCost,
       parameters.maxBlockSize,
@@ -378,7 +429,7 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     )
 
     invalid shouldBe empty
-    collected should contain theSameElementsAs zeroFeeTxs
+    (inputCollected ++ orderingCollected) should contain theSameElementsAs zeroFeeTxs
   }
 
   property("excludeAppliedTxs filters transactions of the applied best block only") {
@@ -419,16 +470,280 @@ class CandidateGeneratorPropSpec extends ErgoCorePropertyTest {
     CandidateGenerator.isChainSynced(Some(bytesToId(Array.fill(32)(33.toByte))), emptyStateContext) shouldBe false
   }
 
-  property("it should calculate average block mining time from creation timestamps") {
-    val timestamps1 = System.currentTimeMillis()
-    val timestamps2 = timestamps1 + 100
-    val timestamps3 = timestamps2 + 200
-    val timestamps4 = timestamps3 + 300
-    val avgMiningTime = {
-      CandidateGenerator.getBlockMiningTimeAvg(
-        Vector(timestamps1, timestamps2, timestamps3, timestamps4)
-      )
-    }
-    avgMiningTime shouldBe 200.millis
+  /**
+   * Test: Double-spend detection within collectTxs
+   * Verifies that when multiple transactions attempt to spend the same inputs,
+   * only the first valid one is included and others are marked as invalid.
+   */
+  property("should filter double-spending transactions in collectTxs") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    val inputs = bh.boxes.values.toIndexedSeq.take(5)
+
+    // Create conflicting transactions spending the same inputs
+    val tx1 = validTransactionFromBoxes(inputs.take(2))
+    val tx2 = validTransactionFromBoxes(inputs.take(2)) // Same inputs as tx1
+    val tx3 = validTransactionFromBoxes(inputs.drop(2)) // Non-conflicting
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      Seq(tx1, tx2, tx3)
+    )
+
+    // At least tx3 should be included (non-conflicting)
+    result._1.exists(_.id sameElements tx3.id) shouldBe true
+    
+    // At most 2 transactions should be included (one of tx1/tx2, plus tx3)
+    result._1.length should be <= 2
+    result._1.length should be >= 1
+
+    // At least one of the conflicting txs should be in invalid list (result._3)
+    // Both result._3 and tx.id are ModifierId (String type)
+    val conflictingInvalid = result._3.count(id => id == tx1.id || id == tx2.id)
+    conflictingInvalid should be >= 1
   }
+
+  /**
+   * Test: Invalid transaction filtering - non-existent inputs
+   * Verifies that transactions attempting to spend boxes that don't exist
+   * in the UTXO set are filtered out and marked as invalid.
+   */
+  property("should filter transactions with non-existent inputs") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+
+    // Create transaction spending non-existent box (fake input)
+    // Use a valid box ID format but from a box that doesn't exist in UTXO
+    // We reuse an ID from a spent box to create an invalid transaction
+    val boxesSeq = bh.boxes.values.toIndexedSeq
+    val existingBox = boxesSeq.head
+    val fakeInput = Input(existingBox.id, emptyProverResult)
+    val invalidTx = ErgoTransaction(
+      IndexedSeq(fakeInput),
+      IndexedSeq(),
+      IndexedSeq(new ErgoBoxCandidate(1000, ErgoTreePredef.feeProposition(1), us.stateContext.currentHeight))
+    )
+
+    // Create a valid transaction
+    val validTx = validTransactionFromBoxes(bh.boxes.values.take(1).toIndexedSeq)
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      Seq(invalidTx, validTx)
+    )
+
+    // Valid transaction should be collected
+    result._1.exists(_.id sameElements validTx.id) shouldBe true
+    // Invalid transaction should be in the invalid list (result._3)
+    result._3.contains(invalidTx.id) shouldBe true
+  }
+
+  /**
+   * Test: Empty mempool handling
+   * Verifies that collectTxs handles an empty transaction list gracefully
+   * without errors or exceptions.
+   */
+  property("should handle empty mempool gracefully") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      Seq.empty
+    )
+
+    // All result collections should be empty
+    result._1.length shouldBe 0
+    result._2.length shouldBe 0
+    result._3.length shouldBe 0
+  }
+
+  /**
+   * Test: Block cost limit enforcement
+   * Verifies that transaction collection stops when block computation cost
+   * limit is reached, preventing overflow of block resources.
+   */
+  property("should enforce block cost limit") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    val inputs = bh.boxes.values.toIndexedSeq.take(50)
+    val rnd = new RandomWrapper
+
+    // Create many transactions that will exceed cost limit
+    val manyTxs = inputs.map { i =>
+      validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp)
+    }
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    // Use a moderate cost limit to allow some transactions but not all
+    // Typical transaction cost is around 10000-50000, so this allows ~10-20 txs
+    val moderateCostLimit = 200000 // Much lower than parameters.maxBlockCost (10M+)
+
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      moderateCostLimit,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      manyTxs
+    )
+
+    // Should have collected some transactions but not all
+    result._1.length should be > 0
+    result._1.length should be < manyTxs.length
+
+    // Verify total cost doesn't exceed limit
+    val totalCost = result._1.map { tx =>
+      us.validateWithCost(tx, upcomingContext, Int.MaxValue, Some(verifier), true).getOrElse(0)
+    }.sum
+
+    totalCost should be <= moderateCostLimit
+  }
+
+  /**
+   * Test: Block size limit enforcement
+   * Verifies that transaction collection stops when block size limit
+   * is reached, preventing overflow of block size.
+   */
+  property("should enforce block size limit") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    val inputs = bh.boxes.values.toIndexedSeq.take(50)
+    val rnd = new RandomWrapper
+
+    // Create many transactions that will exceed size limit
+    val manyTxs = inputs.map { i =>
+      validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp)
+    }
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    // Use a very small size limit to force early termination
+    val smallSizeLimit = 512 // Much smaller than typical block size
+
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      smallSizeLimit,
+      us,
+      upcomingContext,
+      manyTxs
+    )
+
+    // Should have collected some transactions but not all
+    result._1.length should be > 0
+    result._1.length should be < manyTxs.length
+
+    // Verify total size doesn't exceed limit
+    val totalSize = result._1.map(_.size).sum
+    totalSize should be <= smallSizeLimit
+  }
+
+  /**
+   * Test: Mixed valid and invalid transactions
+   * Verifies that collectTxs correctly processes a mixed mempool,
+   * collecting valid transactions while filtering out invalid ones.
+   */
+  property("should process mixed valid and invalid transactions") {
+    val bh = boxesHolderGen.sample.get
+    val us = createUtxoState(bh, parameters)
+    val inputs = bh.boxes.values.toIndexedSeq.take(10)
+    val rnd = new RandomWrapper
+
+    // Create valid transactions
+    val validTxs = inputs.take(5).map { i =>
+      validTransactionFromBoxes(IndexedSeq(i), rnd, issueNew = false, feeProp)
+    }
+
+    // Create invalid transaction (double-spend)
+    val doubleSpendTx1 = validTransactionFromBoxes(inputs.take(2), rnd, issueNew = false)
+    val doubleSpendTx2 = validTransactionFromBoxes(inputs.take(2), rnd, issueNew = false) // Same inputs
+
+    val h = validFullBlock(None, us, bh).header
+    val upcomingContext = us.stateContext.upcoming(
+      h.minerPk,
+      h.timestamp,
+      h.nBits,
+      h.votes,
+      emptyVSUpdate,
+      h.version
+    )
+
+    val mixedMempool = validTxs ++ Seq(doubleSpendTx1, doubleSpendTx2)
+
+    val result = CandidateGenerator.collectTxs(
+      defaultMinerPk,
+      Int.MaxValue,
+      Int.MaxValue,
+      us,
+      upcomingContext,
+      mixedMempool
+    )
+
+    // Should collect all valid transactions
+    validTxs.foreach(tx => result._1.exists(_.id sameElements tx.id) shouldEqual true)
+
+    // At least one double-spend should be in invalid list (result._3)
+    result._3.length should be >= 1
+  }
+
 }

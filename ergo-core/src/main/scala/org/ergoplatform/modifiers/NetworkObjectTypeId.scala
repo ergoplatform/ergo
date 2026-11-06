@@ -25,13 +25,23 @@ object NetworkObjectTypeId {
     * Block section could have ids >= this threshold only
     * Other p2p network objects have type id below the threshold
     */
-  val BlockSectionThreshold: Value = Value @@ 50.toByte
+  private val BlockSectionThreshold: Value = Value @@ 50.toByte
 
   /**
     * Whether network object type corresponding to block sections, returns true if so
     */
   def isBlockSection(typeId: Value): Boolean = {
     typeId >= BlockSectionThreshold
+  }
+
+  def isTypeKnown(typeId: Value): Boolean = {
+    typeId match {
+      case HeaderTypeId.value | BlockTransactionsTypeId.value | ProofsTypeId.value |
+           ExtensionTypeId.value | TransactionTypeId.value | FullBlockTypeId.value |
+           UtxoSnapshotChunkTypeId.value | SnapshotsInfoTypeId.value | ManifestTypeId.value |
+           InputBlockTypeId.value | InputBlockTransactionIdsTypeId.value | OrderingBlockAnnouncementTypeId.value => true
+      case _ => false
+    }
   }
 
 }
@@ -115,3 +125,21 @@ object SnapshotsInfoTypeId extends AuxiliaryTypeId {
 object ManifestTypeId extends AuxiliaryTypeId {
   override val value: Value = fromByte(-124)
 }
+
+/**
+  * Input block info: header, possibly transaction ids, extension fields
+  */
+object InputBlockTypeId extends AuxiliaryTypeId {
+  override val value: Value = fromByte(-123)
+}
+
+object InputBlockTransactionIdsTypeId extends AuxiliaryTypeId {
+  override val value: Value = fromByte(-122)
+}
+
+object OrderingBlockAnnouncementTypeId extends AuxiliaryTypeId {
+  override val value: Value = fromByte(-121)
+}
+
+
+// Modify `NetworkObjectTypeId.isTypeKnown` on adding new objects!

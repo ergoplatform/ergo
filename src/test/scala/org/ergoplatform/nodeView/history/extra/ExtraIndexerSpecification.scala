@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import akka.actor.{Actor, ActorIdentity, ActorRef, ActorSystem, Identify, Props, Terminated}
 import akka.testkit.TestProbe
 import org.ergoplatform.ErgoAddressEncoder
-import org.ergoplatform.consensus.{ModifierSemanticValidity, ProgressInfo}
+import org.ergoplatform.consensus.ModifierSemanticValidity
 import org.ergoplatform.core.idToVersion
 import org.ergoplatform.http.api.SortDirection
 import org.ergoplatform.modifiers.{BlockSection, NonHeaderBlockSection}
@@ -16,7 +16,7 @@ import org.ergoplatform.nodeView.history.extra.IndexedErgoAddressSerializer.hash
 import org.ergoplatform.nodeView.history.extra.SegmentSerializer.{boxSegmentId, txSegmentId}
 import org.ergoplatform.nodeView.history.{ErgoHistory, ErgoHistoryReader}
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors.FullBlockProcessor
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.CurrentView
 import org.ergoplatform.nodeView.ErgoNodeViewHolder.ReceivableMessages.GetDataFromCurrentView
 import org.ergoplatform.nodeView.mempool.ErgoMemPool
@@ -1207,12 +1207,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       val selectedTip = fullChainHeaderAt(HEIGHT - 1)
       IndexerState.fromHistory(_history).indexedHeaderId shouldBe Some(indexedTip.id)
 
-      _history.reportModifierIsInvalid(
-        invalidParent,
-        ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
-          org.ergoplatform.utils.ScorexEncoder.default
-        )
-      ).get
+      _history.reportModifierIsInvalid(invalidParent).get
       history.bestFullBlockOpt.map(_.header.id) shouldBe Some(selectedTip.id)
       history.typedModifierById[Header](invalidParent.id) shouldBe None
       _history.historyStorage.modifierById(invalidParent.id) shouldBe Some(invalidParent)
@@ -1277,12 +1272,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
       val selectedTip = fullChainHeaderAt(HEIGHT - 1)
       before.indexedHeaderId shouldBe Some(indexedTip.id)
 
-      _history.reportModifierIsInvalid(
-        invalidParent,
-        ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
-          org.ergoplatform.utils.ScorexEncoder.default
-        )
-      ).get
+      _history.reportModifierIsInvalid(invalidParent).get
       history.bestFullBlockOpt.map(_.header.id) shouldBe Some(selectedTip.id)
       _history.historyStorage.remove(
         Array.empty[ByteArrayWrapper], Array(invalidParent.id)
@@ -1332,12 +1322,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     val indexedBranchHeader = fullChainHeaderAt(HEIGHT)
     IndexerState.fromHistory(_history).indexedHeaderId shouldBe Some(indexedTip.id)
 
-    _history.reportModifierIsInvalid(
-      indexedTip,
-      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
-        org.ergoplatform.utils.ScorexEncoder.default
-      )
-    ).get
+    _history.reportModifierIsInvalid(indexedTip).get
     fullChainHeaderAt(HEIGHT).id shouldBe indexedBranchHeader.id
 
     awaitProcessed(GenerateBetterChainTip())
@@ -1718,11 +1703,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     }
 
     // the state rejects the block: markers flip, the indexer reconciles on its next message
-    _history.reportModifierIsInvalid(
-      forged.header,
-      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
-        org.ergoplatform.utils.ScorexEncoder.default)
-    ).get
+    _history.reportModifierIsInvalid(forged.header).get
     _history.fullBlockHeight shouldBe HEIGHT
 
     indexer ! Index()
@@ -1769,11 +1750,7 @@ class ExtraIndexerSpecification extends ErgoCorePropertyTest {
     history.typedExtraIndexById[IndexedErgoBox](bytesToId(spentBoxId)).get
       .spendingTxIdOpt shouldBe Some(spendingTx.id)
 
-    _history.reportModifierIsInvalid(
-      forged.header,
-      ProgressInfo[BlockSection](None, Seq.empty, Seq.empty, Seq.empty)(
-        org.ergoplatform.utils.ScorexEncoder.default)
-    ).get
+    _history.reportModifierIsInvalid(forged.header).get
     _history.fullBlockHeight shouldBe HEIGHT
 
     indexer ! Index()

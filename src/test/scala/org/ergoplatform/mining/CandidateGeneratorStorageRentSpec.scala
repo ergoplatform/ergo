@@ -85,7 +85,7 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
     }
 
   /** The var-127 (storage rent) claim transactions of a candidate block. */
-  private def rentClaimTransactions(candidate: Candidate): Seq[ErgoTransaction] =
+  def rentClaimTransactions(candidate: Candidate): Seq[ErgoTransaction] =
     candidate.candidateBlock.transactions.filter(isStorageRentClaim)
 
   private def generateOneCandidate(settings: ErgoSettings)(
@@ -110,8 +110,8 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
     rentClaimTransactions(candidate) shouldBe empty
     // and the candidate itself must be a normal, solvable block
     baseSettings.chainSettings.powScheme
-      .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-      .isDefined shouldBe true
+      .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters) should not be
+      org.ergoplatform.NothingFound
     system.terminate()
   }
 
@@ -124,8 +124,8 @@ class CandidateGeneratorStorageRentSpec extends AnyFlatSpec
 
     rentClaimTransactions(candidate) shouldBe empty
     rentEnabledSettings.chainSettings.powScheme
-      .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000)
-      .isDefined shouldBe true
+      .proveCandidate(candidate.candidateBlock, defaultMinerSecret.w, 0, 1000, candidate.parameters) should not be
+      org.ergoplatform.NothingFound
     system.terminate()
   }
 

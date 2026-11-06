@@ -9,7 +9,7 @@ import org.ergoplatform.nodeView.wallet.ErgoWalletActorMessages._
 import org.ergoplatform.settings.{ErgoSettings, Parameters}
 import org.ergoplatform.wallet.boxes.{ReemissionData, ReplaceCompactCollectBoxSelector}
 import org.ergoplatform.core.VersionTag
-import scorex.util.ScorexLogging
+import scorex.util.{ModifierId, ScorexLogging}
 
 import scala.util.{Failure, Success, Try}
 
@@ -43,6 +43,16 @@ class ErgoWallet(historyReader: ErgoHistoryReader, settings: ErgoSettings, param
 
   def scanOffchain(txs: Seq[ErgoTransaction]): ErgoWallet = {
     txs.foreach(tx => scanOffchain(tx))
+    this
+  }
+
+  def scanInputBlock(inputBlockId: ModifierId): ErgoWallet = {
+    walletActor ! ScanInputBlock(inputBlockId)
+    this
+  }
+
+  def rollbackInputBlock(inputBlockId: ModifierId): ErgoWallet = {
+    walletActor ! RollbackInputBlock(inputBlockId)
     this
   }
 

@@ -7,7 +7,7 @@ import org.ergoplatform.modifiers.history.BlockTransactions
 import org.ergoplatform.modifiers.mempool.ErgoTransaction
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.storage.HistoryStorage
-import org.ergoplatform.nodeView.history.storage.modifierprocessors.FullBlockSectionProcessor
+import org.ergoplatform.nodeView.history.modifierprocessors.FullBlockSectionProcessor
 import org.ergoplatform.nodeView.mempool.ErgoMemPoolUtils.SortingOption
 import org.ergoplatform.nodeView.state._
 import org.ergoplatform.settings._

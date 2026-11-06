@@ -3,7 +3,7 @@ package org.ergoplatform.nodeView.history.extra
 import org.ergoplatform.ErgoBox.TokenId
 import org.ergoplatform.ErgoLikeContext.Height
 import org.ergoplatform.mining.difficulty.DifficultySerializer
-import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator}
+import org.ergoplatform.mining.{AutolykosPowScheme, CandidateBlock, CandidateGenerator, InputBlockFields}
 import org.ergoplatform.modifiers.ErgoFullBlock
 import org.ergoplatform.modifiers.history.extension.{Extension, ExtensionCandidate}
 import org.ergoplatform.modifiers.history.header.Header
@@ -12,6 +12,7 @@ import org.ergoplatform.modifiers.mempool.{ErgoTransaction, UnsignedErgoTransact
 import org.ergoplatform.nodeView.history.ErgoHistory
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.GenesisHeight
 import org.ergoplatform.nodeView.state.{ErgoState, ErgoStateContext, UtxoState, UtxoStateReader}
+import org.ergoplatform.settings.{ErgoValidationSettingsUpdate, Parameters}
 import org.ergoplatform.utils.ErgoTestHelpers
 import org.ergoplatform._
 import org.ergoplatform.core.idToVersion
@@ -223,7 +224,7 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     val txs = emissionTxOpt.toSeq ++ txsFromPool
 
     state.proofsForTransactions(txs).map { case (adProof, adDigest) =>
-      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes)
+      CandidateBlock(lastHeaderOpt, version, nBits, adDigest, adProof, txs, ts, extensionCandidate, votes, InputBlockFields.empty, Seq.empty, Seq.empty)
     }
   }.flatten
 
@@ -252,7 +253,8 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
     val candidate = CandidateBlock(Some(parent), parent.version, nBits, parent.stateRoot,
       SerializedAdProof @@ scorex.utils.Random.randomBytes(64), txs,
       parent.timestamp + blockInterval.toMillis,
-      nipopowAlgos.interlinksToExtension(interlinks), Array(0: Byte, 0: Byte, 0: Byte))
+      nipopowAlgos.interlinksToExtension(interlinks), Array(0: Byte, 0: Byte, 0: Byte),
+      InputBlockFields.empty, Seq.empty, txs)
     val block = proveCandidate(candidate)
     history.append(block.header).get
     block.blockSections.foreach { s =>
@@ -264,9 +266,10 @@ object ChainGenerator extends ErgoTestHelpers with Matchers {
   @tailrec
   private def proveCandidate(candidate: CandidateBlock): ErgoFullBlock = {
     log.info(s"Trying to prove block with parent ${candidate.parentOpt.map(_.encodedId)} and timestamp ${candidate.timestamp}")
+    val defaultParams = Parameters(0, Parameters.DefaultParameters, ErgoValidationSettingsUpdate.empty)
 
-    pow.proveCandidate(candidate, defaultProver.hdKeys.head.privateInput.w) match {
-      case Some(fb) => fb
+    pow.proveCandidate(candidate, defaultProver.hdKeys.head.privateInput.w, Long.MinValue, Long.MaxValue, defaultParams) match {
+      case OrderingBlockFound(fb) => fb
       case _ =>
         val interlinks = candidate.parentOpt
           .map(nipopowAlgos.updateInterlinks(_, NipopowAlgos.unpackInterlinks(candidate.extension.fields).get))

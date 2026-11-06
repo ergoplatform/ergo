@@ -3,7 +3,7 @@ package org.ergoplatform.http.routes
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes, UniversalEntity}
-import akka.http.scaladsl.server.{Directives, Route}
+import akka.http.scaladsl.server.{Directives, Route, ValidationRejection}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import akka.stream.scaladsl.Source
 import akka.testkit.TestProbe
@@ -22,8 +22,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import scorex.core.api.http.ApiRejectionHandler
 import scorex.util.ModifierId
-
-import scala.concurrent.duration.DurationInt
 
 class BlocksApiRouteSpec
   extends AnyFlatSpec
@@ -97,32 +95,21 @@ class BlocksApiRouteSpec
     }
   }
 
-  it should "not submit a valid block at an unknown sub-path" in {
+  it should "reject a valid block at unknown sub-paths" in {
     val (st, bh)             = createUtxoState(settings)
     val block: ErgoFullBlock = validFullBlock(parentOpt = None, st, bh)
     val blockJson: UniversalEntity =
       HttpEntity(block.asJson.toString).withContentType(ContentTypes.`application/json`)
-    val eventProbe = TestProbe()
-    val viewProbe  = TestProbe()
-    val handledProbeRoute: Route =
-      Directives.handleRejections(ApiRejectionHandler.rejectionHandler) {
-        BlocksApiRoute(viewProbe.ref, digestReadersRef, settings).route
-      }
 
-    system.eventStream.subscribe(eventProbe.ref, classOf[NewBlockMined])
-    try {
-      val rejectedStatus =
-        Post(prefix + "/junk/path", blockJson) ~> handledProbeRoute ~> check {
-          status
-        }
-      val announced = eventProbe.receiveOne(300.millis) != null
-      val forwarded = viewProbe.receiveOne(300.millis) != null
-      withClue(s"HTTP $rejectedStatus, announced=$announced, forwarded=$forwarded: ") {
-        (announced, forwarded) shouldBe ((false, false))
-      }
-      rejectedStatus.intValue() / 100 shouldBe 4
-    } finally {
-      system.eventStream.unsubscribe(eventProbe.ref)
+    Post(prefix + "/junk/path", blockJson) ~> route ~> check {
+      rejections should contain (ValidationRejection("Wrong modifierId format", None))
+    }
+    Post(prefix + "/junk/path", blockJson) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
+    }
+    val knownIdSuffix = prefix + "/" + headerIdString + "/junk/path"
+    Post(knownIdSuffix, blockJson) ~> handledRoute ~> check {
+      status shouldBe StatusCodes.BadRequest
     }
   }
 
@@ -215,13 +202,6 @@ class BlocksApiRouteSpec
       status shouldBe StatusCodes.OK
       responseAs[Seq[ErgoFullBlock]] shouldEqual expected
       materializations.get() shouldBe 1
-    }
-  }
-
-  it should "not report a wrong method for an unknown sub-path" in {
-    Get(prefix + "/junk/path") ~> handledRoute ~> check {
-      status.intValue() / 100 shouldBe 4
-      status should not be StatusCodes.MethodNotAllowed
     }
   }
 

@@ -1,6 +1,5 @@
 package scorex.core.api.http
 
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.Allow
 import akka.http.scaladsl.server._
 import org.ergoplatform.http.api.ApiError
@@ -14,20 +13,12 @@ object ApiRejectionHandler {
     }
     .handle {
       case AuthorizationFailedRejection =>
-        ApiError.Forbidden("The supplied authentication is not authorized to access this resource")
-    }
-    .handleAll[MethodRejection] { rejections =>
-      val methods = rejections.map(_.supported).distinct
-      val names = methods.map(_.name).mkString(", ")
-      Directives.extractRequest { request =>
-        Directives.extractMaterializer { implicit materializer =>
-          request.discardEntityBytes()
-          Directives.respondWithHeader(Allow(methods)) {
-            ApiError(StatusCodes.MethodNotAllowed, "method.not.allowed")(
-              s"HTTP method not allowed, supported methods: $names")
+        Directives.extractRequest { request =>
+          Directives.extractMaterializer { implicit materializer =>
+            request.discardEntityBytes()
+            ApiError.Forbidden("The supplied authentication is not authorized to access this resource")
           }
         }
-      }
     }
     .handle {
       case MalformedRequestContentRejection(msg, _) =>
@@ -46,6 +37,19 @@ object ApiRejectionHandler {
         ApiError.BadRequest("Request entity expected but not supplied")
     }
     .handle { case ValidationRejection(msg, _) => ApiError.BadRequest(msg) }
+    .handleAll[MethodRejection] { rejections =>
+      val methods = rejections.map(_.supported)
+      val names = methods.map(_.name).mkString(", ")
+      Directives.extractRequest { request =>
+        Directives.extractMaterializer { implicit materializer =>
+          request.discardEntityBytes()
+          Directives.respondWithHeader(Allow(methods)) {
+            ApiError.MethodNotAllowed(
+              s"HTTP method not allowed, supported methods: $names")
+          }
+        }
+      }
+    }
     .handle { case x => ApiError.InternalError(s"Unhandled rejection: $x") }
     .handleNotFound { ApiError.BadRequest("The requested resource/endpoint could not be found.") }
     .result()

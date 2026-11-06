@@ -1,17 +1,31 @@
 package org.ergoplatform.http.routes
 
+import java.util.concurrent.atomic.AtomicInteger
+
+import akka.http.scaladsl.model.ContentTypes
+import akka.http.scaladsl.model.HttpEntity
+import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.UniversalEntity
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.stream.scaladsl.Source
+import akka.testkit.TestProbe
+import akka.util.ByteString
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.classic.{Level, Logger => LogbackLogger}
 import ch.qos.logback.core.read.ListAppender
-import org.ergoplatform.http.api.{EmissionApiRoute, ScanApiRoute}
+import org.ergoplatform.http.api.BlocksApiRoute
+import org.ergoplatform.http.api.EmissionApiRoute
+import org.ergoplatform.http.api.MiningApiRoute
+import org.ergoplatform.http.api.ScanApiRoute
 import org.ergoplatform.http.{ErgoHttpService, NodePanelRoute, SwaggerRoute}
 import org.ergoplatform.utils.Stubs
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.slf4j.LoggerFactory
+import scorex.crypto.hash.Blake2b256
 
 import scala.collection.JavaConverters._
 
@@ -23,6 +37,7 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
   import org.ergoplatform.utils.ErgoNodeTestConstants._
 
   private val restApiSettings = settings.scorexSettings.restApi
+  private val testApiKey = "test-api-key-for-http-service-spec"
 
   private val service = ErgoHttpService(
     apiRoutes = Seq(EmissionApiRoute(settings)),
@@ -35,15 +50,17 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
   private val settingsWithAuth = settings.copy(
     scorexSettings = settings.scorexSettings.copy(
       restApi = restApiSettings.copy(
-        apiKeyHash = Some(
-          "e1c7ef7b3b742c5ae8f52c24d2c5f5c5dccd9c23a41fa6e76e5a6b62c8f72a10"
-        )
+        apiKeyHash = Some(encoder.encode(Blake2b256(testApiKey)))
       )
     )
   )
 
   private val authRoute: Route = ErgoHttpService(
-    apiRoutes = Seq(ScanApiRoute(utxoReadersRef, settingsWithAuth)),
+    apiRoutes = Seq(
+      ScanApiRoute(utxoReadersRef, settingsWithAuth),
+      MiningApiRoute(minerRef, settingsWithAuth),
+      BlocksApiRoute(nodeViewRef, digestReadersRef, settingsWithAuth)
+    ),
     swaggerRoute = SwaggerRoute(
       settingsWithAuth.scorexSettings.restApi,
       swaggerConfig = ""
@@ -132,6 +149,57 @@ class ErgoHttpServiceSpec extends AnyFlatSpec
     Post("/scan/register", "{}") ~> authRoute ~> check {
       status shouldBe StatusCodes.Forbidden
     }
+  }
+
+  private def checkStreamedRequest(path: String,
+                                   body: String,
+                                   expectedStatus: StatusCode,
+                                   apiKey: Option[String] = None): Unit = {
+    val bytes = ByteString(body)
+    val pulled = TestProbe()
+    val materializations = new AtomicInteger
+    val source = Source.single(bytes).map { chunk =>
+      pulled.ref ! chunk
+      chunk
+    }.mapMaterializedValue { materialized =>
+      if (materializations.incrementAndGet() != 1) {
+        throw new IllegalStateException("request body materialized twice")
+      }
+      materialized
+    }
+    val entity: UniversalEntity =
+      HttpEntity.Default(ContentTypes.`application/json`, bytes.length.toLong, source)
+
+    val request = Post(path, entity)
+    val requestWithKey = apiKey.fold(request) { key =>
+      request.addHeader(RawHeader("api_key", key))
+    }
+    requestWithKey ~> authRoute ~> check {
+      status shouldBe expectedStatus
+    }
+    pulled.expectMsg(bytes)
+    materializations.get() shouldBe 1
+  }
+
+  it should "discard a streamed unauthorized scan body exactly once" in {
+    checkStreamedRequest("/scan/register", "{}", StatusCodes.Forbidden)
+  }
+
+  it should "reject and discard a malformed streamed mining body before decoding" in {
+    checkStreamedRequest("/mining/candidateWithTxs", "{", StatusCodes.Forbidden)
+  }
+
+  it should "reject and discard a malformed streamed custom-key mining body" in {
+    checkStreamedRequest("/mining/candidateWithTxsAndPk", "{", StatusCodes.Forbidden)
+  }
+
+  it should "reject and discard a malformed streamed block body before decoding" in {
+    checkStreamedRequest("/blocks", "{", StatusCodes.Forbidden)
+  }
+
+  it should "decode a malformed streamed mining body after valid authentication" in {
+    checkStreamedRequest("/mining/candidateWithTxs", "{", StatusCodes.BadRequest,
+      Some(testApiKey))
   }
 
 }

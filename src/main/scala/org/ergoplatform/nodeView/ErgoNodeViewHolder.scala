@@ -839,6 +839,10 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       txModify(unconfirmedTx) match {
         case _: ProcessingOutcome.Accepted =>
           log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} is back in the memory pool")
+        case _: ProcessingOutcome.Declined if memoryPool().contains(unconfirmedTx.id) =>
+          // A duplicate restore does not remove the existing pool entry. Keep its durable
+          // wallet record too, so another restart can still restore the transaction.
+          log.info(s"Unconfirmed wallet transaction ${unconfirmedTx.id} is already in the memory pool")
         case outcome =>
           // the transaction can not be brought back, e.g. it got on the blockchain while the node
           // was down, or a conflicting one did. There is no point in keeping it for the next restart

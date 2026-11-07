@@ -181,6 +181,7 @@ final class WalletStorage(store: LDBKVStore, settings: ErgoSettings) extends Sco
     */
   def allScans: Seq[Scan] = {
     (store.getRange(SmallestPossibleScanId, BiggestPossibleScanId) ++
+      store.getRange(FirstWrappedShortScanKey, LastWrappedShortScanKey) ++
       store.getRange(FirstLongScanKey, LastLongScanKey))
       .map { case (_, v) => ScanSerializer.parseBytes(v) }
   }
@@ -246,8 +247,9 @@ object WalletStorage {
 
   // scans key space to iterate over all of them
   val SmallestPossibleScanId: Array[Byte] = scanPrefixKey(0L)
-  // Keep the legacy listing range; wrapped negative IDs remain readable by ID.
   val BiggestPossibleScanId: Array[Byte] = scanPrefixKey(Short.MaxValue.toLong)
+  private val FirstWrappedShortScanKey: Array[Byte] = scanPrefixKey(Short.MinValue.toLong)
+  private val LastWrappedShortScanKey: Array[Byte] = scanPrefixKey(-1L)
   private val FirstLongScanKey: Array[Byte] = LongScanPrefixArray ++ Array.fill(8)(0.toByte)
   private val LastLongScanKey: Array[Byte] = LongScanPrefixArray ++ Array.fill(8)(-1.toByte)
   def pubKeyPrefixKey(path: DerivationPath): Array[Byte] = PublicKeyPrefixArray ++ path.bytes

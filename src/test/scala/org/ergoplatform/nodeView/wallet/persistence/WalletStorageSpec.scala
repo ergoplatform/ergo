@@ -130,7 +130,7 @@ class WalletStorageSpec
       withStore { store =>
         store.insert((keys :+ lastUsedScanIdKey).toArray, (values :+ Shorts.toByteArray(last)).toArray).get
         val storage = new WalletStorage(store, settings)
-        storage.allScans.map(_.scanId) shouldBe Seq(0L, Short.MaxValue.toLong)
+        storage.allScans.map(_.scanId) shouldBe ids.map(_.toLong)
         ids.foreach(id => storage.getScan(id.toLong) shouldBe Some(req.toScan(ScanId @@ id.toLong).get))
         val next = storage.addScan(req).get
         next.scanId shouldBe Short.MaxValue.toLong + 1

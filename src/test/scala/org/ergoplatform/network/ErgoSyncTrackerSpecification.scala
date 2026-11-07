@@ -110,4 +110,22 @@ class ErgoSyncTrackerSpecification extends ErgoCorePropertyTest {
     syncTracker.peersByStatus.get(Equal) shouldBe None
     syncTracker.peersByStatus.isEmpty shouldBe true
   }
+
+  property("updateHeight sets a tracked peer's height and keeps its status; raise-only never lowers it") {
+    val syncTracker = ErgoSyncTracker(settings.scorexSettings.network)
+    val peer = createPeer("peer", 9001)
+    val untracked = createPeer("untracked", 9002)
+
+    syncTracker.updateStatus(peer, Equal, Some(1000))
+    syncTracker.updateHeight(peer, 990, raiseOnly = true)
+    syncTracker.statuses(peer).height shouldBe 1000
+    syncTracker.updateHeight(peer, 1010, raiseOnly = true)
+    syncTracker.statuses(peer).height shouldBe 1010
+    syncTracker.updateHeight(peer, 1005, raiseOnly = false)
+    syncTracker.statuses(peer).height shouldBe 1005
+    syncTracker.getStatus(peer) shouldBe Some(Equal)
+
+    syncTracker.updateHeight(untracked, 1000, raiseOnly = false)
+    syncTracker.statuses.get(untracked) shouldBe None
+  }
 }

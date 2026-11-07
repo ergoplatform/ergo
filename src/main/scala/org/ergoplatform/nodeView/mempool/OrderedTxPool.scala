@@ -15,7 +15,7 @@ import scala.collection.immutable.TreeMap
   * @param transactionsRegistry - mapping `tx.id` -> `WeightedTxId(tx.id,tx.weight)` required for getting transaction by its `id`
   * @param invalidatedTxIds     - invalidated transaction ids in bloom filters
   * @param outputs              - mapping `box.id` -> producing `tx.id`; current weight is resolved via `transactionsRegistry`
-  * @param inputs               - mapping `box.id` -> spending `tx.id`; current weight is resolved via `transactionsRegistry`
+  * @param inputs               - mapping `box.id` -> latest pooled spending `tx.id` (preserved across `updateFamily` ancestor weight updates); current weight is resolved via `transactionsRegistry`
   * @param family               - explicit parent/child dependency graph between mempool transactions, used by `updateFamily`
   */
 class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTransaction],
@@ -114,13 +114,18 @@ class OrderedTxPool(val orderedTransactions: TreeMap[WeightedTxId, UnconfirmedTr
       case None =>
         val wtx = weighted(tx, feeFactor)
         val parentIds = tx.inputs.flatMap(in => outputs.get(in.boxId)).toSet
+        // pooled children that arrived before this transaction (e.g. it re-enters after a rollback)
+        val childIds = tx.outputs.flatMap(out => inputs.get(out.id)).toSet
+        val newFamily = childIds.foldLeft(family.addTx(tx.id, parentIds)) { (g, c) =>
+          g.addTx(c, g.parentsOf(c) + tx.id)
+        }
         new OrderedTxPool(
           withoutTransaction(tx.id).updated(wtx, unconfirmedTx),
           transactionsRegistry.updated(wtx.id, wtx),
           invalidatedTxIds,
           outputs ++ tx.outputs.map(_.id -> tx.id),
           inputs ++ tx.inputs.map(_.boxId -> tx.id),
-          family.addTx(tx.id, parentIds)
+          newFamily
         ).updateFamily(tx, parentIds, wtx.weight, System.currentTimeMillis(), 0)
     }
     if (newPool.orderedTransactions.size > mempoolCapacity) {

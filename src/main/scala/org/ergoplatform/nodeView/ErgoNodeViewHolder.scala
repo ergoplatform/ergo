@@ -916,12 +916,11 @@ abstract class ErgoNodeViewHolder[State <: ErgoState[State]](settings: ErgoSetti
       } else {
         efb.mandatoryBlockSections
       }
+      // applyState publishes LocalBlockApplied if the block is applied
       sectionsToApply.foreach { section =>
         pmodModify(section, local = true)
       }
       history().saveOrderingBlockTransactions(efb.id, orderingBlockTransactions)
-
-      context.system.eventStream.publish(LocalBlockApplied(efb.header, orderingBlockTransactions.map(_.id)))
 
     case LocallyGeneratedInputBlock(subblockInfo, subBlockTransactionsData) =>
       log.info(s"Got locally generated input block ${subblockInfo.header.id}")

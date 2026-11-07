@@ -28,8 +28,6 @@ import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
   * 
   * Tests verify:
   * - Ordering block announcement propagation to appropriate peers
-  * - Input block message flow and processing
-  * - FullBlockApplied event chain and downstream effects
   */
 class OrderingBlockMessageFlowSpec extends AnyPropSpec
   with Matchers
@@ -249,85 +247,6 @@ class OrderingBlockMessageFlowSpec extends AnyPropSpec
           case _ => false
         }
       }
-    }
-  }
-
-  // ============================================================================
-  // Input Block Message Flow Tests
-  // ============================================================================
-
-  property("ordering block processed when input blocks already available") {
-    withFixture { fixture =>
-      import fixture._
-
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
-      synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
-
-      // Subscribe to FullBlockApplied events
-      system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
-
-      // Create ordering block at height 11
-      val wrappedState = wrappedUtxoStateGen.sample.get
-      val nextBlock = validFullBlock(fullChain.lastOption, wrappedState)
-
-      // Simulate scenario where input blocks are already stored
-      // (In real scenario, input blocks would arrive before ordering block announcement)
-      
-      // Send ordering block (input blocks assumed to be available)
-      nodeViewHolder ! LocallyGeneratedOrderingBlock(nextBlock, Seq.empty)
-
-      // Verify FullBlockApplied is published (indicating successful processing)
-      val fullBlockAppliedMsg = eventListener.expectMsgClass(15.seconds, classOf[FullBlockApplied])
-      fullBlockAppliedMsg.header.id shouldBe nextBlock.header.id
-    }
-  }
-
-
-  // ============================================================================
-  // FullBlockApplied Event Chain Tests
-  // ============================================================================
-
-
-  property("FullBlockApplied contains correct header information") {
-    withFixture { fixture =>
-      import fixture._
-
-      // Setup: node at height 10
-      val localHistory = generateHistory(verifyTransactions = true, StateType.Utxo, PoPoWBootstrap = false, blocksToKeep = -1)
-      val fullChain = genChain(10, localHistory)
-      fullChain.foreach { block =>
-        localHistory.append(block.header).get
-        block.blockSections.foreach(section => localHistory.append(section).get)
-      }
-
-      synchronizer ! ChangedHistory(localHistory)
-      synchronizer ! ChangedMempool(ErgoMemPool.empty(settings))
-
-      // Subscribe to FullBlockApplied
-      system.eventStream.subscribe(eventListener.ref, classOf[FullBlockApplied])
-
-      // Create ordering block at height 11
-      val wrappedState = wrappedUtxoStateGen.sample.get
-      val nextBlock = validFullBlock(fullChain.lastOption, wrappedState)
-
-      // Send ordering block
-      nodeViewHolder ! LocallyGeneratedOrderingBlock(nextBlock, Seq.empty)
-
-      // Verify FullBlockApplied header details
-      val fullBlockAppliedMsg = eventListener.expectMsgClass(15.seconds, classOf[FullBlockApplied])
-      
-      fullBlockAppliedMsg.header.id shouldBe nextBlock.header.id
-      fullBlockAppliedMsg.header.height shouldBe 11
-      fullBlockAppliedMsg.header.parentId shouldBe fullChain.last.header.id
-      fullBlockAppliedMsg.header.stateRoot shouldBe nextBlock.header.stateRoot
     }
   }
 

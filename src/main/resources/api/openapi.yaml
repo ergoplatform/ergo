@@ -4719,7 +4719,7 @@ paths:
           description: identifier of a scan
           schema:
             type: integer
-            format: int32
+            format: int64
       responses:
         '200':
           description: Scan-related transactions
@@ -5915,7 +5915,7 @@ paths:
           description: identifier of a scan
           schema:
             type: integer
-            format: int32
+            format: int64
       responses:
         '200':
           description: List of unspent boxes
@@ -6001,7 +6001,7 @@ paths:
           description: identifier of a scan
           schema:
             type: integer
-            format: int32
+            format: int64
       responses:
         '200':
           description: List of spent boxes

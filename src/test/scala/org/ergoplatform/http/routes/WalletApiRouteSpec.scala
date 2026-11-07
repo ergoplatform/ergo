@@ -358,7 +358,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       val response = responseAs[List[AugWalletTransaction]]
       val walletTxs = response.filter { awtx =>
-        awtx.wtx.scanIds.contains(1.shortValue())
+        awtx.wtx.scanIds.contains(1L)
       }
       walletTxs.size shouldBe response.size
     }
@@ -370,7 +370,7 @@ class WalletApiRouteSpec extends AnyFlatSpec
       status shouldBe StatusCodes.OK
       val response = responseAs[List[AugWalletTransaction]]
       val walletTxs = response.filter { awtx =>
-        awtx.wtx.scanIds.contains(1.shortValue())
+        awtx.wtx.scanIds.contains(1L)
       }
       walletTxs.size shouldBe response.size
       walletTxs.forall(_.numConfirmations == 0) shouldBe true
@@ -383,6 +383,10 @@ class WalletApiRouteSpec extends AnyFlatSpec
     }
 
     Get(prefix + "/transactionsByScanId/32768") ~> sealedRoute ~> check {
+      status shouldBe StatusCodes.OK
+    }
+
+    Get(prefix + "/transactionsByScanId/9223372036854775808") ~> sealedRoute ~> check {
       status shouldBe StatusCodes.BadRequest
     }
   }

@@ -172,8 +172,8 @@ class ErgoWalletServiceSpec
       withVersionedStore(10) { versionedStore =>
         withStore { store =>
           val allBoxes = {
-            val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(ScanId @@ 0.shortValue())))
-            val spentBox = boxes.head.copy(spendingHeightOpt = Some(100), spendingTxIdOpt = Some(txId), scans = Set(ScanId @@ 0.shortValue()))
+            val unspentBoxes = boxes.map(bx => bx.copy(spendingHeightOpt = None, spendingTxIdOpt = None, scans = Set(ScanId @@ 0L)))
+            val spentBox = boxes.head.copy(spendingHeightOpt = Some(100), spendingTxIdOpt = Some(txId), scans = Set(ScanId @@ 0L))
             unspentBoxes :+ spentBox
           }
           val encodedBoxes = allBoxes.map { box =>
@@ -199,16 +199,16 @@ class ErgoWalletServiceSpec
           val signedTx1 =
             walletService.generateTransaction(wState, boxSelector, Seq(paymentRequest), inputsRaw = encodedBoxes, dataInputsRaw = Seq.empty, sign = true)
               .get.asInstanceOf[ErgoTransaction]
-          val walletTx1 = WalletTransaction(signedTx1, 100, Seq(ScanId @@ 0.shortValue()))
+          val walletTx1 = WalletTransaction(signedTx1, 100, Seq(ScanId @@ 0L))
 
           // let's update wallet registry with a transaction from a block
           val genesisBlock = makeGenesisBlock(pks.head.pubkey, randomNewAsset)
           wState.registry.updateOnBlock(ScanResults(allBoxes, ArraySeq.empty, Seq(walletTx1)), genesisBlock.id, blockHeight = 100).get
 
           // transaction should be retrieved by only a scan id that was associated with it
-          val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0.shortValue(), 100)
+          val txs1 = walletService.getScanTransactions(wState, ScanId @@ 0L, 100)
           assert(txs1.nonEmpty)
-          val txs2 = walletService.getScanTransactions(wState, ScanId @@ 1.shortValue(), 100)
+          val txs2 = walletService.getScanTransactions(wState, ScanId @@ 1L, 100)
           assert(txs2.isEmpty)
 
           // let's test that unconfirmed transaction is retrieved

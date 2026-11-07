@@ -7,7 +7,6 @@ import org.ergoplatform.nodeView.wallet.persistence.WalletDigest
 import org.ergoplatform.nodeView.wallet.requests.{AssetIssueRequest, BurnTokensRequest, PaymentRequest}
 import org.ergoplatform.nodeView.wallet.scanning._
 import org.ergoplatform.settings.Constants.FalseTree
-import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.wallet.boxes.TrackedBox
 import org.scalacheck.Gen
 import sigma.ast.ByteArrayConstant
@@ -151,9 +150,9 @@ object ErgoNodeWalletGenerators {
   } yield ScanRequest(appName, pred, Some(ScanWalletInteraction.Off), Some(true))
 
   def externalAppGen: Gen[Scan] = for {
-    scanId <- Gen.posNum[Short]
+    scanId <- scanIdGen
     req <- externalScanReqGen
-  } yield req.toScan(ScanId @@ scanId).get
+  } yield req.toScan(scanId).get
 
   private def outIndexGen(tx: ErgoTransaction) = Gen.choose(0: Short, tx.outputCandidates.length.toShort)
 

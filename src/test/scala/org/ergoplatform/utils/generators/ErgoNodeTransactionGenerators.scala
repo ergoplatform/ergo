@@ -13,7 +13,7 @@ import org.ergoplatform.wallet.interpreter.TransactionHintsBag
 import org.ergoplatform._
 import org.ergoplatform.nodeView.history.ErgoHistoryUtils.EmptyHistoryHeight
 import org.ergoplatform.wallet.Constants.ScanId
-import org.ergoplatform.wallet.utils.WalletGenerators.{additionalRegistersGen, additionalTokensGen, boxIdGen, ergoBoxGen, validValueGen}
+import org.ergoplatform.wallet.utils.WalletGenerators.{additionalRegistersGen, additionalTokensGen, boxIdGen, ergoBoxGen, scanIdGen, validValueGen}
 import org.scalacheck.Gen
 import scorex.db.ByteArrayWrapper
 import scorex.util.ScorexLogging
@@ -91,7 +91,7 @@ object ErgoNodeTransactionGenerators extends ScorexLogging {
   lazy val walletTransactionGen: Gen[WalletTransaction] = for {
     tx <- invalidErgoTransactionGen
     inclusionHeight <- Gen.posNum[Int]
-    scanId <- ScanId @@ Gen.posNum[Short]
+    scanId <- scanIdGen
   } yield WalletTransaction(tx, inclusionHeight, Seq(scanId))
 
   def walletTransactionForScanGen(scanId: ScanId): Gen[WalletTransaction] = for {

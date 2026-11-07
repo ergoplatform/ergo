@@ -1,15 +1,18 @@
 package org.ergoplatform.nodeView.wallet.persistence
 
-import com.google.common.primitives.Ints
+import com.google.common.primitives.{Ints, Shorts}
 import org.ergoplatform.db.DBSpec
-import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.SecretPathsKey
-import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanWalletInteraction}
+import org.ergoplatform.nodeView.wallet.persistence.WalletStorage.{ScanPrefixArray, SecretPathsKey, lastUsedScanIdKey}
+import org.ergoplatform.nodeView.wallet.scanning.{ScanRequest, ScanSerializer, ScanWalletInteraction}
+import org.ergoplatform.wallet.Constants.ScanId
 import org.ergoplatform.sdk.wallet.secrets.{DerivationPath, DerivationPathSerializer}
 import org.scalacheck.Gen
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scorex.db.LDBKVStore
+import scorex.util.ByteArrayBuilder
+import scorex.util.serialization.VLQByteBufferWriter
 
 class WalletStorageSpec
   extends AnyFlatSpec
@@ -86,4 +89,54 @@ class WalletStorageSpec
     }
   }
 
+  it should "read legacy Short scans and transition seamlessly across Short.MaxValue into Long scan ids" in {
+    forAll(externalScanReqGen) { externalScanReq =>
+      withStore { store =>
+        val storage = new WalletStorage(store, settings)
+        val legacyMaxShortId = ScanId @@ Short.MaxValue.toLong
+        val legacyScan = externalScanReq.toScan(legacyMaxShortId).get
+        // Simulate legacy 2-byte Short storage for scan key and lastUsedScanIdKey
+        store.insert(
+          Array(ScanPrefixArray ++ Shorts.toByteArray(Short.MaxValue), lastUsedScanIdKey),
+          Array(ScanSerializer.toBytes(legacyScan), Shorts.toByteArray(Short.MaxValue))
+        ).get
+
+        storage.lastUsedScanId shouldBe Short.MaxValue.toLong
+        storage.getScan(Short.MaxValue.toLong) shouldBe Some(legacyScan)
+
+        val nextScan = storage.addScan(externalScanReq).get
+        nextScan.scanId shouldBe (Short.MaxValue.toLong + 1L)
+        storage.lastUsedScanId shouldBe (Short.MaxValue.toLong + 1L)
+        storage.getScan(nextScan.scanId) shouldBe Some(nextScan)
+        storage.allScans.map(_.scanId) shouldBe Seq(legacyMaxShortId, nextScan.scanId)
+      }
+    }
+  }
+
+  it should "read wrapped Short-era scans and continue above the legacy ID range" in {
+    val req = externalScanReqGen.sample.get
+    val ids = Seq(0.toShort, Short.MaxValue, Short.MinValue, (Short.MinValue + 1).toShort)
+    def legacyIdBytes(id: Short): Array[Byte] = {
+      val writer = new VLQByteBufferWriter(new ByteArrayBuilder())
+      writer.putShort(id)
+      writer.result().toBytes
+    }
+
+    // Build keys and ID fields with the legacy encoding independently of the new helpers.
+    val scanPayload = ScanSerializer.toBytes(req.toScan(ScanId @@ 11L).get).drop(legacyIdBytes(11).length)
+    val keys = ids.map(id => ScanPrefixArray ++ Shorts.toByteArray(id))
+    val values = ids.map(id => legacyIdBytes(id) ++ scanPayload)
+    for (last <- Seq(Short.MinValue, (Short.MinValue + 1).toShort, 0.toShort)) {
+      withStore { store =>
+        store.insert((keys :+ lastUsedScanIdKey).toArray, (values :+ Shorts.toByteArray(last)).toArray).get
+        val storage = new WalletStorage(store, settings)
+        storage.allScans.map(_.scanId) shouldBe ids.map(_.toLong)
+        ids.foreach(id => storage.getScan(id.toLong) shouldBe Some(req.toScan(ScanId @@ id.toLong).get))
+        val next = storage.addScan(req).get
+        next.scanId shouldBe Short.MaxValue.toLong + 1
+        storage.getScan(next.scanId) shouldBe Some(next)
+        storage.allScans.map(_.scanId) should contain (next.scanId)
+      }
+    }
+  }
 }

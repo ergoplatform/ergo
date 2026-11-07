@@ -203,7 +203,7 @@ ergo {
     optimalInputs = 3          # Target input count to passively compact fragmented UTXOs
 
     # CRITICAL WARNING: Leave tokensWhitelist commented out (null) to preserve ALL tokens!
-    # Setting tokensWhitelist = [] causes the wallet to BURN all unlisted tokens in selected inputs!
+    # Setting tokensWhitelist (even []) makes the next transaction BURN all unlisted tokens the wallet holds!
     # tokensWhitelist = null
 
     secretStorage {
@@ -234,7 +234,7 @@ scorex {
 
 > **Critical `tokensWhitelist` Warning**:
 > - When `tokensWhitelist` is omitted or `null` *(default)*, the wallet preserves and tracks **all** native tokens.
-> - When `tokensWhitelist = ["<tokenId1>", "<tokenId2>"]` (or `[]`), **any token not in the list present inside an input selected for a transaction is intentionally omitted from change outputs and permanently burned on-chain** (`ErgoWalletSupport.prepareRequests`). Exchanges listing or custodying arbitrary user tokens must leave `tokensWhitelist = null`.
+> - When `tokensWhitelist = ["<tokenId1>", "<tokenId2>"]` (or `[]`), **every unlisted token held in the wallet's spendable boxes (or in `inputsRaw`) is added to the next transaction and permanently burned on-chain; the transaction fails if it cannot gather them, and a payment of an unlisted token fails**. Exchanges listing or custodying arbitrary user tokens must leave `tokensWhitelist = null`.
 
 ### 2.5 Network Isolation & Reverse Proxy Hardening
 

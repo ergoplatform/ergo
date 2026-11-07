@@ -2576,4 +2576,33 @@ class ErgoNodeViewSynchronizerSpecification extends AnyPropSpec
     }
   }
 
+  // A transaction request that is not delivered in time is cleared without penalty (unlike a block section, which is
+  // re-requested and may penalise), so a later Inv for the same transaction from another peer re-requests it. Ergo
+  // keeps no announcer list, so clearing the request is what makes that recovery possible. This locks that behaviour.
+  property("NodeViewSynchronizer: a timed-out transaction request is cleared without penalty and re-requested from another announcer") {
+    withDeclinedTransactionsFixture { ctx =>
+      import ctx._
+
+      val announcerA = newPeer
+      val announcerB = newPeer
+      val tx = dummyDeclinedTx()
+
+      // A announces the tx; the node requests it from A
+      invTxAndExpectRequest(announcerA, tx)
+      eventually {
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Requested
+      }
+
+      // the request times out: for a transaction the node forgets it (clears Requested) and does not penalize A
+      synchronizerRef ! CheckDelivery(announcerA, ErgoTransaction.modifierTypeId, tx.id)
+      eventually {
+        deliveryTracker.status(tx.id, ErgoTransaction.modifierTypeId, Seq.empty) shouldBe Unknown
+      }
+      val afterTimeout = ncProbe.receiveWhile(max = 1.second, idle = 200.millis) { case m => m }
+      afterTimeout.collect { case PenalizePeer(_, p) => p } shouldBe empty
+
+      // B later announces the same tx; the node requests it from B
+      invTxAndExpectRequest(announcerB, tx)
+    }
+  }
 }

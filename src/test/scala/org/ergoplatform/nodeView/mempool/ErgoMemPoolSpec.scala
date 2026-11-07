@@ -37,6 +37,42 @@ class ErgoMemPoolSpec extends AnyFlatSpec
     )
   }
 
+  it should "find a transaction by its weak id" in {
+    val rnd = new java.util.Random(2899L)
+
+    def randomBytes(n: Int): Array[Byte] = {
+      val bytes = new Array[Byte](n)
+      rnd.nextBytes(bytes)
+      bytes
+    }
+
+    // each transaction has its own id and its own witness id
+    val variants = Vector.fill(20000) {
+      val proof = ProverResult(randomBytes(8), ContextExtension.empty)
+      ErgoTransaction(
+        IndexedSeq(new Input(ADKey @@ randomBytes(32), proof)),
+        IndexedSeq(new ErgoBoxCandidate(1000L, feeProp, creationHeight = 0))
+      )
+    }
+
+    // two transactions with one id prefix, so the search must go on after the first candidate
+    val sharedPrefix = variants.groupBy(_.id.take(6)).values.filter(_.size > 1).head.take(2)
+    sharedPrefix.map(_.weakId.toSeq).distinct.size shouldBe 2
+
+    val txs = sharedPrefix ++ variants.take(1000)
+    val pool = txs.foldLeft(ErgoMemPool.empty(settings)) { case (p, tx) =>
+      p.put(UnconfirmedTransaction(tx, None))
+    }
+
+    txs.foreach { tx =>
+      pool.transactionByWeakId(tx.weakId).map(_.id) shouldBe Some(tx.id)
+
+      val otherWitness = tx.weakId.clone()
+      otherWitness(otherWitness.length - 1) = (otherWitness.last ^ 0x55).toByte
+      pool.transactionByWeakId(otherWitness) shouldBe None
+    }
+  }
+
   it should "accept valid transaction" in {
     val (us, bh) = createUtxoState(settings)
     val genesis = validFullBlock(None, us, bh)

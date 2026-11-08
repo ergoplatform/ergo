@@ -1,5 +1,6 @@
 package org.ergoplatform.network
 
+import akka.actor.ActorRef
 import org.ergoplatform.modifiers.history.header.Header
 import org.ergoplatform.modifiers.mempool.UnconfirmedTransaction
 import org.ergoplatform.modifiers.{BlockSection, NetworkObjectTypeId}
@@ -36,6 +37,10 @@ object ErgoNodeViewSynchronizerMessages {
     case class HandshakedPeer(remote: ConnectedPeer) extends PeerManagerEvent
 
     case class DisconnectedPeer(peer: ConnectedPeer) extends PeerManagerEvent
+
+    case class PeerReadSuspended(handlerRef: ActorRef) extends PeerManagerEvent
+
+    case class PeerReadResumed(handlerRef: ActorRef) extends PeerManagerEvent
 
     trait NodeViewHolderEvent
 

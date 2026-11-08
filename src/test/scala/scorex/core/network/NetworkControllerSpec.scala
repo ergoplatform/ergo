@@ -603,6 +603,13 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       msgHandlerProbe.lastSender shouldBe controller
       peerHandlerProbe.expectNoMessage(150.millis)
 
+      // Length-mismatched MessageProcessed must not drop or credit the recorded slot.
+      msgHandlerProbe.send(
+        controller,
+        NetworkController.ReceivableMessages.MessageProcessed(remotePeer, getPeersMsg.messageLength + 99)
+      )
+      peerHandlerProbe.expectNoMessage(150.millis)
+
       msgHandlerProbe.send(
         controller,
         NetworkController.ReceivableMessages.MessageProcessed(remotePeer, getPeersMsg.messageLength)
@@ -610,6 +617,13 @@ class NetworkControllerSpec extends ErgoCorePropertyTest {
       peerHandlerProbe.expectMsg(
         PeerConnectionHandler.ReceivableMessages.InboundMessageProcessed(getPeersMsg.messageLength)
       )
+
+      // Duplicate MessageProcessed must be ignored once the in-flight slot has been consumed.
+      msgHandlerProbe.send(
+        controller,
+        NetworkController.ReceivableMessages.MessageProcessed(remotePeer, getPeersMsg.messageLength)
+      )
+      peerHandlerProbe.expectNoMessage(150.millis)
 
       // Unregistered message code: credit is released immediately so PeerConnectionHandler never leaks slots.
       val unhandledMsg = Message(InvSpec, Left(Array[Byte](1, 2, 3)), Some(remotePeer))

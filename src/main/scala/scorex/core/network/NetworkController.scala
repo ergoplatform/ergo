@@ -132,22 +132,24 @@ class NetworkController(ergoSettings: ErgoSettings,
   }
 
   private def completeInFlight(handler: ActorRef, peerHandlerRef: ActorRef, messageLength: Int): Unit = {
-    inFlightByHandler.get(handler).foreach { byPeer =>
-      byPeer.get(peerHandlerRef).foreach { lengths =>
+    val matched = inFlightByHandler.get(handler).exists { byPeer =>
+      byPeer.get(peerHandlerRef).exists { lengths =>
         val idx = lengths.indexOf(messageLength)
-        val remainingLengths =
-          if (idx >= 0) lengths.patch(idx, Nil, 1)
-          else if (lengths.nonEmpty) lengths.tail
-          else Vector.empty
-        val updatedByPeer =
-          if (remainingLengths.isEmpty) byPeer - peerHandlerRef
-          else byPeer.updated(peerHandlerRef, remainingLengths)
-        inFlightByHandler =
-          if (updatedByPeer.isEmpty) inFlightByHandler - handler
-          else inFlightByHandler.updated(handler, updatedByPeer)
+        if (idx >= 0) {
+          val remainingLengths = lengths.patch(idx, Nil, 1)
+          val updatedByPeer =
+            if (remainingLengths.isEmpty) byPeer - peerHandlerRef
+            else byPeer.updated(peerHandlerRef, remainingLengths)
+          inFlightByHandler =
+            if (updatedByPeer.isEmpty) inFlightByHandler - handler
+            else inFlightByHandler.updated(handler, updatedByPeer)
+          true
+        } else {
+          false
+        }
       }
     }
-    if (peerHandlerRef != ActorRef.noSender) {
+    if (matched && peerHandlerRef != ActorRef.noSender) {
       peerHandlerRef ! InboundMessageProcessed(messageLength)
     }
   }

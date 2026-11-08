@@ -139,6 +139,11 @@ case class BlocksApiRoute(viewHolderRef: ActorRef, readersHolder: ActorRef, ergo
       //       instead of event bus publish.
       context.eventStream.publish(NewBlockMined(block.header, block.blockSections))
 
+      // Hold the HTTP request open until the view holder finishes processing the header and sections
+      // (so Akka HTTP max-open-requests backpressures callers, cf. #1453). 200 OK promises that
+      // ErgoNodeViewHolder completed processLocallyGeneratedModifiers within scorex.restApi.timeout;
+      // if the holder lags past that timeout, the ask fails with 500 ("Ask timed out") while the block
+      // remains announced via NewBlockMined and queued in the holder's mailbox.
       val modifiers = block.header +: block.blockSections
       val processedF = Future.traverse(modifiers) { mod =>
         (viewHolderRef ? LocallyGeneratedModifier(mod)).mapTo[LocallyGeneratedModifierProcessed]

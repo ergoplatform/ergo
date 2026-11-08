@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorRef, Cancellable, DeadLetterSuppression, Props, S
 import akka.io.Tcp
 import akka.io.Tcp._
 import akka.util.{ByteString, CompactByteString}
+import org.ergoplatform.network.ErgoNodeViewSynchronizerMessages.{PeerReadResumed, PeerReadSuspended}
 import org.ergoplatform.network.Version.Eip37ForkVersion
 import org.ergoplatform.network.{Handshake, HandshakeSerializer, PeerSpec, Version}
 import org.ergoplatform.network.message.MessageConstants.{
@@ -85,9 +86,13 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
         if (direction.isIncoming) {
           connection ! SuspendReading
         }
+        context.system.eventStream.publish(PeerReadSuspended(self))
       }
     } else {
-      readingSuspended = false
+      if (readingSuspended) {
+        readingSuspended = false
+        context.system.eventStream.publish(PeerReadResumed(self))
+      }
       connection ! ResumeReading
     }
   }
@@ -102,7 +107,13 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
 
   override def receive: Receive = reportStrangeInput
 
-  override def postStop(): Unit = log.info(s"Peer handler to $connectionId destroyed")
+  override def postStop(): Unit = {
+    if (readingSuspended) {
+      readingSuspended = false
+      context.system.eventStream.publish(PeerReadResumed(self))
+    }
+    log.info(s"Peer handler to $connectionId destroyed")
+  }
 
   private def handshaking: Receive = {
     handshakeTimeoutCancellableOpt =
@@ -317,6 +328,7 @@ class PeerConnectionHandler(scorexSettings: ScorexSettings,
       if (readingSuspended && !isInboundBackpressured) {
         readingSuspended = false
         connection ! ResumeReading
+        context.system.eventStream.publish(PeerReadResumed(self))
       }
   }
 

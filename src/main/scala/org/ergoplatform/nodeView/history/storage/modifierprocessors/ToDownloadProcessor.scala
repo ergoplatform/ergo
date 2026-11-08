@@ -85,7 +85,8 @@ trait ToDownloadProcessor
         Map.empty
       case Some(fb) if farAwayFromBeingSynced(fb) =>
         // when far away from blockchain tip
-        continuation(fb.height + 1, Map.empty, fb.height + FullBlocksToDownloadAhead)
+        val startHeight = nextFullBlockHeight(fb)
+        continuation(startHeight, Map.empty, startHeight - 1 + FullBlocksToDownloadAhead)
       case Some(fb) =>
         // when blockchain is about to be synced,
         // download children blocks of last 100 full blocks applied to the best chain, to get block sections from forks
@@ -134,19 +135,56 @@ trait ToDownloadProcessor
   }
 
   /**
+    * Returns the height of the next full block required to advance the best full chain from `fb`.
+    * If `fb` is on the best header chain this is `fb.height + 1`; if `fb` is on a fork, this is
+    * the height immediately after the common ancestor of `fb` and the best header chain.
+    */
+  private def nextFullBlockHeight(fb: ErgoFullBlock): Int = {
+    if (isInBestChain(fb.id)) {
+      fb.height + 1
+    } else {
+      headerChainBack(Int.MaxValue, fb.header, h => isInBestChain(h.id))
+        .headOption
+        .map(_.height + 1)
+        .getOrElse(fb.height + 1)
+    }
+  }
+
+  /**
     * Mark headers chain as synced when a fresh header arrives (from the network's perspective,
-    * the chain is at the tip then). When `updateBestBlock` is true the best full block pointer
-    * is persisted as well, which advances minimalFullBlockHeight; callers in the UTXO snapshot
-    * bootstrap path must not do that (see above).
+    * the chain is at the tip then). When `updateBestBlock` is true, `minimalFullBlockHeight` is
+    * initialized only when no full block or UTXO snapshot has been applied yet (or when the best
+    * full block sits before a NiPoPoW header gap); if the node already has a best full block with
+    * subsequent headers, `minimalFullBlockHeight` is kept at or below the next required full block
+    * height so suffix catch-up never rejects needed blocks with `bsTooOld`.
     */
   private def markHeadersSyncedIfFresh(header: Header, updateBestBlock: Boolean = false): Unit = {
     if (!isHeadersChainSynced && header.isNew(chainSettings.blockInterval * headerChainDiff)) {
       if (updateBestBlock) {
-        updateBestFullBlock(header)
+        bestFullBlockOpt match {
+          // A restored UTXO set snapshot has no full block yet: keep its first download height until one is applied
+          case None if nodeSettings.utxoSettings.utxoBootstrap && isUtxoSnapshotApplied =>
+            setHeadersChainSynced()
+          // After a restart, continue from the best full block (or its common ancestor on the best header chain);
+          // recomputing minimalFullBlockHeight from the fresh tip header would advance the floor past the blocks
+          // needed next and cause them to be rejected by bsTooOld. If an earlier run already persisted a floor
+          // above nextHeight, lower it to nextHeight so the node can recover.
+          case Some(fb) if headerIdsAtHeight(fb.height + 1).nonEmpty =>
+            val nextHeight = nextFullBlockHeight(fb)
+            if (minimalFullBlockHeight > nextHeight) {
+              log.warn(s"Stored minimal full block height $minimalFullBlockHeight is above the next full block height " +
+                s"$nextHeight (best full block ${fb.header.encodedId} at height ${fb.height}), lowering it to $nextHeight")
+              writeMinimalFullBlockHeight(nextHeight)
+            }
+            setHeadersChainSynced()
+          case _ =>
+            updateBestFullBlock(header)
+        }
       } else {
         setHeadersChainSynced()
       }
-      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}")
+      log.info(s"Headers chain is likely synced after header ${header.encodedId} at height ${header.height}, " +
+        s"minimal full block height $minimalFullBlockHeight")
     }
   }
 
